@@ -44,6 +44,10 @@ lsof -ti :8790 | xargs -r kill -9
 
 Then restart the dev server with `gob restart <job_id>`.
 
+## Tech Debt
+
+When you introduce or discover technical debt (shortcuts, workarounds, deferred improvements), document it in `docs/tech-debt.md`. When tech debt is resolved, remove the corresponding entry.
+
 ## Secrets
 
 When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use Doppler.
