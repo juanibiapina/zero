@@ -2,15 +2,19 @@
 
 Route files define HTTP endpoints using `createRoute()` from `@hono/zod-openapi` with Zod schemas for request/response validation. This gives us runtime validation and auto-generated OpenAPI documentation.
 
-## Pattern
+## File Structure
 
-Each endpoint has two parts: a **route definition** with Zod schemas, and a **handler** registered via `app.openapi()`.
+Each route file has two sections:
+
+1. **Schemas** — Zod schemas for params, bodies, and responses (top of file, outside the factory)
+2. **Router** — Factory function containing colocated route definitions + handlers
 
 ```typescript
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 
-// 1. Define schemas
+// ── Schemas ──────────────────────────────────────────────────────────────
+
 const ItemIdParamSchema = z.object({
   id: z.string().openapi({
     param: { name: "id", in: "path" },
@@ -27,33 +31,61 @@ const ErrorSchema = z.object({
   error: z.string(),
 });
 
-// 2. Define route
-const getItemRoute = createRoute({
-  method: "get",
-  path: "/api/items/{id}",       // OpenAPI uses {id}, not :id
-  tags: ["Items"],
-  summary: "Get item",
-  request: {
-    params: ItemIdParamSchema,
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: ItemSchema } },
-      description: "Item details",
-    },
-    404: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Item not found",
-    },
-  },
-});
+// ── Router ───────────────────────────────────────────────────────────────
 
-// 3. Register handler
-app.openapi(getItemRoute, async (c) => {
-  const { id } = c.req.valid("param");   // validated + typed
-  // ... handler logic ...
-  return c.json(item, 200);
-});
+export const createItemsRouter = () => {
+  const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+
+  // ── Get item ────────────────────────────────────────────────────────
+
+  const getItemRoute = createRoute({
+    method: "get",
+    path: "/api/items/{id}",
+    tags: ["Items"],
+    summary: "Get item",
+    request: {
+      params: ItemIdParamSchema,
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: ItemSchema } },
+        description: "Item details",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Item not found",
+      },
+    },
+  });
+
+  router.openapi(getItemRoute, async (c) => {
+    const { id } = c.req.valid("param");
+    // ... handler logic ...
+    return c.json(item, 200);
+  });
+
+  return router;
+};
+```
+
+## Colocated Route Definitions
+
+**Each `createRoute()` call lives immediately before its `router.openapi()` handler.** This keeps the OpenAPI spec and implementation as a single visual unit — you never scroll between spec and handler.
+
+```typescript
+// ✅ Correct — spec + handler together
+const listRoute = createRoute({ ... });
+router.openapi(listRoute, async (c) => { ... });
+
+const getRoute = createRoute({ ... });
+router.openapi(getRoute, async (c) => { ... });
+
+// ❌ Wrong — specs grouped separately from handlers
+const listRoute = createRoute({ ... });
+const getRoute = createRoute({ ... });
+
+router.openapi(listRoute, async (c) => { ... });
+router.openapi(getRoute, async (c) => { ... });
 ```
 
 ## Validated Inputs
@@ -66,21 +98,9 @@ Use `c.req.valid()` instead of raw parsing. The input is validated against the Z
 | `c.req.query("key")` | `c.req.valid("query")` |
 | `c.req.json<T>()` | `c.req.valid("json")` |
 
-## Router File Structure
+## Mounting
 
-Each route file exports a factory function that creates and returns an `OpenAPIHono` router:
-
-```typescript
-export const createItemsRouter = () => {
-  const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
-
-  // ... schemas, route definitions, handlers ...
-
-  return app;
-};
-```
-
-Mounted in `app.ts`:
+Routers are mounted in `app.ts`:
 
 ```typescript
 app.route("/", createItemsRouter());

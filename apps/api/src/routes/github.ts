@@ -37,40 +37,38 @@ const SuccessSchema = z.object({
   success: z.boolean(),
 });
 
-// ── Route definitions ────────────────────────────────────────────────────
-
-const githubCallbackRoute = createRoute({
-  method: "post",
-  path: "/api/auth/github/callback",
-  tags: ["GitHub"],
-  summary: "GitHub App installation callback",
-  description:
-    "Called by the frontend after GitHub redirects the user back from installing the GitHub App. Links the installation to the user's account.",
-  request: {
-    body: {
-      content: { "application/json": { schema: GitHubCallbackBodySchema } },
-    },
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "Installation linked",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Missing or invalid installationId",
-    },
-    404: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "User or installation not found",
-    },
-  },
-});
-
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createGitHubRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+
+  const githubCallbackRoute = createRoute({
+    method: "post",
+    path: "/api/auth/github/callback",
+    tags: ["GitHub"],
+    summary: "GitHub App installation callback",
+    description:
+      "Called by the frontend after GitHub redirects the user back from installing the GitHub App. Links the installation to the user's account.",
+    request: {
+      body: {
+        content: { "application/json": { schema: GitHubCallbackBodySchema } },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "Installation linked",
+      },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Missing or invalid installationId",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "User or installation not found",
+      },
+    },
+  });
 
   router.openapi(githubCallbackRoute, async (c) => {
     const { installationId } = c.req.valid("json");

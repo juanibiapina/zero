@@ -77,87 +77,30 @@ const SuccessSchema = z.object({
   ok: z.boolean(),
 });
 
-// ── Route definitions ────────────────────────────────────────────────────
-
-const listSessionsRoute = createRoute({
-  method: "get",
-  path: "/api/sessions",
-  tags: ["Sessions"],
-  summary: "List sessions",
-  description: "Lists all sessions for the authenticated user. Optionally filter by owner and repo.",
-  request: {
-    query: ListSessionsQuerySchema,
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SessionListResponseSchema } },
-      description: "List of sessions",
-    },
-  },
-});
-
-const createSessionRoute = createRoute({
-  method: "post",
-  path: "/api/sessions",
-  tags: ["Sessions"],
-  summary: "Create session",
-  description: "Creates and starts a new coding session for a project.",
-  request: {
-    body: {
-      content: { "application/json": { schema: CreateSessionBodySchema } },
-    },
-  },
-  responses: {
-    201: {
-      content: { "application/json": { schema: CreateSessionResponseSchema } },
-      description: "Session created",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Missing required fields or no GitHub installation",
-    },
-    404: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Project not found",
-    },
-    500: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Failed to create session",
-    },
-  },
-});
-
-const deleteSessionRoute = createRoute({
-  method: "delete",
-  path: "/api/sessions/{id}",
-  tags: ["Sessions"],
-  summary: "Delete session",
-  description: "Deletes a session and cleans up associated resources (container, snapshot, DO storage).",
-  request: {
-    params: SessionIdParamSchema,
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "Session deleted",
-    },
-    404: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Session not found",
-    },
-    500: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Failed to remove session from index",
-    },
-  },
-});
-
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createSessionRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
   // ── List sessions ────────────────────────────────────────────────────
+
+  const listSessionsRoute = createRoute({
+    method: "get",
+    path: "/api/sessions",
+    tags: ["Sessions"],
+    summary: "List sessions",
+    description: "Lists all sessions for the authenticated user. Optionally filter by owner and repo.",
+    request: {
+      query: ListSessionsQuerySchema,
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SessionListResponseSchema } },
+        description: "List of sessions",
+      },
+    },
+  });
+
   router.openapi(listSessionsRoute, async (c) => {
     const { owner, repo } = c.req.valid("query");
 
@@ -181,6 +124,38 @@ export const createSessionRoutes = () => {
   });
 
   // ── Create session ───────────────────────────────────────────────────
+
+  const createSessionRoute = createRoute({
+    method: "post",
+    path: "/api/sessions",
+    tags: ["Sessions"],
+    summary: "Create session",
+    description: "Creates and starts a new coding session for a project.",
+    request: {
+      body: {
+        content: { "application/json": { schema: CreateSessionBodySchema } },
+      },
+    },
+    responses: {
+      201: {
+        content: { "application/json": { schema: CreateSessionResponseSchema } },
+        description: "Session created",
+      },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Missing required fields or no GitHub installation",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Project not found",
+      },
+      500: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Failed to create session",
+      },
+    },
+  });
+
   router.openapi(createSessionRoute, async (c) => {
     const { owner, repo, prompt } = c.req.valid("json");
 
@@ -239,6 +214,32 @@ export const createSessionRoutes = () => {
   });
 
   // ── Delete session ───────────────────────────────────────────────────
+
+  const deleteSessionRoute = createRoute({
+    method: "delete",
+    path: "/api/sessions/{id}",
+    tags: ["Sessions"],
+    summary: "Delete session",
+    description: "Deletes a session and cleans up associated resources (container, snapshot, DO storage).",
+    request: {
+      params: SessionIdParamSchema,
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "Session deleted",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Session not found",
+      },
+      500: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Failed to remove session from index",
+      },
+    },
+  });
+
   router.openapi(deleteSessionRoute, async (c) => {
     const { id } = c.req.valid("param");
 

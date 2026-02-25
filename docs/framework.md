@@ -155,53 +155,60 @@ const userId = c.get("userId");
 
 **Reference:** `apps/api/src/routes/*.ts` | **Full guide:** [`docs/routes.md`](routes.md)
 
-Routes define HTTP endpoints using OpenAPIHono with Zod schemas for request/response validation.
+Routes define HTTP endpoints using OpenAPIHono with Zod schemas for request/response validation. Each route file has **schemas at the top** and a **factory function** containing colocated route definitions and handlers.
 
-### Route Definition Pattern
+### Colocated Route Definitions
+
+Each `createRoute()` call lives immediately before its `router.openapi()` handler. This keeps the OpenAPI spec and its implementation as a single visual unit:
 
 ```typescript
-const getTripRoute = createRoute({
-  method: "get",
-  path: "/api/trips/{id}",
-  tags: ["Trips"],
-  summary: "Get trip details",
-  request: {
-    params: TripIdParamSchema,
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: TripSchema } },
-      description: "Trip details",
-    },
-    404: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Trip not found",
-    },
-  },
-});
+export const createItemsRouter = () => {
+  const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-app.openapi(getTripRoute, async (c) => {
-  const userId = c.get("userId");
-  const { id } = c.req.valid("param");
-  const service = new TripService(env, userId);
+  // ── Get item ──────────────────────────────────────────────────────
 
-  const result = await service.getTrip(id);
-  if (Result.isFailure(result)) {
-    return c.json({ error: result.error.message }, 404);
-  }
-  return c.json(result.value, 200);
-});
+  const getItemRoute = createRoute({
+    method: "get",
+    path: "/api/items/{id}",
+    tags: ["Items"],
+    summary: "Get item details",
+    request: { params: ItemIdParamSchema },
+    responses: {
+      200: {
+        content: { "application/json": { schema: ItemSchema } },
+        description: "Item details",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Item not found",
+      },
+    },
+  });
+
+  router.openapi(getItemRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const service = new ItemService(c.env, userId);
+
+    const result = await service.getItem(id);
+    if (Result.isFailure(result)) {
+      return c.json({ error: result.error.message }, 404 as const);
+    }
+    return c.json(result.value, 200);
+  });
+
+  return router;
+};
 ```
 
 ### Organization
 
-- **Inline routes** — Simple or one-off routes can be defined directly in `app.ts`
 - **Modular files** — Grouped endpoints go in `routes/*.ts` and are mounted via `app.route()`
 
 ```typescript
 // In app.ts
-app.route('/', createTripsRouter(env));
-app.route('/', createInboxRouter(env));
+app.route('/', createItemsRouter());
+app.route('/', createSessionsRouter());
 ```
 
 ### Key Rule: Routes Never Call DOs Directly
@@ -210,12 +217,12 @@ Routes instantiate a service with the authenticated user ID and delegate all bus
 
 ```typescript
 // ✅ Correct
-const service = new TripService(env, userId);
-const result = await service.getTrip(id);
+const service = new ItemService(c.env, userId);
+const result = await service.getItem(id);
 
 // ❌ Wrong — bypasses authorization
-const tripDO = env.TRIPDO.get(env.TRIPDO.idFromName(id));
-const trip = await tripDO.getTrip();
+const itemDO = env.ITEMDO.get(env.ITEMDO.idFromName(id));
+const item = await itemDO.getItem();
 ```
 
 ---

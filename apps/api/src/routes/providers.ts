@@ -83,114 +83,27 @@ const SuccessSchema = z.object({
   success: z.boolean(),
 });
 
-// ── Route definitions ────────────────────────────────────────────────────
-
-const listProvidersRoute = createRoute({
-  method: "get",
-  path: "/api/providers",
-  tags: ["Providers"],
-  summary: "List providers",
-  description: "Lists all known providers with their connection status for the authenticated user.",
-  responses: {
-    200: {
-      content: { "application/json": { schema: ProviderListResponseSchema } },
-      description: "List of providers",
-    },
-  },
-});
-
-const connectProviderRoute = createRoute({
-  method: "post",
-  path: "/api/providers/{id}/connect",
-  tags: ["Providers"],
-  summary: "Start OAuth flow",
-  description: "Initiates an OAuth PKCE flow for the provider. Returns the authorization URL.",
-  request: {
-    params: ProviderIdParamSchema,
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: OAuthConnectResponseSchema } },
-      description: "Authorization URL and state",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "OAuth not supported for this provider",
-    },
-  },
-});
-
-const oauthCallbackRoute = createRoute({
-  method: "post",
-  path: "/api/providers/{id}/callback",
-  tags: ["Providers"],
-  summary: "Complete OAuth flow",
-  description: "Exchanges the authorization code for tokens and stores the credential.",
-  request: {
-    params: ProviderIdParamSchema,
-    body: {
-      content: { "application/json": { schema: OAuthCallbackBodySchema } },
-    },
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "OAuth flow completed",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Invalid provider, missing state, or token exchange failed",
-    },
-  },
-});
-
-const setApiKeyRoute = createRoute({
-  method: "post",
-  path: "/api/providers/{id}/api-key",
-  tags: ["Providers"],
-  summary: "Set API key",
-  description: "Sets an API key credential for a provider.",
-  request: {
-    params: ProviderIdParamSchema,
-    body: {
-      content: { "application/json": { schema: ApiKeyBodySchema } },
-    },
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "API key saved",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "API key not supported or missing",
-    },
-  },
-});
-
-const disconnectProviderRoute = createRoute({
-  method: "delete",
-  path: "/api/providers/{id}",
-  tags: ["Providers"],
-  summary: "Disconnect provider",
-  description: "Removes the stored credential for a provider.",
-  request: {
-    params: ProviderIdParamSchema,
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "Provider disconnected",
-    },
-  },
-});
-
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createProviderRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
   // ── List providers ──────────────────────────────────────────────────
+
+  const listProvidersRoute = createRoute({
+    method: "get",
+    path: "/api/providers",
+    tags: ["Providers"],
+    summary: "List providers",
+    description: "Lists all known providers with their connection status for the authenticated user.",
+    responses: {
+      200: {
+        content: { "application/json": { schema: ProviderListResponseSchema } },
+        description: "List of providers",
+      },
+    },
+  });
+
   router.openapi(listProvidersRoute, async (c) => {
     const userDO = c.env.USER_DO.get(
       c.env.USER_DO.idFromString(
@@ -216,6 +129,28 @@ export const createProviderRoutes = () => {
   });
 
   // ── Start OAuth flow (Anthropic PKCE) ──────────────────────────────
+
+  const connectProviderRoute = createRoute({
+    method: "post",
+    path: "/api/providers/{id}/connect",
+    tags: ["Providers"],
+    summary: "Start OAuth flow",
+    description: "Initiates an OAuth PKCE flow for the provider. Returns the authorization URL.",
+    request: {
+      params: ProviderIdParamSchema,
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: OAuthConnectResponseSchema } },
+        description: "Authorization URL and state",
+      },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "OAuth not supported for this provider",
+      },
+    },
+  });
+
   router.openapi(connectProviderRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
     if (providerId !== "anthropic") {
@@ -270,6 +205,31 @@ export const createProviderRoutes = () => {
   });
 
   // ── Complete OAuth flow ────────────────────────────────────────────
+
+  const oauthCallbackRoute = createRoute({
+    method: "post",
+    path: "/api/providers/{id}/callback",
+    tags: ["Providers"],
+    summary: "Complete OAuth flow",
+    description: "Exchanges the authorization code for tokens and stores the credential.",
+    request: {
+      params: ProviderIdParamSchema,
+      body: {
+        content: { "application/json": { schema: OAuthCallbackBodySchema } },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "OAuth flow completed",
+      },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Invalid provider, missing state, or token exchange failed",
+      },
+    },
+  });
+
   router.openapi(oauthCallbackRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
     if (providerId !== "anthropic") {
@@ -346,6 +306,31 @@ export const createProviderRoutes = () => {
   });
 
   // ── Set API key ────────────────────────────────────────────────────
+
+  const setApiKeyRoute = createRoute({
+    method: "post",
+    path: "/api/providers/{id}/api-key",
+    tags: ["Providers"],
+    summary: "Set API key",
+    description: "Sets an API key credential for a provider.",
+    request: {
+      params: ProviderIdParamSchema,
+      body: {
+        content: { "application/json": { schema: ApiKeyBodySchema } },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "API key saved",
+      },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "API key not supported or missing",
+      },
+    },
+  });
+
   router.openapi(setApiKeyRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
     const providerConfig = PROVIDER_REGISTRY[providerId];
@@ -374,6 +359,24 @@ export const createProviderRoutes = () => {
   });
 
   // ── Disconnect provider ────────────────────────────────────────────
+
+  const disconnectProviderRoute = createRoute({
+    method: "delete",
+    path: "/api/providers/{id}",
+    tags: ["Providers"],
+    summary: "Disconnect provider",
+    description: "Removes the stored credential for a provider.",
+    request: {
+      params: ProviderIdParamSchema,
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "Provider disconnected",
+      },
+    },
+  });
+
   router.openapi(disconnectProviderRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
 

@@ -61,52 +61,27 @@ const SuccessSchema = z.object({
   success: z.boolean(),
 });
 
-// ── Route definitions ────────────────────────────────────────────────────
-
-const listProjectsRoute = createRoute({
-  method: "get",
-  path: "/api/projects",
-  tags: ["Projects"],
-  summary: "List projects",
-  description: "Lists all repos from the user's GitHub installation.",
-  responses: {
-    200: {
-      content: { "application/json": { schema: ProjectListResponseSchema } },
-      description: "List of projects with install URL",
-    },
-  },
-});
-
-const setProjectModelRoute = createRoute({
-  method: "put",
-  path: "/api/projects/{owner}/{repo}/model",
-  tags: ["Projects"],
-  summary: "Set default model",
-  description: "Sets the default provider and model for a project.",
-  request: {
-    params: ProjectModelParamSchema,
-    body: {
-      content: { "application/json": { schema: SetModelBodySchema } },
-    },
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "Model updated",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Missing provider or model",
-    },
-  },
-});
-
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createProjectRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
   // ── List projects (repos from the user's GitHub installation) ────────
+
+  const listProjectsRoute = createRoute({
+    method: "get",
+    path: "/api/projects",
+    tags: ["Projects"],
+    summary: "List projects",
+    description: "Lists all repos from the user's GitHub installation.",
+    responses: {
+      200: {
+        content: { "application/json": { schema: ProjectListResponseSchema } },
+        description: "List of projects with install URL",
+      },
+    },
+  });
+
   router.openapi(listProjectsRoute, async (c) => {
     const userDO = c.env.USER_DO.get(
       c.env.USER_DO.idFromString(
@@ -159,6 +134,31 @@ export const createProjectRoutes = () => {
   });
 
   // ── Set default model for a project ─────────────────────────────────
+
+  const setProjectModelRoute = createRoute({
+    method: "put",
+    path: "/api/projects/{owner}/{repo}/model",
+    tags: ["Projects"],
+    summary: "Set default model",
+    description: "Sets the default provider and model for a project.",
+    request: {
+      params: ProjectModelParamSchema,
+      body: {
+        content: { "application/json": { schema: SetModelBodySchema } },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "Model updated",
+      },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Missing provider or model",
+      },
+    },
+  });
+
   router.openapi(setProjectModelRoute, async (c) => {
     const { owner, repo } = c.req.valid("param");
     const { provider, model } = c.req.valid("json");

@@ -52,76 +52,31 @@ const SuccessSchema = z.object({
   success: z.boolean(),
 });
 
-// ── Route definitions ────────────────────────────────────────────────────
-
-const listSecretsRoute = createRoute({
-  method: "get",
-  path: "/api/secrets",
-  tags: ["Secrets"],
-  summary: "List secrets",
-  description: "Lists secret names and creation dates. Values are never returned.",
-  responses: {
-    200: {
-      content: { "application/json": { schema: SecretListResponseSchema } },
-      description: "List of secret names",
-    },
-    500: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Internal error",
-    },
-  },
-});
-
-const createSecretRoute = createRoute({
-  method: "post",
-  path: "/api/secrets",
-  tags: ["Secrets"],
-  summary: "Create or update secret",
-  description: "Creates a new secret or updates an existing one.",
-  request: {
-    body: {
-      content: { "application/json": { schema: CreateSecretBodySchema } },
-    },
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "Secret saved",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Missing required fields",
-    },
-  },
-});
-
-const deleteSecretRoute = createRoute({
-  method: "delete",
-  path: "/api/secrets/{name}",
-  tags: ["Secrets"],
-  summary: "Delete secret",
-  description: "Deletes a secret by name.",
-  request: {
-    params: SecretNameParamSchema,
-  },
-  responses: {
-    200: {
-      content: { "application/json": { schema: SuccessSchema } },
-      description: "Secret deleted",
-    },
-    500: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Internal error",
-    },
-  },
-});
-
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createSecretsRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
   // ── List secrets (names only) ─────────────────────────────────────────
+
+  const listSecretsRoute = createRoute({
+    method: "get",
+    path: "/api/secrets",
+    tags: ["Secrets"],
+    summary: "List secrets",
+    description: "Lists secret names and creation dates. Values are never returned.",
+    responses: {
+      200: {
+        content: { "application/json": { schema: SecretListResponseSchema } },
+        description: "List of secret names",
+      },
+      500: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Internal error",
+      },
+    },
+  });
+
   router.openapi(listSecretsRoute, async (c) => {
     const service = new SecretsService(c.env, c.get("userId"));
     const result = await service.listSecrets();
@@ -132,6 +87,30 @@ export const createSecretsRoutes = () => {
   });
 
   // ── Create or update a secret ─────────────────────────────────────────
+
+  const createSecretRoute = createRoute({
+    method: "post",
+    path: "/api/secrets",
+    tags: ["Secrets"],
+    summary: "Create or update secret",
+    description: "Creates a new secret or updates an existing one.",
+    request: {
+      body: {
+        content: { "application/json": { schema: CreateSecretBodySchema } },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "Secret saved",
+      },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Missing required fields",
+      },
+    },
+  });
+
   router.openapi(createSecretRoute, async (c) => {
     const { name, value } = c.req.valid("json");
     const service = new SecretsService(c.env, c.get("userId"));
@@ -143,6 +122,28 @@ export const createSecretsRoutes = () => {
   });
 
   // ── Delete a secret ────────────────────────────────────────────────────
+
+  const deleteSecretRoute = createRoute({
+    method: "delete",
+    path: "/api/secrets/{name}",
+    tags: ["Secrets"],
+    summary: "Delete secret",
+    description: "Deletes a secret by name.",
+    request: {
+      params: SecretNameParamSchema,
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: SuccessSchema } },
+        description: "Secret deleted",
+      },
+      500: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Internal error",
+      },
+    },
+  });
+
   router.openapi(deleteSecretRoute, async (c) => {
     const { name } = c.req.valid("param");
     const service = new SecretsService(c.env, c.get("userId"));

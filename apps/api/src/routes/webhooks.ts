@@ -23,30 +23,28 @@ const WebhookReceivedSchema = z.object({
   received: z.boolean(),
 });
 
-// ── Route definitions ────────────────────────────────────────────────────
-
-const githubWebhookRoute = createRoute({
-  method: "post",
-  path: "/api/webhooks/github",
-  tags: ["Webhooks"],
-  summary: "GitHub webhook",
-  description: "Receives GitHub App webhook events. Verified by HMAC signature, not Clerk auth.",
-  responses: {
-    200: {
-      content: { "application/json": { schema: WebhookReceivedSchema } },
-      description: "Webhook received",
-    },
-    401: {
-      content: { "application/json": { schema: ErrorSchema } },
-      description: "Missing or invalid signature",
-    },
-  },
-});
-
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createWebhookRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env }>();
+
+  const githubWebhookRoute = createRoute({
+    method: "post",
+    path: "/api/webhooks/github",
+    tags: ["Webhooks"],
+    summary: "GitHub webhook",
+    description: "Receives GitHub App webhook events. Verified by HMAC signature, not Clerk auth.",
+    responses: {
+      200: {
+        content: { "application/json": { schema: WebhookReceivedSchema } },
+        description: "Webhook received",
+      },
+      401: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Missing or invalid signature",
+      },
+    },
+  });
 
   router.openapi(githubWebhookRoute, async (c) => {
     const signature = c.req.header("x-hub-signature-256");
