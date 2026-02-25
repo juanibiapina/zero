@@ -13,22 +13,22 @@
   },
   "dependencies": {
     "@cloudflare/containers": "^0.1.0",
-    "@hono/clerk-auth": "^2.0.0",
+    "@hono/clerk-auth": "^3.1.0",
     "@hono/zod-openapi": "^1.2.2",
-    "@zero/drizzle-migrator": "workspace:*",
     "@zero/core": "workspace:*",
+    "@zero/drizzle-migrator": "workspace:*",
     "drizzle-orm": "^0.45.1",
-    "hono": "^4.11.10",
+    "hono": "^4.12.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260218.0",
+    "@cloudflare/workers-types": "^4.20260304.0",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "dotenv": "^16.5.0",
-    "drizzle-kit": "^0.31.3",
-    "eslint": "9.39.2",
+    "dotenv": "^17.3.1",
+    "drizzle-kit": "^0.31.9",
+    "eslint": "9.39.3",
     "typescript": "5.9.3",
-    "wrangler": "^4.67.0"
+    "wrangler": "^4.68.1"
   }
 }

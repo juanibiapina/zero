@@ -15,7 +15,7 @@
     "deploy": "turbo run deploy"
   },
   "devDependencies": {
-    "turbo": "^2.8.10"
+    "turbo": "^2.8.11"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.1"
