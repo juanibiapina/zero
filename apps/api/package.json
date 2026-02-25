@@ -15,6 +15,7 @@
     "@cloudflare/containers": "^0.1.0",
     "@hono/clerk-auth": "^3.1.0",
     "@hono/zod-openapi": "^1.2.2",
+    "@praha/byethrow": "^0.10.0",
     "@zero/core": "workspace:*",
     "@zero/drizzle-migrator": "workspace:*",
     "drizzle-orm": "^0.45.1",

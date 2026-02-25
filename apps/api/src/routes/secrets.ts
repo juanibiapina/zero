@@ -12,7 +12,8 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import type { UserDOReferences } from "@zero/core";
-import type { UserDO } from "../UserDO";
+import { Result } from "@praha/byethrow";
+import { SecretsService } from "../services/secrets";
 
 type Variables = {
   userId: string;
@@ -64,6 +65,10 @@ const listSecretsRoute = createRoute({
       content: { "application/json": { schema: SecretListResponseSchema } },
       description: "List of secret names",
     },
+    500: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Internal error",
+    },
   },
 });
 
@@ -104,6 +109,10 @@ const deleteSecretRoute = createRoute({
       content: { "application/json": { schema: SuccessSchema } },
       description: "Secret deleted",
     },
+    500: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Internal error",
+    },
   },
 });
 
@@ -114,46 +123,34 @@ export const createSecretsRoutes = () => {
 
   // ── List secrets (names only) ─────────────────────────────────────────
   router.openapi(listSecretsRoute, async (c) => {
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    ) as DurableObjectStub<UserDO>;
-
-    const rows = await userDO.listUserSecrets();
-    return c.json({ secrets: rows.map((s) => ({ name: s.name, createdAt: s.createdAt })) }, 200);
+    const service = new SecretsService(c.env, c.get("userId"));
+    const result = await service.listSecrets();
+    if (Result.isFailure(result)) {
+      return c.json({ error: result.error.message }, 500 as const);
+    }
+    return c.json(result.value, 200);
   });
 
   // ── Create or update a secret ─────────────────────────────────────────
   router.openapi(createSecretRoute, async (c) => {
     const { name, value } = c.req.valid("json");
-
-    if (!name || !value) {
-      return c.json({ error: "Missing required fields: name, value" }, 400 as const);
+    const service = new SecretsService(c.env, c.get("userId"));
+    const result = await service.upsertSecret(name, value);
+    if (Result.isFailure(result)) {
+      return c.json({ error: result.error.message }, 400 as const);
     }
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    ) as DurableObjectStub<UserDO>;
-
-    await userDO.upsertUserSecret(name, value);
-    return c.json({ success: true }, 200);
+    return c.json(result.value, 200);
   });
 
   // ── Delete a secret ────────────────────────────────────────────────────
   router.openapi(deleteSecretRoute, async (c) => {
     const { name } = c.req.valid("param");
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    ) as DurableObjectStub<UserDO>;
-
-    await userDO.deleteUserSecret(name);
-    return c.json({ success: true }, 200);
+    const service = new SecretsService(c.env, c.get("userId"));
+    const result = await service.deleteSecret(name);
+    if (Result.isFailure(result)) {
+      return c.json({ error: result.error.message }, 500 as const);
+    }
+    return c.json(result.value, 200);
   });
 
   return router;
