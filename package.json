@@ -1,0 +1,23 @@
+{
+  "name": "zero",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.21.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "deploy": "turbo run deploy"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.10"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.1"
+  }
+}

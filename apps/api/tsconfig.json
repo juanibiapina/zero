@@ -1,0 +1,7 @@
+{
+  "extends": "@zero/typescript-config/worker.json",
+  "compilerOptions": {
+    "types": ["./worker-configuration.d.ts"]
+  },
+  "include": ["src/**/*.ts", "worker-configuration.d.ts"]
+}

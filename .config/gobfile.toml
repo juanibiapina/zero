@@ -1,0 +1,19 @@
+[[job]]
+command = "pnpm turbo dev"
+description = "Run development server. Frontend starts on port 5176 and backend at 8790"
+autostart = true
+
+[[job]]
+command = "bin/ci"
+description = "Run full CI pipeline locally (no deploy)"
+autostart = false
+
+[[job]]
+command = "bin/deploy"
+description = "Deploy to production"
+autostart = false
+
+[[job]]
+command = "pnpm --dir apps/api exec wrangler tail"
+description = "Follow production logs"
+autostart = false

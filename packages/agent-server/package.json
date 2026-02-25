@@ -1,0 +1,26 @@
+{
+  "name": "@zero/agent-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.10.0",
+    "@mariozechner/pi-coding-agent": "^0.10.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@zero/eslint-config": "workspace:*",
+    "@zero/typescript-config": "workspace:*",
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.5.13",
+    "eslint": "9.39.2",
+    "typescript": "5.9.3"
+  }
+}

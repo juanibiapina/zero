@@ -1,0 +1,13 @@
+import journal from './meta/_journal.json';
+import m0000 from './0000_big_virginia_dare.sql';
+import m0001 from './0001_minor_nicolaos.sql';
+import m0002 from './0002_shallow_la_nuit.sql';
+
+  export default {
+    journal,
+    migrations: {
+      m0000,
+m0001,
+m0002
+    }
+  }

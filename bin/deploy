@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e
+
+bin/fetch-secrets
+pnpm --filter @zero/api run cf-typegen
+pnpm run deploy
