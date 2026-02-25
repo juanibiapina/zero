@@ -153,7 +153,7 @@ const userId = c.get("userId");
 
 ## Routes Layer
 
-**Reference:** `apps/worker/src/routes/*.ts`
+**Reference:** `apps/api/src/routes/*.ts` | **Full guide:** [`docs/routes.md`](routes.md)
 
 Routes define HTTP endpoints using OpenAPIHono with Zod schemas for request/response validation.
 

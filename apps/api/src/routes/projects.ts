@@ -7,7 +7,8 @@
  * PUT  /api/projects/:owner/:repo/model — Set default model for a project
  */
 
-import { OpenAPIHono } from "@hono/zod-openapi";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { z } from "zod";
 import type { Env } from "../types";
 import type { UserDOReferences, ProjectSummary } from "@zero/core";
 import type { UserDO } from "../UserDO";
@@ -19,11 +20,94 @@ type Variables = {
   doRefs: UserDOReferences;
 };
 
+// ── Schemas ──────────────────────────────────────────────────────────────
+
+const ProjectSummarySchema = z.object({
+  owner: z.string(),
+  repo: z.string(),
+  fullName: z.string(),
+  description: z.string().nullable(),
+  defaultBranch: z.string(),
+  private: z.boolean(),
+});
+
+const ProjectListResponseSchema = z.object({
+  projects: z.array(ProjectSummarySchema),
+  installUrl: z.string(),
+  errors: z.array(z.string()).optional(),
+});
+
+const ProjectModelParamSchema = z.object({
+  owner: z.string().openapi({
+    param: { name: "owner", in: "path" },
+    description: "Repository owner",
+  }),
+  repo: z.string().openapi({
+    param: { name: "repo", in: "path" },
+    description: "Repository name",
+  }),
+});
+
+const SetModelBodySchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+});
+
+const ErrorSchema = z.object({
+  error: z.string(),
+});
+
+const SuccessSchema = z.object({
+  success: z.boolean(),
+});
+
+// ── Route definitions ────────────────────────────────────────────────────
+
+const listProjectsRoute = createRoute({
+  method: "get",
+  path: "/api/projects",
+  tags: ["Projects"],
+  summary: "List projects",
+  description: "Lists all repos from the user's GitHub installation.",
+  responses: {
+    200: {
+      content: { "application/json": { schema: ProjectListResponseSchema } },
+      description: "List of projects with install URL",
+    },
+  },
+});
+
+const setProjectModelRoute = createRoute({
+  method: "put",
+  path: "/api/projects/{owner}/{repo}/model",
+  tags: ["Projects"],
+  summary: "Set default model",
+  description: "Sets the default provider and model for a project.",
+  request: {
+    params: ProjectModelParamSchema,
+    body: {
+      content: { "application/json": { schema: SetModelBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: SuccessSchema } },
+      description: "Model updated",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Missing provider or model",
+    },
+  },
+});
+
+// ── Router ───────────────────────────────────────────────────────────────
+
 export const createProjectRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  // ── List projects (repos from the user's GitHub installation) ────────────
-  router.get("/api/projects", async (c) => {
+  // ── List projects (repos from the user's GitHub installation) ────────
+  router.openapi(listProjectsRoute, async (c) => {
     const userDO = c.env.USER_DO.get(
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
@@ -34,7 +118,7 @@ export const createProjectRoutes = () => {
     const installUrl = getInstallUrl(c.env);
 
     if (!installation) {
-      return c.json({ projects: [], installUrl });
+      return c.json({ projects: [], installUrl }, 200);
     }
 
     const allRepos: ProjectSummary[] = [];
@@ -55,7 +139,7 @@ export const createProjectRoutes = () => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`Failed to list repos for installation ${installation.installationId}:`, err);
-      return c.json({ projects: [], installUrl, errors: [msg] });
+      return c.json({ projects: [], installUrl, errors: [msg] }, 200);
     }
 
     // Ensure each repo has a ProjectDO entry in UserDO
@@ -71,16 +155,16 @@ export const createProjectRoutes = () => {
       }
     }
 
-    return c.json({ projects: allRepos, installUrl });
+    return c.json({ projects: allRepos, installUrl }, 200);
   });
 
-  // ── Set default model for a project ────────────────────────────────────
-  router.put("/api/projects/:owner/:repo/model", async (c) => {
-    const { owner, repo } = c.req.param();
-    const body = await c.req.json<{ provider: string; model: string }>();
+  // ── Set default model for a project ─────────────────────────────────
+  router.openapi(setProjectModelRoute, async (c) => {
+    const { owner, repo } = c.req.valid("param");
+    const { provider, model } = c.req.valid("json");
 
-    if (!body.provider || !body.model) {
-      return c.json({ error: "Missing provider or model" }, 400);
+    if (!provider || !model) {
+      return c.json({ error: "Missing provider or model" }, 400 as const);
     }
 
     const userDO = c.env.USER_DO.get(
@@ -89,8 +173,8 @@ export const createProjectRoutes = () => {
       )
     ) as DurableObjectStub<UserDO>;
 
-    await userDO.updateProjectModel(owner, repo, body.provider, body.model);
-    return c.json({ success: true });
+    await userDO.updateProjectModel(owner, repo, provider, model);
+    return c.json({ success: true }, 200);
   });
 
   return router;

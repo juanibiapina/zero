@@ -8,16 +8,50 @@
  * No Clerk auth — verified by HMAC signature.
  */
 
-import { OpenAPIHono } from "@hono/zod-openapi";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { z } from "zod";
 import type { Env } from "../types";
 import { verifyWebhookSignature } from "../services/github";
+
+// ── Schemas ──────────────────────────────────────────────────────────────
+
+const ErrorSchema = z.object({
+  error: z.string(),
+});
+
+const WebhookReceivedSchema = z.object({
+  received: z.boolean(),
+});
+
+// ── Route definitions ────────────────────────────────────────────────────
+
+const githubWebhookRoute = createRoute({
+  method: "post",
+  path: "/api/webhooks/github",
+  tags: ["Webhooks"],
+  summary: "GitHub webhook",
+  description: "Receives GitHub App webhook events. Verified by HMAC signature, not Clerk auth.",
+  responses: {
+    200: {
+      content: { "application/json": { schema: WebhookReceivedSchema } },
+      description: "Webhook received",
+    },
+    401: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Missing or invalid signature",
+    },
+  },
+});
+
+// ── Router ───────────────────────────────────────────────────────────────
+
 export const createWebhookRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env }>();
 
-  router.post("/api/webhooks/github", async (c) => {
+  router.openapi(githubWebhookRoute, async (c) => {
     const signature = c.req.header("x-hub-signature-256");
     if (!signature) {
-      return c.json({ error: "Missing signature" }, 401);
+      return c.json({ error: "Missing signature" }, 401 as const);
     }
 
     const payload = await c.req.text();
@@ -28,7 +62,7 @@ export const createWebhookRoutes = () => {
       signature
     );
     if (!valid) {
-      return c.json({ error: "Invalid signature" }, 401);
+      return c.json({ error: "Invalid signature" }, 401 as const);
     }
 
     const event = c.req.header("x-github-event");
@@ -41,7 +75,7 @@ export const createWebhookRoutes = () => {
       await handleInstallationEvent(c.env, body);
     }
 
-    return c.json({ received: true });
+    return c.json({ received: true }, 200);
   });
 
   return router;
@@ -67,11 +101,6 @@ async function handleInstallationEvent(
   const accountType = body.installation.account.type;
 
   if (body.action === "created") {
-    // Store installation → sender mapping in KV for webhook routing
-    // Note: We can't know the Clerk userId from the webhook alone.
-    // The GitHub installation callback route (user-initiated) handles
-    // linking the installation to the user's UserDO.
-    // For now, log it.
     console.log(
       `GitHub App installed: ${installationId} by ${accountLogin} (${accountType})`
     );

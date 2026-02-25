@@ -9,7 +9,8 @@
  * GET    /api/sessions/:id/ws         — WebSocket upgrade → SessionDO
  */
 
-import { OpenAPIHono } from "@hono/zod-openapi";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { z } from "zod";
 import { getContainer } from "@cloudflare/containers";
 import type { Env } from "../types";
 import type { UserDOReferences } from "@zero/core";
@@ -22,13 +23,143 @@ type Variables = {
   doRefs: UserDOReferences;
 };
 
+// ── Schemas ──────────────────────────────────────────────────────────────
+
+const SessionIdParamSchema = z.object({
+  id: z.string().openapi({
+    param: { name: "id", in: "path" },
+    description: "Session unique identifier",
+  }),
+});
+
+const ListSessionsQuerySchema = z.object({
+  owner: z.string().optional().openapi({
+    param: { name: "owner", in: "query" },
+    description: "Filter by repository owner",
+  }),
+  repo: z.string().optional().openapi({
+    param: { name: "repo", in: "query" },
+    description: "Filter by repository name",
+  }),
+});
+
+const CreateSessionBodySchema = z.object({
+  owner: z.string(),
+  repo: z.string(),
+  prompt: z.string().optional(),
+});
+
+const SessionSummarySchema = z.object({
+  id: z.string(),
+  owner: z.string(),
+  repo: z.string(),
+  title: z.string().nullable(),
+  status: z.string(),
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const SessionListResponseSchema = z.object({
+  sessions: z.array(SessionSummarySchema),
+});
+
+const CreateSessionResponseSchema = z.object({
+  sessionId: z.string(),
+});
+
+const ErrorSchema = z.object({
+  error: z.string(),
+});
+
+const SuccessSchema = z.object({
+  ok: z.boolean(),
+});
+
+// ── Route definitions ────────────────────────────────────────────────────
+
+const listSessionsRoute = createRoute({
+  method: "get",
+  path: "/api/sessions",
+  tags: ["Sessions"],
+  summary: "List sessions",
+  description: "Lists all sessions for the authenticated user. Optionally filter by owner and repo.",
+  request: {
+    query: ListSessionsQuerySchema,
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: SessionListResponseSchema } },
+      description: "List of sessions",
+    },
+  },
+});
+
+const createSessionRoute = createRoute({
+  method: "post",
+  path: "/api/sessions",
+  tags: ["Sessions"],
+  summary: "Create session",
+  description: "Creates and starts a new coding session for a project.",
+  request: {
+    body: {
+      content: { "application/json": { schema: CreateSessionBodySchema } },
+    },
+  },
+  responses: {
+    201: {
+      content: { "application/json": { schema: CreateSessionResponseSchema } },
+      description: "Session created",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Missing required fields or no GitHub installation",
+    },
+    404: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Project not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Failed to create session",
+    },
+  },
+});
+
+const deleteSessionRoute = createRoute({
+  method: "delete",
+  path: "/api/sessions/{id}",
+  tags: ["Sessions"],
+  summary: "Delete session",
+  description: "Deletes a session and cleans up associated resources (container, snapshot, DO storage).",
+  request: {
+    params: SessionIdParamSchema,
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: SuccessSchema } },
+      description: "Session deleted",
+    },
+    404: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Session not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Failed to remove session from index",
+    },
+  },
+});
+
+// ── Router ───────────────────────────────────────────────────────────────
+
 export const createSessionRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  // ── List sessions ──────────────────────────────────────────────────────
-  router.get("/api/sessions", async (c) => {
-    const owner = c.req.query("owner");
-    const repo = c.req.query("repo");
+  // ── List sessions ────────────────────────────────────────────────────
+  router.openapi(listSessionsRoute, async (c) => {
+    const { owner, repo } = c.req.valid("query");
 
     const userDO = c.get("userDOStub") as DurableObjectStub<UserDO>;
     const filter = owner && repo ? { owner, repo } : undefined;
@@ -46,18 +177,76 @@ export const createSessionRoutes = () => {
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,
       })),
-    });
+    }, 200);
   });
 
-  // ── Delete session ────────────────────────────────────────────────────
-  router.delete("/api/sessions/:id", async (c) => {
-    const { id } = c.req.param();
+  // ── Create session ───────────────────────────────────────────────────
+  router.openapi(createSessionRoute, async (c) => {
+    const { owner, repo, prompt } = c.req.valid("json");
+
+    if (!owner || !repo) {
+      return c.json({ error: "owner and repo are required" }, 400 as const);
+    }
+
+    // Verify user has access to this project
+    const doRefs = c.get("doRefs");
+    const projectRef = doRefs.projects.find(
+      (p) => p.owner === owner && p.repo === repo
+    );
+    if (!projectRef) {
+      return c.json({ error: "Project not found" }, 404 as const);
+    }
+
+    // Get UserDO stub and ID
+    const userDOIdStr = (await c.env.KV.get(`user:${c.get("userId")}`))!;
+    const userDO = c.env.USER_DO.get(
+      c.env.USER_DO.idFromString(userDOIdStr)
+    ) as DurableObjectStub<UserDO>;
+
+    // Look up installationId from the user's linked GitHub installation
+    const installation = await userDO.getGitHubInstallation();
+    if (!installation) {
+      return c.json(
+        { error: "No GitHub installation linked. Install or link the GitHub App first." },
+        400 as const
+      );
+    }
+
+    try {
+      const result = await createSession({
+        env: c.env,
+        userDO,
+        userDOId: userDOIdStr,
+        owner,
+        repo,
+        installationId: installation.installationId,
+        prompt,
+      });
+
+      return c.json(result, 201);
+    } catch (err) {
+      console.error("Failed to create session:", err);
+      return c.json(
+        {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Failed to create session",
+        },
+        500 as const
+      );
+    }
+  });
+
+  // ── Delete session ───────────────────────────────────────────────────
+  router.openapi(deleteSessionRoute, async (c) => {
+    const { id } = c.req.valid("param");
 
     // Verify session belongs to this user
     const userDO = c.get("userDOStub") as DurableObjectStub<UserDO>;
     const sessionRow = await userDO.getSessionById(id);
     if (!sessionRow) {
-      return c.json({ error: "Session not found" }, 404);
+      return c.json({ error: "Session not found" }, 404 as const);
     }
 
     // Get SessionDO for cleanup
@@ -68,14 +257,14 @@ export const createSessionRoutes = () => {
     } catch {
       // Invalid ID — just remove from index
       await userDO.removeSession(id);
-      return c.json({ ok: true });
+      return c.json({ ok: true }, 200);
     }
 
     const session = await sessionDO.getSession();
     if (!session) {
       // SessionDO already cleared — just clean up index
       await userDO.removeSession(id);
-      return c.json({ ok: true });
+      return c.json({ ok: true }, 200);
     }
 
     // Step 1: Best-effort stop container process
@@ -108,72 +297,14 @@ export const createSessionRoutes = () => {
       await userDO.removeSession(id);
     } catch (err) {
       console.error("Delete: index removal failed:", err);
-      return c.json({ error: "Failed to remove session from index" }, 500);
+      return c.json({ error: "Failed to remove session from index" }, 500 as const);
     }
 
-    return c.json({ ok: true });
+    return c.json({ ok: true }, 200);
   });
 
-  // ── Create session ──────────────────────────────────────────────────────
-  router.post("/api/sessions", async (c) => {
-    const body = await c.req.json<{ owner: string; repo: string; prompt?: string }>();
-    const { owner, repo } = body;
-
-    if (!owner || !repo) {
-      return c.json({ error: "owner and repo are required" }, 400);
-    }
-
-    // Verify user has access to this project
-    const doRefs = c.get("doRefs");
-    const projectRef = doRefs.projects.find(
-      (p) => p.owner === owner && p.repo === repo
-    );
-    if (!projectRef) {
-      return c.json({ error: "Project not found" }, 404);
-    }
-
-    // Get UserDO stub and ID
-    const userDOIdStr = (await c.env.KV.get(`user:${c.get("userId")}`))!;
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(userDOIdStr)
-    ) as DurableObjectStub<UserDO>;
-
-    // Look up installationId from the user's linked GitHub installation
-    const installation = await userDO.getGitHubInstallation();
-    if (!installation) {
-      return c.json(
-        { error: "No GitHub installation linked. Install or link the GitHub App first." },
-        400
-      );
-    }
-
-    try {
-      const result = await createSession({
-        env: c.env,
-        userDO,
-        userDOId: userDOIdStr,
-        owner,
-        repo,
-        installationId: installation.installationId,
-        prompt: body.prompt,
-      });
-
-      return c.json(result, 201);
-    } catch (err) {
-      console.error("Failed to create session:", err);
-      return c.json(
-        {
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to create session",
-        },
-        500
-      );
-    }
-  });
-
-  // ── WebSocket upgrade → SessionDO ─────────────────────────────────────
+  // ── WebSocket upgrade → SessionDO ────────────────────────────────────
+  // WebSocket upgrades don't fit OpenAPI — kept as a plain route.
   router.get("/api/sessions/:id/ws", async (c) => {
     const { id } = c.req.param();
 

@@ -10,7 +10,8 @@
  * DELETE /api/providers/:id              — Disconnect provider
  */
 
-import { OpenAPIHono } from "@hono/zod-openapi";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { z } from "zod";
 import type { Env } from "../types";
 import type { UserDOReferences, ProviderInfo } from "@zero/core";
 import type { UserDO } from "../UserDO";
@@ -38,11 +39,159 @@ const PROVIDER_REGISTRY: Record<
   anthropic: { name: "Anthropic", supportsOAuth: true, supportsApiKey: true },
 };
 
+// ── Schemas ──────────────────────────────────────────────────────────────
+
+const ProviderIdParamSchema = z.object({
+  id: z.string().openapi({
+    param: { name: "id", in: "path" },
+    description: "Provider identifier (e.g. 'anthropic')",
+  }),
+});
+
+const ProviderInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  connected: z.boolean(),
+  credentialType: z.enum(["oauth", "api_key"]).nullable(),
+  supportsOAuth: z.boolean(),
+  supportsApiKey: z.boolean(),
+});
+
+const ProviderListResponseSchema = z.object({
+  providers: z.array(ProviderInfoSchema),
+});
+
+const OAuthConnectResponseSchema = z.object({
+  authUrl: z.string(),
+  state: z.string(),
+});
+
+const OAuthCallbackBodySchema = z.object({
+  code: z.string(),
+  state: z.string().optional(),
+});
+
+const ApiKeyBodySchema = z.object({
+  apiKey: z.string(),
+});
+
+const ErrorSchema = z.object({
+  error: z.string(),
+});
+
+const SuccessSchema = z.object({
+  success: z.boolean(),
+});
+
+// ── Route definitions ────────────────────────────────────────────────────
+
+const listProvidersRoute = createRoute({
+  method: "get",
+  path: "/api/providers",
+  tags: ["Providers"],
+  summary: "List providers",
+  description: "Lists all known providers with their connection status for the authenticated user.",
+  responses: {
+    200: {
+      content: { "application/json": { schema: ProviderListResponseSchema } },
+      description: "List of providers",
+    },
+  },
+});
+
+const connectProviderRoute = createRoute({
+  method: "post",
+  path: "/api/providers/{id}/connect",
+  tags: ["Providers"],
+  summary: "Start OAuth flow",
+  description: "Initiates an OAuth PKCE flow for the provider. Returns the authorization URL.",
+  request: {
+    params: ProviderIdParamSchema,
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: OAuthConnectResponseSchema } },
+      description: "Authorization URL and state",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "OAuth not supported for this provider",
+    },
+  },
+});
+
+const oauthCallbackRoute = createRoute({
+  method: "post",
+  path: "/api/providers/{id}/callback",
+  tags: ["Providers"],
+  summary: "Complete OAuth flow",
+  description: "Exchanges the authorization code for tokens and stores the credential.",
+  request: {
+    params: ProviderIdParamSchema,
+    body: {
+      content: { "application/json": { schema: OAuthCallbackBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: SuccessSchema } },
+      description: "OAuth flow completed",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Invalid provider, missing state, or token exchange failed",
+    },
+  },
+});
+
+const setApiKeyRoute = createRoute({
+  method: "post",
+  path: "/api/providers/{id}/api-key",
+  tags: ["Providers"],
+  summary: "Set API key",
+  description: "Sets an API key credential for a provider.",
+  request: {
+    params: ProviderIdParamSchema,
+    body: {
+      content: { "application/json": { schema: ApiKeyBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: SuccessSchema } },
+      description: "API key saved",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "API key not supported or missing",
+    },
+  },
+});
+
+const disconnectProviderRoute = createRoute({
+  method: "delete",
+  path: "/api/providers/{id}",
+  tags: ["Providers"],
+  summary: "Disconnect provider",
+  description: "Removes the stored credential for a provider.",
+  request: {
+    params: ProviderIdParamSchema,
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: SuccessSchema } },
+      description: "Provider disconnected",
+    },
+  },
+});
+
+// ── Router ───────────────────────────────────────────────────────────────
+
 export const createProviderRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  // ── List providers ──────────────────────────────────────────────────────
-  router.get("/api/providers", async (c) => {
+  // ── List providers ──────────────────────────────────────────────────
+  router.openapi(listProvidersRoute, async (c) => {
     const userDO = c.env.USER_DO.get(
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
@@ -63,14 +212,14 @@ export const createProviderRoutes = () => {
       })
     );
 
-    return c.json({ providers });
+    return c.json({ providers }, 200);
   });
 
-  // ── Start OAuth flow (Anthropic PKCE) ──────────────────────────────────
-  router.post("/api/providers/:id/connect", async (c) => {
-    const providerId = c.req.param("id");
+  // ── Start OAuth flow (Anthropic PKCE) ──────────────────────────────
+  router.openapi(connectProviderRoute, async (c) => {
+    const { id: providerId } = c.req.valid("param");
     if (providerId !== "anthropic") {
-      return c.json({ error: "OAuth not supported for this provider" }, 400);
+      return c.json({ error: "OAuth not supported for this provider" }, 400 as const);
     }
 
     const userDO = c.env.USER_DO.get(
@@ -117,17 +266,17 @@ export const createProviderRoutes = () => {
     });
 
     const authUrl = `${ANTHROPIC_OAUTH.authorizeUrl}?${params}`;
-    return c.json({ authUrl, state });
+    return c.json({ authUrl, state }, 200);
   });
 
-  // ── Complete OAuth flow ────────────────────────────────────────────────
-  router.post("/api/providers/:id/callback", async (c) => {
-    const providerId = c.req.param("id");
+  // ── Complete OAuth flow ────────────────────────────────────────────
+  router.openapi(oauthCallbackRoute, async (c) => {
+    const { id: providerId } = c.req.valid("param");
     if (providerId !== "anthropic") {
-      return c.json({ error: "OAuth not supported for this provider" }, 400);
+      return c.json({ error: "OAuth not supported for this provider" }, 400 as const);
     }
 
-    const body = await c.req.json<{ code: string; state?: string }>();
+    const body = c.req.valid("json");
     const code = body.code;
 
     // Parse code#state format from Anthropic
@@ -140,7 +289,7 @@ export const createProviderRoutes = () => {
     }
 
     if (!state) {
-      return c.json({ error: "Missing state parameter" }, 400);
+      return c.json({ error: "Missing state parameter" }, 400 as const);
     }
 
     const userDO = c.env.USER_DO.get(
@@ -152,7 +301,7 @@ export const createProviderRoutes = () => {
     // Retrieve stored PKCE verifier
     const pkce = await userDO.consumePKCEVerifier(state);
     if (!pkce) {
-      return c.json({ error: "Invalid or expired state" }, 400);
+      return c.json({ error: "Invalid or expired state" }, 400 as const);
     }
 
     // Exchange code for tokens
@@ -172,7 +321,7 @@ export const createProviderRoutes = () => {
     if (!tokenResp.ok) {
       const err = await tokenResp.text();
       console.error("Token exchange failed:", err);
-      return c.json({ error: "Token exchange failed" }, 400);
+      return c.json({ error: "Token exchange failed" }, 400 as const);
     }
 
     const tokens = (await tokenResp.json()) as {
@@ -193,20 +342,20 @@ export const createProviderRoutes = () => {
       expiresAt,
     });
 
-    return c.json({ success: true });
+    return c.json({ success: true }, 200);
   });
 
-  // ── Set API key ────────────────────────────────────────────────────────
-  router.post("/api/providers/:id/api-key", async (c) => {
-    const providerId = c.req.param("id");
+  // ── Set API key ────────────────────────────────────────────────────
+  router.openapi(setApiKeyRoute, async (c) => {
+    const { id: providerId } = c.req.valid("param");
     const providerConfig = PROVIDER_REGISTRY[providerId];
     if (!providerConfig?.supportsApiKey) {
-      return c.json({ error: "API key not supported for this provider" }, 400);
+      return c.json({ error: "API key not supported for this provider" }, 400 as const);
     }
 
-    const body = await c.req.json<{ apiKey: string }>();
-    if (!body.apiKey) {
-      return c.json({ error: "Missing apiKey" }, 400);
+    const { apiKey } = c.req.valid("json");
+    if (!apiKey) {
+      return c.json({ error: "Missing apiKey" }, 400 as const);
     }
 
     const userDO = c.env.USER_DO.get(
@@ -218,15 +367,15 @@ export const createProviderRoutes = () => {
     await userDO.upsertProviderCredential({
       provider: providerId,
       credentialType: "api_key",
-      apiKey: body.apiKey,
+      apiKey,
     });
 
-    return c.json({ success: true });
+    return c.json({ success: true }, 200);
   });
 
-  // ── Disconnect provider ────────────────────────────────────────────────
-  router.delete("/api/providers/:id", async (c) => {
-    const providerId = c.req.param("id");
+  // ── Disconnect provider ────────────────────────────────────────────
+  router.openapi(disconnectProviderRoute, async (c) => {
+    const { id: providerId } = c.req.valid("param");
 
     const userDO = c.env.USER_DO.get(
       c.env.USER_DO.idFromString(
@@ -235,7 +384,7 @@ export const createProviderRoutes = () => {
     ) as DurableObjectStub<UserDO>;
 
     await userDO.deleteProviderCredential(providerId);
-    return c.json({ success: true });
+    return c.json({ success: true }, 200);
   });
 
   return router;
