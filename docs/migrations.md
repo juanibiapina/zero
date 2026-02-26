@@ -4,16 +4,15 @@ This project uses Drizzle ORM with Cloudflare Durable Objects SQLite. Migrations
 
 ## Overview
 
-There are three separate databases with their own schemas and migrations:
+There are two separate databases with their own schemas and migrations:
 - **UserDO** - User data (`apps/api/src/UserDO/db/`)
-- **ProjectDO** - Project data (`apps/api/src/ProjectDO/db/`)
 - **SessionDO** - Session data (`apps/api/src/SessionDO/db/`)
 
 ## Creating a Migration
 
 ### 1. Edit the schema
 
-Modify the appropriate schema file in `apps/api/src/{UserDO,ProjectDO,SessionDO}/db/schema.ts`.
+Modify the appropriate schema file in `apps/api/src/{UserDO,SessionDO}/db/schema.ts`.
 
 ### 2. Generate the migration
 

@@ -13,12 +13,11 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
-import type { UserDOReferences, ProviderInfo } from "@zero/core";
+import type { ProviderInfo } from "@zero/core";
 
 type Variables = {
   userId: string;
   userDOStub: DurableObjectStub;
-  doRefs: UserDOReferences;
 };
 
 // Anthropic OAuth constants (extracted from @mariozechner/pi-ai source)

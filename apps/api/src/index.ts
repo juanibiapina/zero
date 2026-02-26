@@ -7,6 +7,5 @@ export default {
 };
 
 export { UserDO } from "./UserDO";
-export { ProjectDO } from "./ProjectDO";
 export { SessionDO } from "./SessionDO";
 export { AgentContainer } from "./AgentContainer";

@@ -111,12 +111,9 @@ export class SessionService {
 
     const { userDO, userDOId } = await this.getUserDO();
 
-    // Verify user has access to this project
-    const projects = (await userDO.getDOReferences()).projects;
-    const projectRef = projects.find(
-      (p) => p.owner === owner && p.repo === repo
-    );
-    if (!projectRef) {
+    // Verify user has access to this project and resolve model defaults
+    const project = await userDO.getProject(owner, repo);
+    if (!project) {
       return Result.fail({ message: "Project not found", code: "NOT_FOUND" });
     }
 
@@ -147,9 +144,8 @@ export class SessionService {
     const provider = cred.provider;
 
     // Resolve model: use project default or a sensible default per provider
-    const project = await userDO.getProject(owner, repo);
     let model: string;
-    if (project?.defaultProvider === provider && project?.defaultModel) {
+    if (project.defaultProvider === provider && project.defaultModel) {
       model = project.defaultModel;
     } else {
       model = "claude-sonnet-4-20250514";

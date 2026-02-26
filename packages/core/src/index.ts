@@ -78,7 +78,6 @@ export interface SessionMessage {
 export interface Project {
   owner: string;
   repo: string;
-  projectDOId: string;
   defaultProvider: string | null;
   defaultModel: string | null;
 }
@@ -261,12 +260,4 @@ export interface SecretEntry {
   // value intentionally omitted — never returned from API
 }
 
-// ============================================================================
-// User DO References
-// ============================================================================
 
-export interface UserDOReferences {
-  inboxDOId: string | null;
-  realtimeDOId: string | null;
-  projects: { owner: string; repo: string; projectDOId: string }[];
-}

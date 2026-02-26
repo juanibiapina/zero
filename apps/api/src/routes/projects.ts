@@ -10,13 +10,12 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
-import type { UserDOReferences, ProjectSummary } from "@zero/core";
+import type { ProjectSummary } from "@zero/core";
 import { getInstallationToken, listInstallationRepos } from "../services/github";
 
 type Variables = {
   userId: string;
   userDOStub: DurableObjectStub;
-  doRefs: UserDOReferences;
 };
 
 // ── Schemas ──────────────────────────────────────────────────────────────
@@ -116,15 +115,13 @@ export const createProjectRoutes = () => {
       return c.json({ projects: [], installUrl, errors: [msg] }, 200);
     }
 
-    // Ensure each repo has a ProjectDO entry in UserDO
+    // Ensure each repo has a project entry in UserDO
     for (const repo of allRepos) {
       const existing = await userDO.getProject(repo.owner, repo.repo);
       if (!existing) {
-        const projectDOId = c.env.PROJECT_DO.newUniqueId().toString();
         await userDO.upsertProject({
           owner: repo.owner,
           repo: repo.repo,
-          projectDOId,
         });
       }
     }

@@ -60,7 +60,7 @@ Doppler projects:
 
 When making schema changes to Durable Objects, refer to `docs/migrations.md` for the migration workflow.
 
-1. Edit schema file (`apps/api/src/{UserDO,ProjectDO,SessionDO}/db/schema.ts`)
+1. Edit schema file (`apps/api/src/{UserDO,SessionDO}/db/schema.ts`)
 2. Generate migration: `pnpm --filter @zero/api run db:generate`
 3. Run `gob run bin/ci` to verify
 

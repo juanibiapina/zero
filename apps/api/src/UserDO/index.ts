@@ -7,7 +7,7 @@
  * Stores:
  * - Provider credentials (OAuth tokens, API keys)
  * - GitHub App installations
- * - Project references (owner/repo → ProjectDO ID)
+ * - Project references (owner/repo → default provider/model)
  * - PKCE verifiers for in-progress OAuth flows
  *
  * Created with newUniqueId() for low-latency placement near the user.
@@ -28,7 +28,7 @@ import {
   sessionsTable,
 } from "./db/schema";
 import type { Env } from "../types";
-import type { UserDOReferences, SessionStatus, UserServerMessage } from "@zero/core";
+import type { SessionStatus, UserServerMessage } from "@zero/core";
 import { migrate } from "@zero/drizzle-migrator";
 
 export class UserDO extends DurableObject<Env> {
@@ -80,24 +80,6 @@ export class UserDO extends DurableObject<Env> {
         try { ws.close(1011, "Send failed"); } catch { /* already closed */ }
       }
     }
-  }
-
-  // ============================================================================
-  // DO References
-  // ============================================================================
-
-  async getDOReferences(): Promise<UserDOReferences> {
-    const projects = this.db.select({
-      owner: projectsTable.owner,
-      repo: projectsTable.repo,
-      projectDOId: projectsTable.projectDOId,
-    }).from(projectsTable).all();
-
-    return {
-      inboxDOId: null,
-      realtimeDOId: null,
-      projects,
-    };
   }
 
   // ============================================================================
@@ -242,7 +224,6 @@ export class UserDO extends DurableObject<Env> {
   async upsertProject(data: {
     owner: string;
     repo: string;
-    projectDOId: string;
     defaultProvider?: string;
     defaultModel?: string;
   }) {
@@ -253,7 +234,6 @@ export class UserDO extends DurableObject<Env> {
       this.db
         .update(projectsTable)
         .set({
-          projectDOId: data.projectDOId,
           defaultProvider: data.defaultProvider ?? existing.defaultProvider,
           defaultModel: data.defaultModel ?? existing.defaultModel,
         })
@@ -265,7 +245,6 @@ export class UserDO extends DurableObject<Env> {
       this.db.insert(projectsTable).values({
         owner: data.owner,
         repo: data.repo,
-        projectDOId: data.projectDOId,
         defaultProvider: data.defaultProvider ?? null,
         defaultModel: data.defaultModel ?? null,
         createdAt: now,

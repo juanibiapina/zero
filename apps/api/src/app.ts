@@ -17,7 +17,6 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { clerkMiddleware, getAuth } from "@hono/clerk-auth";
 import { cors } from "hono/cors";
 import type { Env } from "./types";
-import type { UserDOReferences } from "@zero/core";
 import { createProviderRoutes } from "./routes/providers";
 import { createProjectRoutes } from "./routes/projects";
 import { createSessionRoutes } from "./routes/sessions";
@@ -32,7 +31,6 @@ import { createRealtimeRoutes } from "./routes/realtime";
 type Variables = {
   userId: string;
   userDOStub: DurableObjectStub;
-  doRefs: UserDOReferences;
 };
 
 export const createApp = () => {
@@ -104,10 +102,6 @@ export const createApp = () => {
     const userDOId = env.USER_DO.idFromString(userDOIdStr);
     const userDOStub = env.USER_DO.get(userDOId);
     c.set("userDOStub", userDOStub as unknown as DurableObjectStub);
-
-    // Fetch DO references and cache in context
-    const refsResponse = await userDOStub.getDOReferences();
-    c.set("doRefs", refsResponse);
 
     await next();
   });

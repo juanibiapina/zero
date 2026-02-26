@@ -38,13 +38,12 @@ export const githubInstallationsTable = sqliteTable("github_installations", {
 });
 
 /**
- * Project references — maps owner/repo to a ProjectDO instance.
+ * Project references — maps owner/repo to project settings.
  */
 export const projectsTable = sqliteTable("projects", {
   id: int().primaryKey({ autoIncrement: true }),
   owner: text().notNull(),
   repo: text().notNull(),
-  projectDOId: text().notNull(),
   defaultProvider: text(),
   defaultModel: text(),
   createdAt: text().notNull(),

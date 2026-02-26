@@ -52,10 +52,6 @@
         "class_name": "UserDO"
       },
       {
-        "name": "PROJECT_DO",
-        "class_name": "ProjectDO"
-      },
-      {
         "name": "SESSION_DO",
         "class_name": "SessionDO"
       },
@@ -73,6 +69,10 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["SessionDO", "AgentContainer"]
+    },
+    {
+      "tag": "v3",
+      "deleted_classes": ["ProjectDO"]
     }
   ]
 }

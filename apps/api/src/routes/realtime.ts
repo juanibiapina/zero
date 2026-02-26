@@ -11,12 +11,10 @@
 
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Env } from "../types";
-import type { UserDOReferences } from "@zero/core";
 
 type Variables = {
   userId: string;
   userDOStub: DurableObjectStub;
-  doRefs: UserDOReferences;
 };
 
 export const createRealtimeRoutes = () => {

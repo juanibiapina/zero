@@ -4,10 +4,6 @@ Document known technical debt here: shortcuts, workarounds, temporary solutions,
 
 ---
 
-### Unused `sessionIndexTable` in ProjectDO
-
-The `session_index` table in `apps/api/src/ProjectDO/db/schema.ts` is defined and has migrations, but is never referenced from any code outside the schema file. Session listing was moved to UserDO's `sessions` table. The table and its schema definition should be removed in a future migration cleanup.
-
 ### Steer not implemented
 
 `SessionWrapper.steer()` in `packages/agent-server/src/session.ts` throws `"Steer not yet supported"`. The WebSocket protocol and route wiring exist end-to-end, but the agent-server doesn't implement the actual steer behavior.

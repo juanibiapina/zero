@@ -68,7 +68,6 @@ export default {
 };
 
 export { UserDO } from "./UserDO";
-export { ProjectDO } from "./ProjectDO";
 export { SessionDO } from "./SessionDO";
 export { AgentContainer } from "./AgentContainer";
 ```
@@ -132,7 +131,6 @@ app.use("/api/*", async (c, next) => {
 
   const userDOStub = env.USER_DO.get(env.USER_DO.idFromString(userDOIdStr));
   c.set("userDOStub", userDOStub);
-  c.set("doRefs", await userDOStub.getDOReferences());
   await next();
 });
 ```
@@ -145,13 +143,11 @@ The app defines typed context variables that downstream handlers can access:
 type Variables = {
   userId: string;
   userDOStub: DurableObjectStub;
-  doRefs: UserDOReferences;
 };
 
 // In a route handler:
 const userId = c.get("userId");
 const userDO = c.get("userDOStub");
-const doRefs = c.get("doRefs");
 ```
 
 ---
@@ -365,8 +361,8 @@ All DOs use `newUniqueId()` for placement near the user. Lookup goes through KV 
 const userDOIdStr = await env.KV.get(`user:${userId}`);
 const userDO = env.USER_DO.get(env.USER_DO.idFromString(userDOIdStr));
 
-// UserDO stores references to other DOs
-const refs = await userDO.getDOReferences();
+// UserDO stores project references, credentials, sessions, etc.
+const projects = await userDO.listProjects();
 ```
 
 ### Migration Pattern

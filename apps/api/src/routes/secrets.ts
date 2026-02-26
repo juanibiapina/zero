@@ -11,14 +11,12 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
-import type { UserDOReferences } from "@zero/core";
 import { SecretsService } from "../services/secrets";
 import { serviceResult } from "../lib/result";
 
 type Variables = {
   userId: string;
   userDOStub: DurableObjectStub;
-  doRefs: UserDOReferences;
 };
 
 // ── Schemas ──────────────────────────────────────────────────────────────
