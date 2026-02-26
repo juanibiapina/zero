@@ -55,6 +55,10 @@ export {
   loginAntigravity,
   refreshAntigravityToken,
   antigravityOAuthProvider,
+  // Anthropic web OAuth (two-step PKCE flow)
+  buildAnthropicAuthUrl,
+  exchangeAnthropicCode,
+  type AnthropicOAuthTokens,
   // Unified
   refreshOAuthToken,
 } from "./oauth.js";

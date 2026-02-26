@@ -17,22 +17,10 @@ import {
   getProviderRegistry,
   getProviderMeta,
   generatePKCE,
+  buildAnthropicAuthUrl,
+  exchangeAnthropicCode,
 } from "@zero/providers";
 import { getInstallationToken, listInstallationRepos, getInstallationDetails } from "./github";
-
-// ── Anthropic OAuth constants ────────────────────────────────────────────
-//
-// These are private in pi-ai's anthropic.js module, so we maintain
-// them here for the two-step connect/callback flow that Workers require.
-// The values are stable (they're Anthropic's published OAuth app).
-
-const ANTHROPIC_OAUTH = {
-  clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-  tokenUrl: "https://console.anthropic.com/v1/oauth/token",
-  authorizeUrl: "https://claude.ai/oauth/authorize",
-  redirectUri: "https://console.anthropic.com/oauth/code/callback",
-  scopes: "org:create_api_key user:profile user:inference",
-};
 
 // ── Service ──────────────────────────────────────────────────────────────
 
@@ -270,20 +258,7 @@ export class UserService {
     await userDO.storePKCEVerifier(state, verifier, providerId);
 
     // Build authorization URL
-    // Note: Anthropic's flow uses `code=true` and passes the verifier as `state`
-    // (the verifier is needed both as state and for PKCE verification)
-    const params = new URLSearchParams({
-      code: "true",
-      client_id: ANTHROPIC_OAUTH.clientId,
-      response_type: "code",
-      redirect_uri: ANTHROPIC_OAUTH.redirectUri,
-      scope: ANTHROPIC_OAUTH.scopes,
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-      state: verifier,
-    });
-
-    const authUrl = `${ANTHROPIC_OAUTH.authorizeUrl}?${params.toString()}`;
+    const authUrl = buildAnthropicAuthUrl({ challenge, verifier });
     return Result.succeed({ authUrl, state });
   }
 
@@ -304,15 +279,11 @@ export class UserService {
       return Result.fail({ message: "OAuth flow not yet implemented for this provider", code: "INVALID" });
     }
 
-    // Parse code#state format from Anthropic
-    let actualCode = code;
+    // Resolve state from the code#state format or explicit param
     let state = stateParam;
-    if (code.includes("#")) {
-      const parts = code.split("#");
-      actualCode = parts[0];
-      state = state ?? parts[1];
+    if (!state && code.includes("#")) {
+      state = code.split("#")[1];
     }
-
     if (!state) {
       return Result.fail({ message: "Missing state parameter", code: "INVALID" });
     }
@@ -326,36 +297,27 @@ export class UserService {
     }
 
     // Exchange code for tokens
-    const tokenResp = await fetch(ANTHROPIC_OAUTH.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "authorization_code",
-        client_id: ANTHROPIC_OAUTH.clientId,
-        code: actualCode,
+    let tokens;
+    try {
+      tokens = await exchangeAnthropicCode({
+        code,
         state,
-        redirect_uri: ANTHROPIC_OAUTH.redirectUri,
-        code_verifier: pkce.verifier,
-      }),
-    });
-
-    if (!tokenResp.ok) {
-      const err = await tokenResp.text();
+        verifier: pkce.verifier,
+      });
+    } catch (err) {
       console.error("Token exchange failed:", err);
       return Result.fail({ message: "Token exchange failed", code: "INVALID" });
     }
 
-    const tokens: { access_token: string; refresh_token?: string; expires_in?: number } = await tokenResp.json();
-
-    const expiresAt = tokens.expires_in
-      ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+    const expiresAt = tokens.expiresIn
+      ? new Date(Date.now() + tokens.expiresIn * 1000).toISOString()
       : undefined;
 
     await userDO.upsertProviderCredential({
       provider: providerId,
       credentialType: "oauth",
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       expiresAt,
     });
 
