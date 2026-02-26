@@ -243,6 +243,15 @@ export type SessionServerMessage =
   | { type: "error"; message: string };
 
 // ============================================================================
+// User WebSocket Protocol
+// ============================================================================
+
+/** UserDO → Browser (user-level push events) */
+export type UserServerMessage =
+  | { type: "session_status"; sessionId: string; status: SessionStatus }
+  | { type: "pong" };
+
+// ============================================================================
 // Secret Types
 // ============================================================================
 

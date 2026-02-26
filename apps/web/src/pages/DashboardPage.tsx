@@ -1,21 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import { LayoutDashboard, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-
-interface SessionEntry {
-  id: string;
-  owner: string;
-  repo: string;
-  title: string;
-  status: string;
-  provider: string;
-  model: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { useSessionStore } from "@/lib/session-store";
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -30,30 +19,10 @@ function relativeTime(iso: string): string {
 
 export default function DashboardPage() {
   const { getToken } = useAuth();
-  const [sessions, setSessions] = useState<SessionEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const sessions = useSessionStore((s) => s.sessions);
+  const loading = useSessionStore((s) => s.loading);
+  const removeSession = useSessionStore((s) => s.removeSession);
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
-
-  const fetchSessions = useCallback(async () => {
-    try {
-      const token = await getToken();
-      const resp = await fetch("/api/sessions", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        const data = (await resp.json()) as { sessions: SessionEntry[] };
-        setSessions(data.sessions);
-      }
-    } catch {
-      // Ignore fetch errors
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken]);
-
-  useEffect(() => {
-    void fetchSessions();
-  }, [fetchSessions]);
 
   const handleDelete = async (sessionId: string) => {
     setDeleting((prev) => new Set(prev).add(sessionId));
@@ -64,7 +33,7 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (resp.ok) {
-        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        removeSession(sessionId);
       }
     } catch {
       // Ignore errors

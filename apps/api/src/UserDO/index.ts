@@ -28,7 +28,7 @@ import {
   sessionsTable,
 } from "./db/schema";
 import type { Env } from "../types";
-import type { UserDOReferences, SessionStatus } from "@zero/core";
+import type { UserDOReferences, SessionStatus, UserServerMessage } from "@zero/core";
 import { migrate } from "@zero/drizzle-migrator";
 
 export class UserDO extends DurableObject<Env> {
@@ -38,9 +38,48 @@ export class UserDO extends DurableObject<Env> {
     super(ctx, env);
     this.db = drizzle(ctx.storage, { logger: false });
 
+    // Auto-respond to ping/pong at the edge without waking the DO from hibernation.
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(
+        JSON.stringify({ type: "ping" }),
+        JSON.stringify({ type: "pong" }),
+      ),
+    );
+
     void ctx.blockConcurrencyWhile(async () => {
       migrate(this.db, migrations as MigrationConfig);
     });
+  }
+
+  // ============================================================================
+  // Browser WebSocket (Hibernation API)
+  // ============================================================================
+
+  async fetch(request: Request): Promise<Response> {
+    const upgrade = request.headers.get("Upgrade");
+    if (upgrade !== "websocket") {
+      return new Response("Expected WebSocket upgrade", { status: 426 });
+    }
+
+    const pair = new WebSocketPair();
+    const [client, server] = [pair[0], pair[1]];
+    this.ctx.acceptWebSocket(server);
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(): Promise<void> { /* ping/pong handled by auto-response */ }
+  async webSocketClose(): Promise<void> { /* Hibernation API manages cleanup */ }
+  async webSocketError(): Promise<void> { /* Hibernation API manages cleanup */ }
+
+  private broadcastToWebSockets(message: UserServerMessage): void {
+    const json = JSON.stringify(message);
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(json); }
+      catch {
+        try { ws.close(1011, "Send failed"); } catch { /* already closed */ }
+      }
+    }
   }
 
   // ============================================================================
@@ -328,6 +367,13 @@ export class UserDO extends DurableObject<Env> {
       .set({ status, updatedAt: now })
       .where(eq(sessionsTable.sessionDOId, sessionDOId))
       .run();
+
+    // Push status change to all connected browsers
+    this.broadcastToWebSockets({
+      type: "session_status",
+      sessionId: sessionDOId,
+      status,
+    });
   }
 
   async listSessions(filter?: { owner: string; repo: string }) {

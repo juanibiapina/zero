@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import { NavLink, useLocation } from "react-router";
 import { useUser, useAuth, UserButton } from "@clerk/clerk-react";
 import {
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { useSessionStore } from "@/lib/session-store";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -35,14 +36,6 @@ const statusDotColor: Record<string, string> = {
   error: "bg-destructive",
 };
 
-interface SessionEntry {
-  id: string;
-  owner: string;
-  repo: string;
-  title: string;
-  status: string;
-}
-
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
@@ -52,30 +45,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { user } = useUser();
   const { getToken } = useAuth();
   const location = useLocation();
-  const [sessions, setSessions] = useState<SessionEntry[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(true);
+  const sessions = useSessionStore((s) => s.sessions);
+  const loadingSessions = useSessionStore((s) => s.loading);
+  const fetchSessions = useSessionStore((s) => s.fetchSessions);
 
-  const fetchSessions = useCallback(async () => {
-    try {
-      const token = await getToken();
-      const resp = await fetch("/api/sessions", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        const data = (await resp.json()) as { sessions: SessionEntry[] };
-        setSessions(data.sessions);
-      }
-    } catch {
-      // Ignore fetch errors
-    } finally {
-      setLoadingSessions(false);
-    }
-  }, [getToken]);
-
-  // Fetch sessions on mount and whenever the route changes
+  // Re-fetch sessions on route changes (picks up new/deleted sessions)
   useEffect(() => {
-    void fetchSessions();
-  }, [fetchSessions, location.pathname]);
+    void fetchSessions(getToken);
+  }, [fetchSessions, getToken, location.pathname]);
 
   const sidebarContent = (
     <>

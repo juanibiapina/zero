@@ -24,6 +24,7 @@ import { createSessionRoutes } from "./routes/sessions";
 import { createSecretsRoutes } from "./routes/secrets";
 import { createGitHubRoutes } from "./routes/github";
 import { createWebhookRoutes } from "./routes/webhooks";
+import { createRealtimeRoutes } from "./routes/realtime";
 
 /**
  * Custom context variables available to all route handlers.
@@ -117,6 +118,7 @@ export const createApp = () => {
   app.route("/", createProjectRoutes());
   app.route("/", createSessionRoutes());
   app.route("/", createSecretsRoutes());
+  app.route("/", createRealtimeRoutes());
 
   return app;
 };
