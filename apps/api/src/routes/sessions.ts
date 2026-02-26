@@ -47,7 +47,6 @@ const ListSessionsQuerySchema = z.object({
 const CreateSessionBodySchema = z.object({
   owner: z.string(),
   repo: z.string(),
-  prompt: z.string().optional(),
 });
 
 const SessionSummarySchema = z.object({
@@ -143,11 +142,11 @@ export const createSessionRoutes = () => {
   });
 
   router.openapi(createSessionRoute, async (c) => {
-    const { owner, repo, prompt } = c.req.valid("json");
+    const { owner, repo } = c.req.valid("json");
     const service = new SessionService(c.env, c.get("userId"));
 
     try {
-      const result = await service.createSession(owner, repo, prompt);
+      const result = await service.createSession(owner, repo);
       return serviceResult(c, result, 201);
     } catch (err) {
       console.error("Failed to create session:", err);

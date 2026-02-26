@@ -99,7 +99,7 @@ export default function SessionPage() {
             case "status": {
               const s = msg.status as string;
               if (["ready", "running", "idle", "error", "starting", "stopped", "pending", "failed", "resuming"].includes(s)) {
-                setStatusBoth(s === "pending" ? "starting" : s === "failed" ? "error" : s as SessionStatus);
+                setStatusBoth(s === "pending" ? "ready" : s === "failed" ? "error" : s as SessionStatus);
               }
               // Capture error message from status event (e.g. API auth failure)
               if ((s === "error" || s === "failed") && msg.error) {

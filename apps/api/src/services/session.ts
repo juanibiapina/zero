@@ -100,8 +100,7 @@ export class SessionService {
 
   async createSession(
     owner: string,
-    repo: string,
-    prompt?: string
+    repo: string
   ): Promise<Result.Result<CreateSessionResult, ServiceError<"INVALID" | "NOT_FOUND">>> {
     if (!owner || !repo) {
       return Result.fail({
@@ -131,8 +130,8 @@ export class SessionService {
       });
     }
 
-    // 1. Get first connected credential (API key or OAuth) — validates existence
-    //    and determines provider. Actual key resolution happens inside SessionDO.
+    // Get first connected credential (API key or OAuth) — validates existence
+    // and determines provider. Actual key resolution happens inside SessionDO.
     const credentials = await userDO.listProviderCredentials();
     const cred =
       credentials.find((c) => c.credentialType === "api_key" && c.apiKey) ??
@@ -156,30 +155,28 @@ export class SessionService {
       model = "claude-sonnet-4-20250514";
     }
 
-    // 2. Create SessionDO — initSession persists metadata and kicks off
-    //    container start asynchronously (credentials resolved by SessionDO).
+    // Create SessionDO
     const sessionDOId = this.env.SESSION_DO.newUniqueId();
     const sessionDO = this.env.SESSION_DO.get(sessionDOId);
 
     const title = `Session ${sessionDOId.toString().slice(0, 8)}`;
 
     await sessionDO.initSession({
-      status: "starting",
+      status: "pending",
       projectOwner: owner,
       projectRepo: repo,
       provider,
       model,
       userDOId,
-      prompt,
     });
 
-    // 3. Add to UserDO session index
+    // Add to UserDO session index
     await userDO.addSession({
       sessionDOId: sessionDOId.toString(),
       owner,
       repo,
       title,
-      status: "starting",
+      status: "pending",
       provider,
       model,
     });
