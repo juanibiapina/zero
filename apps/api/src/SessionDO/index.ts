@@ -145,6 +145,64 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   /**
+   * Start the container for the first time.
+   * Binds the container to this session, starts it, and connects the event stream.
+   * Called by SessionService after initializing session metadata.
+   */
+  async startContainer(params: {
+    repoUrl: string;
+    token: string;
+    provider: string;
+    model: string;
+    apiKey: string;
+    prompt?: string;
+    secrets?: Record<string, string>;
+  }): Promise<void> {
+    const session = await this.getSession();
+    if (!session) throw new Error("No session");
+
+    const container = new ContainerHandle(this.env, session.containerName);
+
+    // Tell the container which SessionDO to notify on stop
+    await container.bindToSession(this.ctx.id.toString());
+
+    await container.start(params);
+
+    // Connect event stream so status events (e.g. "ready") reach the browser.
+    await this.connectEventStream(container);
+  }
+
+  /**
+   * Full teardown: stop container, clean R2 snapshot, clear storage.
+   * All steps are best-effort — a single failure doesn't block cleanup.
+   */
+  async destroySession(): Promise<void> {
+    const session = await this.getSession();
+
+    if (session) {
+      // Step 1: Best-effort stop container process
+      try {
+        const container = new ContainerHandle(this.env, session.containerName);
+        await container.stop();
+      } catch (err) {
+        console.error("Destroy: container stop failed (ok):", err);
+      }
+    }
+
+    // Step 2: Clear R2 workspace snapshot
+    try {
+      await this.env.SNAPSHOTS.delete(
+        `workspace-snapshots/${this.ctx.id.toString()}/snapshot.tar.zst`
+      );
+    } catch (err) {
+      console.error("Destroy: R2 snapshot cleanup failed (ok):", err);
+    }
+
+    // Step 3: Clear all DO storage
+    await this.ctx.storage.deleteAll();
+  }
+
+  /**
    * Auto-wake the container when a browser connects to a sleeping session.
    * Fire-and-forget — errors are logged but don't fail the WS connection.
    *
@@ -190,18 +248,6 @@ export class SessionDO extends DurableObject<Env> {
       await this.updateStatus("idle");
       this.broadcastToWebSockets({ type: "status", status: "idle" });
     }
-  }
-
-  /**
-   * Proactively connect the event WS to the container.
-   * Called during session creation so startup events reach the browser.
-   */
-  async connectToContainer(): Promise<void> {
-    if (this.containerWs) return;
-    const session = await this.getSession();
-    if (!session) return;
-    const container = new ContainerHandle(this.env, session.containerName);
-    await this.connectEventStream(container);
   }
 
   /**

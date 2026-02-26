@@ -13,7 +13,6 @@ import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
 import { getInstallationToken } from "./github";
-import { ContainerHandle } from "./container";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -198,16 +197,11 @@ export class SessionService {
       userSecretsList.map((s) => [s.name, s.value])
     );
 
-    // 6. Start container
+    // 6. Start container (SessionDO handles bind + start + event stream)
     const repoUrl = `https://github.com/${owner}/${repo}.git`;
 
     try {
-      const container = new ContainerHandle(this.env, containerName);
-
-      // Tell the container which SessionDO to notify on stop
-      await container.bindToSession(sessionDOId.toString());
-
-      await container.start({
+      await sessionDO.startContainer({
         repoUrl,
         token: githubToken,
         provider,
@@ -216,16 +210,7 @@ export class SessionService {
         secrets,
         ...(prompt ? { prompt } : {}),
       });
-
-      // Connect SessionDO's event stream so status events (e.g. "ready")
-      // reach the browser. Without this, the lazy architecture deadlocks:
-      // browser waits for "ready" before sending the prompt, but SessionDO
-      // only opens the event WS on receiving a command.
-      sessionDO.connectToContainer().catch((err) => {
-        console.error("Failed to connect event stream after /start:", err);
-      });
     } catch (err) {
-      // Update session status on container start failure
       await sessionDO.updateStatus("failed");
       throw new Error(
         `Failed to start container: ${err instanceof Error ? err.message : String(err)}`
@@ -257,38 +242,14 @@ export class SessionService {
       return Result.succeed({ ok: true as const });
     }
 
-    const session = await sessionDO.getSession();
-    if (!session) {
-      // SessionDO already cleared — just clean up index
-      await userDO.removeSession(id);
-      return Result.succeed({ ok: true as const });
-    }
-
-    // Step 1: Best-effort stop container process
+    // Full teardown: stop container, clean R2 snapshot, clear DO storage
     try {
-      const container = new ContainerHandle(this.env, session.containerName);
-      await container.stop();
+      await sessionDO.destroySession();
     } catch (err) {
-      console.error("Delete: container stop failed (ok):", err);
+      console.error("Delete: session destroy failed (ok):", err);
     }
 
-    // Step 2: Clear R2 workspace snapshot
-    try {
-      await this.env.SNAPSHOTS.delete(
-        `workspace-snapshots/${id}/snapshot.tar.zst`
-      );
-    } catch (err) {
-      console.error("Delete: R2 snapshot cleanup failed (ok):", err);
-    }
-
-    // Step 3: Clear SessionDO storage
-    try {
-      await sessionDO.deleteSession();
-    } catch (err) {
-      console.error("Delete: session DO cleanup failed (ok):", err);
-    }
-
-    // Step 4: Remove from UserDO index
+    // Remove from UserDO index
     await userDO.removeSession(id);
 
     return Result.succeed({ ok: true as const });
