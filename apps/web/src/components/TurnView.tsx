@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Brain, MessageSquare, Wrench, Terminal, AlertTriangle, KeyRound, Loader2, CheckCircle2 } from "lucide-react";
+import { Brain, MessageSquare, Wrench, Terminal, AlertTriangle, KeyRound } from "lucide-react";
 import { Link } from "react-router";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,7 +10,6 @@ import type {
   ToolCallBlock,
   ToolResultBlock,
   ErrorBlock,
-  LifecycleBlock,
 } from "@/lib/session-types";
 
 function ThinkingBlockView({ block }: { block: ThinkingBlock }) {
@@ -100,22 +99,6 @@ function ToolResultBlockView({ block }: { block: ToolResultBlock }) {
   );
 }
 
-const TERMINAL_PHASES = new Set(["clone_complete", "workspace_restored", "ready"]);
-
-function LifecycleBlockView({ block }: { block: LifecycleBlock }) {
-  const isDone = TERMINAL_PHASES.has(block.phase) || block.completed === true;
-  return (
-    <div className="flex items-center gap-2 text-muted-foreground text-xs py-0.5">
-      {isDone ? (
-        <CheckCircle2 className="h-3 w-3 text-green-500" />
-      ) : (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      )}
-      <span>{block.message}</span>
-    </div>
-  );
-}
-
 function ErrorBlockView({ block }: { block: ErrorBlock }) {
   const [showRaw, setShowRaw] = useState(false);
   return (
@@ -189,8 +172,6 @@ export function TurnView({ turn }: { turn: Turn }) {
             return <ToolResultBlockView key={i} block={block} />;
           case "error":
             return <ErrorBlockView key={i} block={block} />;
-          case "lifecycle":
-            return <LifecycleBlockView key={i} block={block} />;
         }
       })}
     </div>

@@ -256,27 +256,20 @@ export class SessionWrapper {
     this._eventBuffer.addEvent({ type: "status", status: this._status });
 
     try {
-      this._eventBuffer.addEvent({ type: "lifecycle", phase: "resuming" });
-
       let workDir: string;
       if (workspaceRestored) {
-        this._eventBuffer.addEvent({ type: "lifecycle", phase: "restoring_workspace" });
         workDir = WORKSPACE_DIR;
         mkdirSync(workDir, { recursive: true });
         console.log("Skipping clone — workspace will be restored from R2 snapshot");
-        this._eventBuffer.addEvent({ type: "lifecycle", phase: "workspace_restored" });
         
         // Set up user git authentication for restored workspace
         // (cloneRepo already handles this for the clone case)
         this.setupUserGitAuthentication(workDir, repoUrl);
       } else {
-        this._eventBuffer.addEvent({ type: "lifecycle", phase: "cloning" });
         workDir = this.cloneRepo(repoUrl, token);
-        this._eventBuffer.addEvent({ type: "lifecycle", phase: "clone_complete" });
       }
 
       // Configure provider and model
-      this._eventBuffer.addEvent({ type: "lifecycle", phase: "configuring" });
       setApiKey(provider, apiKey);
       const model = getModel(
         provider as Parameters<typeof getModel>[0],
@@ -296,7 +289,6 @@ export class SessionWrapper {
 
       // Ready for follow-up messages
       this._status = "idle";
-      this._eventBuffer.addEvent({ type: "lifecycle", phase: "ready" });
       this._eventBuffer.addEvent({ type: "status", status: this._status });
     } catch (err) {
       this._status = "error";

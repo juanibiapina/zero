@@ -30,14 +30,7 @@ export interface ErrorBlock {
   isAuthError: boolean;
 }
 
-export interface LifecycleBlock {
-  kind: "lifecycle";
-  phase: string;
-  message: string;
-  completed?: boolean;
-}
-
-export type ContentBlock = ThinkingBlock | TextBlock | ToolCallBlock | ToolResultBlock | ErrorBlock | LifecycleBlock;
+export type ContentBlock = ThinkingBlock | TextBlock | ToolCallBlock | ToolResultBlock | ErrorBlock;
 
 export interface AssistantTurn {
   role: "assistant";

@@ -212,8 +212,7 @@ export type AgentEvent =
   | { type: "tool_execution_end"; toolCallId: string; toolName: string; result: unknown; isError: boolean }
   | { type: "turn_end"; message: AgentAssistantMessage; toolResults: AgentToolResultMessage[] }
   | { type: "agent_end"; messages: AgentMessage[] }
-  | { type: "status"; status: string; error?: string }
-  | { type: "lifecycle"; phase: string };
+  | { type: "status"; status: string; error?: string };
 
 export type AgentEventType = AgentEvent["type"];
 

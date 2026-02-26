@@ -1,5 +1,5 @@
 import type { AgentEvent, AgentAssistantMessageEvent, AgentAssistantMessage } from "@zero/core";
-import type { Turn, AssistantTurn, ErrorBlock, LifecycleBlock } from "./session-types";
+import type { Turn, AssistantTurn, ErrorBlock } from "./session-types";
 
 // ─── Error Parsing ──────────────────────────────────────────────────────────
 
@@ -84,60 +84,6 @@ export function processAgentEvent(
     // ── Status events (handled separately in SessionPage) ─────────────
     case "status":
       break;
-
-    // ── Lifecycle events (progress indicators) ────────────────────────
-    case "lifecycle": {
-      const turn = ensureAssistantTurn();
-      const phaseMessages: Record<string, string> = {
-        cloning: "Cloning repository…",
-        clone_complete: "Repository cloned",
-        configuring: "Configuring environment…",
-        restoring_workspace: "Restoring workspace from snapshot…",
-        workspace_restored: "Workspace restored",
-        ready: "Environment ready",
-        resuming: "Resuming session…",
-      };
-      const phase = (event as { phase: string }).phase;
-
-      // Terminal phases replace their in-progress counterpart in-place
-      // instead of adding a redundant new block.
-      const REPLACES: Record<string, string> = {
-        clone_complete: "cloning",
-        workspace_restored: "restoring_workspace",
-        ready: "configuring",
-      };
-      const DONE_PHASES = new Set(["clone_complete", "workspace_restored", "ready"]);
-
-      const replacesPhase = REPLACES[phase];
-      if (replacesPhase) {
-        const idx = turn.blocks.findIndex(
-          (b) => b.kind === "lifecycle" && b.phase === replacesPhase
-        );
-        if (idx >= 0) {
-          const lb = turn.blocks[idx] as LifecycleBlock;
-          lb.phase = phase;
-          lb.message = phaseMessages[phase] ?? phase;
-        } else {
-          turn.blocks.push({ kind: "lifecycle", phase, message: phaseMessages[phase] ?? phase });
-        }
-      } else {
-        turn.blocks.push({ kind: "lifecycle", phase, message: phaseMessages[phase] ?? phase });
-      }
-
-      // Auto-complete orphan in-progress lifecycle blocks (e.g. "resuming"
-      // is implicitly done once subsequent phases arrive)
-      for (const block of turn.blocks) {
-        if (
-          block.kind === "lifecycle" &&
-          !DONE_PHASES.has(block.phase) &&
-          block.phase !== phase
-        ) {
-          (block).completed = true;
-        }
-      }
-
-      break;
-    }
 
     // ── Message lifecycle ─────────────────────────────────────────────
     case "message_start": {
