@@ -226,86 +226,6 @@ export class SessionWrapper {
   }
 
   /**
-   * Start a new agent session. Auto-stops any existing session first.
-   * If prompt is provided, starts the agent loop immediately.
-   * If no prompt, sets up the environment and waits in "ready" state.
-   */
-  async start(
-    provider: string,
-    modelId: string,
-    apiKey: string,
-    prompt: string | undefined,
-    repoUrl?: string,
-    token?: string
-  ): Promise<void> {
-    // Auto-stop existing session
-    if (this._abortController) {
-      await this.stop();
-    }
-
-    // Clear state for new session
-    this._eventBuffer.clear();
-    this._messages = [];
-    this._error = undefined;
-    this._status = "starting";
-    this._eventBuffer.addEvent({ type: "status", status: this._status });
-
-    try {
-      // Clone repo if URL provided
-      let workDir: string;
-      if (repoUrl && token) {
-        this._eventBuffer.addEvent({ type: "lifecycle", phase: "cloning" });
-        workDir = this.cloneRepo(repoUrl, token);
-        this._eventBuffer.addEvent({ type: "lifecycle", phase: "clone_complete" });
-      } else {
-        workDir = process.cwd();
-      }
-
-      // Configure provider and model
-      this._eventBuffer.addEvent({ type: "lifecycle", phase: "configuring" });
-      setApiKey(provider, apiKey);
-      const model = getModel(
-        provider as Parameters<typeof getModel>[0],
-        modelId as never
-      );
-      if (!model) {
-        throw new Error(`Unknown model: ${provider}/${modelId}`);
-      }
-
-      // Set cwd for tools and store setup for sendMessage()
-      process.chdir(workDir);
-      this._model = model;
-      this._workDir = workDir;
-
-      // If no prompt, wait in "ready" state for a message
-      if (!prompt) {
-        this._status = "ready";
-        this._eventBuffer.addEvent({ type: "lifecycle", phase: "ready" });
-        this._eventBuffer.addEvent({ type: "status", status: this._status });
-        return;
-      }
-
-      // Build user message and start agent loop
-      const userMessage = {
-        role: "user" as const,
-        content: [{ type: "text" as const, text: prompt }],
-        timestamp: Date.now(),
-      };
-
-      this.runAgentLoop(userMessage);
-    } catch (err) {
-      this._status = "error";
-      this._error = err instanceof Error ? err.message : String(err);
-      this._eventBuffer.addEvent({
-        type: "status",
-        status: this._status,
-        error: this._error,
-      });
-      throw err;
-    }
-  }
-
-  /**
    * Resume a session after container sleep/wake.
    *
    * Similar to start() but restores conversation history instead of running a prompt.
@@ -392,10 +312,10 @@ export class SessionWrapper {
 
   /**
    * Send a message to the session.
-   * Works when "ready" (initial prompt) or "idle" (follow-up after a turn completes).
+   * Works when idle (after resume completes or a turn finishes).
    */
   async sendMessage(text: string): Promise<void> {
-    if (this._status !== "ready" && this._status !== "idle") {
+    if (this._status !== "idle") {
       throw new Error(
         `Session not ready for messages (status: ${this._status})`
       );

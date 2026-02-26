@@ -2,8 +2,7 @@
  * HTTP server — Plain Node.js http router for agent-server.
  *
  * Routes:
- *   POST /start    — Start a new agent session (clone repo + run prompt)
- *   POST /resume   — Resume session after container sleep/wake
+ *   POST /resume   — Resume session (first-start or wake-from-sleep)
  *   POST /message  — Send a follow-up message
  *   POST /steer    — Steer the agent mid-run
  *   POST /stop     — Stop the current session
@@ -20,7 +19,7 @@ import { WebSocketServer } from "ws";
 import { EventBuffer } from "./events.js";
 import { SessionWrapper } from "./session.js";
 import type { Message } from "@mariozechner/pi-ai";
-import type { StartRequest, ResumeRequest, MessageRequest, SteerRequest } from "./types.js";
+import type { ResumeRequest, MessageRequest, SteerRequest } from "./types.js";
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -60,26 +59,6 @@ export function createAppServer(): Server {
     const path = url.pathname;
 
     try {
-      // ── POST /start ─────────────────────────────────────────────────
-      if (method === "POST" && path === "/start") {
-        const body = await parseJsonBody<StartRequest>(req, res);
-        if (!body) return;
-        if (!body.provider || !body.model || !body.apiKey) {
-          sendJson(res, 400, { error: "Missing required fields: provider, model, apiKey" });
-          return;
-        }
-        if (body.secrets) {
-          for (const [name, value] of Object.entries(body.secrets)) {
-            process.env[name] = value;
-          }
-        }
-        session
-          .start(body.provider, body.model, body.apiKey, body.prompt, body.repoUrl, body.token)
-          .catch((err) => console.error("Session start error:", err));
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
       // ── POST /resume ────────────────────────────────────────────────
       if (method === "POST" && path === "/resume") {
         const body = await parseJsonBody<ResumeRequest>(req, res);

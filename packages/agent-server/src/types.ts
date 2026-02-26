@@ -2,17 +2,6 @@
  * Request/response types for agent-server HTTP API.
  */
 
-export interface StartRequest {
-  repoUrl: string;
-  token: string;
-  provider: string;
-  model: string;
-  apiKey: string;
-  prompt?: string;
-  /** User secrets injected as environment variables before the agent starts. */
-  secrets?: Record<string, string>;
-}
-
 export interface ResumeRequest {
   provider: string;
   model: string;
@@ -38,19 +27,8 @@ export interface SteerRequest {
 export type SessionStatus =
   | "idle"
   | "starting"
-  | "ready"
   | "running"
-  | "error"
-  | "stopped";
-
-export type LifecyclePhase =
-  | "cloning"
-  | "clone_complete"
-  | "configuring"
-  | "restoring_workspace"
-  | "workspace_restored"
-  | "ready"
-  | "resuming";
+  | "error";
 
 export interface EventEnvelope {
   seq: number;

@@ -134,10 +134,6 @@ export class SessionDO extends DurableObject<Env> {
     this.syncStatusToUserDO(status);
   }
 
-  async deleteSession(): Promise<void> {
-    await this.ctx.storage.deleteAll();
-  }
-
   /**
    * Full teardown: stop container, clean R2 snapshot, clear storage.
    * All steps are best-effort — a single failure doesn't block cleanup.
@@ -709,12 +705,9 @@ export class SessionDO extends DurableObject<Env> {
    */
   private containerStatusToSessionStatus(containerStatus: string): SessionStatus | null {
     switch (containerStatus) {
-      case "ready":    return "idle";
       case "idle":     return "idle";
-      case "running":  return "running";
       case "starting": return "starting";
-      case "resuming": return "resuming";
-      case "failed":   return "error";
+      case "running":  return "running";
       case "error":    return "error";
       default:         return null;
     }
