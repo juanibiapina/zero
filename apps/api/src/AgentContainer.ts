@@ -95,6 +95,9 @@ export class AgentContainer extends Container<Env> {
     const stub = this.env.SESSION_DO.get(
       this.env.SESSION_DO.idFromString(sessionDOId)
     );
-    await stub.onContainerStopped();
+    await stub.onContainerStopped({
+      exitCode: params.exitCode,
+      reason: params.reason,
+    });
   }
 }

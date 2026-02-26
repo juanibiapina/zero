@@ -161,9 +161,33 @@ export class SessionDO extends DurableObject<Env> {
 
   /**
    * Called by AgentContainer.onStop() when the container dies.
+   * This is the source of truth for "the container is gone" — it must
+   * clean up the event stream, reset container sequence tracking, and
+   * transition any stale active status to idle.
+   *
+   * In the normal flow the agent sends a status:idle event before the
+   * container sleeps, so this is a no-op. But if the container dies
+   * unexpectedly (crash, OOM, platform kill) while the agent is active,
+   * this is the only signal — without it the session would be stuck in
+   * "running" forever.
    */
-  async onContainerStopped(): Promise<void> {
+  async onContainerStopped(params?: { exitCode: number; reason: string }): Promise<void> {
+    if (params) {
+      console.log(`Container stopped: exitCode=${params.exitCode} reason=${params.reason}`);
+    }
+
     this.closeEventStream();
+    this.lastContainerSeq = 0;
+
+    // If the session was in an active state, the container died before
+    // the agent could send a final status event. Transition to idle so
+    // the user can send another message.
+    const ACTIVE: Set<string> = new Set(["starting", "running", "resuming"]);
+    const currentStatus = await this.getStatus();
+    if (currentStatus && ACTIVE.has(currentStatus)) {
+      await this.updateStatus("idle");
+      this.broadcastToWebSockets({ type: "status", status: "idle" });
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════
