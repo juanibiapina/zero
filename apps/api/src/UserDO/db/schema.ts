@@ -38,15 +38,21 @@ export const githubInstallationsTable = sqliteTable("github_installations", {
 });
 
 /**
- * Project references — maps owner/repo to project settings.
+ * Project references — maps owner/repo to project settings and cached GitHub metadata.
  */
 export const projectsTable = sqliteTable("projects", {
   id: int().primaryKey({ autoIncrement: true }),
   owner: text().notNull(),
   repo: text().notNull(),
+  fullName: text(),
+  description: text(),
+  defaultBranch: text(),
+  isPrivate: int({ mode: "boolean" }),
+  archived: int({ mode: "boolean" }),
   defaultProvider: text(),
   defaultModel: text(),
   createdAt: text().notNull(),
+  updatedAt: text().notNull(),
 });
 
 /**

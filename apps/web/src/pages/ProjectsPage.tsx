@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Link2,
   Archive,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,7 @@ export default function ProjectsPage() {
   const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
   const archivedCount = projects.filter((p) => p.archived).length;
@@ -97,22 +99,41 @@ export default function ProjectsPage() {
     ? projects
     : projects.filter((p) => !p.archived);
 
+  const applyData = useCallback((data: { projects?: ProjectSummary[]; installUrl?: string; errors?: string[] }) => {
+    setProjects(data.projects ?? []);
+    setInstallUrl(data.installUrl ?? null);
+    setErrors(data.errors ?? []);
+  }, []);
+
   const fetchProjects = useCallback(async () => {
     try {
       const token = await getToken();
       const resp = await fetch("/api/projects", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await jsonBody<{ projects?: ProjectSummary[]; installUrl?: string; errors?: string[] }>(resp);
-      setProjects(data.projects ?? []);
-      setInstallUrl(data.installUrl ?? null);
-      setErrors(data.errors ?? []);
+      applyData(await jsonBody<{ projects?: ProjectSummary[]; installUrl?: string; errors?: string[] }>(resp));
     } catch (err) {
       console.error("Failed to fetch projects:", err);
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, [getToken, applyData]);
+
+  const refreshProjects = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch("/api/projects/refresh", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      applyData(await jsonBody<{ projects?: ProjectSummary[]; installUrl?: string; errors?: string[] }>(resp));
+    } catch (err) {
+      console.error("Failed to refresh projects:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [getToken, applyData]);
 
   useEffect(() => {
     void fetchProjects();
@@ -134,12 +155,24 @@ export default function ProjectsPage() {
           <FolderGit2 className="h-5 w-5" />
           <h1 className="text-2xl font-bold">Projects</h1>
         </div>
-        {archivedCount > 0 && (
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Switch checked={showArchived} onCheckedChange={setShowArchived} />
-            Show archived ({archivedCount})
-          </label>
-        )}
+        <div className="flex items-center gap-3">
+          {archivedCount > 0 && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+              Show archived ({archivedCount})
+            </label>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            disabled={refreshing}
+            onClick={() => void refreshProjects()}
+            title="Refresh from GitHub"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
 
       {errors.length > 0 && (
@@ -170,7 +203,7 @@ export default function ProjectsPage() {
               </Button>
             )}
             <div className="text-xs text-muted-foreground">or paste an existing installation ID</div>
-            <ManualLinkInput onLinked={() => void fetchProjects()} />
+            <ManualLinkInput onLinked={() => void refreshProjects()} />
           </div>
         </div>
       ) : visibleProjects.length === 0 ? (

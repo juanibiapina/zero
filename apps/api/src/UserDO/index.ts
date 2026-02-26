@@ -224,6 +224,11 @@ export class UserDO extends DurableObject<Env> {
   async upsertProject(data: {
     owner: string;
     repo: string;
+    fullName?: string;
+    description?: string | null;
+    defaultBranch?: string;
+    isPrivate?: boolean;
+    archived?: boolean;
     defaultProvider?: string;
     defaultModel?: string;
   }) {
@@ -234,8 +239,14 @@ export class UserDO extends DurableObject<Env> {
       this.db
         .update(projectsTable)
         .set({
+          fullName: data.fullName ?? existing.fullName,
+          description: data.description !== undefined ? data.description : existing.description,
+          defaultBranch: data.defaultBranch ?? existing.defaultBranch,
+          isPrivate: data.isPrivate ?? existing.isPrivate,
+          archived: data.archived ?? existing.archived,
           defaultProvider: data.defaultProvider ?? existing.defaultProvider,
           defaultModel: data.defaultModel ?? existing.defaultModel,
+          updatedAt: now,
         })
         .where(
           and(eq(projectsTable.owner, data.owner), eq(projectsTable.repo, data.repo))
@@ -245,17 +256,62 @@ export class UserDO extends DurableObject<Env> {
       this.db.insert(projectsTable).values({
         owner: data.owner,
         repo: data.repo,
+        fullName: data.fullName ?? null,
+        description: data.description ?? null,
+        defaultBranch: data.defaultBranch ?? null,
+        isPrivate: data.isPrivate ?? null,
+        archived: data.archived ?? null,
         defaultProvider: data.defaultProvider ?? null,
         defaultModel: data.defaultModel ?? null,
         createdAt: now,
+        updatedAt: now,
       }).run();
     }
   }
 
+  /**
+   * Sync projects from GitHub: upsert all repos, remove stale ones.
+   * Preserves user settings (defaultProvider, defaultModel).
+   */
+  async syncProjects(repos: {
+    owner: string;
+    repo: string;
+    fullName: string;
+    description: string | null;
+    defaultBranch: string;
+    isPrivate: boolean;
+    archived: boolean;
+  }[]) {
+    for (const r of repos) {
+      await this.upsertProject({
+        owner: r.owner,
+        repo: r.repo,
+        fullName: r.fullName,
+        description: r.description,
+        defaultBranch: r.defaultBranch,
+        isPrivate: r.isPrivate,
+        archived: r.archived,
+      });
+    }
+
+    // Remove projects no longer in the installation
+    const repoKeys = new Set(repos.map((r) => `${r.owner}/${r.repo}`));
+    const existing = await this.listProjects();
+    for (const row of existing) {
+      if (!repoKeys.has(`${row.owner}/${row.repo}`)) {
+        this.db
+          .delete(projectsTable)
+          .where(and(eq(projectsTable.owner, row.owner), eq(projectsTable.repo, row.repo)))
+          .run();
+      }
+    }
+  }
+
   async updateProjectModel(owner: string, repo: string, provider: string, model: string) {
+    const now = new Date().toISOString();
     this.db
       .update(projectsTable)
-      .set({ defaultProvider: provider, defaultModel: model })
+      .set({ defaultProvider: provider, defaultModel: model, updatedAt: now })
       .where(and(eq(projectsTable.owner, owner), eq(projectsTable.repo, repo)))
       .run();
   }
