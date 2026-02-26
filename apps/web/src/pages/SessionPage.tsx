@@ -357,6 +357,7 @@ export default function SessionPage() {
               </>
             )}
             {status === "ready" && "Ready! Describe what you want the agent to do."}
+            {status === "idle" && "Send a message to continue."}
             {status === "error" && !error && "Something went wrong."}
           </div>
         )}

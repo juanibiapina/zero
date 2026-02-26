@@ -198,49 +198,6 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   /**
-   * Auto-wake the container when a browser connects to a sleeping session.
-   * Fire-and-forget — errors are logged but don't fail the WS connection.
-   *
-   * Checks actual container state before setting "resuming" — if the container
-   * is still running (within its sleepAfter window), we just reconnect the
-   * event stream without any status change.
-   */
-  private async autoWakeContainer(): Promise<void> {
-    try {
-      // Check if container actually needs resuming
-      let needsResume = false;
-      try {
-        const state = await this.container.getState();
-        needsResume = (
-          state.status === "stopped" ||
-          state.status === "stopped_with_code" ||
-          state.status === "stopping"
-        );
-      } catch {
-        needsResume = true;
-      }
-
-      if (needsResume) {
-        // Container is actually sleeping — show resuming UI and wake it
-        await this.updateStatus("resuming");
-        this.broadcastToWebSockets({ type: "status", status: "resuming" });
-        await this.ensureContainerRunning();
-      } else {
-        // Container is still running — just reconnect event stream silently
-        if (!this.containerWs) {
-          await this.connectEventStream(this.container);
-        }
-      }
-    } catch (err) {
-      console.error("Auto-wake failed:", err);
-      // Reset to idle so the user isn't stuck at "Resuming" forever.
-      // They can still trigger a fresh wake by sending a message.
-      await this.updateStatus("idle");
-      this.broadcastToWebSockets({ type: "status", status: "idle" });
-    }
-  }
-
-  /**
    * Called by AgentContainer.onStop() when the container dies.
    */
   async onContainerStopped(): Promise<void> {
@@ -270,22 +227,32 @@ export class SessionDO extends DurableObject<Env> {
       } satisfies SessionServerMessage));
     }
 
-    // Send current status
-    const status = await this.getStatus();
-    if (status) {
-      server.send(JSON.stringify({ type: "status", status } satisfies SessionServerMessage));
-    }
+    // For active container states (running, starting, etc.) send the real
+    // status so the UI reflects what's happening. For inactive states
+    // (pending, idle) report "idle" so the UI is immediately usable — the
+    // container will start/resume when the user sends a message.
+    const INACTIVE: Set<string> = new Set(["pending", "idle"]);
+    const reportedStatus: SessionStatus = INACTIVE.has(this.currentStatus)
+      ? "idle"
+      : this.currentStatus;
+    server.send(JSON.stringify({ type: "status", status: reportedStatus } satisfies SessionServerMessage));
 
     // Mark end of replay
     server.send(JSON.stringify({ type: "caught_up", lastSeq: this.seq } satisfies SessionServerMessage));
 
-    // Reconnect to container if event stream was lost (e.g. after DO hibernation).
-    // "idle" → container is sleeping, needs full wake.
-    // "starting"/"running"/"ready"/"resuming" → container should be running
-    //   but event stream was lost; reconnect it.
-    const ACTIVE_STATES: Set<string> = new Set(["idle", "starting", "running", "ready", "resuming"]);
-    if (ACTIVE_STATES.has(this.currentStatus) && !this.containerWs) {
-      this.ctx.waitUntil(this.autoWakeContainer());
+    // If the container should be active but the event stream was lost
+    // (e.g. after DO hibernation), reconnect it so the browser receives
+    // live updates. Falls back to idle if the container is unreachable.
+    const ACTIVE: Set<string> = new Set(["starting", "running", "ready", "resuming"]);
+    if (ACTIVE.has(this.currentStatus) && !this.containerWs) {
+      this.ctx.waitUntil((async () => {
+        try {
+          await this.connectEventStream(this.container);
+        } catch {
+          await this.updateStatus("idle");
+          this.broadcastToWebSockets({ type: "status", status: "idle" });
+        }
+      })());
     }
 
     return new Response(null, { status: 101, webSocket: client });
