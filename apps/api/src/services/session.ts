@@ -13,7 +13,7 @@ import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
 import { getInstallationToken } from "./github";
-import { getContainer } from "./container";
+import { ContainerHandle } from "./container";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -202,31 +202,20 @@ export class SessionService {
     const repoUrl = `https://github.com/${owner}/${repo}.git`;
 
     try {
-      const container = getContainer(this.env, containerName);
+      const container = new ContainerHandle(this.env, containerName);
 
       // Tell the container which SessionDO to notify on stop
       await container.bindToSession(sessionDOId.toString());
 
-      const startResp = await container.fetch("http://container/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repoUrl,
-          token: githubToken,
-          provider,
-          model,
-          apiKey,
-          secrets,
-          ...(prompt ? { prompt } : {}),
-        }),
+      await container.start({
+        repoUrl,
+        token: githubToken,
+        provider,
+        model,
+        apiKey,
+        secrets,
+        ...(prompt ? { prompt } : {}),
       });
-
-      if (!startResp.ok) {
-        const body = await startResp.text();
-        throw new Error(
-          `Container /start returned ${startResp.status}: ${body}`
-        );
-      }
 
       // Connect SessionDO's event stream so status events (e.g. "ready")
       // reach the browser. Without this, the lazy architecture deadlocks:
@@ -277,8 +266,8 @@ export class SessionService {
 
     // Step 1: Best-effort stop container process
     try {
-      const container = getContainer(this.env, session.containerName);
-      await container.fetch("http://container/stop", { method: "POST" });
+      const container = new ContainerHandle(this.env, session.containerName);
+      await container.stop();
     } catch (err) {
       console.error("Delete: container stop failed (ok):", err);
     }
