@@ -29,6 +29,7 @@ export default function SessionPage() {
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const wsRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sessionIdRef = useRef<string | null>(isNew ? null : id ?? null);
@@ -46,12 +47,19 @@ export default function SessionPage() {
     setStatus(s);
   }, []);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom (disabled when user scrolls up)
   useEffect(() => {
-    if (scrollRef.current) {
+    if (shouldAutoScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [turns]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    shouldAutoScrollRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+  }, []);
 
   // Auto-focus input
   useEffect(() => {
@@ -316,7 +324,7 @@ export default function SessionPage() {
       )}
 
       {/* Chat area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-1 pr-2">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto space-y-1 pr-2">
         {turns.length === 0 && (
           <div className="text-muted-foreground text-sm py-8 text-center">
             {isCreating && (
