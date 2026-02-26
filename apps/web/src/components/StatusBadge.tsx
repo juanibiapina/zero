@@ -7,11 +7,6 @@ interface StatusConfig {
 }
 
 const configs: Record<string, StatusConfig> = {
-  creating: {
-    label: "Creating",
-    icon: <Loader2 className="h-3 w-3 animate-spin" />,
-    className: "text-yellow-600",
-  },
   connecting: {
     label: "Connecting",
     icon: <Loader2 className="h-3 w-3 animate-spin" />,

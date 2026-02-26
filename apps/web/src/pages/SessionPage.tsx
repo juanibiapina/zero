@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { useParams } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import { ChevronRight, Loader2, Send, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,36 +7,42 @@ import { Link } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TurnView } from "@/components/TurnView";
 import { processAgentEvent } from "@/lib/process-agent-event";
+import { useSessionStore } from "@/lib/session-store";
 import type { AgentEvent, SessionServerMessage } from "@zero/core";
 import type { Turn, SessionStatus } from "@/lib/session-types";
-import { jsonBody } from "@/lib/api";
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
+// ─── Keyed wrapper ───────────────────────────────────────────────────────────
+// Forces full remount when navigating between sessions so stale state
+// (turns, WebSocket, scroll position) is never carried over.
 
 export default function SessionPage() {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
+  return <SessionPageInner key={id} />;
+}
+
+// ─── Inner implementation ────────────────────────────────────────────────────
+
+function SessionPageInner() {
+  const { id } = useParams();
   const { getToken } = useAuth();
   const [turns, setTurns] = useState<Turn[]>([]);
-  const isNew = !id;
 
-  // For new sessions, owner/repo come from query params
-  const [owner] = useState(searchParams.get("owner") ?? "");
-  const [repo] = useState(searchParams.get("repo") ?? "");
+  // Read owner/repo from session store for breadcrumb
+  const session = useSessionStore((s) => s.sessions.find((sess) => sess.id === id));
+  const owner = session?.owner ?? "";
+  const repo = session?.repo ?? "";
 
   const [status, setStatus] = useState<SessionStatus>("connecting");
-  const [isCreating, setIsCreating] = useState(isNew);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const wsRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const sessionIdRef = useRef<string | null>(isNew ? null : id ?? null);
   const lastSeqRef = useRef<number>(0);
   const pendingPromptRef = useRef<string | null>(null);
-  const createdRef = useRef(false);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const connectWebSocketRef = useRef<((sessionId: string) => Promise<void>) | null>(null);
   /** Track user messages we've sent optimistically, to dedup on replay */
   const sentUserMessagesRef = useRef<Set<string>>(new Set());
   const caughtUpRef = useRef(false);
@@ -179,7 +185,7 @@ export default function SessionPage() {
         if (e.code !== 1000) {
           setTimeout(async () => {
             try {
-              await connectWebSocket(sessionId);
+              await connectWebSocketRef.current?.(sessionId);
             } catch {
               setStatusBoth("error");
               setError("Lost connection to session");
@@ -195,68 +201,10 @@ export default function SessionPage() {
     [getToken, setStatusBoth]
   );
 
-  // ── Auto-create session when new ────────────────────────────────────────
-
+  // ── Connect WebSocket ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!isNew || createdRef.current) return;
-    createdRef.current = true;
-
-    void (async () => {
-      setIsCreating(true);
-      setError(null);
-
-      try {
-        const token = await getToken();
-        const resp = await fetch("/api/sessions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ owner, repo }),
-        });
-
-        if (!resp.ok) {
-          let message = `Failed to create session (${resp.status})`;
-          try {
-            const parsed = await jsonBody<{ error?: string }>(resp);
-            if (parsed.error) {
-              message = parsed.error;
-            }
-          } catch {
-            // Response wasn't JSON
-          }
-          throw new Error(message);
-        }
-
-        const data = await jsonBody<{ sessionId: string }>(resp);
-        sessionIdRef.current = data.sessionId;
-
-        // Update URL without remounting
-        window.history.replaceState(
-          null,
-          "",
-          `/sessions/${data.sessionId}`
-        );
-
-        // Connect WebSocket
-        setIsCreating(false);
-        await connectWebSocket(data.sessionId);
-      } catch (err) {
-        setIsCreating(false);
-        setStatusBoth("error");
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to create session"
-        );
-      }
-    })();
-  }, [isNew, owner, repo, getToken, connectWebSocket, setStatusBoth]);
-
-  // ── Connect WebSocket for existing sessions ─────────────────────────────
-  useEffect(() => {
-    if (!isNew && id) {
+    connectWebSocketRef.current = connectWebSocket;
+    if (id) {
       void connectWebSocket(id);
     }
     return () => {
@@ -269,7 +217,7 @@ export default function SessionPage() {
         pingIntervalRef.current = null;
       }
     };
-  }, [isNew, id, connectWebSocket]);
+  }, [id, connectWebSocket]);
 
   // ── Stop/abort session ────────────────────────────────────────────────
 
@@ -327,7 +275,7 @@ export default function SessionPage() {
         </div>
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold">Agent Session</h1>
-          <StatusBadge status={isCreating ? "creating" : status} />
+          <StatusBadge status={status} />
         </div>
       </div>
 
@@ -342,13 +290,7 @@ export default function SessionPage() {
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto space-y-1 pr-2">
         {turns.length === 0 && (
           <div className="text-muted-foreground text-sm py-8 text-center">
-            {isCreating && (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating session...
-              </span>
-            )}
-            {!isCreating && status === "connecting" && (
+            {status === "connecting" && (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Connecting to agent...
@@ -389,8 +331,7 @@ export default function SessionPage() {
         {/* Waiting indicator after user message when container isn't ready */}
         {turns.length > 0 &&
           turns[turns.length - 1]?.role === "user" &&
-          (isCreating ||
-            status === "connecting" ||
+          (status === "connecting" ||
             status === "starting" ||
             status === "resuming") && (
             <div className="flex items-center gap-2 text-muted-foreground py-2">

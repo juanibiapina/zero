@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useParams, Link } from "react-router";
+import { useParams, Link, useNavigate } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import {
   FolderGit2,
@@ -34,9 +34,12 @@ function relativeTime(iso: string): string {
 export default function ProjectDetailPage() {
   const { owner, repo } = useParams();
   const { getToken } = useAuth();
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -84,6 +87,39 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleCreate = async () => {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const token = await getToken();
+      const resp = await fetch("/api/sessions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ owner, repo }),
+      });
+      if (!resp.ok) {
+        let message = `Failed to create session (${resp.status})`;
+        try {
+          const parsed = (await resp.json()) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch {
+          // Response wasn't JSON
+        }
+        throw new Error(message);
+      }
+      const data = (await resp.json()) as { sessionId: string };
+      void navigate(`/sessions/${data.sessionId}`);
+    } catch (err) {
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create session"
+      );
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
@@ -105,13 +141,18 @@ export default function ProjectDetailPage() {
             {owner}/{repo}
           </h1>
         </div>
-        <Button asChild className="shrink-0">
-          <Link to={`/sessions/new?owner=${encodeURIComponent(owner!)}&repo=${encodeURIComponent(repo!)}`}>
-            <Plus className="h-4 w-4" />
-            New Session
-          </Link>
+        <Button className="shrink-0" disabled={creating} onClick={() => void handleCreate()}>
+          {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          {creating ? "Creating..." : "New Session"}
         </Button>
       </div>
+
+      {/* Create error */}
+      {createError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          {createError}
+        </div>
+      )}
 
       {/* Sessions */}
       {loading ? (

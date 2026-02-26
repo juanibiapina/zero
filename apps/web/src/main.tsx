@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider, useParams } from "react-router";
+import { createBrowserRouter, RouterProvider } from "react-router";
 
 import "./index.css";
 import App from "./App";
@@ -13,12 +13,6 @@ import SettingsPage from "./pages/SettingsPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import SecretsPage from "./pages/SecretsPage";
 import GitHubSetupPage from "./pages/GitHubSetupPage";
-
-/** Force full remount of SessionPage when navigating between sessions. */
-function SessionPageKeyed() {
-  const { id } = useParams();
-  return <SessionPage key={id ?? "new"} />;
-}
 
 const router = createBrowserRouter([
   {
@@ -35,12 +29,8 @@ const router = createBrowserRouter([
             element: <ProjectDetailPage />,
           },
           {
-            path: "sessions/new",
-            element: <SessionPage />,
-          },
-          {
             path: "sessions/:id",
-            element: <SessionPageKeyed />,
+            element: <SessionPage />,
           },
           { path: "settings", element: <SettingsPage /> },
           { path: "settings/providers", element: <ProvidersPage /> },
