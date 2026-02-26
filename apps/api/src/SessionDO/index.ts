@@ -91,6 +91,7 @@ export class SessionDO extends DurableObject<Env> {
     provider: string;
     model: string;
     userDOId?: string;
+    prompt?: string;
   }): Promise<void> {
     const now = new Date().toISOString();
     await this.db.insert(sessionMetaTable).values({
@@ -102,6 +103,10 @@ export class SessionDO extends DurableObject<Env> {
       userDOId: meta.userDOId ?? null,
       createdAt: now,
     });
+
+    // Fire-and-forget: resolve credentials and start the container asynchronously.
+    // Status transitions (ready / failed) are broadcast to browsers via WebSocket.
+    this.ctx.waitUntil(this.startContainerFromMeta(meta.prompt));
   }
 
   async getSession(): Promise<{
@@ -146,25 +151,38 @@ export class SessionDO extends DurableObject<Env> {
 
   /**
    * Start the container for the first time.
-   * Binds the container to this session, starts it, and connects the event stream.
-   * Called by SessionService after initializing session metadata.
+   * Resolves credentials from UserDO (same as resumeContainer), binds the
+   * container, starts it, and connects the event stream.
+   * Launched as fire-and-forget from initSession via ctx.waitUntil.
    */
-  async startContainer(params: {
-    repoUrl: string;
-    token: string;
-    provider: string;
-    model: string;
-    apiKey: string;
-    prompt?: string;
-    secrets?: Record<string, string>;
-  }): Promise<void> {
-    // Tell the container which SessionDO to notify on stop
-    await this.container.bindToSession(this.ctx.id.toString());
+  private async startContainerFromMeta(prompt?: string): Promise<void> {
+    try {
+      const session = await this.getSession();
+      if (!session) throw new Error("No session metadata");
 
-    await this.container.start(params);
+      const { apiKey, githubToken, secrets } = await this.resolveCredentials(session);
+      const repoUrl = `https://github.com/${session.projectOwner}/${session.projectRepo}.git`;
 
-    // Connect event stream so status events (e.g. "ready") reach the browser.
-    await this.connectEventStream(this.container);
+      // Tell the container which SessionDO to notify on stop
+      await this.container.bindToSession(this.ctx.id.toString());
+
+      await this.container.start({
+        repoUrl,
+        token: githubToken,
+        provider: session.provider,
+        model: session.model,
+        apiKey,
+        secrets: Object.keys(secrets).length > 0 ? secrets : undefined,
+        ...(prompt ? { prompt } : {}),
+      });
+
+      // Connect event stream so status events (e.g. "ready") reach the browser.
+      await this.connectEventStream(this.container);
+    } catch (err) {
+      console.error("startContainerFromMeta failed:", err);
+      await this.updateStatus("failed");
+      this.broadcastToWebSockets({ type: "status", status: "failed" });
+    }
   }
 
   /**

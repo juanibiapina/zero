@@ -12,7 +12,6 @@ import { Result } from "@praha/byethrow";
 import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
-import { getInstallationToken } from "./github";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -132,7 +131,8 @@ export class SessionService {
       });
     }
 
-    // 1. Get first connected credential (API key or OAuth)
+    // 1. Get first connected credential (API key or OAuth) — validates existence
+    //    and determines provider. Actual key resolution happens inside SessionDO.
     const credentials = await userDO.listProviderCredentials();
     const cred =
       credentials.find((c) => c.credentialType === "api_key" && c.apiKey) ??
@@ -146,7 +146,6 @@ export class SessionService {
     }
 
     const provider = cred.provider;
-    const apiKey = (cred.apiKey ?? cred.accessToken)!;
 
     // Resolve model: use project default or a sensible default per provider
     const project = await userDO.getProject(owner, repo);
@@ -157,13 +156,8 @@ export class SessionService {
       model = "claude-sonnet-4-20250514";
     }
 
-    // 2. Get GitHub installation token
-    const githubToken = await getInstallationToken(
-      this.env,
-      installation.installationId
-    );
-
-    // 3. Create SessionDO
+    // 2. Create SessionDO — initSession persists metadata and kicks off
+    //    container start asynchronously (credentials resolved by SessionDO).
     const sessionDOId = this.env.SESSION_DO.newUniqueId();
     const sessionDO = this.env.SESSION_DO.get(sessionDOId);
 
@@ -176,9 +170,10 @@ export class SessionService {
       provider,
       model,
       userDOId,
+      prompt,
     });
 
-    // 4. Add to UserDO session index
+    // 3. Add to UserDO session index
     await userDO.addSession({
       sessionDOId: sessionDOId.toString(),
       owner,
@@ -188,32 +183,6 @@ export class SessionService {
       provider,
       model,
     });
-
-    // 5. Fetch user secrets for injection into the container environment
-    const userSecretsList = await userDO.listUserSecretsWithValues();
-    const secrets = Object.fromEntries(
-      userSecretsList.map((s) => [s.name, s.value])
-    );
-
-    // 6. Start container (SessionDO handles bind + start + event stream)
-    const repoUrl = `https://github.com/${owner}/${repo}.git`;
-
-    try {
-      await sessionDO.startContainer({
-        repoUrl,
-        token: githubToken,
-        provider,
-        model,
-        apiKey,
-        secrets,
-        ...(prompt ? { prompt } : {}),
-      });
-    } catch (err) {
-      await sessionDO.updateStatus("failed");
-      throw new Error(
-        `Failed to start container: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
 
     return Result.succeed({
       sessionId: sessionDOId.toString(),
