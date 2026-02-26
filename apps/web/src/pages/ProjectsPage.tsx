@@ -5,7 +5,6 @@ import {
   FolderGit2,
   Lock,
   Globe,
-  ExternalLink,
   Loader2,
   ChevronRight,
   AlertCircle,
@@ -135,23 +134,12 @@ export default function ProjectsPage() {
           <FolderGit2 className="h-5 w-5" />
           <h1 className="text-2xl font-bold">Projects</h1>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          {archivedCount > 0 && (
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Switch checked={showArchived} onCheckedChange={setShowArchived} />
-              Show archived ({archivedCount})
-            </label>
-          )}
-          <ManualLinkInput onLinked={() => void fetchProjects()} />
-          {installUrl && (
-            <Button variant="outline" asChild>
-              <a href={installUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4" />
-                Install GitHub App
-              </a>
-            </Button>
-          )}
-        </div>
+        {archivedCount > 0 && (
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+            Show archived ({archivedCount})
+          </label>
+        )}
       </div>
 
       {errors.length > 0 && (
