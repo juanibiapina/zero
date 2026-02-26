@@ -13,17 +13,6 @@ import type { Env } from "../types";
 
 // ── Parameter Types ──────────────────────────────────────────────────────
 
-export type StartParams = {
-  repoUrl: string;
-  token: string;
-  provider: string;
-  model: string;
-  apiKey: string;
-  prompt?: string;
-  /** User secrets injected as environment variables before the agent starts. */
-  secrets?: Record<string, string>;
-};
-
 export type ResumeParams = {
   provider: string;
   model: string;
@@ -84,12 +73,7 @@ export class ContainerHandle {
 
   // ── Agent Lifecycle ──────────────────────────────────────────────────
 
-  /** Start a new agent session (clone repo + run prompt). */
-  start(params: StartParams): Promise<void> {
-    return this.post("/start", params);
-  }
-
-  /** Resume session after container sleep/wake. */
+  /** Resume session (first-start or wake-from-sleep). */
   resume(params: ResumeParams): Promise<void> {
     return this.post("/resume", params);
   }

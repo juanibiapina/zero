@@ -45,9 +45,6 @@ export class SessionDO extends DurableObject<Env> {
   /** Ephemeral event WebSocket to the container (null when agent is idle) */
   private containerWs: WebSocket | null = null;
 
-  /** Whether the container has been started at least once (survives hibernation) */
-  private containerInitialized = false;
-
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = drizzle(ctx.storage, { logger: false });
@@ -74,8 +71,6 @@ export class SessionDO extends DurableObject<Env> {
 
       if (maxRow?.maxSeq) this.seq = maxRow.maxSeq;
       if (maxRow?.maxContainerSeq) this.lastContainerSeq = maxRow.maxContainerSeq;
-
-      this.containerInitialized = (await ctx.storage.get<boolean>("containerInitialized")) ?? false;
     });
   }
 
@@ -140,34 +135,6 @@ export class SessionDO extends DurableObject<Env> {
 
   async deleteSession(): Promise<void> {
     await this.ctx.storage.deleteAll();
-  }
-
-  /**
-   * Start the container for the first time.
-   * Resolves credentials from UserDO, binds the container, starts it,
-   * and connects the event stream.
-   */
-  private async startContainerFromMeta(): Promise<void> {
-    const session = await this.getSession();
-    if (!session) throw new Error("No session metadata");
-
-    const { apiKey, githubToken, secrets } = await this.resolveCredentials(session);
-    const repoUrl = `https://github.com/${session.projectOwner}/${session.projectRepo}.git`;
-
-    // Tell the container which SessionDO to notify on stop
-    await this.container.bindToSession(this.ctx.id.toString());
-
-    await this.container.start({
-      repoUrl,
-      token: githubToken,
-      provider: session.provider,
-      model: session.model,
-      apiKey,
-      secrets: Object.keys(secrets).length > 0 ? secrets : undefined,
-    });
-
-    // Connect event stream so status events (e.g. "ready") reach the browser.
-    await this.connectEventStream(this.container);
   }
 
   /**
@@ -331,21 +298,11 @@ export class SessionDO extends DurableObject<Env> {
 
   /**
    * Ensure the container is running and the event stream is connected.
-   * First-start uses startContainerFromMeta; subsequent wakes
-   * use resumeContainer.
+   * Uses a single resume path for both first-start and wake-from-sleep:
+   * /resume with empty history on a fresh container is equivalent to /start.
    */
   private async ensureContainerRunning(): Promise<void> {
-    // First start — container has never been started
-    if (!this.containerInitialized) {
-      await this.updateStatus("starting");
-      this.broadcastToWebSockets({ type: "status", status: "starting" });
-      await this.startContainerFromMeta();
-      this.containerInitialized = true;
-      await this.ctx.storage.put("containerInitialized", true);
-      return;
-    }
-
-    // Check if container needs resume
+    // Check if container needs (re)starting
     let needsResume = false;
     try {
       const state = await this.container.getState();
@@ -368,6 +325,13 @@ export class SessionDO extends DurableObject<Env> {
       this.lastContainerSeq = 0;
       const session = await this.getSession();
       if (!session) throw new Error("No session");
+
+      // Show "Starting" for first start, "Resuming" for wake-from-sleep
+      const hasHistory = this.getConversationHistory().length > 0;
+      const status: SessionStatus = hasHistory ? "resuming" : "starting";
+      await this.updateStatus(status);
+      this.broadcastToWebSockets({ type: "status", status });
+
       await this.resumeContainer(session, this.container);
     }
 
@@ -415,16 +379,18 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   /**
-   * Resume the container session after sleep/wake.
-   * Clean, linear flow: credentials → history → POST /resume → R2 restore.
+   * Resume the container session (first-start or wake-from-sleep).
+   * Works for both cases: fresh container gets empty history + no snapshot,
+   * which is equivalent to a first start (clone repo, configure, idle).
    */
   private async resumeContainer(
     session: NonNullable<Awaited<ReturnType<typeof this.getSession>>>,
     container: ContainerHandle
   ): Promise<void> {
-    this.broadcastToWebSockets({ type: "status", status: "resuming" as SessionStatus });
-
     if (!session.userDOId) throw new Error("No userDOId for resume");
+
+    // Ensure container knows which SessionDO to notify on stop (idempotent)
+    await container.bindToSession(this.ctx.id.toString());
 
     // 1. Resolve fresh credentials
     const { apiKey, githubToken, secrets } = await this.resolveCredentials(session);
