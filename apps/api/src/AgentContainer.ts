@@ -8,9 +8,6 @@
  *
  * Lifecycle hooks notify SessionDO when the container stops so it can
  * reset its event sequence counter and properly surface errors on restart.
- *
- * IMPORTANT: Must use `new_sqlite_classes` in wrangler migration
- * (Container class uses SQLite internally).
  */
 
 import { Container, switchPort } from "@cloudflare/containers";
@@ -92,17 +89,12 @@ export class AgentContainer extends Container<Env> {
   override async onStop(params: StopParams): Promise<void> {
     console.log("AgentContainer.onStop()", JSON.stringify(params));
 
-    try {
-      const sessionDOId = await this.ctx.storage.get<string>("sessionDOId");
-      if (!sessionDOId) return;
+    const sessionDOId = await this.ctx.storage.get<string>("sessionDOId");
+    if (!sessionDOId) return;
 
-      const stub = this.env.SESSION_DO.get(
-        this.env.SESSION_DO.idFromString(sessionDOId)
-      );
-      await stub.onContainerStopped();
-    } catch (err) {
-      // Best-effort — SessionDO may already be evicted
-      console.error("AgentContainer.onStop: failed to notify SessionDO", err);
-    }
+    const stub = this.env.SESSION_DO.get(
+      this.env.SESSION_DO.idFromString(sessionDOId)
+    );
+    await stub.onContainerStopped();
   }
 }
