@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import type { ProviderInfo } from "@zero/core";
+import { jsonBody } from "@/lib/api";
 
 export default function ProvidersPage() {
   const { getToken } = useAuth();
@@ -28,7 +29,7 @@ export default function ProvidersPage() {
       const resp = await fetch("/api/providers", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await resp.json();
+      const data = await jsonBody<{ providers?: ProviderInfo[] }>(resp);
       setProviders(data.providers ?? []);
     } catch (err) {
       console.error("Failed to fetch providers:", err);
@@ -38,7 +39,7 @@ export default function ProvidersPage() {
   };
 
   useEffect(() => {
-    fetchProviders();
+    void fetchProviders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -48,10 +49,10 @@ export default function ProvidersPage() {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
-    const data = await resp.json();
+    const data = await jsonBody<{ authUrl?: string; state?: string }>(resp);
     if (data.authUrl) {
       setPendingOAuth(providerId);
-      setOauthState(data.state);
+      setOauthState(data.state ?? null);
       window.open(data.authUrl, "_blank");
     }
   };
@@ -69,12 +70,12 @@ export default function ProvidersPage() {
       },
       body: JSON.stringify({ code, state: oauthState }),
     });
-    const data = await resp.json();
+    const data = await jsonBody<{ success?: boolean }>(resp);
     if (data.success) {
       setPendingOAuth(null);
       setOauthState(null);
       setOauthCode((prev) => ({ ...prev, [providerId]: "" }));
-      fetchProviders();
+      void fetchProviders();
     }
   };
 
@@ -91,10 +92,10 @@ export default function ProvidersPage() {
       },
       body: JSON.stringify({ apiKey }),
     });
-    const data = await resp.json();
+    const data = await jsonBody<{ success?: boolean }>(resp);
     if (data.success) {
       setApiKeyInputs((prev) => ({ ...prev, [providerId]: "" }));
-      fetchProviders();
+      void fetchProviders();
     }
   };
 
@@ -104,7 +105,7 @@ export default function ProvidersPage() {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-    fetchProviders();
+    void fetchProviders();
   };
 
   if (loading) {
@@ -148,7 +149,7 @@ export default function ProvidersPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => disconnect(provider.id)}
+                  onClick={() => void disconnect(provider.id)}
                 >
                   Disconnect
                 </Button>
@@ -178,7 +179,7 @@ export default function ProvidersPage() {
                           />
                           <Button
                             size="sm"
-                            onClick={() => completeOAuth(provider.id)}
+                            onClick={() => void completeOAuth(provider.id)}
                           >
                             Submit
                           </Button>
@@ -195,7 +196,7 @@ export default function ProvidersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => startOAuth(provider.id)}
+                        onClick={() => void startOAuth(provider.id)}
                       >
                         <ExternalLink className="h-4 w-4" />
                         Connect with OAuth
@@ -230,7 +231,7 @@ export default function ProvidersPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => saveApiKey(provider.id)}
+                      onClick={() => void saveApiKey(provider.id)}
                     >
                       <Key className="h-4 w-4" />
                       Save

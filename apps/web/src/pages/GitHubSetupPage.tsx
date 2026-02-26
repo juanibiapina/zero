@@ -61,8 +61,13 @@ export default function GitHubSetupPage() {
         });
 
         if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          throw new Error((data as { error?: string }).error || `HTTP ${resp.status}`);
+          const text = await resp.text().catch(() => "");
+          let errorMsg = `HTTP ${resp.status}`;
+          try {
+            const parsed = JSON.parse(text) as { error?: string };
+            if (parsed.error) errorMsg = parsed.error;
+          } catch { /* use default errorMsg */ }
+          throw new Error(errorMsg);
         }
 
         setStatus("success");
@@ -75,7 +80,7 @@ export default function GitHubSetupPage() {
       }
     }
 
-    linkInstallation();
+    void linkInstallation();
   }, [searchParams, getToken, navigate]);
 
   return (
@@ -100,7 +105,7 @@ export default function GitHubSetupPage() {
             <p className="font-medium">Failed to link GitHub App</p>
             <p className="text-sm text-muted-foreground">{error}</p>
             <button
-              onClick={() => navigate("/projects", { replace: true })}
+              onClick={() => void navigate("/projects", { replace: true })}
               className="mt-2 text-sm text-primary underline"
             >
               Go to Projects

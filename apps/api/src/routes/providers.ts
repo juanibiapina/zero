@@ -14,7 +14,6 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import type { UserDOReferences, ProviderInfo } from "@zero/core";
-import type { UserDO } from "../UserDO";
 
 type Variables = {
   userId: string;
@@ -109,7 +108,7 @@ export const createProviderRoutes = () => {
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
       )
-    ) as DurableObjectStub<UserDO>;
+    );
 
     const credentials = await userDO.listProviderCredentials();
     const connectedSet = new Set(credentials.map((cr) => cr.provider));
@@ -161,7 +160,7 @@ export const createProviderRoutes = () => {
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
       )
-    ) as DurableObjectStub<UserDO>;
+    );
 
     // Generate PKCE challenge
     const verifierBytes = new Uint8Array(32);
@@ -200,7 +199,7 @@ export const createProviderRoutes = () => {
       state: verifier,
     });
 
-    const authUrl = `${ANTHROPIC_OAUTH.authorizeUrl}?${params}`;
+    const authUrl = `${ANTHROPIC_OAUTH.authorizeUrl}?${params.toString()}`;
     return c.json({ authUrl, state }, 200);
   });
 
@@ -256,7 +255,7 @@ export const createProviderRoutes = () => {
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
       )
-    ) as DurableObjectStub<UserDO>;
+    );
 
     // Retrieve stored PKCE verifier
     const pkce = await userDO.consumePKCEVerifier(state);
@@ -284,11 +283,8 @@ export const createProviderRoutes = () => {
       return c.json({ error: "Token exchange failed" }, 400 as const);
     }
 
-    const tokens = (await tokenResp.json()) as {
-      access_token: string;
-      refresh_token?: string;
-      expires_in?: number;
-    };
+     
+    const tokens: { access_token: string; refresh_token?: string; expires_in?: number } = await tokenResp.json();
 
     const expiresAt = tokens.expires_in
       ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
@@ -347,7 +343,7 @@ export const createProviderRoutes = () => {
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
       )
-    ) as DurableObjectStub<UserDO>;
+    );
 
     await userDO.upsertProviderCredential({
       provider: providerId,
@@ -384,7 +380,7 @@ export const createProviderRoutes = () => {
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
       )
-    ) as DurableObjectStub<UserDO>;
+    );
 
     await userDO.deleteProviderCredential(providerId);
     return c.json({ success: true }, 200);

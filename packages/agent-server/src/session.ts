@@ -263,7 +263,7 @@ export class SessionWrapper {
 
       // Configure provider and model
       this._eventBuffer.addEvent({ type: "lifecycle", phase: "configuring" });
-      setApiKey(provider as Parameters<typeof setApiKey>[0], apiKey);
+      setApiKey(provider, apiKey);
       const model = getModel(
         provider as Parameters<typeof getModel>[0],
         modelId as never
@@ -357,7 +357,7 @@ export class SessionWrapper {
 
       // Configure provider and model
       this._eventBuffer.addEvent({ type: "lifecycle", phase: "configuring" });
-      setApiKey(provider as Parameters<typeof setApiKey>[0], apiKey);
+      setApiKey(provider, apiKey);
       const model = getModel(
         provider as Parameters<typeof getModel>[0],
         modelId as never

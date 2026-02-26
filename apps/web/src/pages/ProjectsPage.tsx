@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ProjectSummary } from "@zero/core";
+import { jsonBody } from "@/lib/api";
 
 function ManualLinkInput({ onLinked }: { onLinked: () => void }) {
   const { getToken } = useAuth();
@@ -41,8 +42,13 @@ function ManualLinkInput({ onLinked }: { onLinked: () => void }) {
         body: JSON.stringify({ installationId: id }),
       });
       if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error((data as { error?: string }).error || `HTTP ${resp.status}`);
+        const text = await resp.text().catch(() => "");
+        let errorMsg = `HTTP ${resp.status}`;
+        try {
+          const parsed = JSON.parse(text) as { error?: string };
+          if (parsed.error) errorMsg = parsed.error;
+        } catch { /* use default errorMsg */ }
+        throw new Error(errorMsg);
       }
       setInstallationId("");
       onLinked();
@@ -63,11 +69,11 @@ function ManualLinkInput({ onLinked }: { onLinked: () => void }) {
             setInstallationId(e.target.value);
             setError(null);
           }}
-          onKeyDown={(e) => e.key === "Enter" && handleLink()}
+          onKeyDown={(e) => { if (e.key === "Enter") void handleLink(); }}
           className="w-40"
           disabled={linking}
         />
-        <Button variant="outline" onClick={handleLink} disabled={linking}>
+        <Button variant="outline" onClick={() => void handleLink()} disabled={linking}>
           {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
           Link
         </Button>
@@ -90,7 +96,7 @@ export default function ProjectsPage() {
       const resp = await fetch("/api/projects", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await resp.json();
+      const data = await jsonBody<{ projects?: ProjectSummary[]; installUrl?: string; errors?: string[] }>(resp);
       setProjects(data.projects ?? []);
       setInstallUrl(data.installUrl ?? null);
       setErrors(data.errors ?? []);
@@ -102,7 +108,7 @@ export default function ProjectsPage() {
   }, [getToken]);
 
   useEffect(() => {
-    fetchProjects();
+    void fetchProjects();
   }, [fetchProjects]);
 
   if (loading) {
@@ -122,7 +128,7 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold">Projects</h1>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <ManualLinkInput onLinked={fetchProjects} />
+          <ManualLinkInput onLinked={() => void fetchProjects()} />
           {installUrl && (
             <Button variant="outline" asChild>
               <a href={installUrl} target="_blank" rel="noopener noreferrer">
@@ -162,7 +168,7 @@ export default function ProjectsPage() {
               </Button>
             )}
             <div className="text-xs text-muted-foreground">or paste an existing installation ID</div>
-            <ManualLinkInput onLinked={fetchProjects} />
+            <ManualLinkInput onLinked={() => void fetchProjects()} />
           </div>
         </div>
       ) : (

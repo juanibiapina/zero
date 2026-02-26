@@ -85,9 +85,8 @@ export async function getInstallationDetails(
     throw new Error(`Failed to get installation details: ${resp.status} ${body}`);
   }
 
-  const data = (await resp.json()) as {
-    account: { login: string; type: string };
-  };
+   
+  const data: { account: { login: string; type: string } } = await resp.json();
 
   return {
     accountLogin: data.account.login,
@@ -122,7 +121,8 @@ export async function getInstallationToken(
     throw new Error(`Failed to get installation token: ${resp.status} ${body}`);
   }
 
-  const data = (await resp.json()) as { token: string };
+   
+  const data: { token: string } = await resp.json();
   return data.token;
 }
 
@@ -166,10 +166,8 @@ export async function listInstallationRepos(
 
     if (!resp.ok) break;
 
-    const data = (await resp.json()) as {
-      repositories: typeof repos;
-      total_count: number;
-    };
+     
+    const data: { repositories: typeof repos; total_count: number } = await resp.json();
     repos.push(...data.repositories);
     if (repos.length >= data.total_count) break;
     page++;

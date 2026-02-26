@@ -21,13 +21,14 @@ import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlit
 import { DurableObject } from "cloudflare:workers";
 import { eq, gt, sql } from "drizzle-orm";
 import { ContainerHandle, ContainerError } from "../services/container";
-// @ts-expect-error — Generated migrations file
+// @ts-expect-error — Generated JS file without type declarations
 import migrations from "./db/drizzle/migrations";
+import type { MigrationConfig } from "@zero/drizzle-migrator";
 import { sessionMetaTable, sessionEventsTable } from "./db/schema";
 import type { Env } from "../types";
-import type { UserDO } from "../UserDO";
 import type { SessionStatus, SessionServerMessage, SessionClientMessage } from "@zero/core";
 import { migrate } from "@zero/drizzle-migrator";
+
 import { getInstallationToken } from "../services/github";
 
 export class SessionDO extends DurableObject<Env> {
@@ -58,8 +59,8 @@ export class SessionDO extends DurableObject<Env> {
       ),
     );
 
-    ctx.blockConcurrencyWhile(async () => {
-      await migrate(this.db, migrations);
+    void ctx.blockConcurrencyWhile(async () => {
+      migrate(this.db, migrations as MigrationConfig);
 
       const maxRow = this.db
         .select({
@@ -87,7 +88,7 @@ export class SessionDO extends DurableObject<Env> {
     userDOId?: string;
   }): Promise<void> {
     const now = new Date().toISOString();
-    await this.db.insert(sessionMetaTable).values({
+    this.db.insert(sessionMetaTable).values({
       status: meta.status,
       projectOwner: meta.projectOwner,
       projectRepo: meta.projectRepo,
@@ -95,7 +96,7 @@ export class SessionDO extends DurableObject<Env> {
       model: meta.model,
       userDOId: meta.userDOId ?? null,
       createdAt: now,
-    });
+    }).run();
   }
 
   async getSession(): Promise<{
@@ -107,7 +108,7 @@ export class SessionDO extends DurableObject<Env> {
     userDOId: string | null;
     createdAt: string;
   } | null> {
-    const row = await this.db.select().from(sessionMetaTable).get();
+    const row = this.db.select().from(sessionMetaTable).get();
     if (!row) return null;
     return {
       status: row.status as SessionStatus,
@@ -121,7 +122,7 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   async getStatus(): Promise<SessionStatus | null> {
-    const row = await this.db
+    const row = this.db
       .select({ status: sessionMetaTable.status })
       .from(sessionMetaTable)
       .get();
@@ -129,7 +130,7 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   async updateStatus(status: SessionStatus): Promise<void> {
-    await this.db.update(sessionMetaTable).set({ status });
+    this.db.update(sessionMetaTable).set({ status }).run();
     this.syncStatusToUserDO(status);
   }
 
@@ -221,7 +222,7 @@ export class SessionDO extends DurableObject<Env> {
     if (typeof message !== "string") return;
 
     let data: SessionClientMessage;
-    try { data = JSON.parse(message); } catch { return; }
+    try { data = JSON.parse(message) as SessionClientMessage; } catch { return; }
 
     switch (data.type) {
       case "message": return this.handleUserMessage(data.text);
@@ -469,9 +470,9 @@ export class SessionDO extends DurableObject<Env> {
 
     let envelope: { seq: number; event: unknown; timestamp: string };
     try {
-      const raw = JSON.parse(event.data);
-      if (raw.type === "pong") return;
-      envelope = raw;
+      const raw: unknown = JSON.parse(event.data);
+      if (typeof raw === "object" && raw !== null && "type" in raw && (raw as Record<string, unknown>).type === "pong") return;
+      envelope = raw as typeof envelope;
     } catch { return; }
 
     // Skip already-seen events
@@ -563,7 +564,7 @@ export class SessionDO extends DurableObject<Env> {
 
     const userDO = this.env.USER_DO.get(
       this.env.USER_DO.idFromString(session.userDOId)
-    ) as DurableObjectStub<UserDO>;
+    );
 
     // API key
     const credentials = await userDO.listProviderCredentials();
@@ -661,7 +662,7 @@ export class SessionDO extends DurableObject<Env> {
       seq: row.seq,
       source: row.source,
       eventType: row.eventType,
-      data: JSON.parse(row.data),
+      data: JSON.parse(row.data) as unknown,
     }));
   }
 
@@ -694,7 +695,7 @@ export class SessionDO extends DurableObject<Env> {
 
     const userDO = this.env.USER_DO.get(
       this.env.USER_DO.idFromString(row.userDOId)
-    ) as DurableObjectStub<UserDO>;
+    );
 
     userDO
       .updateSessionStatus(this.ctx.id.toString(), status)

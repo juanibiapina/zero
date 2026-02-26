@@ -64,13 +64,13 @@ export const createWebhookRoutes = () => {
     }
 
     const event = c.req.header("x-github-event");
-    const body = JSON.parse(payload);
+    const body = JSON.parse(payload) as Record<string, unknown>;
 
-    console.log(`GitHub webhook: ${event} action=${body.action ?? "n/a"}`);
+    console.log(`GitHub webhook: ${event} action=${(body.action as string) ?? "n/a"}`);
 
     // Handle installation events
     if (event === "installation") {
-      await handleInstallationEvent(c.env, body);
+      await handleInstallationEvent(c.env, body as Parameters<typeof handleInstallationEvent>[1]);
     }
 
     return c.json({ received: true }, 200);

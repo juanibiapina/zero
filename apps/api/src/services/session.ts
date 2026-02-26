@@ -54,7 +54,7 @@ export class SessionService {
     return {
       userDO: this.env.USER_DO.get(
         this.env.USER_DO.idFromString(userDOIdStr)
-      ) as DurableObjectStub<UserDO>,
+      ),
       userDOId: userDOIdStr,
     };
   }

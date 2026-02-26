@@ -59,7 +59,7 @@ export default function ProjectDetailPage() {
   }, [getToken, owner, repo]);
 
   useEffect(() => {
-    fetchSessions();
+    void fetchSessions();
   }, [fetchSessions]);
 
   const handleDelete = async (sessionId: string) => {
@@ -170,7 +170,7 @@ export default function ProjectDetailPage() {
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         disabled={deleting.has(session.id)}
-                        onClick={() => handleDelete(session.id)}
+                        onClick={() => void handleDelete(session.id)}
                       >
                         {deleting.has(session.id) ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -201,7 +201,7 @@ export default function ProjectDetailPage() {
                     size="icon"
                     className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
                     disabled={deleting.has(session.id)}
-                    onClick={() => handleDelete(session.id)}
+                    onClick={() => void handleDelete(session.id)}
                   >
                     {deleting.has(session.id) ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

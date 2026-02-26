@@ -16,8 +16,9 @@
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { DurableObject } from "cloudflare:workers";
 import { eq, and } from "drizzle-orm";
-// @ts-expect-error — Generated migrations file
+// @ts-expect-error — Generated JS file without type declarations
 import migrations from "./db/drizzle/migrations";
+import type { MigrationConfig } from "@zero/drizzle-migrator";
 import {
   providerCredentialsTable,
   githubInstallationsTable,
@@ -37,8 +38,8 @@ export class UserDO extends DurableObject<Env> {
     super(ctx, env);
     this.db = drizzle(ctx.storage, { logger: false });
 
-    ctx.blockConcurrencyWhile(async () => {
-      await migrate(this.db, migrations);
+    void ctx.blockConcurrencyWhile(async () => {
+      migrate(this.db, migrations as MigrationConfig);
     });
   }
 
@@ -47,11 +48,11 @@ export class UserDO extends DurableObject<Env> {
   // ============================================================================
 
   async getDOReferences(): Promise<UserDOReferences> {
-    const projects = await this.db.select({
+    const projects = this.db.select({
       owner: projectsTable.owner,
       repo: projectsTable.repo,
       projectDOId: projectsTable.projectDOId,
-    }).from(projectsTable);
+    }).from(projectsTable).all();
 
     return {
       inboxDOId: null,
@@ -65,7 +66,7 @@ export class UserDO extends DurableObject<Env> {
   // ============================================================================
 
   async listProviderCredentials() {
-    return this.db.select().from(providerCredentialsTable);
+    return this.db.select().from(providerCredentialsTable).all();
   }
 
   async getProviderCredential(provider: string) {
@@ -88,7 +89,7 @@ export class UserDO extends DurableObject<Env> {
     const existing = await this.getProviderCredential(data.provider);
 
     if (existing) {
-      await this.db
+      this.db
         .update(providerCredentialsTable)
         .set({
           credentialType: data.credentialType,
@@ -98,9 +99,10 @@ export class UserDO extends DurableObject<Env> {
           apiKey: data.apiKey ?? null,
           updatedAt: now,
         })
-        .where(eq(providerCredentialsTable.provider, data.provider));
+        .where(eq(providerCredentialsTable.provider, data.provider))
+        .run();
     } else {
-      await this.db.insert(providerCredentialsTable).values({
+      this.db.insert(providerCredentialsTable).values({
         provider: data.provider,
         credentialType: data.credentialType,
         accessToken: data.accessToken ?? null,
@@ -109,14 +111,15 @@ export class UserDO extends DurableObject<Env> {
         apiKey: data.apiKey ?? null,
         createdAt: now,
         updatedAt: now,
-      });
+      }).run();
     }
   }
 
   async deleteProviderCredential(provider: string) {
-    await this.db
+    this.db
       .delete(providerCredentialsTable)
-      .where(eq(providerCredentialsTable.provider, provider));
+      .where(eq(providerCredentialsTable.provider, provider))
+      .run();
   }
 
   // ============================================================================
@@ -125,25 +128,26 @@ export class UserDO extends DurableObject<Env> {
 
   async storePKCEVerifier(state: string, verifier: string, provider: string) {
     const now = new Date().toISOString();
-    await this.db.insert(pkceVerifiersTable).values({
+    this.db.insert(pkceVerifiersTable).values({
       state,
       verifier,
       provider,
       createdAt: now,
-    });
+    }).run();
   }
 
   async consumePKCEVerifier(state: string) {
-    const row = await this.db
+    const row = this.db
       .select()
       .from(pkceVerifiersTable)
       .where(eq(pkceVerifiersTable.state, state))
       .get();
 
     if (row) {
-      await this.db
+      this.db
         .delete(pkceVerifiersTable)
-        .where(eq(pkceVerifiersTable.state, state));
+        .where(eq(pkceVerifiersTable.state, state))
+        .run();
     }
 
     return row ?? null;
@@ -154,7 +158,7 @@ export class UserDO extends DurableObject<Env> {
   // ============================================================================
 
   async listGitHubInstallations() {
-    return this.db.select().from(githubInstallationsTable);
+    return this.db.select().from(githubInstallationsTable).all();
   }
 
   async getGitHubInstallation() {
@@ -164,19 +168,20 @@ export class UserDO extends DurableObject<Env> {
   async addGitHubInstallation(installationId: number, accountLogin: string, accountType: string) {
     const now = new Date().toISOString();
     // Enforce single installation: clear all existing, then insert
-    await this.db.delete(githubInstallationsTable);
-    await this.db.insert(githubInstallationsTable).values({
+    this.db.delete(githubInstallationsTable).run();
+    this.db.insert(githubInstallationsTable).values({
       installationId,
       accountLogin,
       accountType,
       createdAt: now,
-    });
+    }).run();
   }
 
   async removeGitHubInstallation(installationId: number) {
-    await this.db
+    this.db
       .delete(githubInstallationsTable)
-      .where(eq(githubInstallationsTable.installationId, installationId));
+      .where(eq(githubInstallationsTable.installationId, installationId))
+      .run();
   }
 
   // ============================================================================
@@ -184,7 +189,7 @@ export class UserDO extends DurableObject<Env> {
   // ============================================================================
 
   async listProjects() {
-    return this.db.select().from(projectsTable);
+    return this.db.select().from(projectsTable).all();
   }
 
   async getProject(owner: string, repo: string) {
@@ -206,7 +211,7 @@ export class UserDO extends DurableObject<Env> {
     const existing = await this.getProject(data.owner, data.repo);
 
     if (existing) {
-      await this.db
+      this.db
         .update(projectsTable)
         .set({
           projectDOId: data.projectDOId,
@@ -215,24 +220,26 @@ export class UserDO extends DurableObject<Env> {
         })
         .where(
           and(eq(projectsTable.owner, data.owner), eq(projectsTable.repo, data.repo))
-        );
+        )
+        .run();
     } else {
-      await this.db.insert(projectsTable).values({
+      this.db.insert(projectsTable).values({
         owner: data.owner,
         repo: data.repo,
         projectDOId: data.projectDOId,
         defaultProvider: data.defaultProvider ?? null,
         defaultModel: data.defaultModel ?? null,
         createdAt: now,
-      });
+      }).run();
     }
   }
 
   async updateProjectModel(owner: string, repo: string, provider: string, model: string) {
-    await this.db
+    this.db
       .update(projectsTable)
       .set({ defaultProvider: provider, defaultModel: model })
-      .where(and(eq(projectsTable.owner, owner), eq(projectsTable.repo, repo)));
+      .where(and(eq(projectsTable.owner, owner), eq(projectsTable.repo, repo)))
+      .run();
   }
 
   // ============================================================================
@@ -247,7 +254,8 @@ export class UserDO extends DurableObject<Env> {
         createdAt: userSecretsTable.createdAt,
       })
       .from(userSecretsTable)
-      .orderBy(userSecretsTable.name);
+      .orderBy(userSecretsTable.name)
+      .all();
   }
 
   /** List all secrets with values — only called internally for session injection. */
@@ -257,36 +265,39 @@ export class UserDO extends DurableObject<Env> {
         name: userSecretsTable.name,
         value: userSecretsTable.value,
       })
-      .from(userSecretsTable);
+      .from(userSecretsTable)
+      .all();
   }
 
   async upsertUserSecret(name: string, value: string) {
     const now = new Date().toISOString();
-    const existing = await this.db
+    const existing = this.db
       .select()
       .from(userSecretsTable)
       .where(eq(userSecretsTable.name, name))
       .get();
 
     if (existing) {
-      await this.db
+      this.db
         .update(userSecretsTable)
         .set({ value, updatedAt: now })
-        .where(eq(userSecretsTable.name, name));
+        .where(eq(userSecretsTable.name, name))
+        .run();
     } else {
-      await this.db.insert(userSecretsTable).values({
+      this.db.insert(userSecretsTable).values({
         name,
         value,
         createdAt: now,
         updatedAt: now,
-      });
+      }).run();
     }
   }
 
   async deleteUserSecret(name: string) {
-    await this.db
+    this.db
       .delete(userSecretsTable)
-      .where(eq(userSecretsTable.name, name));
+      .where(eq(userSecretsTable.name, name))
+      .run();
   }
 
   // ============================================================================
@@ -303,19 +314,20 @@ export class UserDO extends DurableObject<Env> {
     model: string;
   }) {
     const now = new Date().toISOString();
-    await this.db.insert(sessionsTable).values({
+    this.db.insert(sessionsTable).values({
       ...data,
       createdAt: now,
       updatedAt: now,
-    });
+    }).run();
   }
 
   async updateSessionStatus(sessionDOId: string, status: SessionStatus) {
     const now = new Date().toISOString();
-    await this.db
+    this.db
       .update(sessionsTable)
       .set({ status, updatedAt: now })
-      .where(eq(sessionsTable.sessionDOId, sessionDOId));
+      .where(eq(sessionsTable.sessionDOId, sessionDOId))
+      .run();
   }
 
   async listSessions(filter?: { owner: string; repo: string }) {
@@ -329,12 +341,14 @@ export class UserDO extends DurableObject<Env> {
             eq(sessionsTable.repo, filter.repo)
           )
         )
-        .orderBy(sessionsTable.createdAt);
+        .orderBy(sessionsTable.createdAt)
+        .all();
     }
     return this.db
       .select()
       .from(sessionsTable)
-      .orderBy(sessionsTable.createdAt);
+      .orderBy(sessionsTable.createdAt)
+      .all();
   }
 
   async getSessionById(sessionDOId: string) {
@@ -346,8 +360,9 @@ export class UserDO extends DurableObject<Env> {
   }
 
   async removeSession(sessionDOId: string) {
-    await this.db
+    this.db
       .delete(sessionsTable)
-      .where(eq(sessionsTable.sessionDOId, sessionDOId));
+      .where(eq(sessionsTable.sessionDOId, sessionDOId))
+      .run();
   }
 }

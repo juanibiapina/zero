@@ -80,6 +80,7 @@ export const createApp = () => {
       return next();
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Hono context type mismatch with Clerk's expected Context type
     const auth = getAuth(c);
     if (!auth?.userId) {
       return c.json({ error: "Unauthorized" }, 401);

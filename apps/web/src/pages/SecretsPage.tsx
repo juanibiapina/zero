@@ -4,6 +4,7 @@ import { KeyRound, Trash2, Plus, Loader2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { SecretEntry } from "@zero/core";
+import { jsonBody } from "@/lib/api";
 
 export default function SecretsPage() {
   const { getToken } = useAuth();
@@ -19,7 +20,7 @@ export default function SecretsPage() {
       const resp = await fetch("/api/secrets", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await resp.json();
+      const data = await jsonBody<{ secrets?: SecretEntry[] }>(resp);
       setSecrets(data.secrets ?? []);
     } catch (err) {
       console.error("Failed to fetch secrets:", err);
@@ -29,7 +30,7 @@ export default function SecretsPage() {
   };
 
   useEffect(() => {
-    fetchSecrets();
+    void fetchSecrets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -46,7 +47,7 @@ export default function SecretsPage() {
         },
         body: JSON.stringify({ name: newName.trim(), value: newValue.trim() }),
       });
-      const data = await resp.json();
+      const data = await jsonBody<{ success?: boolean }>(resp);
       if (data.success) {
         setNewName("");
         setNewValue("");
@@ -73,7 +74,7 @@ export default function SecretsPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") addSecret();
+    if (e.key === "Enter") void addSecret();
   };
 
   if (loading) {
@@ -131,7 +132,7 @@ export default function SecretsPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => deleteSecret(secret.name)}
+                onClick={() => void deleteSecret(secret.name)}
                 className="text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
@@ -164,7 +165,7 @@ export default function SecretsPage() {
           onKeyDown={handleKeyDown}
         />
         <Button
-          onClick={addSecret}
+          onClick={() => void addSecret()}
           disabled={saving || !newName.trim() || !newValue.trim()}
           className="shrink-0"
         >

@@ -53,6 +53,7 @@ export function createAppServer(): Server {
   const eventBuffer = new EventBuffer();
   const session = new SessionWrapper(eventBuffer);
 
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Node HTTP server handler
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
     const method = req.method?.toUpperCase() ?? "GET";
@@ -244,10 +245,10 @@ export function createAppServer(): Server {
     wss.handleUpgrade(req, socket, head, (ws) => {
       const afterSeq = parseInt(url.searchParams.get("after") ?? "0", 10);
       eventBuffer.registerWebSocket(ws, afterSeq);
-      ws.on("message", (raw) => {
+      ws.on("message", (raw: Buffer) => {
         let data: { type: string };
         try {
-          data = JSON.parse(typeof raw === "string" ? raw : raw.toString("utf-8"));
+          data = JSON.parse(raw.toString("utf-8")) as { type: string };
         } catch { return; }
         if (data.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
       });

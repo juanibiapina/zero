@@ -11,7 +11,6 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import type { UserDOReferences, ProjectSummary } from "@zero/core";
-import type { UserDO } from "../UserDO";
 import { getInstallationToken, listInstallationRepos } from "../services/github";
 
 type Variables = {
@@ -87,7 +86,7 @@ export const createProjectRoutes = () => {
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
       )
-    ) as DurableObjectStub<UserDO>;
+    );
 
     const installation = await userDO.getGitHubInstallation();
     const installUrl = getInstallUrl(c.env);
@@ -171,7 +170,7 @@ export const createProjectRoutes = () => {
       c.env.USER_DO.idFromString(
         (await c.env.KV.get(`user:${c.get("userId")}`))!
       )
-    ) as DurableObjectStub<UserDO>;
+    );
 
     await userDO.updateProjectModel(owner, repo, provider, model);
     return c.json({ success: true }, 200);

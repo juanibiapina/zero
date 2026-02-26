@@ -7,8 +7,9 @@ import { Link } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TurnView } from "@/components/TurnView";
 import { processAgentEvent } from "@/lib/process-agent-event";
-import type { AgentEvent } from "@zero/core";
+import type { AgentEvent, SessionServerMessage } from "@zero/core";
 import type { Turn, SessionStatus } from "@/lib/session-types";
+import { jsonBody } from "@/lib/api";
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ export default function SessionPage() {
 
       ws.onmessage = (e) => {
         try {
-          const msg = JSON.parse(e.data);
+          const msg = JSON.parse(e.data as string) as SessionServerMessage;
 
           switch (msg.type) {
             case "caught_up":
@@ -96,15 +97,14 @@ export default function SessionPage() {
               return;
 
             case "status": {
-              const s = msg.status as SessionStatus;
-              setStatusBoth(s);
+              setStatusBoth(msg.status);
               // Capture error message from status event (e.g. API auth failure)
-              if (s === "error" && msg.error) {
-                setError(msg.error as string);
+              if (msg.status === "error" && msg.error) {
+                setError(msg.error);
               }
               // If transitioning to idle, send pending prompt
               // (fallback for messages queued before caught_up)
-              if (s === "idle" && pendingPromptRef.current && caughtUpRef.current) {
+              if (msg.status === "idle" && pendingPromptRef.current && caughtUpRef.current) {
                 const text = pendingPromptRef.current;
                 pendingPromptRef.current = null;
                 ws.send(JSON.stringify({ type: "message", text }));
@@ -120,19 +120,18 @@ export default function SessionPage() {
               return;
 
             case "event": {
-              const seq = msg.seq as number;
-              if (seq <= lastSeqRef.current) return; // dedup
-              lastSeqRef.current = seq;
+              if (msg.seq <= lastSeqRef.current) return; // dedup
+              lastSeqRef.current = msg.seq;
 
               if (msg.source === "user") {
                 // User message — check if we already added it optimistically
-                const userText = msg.data?.text as string;
+                const userText = (msg.data as { text?: string })?.text ?? "";
                 if (userText && sentUserMessagesRef.current.has(userText)) {
                   sentUserMessagesRef.current.delete(userText);
                   return; // Already shown
                 }
                 // From another tab or replay — add it
-                setTurns((prev) => [...prev, { role: "user", text: userText || "" }]);
+                setTurns((prev) => [...prev, { role: "user", text: userText }]);
                 return;
               }
 
@@ -179,7 +178,7 @@ export default function SessionPage() {
     if (!isNew || createdRef.current) return;
     createdRef.current = true;
 
-    (async () => {
+    void (async () => {
       setIsCreating(true);
       setError(null);
 
@@ -197,9 +196,9 @@ export default function SessionPage() {
         if (!resp.ok) {
           let message = `Failed to create session (${resp.status})`;
           try {
-            const data = await resp.json();
-            if ((data as { error?: string }).error) {
-              message = (data as { error: string }).error;
+            const parsed = await jsonBody<{ error?: string }>(resp);
+            if (parsed.error) {
+              message = parsed.error;
             }
           } catch {
             // Response wasn't JSON
@@ -207,7 +206,7 @@ export default function SessionPage() {
           throw new Error(message);
         }
 
-        const data = (await resp.json()) as { sessionId: string };
+        const data = await jsonBody<{ sessionId: string }>(resp);
         sessionIdRef.current = data.sessionId;
 
         // Update URL without remounting
@@ -235,7 +234,7 @@ export default function SessionPage() {
   // ── Connect WebSocket for existing sessions ─────────────────────────────
   useEffect(() => {
     if (!isNew && id) {
-      connectWebSocket(id);
+      void connectWebSocket(id);
     }
     return () => {
       if (wsRef.current) {
@@ -411,7 +410,7 @@ export default function SessionPage() {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (isRunning) return; // Don't send while running
-                  handleSend();
+                  void handleSend();
                 }
               }}
             />
@@ -428,7 +427,7 @@ export default function SessionPage() {
             ) : (
               <Button
                 size="icon"
-                onClick={handleSend}
+                onClick={() => void handleSend()}
                 disabled={!input.trim()}
                 className="shrink-0 h-[44px] w-[44px]"
               >

@@ -1,7 +1,7 @@
 import { ClerkProvider, SignIn, useAuth } from "@clerk/clerk-react";
 import { Outlet } from "react-router";
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
 if (!PUBLISHABLE_KEY) {
   throw new Error("Add your Clerk Publishable Key to .env.local");
@@ -31,7 +31,7 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY!}>
       <AuthGate />
     </ClerkProvider>
   );

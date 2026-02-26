@@ -17,9 +17,9 @@ function parseErrorMessage(raw: string): ParsedError {
   if (spaceIdx > 0) {
     const jsonPart = raw.slice(spaceIdx + 1);
     try {
-      const parsed = JSON.parse(jsonPart);
-      const errorType = parsed?.error?.type as string | undefined;
-      const errorMsg = parsed?.error?.message as string | undefined;
+      const parsed = JSON.parse(jsonPart) as { error?: { type?: string; message?: string } };
+      const errorType = parsed?.error?.type;
+      const errorMsg = parsed?.error?.message;
       return {
         friendlyMessage: errorMsg ?? undefined,
         isAuthError: errorType === "authentication_error",
@@ -132,7 +132,7 @@ export function processAgentEvent(
           !DONE_PHASES.has(block.phase) &&
           block.phase !== phase
         ) {
-          (block as LifecycleBlock).completed = true;
+          (block).completed = true;
         }
       }
 

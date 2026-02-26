@@ -32,7 +32,7 @@ export class SecretsService {
     }
     return this.env.USER_DO.get(
       this.env.USER_DO.idFromString(userDOIdStr)
-    ) as DurableObjectStub<UserDO>;
+    );
   }
 
   // ── Public API ─────────────────────────────────────────────────────────

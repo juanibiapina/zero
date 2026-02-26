@@ -7,7 +7,7 @@
 import { sql } from 'drizzle-orm';
 import type { DrizzleSqliteDODatabase } from 'drizzle-orm/durable-sqlite';
 
-interface MigrationConfig {
+export interface MigrationConfig {
   journal: {
     entries: Array<{
       idx: number;
@@ -50,10 +50,10 @@ function readMigrationFiles({ journal, migrations }: MigrationConfig): Migration
   return migrationQueries;
 }
 
-export async function migrate<TSchema extends Record<string, unknown>>(
+export function migrate<TSchema extends Record<string, unknown>>(
   db: DrizzleSqliteDODatabase<TSchema>,
   config: MigrationConfig
-): Promise<void> {
+): void {
   const migrations = readMigrationFiles(config);
   // Note: Unlike upstream Drizzle, we don't call tx.rollback() on error.
   // tx.rollback() throws TransactionRollbackError which replaces the original error.

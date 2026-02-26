@@ -14,7 +14,6 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import type { UserDOReferences } from "@zero/core";
-import type { UserDO } from "../UserDO";
 import { getInstallationDetails } from "../services/github";
 
 type Variables = {
@@ -84,7 +83,7 @@ export const createGitHubRoutes = () => {
 
     const userDO = c.env.USER_DO.get(
       c.env.USER_DO.idFromString(userDOIdStr)
-    ) as DurableObjectStub<UserDO>;
+    );
 
     // Fetch installation details from GitHub API to get account info
     try {
@@ -100,11 +99,11 @@ export const createGitHubRoutes = () => {
       // Fallback: check KV for webhook-stored data
       const kvData = await c.env.KV.get(`gh_installation:${installationId}`);
       if (kvData) {
-        const { accountLogin, accountType } = JSON.parse(kvData);
+        const parsed = JSON.parse(kvData) as { accountLogin: string; accountType: string };
         await userDO.addGitHubInstallation(
           installationId,
-          accountLogin,
-          accountType
+          parsed.accountLogin,
+          parsed.accountType
         );
       } else {
         return c.json({ error: "Installation not found" }, 404 as const);
