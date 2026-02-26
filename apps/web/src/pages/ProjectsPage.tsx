@@ -10,9 +10,11 @@ import {
   ChevronRight,
   AlertCircle,
   Link2,
+  Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import type { ProjectSummary } from "@zero/core";
 import { jsonBody } from "@/lib/api";
 
@@ -89,6 +91,12 @@ export default function ProjectsPage() {
   const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const archivedCount = projects.filter((p) => p.archived).length;
+  const visibleProjects = showArchived
+    ? projects
+    : projects.filter((p) => !p.archived);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -128,6 +136,12 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold">Projects</h1>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          {archivedCount > 0 && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Switch checked={showArchived} onCheckedChange={setShowArchived} />
+              Show archived ({archivedCount})
+            </label>
+          )}
           <ManualLinkInput onLinked={() => void fetchProjects()} />
           {installUrl && (
             <Button variant="outline" asChild>
@@ -171,9 +185,17 @@ export default function ProjectsPage() {
             <ManualLinkInput onLinked={() => void fetchProjects()} />
           </div>
         </div>
+      ) : visibleProjects.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <Archive className="mx-auto h-10 w-10 text-muted-foreground" />
+          <h3 className="mt-2 font-semibold">All projects are archived</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use the "Show archived" button to see them.
+          </p>
+        </div>
       ) : (
         <div className="grid gap-3">
-          {projects.map((project) => (
+          {visibleProjects.map((project) => (
             <Link
               key={project.fullName}
               to={`/projects/${project.owner}/${project.repo}`}
@@ -186,7 +208,15 @@ export default function ProjectsPage() {
                   <Globe className="h-4 w-4 text-muted-foreground" />
                 )}
                 <div>
-                  <div className="font-medium">{project.fullName}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{project.fullName}</span>
+                    {project.archived && (
+                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        <Archive className="mr-1 h-3 w-3" />
+                        archived
+                      </span>
+                    )}
+                  </div>
                   {project.description && (
                     <div className="text-sm text-muted-foreground">
                       {project.description}

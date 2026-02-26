@@ -89,6 +89,7 @@ export interface ProjectSummary {
   description: string | null;
   defaultBranch: string;
   private: boolean;
+  archived: boolean;
 }
 
 // ============================================================================

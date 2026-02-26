@@ -139,6 +139,7 @@ export async function listInstallationRepos(
     description: string | null;
     default_branch: string;
     private: boolean;
+    archived: boolean;
   }[]
 > {
   const repos: {
@@ -148,6 +149,7 @@ export async function listInstallationRepos(
     description: string | null;
     default_branch: string;
     private: boolean;
+    archived: boolean;
   }[] = [];
 
   let page = 1;

@@ -27,6 +27,7 @@ const ProjectSummarySchema = z.object({
   description: z.string().nullable(),
   defaultBranch: z.string(),
   private: z.boolean(),
+  archived: z.boolean(),
 });
 
 const ProjectListResponseSchema = z.object({
@@ -107,6 +108,7 @@ export const createProjectRoutes = () => {
           description: repo.description,
           defaultBranch: repo.default_branch,
           private: repo.private,
+          archived: repo.archived,
         });
       }
     } catch (err) {
