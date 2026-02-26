@@ -1,5 +1,6 @@
-import { NavLink } from "react-router";
-import { useUser, UserButton } from "@clerk/clerk-react";
+import { useEffect, useState, useCallback } from "react";
+import { NavLink, useLocation } from "react-router";
+import { useUser, useAuth, UserButton } from "@clerk/clerk-react";
 import {
   LayoutDashboard,
   FolderGit2,
@@ -7,6 +8,8 @@ import {
   Plug,
   KeyRound,
   X,
+  Loader2,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -22,6 +25,24 @@ const settingsItems = [
   { to: "/settings/providers", icon: Plug, label: "Providers" },
 ];
 
+// Status → dot color (matches StatusBadge palette)
+const statusDotColor: Record<string, string> = {
+  running: "bg-blue-500",
+  starting: "bg-yellow-500",
+  resuming: "bg-yellow-500",
+  idle: "bg-green-500",
+  stopped: "bg-muted-foreground/50",
+  error: "bg-destructive",
+};
+
+interface SessionEntry {
+  id: string;
+  owner: string;
+  repo: string;
+  title: string;
+  status: string;
+}
+
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
@@ -29,11 +50,37 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const { user } = useUser();
+  const { getToken } = useAuth();
+  const location = useLocation();
+  const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+
+  const fetchSessions = useCallback(async () => {
+    try {
+      const token = await getToken();
+      const resp = await fetch("/api/sessions", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        const data = (await resp.json()) as { sessions: SessionEntry[] };
+        setSessions(data.sessions);
+      }
+    } catch {
+      // Ignore fetch errors
+    } finally {
+      setLoadingSessions(false);
+    }
+  }, [getToken]);
+
+  // Fetch sessions on mount and whenever the route changes
+  useEffect(() => {
+    void fetchSessions();
+  }, [fetchSessions, location.pathname]);
 
   const sidebarContent = (
     <>
       {/* Brand */}
-      <div className="flex h-14 items-center justify-between px-4">
+      <div className="flex h-14 shrink-0 items-center justify-between px-4">
         <div className="flex items-center gap-2 font-semibold text-sidebar-foreground">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
             Z
@@ -53,7 +100,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       <Separator />
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 p-2">
+      <nav className="shrink-0 space-y-1 p-2">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -97,8 +144,63 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         ))}
       </nav>
 
+      <Separator />
+
+      {/* Sessions */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center gap-2 px-4 py-2">
+          <MessageSquare className="h-3.5 w-3.5 text-sidebar-foreground/50" />
+          <span className="text-xs font-medium uppercase tracking-wider text-sidebar-foreground/50">
+            Sessions
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 pb-2">
+          {loadingSessions && (
+            <div className="flex items-center justify-center py-3 text-sidebar-foreground/50">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            </div>
+          )}
+          {!loadingSessions && sessions.length === 0 && (
+            <p className="px-3 py-2 text-xs text-sidebar-foreground/40">
+              No sessions yet
+            </p>
+          )}
+          {sessions.map((session) => (
+            <NavLink
+              key={session.id}
+              to={`/sessions/${session.id}`}
+              onClick={onClose}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-start gap-2 rounded-md px-3 py-2 transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )
+              }
+            >
+              <span
+                className={cn(
+                  "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                  statusDotColor[session.status] ?? "bg-muted-foreground/50"
+                )}
+                title={session.status}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium leading-snug">
+                  {session.title}
+                </span>
+                <span className="block truncate text-xs text-sidebar-foreground/50">
+                  {session.owner}/{session.repo}
+                </span>
+              </span>
+            </NavLink>
+          ))}
+        </div>
+      </div>
+
       {/* User */}
-      <div className="border-t border-sidebar-border p-3">
+      <div className="shrink-0 border-t border-sidebar-border p-3">
         <div className="flex items-center gap-2">
           <UserButton afterSignOutUrl="/" />
           <span className="truncate text-sm text-sidebar-foreground">
