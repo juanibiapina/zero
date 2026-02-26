@@ -46,7 +46,10 @@ export class SessionDO extends DurableObject<Env> {
   private containerWs: WebSocket | null = null;
 
   /** In-memory mirror of persisted status — avoids async DB reads in hot paths */
-  private currentStatus: SessionStatus = "pending";
+  private currentStatus: SessionStatus = "idle";
+
+  /** Whether the container has been started at least once (survives hibernation) */
+  private containerInitialized = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -77,6 +80,8 @@ export class SessionDO extends DurableObject<Env> {
 
       const metaRow = this.db.select({ status: sessionMetaTable.status }).from(sessionMetaTable).get();
       if (metaRow?.status) this.currentStatus = metaRow.status as SessionStatus;
+
+      this.containerInitialized = (await ctx.storage.get<boolean>("containerInitialized")) ?? false;
     });
   }
 
@@ -227,15 +232,8 @@ export class SessionDO extends DurableObject<Env> {
       } satisfies SessionServerMessage));
     }
 
-    // For active container states (running, starting, etc.) send the real
-    // status so the UI reflects what's happening. For inactive states
-    // (pending, idle) report "idle" so the UI is immediately usable — the
-    // container will start/resume when the user sends a message.
-    const INACTIVE: Set<string> = new Set(["pending", "idle"]);
-    const reportedStatus: SessionStatus = INACTIVE.has(this.currentStatus)
-      ? "idle"
-      : this.currentStatus;
-    server.send(JSON.stringify({ type: "status", status: reportedStatus } satisfies SessionServerMessage));
+    // Send current session status — no mapping, the session status is authoritative.
+    server.send(JSON.stringify({ type: "status", status: this.currentStatus } satisfies SessionServerMessage));
 
     // Mark end of replay
     server.send(JSON.stringify({ type: "caught_up", lastSeq: this.seq } satisfies SessionServerMessage));
@@ -243,7 +241,7 @@ export class SessionDO extends DurableObject<Env> {
     // If the container should be active but the event stream was lost
     // (e.g. after DO hibernation), reconnect it so the browser receives
     // live updates. Falls back to idle if the container is unreachable.
-    const ACTIVE: Set<string> = new Set(["starting", "running", "ready", "resuming"]);
+    const ACTIVE: Set<string> = new Set(["starting", "running", "resuming"]);
     if (ACTIVE.has(this.currentStatus) && !this.containerWs) {
       this.ctx.waitUntil((async () => {
         try {
@@ -339,15 +337,17 @@ export class SessionDO extends DurableObject<Env> {
 
   /**
    * Ensure the container is running and the event stream is connected.
-   * First-start (pending) uses startContainerFromMeta; subsequent wakes
+   * First-start uses startContainerFromMeta; subsequent wakes
    * use resumeContainer.
    */
   private async ensureContainerRunning(): Promise<void> {
     // First start — container has never been started
-    if (this.currentStatus === "pending") {
+    if (!this.containerInitialized) {
       await this.updateStatus("starting");
       this.broadcastToWebSockets({ type: "status", status: "starting" });
       await this.startContainerFromMeta();
+      this.containerInitialized = true;
+      await this.ctx.storage.put("containerInitialized", true);
       return;
     }
 
@@ -413,7 +413,7 @@ export class SessionDO extends DurableObject<Env> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       if (this.isContainerReady()) return;
-      if (this.currentStatus === "error" || this.currentStatus === "failed") {
+      if (this.currentStatus === "error") {
         throw new Error("Container failed to start");
       }
       await new Promise(r => setTimeout(r, 500));
@@ -422,7 +422,7 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   private isContainerReady(): boolean {
-    return this.currentStatus === "ready" || this.currentStatus === "idle";
+    return this.currentStatus === "idle";
   }
 
   /**
@@ -534,19 +534,21 @@ export class SessionDO extends DurableObject<Env> {
       data: agentEvent,
     }]);
 
-    // Update status if this is a status event
+    // Update session status if this is a container status event
     if (eventType === "status" && agentEvent.status) {
-      const newStatus = agentEvent.status as SessionStatus;
-      this.updateStatus(newStatus).catch(() => {});
-      this.broadcastToWebSockets({
-        type: "status",
-        status: newStatus,
-        ...(agentEvent.error ? { error: agentEvent.error as string } : {}),
-      });
+      const newStatus = this.containerStatusToSessionStatus(agentEvent.status as string);
+      if (newStatus) {
+        this.updateStatus(newStatus).catch(() => {});
+        this.broadcastToWebSockets({
+          type: "status",
+          status: newStatus,
+          ...(agentEvent.error ? { error: agentEvent.error as string } : {}),
+        });
 
-      // Close event stream on terminal states
-      if (newStatus === "completed" || newStatus === "failed" || newStatus === "error") {
-        this.closeEventStream();
+        // Close event stream on terminal states
+        if (newStatus === "error") {
+          this.closeEventStream();
+        }
       }
     }
 
@@ -742,6 +744,24 @@ export class SessionDO extends DurableObject<Env> {
     userDO
       .updateSessionStatus(this.ctx.id.toString(), this.currentStatus)
       .catch(err => console.error("syncStatusToUserDO failed:", err));
+  }
+
+  /**
+   * Explicitly convert a container status string to a session status.
+   * Container status is an internal concern — only recognized values
+   * are mapped; unknown container statuses are ignored.
+   */
+  private containerStatusToSessionStatus(containerStatus: string): SessionStatus | null {
+    switch (containerStatus) {
+      case "ready":    return "idle";
+      case "idle":     return "idle";
+      case "running":  return "running";
+      case "starting": return "starting";
+      case "resuming": return "resuming";
+      case "failed":   return "error";
+      case "error":    return "error";
+      default:         return null;
+    }
   }
 
   private broadcastToWebSockets(message: SessionServerMessage): void {

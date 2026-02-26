@@ -51,13 +51,4 @@ export interface UserTurn {
 
 export type Turn = AssistantTurn | UserTurn;
 
-export type SessionStatus =
-  | "creating"
-  | "connecting"
-  | "starting"
-  | "resuming"
-  | "ready"
-  | "running"
-  | "idle"
-  | "error"
-  | "stopped";
+export type { SessionStatus } from "@zero/core";

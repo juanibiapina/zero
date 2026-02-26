@@ -162,7 +162,7 @@ export class SessionService {
     const title = `Session ${sessionDOId.toString().slice(0, 8)}`;
 
     await sessionDO.initSession({
-      status: "pending",
+      status: "idle",
       projectOwner: owner,
       projectRepo: repo,
       provider,
@@ -176,7 +176,7 @@ export class SessionService {
       owner,
       repo,
       title,
-      status: "pending",
+      status: "idle",
       provider,
       model,
     });

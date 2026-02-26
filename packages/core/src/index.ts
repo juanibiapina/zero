@@ -41,14 +41,11 @@ export interface Notification {
 // ============================================================================
 
 export type SessionStatus =
-  | "pending"
+  | "connecting"
+  | "idle"
   | "starting"
-  | "ready"
   | "resuming"
   | "running"
-  | "idle"
-  | "completed"
-  | "failed"
   | "error";
 
 export interface SessionSummary {

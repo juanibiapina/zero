@@ -23,9 +23,8 @@ export default function SessionPage() {
   const [owner] = useState(searchParams.get("owner") ?? "");
   const [repo] = useState(searchParams.get("repo") ?? "");
 
-  const [status, setStatus] = useState<SessionStatus>(
-    isNew ? "creating" : "connecting"
-  );
+  const [status, setStatus] = useState<SessionStatus>("connecting");
+  const [isCreating, setIsCreating] = useState(isNew);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -39,7 +38,7 @@ export default function SessionPage() {
   /** Track user messages we've sent optimistically, to dedup on replay */
   const sentUserMessagesRef = useRef<Set<string>>(new Set());
   const caughtUpRef = useRef(false);
-  const statusRef = useRef<SessionStatus>(isNew ? "creating" : "connecting");
+  const statusRef = useRef<SessionStatus>("connecting");
 
   const setStatusBoth = useCallback((s: SessionStatus) => {
     statusRef.current = s;
@@ -97,17 +96,15 @@ export default function SessionPage() {
               return;
 
             case "status": {
-              const s = msg.status as string;
-              if (["ready", "running", "idle", "error", "starting", "stopped", "pending", "failed", "resuming"].includes(s)) {
-                setStatusBoth(s === "pending" ? "ready" : s === "failed" ? "error" : s as SessionStatus);
-              }
+              const s = msg.status as SessionStatus;
+              setStatusBoth(s);
               // Capture error message from status event (e.g. API auth failure)
-              if ((s === "error" || s === "failed") && msg.error) {
+              if (s === "error" && msg.error) {
                 setError(msg.error as string);
               }
-              // If transitioning to ready/idle, send pending prompt
+              // If transitioning to idle, send pending prompt
               // (fallback for messages queued before caught_up)
-              if ((s === "ready" || s === "idle") && pendingPromptRef.current && caughtUpRef.current) {
+              if (s === "idle" && pendingPromptRef.current && caughtUpRef.current) {
                 const text = pendingPromptRef.current;
                 pendingPromptRef.current = null;
                 ws.send(JSON.stringify({ type: "message", text }));
@@ -183,7 +180,7 @@ export default function SessionPage() {
     createdRef.current = true;
 
     (async () => {
-      setStatusBoth("creating");
+      setIsCreating(true);
       setError(null);
 
       try {
@@ -221,9 +218,10 @@ export default function SessionPage() {
         );
 
         // Connect WebSocket
-        setStatusBoth("connecting");
+        setIsCreating(false);
         await connectWebSocket(data.sessionId);
       } catch (err) {
+        setIsCreating(false);
         setStatusBoth("error");
         setError(
           err instanceof Error
@@ -282,8 +280,8 @@ export default function SessionPage() {
     }
   };
 
-  // Show input bar for all active states (hidden only on terminal error/stopped)
-  const showInputBar = status !== "error" && status !== "stopped";
+  // Show input bar for all active states (hidden only on terminal error)
+  const showInputBar = status !== "error";
   const isRunning = status === "running";
 
   return (
@@ -307,7 +305,7 @@ export default function SessionPage() {
         </div>
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold">Agent Session</h1>
-          <StatusBadge status={status} />
+          <StatusBadge status={isCreating ? "creating" : status} />
         </div>
       </div>
 
@@ -322,13 +320,13 @@ export default function SessionPage() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-1 pr-2">
         {turns.length === 0 && (
           <div className="text-muted-foreground text-sm py-8 text-center">
-            {status === "creating" && (
+            {isCreating && (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Creating session...
               </span>
             )}
-            {status === "connecting" && (
+            {!isCreating && status === "connecting" && (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Connecting to agent...
@@ -356,8 +354,7 @@ export default function SessionPage() {
                 </span>
               </>
             )}
-            {status === "ready" && "Ready! Describe what you want the agent to do."}
-            {status === "idle" && "Send a message to continue."}
+            {status === "idle" && "Describe what you want the agent to do."}
             {status === "error" && !error && "Something went wrong."}
           </div>
         )}
@@ -369,7 +366,7 @@ export default function SessionPage() {
         {/* Waiting indicator after user message when container isn't ready */}
         {turns.length > 0 &&
           turns[turns.length - 1]?.role === "user" &&
-          (status === "creating" ||
+          (isCreating ||
             status === "connecting" ||
             status === "starting" ||
             status === "resuming") && (
@@ -381,14 +378,13 @@ export default function SessionPage() {
             </div>
           )}
 
-        {(status === "creating" || status === "starting" || status === "resuming" || status === "running") &&
+        {(status === "starting" || status === "resuming" || status === "running") &&
           turns.length > 0 &&
           turns[turns.length - 1]?.role !== "assistant" &&
           turns[turns.length - 1]?.role !== "user" && (
             <div className="flex items-center gap-2 text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {status === "creating" ? "Creating session..." :
-               status === "resuming" ? "Waking up container..." :
+              {status === "resuming" ? "Waking up container..." :
                "Agent is working..."}
             </div>
           )}

@@ -27,11 +27,6 @@ const configs: Record<string, StatusConfig> = {
     icon: <Loader2 className="h-3 w-3 animate-spin" />,
     className: "text-yellow-600",
   },
-  ready: {
-    label: "Ready",
-    icon: <CircleCheck className="h-3 w-3" />,
-    className: "text-green-600",
-  },
   running: {
     label: "Running",
     icon: <Loader2 className="h-3 w-3 animate-spin" />,
@@ -42,25 +37,10 @@ const configs: Record<string, StatusConfig> = {
     icon: <CircleCheck className="h-3 w-3" />,
     className: "text-green-600",
   },
-  completed: {
-    label: "Completed",
-    icon: <CircleCheck className="h-3 w-3" />,
-    className: "text-muted-foreground",
-  },
   error: {
     label: "Error",
     icon: <CircleAlert className="h-3 w-3" />,
     className: "text-destructive",
-  },
-  failed: {
-    label: "Failed",
-    icon: <CircleAlert className="h-3 w-3" />,
-    className: "text-destructive",
-  },
-  stopped: {
-    label: "Stopped",
-    icon: <CircleAlert className="h-3 w-3" />,
-    className: "text-muted-foreground",
   },
 };
 
