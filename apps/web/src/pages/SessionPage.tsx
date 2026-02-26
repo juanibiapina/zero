@@ -57,6 +57,10 @@ export default function SessionPage() {
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    // During event replay (before caught_up), don't let scroll events
+    // disable auto-scroll — content height changes from rapid setTurns
+    // calls can cause spurious "not at bottom" detections.
+    if (!caughtUpRef.current) return;
     shouldAutoScrollRef.current =
       el.scrollHeight - el.scrollTop - el.clientHeight < 50;
   }, []);
@@ -79,6 +83,7 @@ export default function SessionPage() {
 
       ws.onopen = () => {
         setStatusBoth("connecting");
+        caughtUpRef.current = false;
 
         // Start ping keepalive every 30s
         pingIntervalRef.current = setInterval(() => {
@@ -95,6 +100,16 @@ export default function SessionPage() {
           switch (msg.type) {
             case "caught_up":
               caughtUpRef.current = true;
+              // Scroll to bottom after replay completes. Use rAF to ensure
+              // React has committed any pending DOM updates from batched
+              // setTurns calls that arrived before caught_up.
+              if (shouldAutoScrollRef.current) {
+                requestAnimationFrame(() => {
+                  if (scrollRef.current) {
+                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                  }
+                });
+              }
               // Send pending prompt if we have one — don't gate on status.
               // SessionDO handles waiting for the container to be ready.
               if (pendingPromptRef.current) {
