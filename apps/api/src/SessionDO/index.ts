@@ -179,15 +179,10 @@ export class SessionDO extends DurableObject<Env> {
     this.closeEventStream();
     this.lastContainerSeq = 0;
 
-    // If the session was in an active state, the container died before
-    // the agent could send a final status event. Transition to idle so
-    // the user can send another message.
-    const ACTIVE: Set<string> = new Set(["starting", "running", "resuming"]);
-    const currentStatus = await this.getStatus();
-    if (currentStatus && ACTIVE.has(currentStatus)) {
-      await this.updateStatus("idle");
-      this.broadcastToWebSockets({ type: "status", status: "idle" });
-    }
+    // The container is gone — always transition to "stopped" so the UI
+    // reflects that the next message will require a cold start.
+    await this.updateStatus("stopped");
+    this.broadcastToWebSockets({ type: "status", status: "stopped" });
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -229,8 +224,8 @@ export class SessionDO extends DurableObject<Env> {
         try {
           await this.connectEventStream(this.container);
         } catch {
-          await this.updateStatus("idle");
-          this.broadcastToWebSockets({ type: "status", status: "idle" });
+          await this.updateStatus("stopped");
+          this.broadcastToWebSockets({ type: "status", status: "stopped" });
         }
       })());
     }

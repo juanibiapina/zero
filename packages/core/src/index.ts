@@ -46,6 +46,7 @@ export type SessionStatus =
   | "starting"
   | "resuming"
   | "running"
+  | "stopped"
   | "error";
 
 export interface SessionSummary {

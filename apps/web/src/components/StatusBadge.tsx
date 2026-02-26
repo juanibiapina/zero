@@ -1,4 +1,4 @@
-import { Loader2, CircleCheck, CircleAlert } from "lucide-react";
+import { Loader2, CircleCheck, CircleAlert, Moon } from "lucide-react";
 
 interface StatusConfig {
   label: string;
@@ -36,6 +36,11 @@ const configs: Record<string, StatusConfig> = {
     label: "Idle",
     icon: <CircleCheck className="h-3 w-3" />,
     className: "text-green-600",
+  },
+  stopped: {
+    label: "Stopped",
+    icon: <Moon className="h-3 w-3" />,
+    className: "text-muted-foreground",
   },
   error: {
     label: "Error",

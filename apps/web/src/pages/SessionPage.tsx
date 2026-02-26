@@ -377,6 +377,7 @@ export default function SessionPage() {
               </>
             )}
             {status === "idle" && "Describe what you want the agent to do."}
+            {status === "stopped" && "Send a message to wake up the session."}
             {status === "error" && !error && "Something went wrong."}
           </div>
         )}
@@ -422,9 +423,11 @@ export default function SessionPage() {
               placeholder={
                 isRunning
                   ? "Type your next message..."
-                  : status === "idle"
-                    ? "Send a follow-up..."
-                    : "Describe what you want the agent to do..."
+                  : status === "stopped"
+                    ? "Send a message to resume..."
+                    : status === "idle"
+                      ? "Send a follow-up..."
+                      : "Describe what you want the agent to do..."
               }
               rows={1}
               value={input}
