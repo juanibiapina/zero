@@ -296,30 +296,18 @@ function SessionPageInner() {
                 Connecting to agent...
               </span>
             )}
-            {status === "starting" && (
+            {(status === "starting" || status === "resuming") && (
               <>
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Setting up environment...
-                </span>
-                <span className="block mt-2 text-xs text-muted-foreground/60">
-                  You can type your prompt while we get ready
-                </span>
-              </>
-            )}
-            {status === "resuming" && (
-              <>
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Waking up container...
+                  Getting ready...
                 </span>
                 <span className="block mt-2 text-xs text-muted-foreground/60">
                   You can type your message while we get ready
                 </span>
               </>
             )}
-            {status === "idle" && "Describe what you want the agent to do."}
-            {status === "stopped" && "Send a message to wake up the session."}
+            {(status === "idle" || status === "stopped") && "Send a message to get started."}
             {status === "error" && !error && "Something went wrong."}
           </div>
         )}
@@ -336,9 +324,7 @@ function SessionPageInner() {
             status === "resuming") && (
             <div className="flex items-center gap-2 text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {status === "resuming"
-                ? "Waking up container… your message will be sent when ready"
-                : "Setting up… your prompt will be sent once the agent is ready"}
+              Getting ready… your message will be sent when ready
             </div>
           )}
 
@@ -348,8 +334,7 @@ function SessionPageInner() {
           turns[turns.length - 1]?.role !== "user" && (
             <div className="flex items-center gap-2 text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {status === "resuming" ? "Waking up container..." :
-               "Agent is working..."}
+              Agent is working...
             </div>
           )}
       </div>
@@ -361,15 +346,7 @@ function SessionPageInner() {
             <textarea
               ref={inputRef}
               className="flex-1 rounded-md border bg-background p-3 text-sm min-h-[44px] max-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder={
-                isRunning
-                  ? "Type your next message..."
-                  : status === "stopped"
-                    ? "Send a message to resume..."
-                    : status === "idle"
-                      ? "Send a follow-up..."
-                      : "Describe what you want the agent to do..."
-              }
+              placeholder="Send a message..."
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
