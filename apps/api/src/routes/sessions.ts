@@ -11,11 +11,12 @@
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { getContainer } from "@cloudflare/containers";
 import type { Env } from "../types";
 import type { UserDOReferences } from "@zero/core";
-import type { UserDO } from "../UserDO";
-import { createSession } from "../services/session";
+import { Result } from "@praha/byethrow";
+import { SessionService } from "../services/session";
+import { serviceError, serviceResult } from "../lib/result";
+
 
 type Variables = {
   userId: string;
@@ -103,24 +104,9 @@ export const createSessionRoutes = () => {
 
   router.openapi(listSessionsRoute, async (c) => {
     const { owner, repo } = c.req.valid("query");
-
-    const userDO = c.get("userDOStub") as DurableObjectStub<UserDO>;
+    const service = new SessionService(c.env, c.get("userId"));
     const filter = owner && repo ? { owner, repo } : undefined;
-    const sessions = await userDO.listSessions(filter);
-
-    return c.json({
-      sessions: sessions.map((s) => ({
-        id: s.sessionDOId,
-        owner: s.owner,
-        repo: s.repo,
-        title: s.title,
-        status: s.status,
-        provider: s.provider,
-        model: s.model,
-        createdAt: s.createdAt,
-        updatedAt: s.updatedAt,
-      })),
-    }, 200);
+    return c.json(await service.listSessions(filter), 200);
   });
 
   // ── Create session ───────────────────────────────────────────────────
@@ -158,57 +144,16 @@ export const createSessionRoutes = () => {
 
   router.openapi(createSessionRoute, async (c) => {
     const { owner, repo, prompt } = c.req.valid("json");
-
-    if (!owner || !repo) {
-      return c.json({ error: "owner and repo are required" }, 400 as const);
-    }
-
-    // Verify user has access to this project
-    const doRefs = c.get("doRefs");
-    const projectRef = doRefs.projects.find(
-      (p) => p.owner === owner && p.repo === repo
-    );
-    if (!projectRef) {
-      return c.json({ error: "Project not found" }, 404 as const);
-    }
-
-    // Get UserDO stub and ID
-    const userDOIdStr = (await c.env.KV.get(`user:${c.get("userId")}`))!;
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(userDOIdStr)
-    ) as DurableObjectStub<UserDO>;
-
-    // Look up installationId from the user's linked GitHub installation
-    const installation = await userDO.getGitHubInstallation();
-    if (!installation) {
-      return c.json(
-        { error: "No GitHub installation linked. Install or link the GitHub App first." },
-        400 as const
-      );
-    }
+    const service = new SessionService(c.env, c.get("userId"));
 
     try {
-      const result = await createSession({
-        env: c.env,
-        userDO,
-        userDOId: userDOIdStr,
-        owner,
-        repo,
-        installationId: installation.installationId,
-        prompt,
-      });
-
-      return c.json(result, 201);
+      const result = await service.createSession(owner, repo, prompt);
+      return serviceResult(c, result, 201);
     } catch (err) {
       console.error("Failed to create session:", err);
       return c.json(
-        {
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to create session",
-        },
-        500 as const
+        { error: err instanceof Error ? err.message : "Failed to create session" },
+        500
       );
     }
   });
@@ -235,73 +180,16 @@ export const createSessionRoutes = () => {
       },
       500: {
         content: { "application/json": { schema: ErrorSchema } },
-        description: "Failed to remove session from index",
+        description: "Failed to delete session",
       },
     },
   });
 
   router.openapi(deleteSessionRoute, async (c) => {
     const { id } = c.req.valid("param");
-
-    // Verify session belongs to this user
-    const userDO = c.get("userDOStub") as DurableObjectStub<UserDO>;
-    const sessionRow = await userDO.getSessionById(id);
-    if (!sessionRow) {
-      return c.json({ error: "Session not found" }, 404 as const);
-    }
-
-    // Get SessionDO for cleanup
-    let sessionDO;
-    try {
-      const doId = c.env.SESSION_DO.idFromString(id);
-      sessionDO = c.env.SESSION_DO.get(doId);
-    } catch {
-      // Invalid ID — just remove from index
-      await userDO.removeSession(id);
-      return c.json({ ok: true }, 200);
-    }
-
-    const session = await sessionDO.getSession();
-    if (!session) {
-      // SessionDO already cleared — just clean up index
-      await userDO.removeSession(id);
-      return c.json({ ok: true }, 200);
-    }
-
-    // Step 1: Best-effort stop container process
-    try {
-      const container = getContainer(
-        c.env.AGENT_CONTAINER,
-        session.containerName
-      );
-      await container.fetch("http://container/stop", { method: "POST" });
-    } catch (err) {
-      console.error("Delete: container stop failed (ok):", err);
-    }
-
-    // Step 2: Clear R2 workspace snapshot
-    try {
-      await c.env.SNAPSHOTS.delete(`workspace-snapshots/${id}/snapshot.tar.zst`);
-    } catch (err) {
-      console.error("Delete: R2 snapshot cleanup failed (ok):", err);
-    }
-
-    // Step 3: Clear SessionDO storage
-    try {
-      await sessionDO.deleteSession();
-    } catch (err) {
-      console.error("Delete: session DO cleanup failed (ok):", err);
-    }
-
-    // Step 4: Remove from UserDO index
-    try {
-      await userDO.removeSession(id);
-    } catch (err) {
-      console.error("Delete: index removal failed:", err);
-      return c.json({ error: "Failed to remove session from index" }, 500 as const);
-    }
-
-    return c.json({ ok: true }, 200);
+    const service = new SessionService(c.env, c.get("userId"));
+    const result = await service.deleteSession(id);
+    return serviceResult(c, result, 200);
   });
 
   // ── WebSocket upgrade → SessionDO ────────────────────────────────────
@@ -315,23 +203,16 @@ export const createSessionRoutes = () => {
       return c.json({ error: "Expected WebSocket upgrade" }, 426);
     }
 
-    // Verify session belongs to this user
-    const userDO = c.get("userDOStub") as DurableObjectStub<UserDO>;
-    const sessionRow = await userDO.getSessionById(id);
-    if (!sessionRow) {
-      return c.json({ error: "Session not found" }, 404);
-    }
+    const service = new SessionService(c.env, c.get("userId"));
+    const result = await service.getSessionForWebSocket(id);
 
-    // Look up SessionDO
-    let sessionDO;
-    try {
-      const doId = c.env.SESSION_DO.idFromString(id);
-      sessionDO = c.env.SESSION_DO.get(doId);
-    } catch {
-      return c.json({ error: "Invalid session ID" }, 400);
+    if (Result.isFailure(result)) {
+      return serviceError(c, result.error);
     }
 
     // Forward WebSocket upgrade to SessionDO
+    const doId = c.env.SESSION_DO.idFromString(result.value.sessionDOId);
+    const sessionDO = c.env.SESSION_DO.get(doId);
     return sessionDO.fetch(c.req.raw);
   });
 

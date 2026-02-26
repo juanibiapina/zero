@@ -37,18 +37,18 @@ export class SecretsService {
 
   // ── Public API ─────────────────────────────────────────────────────────
 
-  async listSecrets(): Promise<Result.Result<{ secrets: SecretSummary[] }, ServiceError>> {
+  async listSecrets(): Promise<{ secrets: SecretSummary[] }> {
     const userDO = await this.getUserDO();
     const rows = await userDO.listUserSecrets();
-    return Result.succeed({
+    return {
       secrets: rows.map((s) => ({ name: s.name, createdAt: s.createdAt })),
-    });
+    };
   }
 
   async upsertSecret(
     name: string,
     value: string
-  ): Promise<Result.Result<{ success: true }, ServiceError>> {
+  ): Promise<Result.Result<{ success: true }, ServiceError<"INVALID">>> {
     if (!name || !value) {
       return Result.fail({
         message: "Missing required fields: name, value",
@@ -61,11 +61,9 @@ export class SecretsService {
     return Result.succeed({ success: true });
   }
 
-  async deleteSecret(
-    name: string
-  ): Promise<Result.Result<{ success: true }, ServiceError>> {
+  async deleteSecret(name: string): Promise<{ success: true }> {
     const userDO = await this.getUserDO();
     await userDO.deleteUserSecret(name);
-    return Result.succeed({ success: true });
+    return { success: true };
   }
 }

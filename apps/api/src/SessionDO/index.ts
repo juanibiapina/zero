@@ -20,7 +20,7 @@
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { DurableObject } from "cloudflare:workers";
 import { eq, gt, sql } from "drizzle-orm";
-import { getContainer, switchPort } from "@cloudflare/containers";
+import { getContainer, type ContainerHandle } from "../services/container";
 // @ts-expect-error — Generated migrations file
 import migrations from "./db/drizzle/migrations";
 import { sessionMetaTable, sessionEventsTable } from "./db/schema";
@@ -149,7 +149,7 @@ export class SessionDO extends DurableObject<Env> {
       const session = await this.getSession();
       if (!session) return;
 
-      const container = getContainer(this.env.AGENT_CONTAINER, session.containerName);
+      const container = getContainer(this.env, session.containerName);
 
       // Check if container actually needs resuming
       let needsResume = false;
@@ -192,7 +192,7 @@ export class SessionDO extends DurableObject<Env> {
     if (this.containerWs) return;
     const session = await this.getSession();
     if (!session) return;
-    const container = getContainer(this.env.AGENT_CONTAINER, session.containerName);
+    const container = getContainer(this.env, session.containerName);
     await this.connectEventStream(container);
   }
 
@@ -335,7 +335,7 @@ export class SessionDO extends DurableObject<Env> {
     const session = await this.getSession();
     if (!session) throw new Error("No session");
 
-    const container = getContainer(this.env.AGENT_CONTAINER, session.containerName);
+    const container = getContainer(this.env, session.containerName);
 
     // Check if container needs resume
     let needsResume = false;
@@ -372,7 +372,7 @@ export class SessionDO extends DurableObject<Env> {
    * The container may be finishing its onActivityExpired snapshot.
    */
   private async waitForContainerStopped(
-    container: ReturnType<typeof getContainer>,
+    container: ContainerHandle,
     timeoutMs = 30_000
   ): Promise<void> {
     const start = Date.now();
@@ -415,7 +415,7 @@ export class SessionDO extends DurableObject<Env> {
    */
   private async resumeContainer(
     session: NonNullable<Awaited<ReturnType<typeof this.getSession>>>,
-    container: ReturnType<typeof getContainer>
+    container: ContainerHandle
   ): Promise<void> {
     this.broadcastToWebSockets({ type: "status", status: "resuming" as SessionStatus });
 
@@ -460,16 +460,15 @@ export class SessionDO extends DurableObject<Env> {
    * Open the ephemeral event WS to the container.
    * Retries during container startup.
    */
-  private async connectEventStream(container: ReturnType<typeof getContainer>): Promise<void> {
+  private async connectEventStream(container: ContainerHandle): Promise<void> {
     if (this.containerWs) return;
 
     let ws: WebSocket | null = null;
     for (let i = 0; i < 20; i++) {
       try {
-        const req = new Request(`http://container/ws?after=${this.lastContainerSeq}`, {
+        const res = await container.fetch(`http://container/ws?after=${this.lastContainerSeq}`, {
           headers: { Upgrade: "websocket" },
         });
-        const res = await container.fetch(switchPort(req, 8080));
         if (res.webSocket) { ws = res.webSocket; break; }
       } catch { /* container starting or platform error */ }
       await new Promise(r => setTimeout(r, 2000));
@@ -561,13 +560,11 @@ export class SessionDO extends DurableObject<Env> {
   private async postToContainer(path: string, body: unknown): Promise<Response> {
     const session = await this.getSession();
     if (!session) throw new Error("No session");
-    const container = getContainer(this.env.AGENT_CONTAINER, session.containerName);
-    const resp = await container.fetch(switchPort(
-      new Request(`http://container${path}`, {
-        method: "POST",
-        ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
-      }), 8080
-    ));
+    const container = getContainer(this.env, session.containerName);
+    const resp = await container.fetch(`http://container${path}`, {
+      method: "POST",
+      ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+    });
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(`Container ${path}: ${resp.status} ${text}`);
@@ -580,20 +577,18 @@ export class SessionDO extends DurableObject<Env> {
    * Retries on 404, 503, and 500 "Failed to start container" (transient platform errors).
    */
   private async postToContainerWithRetry(
-    container: ReturnType<typeof getContainer>,
+    container: ContainerHandle,
     path: string,
     body: unknown,
     maxRetries = 15
   ): Promise<void> {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const resp = await container.fetch(switchPort(
-          new Request(`http://container${path}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }), 8080
-        ));
+        const resp = await container.fetch(`http://container${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
         if (resp.ok) return;
         const text = await resp.text();
         // 404/503 are transient during container startup.
@@ -658,7 +653,7 @@ export class SessionDO extends DurableObject<Env> {
   // ═══════════════════════════════════════════════════════════════════════
 
   private async restoreWorkspaceFromR2(
-    container: ReturnType<typeof getContainer>,
+    container: ContainerHandle,
     snapshotKey: string,
     repoUrl: string,
     githubToken: string
@@ -670,22 +665,21 @@ export class SessionDO extends DurableObject<Env> {
       const buffer = await obj.arrayBuffer();
       console.log(`Restoring workspace: ${snapshotKey} (${buffer.byteLength} bytes)`);
 
-      const resp = await container.fetch(switchPort(
-        new Request("http://container/workspace/restore", { method: "POST", body: buffer }), 8080
-      ));
+      const resp = await container.fetch("http://container/workspace/restore", {
+        method: "POST",
+        body: buffer,
+      });
       if (!resp.ok) {
         const text = await resp.text();
         throw new Error(`Restore failed: ${resp.status} ${text}`);
       }
 
       // Update git remote with fresh token
-      await container.fetch(switchPort(
-        new Request("http://container/workspace/update-remote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repoUrl, token: githubToken }),
-        }), 8080
-      ));
+      await container.fetch("http://container/workspace/update-remote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl, token: githubToken }),
+      });
 
       console.log("Workspace restored from R2 snapshot");
     } catch (err) {

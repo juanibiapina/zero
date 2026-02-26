@@ -12,8 +12,8 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import type { UserDOReferences } from "@zero/core";
-import { Result } from "@praha/byethrow";
 import { SecretsService } from "../services/secrets";
+import { serviceResult } from "../lib/result";
 
 type Variables = {
   userId: string;
@@ -79,11 +79,7 @@ export const createSecretsRoutes = () => {
 
   router.openapi(listSecretsRoute, async (c) => {
     const service = new SecretsService(c.env, c.get("userId"));
-    const result = await service.listSecrets();
-    if (Result.isFailure(result)) {
-      return c.json({ error: result.error.message }, 500 as const);
-    }
-    return c.json(result.value, 200);
+    return c.json(await service.listSecrets(), 200);
   });
 
   // ── Create or update a secret ─────────────────────────────────────────
@@ -115,10 +111,7 @@ export const createSecretsRoutes = () => {
     const { name, value } = c.req.valid("json");
     const service = new SecretsService(c.env, c.get("userId"));
     const result = await service.upsertSecret(name, value);
-    if (Result.isFailure(result)) {
-      return c.json({ error: result.error.message }, 400 as const);
-    }
-    return c.json(result.value, 200);
+    return serviceResult(c, result, 200);
   });
 
   // ── Delete a secret ────────────────────────────────────────────────────
@@ -147,11 +140,7 @@ export const createSecretsRoutes = () => {
   router.openapi(deleteSecretRoute, async (c) => {
     const { name } = c.req.valid("param");
     const service = new SecretsService(c.env, c.get("userId"));
-    const result = await service.deleteSecret(name);
-    if (Result.isFailure(result)) {
-      return c.json({ error: result.error.message }, 500 as const);
-    }
-    return c.json(result.value, 200);
+    return c.json(await service.deleteSecret(name), 200);
   });
 
   return router;
