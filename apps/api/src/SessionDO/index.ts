@@ -39,6 +39,9 @@ export class SessionDO extends DurableObject<Env> {
   /** Last container SSE seq we've seen (for reconnection after hibernation) */
   private lastContainerSeq = 0;
 
+  /** Cached container handle — set on init and restored from DB after hibernation */
+  private container: ContainerHandle | null = null;
+
   /** Ephemeral event WebSocket to the container (null when agent is idle) */
   private containerWs: WebSocket | null = null;
 
@@ -71,8 +74,14 @@ export class SessionDO extends DurableObject<Env> {
       if (maxRow?.maxSeq) this.seq = maxRow.maxSeq;
       if (maxRow?.maxContainerSeq) this.lastContainerSeq = maxRow.maxContainerSeq;
 
-      const metaRow = this.db.select({ status: sessionMetaTable.status }).from(sessionMetaTable).get();
+      const metaRow = this.db.select({
+        status: sessionMetaTable.status,
+        containerName: sessionMetaTable.containerName,
+      }).from(sessionMetaTable).get();
       if (metaRow?.status) this.currentStatus = metaRow.status as SessionStatus;
+      if (metaRow?.containerName) {
+        this.container = new ContainerHandle(this.env, metaRow.containerName);
+      }
     });
   }
 
@@ -100,6 +109,7 @@ export class SessionDO extends DurableObject<Env> {
       userDOId: meta.userDOId ?? null,
       createdAt: now,
     });
+    this.container = new ContainerHandle(this.env, meta.containerName);
   }
 
   async getSession(): Promise<{
@@ -158,10 +168,7 @@ export class SessionDO extends DurableObject<Env> {
     prompt?: string;
     secrets?: Record<string, string>;
   }): Promise<void> {
-    const session = await this.getSession();
-    if (!session) throw new Error("No session");
-
-    const container = new ContainerHandle(this.env, session.containerName);
+    const container = this.requireContainer();
 
     // Tell the container which SessionDO to notify on stop
     await container.bindToSession(this.ctx.id.toString());
@@ -177,13 +184,10 @@ export class SessionDO extends DurableObject<Env> {
    * All steps are best-effort — a single failure doesn't block cleanup.
    */
   async destroySession(): Promise<void> {
-    const session = await this.getSession();
-
-    if (session) {
-      // Step 1: Best-effort stop container process
+    // Step 1: Best-effort stop container process
+    if (this.container) {
       try {
-        const container = new ContainerHandle(this.env, session.containerName);
-        await container.stop();
+        await this.container.stop();
       } catch (err) {
         console.error("Destroy: container stop failed (ok):", err);
       }
@@ -198,8 +202,9 @@ export class SessionDO extends DurableObject<Env> {
       console.error("Destroy: R2 snapshot cleanup failed (ok):", err);
     }
 
-    // Step 3: Clear all DO storage
+    // Step 3: Clear all DO storage and reset cached state
     await this.ctx.storage.deleteAll();
+    this.container = null;
   }
 
   /**
@@ -212,15 +217,12 @@ export class SessionDO extends DurableObject<Env> {
    */
   private async autoWakeContainer(): Promise<void> {
     try {
-      const session = await this.getSession();
-      if (!session) return;
-
-      const container = new ContainerHandle(this.env, session.containerName);
+      if (!this.container) return;
 
       // Check if container actually needs resuming
       let needsResume = false;
       try {
-        const state = await container.getState();
+        const state = await this.container.getState();
         needsResume = (
           state.status === "stopped" ||
           state.status === "stopped_with_code" ||
@@ -238,7 +240,7 @@ export class SessionDO extends DurableObject<Env> {
       } else {
         // Container is still running — just reconnect event stream silently
         if (!this.containerWs) {
-          await this.connectEventStream(container);
+          await this.connectEventStream(this.container);
         }
       }
     } catch (err) {
@@ -351,8 +353,7 @@ export class SessionDO extends DurableObject<Env> {
 
     // 4. Send message to container
     try {
-      const container = await this.getContainerHandle();
-      await container.sendMessage(text);
+      await this.requireContainer().sendMessage(text);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.broadcastError(msg);
@@ -361,8 +362,7 @@ export class SessionDO extends DurableObject<Env> {
 
   private async handleStop(): Promise<void> {
     try {
-      const container = await this.getContainerHandle();
-      await container.stop();
+      await this.requireContainer().stop();
     } catch {
       // Container might already be dead — that's fine
     }
@@ -372,8 +372,7 @@ export class SessionDO extends DurableObject<Env> {
 
   private async handleSteer(text: string): Promise<void> {
     try {
-      const container = await this.getContainerHandle();
-      await container.steer(text);
+      await this.requireContainer().steer(text);
     } catch (err) {
       this.broadcastError(err instanceof Error ? err.message : String(err));
     }
@@ -388,10 +387,7 @@ export class SessionDO extends DurableObject<Env> {
    * Resumes the container if it was sleeping.
    */
   private async ensureContainerRunning(): Promise<void> {
-    const session = await this.getSession();
-    if (!session) throw new Error("No session");
-
-    const container = new ContainerHandle(this.env, session.containerName);
+    const container = this.requireContainer();
 
     // Check if container needs resume
     let needsResume = false;
@@ -414,6 +410,8 @@ export class SessionDO extends DurableObject<Env> {
 
     if (needsResume) {
       this.lastContainerSeq = 0;
+      const session = await this.getSession();
+      if (!session) throw new Error("No session");
       await this.resumeContainer(session, container);
     }
 
@@ -609,12 +607,11 @@ export class SessionDO extends DurableObject<Env> {
   // ═══════════════════════════════════════════════════════════════════════
 
   /**
-   * Get a ContainerHandle for the current session's container.
+   * Return the cached ContainerHandle or throw if no session exists.
    */
-  private async getContainerHandle(): Promise<ContainerHandle> {
-    const session = await this.getSession();
-    if (!session) throw new Error("No session");
-    return new ContainerHandle(this.env, session.containerName);
+  private requireContainer(): ContainerHandle {
+    if (!this.container) throw new Error("No container");
+    return this.container;
   }
 
   /**
