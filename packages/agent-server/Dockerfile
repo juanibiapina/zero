@@ -6,12 +6,15 @@ RUN apt-get update && apt-get install -y git zstd curl gpg && \
     apt-get update && apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
+# Enable corepack and install pnpm
+RUN corepack enable && corepack prepare pnpm@10.21.0 --activate
+
 WORKDIR /app
 
 # Copy package.json and strip devDependencies (they use workspace: protocol)
 COPY package.json ./
 RUN node -e "const p=JSON.parse(require('fs').readFileSync('package.json','utf8')); delete p.devDependencies; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2));"
-RUN npm install --omit=dev
+RUN pnpm install --prod
 
 COPY dist/ ./dist/
 
