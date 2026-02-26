@@ -167,12 +167,10 @@ export class SessionService {
     const sessionDOId = this.env.SESSION_DO.newUniqueId();
     const sessionDO = this.env.SESSION_DO.get(sessionDOId);
 
-    const containerName = `session-${sessionDOId.toString()}`;
     const title = `Session ${sessionDOId.toString().slice(0, 8)}`;
 
     await sessionDO.initSession({
       status: "starting",
-      containerName,
       projectOwner: owner,
       projectRepo: repo,
       provider,

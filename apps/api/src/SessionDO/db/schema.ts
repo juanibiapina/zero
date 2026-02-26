@@ -14,7 +14,6 @@ import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const sessionMetaTable = sqliteTable("session_meta", {
   id: int().primaryKey({ autoIncrement: true }),
   status: text().notNull(),
-  containerName: text().notNull(),
   projectOwner: text().notNull(),
   projectRepo: text().notNull(),
   provider: text().notNull(),
