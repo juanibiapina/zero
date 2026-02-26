@@ -337,6 +337,21 @@ export class UserDO extends DurableObject<Env> {
       createdAt: now,
       updatedAt: now,
     }).run();
+
+    this.broadcastToWebSockets({
+      type: "session_created",
+      session: {
+        id: data.sessionDOId,
+        owner: data.owner,
+        repo: data.repo,
+        title: data.title,
+        status: data.status,
+        provider: data.provider,
+        model: data.model,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
   }
 
   async updateSessionStatus(sessionDOId: string, status: SessionStatus) {
@@ -389,5 +404,10 @@ export class UserDO extends DurableObject<Env> {
       .delete(sessionsTable)
       .where(eq(sessionsTable.sessionDOId, sessionDOId))
       .run();
+
+    this.broadcastToWebSockets({
+      type: "session_deleted",
+      sessionId: sessionDOId,
+    });
   }
 }

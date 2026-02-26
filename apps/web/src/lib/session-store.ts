@@ -28,6 +28,9 @@ interface SessionStore {
   /** Fetch the full session list from the API. */
   fetchSessions: (getToken: () => Promise<string | null>) => Promise<void>;
 
+  /** Add a session to the local list (from WebSocket push). No-op if already present. */
+  addSession: (session: SessionEntry) => void;
+
   /** Patch a single session's status in-place (from WebSocket push). */
   updateSessionStatus: (sessionId: string, status: SessionStatus) => void;
 
@@ -54,6 +57,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  addSession: (session) => {
+    set((state) => {
+      if (state.sessions.some((s) => s.id === session.id)) return state;
+      return { sessions: [session, ...state.sessions] };
+    });
   },
 
   updateSessionStatus: (sessionId, status) => {

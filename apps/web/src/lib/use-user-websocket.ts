@@ -45,6 +45,14 @@ export function useUserWebSocket() {
                 .updateSessionStatus(msg.sessionId, msg.status);
               break;
 
+            case "session_created":
+              useSessionStore.getState().addSession(msg.session);
+              break;
+
+            case "session_deleted":
+              useSessionStore.getState().removeSession(msg.sessionId);
+              break;
+
             case "pong":
               // Handled by server auto-response; ignore if received
               break;

@@ -248,6 +248,21 @@ export type SessionServerMessage =
 /** UserDO → Browser (user-level push events) */
 export type UserServerMessage =
   | { type: "session_status"; sessionId: string; status: SessionStatus }
+  | {
+      type: "session_created";
+      session: {
+        id: string;
+        owner: string;
+        repo: string;
+        title: string;
+        status: SessionStatus;
+        provider: string;
+        model: string;
+        createdAt: string;
+        updatedAt: string;
+      };
+    }
+  | { type: "session_deleted"; sessionId: string }
   | { type: "pong" };
 
 // ============================================================================
