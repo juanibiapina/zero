@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y git zstd curl gpg && \
     apt-get update && apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
+# Enable corepack for pnpm support
+RUN corepack enable
+
 WORKDIR /app
 
 # Copy package.json and strip devDependencies (they use workspace: protocol)
