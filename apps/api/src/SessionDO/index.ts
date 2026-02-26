@@ -49,6 +49,14 @@ export class SessionDO extends DurableObject<Env> {
     super(ctx, env);
     this.db = drizzle(ctx.storage, { logger: false });
 
+    // Auto-respond to ping/pong at the edge without waking the DO from hibernation.
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(
+        JSON.stringify({ type: "ping" }),
+        JSON.stringify({ type: "pong" }),
+      ),
+    );
+
     ctx.blockConcurrencyWhile(async () => {
       await migrate(this.db, migrations);
 
@@ -257,7 +265,6 @@ export class SessionDO extends DurableObject<Env> {
       case "message": return this.handleUserMessage(data.text);
       case "stop":    return this.handleStop();
       case "steer":   return this.handleSteer(data.text);
-      case "ping":    return void _ws.send(JSON.stringify({ type: "pong" } satisfies SessionServerMessage));
     }
   }
 
