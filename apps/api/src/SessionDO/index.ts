@@ -45,9 +45,6 @@ export class SessionDO extends DurableObject<Env> {
   /** Ephemeral event WebSocket to the container (null when agent is idle) */
   private containerWs: WebSocket | null = null;
 
-  /** In-memory mirror of persisted status — avoids async DB reads in hot paths */
-  private currentStatus: SessionStatus = "idle";
-
   /** Whether the container has been started at least once (survives hibernation) */
   private containerInitialized = false;
 
@@ -77,9 +74,6 @@ export class SessionDO extends DurableObject<Env> {
 
       if (maxRow?.maxSeq) this.seq = maxRow.maxSeq;
       if (maxRow?.maxContainerSeq) this.lastContainerSeq = maxRow.maxContainerSeq;
-
-      const metaRow = this.db.select({ status: sessionMetaTable.status }).from(sessionMetaTable).get();
-      if (metaRow?.status) this.currentStatus = metaRow.status as SessionStatus;
 
       this.containerInitialized = (await ctx.storage.get<boolean>("containerInitialized")) ?? false;
     });
@@ -140,9 +134,8 @@ export class SessionDO extends DurableObject<Env> {
   }
 
   async updateStatus(status: SessionStatus): Promise<void> {
-    this.currentStatus = status;
     await this.db.update(sessionMetaTable).set({ status });
-    this.syncStatusToUserDO();
+    this.syncStatusToUserDO(status);
   }
 
   async deleteSession(): Promise<void> {
@@ -233,7 +226,8 @@ export class SessionDO extends DurableObject<Env> {
     }
 
     // Send current session status — no mapping, the session status is authoritative.
-    server.send(JSON.stringify({ type: "status", status: this.currentStatus } satisfies SessionServerMessage));
+    const currentStatus = (await this.getStatus()) ?? "idle";
+    server.send(JSON.stringify({ type: "status", status: currentStatus } satisfies SessionServerMessage));
 
     // Mark end of replay
     server.send(JSON.stringify({ type: "caught_up", lastSeq: this.seq } satisfies SessionServerMessage));
@@ -242,7 +236,7 @@ export class SessionDO extends DurableObject<Env> {
     // (e.g. after DO hibernation), reconnect it so the browser receives
     // live updates. Falls back to idle if the container is unreachable.
     const ACTIVE: Set<string> = new Set(["starting", "running", "resuming"]);
-    if (ACTIVE.has(this.currentStatus) && !this.containerWs) {
+    if (ACTIVE.has(currentStatus) && !this.containerWs) {
       this.ctx.waitUntil((async () => {
         try {
           await this.connectEventStream(this.container);
@@ -408,21 +402,16 @@ export class SessionDO extends DurableObject<Env> {
    * Wait for the container to be ready (status = ready or idle).
    */
   private async waitForReady(timeoutMs = 60_000): Promise<void> {
-    if (this.isContainerReady()) return;
-
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      if (this.isContainerReady()) return;
-      if (this.currentStatus === "error") {
+      const status = await this.getStatus();
+      if (status === "idle") return;
+      if (status === "error") {
         throw new Error("Container failed to start");
       }
       await new Promise(r => setTimeout(r, 500));
     }
     throw new Error("Timed out waiting for container to be ready");
-  }
-
-  private isContainerReady(): boolean {
-    return this.currentStatus === "idle";
   }
 
   /**
@@ -730,7 +719,7 @@ export class SessionDO extends DurableObject<Env> {
   // Status & Broadcast Helpers
   // ═══════════════════════════════════════════════════════════════════════
 
-  private syncStatusToUserDO(): void {
+  private syncStatusToUserDO(status: SessionStatus): void {
     const row = this.db
       .select({ userDOId: sessionMetaTable.userDOId })
       .from(sessionMetaTable)
@@ -742,7 +731,7 @@ export class SessionDO extends DurableObject<Env> {
     ) as DurableObjectStub<UserDO>;
 
     userDO
-      .updateSessionStatus(this.ctx.id.toString(), this.currentStatus)
+      .updateSessionStatus(this.ctx.id.toString(), status)
       .catch(err => console.error("syncStatusToUserDO failed:", err));
   }
 
