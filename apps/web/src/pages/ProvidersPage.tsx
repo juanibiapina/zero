@@ -3,7 +3,6 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   Plug,
   Check,
-  X,
   ExternalLink,
   Key,
   Loader2,
@@ -11,17 +10,50 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import type { ProviderInfo } from "@zero/core";
 import { jsonBody } from "@/lib/api";
+
+/** Providers surfaced first in the available grid (in this order). */
+const FEATURED_IDS = ["anthropic", "openai", "google"];
+
+function sortProviders(providers: ProviderInfo[]): ProviderInfo[] {
+  return [...providers].sort((a, b) => {
+    const ai = FEATURED_IDS.indexOf(a.id);
+    const bi = FEATURED_IDS.indexOf(b.id);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
 
 export default function ProvidersPage() {
   const { getToken } = useAuth();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
-  const [oauthCode, setOauthCode] = useState<Record<string, string>>({});
-  const [pendingOAuth, setPendingOAuth] = useState<string | null>(null);
+
+  // Connect dialog state
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // OAuth state
+  const [pendingOAuth, setPendingOAuth] = useState(false);
   const [oauthState, setOauthState] = useState<string | null>(null);
+  const [oauthCode, setOauthCode] = useState("");
+
+  const connectingProvider = providers.find((p) => p.id === connectingId) ?? null;
+  const connected = sortProviders(providers.filter((p) => p.connected));
+  const available = sortProviders(providers.filter((p) => !p.connected));
+
+  // ── Data fetching ────────────────────────────────────────────────
 
   const fetchProviders = async () => {
     try {
@@ -43,6 +75,25 @@ export default function ProvidersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Actions ──────────────────────────────────────────────────────
+
+  const openConnectDialog = (providerId: string) => {
+    setConnectingId(providerId);
+    setApiKeyInput("");
+    setPendingOAuth(false);
+    setOauthState(null);
+    setOauthCode("");
+  };
+
+  const closeConnectDialog = () => {
+    setConnectingId(null);
+    setApiKeyInput("");
+    setPendingOAuth(false);
+    setOauthState(null);
+    setOauthCode("");
+    setSaving(false);
+  };
+
   const startOAuth = async (providerId: string) => {
     const token = await getToken();
     const resp = await fetch(`/api/providers/${providerId}/connect`, {
@@ -51,51 +102,55 @@ export default function ProvidersPage() {
     });
     const data = await jsonBody<{ authUrl?: string; state?: string }>(resp);
     if (data.authUrl) {
-      setPendingOAuth(providerId);
+      setPendingOAuth(true);
       setOauthState(data.state ?? null);
       window.open(data.authUrl, "_blank");
     }
   };
 
   const completeOAuth = async (providerId: string) => {
-    const code = oauthCode[providerId];
-    if (!code) return;
-
-    const token = await getToken();
-    const resp = await fetch(`/api/providers/${providerId}/callback`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ code, state: oauthState }),
-    });
-    const data = await jsonBody<{ success?: boolean }>(resp);
-    if (data.success) {
-      setPendingOAuth(null);
-      setOauthState(null);
-      setOauthCode((prev) => ({ ...prev, [providerId]: "" }));
-      void fetchProviders();
+    if (!oauthCode) return;
+    setSaving(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`/api/providers/${providerId}/callback`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ code: oauthCode, state: oauthState }),
+      });
+      const data = await jsonBody<{ success?: boolean }>(resp);
+      if (data.success) {
+        closeConnectDialog();
+        void fetchProviders();
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
   const saveApiKey = async (providerId: string) => {
-    const apiKey = apiKeyInputs[providerId];
-    if (!apiKey) return;
-
-    const token = await getToken();
-    const resp = await fetch(`/api/providers/${providerId}/api-key`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ apiKey }),
-    });
-    const data = await jsonBody<{ success?: boolean }>(resp);
-    if (data.success) {
-      setApiKeyInputs((prev) => ({ ...prev, [providerId]: "" }));
-      void fetchProviders();
+    if (!apiKeyInput) return;
+    setSaving(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`/api/providers/${providerId}/api-key`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ apiKey: apiKeyInput }),
+      });
+      const data = await jsonBody<{ success?: boolean }>(resp);
+      if (data.success) {
+        closeConnectDialog();
+        void fetchProviders();
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -108,6 +163,16 @@ export default function ProvidersPage() {
     void fetchProviders();
   };
 
+  // ── Auth method label ────────────────────────────────────────────
+
+  const authLabel = (p: ProviderInfo) => {
+    if (p.supportsOAuth && p.supportsApiKey) return "API Key or OAuth";
+    if (p.supportsOAuth) return "OAuth";
+    return "API Key";
+  };
+
+  // ── Render ───────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
@@ -118,34 +183,37 @@ export default function ProvidersPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Plug className="h-5 w-5" />
-        <h1 className="text-2xl font-bold">AI Providers</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-2">
+          <Plug className="h-5 w-5" />
+          <h1 className="text-2xl font-bold">AI Providers</h1>
+        </div>
+        <p className="text-muted-foreground mt-1">
+          Connect AI providers to use with your agent sessions.
+        </p>
       </div>
-      <p className="text-muted-foreground">
-        Connect AI providers to use with your agent sessions.
-      </p>
 
-      <div className="space-y-4">
-        {providers.map((provider) => (
-          <div key={provider.id} className="rounded-lg border p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="font-medium">{provider.name}</div>
-                {provider.connected ? (
-                  <span className="flex items-center gap-1 text-xs text-green-600">
-                    <Check className="h-3 w-3" />
-                    Connected ({provider.credentialType})
+      {/* Connected providers */}
+      {connected.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Connected
+          </h2>
+          <div className="space-y-2">
+            {connected.map((provider) => (
+              <div
+                key={provider.id}
+                className="flex items-center justify-between rounded-lg border px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-2 w-2 rounded-full bg-green-500" />
+                  <span className="font-medium">{provider.name}</span>
+                  <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    {provider.credentialType === "oauth" ? "OAuth" : "API Key"}
                   </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <X className="h-3 w-3" />
-                    Not connected
-                  </span>
-                )}
-              </div>
-              {provider.connected && (
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -153,15 +221,67 @@ export default function ProvidersPage() {
                 >
                   Disconnect
                 </Button>
-              )}
-            </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-            {!provider.connected && (
-              <>
-                {/* OAuth connect */}
-                {provider.supportsOAuth && (
+      {/* Available providers */}
+      {available.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Available
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {available.map((provider) => (
+              <div
+                key={provider.id}
+                className="flex items-center justify-between rounded-lg border px-4 py-3"
+              >
+                <div>
+                  <div className="font-medium">{provider.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {authLabel(provider)}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openConnectDialog(provider.id)}
+                >
+                  Connect
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Connect dialog */}
+      <Dialog
+        open={connectingId !== null}
+        onOpenChange={(open) => { if (!open) closeConnectDialog(); }}
+      >
+        <DialogContent>
+          {connectingProvider && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Connect {connectingProvider.name}</DialogTitle>
+                <DialogDescription>
+                  {connectingProvider.supportsOAuth && connectingProvider.supportsApiKey
+                    ? "Sign in with OAuth or paste an API key."
+                    : connectingProvider.supportsOAuth
+                      ? "Sign in with OAuth to connect."
+                      : "Enter your API key to connect."}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                {/* OAuth */}
+                {connectingProvider.supportsOAuth && (
                   <div className="space-y-2">
-                    {pendingOAuth === provider.id ? (
+                    {pendingOAuth ? (
                       <div className="space-y-2">
                         <p className="text-sm text-muted-foreground">
                           Paste the authorization code from the opened tab:
@@ -169,34 +289,33 @@ export default function ProvidersPage() {
                         <div className="flex gap-2">
                           <Input
                             placeholder="Paste code here..."
-                            value={oauthCode[provider.id] ?? ""}
-                            onChange={(e) =>
-                              setOauthCode((prev) => ({
-                                ...prev,
-                                [provider.id]: e.target.value,
-                              }))
-                            }
+                            value={oauthCode}
+                            onChange={(e) => setOauthCode(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void completeOAuth(connectingProvider.id);
+                            }}
                           />
                           <Button
                             size="sm"
-                            onClick={() => void completeOAuth(provider.id)}
+                            onClick={() => void completeOAuth(connectingProvider.id)}
+                            disabled={saving || !oauthCode}
                           >
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                             Submit
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setPendingOAuth(null)}
-                          >
-                            Cancel
-                          </Button>
                         </div>
+                        <button
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => { setPendingOAuth(false); setOauthCode(""); }}
+                        >
+                          Cancel
+                        </button>
                       </div>
                     ) : (
                       <Button
                         variant="outline"
-                        size="sm"
-                        onClick={() => void startOAuth(provider.id)}
+                        className="w-full"
+                        onClick={() => void startOAuth(connectingProvider.id)}
                       >
                         <ExternalLink className="h-4 w-4" />
                         Connect with OAuth
@@ -205,8 +324,8 @@ export default function ProvidersPage() {
                   </div>
                 )}
 
-                {/* Separator between OAuth and API key if both available */}
-                {provider.supportsOAuth && provider.supportsApiKey && (
+                {/* Separator */}
+                {connectingProvider.supportsOAuth && connectingProvider.supportsApiKey && !pendingOAuth && (
                   <div className="flex items-center gap-2">
                     <Separator className="flex-1" />
                     <span className="text-xs text-muted-foreground">or</span>
@@ -214,35 +333,34 @@ export default function ProvidersPage() {
                   </div>
                 )}
 
-                {/* API key input */}
-                {provider.supportsApiKey && (
+                {/* API key */}
+                {connectingProvider.supportsApiKey && !pendingOAuth && (
                   <div className="flex gap-2">
                     <Input
                       type="password"
                       placeholder="API Key..."
-                      value={apiKeyInputs[provider.id] ?? ""}
-                      onChange={(e) =>
-                        setApiKeyInputs((prev) => ({
-                          ...prev,
-                          [provider.id]: e.target.value,
-                        }))
-                      }
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void saveApiKey(connectingProvider.id);
+                      }}
                     />
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void saveApiKey(provider.id)}
+                      onClick={() => void saveApiKey(connectingProvider.id)}
+                      disabled={saving || !apiKeyInput}
                     >
-                      <Key className="h-4 w-4" />
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
                       Save
                     </Button>
                   </div>
                 )}
-              </>
-            )}
-          </div>
-        ))}
-      </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
