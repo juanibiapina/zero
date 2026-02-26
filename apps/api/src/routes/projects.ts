@@ -11,9 +11,8 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
-import type { ProjectSummary } from "@zero/core";
-import type { UserDO } from "../UserDO";
-import { getInstallationToken, listInstallationRepos } from "../services/github";
+import { UserService } from "../services/user";
+import { serviceResult } from "../lib/result";
 
 type Variables = {
   userId: string;
@@ -62,79 +61,6 @@ const SuccessSchema = z.object({
   success: z.boolean(),
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-/**
- * Fetch repos from GitHub API and sync into UserDO.
- * Returns the fresh project list as ProjectSummary[].
- */
-async function syncFromGitHub(
-  env: Env,
-  userDO: DurableObjectStub<UserDO>,
-  installationId: number,
-): Promise<{ projects: ProjectSummary[]; errors: string[] }> {
-  const allRepos: ProjectSummary[] = [];
-
-  try {
-    const token = await getInstallationToken(env, installationId);
-    const repos = await listInstallationRepos(token);
-    for (const repo of repos) {
-      allRepos.push({
-        owner: repo.owner.login,
-        repo: repo.name,
-        fullName: repo.full_name,
-        description: repo.description,
-        defaultBranch: repo.default_branch,
-        private: repo.private,
-        archived: repo.archived,
-      });
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`Failed to list repos for installation ${installationId}:`, err);
-    return { projects: [], errors: [msg] };
-  }
-
-  await userDO.syncProjects(
-    allRepos.map((r) => ({
-      owner: r.owner,
-      repo: r.repo,
-      fullName: r.fullName,
-      description: r.description,
-      defaultBranch: r.defaultBranch,
-      isPrivate: r.private,
-      archived: r.archived,
-    })),
-  );
-
-  return { projects: allRepos, errors: [] };
-}
-
-/**
- * Convert DB rows to ProjectSummary[].
- */
-function rowsToSummaries(
-  rows: {
-    owner: string;
-    repo: string;
-    fullName: string | null;
-    description: string | null;
-    defaultBranch: string | null;
-    isPrivate: boolean | null;
-    archived: boolean | null;
-  }[],
-): ProjectSummary[] {
-  return rows.map((r) => ({
-    owner: r.owner,
-    repo: r.repo,
-    fullName: r.fullName ?? `${r.owner}/${r.repo}`,
-    description: r.description,
-    defaultBranch: r.defaultBranch ?? "main",
-    private: r.isPrivate ?? false,
-    archived: r.archived ?? false,
-  }));
-}
-
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createProjectRoutes = () => {
@@ -158,31 +84,8 @@ export const createProjectRoutes = () => {
   });
 
   router.openapi(listProjectsRoute, async (c) => {
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!,
-      ),
-    );
-
-    const installation = await userDO.getGitHubInstallation();
-    const installUrl = getInstallUrl(c.env);
-
-    if (!installation) {
-      return c.json({ projects: [], installUrl }, 200);
-    }
-
-    const rows = await userDO.listProjects();
-
-    // Auto-sync on first use (empty cache or pre-migration rows without fullName)
-    if (rows.length === 0 || rows[0].fullName === null) {
-      const result = await syncFromGitHub(c.env, userDO, installation.installationId);
-      return c.json(
-        { projects: result.projects, installUrl, errors: result.errors.length > 0 ? result.errors : undefined },
-        200,
-      );
-    }
-
-    return c.json({ projects: rowsToSummaries(rows), installUrl }, 200);
+    const service = new UserService(c.env, c.get("userId"));
+    return c.json(await service.listProjects(), 200);
   });
 
   // ── Refresh projects (sync from GitHub API) ─────────────────────────
@@ -202,24 +105,8 @@ export const createProjectRoutes = () => {
   });
 
   router.openapi(refreshProjectsRoute, async (c) => {
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!,
-      ),
-    );
-
-    const installation = await userDO.getGitHubInstallation();
-    const installUrl = getInstallUrl(c.env);
-
-    if (!installation) {
-      return c.json({ projects: [], installUrl }, 200);
-    }
-
-    const result = await syncFromGitHub(c.env, userDO, installation.installationId);
-    return c.json(
-      { projects: result.projects, installUrl, errors: result.errors.length > 0 ? result.errors : undefined },
-      200,
-    );
+    const service = new UserService(c.env, c.get("userId"));
+    return c.json(await service.refreshProjects(), 200);
   });
 
   // ── Set default model for a project ─────────────────────────────────
@@ -251,33 +138,10 @@ export const createProjectRoutes = () => {
   router.openapi(setProjectModelRoute, async (c) => {
     const { owner, repo } = c.req.valid("param");
     const { provider, model } = c.req.valid("json");
-
-    if (!provider || !model) {
-      return c.json({ error: "Missing provider or model" }, 400 as const);
-    }
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!,
-      ),
-    );
-
-    await userDO.updateProjectModel(owner, repo, provider, model);
-    return c.json({ success: true }, 200);
+    const service = new UserService(c.env, c.get("userId"));
+    const result = await service.setProjectModel(owner, repo, provider, model);
+    return serviceResult(c, result, 200);
   });
 
   return router;
 };
-
-/**
- * GitHub App installation URL for the user to install the app on their account.
- * The setup URL configured in the GitHub App settings handles the redirect back
- * to our /github/setup page, which links the installation to the user's account.
- */
-function getInstallUrl(env: Env): string {
-  const base = "https://github.com/apps/zerocoding-app/installations/new";
-  if (env.ENVIRONMENT === "development") {
-    return `${base}?state=localhost:5176`;
-  }
-  return base;
-}

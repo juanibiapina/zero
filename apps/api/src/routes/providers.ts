@@ -13,27 +13,8 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
-import type { ProviderInfo } from "@zero/core";
-import {
-  getProviderRegistry,
-  getProviderMeta,
-  generatePKCE,
-} from "@zero/providers";
-
-/**
- * Anthropic OAuth constants.
- *
- * These are private in pi-ai's anthropic.js module, so we maintain
- * them here for the two-step connect/callback flow that Workers require.
- * The values are stable (they're Anthropic's published OAuth app).
- */
-const ANTHROPIC_OAUTH = {
-  clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-  tokenUrl: "https://console.anthropic.com/v1/oauth/token",
-  authorizeUrl: "https://claude.ai/oauth/authorize",
-  redirectUri: "https://console.anthropic.com/oauth/code/callback",
-  scopes: "org:create_api_key user:profile user:inference",
-};
+import { UserService } from "../services/user";
+import { serviceResult } from "../lib/result";
 
 // ── Schemas ──────────────────────────────────────────────────────────────
 
@@ -101,29 +82,8 @@ export const createProviderRoutes = () => {
   });
 
   router.openapi(listProvidersRoute, async (c) => {
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    );
-
-    const credentials = await userDO.listProviderCredentials();
-    const connectedSet = new Set(credentials.map((cr) => cr.provider));
-
-    const registry = getProviderRegistry();
-
-    const providers: ProviderInfo[] = registry
-      .filter((meta) => meta.supportsOAuth || meta.supportsApiKey)
-      .map((meta) => ({
-        id: meta.id,
-        name: meta.name,
-        connected: connectedSet.has(meta.id),
-        credentialType: credentials.find((cr) => cr.provider === meta.id)?.credentialType as ProviderInfo["credentialType"] ?? null,
-        supportsOAuth: meta.supportsOAuth,
-        supportsApiKey: meta.supportsApiKey,
-      }));
-
-    return c.json({ providers }, 200);
+    const service = new UserService(c.env, c.get("userId"));
+    return c.json(await service.listProviders(), 200);
   });
 
   // ── Start OAuth flow (Anthropic PKCE) ──────────────────────────────
@@ -151,49 +111,9 @@ export const createProviderRoutes = () => {
 
   router.openapi(connectProviderRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
-
-    const meta = getProviderMeta(providerId);
-    if (!meta?.supportsOAuth) {
-      return c.json({ error: "OAuth not supported for this provider" }, 400 as const);
-    }
-
-    // Currently only Anthropic OAuth is implemented as a two-step web flow.
-    // Other OAuth providers (GitHub Copilot, OpenAI Codex, etc.) will be added later.
-    if (providerId !== "anthropic") {
-      return c.json({ error: "OAuth flow not yet implemented for this provider" }, 400 as const);
-    }
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    );
-
-    // Generate PKCE challenge using pi-ai's Web Crypto implementation
-    const { verifier, challenge } = await generatePKCE();
-
-    // Random state token for CSRF protection
-    const state = crypto.randomUUID();
-
-    // Store verifier in UserDO
-    await userDO.storePKCEVerifier(state, verifier, providerId);
-
-    // Build authorization URL
-    // Note: Anthropic's flow uses `code=true` and passes the verifier as `state`
-    // (the verifier is needed both as state and for PKCE verification)
-    const params = new URLSearchParams({
-      code: "true",
-      client_id: ANTHROPIC_OAUTH.clientId,
-      response_type: "code",
-      redirect_uri: ANTHROPIC_OAUTH.redirectUri,
-      scope: ANTHROPIC_OAUTH.scopes,
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-      state: verifier,
-    });
-
-    const authUrl = `${ANTHROPIC_OAUTH.authorizeUrl}?${params.toString()}`;
-    return c.json({ authUrl, state }, 200);
+    const service = new UserService(c.env, c.get("userId"));
+    const result = await service.startOAuthFlow(providerId);
+    return serviceResult(c, result, 200);
   });
 
   // ── Complete OAuth flow ────────────────────────────────────────────
@@ -224,79 +144,10 @@ export const createProviderRoutes = () => {
 
   router.openapi(oauthCallbackRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
-
-    const meta = getProviderMeta(providerId);
-    if (!meta?.supportsOAuth) {
-      return c.json({ error: "OAuth not supported for this provider" }, 400 as const);
-    }
-
-    if (providerId !== "anthropic") {
-      return c.json({ error: "OAuth flow not yet implemented for this provider" }, 400 as const);
-    }
-
-    const body = c.req.valid("json");
-    const code = body.code;
-
-    // Parse code#state format from Anthropic
-    let actualCode = code;
-    let state = body.state;
-    if (code.includes("#")) {
-      const parts = code.split("#");
-      actualCode = parts[0];
-      state = state ?? parts[1];
-    }
-
-    if (!state) {
-      return c.json({ error: "Missing state parameter" }, 400 as const);
-    }
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    );
-
-    // Retrieve stored PKCE verifier
-    const pkce = await userDO.consumePKCEVerifier(state);
-    if (!pkce) {
-      return c.json({ error: "Invalid or expired state" }, 400 as const);
-    }
-
-    // Exchange code for tokens
-    const tokenResp = await fetch(ANTHROPIC_OAUTH.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "authorization_code",
-        client_id: ANTHROPIC_OAUTH.clientId,
-        code: actualCode,
-        state,
-        redirect_uri: ANTHROPIC_OAUTH.redirectUri,
-        code_verifier: pkce.verifier,
-      }),
-    });
-
-    if (!tokenResp.ok) {
-      const err = await tokenResp.text();
-      console.error("Token exchange failed:", err);
-      return c.json({ error: "Token exchange failed" }, 400 as const);
-    }
-
-    const tokens: { access_token: string; refresh_token?: string; expires_in?: number } = await tokenResp.json();
-
-    const expiresAt = tokens.expires_in
-      ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-      : undefined;
-
-    await userDO.upsertProviderCredential({
-      provider: providerId,
-      credentialType: "oauth",
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt,
-    });
-
-    return c.json({ success: true }, 200);
+    const { code, state } = c.req.valid("json");
+    const service = new UserService(c.env, c.get("userId"));
+    const result = await service.completeOAuthFlow(providerId, code, state);
+    return serviceResult(c, result, 200);
   });
 
   // ── Set API key ────────────────────────────────────────────────────
@@ -327,29 +178,10 @@ export const createProviderRoutes = () => {
 
   router.openapi(setApiKeyRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
-    const meta = getProviderMeta(providerId);
-    if (!meta?.supportsApiKey) {
-      return c.json({ error: "API key not supported for this provider" }, 400 as const);
-    }
-
     const { apiKey } = c.req.valid("json");
-    if (!apiKey) {
-      return c.json({ error: "Missing apiKey" }, 400 as const);
-    }
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    );
-
-    await userDO.upsertProviderCredential({
-      provider: providerId,
-      credentialType: "api_key",
-      apiKey,
-    });
-
-    return c.json({ success: true }, 200);
+    const service = new UserService(c.env, c.get("userId"));
+    const result = await service.setApiKey(providerId, apiKey);
+    return serviceResult(c, result, 200);
   });
 
   // ── Disconnect provider ────────────────────────────────────────────
@@ -373,15 +205,8 @@ export const createProviderRoutes = () => {
 
   router.openapi(disconnectProviderRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(
-        (await c.env.KV.get(`user:${c.get("userId")}`))!
-      )
-    );
-
-    await userDO.deleteProviderCredential(providerId);
-    return c.json({ success: true }, 200);
+    const service = new UserService(c.env, c.get("userId"));
+    return c.json(await service.disconnectProvider(providerId), 200);
   });
 
   return router;

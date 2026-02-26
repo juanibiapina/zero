@@ -13,7 +13,8 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
-import { getInstallationDetails } from "../services/github";
+import { UserService } from "../services/user";
+import { serviceResult } from "../lib/result";
 
 type Variables = {
   userId: string;
@@ -69,46 +70,9 @@ export const createGitHubRoutes = () => {
 
   router.openapi(githubCallbackRoute, async (c) => {
     const { installationId } = c.req.valid("json");
-
-    if (!installationId || typeof installationId !== "number") {
-      return c.json({ error: "Missing or invalid installationId" }, 400 as const);
-    }
-
-    const userDOIdStr = await c.env.KV.get(`user:${c.get("userId")}`);
-    if (!userDOIdStr) {
-      return c.json({ error: "User not found" }, 404 as const);
-    }
-
-    const userDO = c.env.USER_DO.get(
-      c.env.USER_DO.idFromString(userDOIdStr)
-    );
-
-    // Fetch installation details from GitHub API to get account info
-    try {
-      const details = await getInstallationDetails(c.env, installationId);
-      await userDO.addGitHubInstallation(
-        installationId,
-        details.accountLogin,
-        details.accountType
-      );
-    } catch (err) {
-      console.error("Failed to fetch installation details from GitHub:", err);
-
-      // Fallback: check KV for webhook-stored data
-      const kvData = await c.env.KV.get(`gh_installation:${installationId}`);
-      if (kvData) {
-        const parsed = JSON.parse(kvData) as { accountLogin: string; accountType: string };
-        await userDO.addGitHubInstallation(
-          installationId,
-          parsed.accountLogin,
-          parsed.accountType
-        );
-      } else {
-        return c.json({ error: "Installation not found" }, 404 as const);
-      }
-    }
-
-    return c.json({ success: true }, 200);
+    const service = new UserService(c.env, c.get("userId"));
+    const result = await service.linkGitHubInstallation(installationId);
+    return serviceResult(c, result, 200);
   });
 
   return router;
