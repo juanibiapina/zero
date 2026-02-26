@@ -38,7 +38,7 @@ Implemented in `AgentContainer.ts` and `SessionDO/index.ts`.
 
 **How it works:**
 - `AgentContainer.onStop()` notifies SessionDO when container dies → immediate WS cleanup
-- `ensureContainerWebSocket()` calls `container.getState()` before connecting
+- `ensureContainerRunning()` calls `container.getState()` before sending commands
 - If `stopped`/`stopped_with_code`/`stopping` → reset `lastContainerSeq = 0`
 - Fresh container's EventBuffer starts at seq 0 → events flow correctly
 
@@ -163,7 +163,7 @@ private getConversationHistory(): unknown[] {
 
 ### SessionDO: resume orchestration
 
-**Updated `ensureContainerWebSocket()`** — after connecting to a woken container, resume before forwarding messages:
+**Updated `ensureContainerRunning()`** — after detecting a stopped container, resume before forwarding messages:
 
 ```typescript
 // After connecting the WS (existing code)...

@@ -11,17 +11,23 @@ Rewrite the `zero/` app as **Zero**, a multi-user **agent orchestrator** that:
 
 ## Package Structure
 
-Follows the existing monorepo patterns. Reuses the `zero/` directory:
+Monorepo with `apps/` for deployable applications and `packages/` for shared code:
 
 ```
 zero/
-├── api/          (@zero/api)      — CF Worker: API, webhooks, orchestration
-├── web/          (@zero/web)      — Vite + React + Tailwind frontend
-├── core/         (@zero/core)     — Shared types between api & web
-└── docs/         — Design docs
+├── apps/
+│   ├── api/             (@zero/api)            — CF Worker: API, webhooks, orchestration
+│   └── web/             (@zero/web)            — Vite + React + Tailwind frontend
+├── packages/
+│   ├── core/            (@zero/core)           — Shared types between api & web
+│   ├── agent-server/    (@zero/agent-server)   — Node.js agent server (runs in CF Container)
+│   ├── drizzle-migrator/                       — Drizzle migration utility
+│   ├── eslint-config/                          — Shared ESLint config
+│   └── typescript-config/                      — Shared TypeScript config
+└── docs/                                       — Design docs
 ```
 
-`pnpm-workspace.yaml` already includes `zero/*`.
+`pnpm-workspace.yaml` includes `apps/*` and `packages/*`.
 
 ## Tech Stack (matching existing apps)
 
@@ -32,7 +38,7 @@ zero/
 | API | Hono + OpenAPIHono + Zod on Cloudflare Workers |
 | State | Durable Objects (SQLite + Drizzle) |
 | Agent compute | Cloudflare Containers with pi SDK |
-| Real-time | WebSocket: browser↔SessionDO (standard accept) + SessionDO↔Container (getContainer + switchPort) |
+| Real-time | WebSocket: browser↔SessionDO (Hibernation API) + SessionDO↔Container (ephemeral event WS); UserDO (Hibernation API) for user-level push events |
 | Secrets | Doppler (projects: `zero-api`, `zero-web`) |
 
 ## Architecture
@@ -47,7 +53,7 @@ zero/
 │  └───────────┘  └───────────────┘  └──────────────────┘    │
 └─────────────────────────┬───────────────────────────────────┘
                           │ REST + WebSocket (agent sessions via SessionDO ↔ Container)
-                          │ WebSocket (push notifications via RealtimeDO)
+                          │ WebSocket (session status push via UserDO)
 ┌─────────────────────────▼───────────────────────────────────┐
 │            CF Worker (API + Orchestration)                    │
 │                                                              │
@@ -147,11 +153,11 @@ const inboxDO = env.INBOXDO.get(c.get("inboxDOId"));
 
 | DO | Keyed by | Purpose |
 |---|---|---|
-| **UserDO** | `newUniqueId()` (KV lookup) | DO registry, GitHub installation (single), connected providers, preferences |
-| **InboxDO** | `newUniqueId()` (ref in UserDO) | All notifications for a user across all projects and providers |
-| **ProjectDO** | `newUniqueId()` (ref in UserDO) | Session index (lightweight), project settings |
-| **SessionDO** | `newUniqueId()` (ref in ProjectDO) | Full session data: chat history (append-only event log), state machine, WebSocket hub (standard accept, not hibernation) for real-time browser communication |
-| **RealtimeDO** | `newUniqueId()` (ref in UserDO) | WebSocket connections for push events (hibernation API) |
+| **UserDO** | `newUniqueId()` (KV lookup) | DO registry, GitHub installation (single), connected providers, preferences, session index, user-level WebSocket push (Hibernation API) |
+| **InboxDO** | `newUniqueId()` (ref in UserDO) | *(Not yet implemented)* All notifications for a user across all projects and providers |
+| **ProjectDO** | `newUniqueId()` (ref in UserDO) | Project settings. *(Session index table exists but is unused — sessions are now indexed in UserDO)* |
+| **SessionDO** | `newUniqueId()` (ref in UserDO) | Full session data: chat history (append-only event log), state machine, WebSocket hub (Hibernation API) for real-time browser communication, HTTP commands + ephemeral event WS to container |
+| **RealtimeDO** | — | *(Not implemented — UserDO handles real-time push instead)* |
 | **AgentContainer** | `newUniqueId()` | CF Container running the pi agent server. Must use `new_sqlite_classes` in wrangler migration (Container class uses SQLite internally). Access via `getContainer(env.BINDING, name).fetch(request)`. |
 
 ### InboxDO — Unified Notification Store
@@ -185,31 +191,39 @@ Following the existing framework pattern: **Worker → App → Routes → Servic
 
 ```
 # Auth
-POST   /api/auth/github/callback     — GitHub App installation callback
+POST   /api/auth/github/callback       — GitHub App installation callback
 
 # Projects
-GET    /api/projects                  — List user's repos (from GitHub API)
-GET    /api/projects/:owner/:repo     — Project detail + recent notifications + sessions
-POST   /api/projects/:owner/:repo/sync — Force sync notifications
+GET    /api/projects                    — List user's repos (from GitHub API)
+PUT    /api/projects/{owner}/{repo}/model — Set default model for a project
 
-# Inbox
-GET    /api/inbox                     — Global notification feed (all projects, all providers)
-GET    /api/inbox/:id                 — Single notification with LLM actions
-POST   /api/inbox/:id/dismiss        — Dismiss
-POST   /api/inbox/:id/action         — Execute an LLM-suggested action → creates session
+# Sessions (top-level, not nested under projects)
+GET    /api/sessions                    — List sessions (optional ?owner=X&repo=Y filter)
+POST   /api/sessions                    — Create + start session
+DELETE /api/sessions/{id}               — Delete session
+GET    /api/sessions/:id/ws             — WebSocket upgrade → SessionDO (real-time)
 
-# Sessions (nested under projects — RESTful)
-POST   /api/projects/:owner/:repo/sessions           — Create + start session
-GET    /api/projects/:owner/:repo/sessions           — List sessions (index + status fan-out)
-GET    /api/projects/:owner/:repo/sessions/:id       — Session detail (metadata + stored events)
-GET    /api/projects/:owner/:repo/sessions/:id/ws    — WebSocket upgrade → SessionDO (real-time)
-DELETE /api/projects/:owner/:repo/sessions/:id       — Delete session
+# Providers
+GET    /api/providers                   — List available providers + connection status
+POST   /api/providers/{id}/connect      — Start OAuth flow
+POST   /api/providers/{id}/callback     — Complete OAuth flow
+POST   /api/providers/{id}/api-key      — Set API key
+DELETE /api/providers/{id}              — Disconnect provider
 
-# GitHub Webhooks (no auth — verified by signature)
-POST   /api/webhooks/github           — Receives all GitHub App events
+# Secrets
+GET    /api/secrets                     — List secret names (values omitted)
+POST   /api/secrets                     — Create/update secret
+DELETE /api/secrets/{name}              — Delete secret
 
-# WebSocket
-GET    /api/realtime                  — WebSocket upgrade for push events
+# GitHub Webhooks (no auth — verified by HMAC signature)
+POST   /api/webhooks/github             — Receives all GitHub App events
+
+# WebSocket (user-level push)
+GET    /api/ws                          — WebSocket upgrade → UserDO (session status events)
+
+# Not yet implemented
+# GET  /api/inbox                       — Global notification feed
+# GET  /api/projects/:owner/:repo       — Project detail + notifications
 ```
 
 ### Services
@@ -217,9 +231,10 @@ GET    /api/realtime                  — WebSocket upgrade for push events
 | Service | Responsibility |
 |---|---|
 | **GitHubService** | GitHub API calls, installation token management, repo listing |
-| **InboxService** | Process webhooks → notifications, manage read/dismiss state |
-| **SessionService** | Create/manage sessions, dispatch to AgentContainer, fan-out status queries |
-| **ActionService** | LLM-powered action generation from notification context (async) |
+| **SessionService** | Create/manage sessions, orchestrate container lifecycle, list/delete |
+| **ContainerHandle** | Typed wrapper for a single container instance (HTTP API + WebSocket) |
+| *(Future)* **InboxService** | Process webhooks → notifications, manage read/dismiss state |
+| *(Future)* **ActionService** | LLM-powered action generation from notification context (async) |
 
 ### Webhook → Notification → LLM Action Pipeline
 
@@ -252,15 +267,20 @@ With multiple providers, the same event may arrive through different channels (e
 ### Agent Session Lifecycle
 
 ```
-1. PENDING    — Session created, container not yet started
-2. STARTING   — Container booting, cloning repo
-3. RUNNING    — pi is executing, user can send messages
-4. IDLE       — pi finished task, waiting for user input
-5. COMPLETED  — User ended session or pi completed
-6. FAILED     — Error during execution
+SessionStatus (from @zero/core):
+  connecting — Frontend-only: WebSocket connecting to SessionDO
+  starting   — Container booting, cloning repo
+  resuming   — Container waking from sleep, restoring state
+  running    — pi is executing, user can send messages
+  idle       — pi finished task, container alive, waiting for user input
+  stopped    — Container gone (will need cold start on next message)
+  error      — Error during execution
 ```
 
-SessionDO manages this state machine and stores the full chat history. ProjectDO's session index is kept in sync with the current status for fast listing. AgentContainer runs the actual Docker image.
+> **Note:** `connecting` is used only on the frontend (not stored in SessionDO).
+> The frontend also uses a local `creating` state before the session API call completes.
+
+SessionDO manages this state machine and stores the full chat history. UserDO's `sessions` table is kept in sync with the current status on every transition (via `syncStatusToUserDO()`). AgentContainer runs the actual Docker image.
 
 ## Provider Credentials & Model Selection
 
@@ -326,14 +346,13 @@ The PKCE constants (CLIENT_ID, TOKEN_URL, AUTHORIZE_URL, REDIRECT_URI, SCOPES) c
 ```
 # Provider credentials
 GET    /api/providers                     — List available providers + which are connected
-POST   /api/providers/:id/connect         — Start OAuth flow (returns auth URL)
-POST   /api/providers/:id/callback        — Complete OAuth flow (receives auth code)
-POST   /api/providers/:id/api-key         — Set API key for a provider
-DELETE /api/providers/:id                 — Disconnect a provider
+POST   /api/providers/{id}/connect        — Start OAuth flow (returns auth URL)
+POST   /api/providers/{id}/callback       — Complete OAuth flow (receives auth code)
+POST   /api/providers/{id}/api-key        — Set API key for a provider
+DELETE /api/providers/{id}                — Disconnect a provider
 
-# Model preferences
-GET    /api/providers/models              — List available models for connected providers
-PUT    /api/projects/:owner/:repo/model   — Set default model for a project
+# Model preferences (no models list endpoint — only project default)
+PUT    /api/projects/{owner}/{repo}/model — Set default model for a project
 ```
 
 ### ✅ Validated: OAuth in Worker
@@ -390,19 +409,23 @@ await session.prompt(taskPrompt);
 
 ### Agent Server HTTP API (inside container)
 
+> **Note:** This section describes the original design. The current implementation replaced `POST /start` with `POST /resume` and `GET /events` (SSE) with `GET /ws` (WebSocket). See Slice 7 for the current architecture.
+
 ```
-POST /start     { repoUrl, token, prompt, credentials, provider, model }
-                                            → Clone repo, create pi session, start executing
-                                              If a session is already running, auto-stop it first (don't reject with 409)
-POST /message   { text }                    → Send follow-up (session.followUp)
-POST /steer     { text }                    → Interrupt current work (session.steer)
-GET  /events                                → SSE stream of pi session events (named events: "agent", "status")
-                                              Events are buffered in-memory until first SSE client connects, then flushed.
-                                              This is essential because the agent starts producing events before the
-                                              browser's EventSource connection is established (~5s container boot time).
+POST /resume    { provider, model, apiKey, repoUrl, token, secrets?, messages, workspaceRestored? }
+                                            → Resume session (first-start or wake-from-sleep)
+                                              Clone repo (or skip if workspaceRestored), configure model,
+                                              restore conversation history, transition to idle.
+POST /message   { text }                    → Send follow-up (runs agentLoop)
+POST /steer     { text }                    → Interrupt current work (not yet implemented)
 POST /stop                                  → Abort current operation (session.abort)
                                               session.abort() emits agent_end properly — abort is clean.
-GET  /status                                → Session state (pending/running/idle/etc)
+GET  /ws                                    → WebSocket for event streaming
+                                              Events buffered in-memory, replayed from ?after=N on connect.
+GET  /status                                → Session state (idle/starting/running/error)
+GET  /workspace/snapshot                    → Snapshot workspace as tar.zst (streamed response)
+POST /workspace/restore                     → Restore workspace from tar.zst (binary body)
+POST /workspace/update-remote               → Update git remote URL with fresh token
 ```
 
 **SSE event format:**
@@ -494,23 +517,26 @@ type SuggestedAction = {
 ## Frontend Pages
 
 ```
-/                                              — Dashboard: inbox feed + active sessions
-/projects                                      — Project list (all repos from GitHub)
-/projects/:owner/:repo                         — Project detail: sessions for this repo
-/projects/:owner/:repo/sessions/:id            — Session view: chat interface with pi (WebSocket)
-/settings                                      — GitHub connection, preferences, notification filters
-/settings/providers                             — Connect/disconnect AI providers, manage API keys, OAuth logins
+/                                  — Dashboard: recent sessions
+/projects                          — Project list (all repos from GitHub)
+/projects/:owner/:repo             — Project detail: sessions for this repo
+/sessions/new                      — Create new session (auto-creates, navigates to session page)
+/sessions/:id                      — Session view: chat interface with pi (WebSocket)
+/settings                          — Settings overview
+/settings/providers                — Connect/disconnect AI providers, manage API keys, OAuth logins
+/secrets                           — Manage user-level secrets (env vars injected into sessions)
+/github/setup                      — GitHub App installation callback page
 ```
 
 ### Key UI Components
 
 | Component | Description |
 |---|---|
-| **Sidebar** | Projects list, quick-switch between repos |
-| **InboxFeed** | Filterable list of notifications with LLM action buttons |
-| **NotificationCard** | Event summary + suggested actions as clickable buttons |
-| **SessionChat** | Chat-style interface: user messages + pi output + action buttons |
-| **SessionList** | Active/recent sessions with status indicators |
+| **Sidebar** | Navigation links, session list with live status dots (via zustand store + UserDO WebSocket), user section |
+| **StatusBadge** | Unified status badge for any session status (creating, connecting, starting, resuming, running, idle, stopped, error) |
+| **TurnView** | Renders assistant turns: collapsible thinking blocks, markdown text, tool calls with args + results |
+| **SessionPage** | Full chat interface with WebSocket, event processing, message input, abort button |
+| *(Future)* **InboxFeed** | Filterable list of notifications with LLM action buttons |
 | **ProjectView** | Notifications + sessions scoped to one repo |
 
 ## Secrets
@@ -537,7 +563,6 @@ Secrets follow the same Doppler + local env file pattern as the other apps (see 
 | `GITHUB_WEBHOOK_SECRET` | Secret for verifying GitHub webhook signatures (HMAC) |
 | `ANTHROPIC_API_KEY` | Anthropic API key for LLM action generation + pi agent sessions |
 | `ENVIRONMENT` | `development` or `production` |
-| `SENTRY_DSN` | Sentry error tracking endpoint (production only) |
 
 ### Build-Time Variables (`zero-web`)
 
@@ -1333,12 +1358,12 @@ After opening the event WS, `sendCommandToContainer()` polls `isContainerReady()
 
 The sections below describe the full Phase 2 architecture as originally designed. **Note:** The SessionDO and Agent Server sections describe the Slice 4 double-WebSocket pattern. For the current implementation (Slice 7 — Hibernation API + HTTP commands + ephemeral event WS), see Slice 7 above. The remaining unimplemented work includes: steer, ProjectDO schema cleanup, and production polish.
 
-#### Agent Server (`zero/agent-server/`)
+#### Agent Server (`packages/agent-server/`)
 
 Workspace module `@zero/agent-server` — gets linting, typecheck, shared tsconfig from the monorepo. Build in monorepo via turbo, Dockerfile copies the built `dist/` and installs production npm deps independently.
 
 ```
-zero/agent-server/
+packages/agent-server/
 ├── package.json        — @mariozechner/pi-coding-agent, @mariozechner/pi-ai
 ├── tsconfig.json
 ├── Dockerfile          — copies built dist/, npm install --production
@@ -1372,7 +1397,7 @@ zero/agent-server/
 - WebSocket messages: `{ seq, event }` JSON envelopes (same payload as SSE data fields)
 - WebSocket inbound commands: `{ type: "message", text }`, `{ type: "stop" }`, `{ type: "steer", text }` — dispatched to same handlers as REST endpoints
 
-**Container HTTP API:**
+**Container HTTP API (⚠️ superseded — see Agent Server HTTP API section above for current endpoints):**
 ```
 POST /start     { repoUrl, token, prompt, credentials, provider, model }
 POST /message   { text }
@@ -1427,15 +1452,16 @@ session_meta (single row per DO):
   projectRepo    TEXT NOT NULL
   provider       TEXT NOT NULL
   model          TEXT NOT NULL
-  title          TEXT NOT NULL
-  containerName  TEXT NOT NULL    -- 'session-{doId}' for container routing
+  userDOId       TEXT             -- UserDO ID for status sync + credential resolution on resume
   createdAt      TEXT NOT NULL
-  updatedAt      TEXT NOT NULL
+  -- Note: containerName was removed; derived from DO ID as 'session-{ctx.id}'
+  -- Note: title is stored in UserDO sessions table, not here
 
 session_events (append-only log — source of truth for chat history):
   id             INTEGER PRIMARY KEY AUTOINCREMENT
   seq            INTEGER NOT NULL UNIQUE   -- monotonic, for dedup + resume
-  source         TEXT NOT NULL             -- 'user' | 'agent' | 'system'
+  containerSeq   INTEGER                   -- container's original seq (for reconnection)
+  source         TEXT NOT NULL             -- 'user' | 'agent'
   eventType      TEXT NOT NULL             -- agent: 'message_update', etc. / user: 'message'
   data           TEXT NOT NULL             -- raw JSON payload
   createdAt      TEXT NOT NULL
@@ -1680,24 +1706,6 @@ Each step is testable before moving to the next:
 25. Deploy pipeline (Doppler projects already created, `bin/ci` already updated)
 
 ---
-
-## Pending Structural Change — Directory Rename
-
-The `canvas/` directory and all `@canvas/*` / `@zero/*` package names should be renamed to match the app name:
-
-```
-canvas/  →  zero/
-```
-
-Package names are already `@zero/*` (renamed in Phase 1). The directory rename aligns the filesystem with the package names. This is a pure rename — no code logic changes. Do this as a standalone commit before any further feature work.
-
-Steps:
-1. `mv canvas zero` at the monorepo root
-2. Update `pnpm-workspace.yaml`: `canvas/*` → `zero/*`
-3. Update `.config/gobfile` (dev server command paths)
-4. Update `bin/fetch-secrets`, `bin/sync-secrets-to-cloudflare`, `bin/ci` (any paths referencing `canvas/`)
-5. Update `turbo.json` if any task references `canvas/`
-6. Verify `pnpm install` + `pnpm turbo dev` still work
 
 ---
 
@@ -2484,11 +2492,13 @@ The frontend doesn't need to distinguish "container warm" from "container waking
 
 ---
 
-### Feature: Session Storage Refactor
+### Feature: Session Storage Refactor ✅
 
-**Scope:** Medium. New migration + cross-DO wiring. Unlocks sidebar session list and RealtimeDO.
+**Status: Complete.** Sessions are indexed in UserDO with live status sync from SessionDO.
 
-**Problem:** Sessions are indexed in ProjectDO (per-repo). Listing running sessions globally requires fan-out to all ProjectDOs — O(n projects) DO calls.
+**Scope:** Medium. New migration + cross-DO wiring. Unlocks sidebar session list and real-time push.
+
+**Problem:** Sessions were indexed in ProjectDO (per-repo). Listing running sessions globally required fan-out to all ProjectDOs — O(n projects) DO calls.
 
 **Solution:** Add a flat `sessions` table to UserDO. Make it the single source for session listing. Status is denormalized (`currentStatus`) and kept up-to-date by SessionDO on every transition.
 
@@ -2566,11 +2576,13 @@ The title is generated asynchronously — the session page shows the generated t
 
 ---
 
-### Feature: RealtimeDO — Global Session Status Events
+### Feature: Real-Time Session Status Events ✅
 
-**Scope:** Medium. New DO + global WebSocket hook in frontend.
+**Status: Complete.** Implemented via UserDO WebSocket (not a separate RealtimeDO). UserDO uses the Hibernation API and broadcasts `session_status` events to all connected browsers. Frontend uses a zustand store (`session-store.ts`) + `useUserWebSocket()` hook mounted in `Layout.tsx`.
 
-**Problem:** Session status changes (running → idle) are invisible unless you're watching that specific session's WebSocket. Session lists on the project page and sidebar show stale status.
+**Scope:** Medium. WebSocket support in UserDO + global hook in frontend.
+
+**Problem:** Session status changes (running → idle) were invisible unless watching that specific session's WebSocket. Session lists on the project page and sidebar showed stale status.
 
 **Architecture:**
 ```
@@ -2811,29 +2823,22 @@ Neither is designed in detail yet. File browser via GitHub API is simpler to bui
 
 ## Revised Implementation Order (Dogfooding-First)
 
-| Slice | Feature | Scope | Depends on |
+| Slice | Feature | Scope | Status |
 |---|---|---|---|
-| **–** | Directory rename `zero/` → `zero/` | Structural | — |
-| **A** | Deployment to `zero.juanibiapina.dev` | Config only | Dir rename |
-| **B** | Git push credentials + `create_pull_request` tool | Small | — |
-| **C** | Secret manager (user-level secrets injected as env vars) | Small-Medium | — |
-| **7** | Hide archived repos + repo list caching | Small | — |
-| **8** | Session storage refactor (UserDO flat sessions + status sync) | Medium | — |
-| **9** | Session auto-titles via Workers AI | Small | Slice 8 |
-| **10** | Sidebar running sessions | Small | Slice 8 |
-| **11** | RealtimeDO + global WebSocket + live status | Medium | Slice 8 |
-| **12** | Session hibernation + resume (R2 workspace snapshots + agent state restore) | Medium-Large | — |
-| **13** | Agent-suggested actions | Small-Medium | — |
-| **14** | ProjectDO schema cleanup + steer UX | Small | — |
-| **15** | Command palette (`Cmd+P`) | Medium | — |
-| **16+** | Keyboard shortcuts (incremental, game-style) | Ongoing | Slice 15 |
-| **Later** | File browser | TBD | — |
-| **Later** | Diff viewer | TBD | — |
-| **Later** | Phase 3: Inbox + notifications | Large | — |
-
-**The critical path to dogfooding:**
-```
-Dir rename → Slice A (deploy) → Slice B (PR creation) → using Zero to build Zero
-```
-
-Everything after that gets built using Zero itself.
+| **–** | Directory rename | Structural | ✅ Done |
+| **A** | Deployment to `zero.juanibiapina.dev` | Config only | ✅ Done |
+| **B** | Git push credentials + `create_pull_request` tool | Small | Planned |
+| **C** | Secret manager (user-level secrets injected as env vars) | Small-Medium | ✅ Done |
+| **8** | Session storage refactor (UserDO flat sessions + status sync) | Medium | ✅ Done |
+| **10** | Sidebar session list | Small | ✅ Done |
+| **11** | Real-time session status (via UserDO WebSocket) | Medium | ✅ Done |
+| **7** | Hide archived repos + repo list caching | Small | Planned |
+| **9** | Session auto-titles via Workers AI | Small | Planned |
+| **12** | R2 workspace snapshots (Phase 3 of container resume) | Medium-Large | Planned |
+| **13** | Agent-suggested actions | Small-Medium | Planned |
+| **14** | ProjectDO schema cleanup + steer UX | Small | Planned |
+| **15** | Command palette (`Cmd+P`) | Medium | Planned |
+| **16+** | Keyboard shortcuts (incremental, game-style) | Ongoing | Planned |
+| **Later** | File browser | TBD | Planned |
+| **Later** | Diff viewer | TBD | Planned |
+| **Later** | Phase 3: Inbox + notifications | Large | Planned |

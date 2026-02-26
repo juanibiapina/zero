@@ -7,35 +7,35 @@ This document describes the layered architecture pattern used in this codebase f
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Entry Point                             │
-│                        (worker.ts)                              │
-│         Sentry wrapping, special route handling                 │
+│                     (apps/api/src/index.ts)                     │
+│                  Worker default export                          │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                          App Layer                              │
-│                          (app.ts)                               │
+│                     (apps/api/src/app.ts)                       │
 │         Hono framework, middleware stack, auth context          │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Routes Layer                             │
-│                       (routes/*.ts)                             │
+│                   (apps/api/src/routes/*.ts)                    │
 │         OpenAPIHono endpoints, Zod validation                   │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                       Services Layer                            │
-│                      (services/*.ts)                            │
+│                  (apps/api/src/services/*.ts)                   │
 │         Authorization logic, DO orchestration                   │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Durable Objects Layer                        │
-│                        (*DO/index.ts)                           │
+│                  (apps/api/src/*DO/index.ts)                    │
 │         SQLite storage, domain logic, migrations                │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -43,7 +43,7 @@ This document describes the layered architecture pattern used in this codebase f
                                   │
 ┌─────────────────────────────────┴───────────────────────────────┐
 │                        Shared Types                             │
-│                       (packages/core)                           │
+│                   (packages/core/src/index.ts)                  │
 │         Types shared between frontend and backend               │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -54,84 +54,85 @@ This document describes the layered architecture pattern used in this codebase f
 
 ## Entry Point
 
-**Reference:** `apps/worker/src/worker.ts`
+**Reference:** `apps/api/src/index.ts`
 
-The entry point is the Cloudflare Worker's default export. It handles:
-
-1. **Sentry wrapping** — All requests are wrapped with error tracking
-2. **Special route handling** — Routes that need different auth (e.g., MCP) are handled before falling through to the main app
+The entry point is the Cloudflare Worker's default export. It creates the Hono app and delegates all request handling to it.
 
 ```typescript
-export default Sentry.withSentry(sentryConfig, {
-  async fetch(req, env, ctx) {
-    // Handle special routes with different auth
-    if (url.pathname === "/mcp") {
-      const userId = await validateApiKey(env, authHeader, ctx);
-      if (!userId) return unauthorized();
-      return createMcpHandler(env, userId)(req, env, ctx);
-    }
+import { createApp } from "./app";
 
-    // Fall through to main Hono app
-    return createApp(env).fetch(req, env, ctx);
+export default {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext) {
+    return createApp().fetch(req, env, ctx);
   },
-});
+};
+
+export { UserDO } from "./UserDO";
+export { ProjectDO } from "./ProjectDO";
+export { SessionDO } from "./SessionDO";
+export { AgentContainer } from "./AgentContainer";
 ```
 
-The entry point also handles non-HTTP triggers like email:
-
-```typescript
-async email(message, env, ctx) {
-  await handleEmail(message, env, ctx);
-}
-```
+Durable Object classes are re-exported here so the Worker runtime can find them.
 
 ---
 
 ## App Layer
 
-**Reference:** `apps/worker/src/app.ts`
+**Reference:** `apps/api/src/app.ts`
 
 The app layer sets up the Hono framework and middleware stack. It's responsible for:
 
-1. **Error handling** — Catches errors and reports to Sentry
-2. **Authentication** — Validates JWTs or API keys
-3. **Context setup** — Sets the authenticated user ID for downstream use
+1. **CORS** — Allows requests from the frontend origin
+2. **Authentication** — Validates Clerk JWTs
+3. **Context setup** — Resolves the authenticated user's UserDO and caches DO references
 
 ### Middleware Stack
 
-Middleware executes in order. The typical stack:
+Middleware executes in order. The stack:
 
 ```typescript
 const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-// 1. Error handler — catches all errors
-app.onError((err, c) => {
-  Sentry.captureException(err);
-  if (err instanceof HTTPException) return err.getResponse();
-  return c.json({ error: "Internal server error" }, 500);
+// 1. CORS
+app.use("/api/*", cors({ origin: ["http://localhost:5176"], credentials: true }));
+
+// 2. Health check (no auth)
+app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+// 3. Webhook routes (HMAC auth, not Clerk)
+app.route("/", createWebhookRoutes());
+
+// 4. Token injection for WebSocket/SSE (query param → header)
+app.use("/api/*", async (c, next) => {
+  const queryToken = new URL(c.req.url).searchParams.get("token");
+  if (queryToken && !c.req.header("Authorization")) {
+    // Inject Authorization header so Clerk can validate it
+  }
+  await next();
 });
 
-// 2. Clerk middleware — parses JWT (but doesn't enforce auth)
-app.use("*", clerkMiddleware());
+// 5. Clerk middleware — parses JWT
+app.use("/api/*", clerkMiddleware());
 
-// 3. Auth guard — enforces authentication, sets userId
+// 6. Auth guard — enforces auth, resolves UserDO, caches DO refs
 app.use("/api/*", async (c, next) => {
-  // Check API key first
-  if (authHeader?.startsWith("Bearer tc:")) {
-    const userId = await validateApiKey(env, authHeader, ctx);
-    if (userId) {
-      c.set("userId", userId);
-      return next();
-    }
-    return c.json({ error: "Invalid API key" }, 401);
+  const auth = getAuth(c);
+  if (!auth?.userId) return c.json({ error: "Unauthorized" }, 401);
+
+  c.set("userId", auth.userId);
+
+  // KV lookup → UserDO (auto-create on first request)
+  let userDOIdStr = await env.KV.get(`user:${auth.userId}`);
+  if (!userDOIdStr) {
+    const newId = env.USER_DO.newUniqueId();
+    userDOIdStr = newId.toString();
+    await env.KV.put(`user:${auth.userId}`, userDOIdStr);
   }
 
-  // Fall back to Clerk JWT
-  const auth = getAuth(c);
-  if (!auth?.userId) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
-  c.set("userId", auth.userId);
+  const userDOStub = env.USER_DO.get(env.USER_DO.idFromString(userDOIdStr));
+  c.set("userDOStub", userDOStub);
+  c.set("doRefs", await userDOStub.getDOReferences());
   await next();
 });
 ```
@@ -142,11 +143,15 @@ The app defines typed context variables that downstream handlers can access:
 
 ```typescript
 type Variables = {
-  userId: string;  // Set by auth middleware
+  userId: string;
+  userDOStub: DurableObjectStub;
+  doRefs: UserDOReferences;
 };
 
 // In a route handler:
 const userId = c.get("userId");
+const userDO = c.get("userDOStub");
+const doRefs = c.get("doRefs");
 ```
 
 ---
@@ -162,39 +167,30 @@ Routes define HTTP endpoints using OpenAPIHono with Zod schemas for request/resp
 Each `createRoute()` call lives immediately before its `router.openapi()` handler. This keeps the OpenAPI spec and its implementation as a single visual unit:
 
 ```typescript
-export const createItemsRouter = () => {
+export const createSessionRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
-  // ── Get item ──────────────────────────────────────────────────────
+  // ── List sessions ────────────────────────────────────────────────────
 
-  const getItemRoute = createRoute({
+  const listSessionsRoute = createRoute({
     method: "get",
-    path: "/api/items/{id}",
-    tags: ["Items"],
-    summary: "Get item details",
-    request: { params: ItemIdParamSchema },
+    path: "/api/sessions",
+    tags: ["Sessions"],
+    summary: "List sessions",
+    request: { query: ListSessionsQuerySchema },
     responses: {
       200: {
-        content: { "application/json": { schema: ItemSchema } },
-        description: "Item details",
-      },
-      404: {
-        content: { "application/json": { schema: ErrorSchema } },
-        description: "Item not found",
+        content: { "application/json": { schema: SessionListResponseSchema } },
+        description: "List of sessions",
       },
     },
   });
 
-  router.openapi(getItemRoute, async (c) => {
-    const userId = c.get("userId");
-    const { id } = c.req.valid("param");
-    const service = new ItemService(c.env, userId);
-
-    const result = await service.getItem(id);
-    if (Result.isFailure(result)) {
-      return c.json({ error: result.error.message }, 404 as const);
-    }
-    return c.json(result.value, 200);
+  router.openapi(listSessionsRoute, async (c) => {
+    const { owner, repo } = c.req.valid("query");
+    const service = new SessionService(c.env, c.get("userId"));
+    const filter = owner && repo ? { owner, repo } : undefined;
+    return c.json(await service.listSessions(filter), 200);
   });
 
   return router;
@@ -207,8 +203,9 @@ export const createItemsRouter = () => {
 
 ```typescript
 // In app.ts
-app.route('/', createItemsRouter());
-app.route('/', createSessionsRouter());
+app.route("/", createSessionRoutes());
+app.route("/", createProjectRoutes());
+app.route("/", createProviderRoutes());
 ```
 
 ### Key Rule: Routes Never Call DOs Directly
@@ -217,52 +214,50 @@ Routes instantiate a service with the authenticated user ID and delegate all bus
 
 ```typescript
 // ✅ Correct
-const service = new ItemService(c.env, userId);
-const result = await service.getItem(id);
+const service = new SessionService(c.env, c.get("userId"));
+const result = await service.createSession(owner, repo);
 
 // ❌ Wrong — bypasses authorization
-const itemDO = env.ITEMDO.get(env.ITEMDO.idFromName(id));
-const item = await itemDO.getItem();
+const sessionDO = env.SESSION_DO.get(id);
+const session = await sessionDO.getSession();
 ```
 
 ---
 
 ## Services Layer
 
-**Reference:** `apps/worker/src/services/TripService.ts`
+**Reference:** `apps/api/src/services/session.ts`
 
-Services handle authorization and orchestrate operations across multiple Durable Objects. They're the single point of entry for business logic, used by both HTTP routes and MCP tools.
+Services handle authorization and orchestrate operations across multiple Durable Objects. They're the single point of entry for business logic, used by HTTP routes.
 
 ### Authorization Patterns
 
 Services implement authorization as private helper methods:
 
 ```typescript
-class TripService {
+class SessionService {
   constructor(private env: Env, private callerId: string) {}
 
-  // Check if caller has any access to the trip
-  private async requireTripAccess(tripId: string): Promise<Result<TripAccess, ServiceError>> {
-    const tripDO = this.env.TRIPDO.get(this.env.TRIPDO.idFromName(tripId));
-    const member = await tripDO.getMemberByUserId(this.callerId);
-    if (!member) {
-      return Result.fail({ message: 'Trip not found', code: 'NOT_FOUND' });
-    }
-    return Result.succeed({ tripDO, role: member.role });
+  private async getUserDO(): Promise<{
+    userDO: DurableObjectStub<UserDO>;
+    userDOId: string;
+  }> {
+    const userDOIdStr = await this.env.KV.get(`user:${this.callerId}`);
+    if (!userDOIdStr) throw new Error("User not found in KV");
+    return {
+      userDO: this.env.USER_DO.get(this.env.USER_DO.idFromString(userDOIdStr)),
+      userDOId: userDOIdStr,
+    };
   }
 
-  // Check if caller is the owner
-  private async requireOwner(tripId: string): Promise<Result<TripAccess, ServiceError>> {
-    const access = await this.requireTripAccess(tripId);
-    if (Result.isFailure(access)) return access;
-    if (access.value.role !== 'owner') {
-      return Result.fail({ message: 'Not authorized', code: 'NOT_AUTHORIZED' });
+  private async requireSessionAccess(sessionId: string) {
+    const { userDO, userDOId } = await this.getUserDO();
+    const sessionRow = await userDO.getSessionById(sessionId);
+    if (!sessionRow) {
+      return Result.fail({ message: "Session not found", code: "NOT_FOUND" });
     }
-    return access;
+    return Result.succeed({ userDO, userDOId });
   }
-
-  // Check if caller is the target user or an owner
-  private async requireSelfOrOwner(tripId: string, targetUserId: string) { ... }
 }
 ```
 
@@ -271,58 +266,56 @@ class TripService {
 Services coordinate operations across multiple DOs:
 
 ```typescript
-async deleteTrip(tripId: string): Promise<Result<{ success: true }, ServiceError>> {
+async deleteSession(id: string) {
   // Authorization
-  const access = await this.requireOwner(tripId);
+  const access = await this.requireSessionAccess(id);
   if (Result.isFailure(access)) return access;
+  const { userDO } = access.value;
 
-  // Delete from TripDO
-  await access.value.tripDO.deleteTrip();
+  // Full teardown: stop container, clean R2 snapshot, clear DO storage
+  const sessionDO = this.env.SESSION_DO.get(this.env.SESSION_DO.idFromString(id));
+  await sessionDO.destroySession();
 
-  // Also remove from user's trip list in UserDO
-  const userDO = this.env.USERDO.get(this.env.USERDO.idFromName(this.callerId));
-  await userDO.removeTrip(tripId);
+  // Remove from UserDO index
+  await userDO.removeSession(id);
 
-  return Result.succeed({ success: true });
+  return Result.succeed({ ok: true });
 }
 ```
 
 ### Result Types
 
-Services return typed results using a Result monad pattern:
+Services return typed results using a Result monad pattern (via `@praha/byethrow`):
 
 ```typescript
-type ServiceError = {
+type ServiceError<C extends string = string> = {
   message: string;
-  code: 'NOT_FOUND' | 'NOT_AUTHORIZED' | 'INVALID';
+  code: C;
 };
 
 // Success
-return Result.succeed(trip);
+return Result.succeed(session);
 
 // Failure
-return Result.fail({ message: 'Trip not found', code: 'NOT_FOUND' });
+return Result.fail({ message: "Session not found", code: "NOT_FOUND" });
 
 // Usage in routes
-const result = await service.getTrip(id);
-if (Result.isFailure(result)) {
-  return c.json({ error: result.error.message }, 404);
-}
-return c.json(result.value, 200);
+const result = await service.deleteSession(id);
+return serviceResult(c, result, 200);
 ```
 
 ---
 
 ## Durable Objects Layer
 
-**Reference:** `apps/worker/src/TripDO/index.ts`
+**Reference:** `apps/api/src/UserDO/index.ts`, `apps/api/src/SessionDO/index.ts`
 
-Durable Objects provide persistent storage and domain logic. Each DO instance is keyed by an ID (e.g., trip ID, user ID) and maintains its own SQLite database.
+Durable Objects provide persistent storage and domain logic. Each DO instance is keyed by an ID and maintains its own SQLite database.
 
 ### Structure
 
 ```
-TripDO/
+UserDO/
 ├── index.ts       # DO class with methods
 ├── db/
 │   ├── schema.ts  # Drizzle table definitions
@@ -335,51 +328,45 @@ TripDO/
 ### DO Class Pattern
 
 ```typescript
-export class TripDO extends DurableObject<Env> {
+export class UserDO extends DurableObject<Env> {
   db: DrizzleSqliteDODatabase;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = drizzle(ctx.storage, { logger: false });
 
-    // Run migrations on initialization
-    ctx.blockConcurrencyWhile(async () => {
-      await migrate(this.db, migrations);
+    void ctx.blockConcurrencyWhile(async () => {
+      migrate(this.db, migrations as MigrationConfig);
     });
   }
 
   // Pure data operations — no authorization checks
-  async getTrip(): Promise<Trip | null> {
-    const tripRow = await this.db.select().from(tripsTable).get();
-    if (!tripRow) return null;
-    // ... assemble full trip object
-    return trip;
-  }
-
-  async createTrip(tripId: string, name: string): Promise<void> {
-    await this.db.insert(tripsTable).values({ id: tripId, name, ... });
+  async getSession(): Promise<SessionMeta | null> {
+    const row = this.db.select().from(sessionMetaTable).get();
+    if (!row) return null;
+    return { ... };
   }
 }
 ```
 
 ### Key Characteristics
 
-1. **One instance per entity** — Each trip has its own TripDO, keyed by trip ID
+1. **One instance per entity** — Each session has its own SessionDO, each user has their own UserDO
 2. **No authorization** — DOs trust their callers (services handle auth)
 3. **Pure domain logic** — Business rules and data consistency
 4. **SQLite + Drizzle** — Type-safe queries with ORM
 
 ### Accessing DOs
 
-DOs are accessed via namespace bindings in the environment:
+All DOs use `newUniqueId()` for placement near the user. Lookup goes through KV → UserDO:
 
 ```typescript
-// Get a DO stub by ID
-const tripDOId = env.TRIPDO.idFromName(tripId);
-const tripDO = env.TRIPDO.get(tripDOId);
+// KV bootstrap: user:{clerkUserId} → UserDO ID
+const userDOIdStr = await env.KV.get(`user:${userId}`);
+const userDO = env.USER_DO.get(env.USER_DO.idFromString(userDOIdStr));
 
-// Call methods on the stub
-const trip = await tripDO.getTrip();
+// UserDO stores references to other DOs
+const refs = await userDO.getDOReferences();
 ```
 
 ### Migration Pattern
@@ -388,7 +375,7 @@ Migrations are bundled into the worker code and run automatically:
 
 ```typescript
 ctx.blockConcurrencyWhile(async () => {
-  await migrate(this.db, migrations);
+  migrate(this.db, migrations as MigrationConfig);
 });
 ```
 
@@ -404,37 +391,21 @@ The core types package defines TypeScript types shared between frontend and back
 
 ```typescript
 // packages/core/src/index.ts
-export type Trip = {
-  id: string;
-  name: string;
-  locations: Location[];
-  members: TripMember[];
-  // ...
-};
+export type SessionStatus =
+  | "connecting" | "idle" | "starting" | "resuming"
+  | "running" | "stopped" | "error";
 
-export type Location = {
-  id: number;
-  name: string;
-  cityId: number | null;
-  country: string | null;
-};
+export type SessionClientMessage =
+  | { type: "message"; text: string }
+  | { type: "stop" }
+  | { type: "steer"; text: string }
+  | { type: "ping" };
 ```
 
-Both the worker and web app import from `@repo/core`:
+Both the worker and web app import from `@zero/core`:
 
 ```typescript
-import type { Trip, Location } from '@repo/core';
+import type { SessionStatus, SessionClientMessage } from "@zero/core";
 ```
 
 This ensures type consistency across the stack without runtime overhead.
-
----
-
-## Future Topics
-
-The following areas use this same layered pattern but aren't covered in detail here:
-
-- **Real-time/WebSocket** — `RealtimeDO` for push notifications
-- **Email handling** — `email/handler.ts` for processing forwarded emails
-- **MCP integration** — `mcp/` for AI assistant tool access
-- **Workflows** — `JobWorkflow.ts` for background job processing
