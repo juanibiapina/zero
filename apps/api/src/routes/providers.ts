@@ -14,27 +14,25 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import type { ProviderInfo } from "@zero/core";
+import {
+  getProviderRegistry,
+  getProviderMeta,
+  generatePKCE,
+} from "@zero/providers";
 
-type Variables = {
-  userId: string;
-  userDOStub: DurableObjectStub;
-};
-
-// Anthropic OAuth constants (extracted from @mariozechner/pi-ai source)
+/**
+ * Anthropic OAuth constants.
+ *
+ * These are private in pi-ai's anthropic.js module, so we maintain
+ * them here for the two-step connect/callback flow that Workers require.
+ * The values are stable (they're Anthropic's published OAuth app).
+ */
 const ANTHROPIC_OAUTH = {
   clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
   tokenUrl: "https://console.anthropic.com/v1/oauth/token",
   authorizeUrl: "https://claude.ai/oauth/authorize",
   redirectUri: "https://console.anthropic.com/oauth/code/callback",
   scopes: "org:create_api_key user:profile user:inference",
-};
-
-/** Known providers and their capabilities. */
-const PROVIDER_REGISTRY: Record<
-  string,
-  { name: string; supportsOAuth: boolean; supportsApiKey: boolean }
-> = {
-  anthropic: { name: "Anthropic", supportsOAuth: true, supportsApiKey: true },
 };
 
 // ── Schemas ──────────────────────────────────────────────────────────────
@@ -84,7 +82,7 @@ const SuccessSchema = z.object({
 // ── Router ───────────────────────────────────────────────────────────────
 
 export const createProviderRoutes = () => {
-  const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+  const router = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
 
   // ── List providers ──────────────────────────────────────────────────
 
@@ -112,16 +110,18 @@ export const createProviderRoutes = () => {
     const credentials = await userDO.listProviderCredentials();
     const connectedSet = new Set(credentials.map((cr) => cr.provider));
 
-    const providers: ProviderInfo[] = Object.entries(PROVIDER_REGISTRY).map(
-      ([id, info]) => ({
-        id,
-        name: info.name,
-        connected: connectedSet.has(id),
-        credentialType: credentials.find((cr) => cr.provider === id)?.credentialType as ProviderInfo["credentialType"] ?? null,
-        supportsOAuth: info.supportsOAuth,
-        supportsApiKey: info.supportsApiKey,
-      })
-    );
+    const registry = getProviderRegistry();
+
+    const providers: ProviderInfo[] = registry
+      .filter((meta) => meta.supportsOAuth || meta.supportsApiKey)
+      .map((meta) => ({
+        id: meta.id,
+        name: meta.name,
+        connected: connectedSet.has(meta.id),
+        credentialType: credentials.find((cr) => cr.provider === meta.id)?.credentialType as ProviderInfo["credentialType"] ?? null,
+        supportsOAuth: meta.supportsOAuth,
+        supportsApiKey: meta.supportsApiKey,
+      }));
 
     return c.json({ providers }, 200);
   });
@@ -151,8 +151,16 @@ export const createProviderRoutes = () => {
 
   router.openapi(connectProviderRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
-    if (providerId !== "anthropic") {
+
+    const meta = getProviderMeta(providerId);
+    if (!meta?.supportsOAuth) {
       return c.json({ error: "OAuth not supported for this provider" }, 400 as const);
+    }
+
+    // Currently only Anthropic OAuth is implemented as a two-step web flow.
+    // Other OAuth providers (GitHub Copilot, OpenAI Codex, etc.) will be added later.
+    if (providerId !== "anthropic") {
+      return c.json({ error: "OAuth flow not yet implemented for this provider" }, 400 as const);
     }
 
     const userDO = c.env.USER_DO.get(
@@ -161,24 +169,10 @@ export const createProviderRoutes = () => {
       )
     );
 
-    // Generate PKCE challenge
-    const verifierBytes = new Uint8Array(32);
-    crypto.getRandomValues(verifierBytes);
-    const verifier = btoa(String.fromCharCode(...verifierBytes))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
+    // Generate PKCE challenge using pi-ai's Web Crypto implementation
+    const { verifier, challenge } = await generatePKCE();
 
-    const challengeBuffer = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(verifier)
-    );
-    const challenge = btoa(String.fromCharCode(...new Uint8Array(challengeBuffer)))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-
-    // Random state token
+    // Random state token for CSRF protection
     const state = crypto.randomUUID();
 
     // Store verifier in UserDO
@@ -230,8 +224,14 @@ export const createProviderRoutes = () => {
 
   router.openapi(oauthCallbackRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
-    if (providerId !== "anthropic") {
+
+    const meta = getProviderMeta(providerId);
+    if (!meta?.supportsOAuth) {
       return c.json({ error: "OAuth not supported for this provider" }, 400 as const);
+    }
+
+    if (providerId !== "anthropic") {
+      return c.json({ error: "OAuth flow not yet implemented for this provider" }, 400 as const);
     }
 
     const body = c.req.valid("json");
@@ -243,7 +243,7 @@ export const createProviderRoutes = () => {
     if (code.includes("#")) {
       const parts = code.split("#");
       actualCode = parts[0];
-      state = state || parts[1];
+      state = state ?? parts[1];
     }
 
     if (!state) {
@@ -282,7 +282,6 @@ export const createProviderRoutes = () => {
       return c.json({ error: "Token exchange failed" }, 400 as const);
     }
 
-     
     const tokens: { access_token: string; refresh_token?: string; expires_in?: number } = await tokenResp.json();
 
     const expiresAt = tokens.expires_in
@@ -328,8 +327,8 @@ export const createProviderRoutes = () => {
 
   router.openapi(setApiKeyRoute, async (c) => {
     const { id: providerId } = c.req.valid("param");
-    const providerConfig = PROVIDER_REGISTRY[providerId];
-    if (!providerConfig?.supportsApiKey) {
+    const meta = getProviderMeta(providerId);
+    if (!meta?.supportsApiKey) {
       return c.json({ error: "API key not supported for this provider" }, 400 as const);
     }
 

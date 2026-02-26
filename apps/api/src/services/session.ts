@@ -12,6 +12,7 @@ import { Result } from "@praha/byethrow";
 import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
+import { getDefaultModel } from "@zero/providers";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -148,7 +149,7 @@ export class SessionService {
     if (project.defaultProvider === provider && project.defaultModel) {
       model = project.defaultModel;
     } else {
-      model = "claude-sonnet-4-20250514";
+      model = getDefaultModel(provider) ?? "claude-sonnet-4-20250514";
     }
 
     // Create SessionDO

@@ -17,6 +17,7 @@
     "@hono/zod-openapi": "^1.2.2",
     "@praha/byethrow": "^0.10.0",
     "@zero/core": "workspace:*",
+    "@zero/providers": "workspace:*",
     "@zero/drizzle-migrator": "workspace:*",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.12.2",
