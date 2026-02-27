@@ -504,6 +504,15 @@ export class UserDO extends DurableObject<Env> {
     });
   }
 
+  async updateSessionProviderModel(sessionDOId: string, provider: string, model: string) {
+    const now = new Date().toISOString();
+    this.db
+      .update(sessionsTable)
+      .set({ provider, model, updatedAt: now })
+      .where(eq(sessionsTable.sessionDOId, sessionDOId))
+      .run();
+  }
+
   async updateSessionStatus(sessionDOId: string, status: SessionStatus) {
     const now = new Date().toISOString();
     this.db

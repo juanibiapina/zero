@@ -326,6 +326,32 @@ export class SessionWrapper {
   }
 
   /**
+   * Reconfigure provider/model/apiKey.
+   *
+   * Safe to call in any state (idle or running). The new model is stored
+   * immediately, but runAgentLoop() snapshots this._model at turn start,
+   * so a running turn continues with the old model. The next turn uses
+   * the new one.
+   */
+  async configure(provider: string, modelId: string, apiKey: string): Promise<void> {
+    if (!this._workDir) {
+      throw new Error("Session not initialized — cannot configure before resume");
+    }
+
+    setApiKey(provider, apiKey);
+    const model = getModel(
+      provider as Parameters<typeof getModel>[0],
+      modelId as never,
+    );
+    if (!model) {
+      throw new Error(`Unknown model: ${provider}/${modelId}`);
+    }
+
+    this._model = model;
+    console.log(`Session reconfigured: ${provider}/${modelId}`);
+  }
+
+  /**
    * Steer the agent mid-run (not supported in slice 1).
    */
   async steer(_text: string): Promise<void> {

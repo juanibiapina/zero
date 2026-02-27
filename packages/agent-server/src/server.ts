@@ -2,10 +2,11 @@
  * HTTP server — Plain Node.js http router for agent-server.
  *
  * Routes:
- *   POST /resume   — Resume session (first-start or wake-from-sleep)
- *   POST /message  — Send a follow-up message
- *   POST /steer    — Steer the agent mid-run
- *   POST /stop     — Stop the current session
+ *   POST /resume     — Resume session (first-start or wake-from-sleep)
+ *   POST /message    — Send a follow-up message
+ *   POST /configure  — Reconfigure provider/model/apiKey (takes effect next turn)
+ *   POST /steer      — Steer the agent mid-run
+ *   POST /stop       — Stop the current session
  *   GET  /ws       — WebSocket for event streaming
  *   GET  /workspace/snapshot — Snapshot workspace as tar.zst
  *   POST /workspace/restore — Restore workspace from tar.zst
@@ -19,7 +20,7 @@ import { WebSocketServer } from "ws";
 import { EventBuffer } from "./events.js";
 import { SessionWrapper } from "./session.js";
 import type { Message } from "@mariozechner/pi-ai";
-import type { ResumeRequest, MessageRequest, SteerRequest } from "./types.js";
+import type { ResumeRequest, MessageRequest, SteerRequest, ConfigureRequest } from "./types.js";
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -98,6 +99,23 @@ export function createAppServer(): Server {
         }
         try {
           await session.sendMessage(body.text);
+          sendJson(res, 200, { ok: true });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+
+      // ── POST /configure ────────────────────────────────────────────
+      if (method === "POST" && path === "/configure") {
+        const body = await parseJsonBody<ConfigureRequest>(req, res);
+        if (!body) return;
+        if (!body.provider || !body.model || !body.apiKey) {
+          sendJson(res, 400, { error: "Missing required fields: provider, model, apiKey" });
+          return;
+        }
+        try {
+          await session.configure(body.provider, body.model, body.apiKey);
           sendJson(res, 200, { ok: true });
         } catch (err) {
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });

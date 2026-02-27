@@ -15,6 +15,7 @@ import { z } from "zod";
 import type { Env } from "../types";
 import { UserService } from "../services/user";
 import { serviceResult } from "../lib/result";
+import { getModels, getProviderMeta } from "@zero/providers";
 
 // ── Schemas ──────────────────────────────────────────────────────────────
 
@@ -207,6 +208,50 @@ export const createProviderRoutes = () => {
     const { id: providerId } = c.req.valid("param");
     const service = new UserService(c.env, c.get("userId"));
     return c.json(await service.disconnectProvider(providerId), 200);
+  });
+
+  // ── List models for a provider ─────────────────────────────────────
+
+  const ModelSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+  });
+
+  const ModelListResponseSchema = z.object({
+    models: z.array(ModelSchema),
+  });
+
+  const listModelsRoute = createRoute({
+    method: "get",
+    path: "/api/providers/{id}/models",
+    tags: ["Providers"],
+    summary: "List models for a provider",
+    description: "Returns the available models for a specific provider.",
+    request: {
+      params: ProviderIdParamSchema,
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: ModelListResponseSchema } },
+        description: "List of models",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Provider not found",
+      },
+    },
+  });
+
+  router.openapi(listModelsRoute, async (c) => {
+    const { id: providerId } = c.req.valid("param");
+    const meta = getProviderMeta(providerId);
+    if (!meta) {
+      return c.json({ error: "Provider not found" }, 404);
+    }
+    const models = getModels(providerId as Parameters<typeof getModels>[0]);
+    return c.json({
+      models: models.map((m) => ({ id: m.id, name: m.name ?? m.id })),
+    }, 200);
   });
 
   return router;

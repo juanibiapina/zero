@@ -11,11 +11,14 @@ import {
   Terminal,
   MessageSquare,
   Trash2,
+  ArrowLeftRight,
+  Cpu,
 } from "lucide-react";
 import { formatForDisplay } from "@tanstack/react-hotkeys";
 import { APP_ACTIONS, type AppAction } from "@zero/core";
 import PickerDialog from "@/components/PickerDialog";
 import { useSettingsStore } from "@/lib/settings-store";
+import { useActionHandlerStore } from "@/lib/action-handlers";
 
 // ── Icon map (lucide-react can't live in @zero/core) ─────────────────────
 
@@ -30,6 +33,8 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   newSession: Plus,
   commandPalette: Terminal,
   deleteCurrentSession: Trash2,
+  switchProvider: ArrowLeftRight,
+  switchModel: Cpu,
 };
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -62,21 +67,29 @@ export default function CommandPaletteDialog({
   const navigate = useNavigate();
   const prefix = useSettingsStore((s) => s.settings.hotkeyPrefix);
   const bindings = useSettingsStore((s) => s.settings.hotkeyBindings);
+  const registeredHandlers = useActionHandlerStore((s) => s.handlers);
 
   // ── Action handlers (close palette, then do the thing) ──────────────
 
   const handlers: Record<string, () => void> = useMemo(
-    () => ({
-      goToDashboard: () => { onOpenChange(false); void navigate("/"); },
-      goToProjects: () => { onOpenChange(false); void navigate("/projects"); },
-      goToSecrets: () => { onOpenChange(false); void navigate("/secrets"); },
-      goToTemplates: () => { onOpenChange(false); void navigate("/templates"); },
-      goToSettings: () => { onOpenChange(false); void navigate("/settings"); },
-      goToProviders: () => { onOpenChange(false); void navigate("/settings/providers"); },
-      listSessions: () => { onOpenChange(false); onOpenSessionPicker(); },
-      newSession: () => { onOpenChange(false); onOpenProjectPicker(); },
-    }),
-    [navigate, onOpenChange, onOpenProjectPicker, onOpenSessionPicker],
+    () => {
+      const base: Record<string, () => void> = {
+        goToDashboard: () => { onOpenChange(false); void navigate("/"); },
+        goToProjects: () => { onOpenChange(false); void navigate("/projects"); },
+        goToSecrets: () => { onOpenChange(false); void navigate("/secrets"); },
+        goToTemplates: () => { onOpenChange(false); void navigate("/templates"); },
+        goToSettings: () => { onOpenChange(false); void navigate("/settings"); },
+        goToProviders: () => { onOpenChange(false); void navigate("/settings/providers"); },
+        listSessions: () => { onOpenChange(false); onOpenSessionPicker(); },
+        newSession: () => { onOpenChange(false); onOpenProjectPicker(); },
+      };
+      // Merge in page-level registered handlers (e.g. switchProvider, switchModel)
+      for (const [id, handler] of Object.entries(registeredHandlers)) {
+        base[id] = () => { onOpenChange(false); handler(); };
+      }
+      return base;
+    },
+    [navigate, onOpenChange, onOpenProjectPicker, onOpenSessionPicker, registeredHandlers],
   );
 
   // ── Build command list from APP_ACTIONS ─────────────────────────────

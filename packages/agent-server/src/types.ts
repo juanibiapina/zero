@@ -24,6 +24,12 @@ export interface SteerRequest {
   text: string;
 }
 
+export interface ConfigureRequest {
+  provider: string;
+  model: string;
+  apiKey: string;
+}
+
 export type SessionStatus =
   | "idle"
   | "starting"

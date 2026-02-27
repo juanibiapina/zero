@@ -13,7 +13,10 @@ import { SlashAutocomplete } from "@/components/SlashAutocomplete";
 import { resolveSlashCommand, getSlashFilteredTemplates } from "@/lib/template-utils";
 import { useAction } from "@/lib/use-action";
 import { useSessionStore } from "@/lib/session-store";
+import { useRegisterAction } from "@/lib/action-handlers";
 import SessionDeleteDialog from "@/components/SessionDeleteDialog";
+import ProviderPickerDialog from "@/components/ProviderPickerDialog";
+import ModelPickerDialog from "@/components/ModelPickerDialog";
 
 // ─── Keyed wrapper ───────────────────────────────────────────────────────────
 // Forces full remount when navigating between sessions so stale state
@@ -52,6 +55,12 @@ function SessionPageInner() {
   /** Buffer turns during replay to avoid per-event renders / scroll flicker */
   const replayBufferRef = useRef<Turn[]>([]);
   const statusRef = useRef<SessionStatus>("connecting");
+
+  // Provider/model state
+  const [provider, setProvider] = useState<string>("");
+  const [model, setModel] = useState<string>("");
+  const [providerPickerOpen, setProviderPickerOpen] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
   // Delete session state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -212,6 +221,11 @@ function SessionPageInner() {
               return;
             }
 
+            case "config":
+              setProvider(msg.provider);
+              setModel(msg.model);
+              return;
+
             case "pong":
               return;
 
@@ -322,6 +336,54 @@ function SessionPageInner() {
     }
   }, []);
 
+  // ── Configure provider/model ────────────────────────────────────────────
+
+  const sendConfigure = useCallback((newProvider: string, newModel: string) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "configure", provider: newProvider, model: newModel }));
+    }
+  }, []);
+
+  const handleProviderSelect = useCallback(
+    async (newProvider: string) => {
+      if (newProvider === provider) return;
+      // Fetch default model for the new provider
+      try {
+        const token = await getToken();
+        const resp = await fetch(`/api/providers/${newProvider}/models`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await resp.json()) as { models?: { id: string }[] };
+        const defaultModel = data.models?.[0]?.id ?? "";
+        sendConfigure(newProvider, defaultModel);
+      } catch {
+        // Fallback: send with empty model, backend will handle
+        sendConfigure(newProvider, "");
+      }
+    },
+    [provider, getToken, sendConfigure],
+  );
+
+  const handleModelSelect = useCallback(
+    (newModel: string) => {
+      if (newModel === model) return;
+      sendConfigure(provider, newModel);
+    },
+    [provider, model, sendConfigure],
+  );
+
+  // ── Actions: switch provider / model ────────────────────────────────────
+  const anyDialogOpen = deleteDialogOpen || providerPickerOpen || modelPickerOpen;
+  const openProviderPicker = useCallback(() => setProviderPickerOpen(true), []);
+  const openModelPicker = useCallback(() => setModelPickerOpen(true), []);
+  useAction("switchProvider", openProviderPicker, { enabled: !anyDialogOpen && !!provider });
+  useAction("switchModel", openModelPicker, { enabled: !anyDialogOpen && !!provider });
+
+  // Register for command palette (visible while SessionPage is mounted)
+  useRegisterAction("switchProvider", openProviderPicker);
+  useRegisterAction("switchModel", openModelPicker);
+
   // ── Handle user input ───────────────────────────────────────────────────
 
   const handleSend = async () => {
@@ -427,6 +489,25 @@ function SessionPageInner() {
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold">Agent Session</h1>
           <StatusBadge status={status} />
+          {provider && (
+            <>
+              <button
+                onClick={() => setProviderPickerOpen(true)}
+                className="rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                title="Switch provider"
+              >
+                {provider}
+              </button>
+              <span className="text-muted-foreground/40">/</span>
+              <button
+                onClick={() => setModelPickerOpen(true)}
+                className="rounded-md border px-2 py-1 text-xs font-mono text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                title="Switch model"
+              >
+                {model}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -559,6 +640,23 @@ function SessionPageInner() {
         onConfirm={handleDelete}
         sessionTitle={owner && repo ? `${owner}/${repo} session` : null}
         isDeleting={isDeleting}
+      />
+
+      {/* Provider picker */}
+      <ProviderPickerDialog
+        open={providerPickerOpen}
+        onOpenChange={setProviderPickerOpen}
+        currentProvider={provider}
+        onSelect={(p) => void handleProviderSelect(p)}
+      />
+
+      {/* Model picker */}
+      <ModelPickerDialog
+        open={modelPickerOpen}
+        onOpenChange={setModelPickerOpen}
+        provider={provider}
+        currentModel={model}
+        onSelect={handleModelSelect}
       />
     </div>
   );

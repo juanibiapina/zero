@@ -224,6 +224,7 @@ export type AgentEventType = AgentEvent["type"];
 export type SessionClientMessage =
   | { type: "message"; text: string; template?: { slug: string; name: string }; originalText?: string }
   | { type: "stop" }
+  | { type: "configure"; provider: string; model: string }
   | { type: "steer"; text: string }
   | { type: "ping" };
 
@@ -237,6 +238,7 @@ export type SessionServerMessage =
       data: unknown;
     }
   | { type: "status"; status: SessionStatus; error?: string }
+  | { type: "config"; provider: string; model: string }
   | { type: "caught_up"; lastSeq: number }
   | { type: "pong" }
   | { type: "error"; message: string };
@@ -314,8 +316,10 @@ export const APP_ACTIONS: AppAction[] = [
   // Actions
   { id: "listSessions", label: "Sessions", description: "Open session picker", category: "Actions", defaultKey: "s" },
   { id: "newSession", label: "New Session", description: "Open project picker to create a session", category: "Actions", defaultKey: "N" },
-  { id: "commandPalette", label: "Command Palette", description: "Open command palette", category: "Actions", defaultKey: "P" },
+  { id: "commandPalette", label: "Command Palette", description: "Open command palette", category: "Actions", defaultKey: "k" },
   { id: "deleteCurrentSession", label: "Delete Session", description: "Delete the current session", category: "Actions", defaultKey: "D" },
+  { id: "switchProvider", label: "Switch Provider", description: "Change the AI provider for the current session", category: "Actions", defaultKey: "p" },
+  { id: "switchModel", label: "Switch Model", description: "Change the model for the current session", category: "Actions", defaultKey: "m" },
 ];
 
 /** Default hotkey bindings: actionId → key string (only actions with a defaultKey). */

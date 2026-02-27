@@ -13,6 +13,12 @@ import type { Env } from "../types";
 
 // ── Parameter Types ──────────────────────────────────────────────────────
 
+export type ConfigureParams = {
+  provider: string;
+  model: string;
+  apiKey: string;
+};
+
 export type ResumeParams = {
   provider: string;
   model: string;
@@ -76,6 +82,11 @@ export class ContainerHandle {
   /** Resume session (first-start or wake-from-sleep). */
   resume(params: ResumeParams): Promise<void> {
     return this.post("/resume", params);
+  }
+
+  /** Reconfigure provider/model/apiKey (takes effect next turn). */
+  configure(params: ConfigureParams): Promise<void> {
+    return this.post("/configure", params);
   }
 
   /** Send a follow-up message. */

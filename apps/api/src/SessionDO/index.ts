@@ -135,6 +135,10 @@ export class SessionDO extends DurableObject<Env> {
     this.syncStatusToUserDO(status);
   }
 
+  async updateProviderModel(provider: string, model: string): Promise<void> {
+    this.db.update(sessionMetaTable).set({ provider, model }).run();
+  }
+
   /**
    * Full teardown: stop container, clean R2 snapshot, clear storage.
    * All steps are best-effort — a single failure doesn't block cleanup.
@@ -237,9 +241,17 @@ export class SessionDO extends DurableObject<Env> {
       } satisfies SessionServerMessage));
     }
 
-    // Send current session status — no mapping, the session status is authoritative.
-    const currentStatus = (await this.getStatus()) ?? "idle";
+    // Send current session status and config — the session metadata is authoritative.
+    const currentSession = await this.getSession();
+    const currentStatus = (currentSession?.status as SessionStatus) ?? "idle";
     server.send(JSON.stringify({ type: "status", status: currentStatus } satisfies SessionServerMessage));
+    if (currentSession) {
+      server.send(JSON.stringify({
+        type: "config",
+        provider: currentSession.provider,
+        model: currentSession.model,
+      } satisfies SessionServerMessage));
+    }
 
     // Mark end of replay
     server.send(JSON.stringify({ type: "caught_up", lastSeq: this.seq } satisfies SessionServerMessage));
@@ -274,8 +286,9 @@ export class SessionDO extends DurableObject<Env> {
         data.template,
         data.originalText,
       );
-      case "stop":    return this.handleStop();
-      case "steer":   return this.handleSteer(data.text);
+      case "stop":      return this.handleStop();
+      case "configure": return this.handleConfigure(data.provider, data.model);
+      case "steer":     return this.handleSteer(data.text);
     }
   }
 
@@ -332,6 +345,57 @@ export class SessionDO extends DurableObject<Env> {
       await this.updateStatus("error");
       this.broadcastToWebSockets({ type: "status", status: "error" });
     }
+  }
+
+  private async handleConfigure(provider: string, model: string): Promise<void> {
+    const session = await this.getSession();
+    if (!session) {
+      this.broadcastError("No session found");
+      return;
+    }
+
+    // 1. Resolve credentials for the new provider
+    let apiKey: string;
+    try {
+      if (!session.userDOId) throw new Error("No userDOId");
+      const userDO = this.env.USER_DO.get(
+        this.env.USER_DO.idFromString(session.userDOId),
+      );
+      const credentials = await userDO.listProviderCredentials();
+      const cred =
+        credentials.find(c => c.provider === provider && c.apiKey) ??
+        credentials.find(c => c.provider === provider && c.accessToken);
+      if (!cred) throw new Error(`No credentials for provider: ${provider}`);
+      apiKey = (cred.apiKey ?? cred.accessToken)!;
+    } catch (err) {
+      this.broadcastError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+
+    // 2. Update session metadata (persisted — survives container sleep/wake)
+    await this.updateProviderModel(provider, model);
+
+    // 3. Sync to UserDO session index
+    if (session.userDOId) {
+      const userDO = this.env.USER_DO.get(
+        this.env.USER_DO.idFromString(session.userDOId),
+      );
+      userDO.updateSessionProviderModel(this.ctx.id.toString(), provider, model)
+        .catch(err => console.error("syncProviderModel to UserDO failed:", err));
+    }
+
+    // 4. If container is alive, reconfigure it (best-effort)
+    try {
+      const state = await this.container.getState();
+      if (state.status !== "stopped" && state.status !== "stopped_with_code") {
+        await this.container.configure({ provider, model, apiKey });
+      }
+    } catch {
+      // Container unreachable — OK, next resume reads from sessionMetaTable
+    }
+
+    // 5. Broadcast config change to all connected browsers
+    this.broadcastToWebSockets({ type: "config", provider, model });
   }
 
   private async handleStop(): Promise<void> {
