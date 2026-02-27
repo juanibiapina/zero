@@ -375,16 +375,21 @@ function SessionPageInner() {
   const handleProviderSelect = useCallback(
     async (newProvider: string) => {
       if (newProvider === provider) return;
-      // Fetch default model for the new provider and resolve thinking level
+      // Fetch models + preferred default for the new provider
       try {
         const token = await getToken();
         const resp = await fetch(`/api/providers/${newProvider}/models`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
-        const firstModel = data.models?.[0];
-        const newModel = firstModel?.id ?? "";
-        const newThinking = defaultThinkingLevel(firstModel?.reasoning ?? false);
+        const data = (await resp.json()) as {
+          models?: { id: string; reasoning: boolean }[];
+          defaultModelId?: string | null;
+        };
+        const models = data.models ?? [];
+        // Use backend-provided default, fall back to first model
+        const defaultModel = models.find((m) => m.id === data.defaultModelId) ?? models[0];
+        const newModel = defaultModel?.id ?? "";
+        const newThinking = defaultThinkingLevel(defaultModel?.reasoning ?? false);
         sendConfigure(newProvider, newModel, newThinking);
       } catch {
         // Fallback: send with empty model, backend will handle
@@ -395,29 +400,38 @@ function SessionPageInner() {
   );
 
   const handleModelSelect = useCallback(
-    async (newModel: string) => {
+    (newModel: string) => {
       if (newModel === model) return;
-      // Check reasoning capability of the new model and auto-adjust thinking level
-      try {
-        const token = await getToken();
-        const resp = await fetch(`/api/providers/${provider}/models`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
-        const modelInfo = data.models?.find((m) => m.id === newModel);
-        const supportsReasoning = modelInfo?.reasoning ?? false;
-        // If switching to non-reasoning model, force "off".
-        // If switching to reasoning model while currently "off", default to "high".
-        let newThinking: ThinkingLevel | undefined;
-        if (!supportsReasoning) {
-          newThinking = "off";
-        } else if (thinkingLevel === "off") {
-          newThinking = "high";
+      // Send configure immediately to avoid race with user sending a message.
+      // Use cached reasoning info from ModelPickerDialog to adjust thinking level
+      // synchronously — the model list was already fetched when the picker opened.
+      sendConfigure(provider, newModel);
+      // Then async-check reasoning capability and send a follow-up configure
+      // with adjusted thinking level if needed
+      void (async () => {
+        try {
+          const token = await getToken();
+          const resp = await fetch(`/api/providers/${provider}/models`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
+          const modelInfo = data.models?.find((m) => m.id === newModel);
+          const supportsReasoning = modelInfo?.reasoning ?? false;
+          // If switching to non-reasoning model, force "off".
+          // If switching to reasoning model while currently "off", default to "high".
+          let newThinking: ThinkingLevel | undefined;
+          if (!supportsReasoning) {
+            newThinking = "off";
+          } else if (thinkingLevel === "off") {
+            newThinking = "high";
+          }
+          if (newThinking !== undefined) {
+            sendConfigure(provider, newModel, newThinking);
+          }
+        } catch {
+          // Model already configured, thinking level adjustment is best-effort
         }
-        sendConfigure(provider, newModel, newThinking);
-      } catch {
-        sendConfigure(provider, newModel);
-      }
+      })();
     },
     [provider, model, thinkingLevel, getToken, sendConfigure],
   );

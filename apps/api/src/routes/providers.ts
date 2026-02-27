@@ -15,7 +15,7 @@ import { z } from "zod";
 import type { Env } from "../types";
 import { UserService } from "../services/user";
 import { serviceResult } from "../lib/result";
-import { getModels, getProviderMeta } from "@zero/providers";
+import { getModels, getProviderMeta, getDefaultModel } from "@zero/providers";
 
 // ── Schemas ──────────────────────────────────────────────────────────────
 
@@ -220,6 +220,7 @@ export const createProviderRoutes = () => {
 
   const ModelListResponseSchema = z.object({
     models: z.array(ModelSchema),
+    defaultModelId: z.string().nullable(),
   });
 
   const listModelsRoute = createRoute({
@@ -250,8 +251,10 @@ export const createProviderRoutes = () => {
       return c.json({ error: "Provider not found" }, 404);
     }
     const models = getModels(providerId as Parameters<typeof getModels>[0]);
+    const defaultModelId = getDefaultModel(providerId) ?? null;
     return c.json({
       models: models.map((m) => ({ id: m.id, name: m.name ?? m.id, reasoning: m.reasoning })),
+      defaultModelId,
     }, 200);
   });
 

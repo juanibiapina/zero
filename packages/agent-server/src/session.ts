@@ -1,18 +1,16 @@
 /**
  * SessionWrapper — Manages pi agent lifecycle.
  *
- * Uses agentLoop from pi-ai + codingTools from pi-coding-agent.
+ * Uses agentLoop from pi-agent-core + codingTools from pi-coding-agent.
  * Auto-stops existing session on new start. Clones repo before starting.
  */
 
 import { execSync } from "node:child_process";
 import { mkdirSync, existsSync } from "node:fs";
-import {
-  agentLoop,
-  setApiKey,
-  getModel,
-} from "@mariozechner/pi-ai";
-import type { AgentEvent, AgentContext, QueuedMessage, Message } from "@mariozechner/pi-ai";
+import { getModel } from "@mariozechner/pi-ai";
+import type { Message } from "@mariozechner/pi-ai";
+import { agentLoop } from "@mariozechner/pi-agent-core";
+import type { AgentEvent, AgentContext, AgentMessage } from "@mariozechner/pi-agent-core";
 import { codingTools } from "@mariozechner/pi-coding-agent";
 import type { EventBuffer } from "./events.js";
 import type { SessionStatus } from "./types.js";
@@ -29,6 +27,7 @@ export class SessionWrapper {
   // Stored after start() for use by sendMessage()
   private _model: ReturnType<typeof getModel> | null = null;
   private _workDir: string | null = null;
+  private _apiKey: string | null = null;
   private _thinkingLevel: string = "high";
 
   // Conversation history — accumulated across turns for follow-up context
@@ -164,13 +163,16 @@ export class SessionWrapper {
     const config = {
       model,
       reasoning,
+      apiKey: this._apiKey ?? undefined,
       signal: this._abortController.signal,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      getQueuedMessages: async () => [] as QueuedMessage<any>[],
+      // Identity converter — we only use standard user/assistant/toolResult messages
+      convertToLlm: (msgs: AgentMessage[]) => msgs.filter(
+        (m): m is Message => m.role === "user" || m.role === "assistant" || m.role === "toolResult"
+      ),
     };
 
     const eventStream = agentLoop(
-      userMessage,
+      [userMessage],
       context,
       config,
       this._abortController.signal,
@@ -186,7 +188,11 @@ export class SessionWrapper {
 
           if (event.type === "agent_end") {
             // Accumulate messages from this turn for follow-up context
-            this._messages.push(...event.messages);
+            // Filter to standard LLM messages (agent_end may include custom AgentMessage types)
+            const llmMessages = event.messages.filter(
+              (m): m is Message => m.role === "user" || m.role === "assistant" || m.role === "toolResult"
+            );
+            this._messages.push(...llmMessages);
 
             // Check if the agent ended due to an API error (e.g. expired OAuth token)
             const lastAssistant = [...event.messages]
@@ -277,7 +283,6 @@ export class SessionWrapper {
       }
 
       // Configure provider and model
-      setApiKey(provider, apiKey);
       const model = getModel(
         provider as Parameters<typeof getModel>[0],
         modelId as never
@@ -290,6 +295,7 @@ export class SessionWrapper {
       process.chdir(workDir);
       this._model = model;
       this._workDir = workDir;
+      this._apiKey = apiKey;
       this._thinkingLevel = thinkingLevel ?? "high";
 
       // Restore conversation history
@@ -346,7 +352,6 @@ export class SessionWrapper {
       throw new Error("Session not initialized — cannot configure before resume");
     }
 
-    setApiKey(provider, apiKey);
     const model = getModel(
       provider as Parameters<typeof getModel>[0],
       modelId as never,
@@ -356,6 +361,7 @@ export class SessionWrapper {
     }
 
     this._model = model;
+    this._apiKey = apiKey;
     if (thinkingLevel !== undefined) {
       this._thinkingLevel = thinkingLevel;
     }

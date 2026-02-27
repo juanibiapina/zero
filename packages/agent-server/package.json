@@ -11,8 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.10.2",
-    "@mariozechner/pi-coding-agent": "^0.10.2",
+    "@mariozechner/pi-agent-core": "^0.55.1",
+    "@mariozechner/pi-ai": "^0.55.1",
+    "@mariozechner/pi-coding-agent": "^0.55.1",
     "ws": "^8.19.0"
   },
   "devDependencies": {
