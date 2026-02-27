@@ -14,6 +14,15 @@ import { useAction } from "@/lib/use-action";
 export default function Layout() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState<boolean>(() => {
+    // Initialize from localStorage
+    try {
+      const saved = localStorage.getItem("sidebar-visible");
+      return saved ? (JSON.parse(saved) as boolean) : true;
+    } catch {
+      return true;
+    }
+  });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sessionPickerOpen, setSessionPickerOpen] = useState(false);
   const [sessionPickerKey, setSessionPickerKey] = useState(0);
@@ -21,6 +30,15 @@ export default function Layout() {
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
+
+  // Persist sidebar visibility to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("sidebar-visible", JSON.stringify(sidebarVisible));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [sidebarVisible]);
 
   // Fetch user settings and sessions on mount
   useEffect(() => {
@@ -40,6 +58,7 @@ export default function Layout() {
   useAction("goToSecrets", () => void navigate("/secrets"), { enabled: !dialogOpen });
   useAction("goToSettings", () => void navigate("/settings"), { enabled: !dialogOpen });
   useAction("goToProviders", () => void navigate("/settings/providers"), { enabled: !dialogOpen });
+  useAction("toggleSidebar", () => setSidebarVisible((v: boolean) => !v));
 
   // User-level WebSocket for real-time push events
   useUserWebSocket();
@@ -58,7 +77,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} visible={sidebarVisible} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile top bar */}

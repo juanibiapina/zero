@@ -316,6 +316,7 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "newSession", label: "New Session", description: "Open project picker to create a session", category: "Actions", defaultKey: "N" },
   { id: "commandPalette", label: "Command Palette", description: "Open command palette", category: "Actions", defaultKey: "P" },
   { id: "deleteCurrentSession", label: "Delete Session", description: "Delete the current session", category: "Actions", defaultKey: "D" },
+  { id: "toggleSidebar", label: "Toggle Sidebar", description: "Show or hide the sidebar", category: "Actions", defaultKey: "B" },
 ];
 
 /** Default hotkey bindings: actionId → key string (only actions with a defaultKey). */

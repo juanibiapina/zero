@@ -40,9 +40,10 @@ const statusDotColor: Record<string, string> = {
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
+  visible?: boolean;
 }
 
-export default function Sidebar({ open, onClose }: SidebarProps) {
+export default function Sidebar({ open, onClose, visible = true }: SidebarProps) {
   const { user } = useUser();
   const sessions = useSessionStore((s) => s.sessions);
   const loadingSessions = useSessionStore((s) => s.loading);
@@ -183,8 +184,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Desktop sidebar — always visible at md+ */}
-      <aside className="hidden md:flex h-full w-56 flex-col border-r border-sidebar-border bg-sidebar">
+      {/* Desktop sidebar — toggleable at md+ */}
+      <aside className={cn(
+        "h-full w-56 flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200",
+        visible ? "md:flex" : "hidden"
+      )}>
         {sidebarContent}
       </aside>
 
