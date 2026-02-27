@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y git zstd curl gpg ripgrep && \
     apt-get update && apt-get install -y gh && \
     rm -rf /var/lib/apt/lists/*
 
+RUN corepack enable
+
 WORKDIR /app
 
 # Copy package.json and strip devDependencies (they use workspace: protocol)
