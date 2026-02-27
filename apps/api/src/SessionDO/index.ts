@@ -329,6 +329,8 @@ export class SessionDO extends DurableObject<Env> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.broadcastError(msg);
+      await this.updateStatus("error");
+      this.broadcastToWebSockets({ type: "status", status: "error" });
     }
   }
 
@@ -430,6 +432,9 @@ export class SessionDO extends DurableObject<Env> {
       if (status === "idle") return;
       if (status === "error") {
         throw new Error("Container failed to start");
+      }
+      if (status === "stopped") {
+        throw new Error("Container stopped unexpectedly during startup");
       }
       await new Promise(r => setTimeout(r, 500));
     }

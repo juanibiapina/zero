@@ -17,7 +17,7 @@ import { withRetry } from "./lib/retry";
 
 export class AgentContainer extends Container<Env> {
   defaultPort = 8080;
-  sleepAfter = "1m";
+  sleepAfter = "5m";
 
   /**
    * Store the SessionDO ID so onStop() can notify it when the container dies.
@@ -29,6 +29,22 @@ export class AgentContainer extends Container<Env> {
 
   override onStart(): void {
     console.log("AgentContainer.onStart()");
+  }
+
+  /**
+   * Renew the activity timeout after each proxied request completes.
+   *
+   * The Container SDK only calls renewActivityTimeout() *before* proxying,
+   * so long-running requests (e.g. POST /resume with a slow git clone) can
+   * cause the activity timer to expire before the response arrives. This
+   * override ensures the timer is also renewed *after*, preventing
+   * onActivityExpired from killing the container immediately after a
+   * successful but slow operation.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    const response = await super.fetch(request);
+    this.renewActivityTimeout();
+    return response;
   }
 
   /**
@@ -46,8 +62,8 @@ export class AgentContainer extends Container<Env> {
       );
       if (statusResp.ok) {
         const { status } = await statusResp.json<{ status: string }>();
-        if (status === "running") {
-          console.log("Agent still running, extending activity timeout");
+        if (status === "running" || status === "starting") {
+          console.log(`Agent still active (${status}), extending activity timeout`);
           this.renewActivityTimeout();
           return;
         }
