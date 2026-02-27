@@ -10,6 +10,7 @@ import {
   Plus,
   Terminal,
   MessageSquare,
+  Trash2,
 } from "lucide-react";
 import { formatForDisplay } from "@tanstack/react-hotkeys";
 import { APP_ACTIONS, type AppAction } from "@zero/core";
@@ -28,6 +29,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   listSessions: MessageSquare,
   newSession: Plus,
   commandPalette: Terminal,
+  deleteCurrentSession: Trash2,
 };
 
 // ── Types ────────────────────────────────────────────────────────────────

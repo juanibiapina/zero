@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useParams } from "react-router";
+import { useParams, useNavigate } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import { ChevronRight, Loader2, Send, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,9 @@ import type { AgentEvent, SessionServerMessage, PromptTemplate } from "@zero/cor
 import type { Turn, SessionStatus } from "@/lib/session-types";
 import { SlashAutocomplete } from "@/components/SlashAutocomplete";
 import { resolveSlashCommand, getSlashFilteredTemplates } from "@/lib/template-utils";
+import { useAction } from "@/lib/use-action";
+import { useSessionStore } from "@/lib/session-store";
+import SessionDeleteDialog from "@/components/SessionDeleteDialog";
 
 // ─── Keyed wrapper ───────────────────────────────────────────────────────────
 // Forces full remount when navigating between sessions so stale state
@@ -26,6 +29,7 @@ export default function SessionPage() {
 function SessionPageInner() {
   const { owner, repo, id } = useParams();
   const { getToken } = useAuth();
+  const navigate = useNavigate();
   const [turns, setTurns] = useState<Turn[]>([]);
 
   const [status, setStatus] = useState<SessionStatus>("connecting");
@@ -48,6 +52,11 @@ function SessionPageInner() {
   /** Buffer turns during replay to avoid per-event renders / scroll flicker */
   const replayBufferRef = useRef<Turn[]>([]);
   const statusRef = useRef<SessionStatus>("connecting");
+
+  // Delete session state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const removeSession = useSessionStore((s) => s.removeSession);
 
   const setStatusBoth = useCallback((s: SessionStatus) => {
     statusRef.current = s;
@@ -362,6 +371,36 @@ function SessionPageInner() {
     }
   };
 
+  // ── Delete session ───────────────────────────────────────────────────────
+
+  const handleDelete = async () => {
+    if (!id) return;
+    setIsDeleting(true);
+    try {
+      const token = await getToken();
+      const resp = await fetch(`/api/sessions/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        // Remove from local store
+        removeSession(id);
+        // Close dialog and navigate to dashboard
+        setDeleteDialogOpen(false);
+        void navigate("/");
+      }
+    } catch {
+      // Ignore errors - dialog stays open so user can try again or cancel
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Wire up the delete session action (only when dialog is not open)
+  useAction("deleteCurrentSession", () => setDeleteDialogOpen(true), {
+    enabled: !deleteDialogOpen,
+  });
+
   // Show input bar for all active states (hidden only on terminal error)
   const showInputBar = status !== "error";
   const isRunning = status === "running";
@@ -512,6 +551,15 @@ function SessionPageInner() {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <SessionDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDelete}
+        sessionTitle={owner && repo ? `${owner}/${repo} session` : null}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }
