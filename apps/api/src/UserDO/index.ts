@@ -25,6 +25,7 @@ import {
   projectsTable,
   pkceVerifiersTable,
   userSecretsTable,
+  userSettingsTable,
   sessionsTable,
 } from "./db/schema";
 import type { Env } from "../types";
@@ -372,6 +373,50 @@ export class UserDO extends DurableObject<Env> {
       .delete(userSecretsTable)
       .where(eq(userSecretsTable.name, name))
       .run();
+  }
+
+  // ============================================================================
+  // User Settings
+  // ============================================================================
+
+  async getUserSetting(key: string) {
+    return this.db
+      .select()
+      .from(userSettingsTable)
+      .where(eq(userSettingsTable.key, key))
+      .get();
+  }
+
+  async setUserSetting(key: string, value: string) {
+    const now = new Date().toISOString();
+    const existing = this.db
+      .select()
+      .from(userSettingsTable)
+      .where(eq(userSettingsTable.key, key))
+      .get();
+
+    if (existing) {
+      this.db
+        .update(userSettingsTable)
+        .set({ value, updatedAt: now })
+        .where(eq(userSettingsTable.key, key))
+        .run();
+    } else {
+      this.db.insert(userSettingsTable).values({
+        key,
+        value,
+        updatedAt: now,
+      }).run();
+    }
+  }
+
+  async getAllUserSettings(): Promise<Record<string, string>> {
+    const rows = this.db.select().from(userSettingsTable).all();
+    const result: Record<string, string> = {};
+    for (const row of rows) {
+      result[row.key] = row.value;
+    }
+    return result;
   }
 
   // ============================================================================

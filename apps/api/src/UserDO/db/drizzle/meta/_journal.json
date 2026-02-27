@@ -43,6 +43,13 @@
       "when": 1772131990429,
       "tag": "0005_fluffy_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1772180682047,
+      "tag": "0006_elite_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

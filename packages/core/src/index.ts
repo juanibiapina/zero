@@ -275,4 +275,16 @@ export interface SecretEntry {
   // value intentionally omitted — never returned from API
 }
 
+// ============================================================================
+// User Settings Types
+// ============================================================================
+
+export interface UserSettings {
+  hotkeyPrefix: string;
+}
+
+export const DEFAULT_USER_SETTINGS: UserSettings = {
+  hotkeyPrefix: "Control+Space",
+};
+
 

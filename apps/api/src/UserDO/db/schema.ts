@@ -81,6 +81,16 @@ export const userSecretsTable = sqliteTable("user_secrets", {
 });
 
 /**
+ * User-level settings — key/value store for UI preferences (hotkey prefix, etc.).
+ * Extensible: new settings are added as new keys without schema migrations.
+ */
+export const userSettingsTable = sqliteTable("user_settings", {
+  key: text().primaryKey(),
+  value: text().notNull(),
+  updatedAt: text().notNull(),
+});
+
+/**
  * Top-level session index — all sessions for this user across all projects.
  * Status is kept in sync by SessionDO on every status transition.
  */

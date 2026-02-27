@@ -21,6 +21,7 @@ import { createProviderRoutes } from "./routes/providers";
 import { createProjectRoutes } from "./routes/projects";
 import { createSessionRoutes } from "./routes/sessions";
 import { createSecretsRoutes } from "./routes/secrets";
+import { createSettingsRoutes } from "./routes/settings";
 import { createGitHubRoutes } from "./routes/github";
 import { createWebhookRoutes } from "./routes/webhooks";
 import { createRealtimeRoutes } from "./routes/realtime";
@@ -112,6 +113,7 @@ export const createApp = () => {
   app.route("/", createProjectRoutes());
   app.route("/", createSessionRoutes());
   app.route("/", createSecretsRoutes());
+  app.route("/", createSettingsRoutes());
   app.route("/", createRealtimeRoutes());
 
   return app;
