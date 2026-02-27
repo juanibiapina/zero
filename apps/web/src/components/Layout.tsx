@@ -8,6 +8,7 @@ import SessionPickerDialog from "./SessionPickerDialog";
 import CommandPaletteDialog from "./CommandPaletteDialog";
 import { useUserWebSocket } from "@/lib/use-user-websocket";
 import { useSettingsStore } from "@/lib/settings-store";
+import { useSessionStore } from "@/lib/session-store";
 import { useAction } from "@/lib/use-action";
 
 export default function Layout() {
@@ -19,11 +20,13 @@ export default function Layout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  const fetchSessions = useSessionStore((s) => s.fetchSessions);
 
-  // Fetch user settings on mount
+  // Fetch user settings and sessions on mount
   useEffect(() => {
     void fetchSettings(getToken);
-  }, [fetchSettings, getToken]);
+    void fetchSessions(getToken);
+  }, [fetchSettings, fetchSessions, getToken]);
 
   const navigate = useNavigate();
 

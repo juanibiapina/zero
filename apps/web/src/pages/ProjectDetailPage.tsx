@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import {
@@ -10,15 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-
-interface SessionEntry {
-  id: string;
-  title: string;
-  status: string;
-  provider: string;
-  model: string;
-  createdAt: string;
-}
+import { useSessionStore } from "@/lib/session-store";
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -35,35 +27,17 @@ export default function ProjectDetailPage() {
   const { owner, repo } = useParams();
   const { getToken } = useAuth();
   const navigate = useNavigate();
-  const [sessions, setSessions] = useState<SessionEntry[]>([]);
-  const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const fetchSessions = useCallback(async () => {
-    try {
-      const token = await getToken();
-      const resp = await fetch(
-        `/api/sessions?owner=${encodeURIComponent(owner!)}&repo=${encodeURIComponent(repo!)}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      if (resp.ok) {
-        const data = (await resp.json()) as { sessions: SessionEntry[] };
-        setSessions(data.sessions);
-      }
-    } catch {
-      // Ignore fetch errors
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken, owner, repo]);
-
-  useEffect(() => {
-    void fetchSessions();
-  }, [fetchSessions]);
+  // Get all sessions from store and filter for current project
+  const allSessions = useSessionStore((s) => s.sessions);
+  const loadingSessions = useSessionStore((s) => s.loading);
+  const removeSession = useSessionStore((s) => s.removeSession);
+  const sessions = allSessions.filter(
+    (s) => s.owner === owner && s.repo === repo
+  );
 
   const handleDelete = async (sessionId: string) => {
     setDeleting((prev) => new Set(prev).add(sessionId));
@@ -74,7 +48,7 @@ export default function ProjectDetailPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (resp.ok) {
-        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        removeSession(sessionId);
       }
     } catch {
       // Ignore errors
@@ -155,7 +129,7 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Sessions */}
-      {loading ? (
+      {loadingSessions ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
           Loading sessions...

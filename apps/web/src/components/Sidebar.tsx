@@ -1,6 +1,5 @@
-import { useEffect } from "react";
-import { NavLink, useLocation, useMatch } from "react-router";
-import { useUser, useAuth, UserButton } from "@clerk/clerk-react";
+import { NavLink } from "react-router";
+import { useUser, UserButton } from "@clerk/clerk-react";
 import {
   LayoutDashboard,
   FolderGit2,
@@ -45,24 +44,8 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const { user } = useUser();
-  const { getToken } = useAuth();
-  const location = useLocation();
   const sessions = useSessionStore((s) => s.sessions);
   const loadingSessions = useSessionStore((s) => s.loading);
-  const fetchSessions = useSessionStore((s) => s.fetchSessions);
-
-  // Detect if we're inside a project route (/p/:owner/:repo/*)
-  const projectMatch = useMatch("/p/:owner/:repo/*");
-  const currentOwner = projectMatch?.params.owner;
-  const currentRepo = projectMatch?.params.repo;
-
-  // Re-fetch sessions on route changes — scoped to current project when inside one
-  useEffect(() => {
-    const filter = currentOwner && currentRepo
-      ? { owner: currentOwner, repo: currentRepo }
-      : undefined;
-    void fetchSessions(getToken, filter);
-  }, [fetchSessions, getToken, currentOwner, currentRepo, location.pathname]);
 
   const sidebarContent = (
     <>
@@ -177,11 +160,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 <span className="block truncate text-sm font-medium leading-snug">
                   {session.title}
                 </span>
-                {!currentOwner && (
-                  <span className="block truncate text-xs text-sidebar-foreground/50">
-                    {session.owner}/{session.repo}
-                  </span>
-                )}
+                <span className="block truncate text-xs text-sidebar-foreground/50">
+                  {session.owner}/{session.repo}
+                </span>
               </span>
             </NavLink>
           ))}
