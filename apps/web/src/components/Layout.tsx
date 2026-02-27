@@ -1,13 +1,21 @@
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
+import { useHotkeySequence } from "@tanstack/react-hotkeys";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
+import ProjectPickerDialog from "./ProjectPickerDialog";
 import { useUserWebSocket } from "@/lib/use-user-websocket";
 
 export default function Layout() {
   const { isSignedIn, isLoaded } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Ctrl+Space → N: open project picker to create a new session (tmux-style prefix)
+  useHotkeySequence(["Control+Space", "N"], () => setPickerOpen(true), {
+    enabled: !pickerOpen,
+  });
 
   // User-level WebSocket for real-time push events
   useUserWebSocket();
@@ -50,6 +58,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      <ProjectPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} />
     </div>
   );
 }
