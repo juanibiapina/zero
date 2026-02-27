@@ -40,6 +40,8 @@ function SessionPageInner() {
   /** Track user messages we've sent optimistically, to dedup on replay */
   const sentUserMessagesRef = useRef<Set<string>>(new Set());
   const caughtUpRef = useRef(false);
+  /** Buffer turns during replay to avoid per-event renders / scroll flicker */
+  const replayBufferRef = useRef<Turn[]>([]);
   const statusRef = useRef<SessionStatus>("connecting");
 
   const setStatusBoth = useCallback((s: SessionStatus) => {
@@ -84,6 +86,7 @@ function SessionPageInner() {
       ws.onopen = () => {
         setStatusBoth("connecting");
         caughtUpRef.current = false;
+        replayBufferRef.current = [];
 
         // Start ping keepalive every 30s
         pingIntervalRef.current = setInterval(() => {
@@ -100,9 +103,14 @@ function SessionPageInner() {
           switch (msg.type) {
             case "caught_up":
               caughtUpRef.current = true;
+              // Flush buffered replay turns in a single render to avoid
+              // per-event re-renders and scroll flicker.
+              if (replayBufferRef.current.length > 0) {
+                setTurns(replayBufferRef.current);
+                replayBufferRef.current = [];
+              }
               // Scroll to bottom after replay completes. Use rAF to ensure
-              // React has committed any pending DOM updates from batched
-              // setTurns calls that arrived before caught_up.
+              // React has committed the flushed turns to the DOM.
               if (shouldAutoScrollRef.current) {
                 requestAnimationFrame(() => {
                   if (scrollRef.current) {
@@ -153,14 +161,23 @@ function SessionPageInner() {
                   sentUserMessagesRef.current.delete(userText);
                   return; // Already shown
                 }
-                // From another tab or replay — add it
-                setTurns((prev) => [...prev, { role: "user", text: userText }]);
+                if (!caughtUpRef.current) {
+                  // Buffer during replay — avoid per-event renders
+                  replayBufferRef.current = [...replayBufferRef.current, { role: "user", text: userText }];
+                } else {
+                  setTurns((prev) => [...prev, { role: "user", text: userText }]);
+                }
                 return;
               }
 
               // Agent event — typed via AgentEvent
               const event = msg.data as AgentEvent;
-              setTurns((prev) => processAgentEvent(event, prev));
+              if (!caughtUpRef.current) {
+                // Buffer during replay — avoid per-event renders
+                replayBufferRef.current = processAgentEvent(event, replayBufferRef.current);
+              } else {
+                setTurns((prev) => processAgentEvent(event, prev));
+              }
               return;
             }
           }
