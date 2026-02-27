@@ -228,7 +228,7 @@ export default function SettingsPage() {
         </div>
         <p className="text-sm text-muted-foreground">
           Shortcuts use a tmux-style prefix: press the prefix key, then the
-          action key within 1 second.
+          action key.
         </p>
 
         <div className="rounded-lg border p-4 space-y-6">
