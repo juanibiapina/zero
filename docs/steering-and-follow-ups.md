@@ -1,5 +1,7 @@
 # Steering & Follow-up Messages
 
+> **Status: Not yet implemented.** This document describes the target design. The actual codebase does not yet support steering or follow-up queuing — `steer()` throws in the agent-server, and `SessionClientMessage` has no `follow_up` variant.
+
 ## Overview
 
 When the agent is running, users can send two kinds of messages:

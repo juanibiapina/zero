@@ -19,6 +19,8 @@ Zero is an agent orchestrator with the following packages:
 - **Frontend:** `apps/web` (`@zero/web`)
 - **Shared types:** `packages/core` (`@zero/core`)
 - **Agent server:** `packages/agent-server` (`@zero/agent-server`)
+- **Provider registry:** `packages/providers` (`@zero/providers`)
+- **Migration utility:** `packages/drizzle-migrator`
 
 Expected dev ports:
 - **5176**: Web frontend (Vite)

@@ -7,7 +7,7 @@
 | **1** | Detection + seq reset | ✅ Shipped |
 | **2** | Agent state resume (conversation history, credentials) | ✅ Shipped |
 | **2b** | Decoupled architecture (hibernation API + HTTP commands + ephemeral event WS) | ✅ Shipped |
-| **3** | R2 workspace snapshots (preserve filesystem across sleep) | 🔜 Next |
+| **3** | R2 workspace snapshots (preserve filesystem across sleep) | ✅ Shipped |
 
 ## Problem
 
