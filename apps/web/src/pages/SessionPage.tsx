@@ -7,8 +7,10 @@ import { Link } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TurnView } from "@/components/TurnView";
 import { processAgentEvent } from "@/lib/process-agent-event";
-import type { AgentEvent, SessionServerMessage } from "@zero/core";
+import type { AgentEvent, SessionServerMessage, PromptTemplate } from "@zero/core";
 import type { Turn, SessionStatus } from "@/lib/session-types";
+import { SlashAutocomplete } from "@/components/SlashAutocomplete";
+import { resolveSlashCommand, getSlashFilteredTemplates } from "@/lib/template-utils";
 
 // ─── Keyed wrapper ───────────────────────────────────────────────────────────
 // Forces full remount when navigating between sessions so stale state
@@ -29,6 +31,8 @@ function SessionPageInner() {
   const [status, setStatus] = useState<SessionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [acIndex, setAcIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const wsRef = useRef<WebSocket | null>(null);
@@ -48,6 +52,22 @@ function SessionPageInner() {
     statusRef.current = s;
     setStatus(s);
   }, []);
+
+  // Fetch prompt templates (once on mount)
+  useEffect(() => {
+    void (async () => {
+      try {
+        const token = await getToken();
+        const resp = await fetch("/api/templates", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await resp.json()) as { templates?: PromptTemplate[] };
+        setTemplates(data.templates ?? []);
+      } catch {
+        // Non-critical — slash commands just won't work
+      }
+    })();
+  }, [getToken]);
 
   // Auto-scroll to bottom (disabled when user scrolls up)
   useEffect(() => {
@@ -121,9 +141,9 @@ function SessionPageInner() {
               // Send pending prompt if we have one — don't gate on status.
               // SessionDO handles waiting for the container to be ready.
               if (pendingPromptRef.current) {
-                const text = pendingPromptRef.current;
+                const pending = pendingPromptRef.current;
                 pendingPromptRef.current = null;
-                ws.send(JSON.stringify({ type: "message", text }));
+                ws.send(pending);
               }
               return;
 
@@ -136,9 +156,9 @@ function SessionPageInner() {
               // If transitioning to idle, send pending prompt
               // (fallback for messages queued before caught_up)
               if (msg.status === "idle" && pendingPromptRef.current && caughtUpRef.current) {
-                const text = pendingPromptRef.current;
+                const pending = pendingPromptRef.current;
                 pendingPromptRef.current = null;
-                ws.send(JSON.stringify({ type: "message", text }));
+                ws.send(pending);
               }
               return;
             }
@@ -155,17 +175,31 @@ function SessionPageInner() {
               lastSeqRef.current = msg.seq;
 
               if (msg.source === "user") {
-                // User message — check if we already added it optimistically
-                const userText = (msg.data as { text?: string })?.text ?? "";
-                if (userText && sentUserMessagesRef.current.has(userText)) {
-                  sentUserMessagesRef.current.delete(userText);
+                // User message — extract text and optional template metadata
+                const eventData = msg.data as {
+                  text?: string;
+                  template?: { slug: string; name: string };
+                };
+                const userText = eventData.text ?? "";
+                const userTemplate = eventData.template;
+
+                // Check if we already added it optimistically
+                const dedupKey = userTemplate
+                  ? `tpl:${userTemplate.slug}:${userText}`
+                  : userText;
+                if (dedupKey && sentUserMessagesRef.current.has(dedupKey)) {
+                  sentUserMessagesRef.current.delete(dedupKey);
                   return; // Already shown
                 }
+
+                const userTurn = userTemplate
+                  ? { role: "user" as const, text: userText, template: userTemplate }
+                  : { role: "user" as const, text: userText };
+
                 if (!caughtUpRef.current) {
-                  // Buffer during replay — avoid per-event renders
-                  replayBufferRef.current = [...replayBufferRef.current, { role: "user", text: userText }];
+                  replayBufferRef.current = [...replayBufferRef.current, userTurn];
                 } else {
-                  setTurns((prev) => [...prev, { role: "user", text: userText }]);
+                  setTurns((prev) => [...prev, userTurn]);
                 }
                 return;
               }
@@ -242,22 +276,49 @@ function SessionPageInner() {
   // ── Handle user input ───────────────────────────────────────────────────
 
   const handleSend = async () => {
-    const text = input.trim();
-    if (!text) return;
+    const rawInput = input.trim();
+    if (!rawInput) return;
 
     setInput("");
 
-    // Show the user message immediately (optimistic)
-    setTurns((prev) => [...prev, { role: "user", text }]);
-    sentUserMessagesRef.current.add(text);
+    // Resolve slash command if present
+    const resolved = resolveSlashCommand(rawInput, templates);
 
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN && caughtUpRef.current) {
-      // Send immediately — SessionDO handles waiting for container readiness
-      ws.send(JSON.stringify({ type: "message", text }));
+    if (resolved) {
+      // Template matched — show original text with template badge, send expanded
+      setTurns((prev) => [
+        ...prev,
+        { role: "user", text: resolved.originalText, template: resolved.template },
+      ]);
+      // Dedup key: template slug + original text (matches what SessionDO stores)
+      sentUserMessagesRef.current.add(`tpl:${resolved.template.slug}:${resolved.originalText}`);
+
+      const wsMessage = JSON.stringify({
+        type: "message",
+        text: resolved.expandedText,
+        template: resolved.template,
+        originalText: resolved.originalText,
+      });
+
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN && caughtUpRef.current) {
+        ws.send(wsMessage);
+      } else {
+        pendingPromptRef.current = wsMessage;
+      }
     } else {
-      // WS not connected yet — queue for when caught_up
-      pendingPromptRef.current = text;
+      // Plain message — no template
+      setTurns((prev) => [...prev, { role: "user", text: rawInput }]);
+      sentUserMessagesRef.current.add(rawInput);
+
+      const wsMessage = JSON.stringify({ type: "message", text: rawInput });
+
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN && caughtUpRef.current) {
+        ws.send(wsMessage);
+      } else {
+        pendingPromptRef.current = wsMessage;
+      }
     }
   };
 
@@ -353,14 +414,33 @@ function SessionPageInner() {
       {/* Input bar — always visible except on terminal states */}
       {showInputBar && (
         <div className="shrink-0 border-t pt-3 mt-3">
-          <div className="flex gap-2">
+          <div className="relative flex gap-2">
+            <SlashAutocomplete
+              input={input}
+              templates={templates}
+              anchorRef={inputRef}
+              selectedIndex={acIndex}
+              onSelectedIndexChange={setAcIndex}
+              onSelect={(t) => {
+                setInput(`/${t.slug} `);
+                setAcIndex(0);
+                inputRef.current?.focus();
+              }}
+            />
             <textarea
               ref={inputRef}
               className="flex-1 rounded-md border bg-background p-3 text-sm min-h-[44px] max-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Send a message..."
+              placeholder="Send a message… type / for templates"
               rows={1}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                const newVal = e.target.value;
+                setInput(newVal);
+                // Reset autocomplete selection when the filtered list changes
+                const prev = getSlashFilteredTemplates(input, templates);
+                const next = getSlashFilteredTemplates(newVal, templates);
+                if (prev.length !== next.length) setAcIndex(0);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

@@ -91,6 +91,19 @@ export const userSettingsTable = sqliteTable("user_settings", {
 });
 
 /**
+ * Prompt templates — user-managed templates invoked via /slug in chat.
+ * Content supports $ARGUMENTS placeholder for argument substitution.
+ */
+export const promptTemplatesTable = sqliteTable("prompt_templates", {
+  id: int().primaryKey({ autoIncrement: true }),
+  name: text().notNull(),
+  slug: text().notNull().unique(),
+  content: text().notNull(),
+  createdAt: text().notNull(),
+  updatedAt: text().notNull(),
+});
+
+/**
  * Top-level session index — all sessions for this user across all projects.
  * Status is kept in sync by SessionDO on every status transition.
  */

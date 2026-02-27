@@ -7,6 +7,7 @@ import {
   Settings,
   Plug,
   KeyRound,
+  FileText,
   X,
   Loader2,
   MessageSquare,
@@ -19,6 +20,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/projects", icon: FolderGit2, label: "Projects" },
   { to: "/secrets", icon: KeyRound, label: "Secrets" },
+  { to: "/templates", icon: FileText, label: "Templates" },
 ];
 
 const settingsItems = [

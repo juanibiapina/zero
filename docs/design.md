@@ -96,7 +96,7 @@ UserDO stores references to all other entities for the user (projects, sessions,
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **UserDO** | User registry: provider credentials, GitHub installation, projects, session index (with live status), secrets, settings, user-level WebSocket push (Hibernation API) | 7 SQLite tables |
+| **UserDO** | User registry: provider credentials, GitHub installation, projects, session index (with live status), secrets, settings, prompt templates, user-level WebSocket push (Hibernation API) | 8 SQLite tables |
 | **SessionDO** | Per-session: metadata, append-only event log, WebSocket hub for browser (Hibernation API), HTTP commands + ephemeral event WS to container, container resume orchestration | 2 SQLite tables |
 | **AgentContainer** | CF Container running the agent-server. Manages container lifecycle, workspace snapshots to R2 on sleep (`onActivityExpired`). One container per session. | Container class internal storage |
 
@@ -111,6 +111,7 @@ UserDO stores references to all other entities for the user (projects, sessions,
 | `pkce_verifiers` | Temporary PKCE state for OAuth flows |
 | `user_secrets` | Named secrets injected as env vars into agent sessions |
 | `user_settings` | User preferences (hotkey prefix, keybindings) |
+| `prompt_templates` | Reusable prompt templates invoked via `/slug` in chat |
 
 ### SessionDO Tables
 
@@ -223,6 +224,12 @@ GET    /api/secrets                     — List secret names (values omitted)
 POST   /api/secrets                     — Create/update secret
 DELETE /api/secrets/{name}              — Delete secret
 
+# Templates
+GET    /api/templates                   — List prompt templates
+POST   /api/templates                   — Create template
+PATCH  /api/templates/{id}              — Update template
+DELETE /api/templates/{id}              — Delete template
+
 # Settings
 GET    /api/settings                    — Get user settings (merged with defaults)
 PATCH  /api/settings                    — Update settings
@@ -243,6 +250,7 @@ The backend follows a layered architecture: Entry Point → App → Routes → S
 | **SessionService** | Create/manage sessions, orchestrate container lifecycle, resolve credentials |
 | **UserService** | Project, provider, and GitHub installation operations via UserDO |
 | **SecretsService** | User secret CRUD via UserDO |
+| **TemplateService** | Prompt template CRUD via UserDO |
 | **SettingsService** | User settings CRUD via UserDO |
 | **ContainerService** | Typed wrapper for container HTTP API (resume, message, stop, WS, snapshot) |
 | **GitHubService** | GitHub App JWT, installation tokens, repo listing, webhook signature verification |
@@ -294,6 +302,7 @@ Used by the frontend's zustand session store for live sidebar updates and status
 | `/settings` | SettingsPage | Hotkey prefix and keybinding customization |
 | `/settings/providers` | ProvidersPage | Connect/disconnect AI providers |
 | `/secrets` | SecretsPage | Manage user-level secrets |
+| `/templates` | TemplatesPage | Manage prompt templates (CRUD, invoked via `/slug`) |
 | `/github/setup` | GitHubSetupPage | GitHub App installation callback |
 
 **Key components:**
@@ -306,6 +315,7 @@ Used by the frontend's zustand session store for live sidebar updates and status
 | ProjectPickerDialog | `Ctrl+Space, N` — pick a project to create a new session |
 | StatusBadge | Colored badge for any session status |
 | TurnView | Renders assistant turns: thinking blocks, text, tool calls, tool results, errors |
+| SlashAutocomplete | Inline autocomplete for `/slug` template invocation in chat input |
 
 **Hotkeys:** Configurable prefix key (default: `Ctrl+Space`) with rebindable action keys. Actions defined in `@zero/core` (`APP_ACTIONS`), bindings persisted via settings API.
 

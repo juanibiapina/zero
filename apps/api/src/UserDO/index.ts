@@ -26,6 +26,7 @@ import {
   pkceVerifiersTable,
   userSecretsTable,
   userSettingsTable,
+  promptTemplatesTable,
   sessionsTable,
 } from "./db/schema";
 import type { Env } from "../types";
@@ -417,6 +418,54 @@ export class UserDO extends DurableObject<Env> {
       result[row.key] = row.value;
     }
     return result;
+  }
+
+  // ============================================================================
+  // Prompt Templates
+  // ============================================================================
+
+  async listPromptTemplates() {
+    return this.db
+      .select()
+      .from(promptTemplatesTable)
+      .orderBy(promptTemplatesTable.name)
+      .all();
+  }
+
+  async getPromptTemplate(id: number) {
+    return this.db
+      .select()
+      .from(promptTemplatesTable)
+      .where(eq(promptTemplatesTable.id, id))
+      .get();
+  }
+
+  async createPromptTemplate(name: string, slug: string, content: string) {
+    const now = new Date().toISOString();
+    const result = this.db.insert(promptTemplatesTable).values({
+      name,
+      slug,
+      content,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+    return result;
+  }
+
+  async updatePromptTemplate(id: number, fields: { name?: string; slug?: string; content?: string }) {
+    const now = new Date().toISOString();
+    this.db
+      .update(promptTemplatesTable)
+      .set({ ...fields, updatedAt: now })
+      .where(eq(promptTemplatesTable.id, id))
+      .run();
+  }
+
+  async deletePromptTemplate(id: number) {
+    this.db
+      .delete(promptTemplatesTable)
+      .where(eq(promptTemplatesTable.id, id))
+      .run();
   }
 
   // ============================================================================

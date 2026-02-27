@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Brain, MessageSquare, Wrench, Terminal, AlertTriangle, KeyRound } from "lucide-react";
+import { Brain, MessageSquare, FileText, Wrench, Terminal, AlertTriangle, KeyRound } from "lucide-react";
 import { Link } from "react-router";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -154,7 +154,15 @@ export function TurnView({ turn }: { turn: Turn }) {
     return (
       <div className="flex gap-2 py-2">
         <MessageSquare className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-        <div className="text-sm font-medium">{turn.text}</div>
+        <div className="text-sm">
+          {turn.template && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 dark:text-violet-400 mb-0.5">
+              <FileText className="h-3 w-3" />
+              {turn.template.name}
+            </span>
+          )}
+          <div className="font-medium">{turn.text || (turn.template ? <span className="text-muted-foreground italic">no arguments</span> : "")}</div>
+        </div>
       </div>
     );
   }

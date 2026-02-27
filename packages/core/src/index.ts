@@ -222,7 +222,7 @@ export type AgentEventType = AgentEvent["type"];
 
 /** Client → SessionDO */
 export type SessionClientMessage =
-  | { type: "message"; text: string }
+  | { type: "message"; text: string; template?: { slug: string; name: string }; originalText?: string }
   | { type: "stop" }
   | { type: "steer"; text: string }
   | { type: "ping" };
@@ -276,6 +276,19 @@ export interface SecretEntry {
 }
 
 // ============================================================================
+// Prompt Template Types
+// ============================================================================
+
+export interface PromptTemplate {
+  id: number;
+  name: string;
+  slug: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================================
 // App Actions — unified registry for hotkeys & command palette
 // ============================================================================
 
@@ -295,6 +308,7 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "goToDashboard", label: "Dashboard", description: "Go to dashboard", category: "Navigation" },
   { id: "goToProjects", label: "Projects", description: "Go to projects", category: "Navigation" },
   { id: "goToSecrets", label: "Secrets", description: "Go to secrets", category: "Navigation" },
+  { id: "goToTemplates", label: "Templates", description: "Go to prompt templates", category: "Navigation" },
   { id: "goToSettings", label: "Settings", description: "Go to settings", category: "Navigation" },
   { id: "goToProviders", label: "Providers", description: "Go to providers", category: "Navigation" },
   // Actions

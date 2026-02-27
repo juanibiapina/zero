@@ -66,9 +66,13 @@ Currently model and provider are fixed at session creation (inherited from proje
 
 ---
 
-### Prompt Templates & Slash Commands
+### Prompt Templates — Future Enhancements
 
-User-managed prompt templates stored in UserDO. Templates are always injected into sessions as system prompt context (the agent-server currently hardcodes a minimal system prompt). Users can also invoke specific templates via `/slash` commands typed in the chat input — e.g. `/review` to inject a code review prompt. Needs: CRUD API and UI for managing templates, a flag per template for "always active" vs "slash-only", template resolution in SessionDO before forwarding to the container, and input parsing in the frontend to detect `/` prefixes and show autocomplete.
+Slash-command prompt templates are shipped (v1: CRUD, `/slug` invocation with `$ARGUMENTS` substitution, autocomplete, template badge on user messages). Possible follow-ups:
+- **"Always active" templates** injected into the system prompt for every message (no slash required)
+- **Positional arguments** (`$1`, `$2`, `${@:N}`, `${@:N:L}`) matching pi's full syntax
+- **Per-project templates** (project-scoped in addition to user-level)
+- **Auto-read AGENTS.md** from repo and inject as system prompt context
 
 ---
 

@@ -40,6 +40,7 @@ export interface AssistantTurn {
 export interface UserTurn {
   role: "user";
   text: string;
+  template?: { slug: string; name: string };
 }
 
 export type Turn = AssistantTurn | UserTurn;

@@ -13,6 +13,7 @@ import SessionPage from "./pages/SessionPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import SecretsPage from "./pages/SecretsPage";
+import TemplatesPage from "./pages/TemplatesPage";
 import GitHubSetupPage from "./pages/GitHubSetupPage";
 
 const router = createBrowserRouter([
@@ -36,6 +37,7 @@ const router = createBrowserRouter([
           { path: "settings", element: <SettingsPage /> },
           { path: "settings/providers", element: <ProvidersPage /> },
           { path: "secrets", element: <SecretsPage /> },
+          { path: "templates", element: <TemplatesPage /> },
           { path: "github/setup", element: <GitHubSetupPage /> },
         ],
       },

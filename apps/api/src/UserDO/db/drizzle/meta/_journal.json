@@ -50,6 +50,13 @@
       "when": 1772180682047,
       "tag": "0006_elite_dreaming_celestial",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1772197878118,
+      "tag": "0007_colorful_tarantula",
+      "breakpoints": true
     }
   ]
 }

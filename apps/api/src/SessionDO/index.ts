@@ -240,7 +240,11 @@ export class SessionDO extends DurableObject<Env> {
     try { data = JSON.parse(message) as SessionClientMessage; } catch { return; }
 
     switch (data.type) {
-      case "message": return this.handleUserMessage(data.text);
+      case "message": return this.handleUserMessage(
+        data.text,
+        data.template,
+        data.originalText,
+      );
       case "stop":    return this.handleStop();
       case "steer":   return this.handleSteer(data.text);
     }
@@ -253,12 +257,21 @@ export class SessionDO extends DurableObject<Env> {
   // Command Handlers
   // ═══════════════════════════════════════════════════════════════════════
 
-  private async handleUserMessage(text: string): Promise<void> {
-    // 1. Persist user message
+  private async handleUserMessage(
+    text: string,
+    template?: { slug: string; name: string },
+    originalText?: string,
+  ): Promise<void> {
+    // 1. Persist user message — store original text + template metadata for UI display.
+    //    The full expanded text goes only to the container.
+    const eventData = template
+      ? { type: "user_message", text: originalText ?? "", template: { slug: template.slug, name: template.name } }
+      : { type: "user_message", text };
+
     const persisted = this.appendEvents([{
       source: "user",
       eventType: "message",
-      data: { type: "user_message", text },
+      data: eventData,
     }]);
 
     // 2. Broadcast to all connected browsers
@@ -281,7 +294,7 @@ export class SessionDO extends DurableObject<Env> {
       return;
     }
 
-    // 4. Send message to container
+    // 4. Send message to container — always send the full expanded text
     try {
       await this.container.sendMessage(text);
     } catch (err) {
