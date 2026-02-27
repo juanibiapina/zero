@@ -157,13 +157,21 @@ function JsonHighlight({ text }: { text: string }) {
   );
 }
 
-function ToolCallBlockView({ block }: { block: ToolCallBlock }) {
+function ToolCallBlockView({ block, result }: { block: ToolCallBlock; result?: ToolResultBlock }) {
   const args = getToolArgs(block);
   const summary = args ? getToolSummary(block.name, args) : null;
   const [open, setOpen] = useState(false);
 
+  const hasError = result?.isError ?? false;
+  const preview = result ? result.content.slice(0, 200) : "";
+  const hasMore = result ? result.content.length > 200 : false;
+
   return (
-    <div className="my-1 rounded border bg-muted/20 p-2">
+    <div
+      className={`my-1 rounded border p-2 ${
+        hasError ? "border-destructive/30 bg-destructive/5" : "bg-muted/20"
+      }`}
+    >
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 text-xs font-medium text-foreground/80 hover:text-foreground w-full text-left"
@@ -175,13 +183,30 @@ function ToolCallBlockView({ block }: { block: ToolCallBlock }) {
         )}
         <Wrench className="h-3 w-3 shrink-0" />
         <span>{block.name || "tool call"}</span>
+        {hasError && <span className="text-destructive text-xs">(error)</span>}
         {summary && (
           <span className="text-muted-foreground font-normal truncate ml-1">
             {summary}
           </span>
         )}
       </button>
-      {open && block.text && <JsonHighlight text={block.text} />}
+      {open ? (
+        <div className="mt-1.5 space-y-1.5">
+          {block.text && <JsonHighlight text={block.text} />}
+          {result && (
+            <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-[400px] overflow-y-auto border-t pt-1.5">
+              {result.content}
+            </pre>
+          )}
+        </div>
+      ) : (
+        result && preview && (
+          <pre className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">
+            {preview}
+            {hasMore && "…"}
+          </pre>
+        )
+      )}
     </div>
   );
 }
@@ -295,10 +320,23 @@ export function TurnView({ turn }: { turn: Turn }) {
             return <ThinkingBlockView key={i} block={block} />;
           case "text":
             return <TextBlockView key={i} block={block} />;
-          case "toolcall":
-            return <ToolCallBlockView key={i} block={block} />;
-          case "toolresult":
+          case "toolcall": {
+            // Merge with adjacent toolresult if names match
+            const next = turn.blocks[i + 1];
+            const result =
+              next?.kind === "toolresult" && next.toolName === block.name
+                ? next
+                : undefined;
+            return <ToolCallBlockView key={i} block={block} result={result} />;
+          }
+          case "toolresult": {
+            // Skip if already merged with the preceding toolcall
+            const prev = i > 0 ? turn.blocks[i - 1] : undefined;
+            if (prev?.kind === "toolcall" && prev.name === block.toolName) {
+              return null;
+            }
             return <ToolResultBlockView key={i} block={block} />;
+          }
           case "error":
             return <ErrorBlockView key={i} block={block} />;
         }
