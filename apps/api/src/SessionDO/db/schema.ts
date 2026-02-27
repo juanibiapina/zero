@@ -26,12 +26,10 @@ export const sessionMetaTable = sqliteTable("session_meta", {
 /**
  * Persisted event log — all agent + user + system events.
  * `seq` is SessionDO's own monotonic counter (used for client dedup/resume).
- * `containerSeq` is the container's original SSE seq (used for SSE reconnection).
  */
 export const sessionEventsTable = sqliteTable("session_events", {
   id: int().primaryKey({ autoIncrement: true }),
   seq: int().notNull().unique(),
-  containerSeq: int(),
   source: text().notNull(),
   eventType: text().notNull(),
   data: text().notNull(),

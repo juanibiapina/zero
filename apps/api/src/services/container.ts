@@ -110,10 +110,10 @@ export class ContainerHandle {
   // ── Event Stream ─────────────────────────────────────────────────────
 
   /** Open a WebSocket to the container's event stream. */
-  async connectWebSocket(afterSeq: number): Promise<WebSocket> {
+  async connectWebSocket(): Promise<WebSocket> {
     const resp = await this.container.fetch(
       switchPort(
-        new Request(`http://container/ws?after=${afterSeq}`, {
+        new Request("http://container/ws", {
           headers: { Upgrade: "websocket" },
         }),
         8080

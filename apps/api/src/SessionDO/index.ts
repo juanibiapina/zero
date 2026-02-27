@@ -38,9 +38,6 @@ export class SessionDO extends DurableObject<Env> {
   /** SessionDO-assigned monotonic sequence counter */
   private seq = 0;
 
-  /** Last container SSE seq we've seen (for reconnection after hibernation) */
-  private lastContainerSeq = 0;
-
   /** Container handle — derived from DO ID, always available */
   private container: ContainerHandle;
 
@@ -66,13 +63,11 @@ export class SessionDO extends DurableObject<Env> {
       const maxRow = this.db
         .select({
           maxSeq: sql<number>`MAX(${sessionEventsTable.seq})`,
-          maxContainerSeq: sql<number>`MAX(${sessionEventsTable.containerSeq})`,
         })
         .from(sessionEventsTable)
         .get();
 
       if (maxRow?.maxSeq) this.seq = maxRow.maxSeq;
-      if (maxRow?.maxContainerSeq) this.lastContainerSeq = maxRow.maxContainerSeq;
     });
   }
 
@@ -188,7 +183,6 @@ export class SessionDO extends DurableObject<Env> {
     }
 
     this.closeEventStream();
-    this.lastContainerSeq = 0;
 
     // The container is gone — always transition to "stopped" so the UI
     // reflects that the next message will require a cold start.
@@ -461,7 +455,6 @@ export class SessionDO extends DurableObject<Env> {
     }
 
     if (needsResume) {
-      this.lastContainerSeq = 0;
       const session = await this.getSession();
       if (!session) throw new Error("No session");
 
@@ -590,7 +583,7 @@ export class SessionDO extends DurableObject<Env> {
     let ws: WebSocket | null = null;
     for (let i = 0; i < 20; i++) {
       try {
-        ws = await container.connectWebSocket(this.lastContainerSeq);
+        ws = await container.connectWebSocket();
         break;
       } catch { /* container starting or platform error */ }
       await new Promise(r => setTimeout(r, 2000));
@@ -620,23 +613,18 @@ export class SessionDO extends DurableObject<Env> {
   private handleContainerEvent(event: MessageEvent): void {
     if (typeof event.data !== "string") return;
 
-    let envelope: { seq: number; event: unknown; timestamp: string };
+    let envelope: { event: unknown; timestamp: string };
     try {
       const raw: unknown = JSON.parse(event.data);
       if (typeof raw === "object" && raw !== null && "type" in raw && (raw as Record<string, unknown>).type === "pong") return;
       envelope = raw as typeof envelope;
     } catch { return; }
 
-    // Skip already-seen events
-    if (envelope.seq <= this.lastContainerSeq) return;
-    this.lastContainerSeq = envelope.seq;
-
     const agentEvent = envelope.event as Record<string, unknown>;
     const eventType = (agentEvent?.type as string) ?? "unknown";
 
     // Persist to SQLite
     const persisted = this.appendEvents([{
-      containerSeq: envelope.seq,
       source: "agent",
       eventType,
       data: agentEvent,
@@ -787,7 +775,6 @@ export class SessionDO extends DurableObject<Env> {
 
   private appendEvents(
     events: Array<{
-      containerSeq?: number;
       source: string;
       eventType: string;
       data: unknown;
@@ -800,7 +787,6 @@ export class SessionDO extends DurableObject<Env> {
       this.seq++;
       this.db.insert(sessionEventsTable).values({
         seq: this.seq,
-        containerSeq: event.containerSeq ?? null,
         source: event.source,
         eventType: event.eventType,
         data: JSON.stringify(event.data),

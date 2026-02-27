@@ -40,8 +40,4 @@ export type SessionStatus =
   | "running"
   | "error";
 
-export interface EventEnvelope {
-  seq: number;
-  event: unknown;
-  timestamp: string;
-}
+

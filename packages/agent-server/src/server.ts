@@ -241,8 +241,7 @@ export function createAppServer(): Server {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
-      const afterSeq = parseInt(url.searchParams.get("after") ?? "0", 10);
-      eventBuffer.registerWebSocket(ws, afterSeq);
+      eventBuffer.registerWebSocket(ws);
       ws.on("message", (raw: Buffer) => {
         let data: { type: string };
         try {
