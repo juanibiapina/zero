@@ -35,6 +35,7 @@ function SessionPageInner() {
   const [acIndex, setAcIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const pendingAutoScrollRef = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastSeqRef = useRef<number>(0);
@@ -72,7 +73,12 @@ function SessionPageInner() {
   // Auto-scroll to bottom (disabled when user scrolls up)
   useEffect(() => {
     if (shouldAutoScrollRef.current && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // Check if window is focused/visible - if not, mark scroll as pending
+      if (document.hidden || !document.hasFocus()) {
+        pendingAutoScrollRef.current = true;
+      } else {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
     }
   }, [turns]);
 
@@ -86,6 +92,40 @@ function SessionPageInner() {
     shouldAutoScrollRef.current =
       el.scrollHeight - el.scrollTop - el.clientHeight < 50;
   }, []);
+
+  // Helper function to perform scroll-to-bottom
+  const scrollToBottom = useCallback(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, []);
+
+  // Handle window focus changes to catch up on missed auto-scrolls
+  useEffect(() => {
+    const handleFocusChange = () => {
+      // Only scroll if auto-scroll is enabled and we missed a scroll while unfocused
+      if (shouldAutoScrollRef.current && pendingAutoScrollRef.current) {
+        pendingAutoScrollRef.current = false;
+        requestAnimationFrame(scrollToBottom);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      // Only trigger on becoming visible (not hidden)
+      if (!document.hidden) {
+        handleFocusChange();
+      }
+    };
+
+    // Listen for both focus and visibility change events for better compatibility
+    window.addEventListener('focus', handleFocusChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [scrollToBottom]);
 
   // Auto-focus input
   useEffect(() => {
@@ -132,11 +172,11 @@ function SessionPageInner() {
               // Scroll to bottom after replay completes. Use rAF to ensure
               // React has committed the flushed turns to the DOM.
               if (shouldAutoScrollRef.current) {
-                requestAnimationFrame(() => {
-                  if (scrollRef.current) {
-                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-                  }
-                });
+                if (document.hidden || !document.hasFocus()) {
+                  pendingAutoScrollRef.current = true;
+                } else {
+                  requestAnimationFrame(scrollToBottom);
+                }
               }
               // Send pending prompt if we have one — don't gate on status.
               // SessionDO handles waiting for the container to be ready.
