@@ -11,7 +11,6 @@ import {
   agentLoop,
   setApiKey,
   getModel,
-  stream as streamFn,
 } from "@mariozechner/pi-ai";
 import type { AgentEvent, AgentContext, QueuedMessage, Message } from "@mariozechner/pi-ai";
 import { codingTools } from "@mariozechner/pi-coding-agent";
@@ -175,7 +174,6 @@ export class SessionWrapper {
       context,
       config,
       this._abortController.signal,
-      streamFn
     );
 
     this._status = "running";
