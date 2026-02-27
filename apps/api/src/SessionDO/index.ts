@@ -30,6 +30,7 @@ import type { SessionStatus, SessionServerMessage, SessionClientMessage } from "
 import { migrate } from "@zero/drizzle-migrator";
 
 import { getInstallationToken } from "../services/github";
+import { withRetry } from "../lib/retry";
 
 export class SessionDO extends DurableObject<Env> {
   db: DrizzleSqliteDODatabase;
@@ -183,6 +184,34 @@ export class SessionDO extends DurableObject<Env> {
     // reflects that the next message will require a cold start.
     await this.updateStatus("stopped");
     this.broadcastToWebSockets({ type: "status", status: "stopped" });
+  }
+
+  /**
+   * Called by AgentContainer.onActivityExpired() when the workspace snapshot
+   * could not be saved to R2 after all retries.
+   *
+   * This is a terminal failure — without a snapshot, the session cannot be
+   * resumed. Transition to "error" and notify the user immediately.
+   * Also cleans up any stale R2 snapshot so a future resume attempt doesn't
+   * try to restore inconsistent state.
+   */
+  async onSnapshotSaveFailed(): Promise<void> {
+    console.error("Snapshot save failed — session is no longer resumable");
+
+    // Clean up any stale R2 snapshot from a previous cycle
+    try {
+      await this.env.SNAPSHOTS.delete(
+        `workspace-snapshots/${this.ctx.id.toString()}/snapshot.tar.zst`
+      );
+    } catch (err) {
+      console.error("Failed to delete stale R2 snapshot:", err);
+    }
+
+    await this.updateStatus("error");
+    this.broadcastError(
+      "Failed to save workspace snapshot. This session can no longer be resumed — any unsaved work may be lost."
+    );
+    this.broadcastToWebSockets({ type: "status", status: "error" });
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -446,9 +475,19 @@ export class SessionDO extends DurableObject<Env> {
 
     console.log(`Session resumed (${messages.length} messages restored)`);
 
-    // 5. Restore workspace from R2 if snapshot exists
+    // 5. Restore workspace from R2 if snapshot exists.
+    // This MUST succeed — the container skipped cloning because we told it
+    // the workspace would be restored. If this fails, the session is broken.
     if (hasSnapshot) {
-      await this.restoreWorkspaceFromR2(container, snapshotKey, repoUrl, githubToken);
+      try {
+        await this.restoreWorkspaceFromR2(container, snapshotKey, repoUrl, githubToken);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Failed to restore workspace snapshot after multiple attempts. ` +
+          `This session cannot continue. (${detail})`
+        );
+      }
     }
   }
 
@@ -619,28 +658,42 @@ export class SessionDO extends DurableObject<Env> {
   // R2 Workspace Snapshots
   // ═══════════════════════════════════════════════════════════════════════
 
+  /**
+   * Restore the workspace from an R2 snapshot.
+   * Retries each step (R2 GET, container restore, remote update) up to 3 times.
+   * Throws on failure — callers must handle the error (session is broken).
+   */
   private async restoreWorkspaceFromR2(
     container: ContainerHandle,
     snapshotKey: string,
     repoUrl: string,
     githubToken: string
   ): Promise<void> {
-    try {
-      const obj = await this.env.SNAPSHOTS.get(snapshotKey);
-      if (!obj) { console.log("No R2 snapshot found"); return; }
+    // 1. Fetch snapshot from R2 with retries
+    const buffer = await withRetry(
+      async () => {
+        const obj = await this.env.SNAPSHOTS.get(snapshotKey);
+        if (!obj) throw new Error(`No R2 snapshot found at ${snapshotKey}`);
+        return obj.arrayBuffer();
+      },
+      { maxAttempts: 3, label: "restore-r2-get" },
+    );
 
-      const buffer = await obj.arrayBuffer();
-      console.log(`Restoring workspace: ${snapshotKey} (${buffer.byteLength} bytes)`);
+    console.log(`Restoring workspace: ${snapshotKey} (${buffer.byteLength} bytes)`);
 
-      await container.restoreWorkspace(buffer);
+    // 2. Send snapshot to container with retries
+    await withRetry(
+      () => container.restoreWorkspace(buffer),
+      { maxAttempts: 3, label: "restore-container-post" },
+    );
 
-      // Update git remote with fresh token
-      await container.updateRemote(repoUrl, githubToken);
+    // 3. Update git remote with fresh token with retries
+    await withRetry(
+      () => container.updateRemote(repoUrl, githubToken),
+      { maxAttempts: 3, label: "restore-update-remote" },
+    );
 
-      console.log("Workspace restored from R2 snapshot");
-    } catch (err) {
-      console.error("Workspace restore failed (session has empty workspace):", err);
-    }
+    console.log("Workspace restored from R2 snapshot");
   }
 
   // ═══════════════════════════════════════════════════════════════════════

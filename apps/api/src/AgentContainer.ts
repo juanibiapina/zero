@@ -13,6 +13,7 @@
 import { Container, switchPort } from "@cloudflare/containers";
 import type { StopParams } from "@cloudflare/containers";
 import type { Env } from "./types";
+import { withRetry } from "./lib/retry";
 
 export class AgentContainer extends Container<Env> {
   defaultPort = 8080;
@@ -57,30 +58,57 @@ export class AgentContainer extends Container<Env> {
     }
 
     const sessionDOId = await this.ctx.storage.get<string>("sessionDOId");
+    let snapshotFailed = false;
     try {
       if (sessionDOId) {
         const snapshotKey = `workspace-snapshots/${sessionDOId}/snapshot.tar.zst`;
         console.log(`Snapshotting workspace to R2: ${snapshotKey}`);
 
-        const resp = await this.containerFetch(
-          switchPort(new Request("http://container/workspace/snapshot"), 8080)
+        // Fetch snapshot from container with retries
+        const buffer = await withRetry(
+          async () => {
+            const resp = await this.containerFetch(
+              switchPort(new Request("http://container/workspace/snapshot"), 8080)
+            );
+            if (resp.status === 404) {
+              // No workspace to snapshot — container never had a repo cloned
+              console.log("No workspace to snapshot, skipping");
+              return null;
+            }
+            if (!resp.ok) {
+              const text = await resp.text();
+              throw new Error(`Snapshot fetch failed: ${resp.status} ${text}`);
+            }
+            return resp.arrayBuffer();
+          },
+          { maxAttempts: 3, label: "snapshot-fetch" },
         );
 
-        if (resp.ok) {
-          const buffer = await resp.arrayBuffer();
-          await this.env.SNAPSHOTS.put(snapshotKey, buffer);
+        // Save to R2 with retries (skip if no workspace)
+        if (buffer !== null) {
+          await withRetry(
+            () => this.env.SNAPSHOTS.put(snapshotKey, buffer),
+            { maxAttempts: 3, label: "snapshot-r2-put" },
+          );
           console.log(`Workspace snapshot saved to R2 (${buffer.byteLength} bytes)`);
-        } else if (resp.status === 404) {
-          // No workspace to snapshot — container never had a repo cloned
-          console.log("No workspace to snapshot, skipping");
-        } else {
-          const text = await resp.text();
-          console.error(`Snapshot fetch failed: ${resp.status} ${text}`);
         }
       }
     } catch (err) {
-      console.error("Workspace snapshot failed:", err);
+      console.error("Workspace snapshot failed after all retries:", err);
+      snapshotFailed = true;
     } finally {
+      // Notify SessionDO before stopping so it can surface the error to the user.
+      // Must happen before this.stop() because onStop() also notifies SessionDO.
+      if (snapshotFailed && sessionDOId) {
+        try {
+          const stub = this.env.SESSION_DO.get(
+            this.env.SESSION_DO.idFromString(sessionDOId)
+          );
+          await stub.onSnapshotSaveFailed();
+        } catch (err) {
+          console.error("Failed to notify SessionDO about snapshot failure:", err);
+        }
+      }
       // Always stop — container must sleep even if snapshot fails
       await this.stop();
     }
