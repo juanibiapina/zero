@@ -110,8 +110,13 @@ export function processAgentEvent(
     case "tool_execution_start": {
       const turn = ensureAssistantTurn();
       const last = turn.blocks[turn.blocks.length - 1];
-      if (last?.kind === "toolcall" && !last.name && event.toolName) {
-        last.name = event.toolName;
+      if (last?.kind === "toolcall") {
+        if (!last.name && event.toolName) {
+          last.name = event.toolName;
+        }
+        if (event.args && typeof event.args === "object") {
+          last.args = event.args as Record<string, unknown>;
+        }
       }
       break;
     }

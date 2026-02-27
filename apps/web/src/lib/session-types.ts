@@ -14,6 +14,7 @@ export interface ToolCallBlock {
   kind: "toolcall";
   name: string;
   text: string;
+  args?: Record<string, unknown>;
 }
 
 export interface ToolResultBlock {

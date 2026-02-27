@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { Brain, MessageSquare, FileText, Wrench, Terminal, AlertTriangle, KeyRound } from "lucide-react";
+import { Brain, MessageSquare, FileText, Wrench, Terminal, AlertTriangle, KeyRound, ChevronRight, ChevronDown } from "lucide-react";
 import { Link } from "react-router";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
+import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light";
+
+SyntaxHighlighter.registerLanguage("json", json);
 import type {
   Turn,
   ThinkingBlock,
@@ -45,22 +50,138 @@ function TextBlockView({ block }: { block: TextBlock }) {
   );
 }
 
+/** Max characters for inline summary text */
+const SUMMARY_MAX_LENGTH = 120;
+
+/**
+ * Try to get parsed args: prefer block.args (from tool_execution_start),
+ * fall back to parsing the streamed JSON text.
+ */
+function getToolArgs(block: ToolCallBlock): Record<string, unknown> | null {
+  if (block.args) return block.args;
+  if (!block.text) return null;
+  try {
+    const parsed: unknown = JSON.parse(block.text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // JSON incomplete during streaming — that's fine
+  }
+  return null;
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+/**
+ * Generate a one-line human-readable summary for a tool call.
+ */
+function getToolSummary(name: string, args: Record<string, unknown>): string | null {
+  switch (name) {
+    case "read": {
+      const path = typeof args.path === "string" ? args.path : null;
+      if (!path) return null;
+      const offset = typeof args.offset === "number" ? args.offset : null;
+      const limit = typeof args.limit === "number" ? args.limit : null;
+      if (offset != null && limit != null) return `${path}:${offset}-${offset + limit - 1}`;
+      if (offset != null) return `${path}:${offset}`;
+      if (limit != null) return `${path} (first ${limit} lines)`;
+      return path;
+    }
+    case "bash": {
+      const cmd = typeof args.command === "string" ? args.command : null;
+      return cmd ? truncate(cmd, SUMMARY_MAX_LENGTH) : null;
+    }
+    case "edit": {
+      const path = typeof args.path === "string" ? args.path : null;
+      return path ?? null;
+    }
+    case "write": {
+      const path = typeof args.path === "string" ? args.path : null;
+      return path ?? null;
+    }
+    case "grep": {
+      const pattern = typeof args.pattern === "string" ? args.pattern : null;
+      if (!pattern) return null;
+      const path = typeof args.path === "string" ? args.path : null;
+      return path ? `"${pattern}" in ${path}` : `"${pattern}"`;
+    }
+    case "find": {
+      const pattern = typeof args.pattern === "string" ? args.pattern : null;
+      if (!pattern) return null;
+      const path = typeof args.path === "string" ? args.path : null;
+      return path ? `"${pattern}" in ${path}` : `"${pattern}"`;
+    }
+    case "ls": {
+      const path = typeof args.path === "string" ? args.path : ".";
+      return path;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Pretty-print JSON with syntax highlighting via react-syntax-highlighter.
+ * Falls back to raw text if parsing fails (e.g. during streaming).
+ */
+function JsonHighlight({ text }: { text: string }) {
+  let formatted: string;
+  try {
+    formatted = JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return (
+      <pre className="mt-1 rounded bg-muted/30 p-2 text-xs whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+        {text}
+      </pre>
+    );
+  }
+
+  return (
+    <SyntaxHighlighter
+      language="json"
+      style={oneLight}
+      customStyle={{
+        margin: "0.25rem 0 0 0",
+        padding: "0.5rem",
+        borderRadius: "0.25rem",
+        fontSize: "0.75rem",
+        maxHeight: "200px",
+        overflow: "auto",
+      }}
+    >
+      {formatted}
+    </SyntaxHighlighter>
+  );
+}
+
 function ToolCallBlockView({ block }: { block: ToolCallBlock }) {
+  const args = getToolArgs(block);
+  const summary = args ? getToolSummary(block.name, args) : null;
   const [open, setOpen] = useState(false);
+
   return (
     <div className="my-1 rounded border bg-muted/20 p-2">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-xs font-medium text-foreground/80 hover:text-foreground"
+        className="flex items-center gap-1.5 text-xs font-medium text-foreground/80 hover:text-foreground w-full text-left"
       >
-        <Wrench className="h-3 w-3" />
-        {block.name || "tool call"}
+        {open ? (
+          <ChevronDown className="h-3 w-3 shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0" />
+        )}
+        <Wrench className="h-3 w-3 shrink-0" />
+        <span>{block.name || "tool call"}</span>
+        {summary && (
+          <span className="text-muted-foreground font-normal truncate ml-1">
+            {summary}
+          </span>
+        )}
       </button>
-      {open && block.text && (
-        <pre className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap max-h-[200px] overflow-y-auto">
-          {block.text}
-        </pre>
-      )}
+      {open && block.text && <JsonHighlight text={block.text} />}
     </div>
   );
 }
