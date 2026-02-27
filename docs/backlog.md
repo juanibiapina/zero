@@ -86,8 +86,4 @@ User-managed todo items per project, stored in UserDO (new table) or a dedicated
 
 `ToolCallBlockView` currently shows just the tool name as a collapsed button — you have to click to see arguments. On desktop there's enough horizontal space to show key arguments inline on the same line (e.g. file path for read/write, command for bash). This avoids unnecessary clicks for the most common tools and makes scanning a session much faster.
 
----
 
-### Key Prefix Timeout in Settings
-
-The hotkey sequence timeout (time allowed between pressing the prefix key and the action key) is currently fixed at ~1 second. Add a user-configurable timeout to `UserSettings` (in `@zero/core`) and expose it in the settings UI. The value would be passed to `useHotkeySequence` from `@tanstack/react-hotkeys`.
