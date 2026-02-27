@@ -18,6 +18,7 @@ export {
   getModel,
   calculateCost,
   modelsAreEqual,
+  supportsXhigh,
   type KnownProvider,
   type Provider,
   type Api,

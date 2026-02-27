@@ -226,7 +226,7 @@ export type AgentEventType = AgentEvent["type"];
  * "off" disables thinking entirely (maps to undefined at the API boundary).
  * Other levels map directly to pi-ai's ReasoningEffort / ThinkingLevel.
  */
-export type ThinkingLevel = "off" | "low" | "medium" | "high";
+export type ThinkingLevel = "off" | "low" | "medium" | "high" | "xhigh";
 
 export interface ThinkingLevelInfo {
   id: ThinkingLevel;
@@ -239,6 +239,7 @@ export const THINKING_LEVELS: ThinkingLevelInfo[] = [
   { id: "low", label: "Low", description: "Brief reasoning" },
   { id: "medium", label: "Medium", description: "Moderate reasoning" },
   { id: "high", label: "High", description: "Deep reasoning (recommended)" },
+  { id: "xhigh", label: "Extra High", description: "Maximum reasoning (select models only)" },
 ];
 
 /**

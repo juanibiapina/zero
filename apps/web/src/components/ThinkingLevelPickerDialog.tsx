@@ -12,6 +12,8 @@ interface ThinkingLevelPickerDialogProps {
   onOpenChange: (open: boolean) => void;
   currentLevel: ThinkingLevel;
   onSelect: (level: ThinkingLevel) => void;
+  /** Whether the current model supports "xhigh" thinking level. */
+  supportsXhigh?: boolean;
 }
 
 export default function ThinkingLevelPickerDialog({
@@ -19,8 +21,12 @@ export default function ThinkingLevelPickerDialog({
   onOpenChange,
   currentLevel,
   onSelect,
+  supportsXhigh = false,
 }: ThinkingLevelPickerDialogProps) {
-  const levels = useMemo(() => THINKING_LEVELS, []);
+  const levels = useMemo(
+    () => (supportsXhigh ? THINKING_LEVELS : THINKING_LEVELS.filter((l) => l.id !== "xhigh")),
+    [supportsXhigh],
+  );
 
   const handleSelect = useCallback(
     (level: ThinkingLevelInfo) => {

@@ -18,7 +18,7 @@ export const sessionMetaTable = sqliteTable("session_meta", {
   projectRepo: text().notNull(),
   provider: text().notNull(),
   model: text().notNull(),
-  thinkingLevel: text(),     // "off" | "low" | "medium" | "high" — null = model default
+  thinkingLevel: text(),     // "off" | "low" | "medium" | "high" | "xhigh" — null = model default
   userDOId: text(),          // UserDO ID for status sync callbacks
   createdAt: text().notNull(),
 });

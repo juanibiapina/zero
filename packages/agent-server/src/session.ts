@@ -158,7 +158,7 @@ export class SessionWrapper {
     // "off" → undefined (disables thinking), else pass directly
     const reasoning = this._thinkingLevel === "off"
       ? undefined
-      : (this._thinkingLevel as "low" | "medium" | "high");
+      : (this._thinkingLevel as "low" | "medium" | "high" | "xhigh");
 
     const config = {
       model,

@@ -11,6 +11,7 @@ export {
   getModel,
   calculateCost,
   modelsAreEqual,
+  supportsXhigh,
 } from "@mariozechner/pi-ai/dist/models.js";
 
 export type {

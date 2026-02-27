@@ -15,7 +15,7 @@ import { z } from "zod";
 import type { Env } from "../types";
 import { UserService } from "../services/user";
 import { serviceResult } from "../lib/result";
-import { getModels, getProviderMeta, getDefaultModel } from "@zero/providers";
+import { getModels, getProviderMeta, getDefaultModel, supportsXhigh } from "@zero/providers";
 
 // ── Schemas ──────────────────────────────────────────────────────────────
 
@@ -216,6 +216,7 @@ export const createProviderRoutes = () => {
     id: z.string(),
     name: z.string(),
     reasoning: z.boolean(),
+    supportsXhigh: z.boolean(),
   });
 
   const ModelListResponseSchema = z.object({
@@ -253,7 +254,7 @@ export const createProviderRoutes = () => {
     const models = getModels(providerId as Parameters<typeof getModels>[0]);
     const defaultModelId = getDefaultModel(providerId) ?? null;
     return c.json({
-      models: models.map((m) => ({ id: m.id, name: m.name ?? m.id, reasoning: m.reasoning })),
+      models: models.map((m) => ({ id: m.id, name: m.name ?? m.id, reasoning: m.reasoning, supportsXhigh: supportsXhigh(m) })),
       defaultModelId,
     }, 200);
   });

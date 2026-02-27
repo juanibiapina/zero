@@ -63,6 +63,7 @@ function SessionPageInner() {
   const [model, setModel] = useState<string>("");
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("high");
   const [modelSupportsReasoning, setModelSupportsReasoning] = useState(false);
+  const [modelSupportsXhigh, setModelSupportsXhigh] = useState(false);
   const [providerPickerOpen, setProviderPickerOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
@@ -352,11 +353,13 @@ function SessionPageInner() {
         const resp = await fetch(`/api/providers/${provider}/models`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
+        const data = (await resp.json()) as { models?: { id: string; reasoning: boolean; supportsXhigh: boolean }[] };
         const m = data.models?.find((m) => m.id === model);
         setModelSupportsReasoning(m?.reasoning ?? false);
+        setModelSupportsXhigh(m?.supportsXhigh ?? false);
       } catch {
         setModelSupportsReasoning(false);
+        setModelSupportsXhigh(false);
       }
     })();
   }, [provider, model, getToken]);
@@ -414,15 +417,19 @@ function SessionPageInner() {
           const resp = await fetch(`/api/providers/${provider}/models`, {
             headers: { Authorization: `Bearer ${token}` },
           });
-          const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
+          const data = (await resp.json()) as { models?: { id: string; reasoning: boolean; supportsXhigh: boolean }[] };
           const modelInfo = data.models?.find((m) => m.id === newModel);
           const supportsReasoning = modelInfo?.reasoning ?? false;
+          const xhighCapable = modelInfo?.supportsXhigh ?? false;
           // If switching to non-reasoning model, force "off".
           // If switching to reasoning model while currently "off", default to "high".
+          // If current level is "xhigh" but new model doesn't support it, downgrade to "high".
           let newThinking: ThinkingLevel | undefined;
           if (!supportsReasoning) {
             newThinking = "off";
           } else if (thinkingLevel === "off") {
+            newThinking = "high";
+          } else if (thinkingLevel === "xhigh" && !xhighCapable) {
             newThinking = "high";
           }
           if (newThinking !== undefined) {
@@ -751,6 +758,7 @@ function SessionPageInner() {
         onOpenChange={setThinkingPickerOpen}
         currentLevel={thinkingLevel}
         onSelect={handleThinkingSelect}
+        supportsXhigh={modelSupportsXhigh}
       />
     </div>
   );

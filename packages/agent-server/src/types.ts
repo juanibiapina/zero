@@ -14,7 +14,7 @@ export interface ResumeRequest {
   messages: unknown[];
   /** When true, workspace will be restored from R2 snapshot after resume — skip clone. */
   workspaceRestored?: boolean;
-  /** Thinking/reasoning level: "off" | "low" | "medium" | "high". */
+  /** Thinking/reasoning level: "off" | "low" | "medium" | "high" | "xhigh". */
   thinkingLevel?: string;
 }
 
@@ -30,7 +30,7 @@ export interface ConfigureRequest {
   provider: string;
   model: string;
   apiKey: string;
-  /** Thinking/reasoning level: "off" | "low" | "medium" | "high". */
+  /** Thinking/reasoning level: "off" | "low" | "medium" | "high" | "xhigh". */
   thinkingLevel?: string;
 }
 

@@ -256,7 +256,7 @@ export class SessionDO extends DurableObject<Env> {
         type: "config",
         provider: currentSession.provider,
         model: currentSession.model,
-        thinkingLevel: (currentSession.thinkingLevel ?? "high") as "off" | "low" | "medium" | "high",
+        thinkingLevel: (currentSession.thinkingLevel ?? "high") as "off" | "low" | "medium" | "high" | "xhigh",
       } satisfies SessionServerMessage));
     }
 
@@ -409,7 +409,7 @@ export class SessionDO extends DurableObject<Env> {
       type: "config",
       provider,
       model,
-      thinkingLevel: effectiveThinkingLevel as "off" | "low" | "medium" | "high",
+      thinkingLevel: effectiveThinkingLevel as "off" | "low" | "medium" | "high" | "xhigh",
     });
   }
 
