@@ -29,7 +29,7 @@ const SettingsResponseSchema = z.object({
 
 const UpdateSettingsBodySchema = z.object({
   hotkeyPrefix: z.string().optional(),
-  hotkeyBindings: z.record(z.string(), z.string()).optional(),
+  hotkeyBindings: z.record(z.string(), z.string().nullable()).optional(),
 });
 
 const ErrorSchema = z.object({
@@ -112,9 +112,9 @@ export const createSettingsRoutes = () => {
 
     // Handle hotkeyBindings — read-modify-write as JSON blob
     if (body.hotkeyBindings) {
-      // Fetch current bindings to merge
-      const current = await service.getSettings();
-      const merged = { ...current.settings.hotkeyBindings, ...body.hotkeyBindings };
+      // Merge into raw stored JSON (preserves null = "explicitly cleared")
+      const raw = await service.getRawBindings();
+      const merged = { ...raw, ...body.hotkeyBindings };
       const result = await service.updateSetting("hotkeyBindings", JSON.stringify(merged));
       if (Result.isFailure(result)) {
         return c.json({ error: result.error.message }, 400);

@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-hotkeys";
 import type { Hotkey } from "@tanstack/react-hotkeys";
 import { Settings, Keyboard } from "lucide-react";
-import { BINDABLE_ACTIONS, type AppAction } from "@zero/core";
+import { APP_ACTIONS, type AppAction } from "@zero/core";
 import { useSettingsStore } from "@/lib/settings-store";
 import { cn } from "@/lib/utils";
 
@@ -113,8 +113,10 @@ function ActionBindingRow({ action }: { action: AppAction }) {
   const bindings = useSettingsStore((s) => s.settings.hotkeyBindings);
   const prefix = useSettingsStore((s) => s.settings.hotkeyPrefix);
   const updateHotkeyBinding = useSettingsStore((s) => s.updateHotkeyBinding);
+  const clearHotkeyBinding = useSettingsStore((s) => s.clearHotkeyBinding);
 
-  const currentKey = bindings[action.id] ?? action.defaultKey ?? "";
+  const currentKey: string | undefined = bindings[action.id];
+  const isBound = currentKey != null;
 
   const [error, setError] = useState<string | null>(null);
 
@@ -128,9 +130,9 @@ function ActionBindingRow({ action }: { action: AppAction }) {
         return;
       }
 
-      // Check for duplicate bindings
-      const duplicate = BINDABLE_ACTIONS.find(
-        (a) => a.id !== action.id && (bindings[a.id] ?? a.defaultKey) === hotkey,
+      // Check for duplicate bindings across all actions
+      const duplicate = APP_ACTIONS.find(
+        (a) => a.id !== action.id && bindings[a.id] === hotkey,
       );
       if (duplicate) {
         setError(`"${hotkey}" is already bound to "${duplicate.label}"`);
@@ -160,29 +162,48 @@ function ActionBindingRow({ action }: { action: AppAction }) {
               ? formatForDisplay(recorder.recordedHotkey)
               : "Press key…"}
           </div>
-        ) : (
+        ) : isBound ? (
           <HotkeyBadge hotkey={currentKey} />
+        ) : (
+          <span className="inline-flex items-center rounded border border-dashed px-2 py-1 font-mono text-sm text-muted-foreground">
+            Unbound
+          </span>
         )}
         <span className="text-muted-foreground">{action.label}</span>
 
-        {recorder.isRecording ? (
-          <button
-            onClick={() => recorder.cancelRecording()}
-            className="ml-auto rounded-md border px-2 py-1 text-xs hover:bg-muted transition-colors"
-          >
-            Cancel
-          </button>
-        ) : (
-          <button
-            onClick={() => {
-              setError(null);
-              recorder.startRecording();
-            }}
-            className="ml-auto rounded-md border px-2 py-1 text-xs hover:bg-muted transition-colors"
-          >
-            Change
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          {recorder.isRecording ? (
+            <button
+              onClick={() => recorder.cancelRecording()}
+              className="rounded-md border px-2 py-1 text-xs hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+          ) : (
+            <>
+              {isBound && (
+                <button
+                  onClick={() => {
+                    setError(null);
+                    void clearHotkeyBinding(getToken, action.id);
+                  }}
+                  className="rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setError(null);
+                  recorder.startRecording();
+                }}
+                className="rounded-md border px-2 py-1 text-xs hover:bg-muted transition-colors"
+              >
+                {isBound ? "Change" : "Bind"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {error && <p className="text-xs text-destructive mt-1">{error}</p>}
     </div>
@@ -213,13 +234,27 @@ export default function SettingsPage() {
         <div className="rounded-lg border p-4 space-y-6">
           <PrefixRecorder />
 
-          <div className="border-t pt-4 space-y-3">
-            <h3 className="text-sm font-medium">Bound shortcuts</h3>
-            <div className="grid gap-3">
-              {BINDABLE_ACTIONS.map((action) => (
-                <ActionBindingRow key={action.id} action={action} />
-              ))}
-            </div>
+          <div className="border-t pt-4 space-y-4">
+            <h3 className="text-sm font-medium">Shortcuts</h3>
+            {Array.from(
+              APP_ACTIONS.reduce((map, action) => {
+                const list = map.get(action.category) ?? [];
+                list.push(action);
+                map.set(action.category, list);
+                return map;
+              }, new Map<string, AppAction[]>()),
+            ).map(([category, actions]) => (
+              <div key={category} className="space-y-2">
+                <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+                  {category}
+                </h4>
+                <div className="grid gap-3">
+                  {actions.map((action) => (
+                    <ActionBindingRow key={action.id} action={action} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

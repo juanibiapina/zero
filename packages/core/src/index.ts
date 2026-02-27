@@ -302,12 +302,9 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "commandPalette", label: "Command Palette", description: "Open command palette", category: "Actions", defaultKey: "P" },
 ];
 
-/** Actions that have hotkey bindings (have a defaultKey). */
-export const BINDABLE_ACTIONS: AppAction[] = APP_ACTIONS.filter((a) => a.defaultKey != null);
-
-/** Default hotkey bindings: actionId → key string. */
+/** Default hotkey bindings: actionId → key string (only actions with a defaultKey). */
 export const DEFAULT_HOTKEY_BINDINGS: Record<string, string> = Object.fromEntries(
-  BINDABLE_ACTIONS.map((a) => [a.id, a.defaultKey!]),
+  APP_ACTIONS.filter((a) => a.defaultKey != null).map((a) => [a.id, a.defaultKey!]),
 );
 
 // ============================================================================

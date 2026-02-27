@@ -27,6 +27,12 @@ interface SettingsStore {
     actionId: string,
     key: string,
   ) => Promise<void>;
+
+  /** Clear a hotkey binding (unbind an action) and persist to the API. */
+  clearHotkeyBinding: (
+    getToken: () => Promise<string | null>,
+    actionId: string,
+  ) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -109,6 +115,37 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       }
     } catch {
       // Revert on error
+      set((state) => ({
+        settings: { ...state.settings, hotkeyBindings: prevBindings },
+      }));
+    }
+  },
+
+  clearHotkeyBinding: async (getToken, actionId) => {
+    const prevBindings = { ...get().settings.hotkeyBindings };
+    // Optimistic update — remove the key
+    set((state) => {
+      const next = { ...state.settings.hotkeyBindings };
+      delete next[actionId];
+      return { settings: { ...state.settings, hotkeyBindings: next } };
+    });
+
+    try {
+      const token = await getToken();
+      const resp = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ hotkeyBindings: { [actionId]: null } }),
+      });
+      if (!resp.ok) {
+        set((state) => ({
+          settings: { ...state.settings, hotkeyBindings: prevBindings },
+        }));
+      }
+    } catch {
       set((state) => ({
         settings: { ...state.settings, hotkeyBindings: prevBindings },
       }));

@@ -39,16 +39,35 @@ export class SettingsService {
 
   // ── Public API ─────────────────────────────────────────────────────────
 
+  /** Get the raw stored bindings JSON (including null entries for cleared keys). */
+  async getRawBindings(): Promise<Record<string, string | null>> {
+    const userDO = await this.getUserDO();
+    const stored = await userDO.getAllUserSettings();
+    if (!stored.hotkeyBindings) return {};
+    try {
+      return JSON.parse(stored.hotkeyBindings) as Record<string, string | null>;
+    } catch {
+      return {};
+    }
+  }
+
   async getSettings(): Promise<{ settings: UserSettings }> {
     const userDO = await this.getUserDO();
     const stored = await userDO.getAllUserSettings();
 
-    // Parse hotkeyBindings from JSON, deep-merge with defaults
-    let hotkeyBindings = { ...DEFAULT_HOTKEY_BINDINGS };
+    // Parse hotkeyBindings from JSON, merge with defaults.
+    // null values mean "explicitly cleared" — remove from defaults.
+    const hotkeyBindings = { ...DEFAULT_HOTKEY_BINDINGS };
     if (stored.hotkeyBindings) {
       try {
-        const parsed = JSON.parse(stored.hotkeyBindings) as Record<string, string>;
-        hotkeyBindings = { ...hotkeyBindings, ...parsed };
+        const parsed = JSON.parse(stored.hotkeyBindings) as Record<string, string | null>;
+        for (const [key, value] of Object.entries(parsed)) {
+          if (value === null) {
+            delete hotkeyBindings[key];
+          } else {
+            hotkeyBindings[key] = value;
+          }
+        }
       } catch {
         // Ignore invalid JSON, keep defaults
       }

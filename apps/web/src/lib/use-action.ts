@@ -3,7 +3,7 @@
  *
  * Reads the prefix and per-action key from the settings store and wires
  * them into a TanStack `useHotkeySequence` call. If the action has no
- * binding in settings (shouldn't happen for bindable actions), it's a no-op.
+ * binding (unbound), the hotkey is disabled (no-op).
  */
 
 import { useHotkeySequence } from "@tanstack/react-hotkeys";

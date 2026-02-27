@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
@@ -22,10 +22,17 @@ export default function Layout() {
     void fetchSettings(getToken);
   }, [fetchSettings, getToken]);
 
+  const navigate = useNavigate();
+
   // Hotkey actions
   const dialogOpen = pickerOpen || paletteOpen;
   useAction("newSession", () => setPickerOpen(true), { enabled: !dialogOpen });
   useAction("commandPalette", () => setPaletteOpen(true), { enabled: !dialogOpen });
+  useAction("goToDashboard", () => void navigate("/"), { enabled: !dialogOpen });
+  useAction("goToProjects", () => void navigate("/projects"), { enabled: !dialogOpen });
+  useAction("goToSecrets", () => void navigate("/secrets"), { enabled: !dialogOpen });
+  useAction("goToSettings", () => void navigate("/settings"), { enabled: !dialogOpen });
+  useAction("goToProviders", () => void navigate("/settings/providers"), { enabled: !dialogOpen });
 
   // User-level WebSocket for real-time push events
   useUserWebSocket();
