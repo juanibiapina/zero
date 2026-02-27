@@ -5,16 +5,23 @@ import { useHotkeySequence } from "@tanstack/react-hotkeys";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import ProjectPickerDialog from "./ProjectPickerDialog";
+import CommandPaletteDialog from "./CommandPaletteDialog";
 import { useUserWebSocket } from "@/lib/use-user-websocket";
 
 export default function Layout() {
   const { isSignedIn, isLoaded } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Ctrl+Space → N: open project picker to create a new session (tmux-style prefix)
   useHotkeySequence(["Control+Space", "N"], () => setPickerOpen(true), {
-    enabled: !pickerOpen,
+    enabled: !pickerOpen && !paletteOpen,
+  });
+
+  // Ctrl+Space → P: open command palette
+  useHotkeySequence(["Control+Space", "P"], () => setPaletteOpen(true), {
+    enabled: !paletteOpen && !pickerOpen,
   });
 
   // User-level WebSocket for real-time push events
@@ -60,6 +67,11 @@ export default function Layout() {
       </div>
 
       <ProjectPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} />
+      <CommandPaletteDialog
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onOpenProjectPicker={() => setPickerOpen(true)}
+      />
     </div>
   );
 }
