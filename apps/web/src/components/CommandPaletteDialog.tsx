@@ -13,6 +13,7 @@ import {
   Trash2,
   ArrowLeftRight,
   Cpu,
+  Brain,
 } from "lucide-react";
 import { formatForDisplay } from "@tanstack/react-hotkeys";
 import { APP_ACTIONS, type AppAction } from "@zero/core";
@@ -35,6 +36,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   deleteCurrentSession: Trash2,
   switchProvider: ArrowLeftRight,
   switchModel: Cpu,
+  switchThinking: Brain,
 };
 
 // ── Types ────────────────────────────────────────────────────────────────

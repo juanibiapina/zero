@@ -80,7 +80,8 @@ export function createAppServer(): Server {
         try {
           await session.resume(
             body.provider, body.model, body.apiKey,
-            body.messages as Message[], body.repoUrl, body.token, body.workspaceRestored,
+            body.messages as Message[], body.repoUrl, body.token,
+            body.workspaceRestored, body.thinkingLevel,
           );
           sendJson(res, 200, { ok: true });
         } catch (err) {
@@ -115,7 +116,7 @@ export function createAppServer(): Server {
           return;
         }
         try {
-          await session.configure(body.provider, body.model, body.apiKey);
+          await session.configure(body.provider, body.model, body.apiKey, body.thinkingLevel);
           sendJson(res, 200, { ok: true });
         } catch (err) {
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });

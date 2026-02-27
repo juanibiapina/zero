@@ -17,6 +17,7 @@ export type ConfigureParams = {
   provider: string;
   model: string;
   apiKey: string;
+  thinkingLevel?: string;
 };
 
 export type ResumeParams = {
@@ -31,6 +32,8 @@ export type ResumeParams = {
   messages: unknown[];
   /** When true, workspace will be restored from R2 snapshot after resume — skip clone. */
   workspaceRestored?: boolean;
+  /** Thinking/reasoning level for the session. */
+  thinkingLevel?: string;
 };
 
 // ── Error Type ───────────────────────────────────────────────────────────

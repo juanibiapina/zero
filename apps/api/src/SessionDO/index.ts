@@ -86,6 +86,7 @@ export class SessionDO extends DurableObject<Env> {
     projectRepo: string;
     provider: string;
     model: string;
+    thinkingLevel?: string;
     userDOId?: string;
   }): Promise<void> {
     const now = new Date().toISOString();
@@ -95,6 +96,7 @@ export class SessionDO extends DurableObject<Env> {
       projectRepo: meta.projectRepo,
       provider: meta.provider,
       model: meta.model,
+      thinkingLevel: meta.thinkingLevel ?? null,
       userDOId: meta.userDOId ?? null,
       createdAt: now,
     }).run();
@@ -106,6 +108,7 @@ export class SessionDO extends DurableObject<Env> {
     projectRepo: string;
     provider: string;
     model: string;
+    thinkingLevel: string | null;
     userDOId: string | null;
     createdAt: string;
   } | null> {
@@ -117,6 +120,7 @@ export class SessionDO extends DurableObject<Env> {
       projectRepo: row.projectRepo,
       provider: row.provider,
       model: row.model,
+      thinkingLevel: row.thinkingLevel,
       userDOId: row.userDOId,
       createdAt: row.createdAt,
     };
@@ -135,8 +139,10 @@ export class SessionDO extends DurableObject<Env> {
     this.syncStatusToUserDO(status);
   }
 
-  async updateProviderModel(provider: string, model: string): Promise<void> {
-    this.db.update(sessionMetaTable).set({ provider, model }).run();
+  async updateProviderModel(provider: string, model: string, thinkingLevel?: string): Promise<void> {
+    const updates: Record<string, string> = { provider, model };
+    if (thinkingLevel !== undefined) updates.thinkingLevel = thinkingLevel;
+    this.db.update(sessionMetaTable).set(updates).run();
   }
 
   /**
@@ -250,6 +256,7 @@ export class SessionDO extends DurableObject<Env> {
         type: "config",
         provider: currentSession.provider,
         model: currentSession.model,
+        thinkingLevel: (currentSession.thinkingLevel ?? "high") as "off" | "low" | "medium" | "high",
       } satisfies SessionServerMessage));
     }
 
@@ -287,7 +294,7 @@ export class SessionDO extends DurableObject<Env> {
         data.originalText,
       );
       case "stop":      return this.handleStop();
-      case "configure": return this.handleConfigure(data.provider, data.model);
+      case "configure": return this.handleConfigure(data.provider, data.model, data.thinkingLevel);
       case "steer":     return this.handleSteer(data.text);
     }
   }
@@ -347,7 +354,7 @@ export class SessionDO extends DurableObject<Env> {
     }
   }
 
-  private async handleConfigure(provider: string, model: string): Promise<void> {
+  private async handleConfigure(provider: string, model: string, thinkingLevel?: string): Promise<void> {
     const session = await this.getSession();
     if (!session) {
       this.broadcastError("No session found");
@@ -372,10 +379,13 @@ export class SessionDO extends DurableObject<Env> {
       return;
     }
 
-    // 2. Update session metadata (persisted — survives container sleep/wake)
-    await this.updateProviderModel(provider, model);
+    // Resolve effective thinking level — use provided value or keep existing
+    const effectiveThinkingLevel = thinkingLevel ?? session.thinkingLevel ?? "high";
 
-    // 3. Sync to UserDO session index
+    // 2. Update session metadata (persisted — survives container sleep/wake)
+    await this.updateProviderModel(provider, model, effectiveThinkingLevel);
+
+    // 3. Sync to UserDO session index (provider/model only — thinkingLevel is session-scoped)
     if (session.userDOId) {
       const userDO = this.env.USER_DO.get(
         this.env.USER_DO.idFromString(session.userDOId),
@@ -388,14 +398,19 @@ export class SessionDO extends DurableObject<Env> {
     try {
       const state = await this.container.getState();
       if (state.status !== "stopped" && state.status !== "stopped_with_code") {
-        await this.container.configure({ provider, model, apiKey });
+        await this.container.configure({ provider, model, apiKey, thinkingLevel: effectiveThinkingLevel });
       }
     } catch {
       // Container unreachable — OK, next resume reads from sessionMetaTable
     }
 
     // 5. Broadcast config change to all connected browsers
-    this.broadcastToWebSockets({ type: "config", provider, model });
+    this.broadcastToWebSockets({
+      type: "config",
+      provider,
+      model,
+      thinkingLevel: effectiveThinkingLevel as "off" | "low" | "medium" | "high",
+    });
   }
 
   private async handleStop(): Promise<void> {
@@ -540,6 +555,7 @@ export class SessionDO extends DurableObject<Env> {
       secrets: Object.keys(secrets).length > 0 ? secrets : undefined,
       messages,
       workspaceRestored: hasSnapshot,
+      thinkingLevel: session.thinkingLevel ?? "high",
     });
 
     console.log(`Session resumed (${messages.length} messages restored)`);

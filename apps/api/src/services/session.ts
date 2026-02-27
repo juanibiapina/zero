@@ -12,7 +12,8 @@ import { Result } from "@praha/byethrow";
 import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
-import { getDefaultModel } from "@zero/providers";
+import { getDefaultModel, getModel } from "@zero/providers";
+import { defaultThinkingLevel } from "@zero/core";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -158,12 +159,17 @@ export class SessionService {
 
     const title = `Session ${sessionDOId.toString().slice(0, 8)}`;
 
+    // Resolve default thinking level based on model capabilities
+    const modelInfo = getModel(provider as Parameters<typeof getModel>[0], model as never);
+    const thinkingLevel = defaultThinkingLevel(modelInfo?.reasoning ?? false);
+
     await sessionDO.initSession({
       status: "stopped",
       projectOwner: owner,
       projectRepo: repo,
       provider,
       model,
+      thinkingLevel,
       userDOId,
     });
 

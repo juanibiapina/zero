@@ -7,7 +7,8 @@ import { Link } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TurnView } from "@/components/TurnView";
 import { processAgentEvent } from "@/lib/process-agent-event";
-import type { AgentEvent, SessionServerMessage, PromptTemplate } from "@zero/core";
+import type { AgentEvent, SessionServerMessage, PromptTemplate, ThinkingLevel } from "@zero/core";
+import { defaultThinkingLevel } from "@zero/core";
 import type { Turn, SessionStatus } from "@/lib/session-types";
 import { SlashAutocomplete } from "@/components/SlashAutocomplete";
 import { resolveSlashCommand, getSlashFilteredTemplates } from "@/lib/template-utils";
@@ -17,6 +18,7 @@ import { useRegisterAction } from "@/lib/action-handlers";
 import SessionDeleteDialog from "@/components/SessionDeleteDialog";
 import ProviderPickerDialog from "@/components/ProviderPickerDialog";
 import ModelPickerDialog from "@/components/ModelPickerDialog";
+import ThinkingLevelPickerDialog from "@/components/ThinkingLevelPickerDialog";
 
 // ─── Keyed wrapper ───────────────────────────────────────────────────────────
 // Forces full remount when navigating between sessions so stale state
@@ -56,11 +58,14 @@ function SessionPageInner() {
   const replayBufferRef = useRef<Turn[]>([]);
   const statusRef = useRef<SessionStatus>("connecting");
 
-  // Provider/model state
+  // Provider/model/thinking state
   const [provider, setProvider] = useState<string>("");
   const [model, setModel] = useState<string>("");
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("high");
+  const [modelSupportsReasoning, setModelSupportsReasoning] = useState(false);
   const [providerPickerOpen, setProviderPickerOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
 
   // Delete session state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -224,6 +229,7 @@ function SessionPageInner() {
             case "config":
               setProvider(msg.provider);
               setModel(msg.model);
+              setThinkingLevel(msg.thinkingLevel);
               return;
 
             case "pong":
@@ -336,27 +342,50 @@ function SessionPageInner() {
     }
   }, []);
 
+  // ── Fetch model reasoning capability ─────────────────────────────────────
+
+  useEffect(() => {
+    if (!provider || !model) return;
+    void (async () => {
+      try {
+        const token = await getToken();
+        const resp = await fetch(`/api/providers/${provider}/models`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
+        const m = data.models?.find((m) => m.id === model);
+        setModelSupportsReasoning(m?.reasoning ?? false);
+      } catch {
+        setModelSupportsReasoning(false);
+      }
+    })();
+  }, [provider, model, getToken]);
+
   // ── Configure provider/model ────────────────────────────────────────────
 
-  const sendConfigure = useCallback((newProvider: string, newModel: string) => {
+  const sendConfigure = useCallback((newProvider: string, newModel: string, newThinkingLevel?: ThinkingLevel) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "configure", provider: newProvider, model: newModel }));
+      const msg: Record<string, string> = { type: "configure", provider: newProvider, model: newModel };
+      if (newThinkingLevel !== undefined) msg.thinkingLevel = newThinkingLevel;
+      ws.send(JSON.stringify(msg));
     }
   }, []);
 
   const handleProviderSelect = useCallback(
     async (newProvider: string) => {
       if (newProvider === provider) return;
-      // Fetch default model for the new provider
+      // Fetch default model for the new provider and resolve thinking level
       try {
         const token = await getToken();
         const resp = await fetch(`/api/providers/${newProvider}/models`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = (await resp.json()) as { models?: { id: string }[] };
-        const defaultModel = data.models?.[0]?.id ?? "";
-        sendConfigure(newProvider, defaultModel);
+        const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
+        const firstModel = data.models?.[0];
+        const newModel = firstModel?.id ?? "";
+        const newThinking = defaultThinkingLevel(firstModel?.reasoning ?? false);
+        sendConfigure(newProvider, newModel, newThinking);
       } catch {
         // Fallback: send with empty model, backend will handle
         sendConfigure(newProvider, "");
@@ -366,23 +395,54 @@ function SessionPageInner() {
   );
 
   const handleModelSelect = useCallback(
-    (newModel: string) => {
+    async (newModel: string) => {
       if (newModel === model) return;
-      sendConfigure(provider, newModel);
+      // Check reasoning capability of the new model and auto-adjust thinking level
+      try {
+        const token = await getToken();
+        const resp = await fetch(`/api/providers/${provider}/models`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await resp.json()) as { models?: { id: string; reasoning: boolean }[] };
+        const modelInfo = data.models?.find((m) => m.id === newModel);
+        const supportsReasoning = modelInfo?.reasoning ?? false;
+        // If switching to non-reasoning model, force "off".
+        // If switching to reasoning model while currently "off", default to "high".
+        let newThinking: ThinkingLevel | undefined;
+        if (!supportsReasoning) {
+          newThinking = "off";
+        } else if (thinkingLevel === "off") {
+          newThinking = "high";
+        }
+        sendConfigure(provider, newModel, newThinking);
+      } catch {
+        sendConfigure(provider, newModel);
+      }
     },
-    [provider, model, sendConfigure],
+    [provider, model, thinkingLevel, getToken, sendConfigure],
   );
 
-  // ── Actions: switch provider / model ────────────────────────────────────
-  const anyDialogOpen = deleteDialogOpen || providerPickerOpen || modelPickerOpen;
+  const handleThinkingSelect = useCallback(
+    (newLevel: ThinkingLevel) => {
+      if (newLevel === thinkingLevel) return;
+      sendConfigure(provider, model, newLevel);
+    },
+    [provider, model, thinkingLevel, sendConfigure],
+  );
+
+  // ── Actions: switch provider / model / thinking ─────────────────────────
+  const anyDialogOpen = deleteDialogOpen || providerPickerOpen || modelPickerOpen || thinkingPickerOpen;
   const openProviderPicker = useCallback(() => setProviderPickerOpen(true), []);
   const openModelPicker = useCallback(() => setModelPickerOpen(true), []);
+  const openThinkingPicker = useCallback(() => setThinkingPickerOpen(true), []);
   useAction("switchProvider", openProviderPicker, { enabled: !anyDialogOpen && !!provider });
   useAction("switchModel", openModelPicker, { enabled: !anyDialogOpen && !!provider });
+  useAction("switchThinking", openThinkingPicker, { enabled: !anyDialogOpen && !!provider && modelSupportsReasoning });
 
   // Register for command palette (visible while SessionPage is mounted)
   useRegisterAction("switchProvider", openProviderPicker);
   useRegisterAction("switchModel", openModelPicker);
+  useRegisterAction("switchThinking", openThinkingPicker);
 
   // ── Handle user input ───────────────────────────────────────────────────
 
@@ -506,6 +566,18 @@ function SessionPageInner() {
               >
                 {model}
               </button>
+              {modelSupportsReasoning && (
+                <>
+                  <span className="text-muted-foreground/40">/</span>
+                  <button
+                    onClick={() => setThinkingPickerOpen(true)}
+                    className="rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+                    title="Switch thinking level"
+                  >
+                    thinking: {thinkingLevel}
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -656,7 +728,15 @@ function SessionPageInner() {
         onOpenChange={setModelPickerOpen}
         provider={provider}
         currentModel={model}
-        onSelect={handleModelSelect}
+        onSelect={(m) => void handleModelSelect(m)}
+      />
+
+      {/* Thinking level picker */}
+      <ThinkingLevelPickerDialog
+        open={thinkingPickerOpen}
+        onOpenChange={setThinkingPickerOpen}
+        currentLevel={thinkingLevel}
+        onSelect={handleThinkingSelect}
       />
     </div>
   );

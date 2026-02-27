@@ -217,6 +217,39 @@ export type AgentEvent =
 export type AgentEventType = AgentEvent["type"];
 
 // ============================================================================
+// Thinking Level Types
+// ============================================================================
+
+/**
+ * User-facing thinking/reasoning level.
+ *
+ * "off" disables thinking entirely (maps to undefined at the API boundary).
+ * Other levels map directly to pi-ai's ReasoningEffort / ThinkingLevel.
+ */
+export type ThinkingLevel = "off" | "low" | "medium" | "high";
+
+export interface ThinkingLevelInfo {
+  id: ThinkingLevel;
+  label: string;
+  description: string;
+}
+
+export const THINKING_LEVELS: ThinkingLevelInfo[] = [
+  { id: "off", label: "Off", description: "Disable extended thinking" },
+  { id: "low", label: "Low", description: "Brief reasoning" },
+  { id: "medium", label: "Medium", description: "Moderate reasoning" },
+  { id: "high", label: "High", description: "Deep reasoning (recommended)" },
+];
+
+/**
+ * Return the highest available thinking level for a model.
+ * Non-reasoning models → "off". Reasoning models → "high".
+ */
+export function defaultThinkingLevel(modelSupportsReasoning: boolean): ThinkingLevel {
+  return modelSupportsReasoning ? "high" : "off";
+}
+
+// ============================================================================
 // Session WebSocket Protocol
 // ============================================================================
 
@@ -224,7 +257,7 @@ export type AgentEventType = AgentEvent["type"];
 export type SessionClientMessage =
   | { type: "message"; text: string; template?: { slug: string; name: string }; originalText?: string }
   | { type: "stop" }
-  | { type: "configure"; provider: string; model: string }
+  | { type: "configure"; provider: string; model: string; thinkingLevel?: ThinkingLevel }
   | { type: "steer"; text: string }
   | { type: "ping" };
 
@@ -238,7 +271,7 @@ export type SessionServerMessage =
       data: unknown;
     }
   | { type: "status"; status: SessionStatus; error?: string }
-  | { type: "config"; provider: string; model: string }
+  | { type: "config"; provider: string; model: string; thinkingLevel: ThinkingLevel }
   | { type: "caught_up"; lastSeq: number }
   | { type: "pong" }
   | { type: "error"; message: string };
@@ -320,6 +353,7 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "deleteCurrentSession", label: "Delete Session", description: "Delete the current session", category: "Actions", defaultKey: "D" },
   { id: "switchProvider", label: "Switch Provider", description: "Change the AI provider for the current session", category: "Actions", defaultKey: "p" },
   { id: "switchModel", label: "Switch Model", description: "Change the model for the current session", category: "Actions", defaultKey: "m" },
+  { id: "switchThinking", label: "Switch Thinking", description: "Change the thinking/reasoning level", category: "Actions", defaultKey: "t" },
 ];
 
 /** Default hotkey bindings: actionId → key string (only actions with a defaultKey). */

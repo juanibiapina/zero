@@ -30,6 +30,7 @@ export class SessionWrapper {
   // Stored after start() for use by sendMessage()
   private _model: ReturnType<typeof getModel> | null = null;
   private _workDir: string | null = null;
+  private _thinkingLevel: string = "high";
 
   // Conversation history — accumulated across turns for follow-up context
   private _messages: Message[] = [];
@@ -155,8 +156,15 @@ export class SessionWrapper {
       tools: codingTools,
     };
 
+    // Map thinking level to pi-ai's reasoning option:
+    // "off" → undefined (disables thinking), else pass directly
+    const reasoning = this._thinkingLevel === "off"
+      ? undefined
+      : (this._thinkingLevel as "low" | "medium" | "high");
+
     const config = {
       model,
+      reasoning,
       signal: this._abortController.signal,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       getQueuedMessages: async () => [] as QueuedMessage<any>[],
@@ -242,6 +250,7 @@ export class SessionWrapper {
     repoUrl: string,
     token: string,
     workspaceRestored?: boolean,
+    thinkingLevel?: string,
   ): Promise<void> {
     // Auto-stop existing session
     if (this._abortController) {
@@ -283,6 +292,7 @@ export class SessionWrapper {
       process.chdir(workDir);
       this._model = model;
       this._workDir = workDir;
+      this._thinkingLevel = thinkingLevel ?? "high";
 
       // Restore conversation history
       this._messages = messages;
@@ -333,7 +343,7 @@ export class SessionWrapper {
    * so a running turn continues with the old model. The next turn uses
    * the new one.
    */
-  async configure(provider: string, modelId: string, apiKey: string): Promise<void> {
+  async configure(provider: string, modelId: string, apiKey: string, thinkingLevel?: string): Promise<void> {
     if (!this._workDir) {
       throw new Error("Session not initialized — cannot configure before resume");
     }
@@ -348,7 +358,10 @@ export class SessionWrapper {
     }
 
     this._model = model;
-    console.log(`Session reconfigured: ${provider}/${modelId}`);
+    if (thinkingLevel !== undefined) {
+      this._thinkingLevel = thinkingLevel;
+    }
+    console.log(`Session reconfigured: ${provider}/${modelId} thinking=${this._thinkingLevel}`);
   }
 
   /**

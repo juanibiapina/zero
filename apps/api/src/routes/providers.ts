@@ -215,6 +215,7 @@ export const createProviderRoutes = () => {
   const ModelSchema = z.object({
     id: z.string(),
     name: z.string(),
+    reasoning: z.boolean(),
   });
 
   const ModelListResponseSchema = z.object({
@@ -250,7 +251,7 @@ export const createProviderRoutes = () => {
     }
     const models = getModels(providerId as Parameters<typeof getModels>[0]);
     return c.json({
-      models: models.map((m) => ({ id: m.id, name: m.name ?? m.id })),
+      models: models.map((m) => ({ id: m.id, name: m.name ?? m.id, reasoning: m.reasoning })),
     }, 200);
   });
 
