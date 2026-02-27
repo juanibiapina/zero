@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { NavLink, useLocation } from "react-router";
+import { NavLink, useLocation, useMatch } from "react-router";
 import { useUser, useAuth, UserButton } from "@clerk/clerk-react";
 import {
   LayoutDashboard,
@@ -49,10 +49,18 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const loadingSessions = useSessionStore((s) => s.loading);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
 
-  // Re-fetch sessions on route changes (picks up new/deleted sessions)
+  // Detect if we're inside a project route (/p/:owner/:repo/*)
+  const projectMatch = useMatch("/p/:owner/:repo/*");
+  const currentOwner = projectMatch?.params.owner;
+  const currentRepo = projectMatch?.params.repo;
+
+  // Re-fetch sessions on route changes — scoped to current project when inside one
   useEffect(() => {
-    void fetchSessions(getToken);
-  }, [fetchSessions, getToken, location.pathname]);
+    const filter = currentOwner && currentRepo
+      ? { owner: currentOwner, repo: currentRepo }
+      : undefined;
+    void fetchSessions(getToken, filter);
+  }, [fetchSessions, getToken, currentOwner, currentRepo, location.pathname]);
 
   const sidebarContent = (
     <>
@@ -145,7 +153,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           {sessions.map((session) => (
             <NavLink
               key={session.id}
-              to={`/sessions/${session.id}`}
+              to={`/p/${session.owner}/${session.repo}/sessions/${session.id}`}
               onClick={onClose}
               className={({ isActive }) =>
                 cn(
@@ -167,9 +175,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 <span className="block truncate text-sm font-medium leading-snug">
                   {session.title}
                 </span>
-                <span className="block truncate text-xs text-sidebar-foreground/50">
-                  {session.owner}/{session.repo}
-                </span>
+                {!currentOwner && (
+                  <span className="block truncate text-xs text-sidebar-foreground/50">
+                    {session.owner}/{session.repo}
+                  </span>
+                )}
               </span>
             </NavLink>
           ))}

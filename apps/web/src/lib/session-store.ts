@@ -25,8 +25,8 @@ interface SessionStore {
   sessions: SessionEntry[];
   loading: boolean;
 
-  /** Fetch the full session list from the API. */
-  fetchSessions: (getToken: () => Promise<string | null>) => Promise<void>;
+  /** Fetch the session list from the API. Optionally filter by project. */
+  fetchSessions: (getToken: () => Promise<string | null>, filter?: { owner: string; repo: string }) => Promise<void>;
 
   /** Add a session to the local list (from WebSocket push). No-op if already present. */
   addSession: (session: SessionEntry) => void;
@@ -42,10 +42,14 @@ export const useSessionStore = create<SessionStore>((set) => ({
   sessions: [],
   loading: true,
 
-  fetchSessions: async (getToken) => {
+  fetchSessions: async (getToken, filter) => {
     try {
       const token = await getToken();
-      const resp = await fetch("/api/sessions", {
+      let url = "/api/sessions";
+      if (filter) {
+        url += `?owner=${encodeURIComponent(filter.owner)}&repo=${encodeURIComponent(filter.repo)}`;
+      }
+      const resp = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (resp.ok) {

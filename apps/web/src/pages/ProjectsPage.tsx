@@ -219,7 +219,7 @@ export default function ProjectsPage() {
           {visibleProjects.map((project) => (
             <Link
               key={project.fullName}
-              to={`/projects/${project.owner}/${project.repo}`}
+              to={`/p/${project.owner}/${project.repo}`}
               className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50 transition-colors"
             >
               <div className="flex items-center gap-3">

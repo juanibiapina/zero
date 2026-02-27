@@ -1,23 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Outlet } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { useUserWebSocket } from "@/lib/use-user-websocket";
-import { useSessionStore } from "@/lib/session-store";
 
 export default function Layout() {
-  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const { isSignedIn, isLoaded } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const fetchSessions = useSessionStore((s) => s.fetchSessions);
 
   // User-level WebSocket for real-time push events
   useUserWebSocket();
-
-  // Initial session list fetch
-  useEffect(() => {
-    void fetchSessions(getToken);
-  }, [fetchSessions, getToken]);
 
   if (!isLoaded) {
     return (

@@ -7,7 +7,6 @@ import { Link } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TurnView } from "@/components/TurnView";
 import { processAgentEvent } from "@/lib/process-agent-event";
-import { useSessionStore } from "@/lib/session-store";
 import type { AgentEvent, SessionServerMessage } from "@zero/core";
 import type { Turn, SessionStatus } from "@/lib/session-types";
 
@@ -23,14 +22,9 @@ export default function SessionPage() {
 // ─── Inner implementation ────────────────────────────────────────────────────
 
 function SessionPageInner() {
-  const { id } = useParams();
+  const { owner, repo, id } = useParams();
   const { getToken } = useAuth();
   const [turns, setTurns] = useState<Turn[]>([]);
-
-  // Read owner/repo from session store for breadcrumb
-  const session = useSessionStore((s) => s.sessions.find((sess) => sess.id === id));
-  const owner = session?.owner ?? "";
-  const repo = session?.repo ?? "";
 
   const [status, setStatus] = useState<SessionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
@@ -259,13 +253,13 @@ function SessionPageInner() {
       {/* Header */}
       <div className="shrink-0 border-b pb-3 mb-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-          <Link to="/" className="hover:text-foreground">
-            Dashboard
+          <Link to="/projects" className="hover:text-foreground">
+            Projects
           </Link>
           {owner && repo && (
             <>
               <ChevronRight className="h-3 w-3" />
-              <Link to={`/projects/${owner}/${repo}`} className="hover:text-foreground">
+              <Link to={`/p/${owner}/${repo}`} className="hover:text-foreground">
                 {owner}/{repo}
               </Link>
             </>

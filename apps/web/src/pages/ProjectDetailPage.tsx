@@ -111,7 +111,7 @@ export default function ProjectDetailPage() {
         throw new Error(message);
       }
       const data = (await resp.json()) as { sessionId: string };
-      void navigate(`/sessions/${data.sessionId}`);
+      void navigate(`/p/${owner}/${repo}/sessions/${data.sessionId}`);
     } catch (err) {
       setCreateError(
         err instanceof Error ? err.message : "Failed to create session"
@@ -187,7 +187,7 @@ export default function ProjectDetailPage() {
                   <tr key={session.id} className="border-b last:border-0 hover:bg-muted/50">
                     <td className="px-4 py-3">
                       <Link
-                        to={`/sessions/${session.id}`}
+                        to={`/p/${owner}/${repo}/sessions/${session.id}`}
                         className="text-sm font-medium hover:underline"
                       >
                         {session.title}
@@ -232,7 +232,7 @@ export default function ProjectDetailPage() {
               <div key={session.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <Link
-                    to={`/sessions/${session.id}`}
+                    to={`/p/${owner}/${repo}/sessions/${session.id}`}
                     className="text-sm font-medium hover:underline"
                   >
                     {session.title}

@@ -88,7 +88,7 @@ export default function DashboardPage() {
                     <tr key={session.id} className="border-b last:border-0 hover:bg-muted/50">
                       <td className="px-4 py-3">
                         <Link
-                          to={`/sessions/${session.id}`}
+                          to={`/p/${session.owner}/${session.repo}/sessions/${session.id}`}
                           className="text-sm font-medium hover:underline"
                         >
                           {session.title}
@@ -96,7 +96,7 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Link
-                          to={`/projects/${session.owner}/${session.repo}`}
+                          to={`/p/${session.owner}/${session.repo}`}
                           className="text-sm text-muted-foreground hover:underline"
                         >
                           {session.owner}/{session.repo}
@@ -138,7 +138,7 @@ export default function DashboardPage() {
                 <div key={session.id} className="rounded-lg border p-4 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <Link
-                      to={`/sessions/${session.id}`}
+                      to={`/p/${session.owner}/${session.repo}/sessions/${session.id}`}
                       className="text-sm font-medium hover:underline"
                     >
                       {session.title}
@@ -158,7 +158,7 @@ export default function DashboardPage() {
                     </Button>
                   </div>
                   <Link
-                    to={`/projects/${session.owner}/${session.repo}`}
+                    to={`/p/${session.owner}/${session.repo}`}
                     className="block text-xs text-muted-foreground hover:underline"
                   >
                     {session.owner}/{session.repo}

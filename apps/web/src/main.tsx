@@ -5,6 +5,7 @@ import { createBrowserRouter, RouterProvider } from "react-router";
 import "./index.css";
 import App from "./App";
 import Layout from "./components/Layout";
+import ProjectLayout from "./components/ProjectLayout";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
@@ -25,12 +26,12 @@ const router = createBrowserRouter([
           { index: true, element: <DashboardPage /> },
           { path: "projects", element: <ProjectsPage /> },
           {
-            path: "projects/:owner/:repo",
-            element: <ProjectDetailPage />,
-          },
-          {
-            path: "sessions/:id",
-            element: <SessionPage />,
+            path: "p/:owner/:repo",
+            element: <ProjectLayout />,
+            children: [
+              { index: true, element: <ProjectDetailPage /> },
+              { path: "sessions/:id", element: <SessionPage /> },
+            ],
           },
           { path: "settings", element: <SettingsPage /> },
           { path: "settings/providers", element: <ProvidersPage /> },
