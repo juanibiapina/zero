@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import ProjectPickerDialog from "./ProjectPickerDialog";
+import SessionPickerDialog from "./SessionPickerDialog";
 import CommandPaletteDialog from "./CommandPaletteDialog";
 import { useUserWebSocket } from "@/lib/use-user-websocket";
 import { useSettingsStore } from "@/lib/settings-store";
@@ -13,6 +14,8 @@ export default function Layout() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [sessionPickerOpen, setSessionPickerOpen] = useState(false);
+  const [sessionPickerKey, setSessionPickerKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
@@ -25,7 +28,8 @@ export default function Layout() {
   const navigate = useNavigate();
 
   // Hotkey actions
-  const dialogOpen = pickerOpen || paletteOpen;
+  const dialogOpen = pickerOpen || sessionPickerOpen || paletteOpen;
+  useAction("listSessions", () => { setSessionPickerKey((k) => k + 1); setSessionPickerOpen(true); }, { enabled: !dialogOpen });
   useAction("newSession", () => setPickerOpen(true), { enabled: !dialogOpen });
   useAction("commandPalette", () => setPaletteOpen(true), { enabled: !dialogOpen });
   useAction("goToDashboard", () => void navigate("/"), { enabled: !dialogOpen });
@@ -77,10 +81,12 @@ export default function Layout() {
       </div>
 
       <ProjectPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} />
+      <SessionPickerDialog key={sessionPickerKey} open={sessionPickerOpen} onOpenChange={setSessionPickerOpen} />
       <CommandPaletteDialog
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         onOpenProjectPicker={() => setPickerOpen(true)}
+        onOpenSessionPicker={() => { setSessionPickerKey((k) => k + 1); setSessionPickerOpen(true); }}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import {
   Plus,
   Terminal,
   Search,
+  MessageSquare,
 } from "lucide-react";
 import { formatForDisplay } from "@tanstack/react-hotkeys";
 import { APP_ACTIONS, type AppAction } from "@zero/core";
@@ -33,6 +34,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   goToTemplates: FileText,
   goToSettings: Settings,
   goToProviders: Plug,
+  listSessions: MessageSquare,
   newSession: Plus,
   commandPalette: Terminal,
 };
@@ -43,12 +45,14 @@ interface CommandPaletteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenProjectPicker: () => void;
+  onOpenSessionPicker: () => void;
 }
 
 export default function CommandPaletteDialog({
   open,
   onOpenChange,
   onOpenProjectPicker,
+  onOpenSessionPicker,
 }: CommandPaletteDialogProps) {
   const navigate = useNavigate();
 
@@ -71,10 +75,11 @@ export default function CommandPaletteDialog({
       goToTemplates: () => { onOpenChange(false); void navigate("/templates"); },
       goToSettings: () => { onOpenChange(false); void navigate("/settings"); },
       goToProviders: () => { onOpenChange(false); void navigate("/settings/providers"); },
+      listSessions: () => { onOpenChange(false); onOpenSessionPicker(); },
       newSession: () => { onOpenChange(false); onOpenProjectPicker(); },
       // commandPalette is omitted — it makes no sense to open the palette from itself
     }),
-    [navigate, onOpenChange, onOpenProjectPicker],
+    [navigate, onOpenChange, onOpenProjectPicker, onOpenSessionPicker],
   );
 
   // ── Build command list from APP_ACTIONS (exclude actions without a handler) ──

@@ -312,6 +312,7 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "goToSettings", label: "Settings", description: "Go to settings", category: "Navigation" },
   { id: "goToProviders", label: "Providers", description: "Go to providers", category: "Navigation" },
   // Actions
+  { id: "listSessions", label: "Sessions", description: "Open session picker", category: "Actions", defaultKey: "s" },
   { id: "newSession", label: "New Session", description: "Open project picker to create a session", category: "Actions", defaultKey: "N" },
   { id: "commandPalette", label: "Command Palette", description: "Open command palette", category: "Actions", defaultKey: "P" },
 ];
