@@ -20,5 +20,6 @@ export function useAction(
 
   useHotkeySequence([prefix, (key ?? "UNBOUND") as Hotkey], callback, {
     enabled: (options?.enabled ?? true) && key != null,
+    timeout: Infinity, // No timeout between prefix and action key
   });
 }
