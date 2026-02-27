@@ -5,13 +5,16 @@
  *
  * Orchestrates user settings CRUD via UserDO.
  * Routes instantiate this with the authenticated user's ID and delegate.
+ *
+ * Scalar settings (hotkeyPrefix) are stored as plain key/value rows.
+ * Object settings (hotkeyBindings) are JSON-serialized under a single key.
  */
 
 import { Result } from "@praha/byethrow";
 import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
-import { DEFAULT_USER_SETTINGS, type UserSettings } from "@zero/core";
+import { DEFAULT_USER_SETTINGS, DEFAULT_HOTKEY_BINDINGS, type UserSettings } from "@zero/core";
 
 /** Keys that can be stored in user_settings. */
 const KNOWN_KEYS = new Set<string>(Object.keys(DEFAULT_USER_SETTINGS));
@@ -39,13 +42,23 @@ export class SettingsService {
   async getSettings(): Promise<{ settings: UserSettings }> {
     const userDO = await this.getUserDO();
     const stored = await userDO.getAllUserSettings();
+
+    // Parse hotkeyBindings from JSON, deep-merge with defaults
+    let hotkeyBindings = { ...DEFAULT_HOTKEY_BINDINGS };
+    if (stored.hotkeyBindings) {
+      try {
+        const parsed = JSON.parse(stored.hotkeyBindings) as Record<string, string>;
+        hotkeyBindings = { ...hotkeyBindings, ...parsed };
+      } catch {
+        // Ignore invalid JSON, keep defaults
+      }
+    }
+
     return {
       settings: {
-        ...DEFAULT_USER_SETTINGS,
-        ...Object.fromEntries(
-          Object.entries(stored).filter(([k]) => KNOWN_KEYS.has(k)),
-        ),
-      } as UserSettings,
+        hotkeyPrefix: stored.hotkeyPrefix ?? DEFAULT_USER_SETTINGS.hotkeyPrefix,
+        hotkeyBindings,
+      },
     };
   }
 

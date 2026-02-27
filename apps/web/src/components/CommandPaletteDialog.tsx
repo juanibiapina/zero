@@ -7,8 +7,11 @@ import {
   Settings,
   Plug,
   Plus,
+  Terminal,
   Search,
 } from "lucide-react";
+import { formatForDisplay } from "@tanstack/react-hotkeys";
+import { APP_ACTIONS, type AppAction } from "@zero/core";
 import {
   Dialog,
   DialogContent,
@@ -18,14 +21,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/lib/settings-store";
 
-interface Command {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  category: "Navigation" | "Actions";
-  action: () => void;
-}
+// ── Icon map (lucide-react can't live in @zero/core) ─────────────────────
+
+const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  goToDashboard: LayoutDashboard,
+  goToProjects: FolderGit2,
+  goToSecrets: KeyRound,
+  goToSettings: Settings,
+  goToProviders: Plug,
+  newSession: Plus,
+  commandPalette: Terminal,
+};
+
+// ── Types ────────────────────────────────────────────────────────────────
 
 interface CommandPaletteDialogProps {
   open: boolean;
@@ -46,70 +56,37 @@ export default function CommandPaletteDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const commands: Command[] = useMemo(
-    () => [
-      {
-        id: "nav-dashboard",
-        label: "Dashboard",
-        icon: LayoutDashboard,
-        category: "Navigation",
-        action: () => {
-          onOpenChange(false);
-          void navigate("/");
-        },
-      },
-      {
-        id: "nav-projects",
-        label: "Projects",
-        icon: FolderGit2,
-        category: "Navigation",
-        action: () => {
-          onOpenChange(false);
-          void navigate("/projects");
-        },
-      },
-      {
-        id: "nav-secrets",
-        label: "Secrets",
-        icon: KeyRound,
-        category: "Navigation",
-        action: () => {
-          onOpenChange(false);
-          void navigate("/secrets");
-        },
-      },
-      {
-        id: "nav-settings",
-        label: "Settings",
-        icon: Settings,
-        category: "Navigation",
-        action: () => {
-          onOpenChange(false);
-          void navigate("/settings");
-        },
-      },
-      {
-        id: "nav-providers",
-        label: "Providers",
-        icon: Plug,
-        category: "Navigation",
-        action: () => {
-          onOpenChange(false);
-          void navigate("/settings/providers");
-        },
-      },
-      {
-        id: "action-new-session",
-        label: "New Session",
-        icon: Plus,
-        category: "Actions",
-        action: () => {
-          onOpenChange(false);
-          onOpenProjectPicker();
-        },
-      },
-    ],
+  const prefix = useSettingsStore((s) => s.settings.hotkeyPrefix);
+  const bindings = useSettingsStore((s) => s.settings.hotkeyBindings);
+
+  // ── Action handlers (close palette, then do the thing) ──────────────
+
+  const handlers: Record<string, () => void> = useMemo(
+    () => ({
+      goToDashboard: () => { onOpenChange(false); void navigate("/"); },
+      goToProjects: () => { onOpenChange(false); void navigate("/projects"); },
+      goToSecrets: () => { onOpenChange(false); void navigate("/secrets"); },
+      goToSettings: () => { onOpenChange(false); void navigate("/settings"); },
+      goToProviders: () => { onOpenChange(false); void navigate("/settings/providers"); },
+      newSession: () => { onOpenChange(false); onOpenProjectPicker(); },
+      // commandPalette is omitted — it makes no sense to open the palette from itself
+    }),
     [navigate, onOpenChange, onOpenProjectPicker],
+  );
+
+  // ── Build command list from APP_ACTIONS (exclude actions without a handler) ──
+
+  const commands = useMemo(
+    () =>
+      APP_ACTIONS
+        .filter((a) => handlers[a.id] != null)
+        .map((a: AppAction) => ({
+          ...a,
+          icon: ACTION_ICONS[a.id] ?? Terminal,
+          action: handlers[a.id],
+          hotkey: bindings[a.id], // may be undefined
+        })),
+    [handlers, bindings],
   );
 
   const filtered = commands.filter((cmd) =>
@@ -118,7 +95,7 @@ export default function CommandPaletteDialog({
 
   // Group filtered commands by category (preserve insertion order)
   const grouped = useMemo(() => {
-    const map = new Map<string, Command[]>();
+    const map = new Map<string, typeof filtered>();
     for (const cmd of filtered) {
       const list = map.get(cmd.category);
       if (list) {
@@ -237,6 +214,17 @@ export default function CommandPaletteDialog({
                   >
                     <cmd.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate font-medium">{cmd.label}</span>
+                    {cmd.hotkey && (
+                      <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                        <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                          {formatForDisplay(prefix)}
+                        </kbd>
+                        <span>→</span>
+                        <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                          {formatForDisplay(cmd.hotkey)}
+                        </kbd>
+                      </span>
+                    )}
                   </button>
                 );
               })}

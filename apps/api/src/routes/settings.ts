@@ -23,11 +23,13 @@ type Variables = {
 const SettingsResponseSchema = z.object({
   settings: z.object({
     hotkeyPrefix: z.string(),
+    hotkeyBindings: z.record(z.string(), z.string()),
   }),
 });
 
 const UpdateSettingsBodySchema = z.object({
   hotkeyPrefix: z.string().optional(),
+  hotkeyBindings: z.record(z.string(), z.string()).optional(),
 });
 
 const ErrorSchema = z.object({
@@ -97,13 +99,25 @@ export const createSettingsRoutes = () => {
     const body = c.req.valid("json");
     const service = new SettingsService(c.env, c.get("userId"));
 
-    // Update each provided setting
+    // Handle scalar settings
     for (const [key, value] of Object.entries(body)) {
+      if (key === "hotkeyBindings") continue; // handled separately below
       if (value !== undefined) {
-        const result = await service.updateSetting(key, value);
+        const result = await service.updateSetting(key, value as string);
         if (Result.isFailure(result)) {
           return c.json({ error: result.error.message }, 400);
         }
+      }
+    }
+
+    // Handle hotkeyBindings — read-modify-write as JSON blob
+    if (body.hotkeyBindings) {
+      // Fetch current bindings to merge
+      const current = await service.getSettings();
+      const merged = { ...current.settings.hotkeyBindings, ...body.hotkeyBindings };
+      const result = await service.updateSetting("hotkeyBindings", JSON.stringify(merged));
+      if (Result.isFailure(result)) {
+        return c.json({ error: result.error.message }, 400);
       }
     }
 

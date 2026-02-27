@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { Outlet } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
-import { useHotkeySequence } from "@tanstack/react-hotkeys";
-import type { Hotkey } from "@tanstack/react-hotkeys";
 import { Menu } from "lucide-react";
 import Sidebar from "./Sidebar";
 import ProjectPickerDialog from "./ProjectPickerDialog";
 import CommandPaletteDialog from "./CommandPaletteDialog";
 import { useUserWebSocket } from "@/lib/use-user-websocket";
 import { useSettingsStore } from "@/lib/settings-store";
+import { useAction } from "@/lib/use-action";
 
 export default function Layout() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
@@ -16,7 +15,6 @@ export default function Layout() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const prefix = useSettingsStore((s) => s.settings.hotkeyPrefix) as Hotkey;
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
 
   // Fetch user settings on mount
@@ -24,15 +22,10 @@ export default function Layout() {
     void fetchSettings(getToken);
   }, [fetchSettings, getToken]);
 
-  // Prefix → N: open project picker to create a new session
-  useHotkeySequence([prefix, "N"], () => setPickerOpen(true), {
-    enabled: !pickerOpen && !paletteOpen,
-  });
-
-  // Prefix → P: open command palette
-  useHotkeySequence([prefix, "P"], () => setPaletteOpen(true), {
-    enabled: !paletteOpen && !pickerOpen,
-  });
+  // Hotkey actions
+  const dialogOpen = pickerOpen || paletteOpen;
+  useAction("newSession", () => setPickerOpen(true), { enabled: !dialogOpen });
+  useAction("commandPalette", () => setPaletteOpen(true), { enabled: !dialogOpen });
 
   // User-level WebSocket for real-time push events
   useUserWebSocket();

@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-hotkeys";
 import type { Hotkey } from "@tanstack/react-hotkeys";
 import { Settings, Keyboard } from "lucide-react";
+import { BINDABLE_ACTIONS, type AppAction } from "@zero/core";
 import { useSettingsStore } from "@/lib/settings-store";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,8 @@ function HotkeyBadge({ hotkey }: { hotkey: string }) {
     </kbd>
   );
 }
+
+// ── Prefix recorder (unchanged from before) ─────────────────────────────
 
 function PrefixRecorder() {
   const { getToken } = useAuth();
@@ -30,7 +33,6 @@ function PrefixRecorder() {
     onRecord: (hotkey: Hotkey) => {
       setError(null);
 
-      // Validate the recorded hotkey
       const validation = validateHotkey(hotkey);
       if (!validation.valid) {
         setError(validation.errors.join(", "));
@@ -89,9 +91,7 @@ function PrefixRecorder() {
         )}
       </div>
 
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {recorder.isRecording && (
         <p className="text-xs text-muted-foreground">
@@ -106,9 +106,92 @@ function PrefixRecorder() {
   );
 }
 
-export default function SettingsPage() {
-  const prefix = useSettingsStore((s) => s.settings.hotkeyPrefix);
+// ── Per-action binding recorder ──────────────────────────────────────────
 
+function ActionBindingRow({ action }: { action: AppAction }) {
+  const { getToken } = useAuth();
+  const bindings = useSettingsStore((s) => s.settings.hotkeyBindings);
+  const prefix = useSettingsStore((s) => s.settings.hotkeyPrefix);
+  const updateHotkeyBinding = useSettingsStore((s) => s.updateHotkeyBinding);
+
+  const currentKey = bindings[action.id] ?? action.defaultKey ?? "";
+
+  const [error, setError] = useState<string | null>(null);
+
+  const recorder = useHotkeyRecorder({
+    onRecord: (hotkey: Hotkey) => {
+      setError(null);
+
+      const validation = validateHotkey(hotkey);
+      if (!validation.valid) {
+        setError(validation.errors.join(", "));
+        return;
+      }
+
+      // Check for duplicate bindings
+      const duplicate = BINDABLE_ACTIONS.find(
+        (a) => a.id !== action.id && (bindings[a.id] ?? a.defaultKey) === hotkey,
+      );
+      if (duplicate) {
+        setError(`"${hotkey}" is already bound to "${duplicate.label}"`);
+        return;
+      }
+
+      void updateHotkeyBinding(getToken, action.id, hotkey);
+    },
+    onCancel: () => {
+      setError(null);
+    },
+  });
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-sm">
+        <HotkeyBadge hotkey={prefix} />
+        <span className="text-muted-foreground">→</span>
+        {recorder.isRecording ? (
+          <div
+            className={cn(
+              "inline-flex items-center rounded border-2 border-primary bg-muted px-2 py-1 font-mono text-sm",
+              "animate-pulse",
+            )}
+          >
+            {recorder.recordedHotkey
+              ? formatForDisplay(recorder.recordedHotkey)
+              : "Press key…"}
+          </div>
+        ) : (
+          <HotkeyBadge hotkey={currentKey} />
+        )}
+        <span className="text-muted-foreground">{action.label}</span>
+
+        {recorder.isRecording ? (
+          <button
+            onClick={() => recorder.cancelRecording()}
+            className="ml-auto rounded-md border px-2 py-1 text-xs hover:bg-muted transition-colors"
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              setError(null);
+              recorder.startRecording();
+            }}
+            className="ml-auto rounded-md border px-2 py-1 text-xs hover:bg-muted transition-colors"
+          >
+            Change
+          </button>
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+    </div>
+  );
+}
+
+// ── Settings page ────────────────────────────────────────────────────────
+
+export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-2">
@@ -132,19 +215,10 @@ export default function SettingsPage() {
 
           <div className="border-t pt-4 space-y-3">
             <h3 className="text-sm font-medium">Bound shortcuts</h3>
-            <div className="grid gap-2">
-              <div className="flex items-center gap-2 text-sm">
-                <HotkeyBadge hotkey={prefix} />
-                <span className="text-muted-foreground">→</span>
-                <HotkeyBadge hotkey="N" />
-                <span className="text-muted-foreground">New session</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <HotkeyBadge hotkey={prefix} />
-                <span className="text-muted-foreground">→</span>
-                <HotkeyBadge hotkey="P" />
-                <span className="text-muted-foreground">Command palette</span>
-              </div>
+            <div className="grid gap-3">
+              {BINDABLE_ACTIONS.map((action) => (
+                <ActionBindingRow key={action.id} action={action} />
+              ))}
             </div>
           </div>
         </div>

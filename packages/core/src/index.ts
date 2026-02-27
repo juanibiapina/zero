@@ -276,15 +276,52 @@ export interface SecretEntry {
 }
 
 // ============================================================================
+// App Actions — unified registry for hotkeys & command palette
+// ============================================================================
+
+export type ActionCategory = "Navigation" | "Actions";
+
+export interface AppAction {
+  id: string;
+  label: string;
+  description: string;
+  category: ActionCategory;
+  /** If set, this action gets a prefix-sequence hotkey binding (rebindable). */
+  defaultKey?: string;
+}
+
+export const APP_ACTIONS: AppAction[] = [
+  // Navigation
+  { id: "goToDashboard", label: "Dashboard", description: "Go to dashboard", category: "Navigation" },
+  { id: "goToProjects", label: "Projects", description: "Go to projects", category: "Navigation" },
+  { id: "goToSecrets", label: "Secrets", description: "Go to secrets", category: "Navigation" },
+  { id: "goToSettings", label: "Settings", description: "Go to settings", category: "Navigation" },
+  { id: "goToProviders", label: "Providers", description: "Go to providers", category: "Navigation" },
+  // Actions
+  { id: "newSession", label: "New Session", description: "Open project picker to create a session", category: "Actions", defaultKey: "N" },
+  { id: "commandPalette", label: "Command Palette", description: "Open command palette", category: "Actions", defaultKey: "P" },
+];
+
+/** Actions that have hotkey bindings (have a defaultKey). */
+export const BINDABLE_ACTIONS: AppAction[] = APP_ACTIONS.filter((a) => a.defaultKey != null);
+
+/** Default hotkey bindings: actionId → key string. */
+export const DEFAULT_HOTKEY_BINDINGS: Record<string, string> = Object.fromEntries(
+  BINDABLE_ACTIONS.map((a) => [a.id, a.defaultKey!]),
+);
+
+// ============================================================================
 // User Settings Types
 // ============================================================================
 
 export interface UserSettings {
   hotkeyPrefix: string;
+  hotkeyBindings: Record<string, string>;
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   hotkeyPrefix: "Control+Space",
+  hotkeyBindings: { ...DEFAULT_HOTKEY_BINDINGS },
 };
 
 
