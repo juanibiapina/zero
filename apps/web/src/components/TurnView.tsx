@@ -161,7 +161,7 @@ export function TurnView({ turn }: { turn: Turn }) {
               {turn.template.name}
             </span>
           )}
-          <div className="font-medium">{turn.text || (turn.template ? <span className="text-muted-foreground italic">no arguments</span> : "")}</div>
+          <div className="font-medium">{turn.text}</div>
         </div>
       </div>
     );
