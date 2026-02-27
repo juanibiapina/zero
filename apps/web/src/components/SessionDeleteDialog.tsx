@@ -13,7 +13,7 @@ import { useEffect, useRef } from "react";
 interface SessionDeleteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void> | void;
   sessionTitle?: string | null;
   isDeleting?: boolean;
 }
@@ -40,7 +40,7 @@ export default function SessionDeleteDialog({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isDeleting) {
       e.preventDefault();
-      onConfirm();
+      void onConfirm();
     }
   };
 
@@ -66,7 +66,7 @@ export default function SessionDeleteDialog({
           <Button
             ref={confirmButtonRef}
             variant="destructive"
-            onClick={onConfirm}
+            onClick={() => void onConfirm()}
             disabled={isDeleting}
           >
             {isDeleting ? (

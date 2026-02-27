@@ -387,7 +387,7 @@ function SessionPageInner() {
         removeSession(id);
         // Close dialog and navigate to dashboard
         setDeleteDialogOpen(false);
-        navigate("/");
+        void navigate("/");
       }
     } catch {
       // Ignore errors - dialog stays open so user can try again or cancel
