@@ -1,49 +1,63 @@
-// ─── Session Types ──────────────────────────────────────────────────────────
+// ─── Session View Types (message-based, mirrors pi-mono) ────────────────────
 
-export interface ThinkingBlock {
-  kind: "thinking";
-  text: string;
-}
+import type { AgentAssistantMessage, AgentToolResultMessage } from "@zero/core";
 
-export interface TextBlock {
-  kind: "text";
-  text: string;
-}
+// Re-export for convenience
+export type { AgentAssistantMessage, AgentToolResultMessage } from "@zero/core";
 
-export interface ToolCallBlock {
-  kind: "toolcall";
-  name: string;
-  text: string;
-  args?: Record<string, unknown>;
-}
-
-export interface ToolResultBlock {
-  kind: "toolresult";
-  toolName: string;
-  content: string;
-  isError: boolean;
-}
-
-export interface ErrorBlock {
-  kind: "error";
-  message: string;
-  friendlyMessage?: string;
-  isAuthError: boolean;
-}
-
-export type ContentBlock = ThinkingBlock | TextBlock | ToolCallBlock | ToolResultBlock | ErrorBlock;
-
-export interface AssistantTurn {
-  role: "assistant";
-  blocks: ContentBlock[];
-}
-
-export interface UserTurn {
+/**
+ * User message for display. Stored separately from agent messages
+ * because they arrive via SessionDO user events (not the agent stream)
+ * and carry UI-only metadata like template info.
+ */
+export interface UserMessageDisplay {
   role: "user";
   text: string;
   template?: { slug: string; name: string };
 }
 
-export type Turn = AssistantTurn | UserTurn;
+/**
+ * All message types that appear in the session view.
+ * Rendered in order: user bubbles, assistant blocks (with inline tool
+ * results paired by ID), toolResult messages skipped (rendered inline).
+ */
+export type DisplayMessage = UserMessageDisplay | AgentAssistantMessage | AgentToolResultMessage;
+
+/**
+ * Session view state — the single source of truth for rendering.
+ *
+ * - messages: completed messages (user, assistant, toolResult)
+ * - streamingMessage: the currently-streaming assistant message (null when idle/replay)
+ * - pendingToolCalls: tool call IDs currently being executed
+ */
+export interface SessionViewState {
+  messages: DisplayMessage[];
+  streamingMessage: AgentAssistantMessage | null;
+  pendingToolCalls: Set<string>;
+}
+
+export function emptyViewState(): SessionViewState {
+  return {
+    messages: [],
+    streamingMessage: null,
+    pendingToolCalls: new Set(),
+  };
+}
 
 export type { SessionStatus } from "@zero/core";
+
+/**
+ * Build a map of tool results by tool call ID for inline pairing.
+ * Used at render time to pair tool calls in assistant messages with their results.
+ */
+export function buildToolResultsMap(
+  messages: DisplayMessage[],
+): Map<string, AgentToolResultMessage> {
+  const map = new Map<string, AgentToolResultMessage>();
+  for (const msg of messages) {
+    if (msg.role === "toolResult") {
+      map.set(msg.toolCallId, msg);
+    }
+  }
+  return map;
+}

@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
 import { ChevronRight, Loader2, Send, Square, Bug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
-import { TurnView } from "@/components/TurnView";
-import { processAgentEvent } from "@/lib/process-agent-event";
-import type { AgentEvent, AgentAssistantMessage, SessionServerMessage, PromptTemplate, ThinkingLevel } from "@zero/core";
+import { MessageView, StreamingMessageView } from "@/components/TurnView";
+import { processAgentEvent, addUserMessage } from "@/lib/process-agent-event";
+import type { AgentAssistantMessage, SessionServerMessage, PromptTemplate, ThinkingLevel, AgentEvent } from "@zero/core";
 import { defaultThinkingLevel } from "@zero/core";
-import type { Turn, SessionStatus } from "@/lib/session-types";
+import type { SessionViewState, SessionStatus } from "@/lib/session-types";
+import { emptyViewState, buildToolResultsMap } from "@/lib/session-types";
 import { SlashAutocomplete } from "@/components/SlashAutocomplete";
 import { resolveSlashCommand, getSlashFilteredTemplates } from "@/lib/template-utils";
 import { useAction } from "@/lib/use-action";
@@ -81,7 +82,7 @@ function SessionPageInner() {
   const { owner, repo, id } = useParams();
   const { getToken } = useAuth();
   const navigate = useNavigate();
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [viewState, setViewState] = useState<SessionViewState>(emptyViewState);
 
   const [status, setStatus] = useState<SessionStatus>("connecting");
   const [error, setError] = useState<string | null>(null);
@@ -89,8 +90,10 @@ function SessionPageInner() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [acIndex, setAcIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const pendingAutoScrollRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
   const connRef = useRef<ManagedWebSocket | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastSeqRef = useRef<number>(0);
@@ -98,9 +101,82 @@ function SessionPageInner() {
   /** Track user messages we've sent optimistically, to dedup on replay */
   const sentUserMessagesRef = useRef<Set<string>>(new Set());
   const caughtUpRef = useRef(false);
-  /** Buffer turns during replay to avoid per-event renders / scroll flicker */
-  const replayBufferRef = useRef<Turn[]>([]);
+  /** Buffer state during replay to avoid per-event renders / scroll flicker */
+  const replayBufferRef = useRef<SessionViewState>(emptyViewState());
   const statusRef = useRef<SessionStatus>("connecting");
+
+  /**
+   * Event buffer + rAF scheduling for streaming.
+   *
+   * Events from the container often arrive in bursts (e.g. 60+ events in <100ms)
+   * because the EventBuffer replays all buffered events when a new client connects.
+   * If we call setViewState synchronously for each event, React 18 batches them
+   * all into one render — meaning message_update (sets streamingMessage) and
+   * message_end (clears it) collapse into the same render and the user never
+   * sees the streaming content.
+   *
+   * Fix: buffer events and process them via requestAnimationFrame, rate-limited
+   * to a few streaming events per frame. This spreads a burst of 60 events
+   * across ~20 frames (~330ms), creating smooth visible streaming instead of
+   * content appearing all at once. Non-streaming events (status, tool_execution,
+   * etc.) are processed immediately; only message_update is rate-limited.
+   * An assistant message_end is always deferred to its own frame so the
+   * streaming view gets at least one paint before transitioning to the final
+   * message.
+   */
+  const agentEventBufferRef = useRef<AgentEvent[]>([]);
+  const rafIdRef = useRef<number | null>(null);
+
+  /** Max message_update events to process per animation frame. Tuned for
+   *  smooth streaming: 3 per frame ≈ 180/s at 60fps, visibly incremental. */
+  const STREAMING_EVENTS_PER_FRAME = 3;
+
+  const flushAgentEvents = useCallback(() => {
+    rafIdRef.current = null;
+    const buf = agentEventBufferRef.current;
+    if (buf.length === 0) return;
+
+    const toProcess: AgentEvent[] = [];
+    let streamingCount = 0;
+
+    while (buf.length > 0) {
+      const ev = buf[0];
+
+      // Never process an assistant message_end in the same batch as
+      // preceding message_update — defer it to the next frame so the
+      // streaming view gets at least one paint.
+      if (
+        ev.type === "message_end" &&
+        ev.message.role === "assistant" &&
+        toProcess.some((e) => e.type === "message_update")
+      ) {
+        break;
+      }
+
+      // Rate-limit message_update events for smooth animation.
+      if (ev.type === "message_update") {
+        if (streamingCount >= STREAMING_EVENTS_PER_FRAME) break;
+        streamingCount++;
+      }
+
+      toProcess.push(buf.shift()!);
+    }
+
+    if (toProcess.length > 0) {
+      setViewState((prev) => {
+        let state = prev;
+        for (const ev of toProcess) {
+          state = processAgentEvent(state, ev);
+        }
+        return state;
+      });
+    }
+
+    // Schedule next frame if there are remaining events.
+    if (buf.length > 0) {
+      rafIdRef.current = requestAnimationFrame(flushAgentEvents);
+    }
+  }, []);
 
   // Debug panel state
   const [showDebug, setShowDebug] = useState(false);
@@ -145,29 +221,6 @@ function SessionPageInner() {
     })();
   }, [getToken]);
 
-  // Auto-scroll to bottom (disabled when user scrolls up)
-  useEffect(() => {
-    if (shouldAutoScrollRef.current && scrollRef.current) {
-      // Check if window is focused/visible - if not, mark scroll as pending
-      if (document.hidden || !document.hasFocus()) {
-        pendingAutoScrollRef.current = true;
-      } else {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
-    }
-  }, [turns]);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    // During event replay (before caught_up), don't let scroll events
-    // disable auto-scroll — content height changes from rapid setTurns
-    // calls can cause spurious "not at bottom" detections.
-    if (!caughtUpRef.current) return;
-    shouldAutoScrollRef.current =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 50;
-  }, []);
-
   // Helper function to perform scroll-to-bottom
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -175,10 +228,54 @@ function SessionPageInner() {
     }
   }, []);
 
+  // ── Auto-scroll via ResizeObserver (matches pi-mono) ────────────────
+  // Instead of reacting to state changes, observe the content container
+  // for size changes. When the DOM grows (new streaming text, new message),
+  // the observer fires and scrolls to bottom. This naturally handles
+  // rAF-batched renders without timing issues.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    const ro = new ResizeObserver(() => {
+      if (shouldAutoScrollRef.current && scrollRef.current) {
+        if (document.hidden || !document.hasFocus()) {
+          pendingAutoScrollRef.current = true;
+        } else {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }
+    });
+
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
+
+  // Scroll detection — track direction like pi-mono: only disable
+  // auto-scroll when user scrolls UP and is far from bottom.
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // During replay, don't let layout-driven scroll events disable auto-scroll.
+    if (!caughtUpRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+    if (scrollTop < lastScrollTopRef.current && distanceFromBottom > 50) {
+      // User scrolled UP and is far from bottom → disable
+      shouldAutoScrollRef.current = false;
+    } else if (distanceFromBottom < 10) {
+      // Very close to bottom → re-enable
+      shouldAutoScrollRef.current = true;
+    }
+
+    lastScrollTopRef.current = scrollTop;
+  }, []);
+
   // Handle window focus changes to catch up on missed auto-scrolls
   useEffect(() => {
     const handleFocusChange = () => {
-      // Only scroll if auto-scroll is enabled and we missed a scroll while unfocused
       if (shouldAutoScrollRef.current && pendingAutoScrollRef.current) {
         pendingAutoScrollRef.current = false;
         requestAnimationFrame(scrollToBottom);
@@ -186,16 +283,11 @@ function SessionPageInner() {
     };
 
     const handleVisibilityChange = () => {
-      // Only trigger on becoming visible (not hidden)
-      if (!document.hidden) {
-        handleFocusChange();
-      }
+      if (!document.hidden) handleFocusChange();
     };
 
-    // Listen for both focus and visibility change events for better compatibility
     window.addEventListener('focus', handleFocusChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       window.removeEventListener('focus', handleFocusChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -223,7 +315,8 @@ function SessionPageInner() {
       onOpen() {
         setStatusBoth("connecting");
         caughtUpRef.current = false;
-        replayBufferRef.current = [];
+        lastSeqRef.current = 0; // Reset so full history is replayed on reconnect
+        replayBufferRef.current = emptyViewState();
         statsRef.current = emptyStats();
         replayStartRef.current = Date.now();
       },
@@ -238,12 +331,18 @@ function SessionPageInner() {
               caughtUpRef.current = true;
               statsRef.current.replayMs = Date.now() - replayStartRef.current;
               setSessionStats({ ...statsRef.current });
-              // Flush buffered replay turns in a single render to avoid
+              // Flush buffered replay state in a single render to avoid
               // per-event re-renders and scroll flicker.
-              if (replayBufferRef.current.length > 0) {
-                setTurns(replayBufferRef.current);
-                replayBufferRef.current = [];
+              if (replayBufferRef.current.messages.length > 0) {
+                setViewState(replayBufferRef.current);
+                replayBufferRef.current = emptyViewState();
               }
+              // Clear optimistic dedup set — if the user sent a message
+              // during replay, the optimistic add was overwritten by the
+              // replay buffer flush above. Clearing this ensures the
+              // server's broadcast of that message won't be deduped and
+              // will re-add it to the view state.
+              sentUserMessagesRef.current.clear();
               // Scroll to bottom after replay completes. Use rAF to ensure
               // React has committed the flushed turns to the DOM.
               if (shouldAutoScrollRef.current) {
@@ -351,14 +450,12 @@ function SessionPageInner() {
                   return; // Already shown
                 }
 
-                const userTurn = userTemplate
-                  ? { role: "user" as const, text: userText, template: userTemplate }
-                  : { role: "user" as const, text: userText };
-
                 if (!caughtUpRef.current) {
-                  replayBufferRef.current = [...replayBufferRef.current, userTurn];
+                  replayBufferRef.current = addUserMessage(
+                    replayBufferRef.current, userText, userTemplate,
+                  );
                 } else {
-                  setTurns((prev) => [...prev, userTurn]);
+                  setViewState((prev) => addUserMessage(prev, userText, userTemplate));
                 }
                 return;
               }
@@ -367,9 +464,14 @@ function SessionPageInner() {
               const event = msg.data as AgentEvent;
               if (!caughtUpRef.current) {
                 // Buffer during replay — avoid per-event renders
-                replayBufferRef.current = processAgentEvent(event, replayBufferRef.current);
+                replayBufferRef.current = processAgentEvent(replayBufferRef.current, event);
               } else {
-                setTurns((prev) => processAgentEvent(event, prev));
+                // Push to rAF buffer so message_update gets at least one
+                // paint before message_end clears streamingMessage.
+                agentEventBufferRef.current.push(event);
+                if (rafIdRef.current === null) {
+                  rafIdRef.current = requestAnimationFrame(flushAgentEvents);
+                }
               }
               return;
             }
@@ -388,8 +490,13 @@ function SessionPageInner() {
         clearTimeout(statsFlushTimerRef.current);
         statsFlushTimerRef.current = null;
       }
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      agentEventBufferRef.current = [];
     };
-  }, [id, getToken, setStatusBoth, scrollToBottom]);
+  }, [id, getToken, setStatusBoth, scrollToBottom, flushAgentEvents]);
 
   // ── Stop/abort session ────────────────────────────────────────────────
 
@@ -528,16 +635,15 @@ function SessionPageInner() {
     if (!rawInput) return;
 
     setInput("");
+    // Re-enable auto-scroll when the user sends a message (like pi-mono)
+    shouldAutoScrollRef.current = true;
 
     // Resolve slash command if present
     const resolved = resolveSlashCommand(rawInput, templates);
 
     if (resolved) {
       // Template matched — show original text with template badge, send expanded
-      setTurns((prev) => [
-        ...prev,
-        { role: "user", text: resolved.originalText, template: resolved.template },
-      ]);
+      setViewState((prev) => addUserMessage(prev, resolved.originalText, resolved.template));
       // Dedup key: template slug + original text (matches what SessionDO stores)
       sentUserMessagesRef.current.add(`tpl:${resolved.template.slug}:${resolved.originalText}`);
 
@@ -553,7 +659,7 @@ function SessionPageInner() {
       }
     } else {
       // Plain message — no template
-      setTurns((prev) => [...prev, { role: "user", text: rawInput }]);
+      setViewState((prev) => addUserMessage(prev, rawInput));
       sentUserMessagesRef.current.add(rawInput);
 
       const wsMessage = JSON.stringify({ type: "message", text: rawInput });
@@ -593,6 +699,12 @@ function SessionPageInner() {
   useAction("deleteCurrentSession", () => setDeleteDialogOpen(true), {
     enabled: !deleteDialogOpen,
   });
+
+  // Derive tool results map for pairing tool calls with results by ID
+  const toolResultsById = useMemo(
+    () => buildToolResultsMap(viewState.messages),
+    [viewState.messages],
+  );
 
   // Show input bar for all active states (hidden only on terminal error)
   const showInputBar = status !== "error";
@@ -697,8 +809,9 @@ function SessionPageInner() {
       )}
 
       {/* Chat area */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto space-y-1 pr-2">
-        {turns.length === 0 && (
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto pr-2">
+        <div ref={contentRef} className="space-y-1">
+        {viewState.messages.length === 0 && !viewState.streamingMessage && (
           <div className="text-muted-foreground text-sm py-8 text-center">
             {status === "connecting" && (
               <span className="flex items-center justify-center gap-2">
@@ -722,13 +835,29 @@ function SessionPageInner() {
           </div>
         )}
 
-        {turns.map((turn, i) => (
-          <TurnView key={i} turn={turn} />
+        {/* Completed messages */}
+        {viewState.messages.map((msg, i) => (
+          <MessageView
+            key={i}
+            message={msg}
+            toolResultsById={toolResultsById}
+            pendingToolCalls={viewState.pendingToolCalls}
+          />
         ))}
 
+        {/* Currently streaming assistant message */}
+        {viewState.streamingMessage && (
+          <StreamingMessageView
+            message={viewState.streamingMessage}
+            toolResultsById={toolResultsById}
+            pendingToolCalls={viewState.pendingToolCalls}
+          />
+        )}
+
         {/* Waiting indicator after user message when container isn't ready */}
-        {turns.length > 0 &&
-          turns[turns.length - 1]?.role === "user" &&
+        {viewState.messages.length > 0 &&
+          viewState.messages[viewState.messages.length - 1]?.role === "user" &&
+          !viewState.streamingMessage &&
           (status === "connecting" ||
             status === "starting" ||
             status === "resuming") && (
@@ -737,16 +866,7 @@ function SessionPageInner() {
               Getting ready… your message will be sent when ready
             </div>
           )}
-
-        {(status === "starting" || status === "resuming" || status === "running") &&
-          turns.length > 0 &&
-          turns[turns.length - 1]?.role !== "assistant" &&
-          turns[turns.length - 1]?.role !== "user" && (
-            <div className="flex items-center gap-2 text-muted-foreground py-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Agent is working...
-            </div>
-          )}
+        </div>{/* end contentRef */}
       </div>
 
       {/* Input bar — always visible except on terminal states */}

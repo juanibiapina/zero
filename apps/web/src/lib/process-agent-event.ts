@@ -1,295 +1,106 @@
-import type { AgentEvent, AgentAssistantMessageEvent, AgentAssistantMessage } from "@zero/core";
-import type { Turn, AssistantTurn, ErrorBlock } from "./session-types";
-
-// ─── Error Parsing ──────────────────────────────────────────────────────────
-
-interface ParsedError {
-  friendlyMessage?: string;
-  isAuthError: boolean;
-}
-
-/**
- * Parse errorMessage from pi-ai. Format: "<status_code> <json_body>" or plain string.
- */
-function parseErrorMessage(raw: string): ParsedError {
-  // Try to split "<status> <json>"
-  const spaceIdx = raw.indexOf(" ");
-  if (spaceIdx > 0) {
-    const jsonPart = raw.slice(spaceIdx + 1);
-    try {
-      const parsed = JSON.parse(jsonPart) as { error?: { type?: string; message?: string } };
-      const errorType = parsed?.error?.type;
-      const errorMsg = parsed?.error?.message;
-      return {
-        friendlyMessage: errorMsg ?? undefined,
-        isAuthError: errorType === "authentication_error",
-      };
-    } catch {
-      // Not JSON after status code — fall through
-    }
-  }
-  return { isAuthError: false };
-}
-
-/**
- * Build an ErrorBlock from an AssistantMessage that has errorMessage set.
- */
-function buildErrorBlock(message: AgentAssistantMessage): ErrorBlock {
-  const raw = message.errorMessage ?? "Unknown error";
-  const parsed = parseErrorMessage(raw);
-  return {
-    kind: "error",
-    message: raw,
-    friendlyMessage: parsed.friendlyMessage,
-    isAuthError: parsed.isAuthError,
-  };
-}
+import type { AgentEvent } from "@zero/core";
+import type { SessionViewState, UserMessageDisplay } from "./session-types";
 
 // ─── Event Processing ───────────────────────────────────────────────────────
 
 /**
- * Process an incoming agent event and return a new turns array.
+ * Process an incoming agent event and return a new view state.
  * Pure function — safe to call from React state updaters.
  *
- * Handles every AgentEvent type exhaustively. Unknown types log a
- * warning so new event types from pi-ai never silently vanish.
+ * This is dramatically simpler than the old turns/blocks model because:
+ * - message_update carries the full accumulated partial (no delta assembly)
+ * - message_end carries the complete message (no replay reconstruction)
+ * - Tool results are paired by ID at render time (no adjacency matching)
+ *
+ * Works identically for live streaming and replay:
+ * - Live: message_update → streamingMessage, message_end → append to messages
+ * - Replay: message_update is ephemeral (absent), message_end → append directly
  */
 export function processAgentEvent(
+  state: SessionViewState,
   event: AgentEvent,
-  turns: Turn[]
-): Turn[] {
-  // Deep-clone turns so mutations (e.g. block.text += delta) are safe
-  // under React StrictMode which calls updaters twice.
-  const next: Turn[] = turns.map((t) =>
-    t.role === "assistant"
-      ? { ...t, blocks: t.blocks.map((b) => ({ ...b })) }
-      : { ...t }
-  );
-
-  const ensureAssistantTurn = (): AssistantTurn => {
-    const last = next[next.length - 1];
-    if (last && last.role === "assistant") return last;
-    const turn: AssistantTurn = { role: "assistant", blocks: [] };
-    next.push(turn);
-    return turn;
-  };
-
+): SessionViewState {
   switch (event.type) {
-    // ── Structural markers (no UI effect) ─────────────────────────────
+    // ── Structural markers (no state change) ────────────────────────
     case "agent_start":
     case "turn_start":
-    case "agent_end":
-      break;
-
-    // ── Status events (handled separately in SessionPage) ─────────────
     case "status":
-      break;
+      return state;
 
-    // ── Message lifecycle ─────────────────────────────────────────────
-    case "message_start": {
-      // Ignore user message echoes — already added locally in handleSend
-      // ToolResult messages are also represented via tool_execution_end
-      break;
-    }
+    // ── Message lifecycle ───────────────────────────────────────────
+    case "message_start":
+      // No state change — wait for content via message_update or message_end
+      return state;
 
-    case "message_update": {
-      processAssistantMessageEvent(event.assistantMessageEvent, ensureAssistantTurn);
-      break;
-    }
+    case "message_update":
+      // The partial message has accumulated content (text, thinking, toolCall).
+      // Just store it as the streaming message — render directly.
+      return { ...state, streamingMessage: event.message };
 
     case "message_end": {
-      if (event.message.role === "assistant") {
-        const turn = ensureAssistantTurn();
+      // Skip user messages — they arrive separately via SessionDO user events
+      if (event.message.role === "user") return state;
 
-        // On replay (no preceding message_update), build content blocks
-        // from the final message. During live streaming, message_update
-        // already built these blocks — the guard prevents duplication.
-        const hasContentBlocks = turn.blocks.some((b) =>
-          b.kind === "thinking" || b.kind === "text" || b.kind === "toolcall"
-        );
-        if (!hasContentBlocks) {
-          const msg = event.message as {
-            content?: Array<{ type: string; thinking?: string; text?: string; name?: string }>;
-          };
-          for (const block of msg.content ?? []) {
-            if (block.type === "thinking" && block.thinking) {
-              turn.blocks.push({ kind: "thinking", text: block.thinking });
-            } else if (block.type === "text" && block.text) {
-              turn.blocks.push({ kind: "text", text: block.text });
-            } else if (block.type === "toolCall") {
-              turn.blocks.push({ kind: "toolcall", name: block.name ?? "", text: "" });
-            }
-          }
-        }
-
-        // Surface error if present
-        if (event.message.errorMessage) {
-          turn.blocks.push(buildErrorBlock(event.message));
-        }
-      }
-      break;
+      // Append the complete message. Clear streamingMessage if this was
+      // the assistant message we were streaming.
+      return {
+        ...state,
+        messages: [...state.messages, event.message],
+        streamingMessage:
+          event.message.role === "assistant" ? null : state.streamingMessage,
+      };
     }
 
-    // ── Tool execution ────────────────────────────────────────────────
+    // ── Tool execution ──────────────────────────────────────────────
     case "tool_execution_start": {
-      const turn = ensureAssistantTurn();
-      const last = turn.blocks[turn.blocks.length - 1];
-      if (last?.kind === "toolcall") {
-        if (!last.name && event.toolName) {
-          last.name = event.toolName;
-        }
-        if (event.args && typeof event.args === "object") {
-          last.args = event.args as Record<string, unknown>;
-        }
-      }
-      break;
+      const pending = new Set(state.pendingToolCalls);
+      pending.add(event.toolCallId);
+      return { ...state, pendingToolCalls: pending };
     }
 
     case "tool_execution_end": {
-      const turn = ensureAssistantTurn();
-      const result = event.result;
-      let content = "";
-      if (typeof result === "string") {
-        content = result;
-      } else if (result && typeof result === "object" && "content" in result) {
-        const parts = (result as { content: Array<{ type: string; text?: string }> }).content;
-        content = parts
-          .filter((p) => p.type === "text")
-          .map((p) => p.text)
-          .join("\n");
-      }
-      turn.blocks.push({
-        kind: "toolresult",
-        toolName: event.toolName ?? "",
-        content,
-        isError: event.isError ?? false,
-      });
-      break;
+      const pending = new Set(state.pendingToolCalls);
+      pending.delete(event.toolCallId);
+      return { ...state, pendingToolCalls: pending };
     }
 
-    // ── Turn end — carries final assistant message (may have error) ───
-    case "turn_end": {
-      if (event.message.errorMessage) {
-        const turn = ensureAssistantTurn();
-        // Only add if message_end didn't already produce an error block
-        const hasError = turn.blocks.some((b) => b.kind === "error");
-        if (!hasError) {
-          turn.blocks.push(buildErrorBlock(event.message));
-        }
-      }
-      break;
-    }
+    // ── Turn / agent end ────────────────────────────────────────────
+    case "turn_end":
+      return state;
+
+    case "agent_end":
+      return {
+        ...state,
+        streamingMessage: null,
+        pendingToolCalls: new Set(),
+      };
 
     default: {
-      // Catch-all for unknown event types from future pi-ai versions
       const unknownEvent = event as { type: string };
-      console.warn(`[processAgentEvent] Unhandled agent event type: "${unknownEvent.type}"`, event);
-      break;
+      console.warn(
+        `[processAgentEvent] Unhandled event type: "${unknownEvent.type}"`,
+        event,
+      );
+      return state;
     }
   }
-
-  return next;
 }
 
-// ─── AssistantMessageEvent sub-handler ──────────────────────────────────────
+/**
+ * Add a user message to the view state.
+ * Called for SessionDO "user" events (source: "user"), not agent events.
+ */
+export function addUserMessage(
+  state: SessionViewState,
+  text: string,
+  template?: { slug: string; name: string },
+): SessionViewState {
+  const userMessage: UserMessageDisplay = template
+    ? { role: "user", text, template }
+    : { role: "user", text };
 
-function processAssistantMessageEvent(
-  ame: AgentAssistantMessageEvent,
-  ensureAssistantTurn: () => AssistantTurn
-): void {
-  switch (ame.type) {
-    // ── Thinking stream ──────────────────────────────────────────────
-    case "thinking_start": {
-      const turn = ensureAssistantTurn();
-      turn.blocks.push({ kind: "thinking", text: "" });
-      break;
-    }
-    case "thinking_delta": {
-      const turn = ensureAssistantTurn();
-      const last = turn.blocks[turn.blocks.length - 1];
-      if (last?.kind === "thinking") {
-        last.text += ame.delta ?? "";
-      } else {
-        turn.blocks.push({ kind: "thinking", text: ame.delta ?? "" });
-      }
-      break;
-    }
-    case "thinking_end":
-      // Content already accumulated via deltas
-      break;
-
-    // ── Text stream ──────────────────────────────────────────────────
-    case "text_start": {
-      const turn = ensureAssistantTurn();
-      turn.blocks.push({ kind: "text", text: "" });
-      break;
-    }
-    case "text_delta": {
-      const turn = ensureAssistantTurn();
-      const last = turn.blocks[turn.blocks.length - 1];
-      if (last?.kind === "text") {
-        last.text += ame.delta ?? "";
-      } else {
-        turn.blocks.push({ kind: "text", text: ame.delta ?? "" });
-      }
-      break;
-    }
-    case "text_end":
-      // Content already accumulated via deltas
-      break;
-
-    // ── Tool call stream ─────────────────────────────────────────────
-    case "toolcall_start": {
-      const turn = ensureAssistantTurn();
-      const content = ame.partial?.content;
-      const toolCall = content?.find((c) => c.type === "toolCall");
-      turn.blocks.push({
-        kind: "toolcall",
-        name: (toolCall && "name" in toolCall ? toolCall.name : "") ?? "",
-        text: "",
-      });
-      break;
-    }
-    case "toolcall_delta": {
-      const turn = ensureAssistantTurn();
-      const last = turn.blocks[turn.blocks.length - 1];
-      if (last?.kind === "toolcall") {
-        last.text += ame.delta ?? "";
-      } else {
-        turn.blocks.push({ kind: "toolcall", name: "", text: ame.delta ?? "" });
-      }
-      break;
-    }
-    case "toolcall_end":
-      // Tool call content already accumulated via deltas
-      break;
-
-    // ── Initial partial (before any content blocks) ──────────────────
-    case "start":
-      // No UI action — the first content-specific *_start follows
-      break;
-
-    // ── Completion signals ───────────────────────────────────────────
-    case "done":
-      // Successful completion — message_end handles the final message
-      break;
-
-    case "error": {
-      // API error (auth, rate limit, etc.) — surface immediately
-      const turn = ensureAssistantTurn();
-      if (ame.error?.errorMessage) {
-        turn.blocks.push(buildErrorBlock(ame.error));
-      }
-      break;
-    }
-
-    default: {
-      const unknownAme = ame as { type: string };
-      console.warn(
-        `[processAgentEvent] Unhandled AssistantMessageEvent type: "${unknownAme.type}"`,
-        ame
-      );
-      break;
-    }
-  }
+  return {
+    ...state,
+    messages: [...state.messages, userMessage],
+  };
 }
