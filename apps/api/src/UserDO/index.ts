@@ -411,12 +411,60 @@ export class UserDO extends DurableObject<Env> {
     }
   }
 
+  async deleteUserSetting(key: string) {
+    this.db
+      .delete(userSettingsTable)
+      .where(eq(userSettingsTable.key, key))
+      .run();
+  }
+
+  /**
+   * Lazy migration: explode legacy `hotkeyBindings` JSON blob into
+   * individual `hotkey:<actionId>` rows, then delete the old key.
+   * Runs at most once per user (single-threaded DO — no race).
+   */
+  private migrateHotkeyBindingsBlob(result: Record<string, string>): void {
+    const blob = result.hotkeyBindings;
+    if (blob === undefined) return;
+
+    const now = new Date().toISOString();
+    try {
+      const parsed = JSON.parse(blob) as Record<string, string | null>;
+      for (const [actionId, value] of Object.entries(parsed)) {
+        const flatKey = `hotkey:${actionId}`;
+        // Only write if not already migrated (avoid overwriting)
+        if (!(flatKey in result)) {
+          const flatValue = value === null ? "" : value;
+          this.db.insert(userSettingsTable).values({
+            key: flatKey,
+            value: flatValue,
+            updatedAt: now,
+          }).run();
+          result[flatKey] = flatValue;
+        }
+      }
+    } catch {
+      // Invalid JSON — discard the blob
+    }
+
+    // Delete the legacy key
+    this.db
+      .delete(userSettingsTable)
+      .where(eq(userSettingsTable.key, "hotkeyBindings"))
+      .run();
+    delete result.hotkeyBindings;
+  }
+
   async getAllUserSettings(): Promise<Record<string, string>> {
     const rows = this.db.select().from(userSettingsTable).all();
     const result: Record<string, string> = {};
     for (const row of rows) {
       result[row.key] = row.value;
     }
+
+    // Lazy-migrate legacy JSON blob if present
+    this.migrateHotkeyBindingsBlob(result);
+
     return result;
   }
 

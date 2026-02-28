@@ -363,6 +363,9 @@ export const DEFAULT_HOTKEY_BINDINGS: Record<string, string> = Object.fromEntrie
   APP_ACTIONS.filter((a) => a.defaultKey != null).map((a) => [a.id, a.defaultKey!]),
 );
 
+/** Set of all valid action IDs — for server-side validation. */
+export const APP_ACTION_IDS: ReadonlySet<string> = new Set(APP_ACTIONS.map((a) => a.id));
+
 // ============================================================================
 // User Settings Types
 // ============================================================================

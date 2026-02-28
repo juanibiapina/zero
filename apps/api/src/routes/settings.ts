@@ -99,25 +99,21 @@ export const createSettingsRoutes = () => {
     const body = c.req.valid("json");
     const service = new SettingsService(c.env, c.get("userId"));
 
-    // Handle scalar settings
-    for (const [key, value] of Object.entries(body)) {
-      if (key === "hotkeyBindings") continue; // handled separately below
-      if (value !== undefined) {
-        const result = await service.updateSetting(key, value as string);
-        if (Result.isFailure(result)) {
-          return c.json({ error: result.error.message }, 400);
-        }
+    // Update hotkey prefix
+    if (body.hotkeyPrefix !== undefined) {
+      const result = await service.updateHotkeyPrefix(body.hotkeyPrefix);
+      if (Result.isFailure(result)) {
+        return c.json({ error: result.error.message }, 400);
       }
     }
 
-    // Handle hotkeyBindings — read-modify-write as JSON blob
+    // Update individual hotkey bindings
     if (body.hotkeyBindings) {
-      // Merge into raw stored JSON (preserves null = "explicitly cleared")
-      const raw = await service.getRawBindings();
-      const merged = { ...raw, ...body.hotkeyBindings };
-      const result = await service.updateSetting("hotkeyBindings", JSON.stringify(merged));
-      if (Result.isFailure(result)) {
-        return c.json({ error: result.error.message }, 400);
+      for (const [actionId, key] of Object.entries(body.hotkeyBindings)) {
+        const result = await service.updateHotkeyBinding(actionId, key);
+        if (Result.isFailure(result)) {
+          return c.json({ error: result.error.message }, 400);
+        }
       }
     }
 
