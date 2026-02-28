@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Brain, MessageSquare, FileText, Wrench, Terminal, AlertTriangle, KeyRound, ChevronRight, ChevronDown } from "lucide-react";
+import { MessageSquare, FileText, Wrench, Terminal, AlertTriangle, KeyRound, ChevronRight, ChevronDown } from "lucide-react";
 import { Link } from "react-router";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -20,11 +20,7 @@ import type {
 function ThinkingBlockView({ block }: { block: ThinkingBlock }) {
   return (
     <div className="my-1">
-      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <Brain className="h-3 w-3" />
-        Thinking
-      </div>
-      <pre className="mt-1 rounded border bg-muted/30 p-2 text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+      <pre className="rounded border bg-muted/30 p-2 text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
         {block.text}
       </pre>
     </div>
