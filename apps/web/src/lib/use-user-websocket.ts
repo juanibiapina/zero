@@ -6,6 +6,11 @@
  * Reconnects automatically on unexpected disconnect.
  *
  * Mount once at the Layout level so it lives for the entire app session.
+ *
+ * Uses a local `cancelled` flag (not a ref) to prevent orphaned WebSocket
+ * connections in React StrictMode. A ref is shared across mounts, so mount 2
+ * overwrites the flag set by cleanup 1. A local variable is scoped per effect
+ * invocation, so each cleanup correctly marks only its own instance as stale.
  */
 
 import { useEffect, useRef } from "react";
@@ -16,17 +21,22 @@ import type { UserServerMessage } from "@zero/core";
 export function useUserWebSocket() {
   const { getToken } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
 
   useEffect(() => {
-    mountedRef.current = true;
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     const connect = async () => {
-      if (!mountedRef.current) return;
+      if (cancelled) return;
 
       const token = await getToken();
-      if (!token || !mountedRef.current) return;
+      if (!token || cancelled) return;
+
+      // Close any prior WS before creating a new one
+      if (wsRef.current) {
+        wsRef.current.close(1000, "reconnecting");
+        wsRef.current = null;
+      }
 
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
       const url = `${protocol}//${location.host}/api/ws?token=${token}`;
@@ -65,8 +75,8 @@ export function useUserWebSocket() {
       ws.onclose = (e) => {
         wsRef.current = null;
         // Reconnect on unexpected close
-        if (e.code !== 1000 && mountedRef.current) {
-          reconnectTimerRef.current = setTimeout(() => {
+        if (e.code !== 1000 && !cancelled) {
+          reconnectTimer = setTimeout(() => {
             void connect();
           }, 2000);
         }
@@ -80,10 +90,10 @@ export function useUserWebSocket() {
     void connect();
 
     return () => {
-      mountedRef.current = false;
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
+      cancelled = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
       }
       if (wsRef.current) {
         wsRef.current.close(1000, "unmounting");

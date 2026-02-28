@@ -95,7 +95,6 @@ function SessionPageInner() {
   const lastSeqRef = useRef<number>(0);
   const pendingPromptRef = useRef<string | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const connectWebSocketRef = useRef<((sessionId: string) => Promise<void>) | null>(null);
   /** Track user messages we've sent optimistically, to dedup on replay */
   const sentUserMessagesRef = useRef<Set<string>>(new Set());
   const caughtUpRef = useRef(false);
@@ -209,10 +208,40 @@ function SessionPageInner() {
   }, [status]);
 
   // ── WebSocket connection ────────────────────────────────────────────────
+  // Uses the React-recommended local `cancelled` flag pattern to prevent
+  // orphaned WebSocket connections. In StrictMode, effects run twice
+  // (mount → cleanup → mount). Because `getToken()` is async, the cleanup
+  // runs before the WebSocket is created, so `wsRef.current` is still null
+  // and the cleanup can't close it. Without the flag, both effect instances
+  // would create live WebSockets, doubling every ephemeral streaming event.
+  // A local `let cancelled` (not a ref) is scoped per effect invocation,
+  // so each cleanup marks only its own instance as stale.
 
-  const connectWebSocket = useCallback(
-    async (sessionId: string) => {
-      const token = await getToken();
+  useEffect(() => {
+    if (!id) return;
+
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function connect(sessionId: string) {
+      let token: string | null;
+      try {
+        token = await getToken();
+      } catch {
+        if (!cancelled) {
+          setStatusBoth("error");
+          setError("Failed to get auth token");
+        }
+        return;
+      }
+      if (cancelled || !token) return;
+
+      // Close any prior WS (belt-and-suspenders for edge cases)
+      if (wsRef.current) {
+        wsRef.current.close(1000, "reconnecting");
+        wsRef.current = null;
+      }
+
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
       const url = `${protocol}//${location.host}/api/sessions/${sessionId}/ws?token=${token}`;
 
@@ -387,38 +416,31 @@ function SessionPageInner() {
       };
 
       ws.onclose = (e) => {
+        wsRef.current = null;
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
           pingIntervalRef.current = null;
         }
 
         // Reconnect on unexpected close (not clean 1000)
-        if (e.code !== 1000) {
-          setTimeout(async () => {
-            try {
-              await connectWebSocketRef.current?.(sessionId);
-            } catch {
-              setStatusBoth("error");
-              setError("Lost connection to session");
-            }
-          }, 2000);
+        if (e.code !== 1000 && !cancelled) {
+          reconnectTimer = setTimeout(() => void connect(sessionId), 2000);
         }
       };
 
       ws.onerror = () => {
         // onclose will fire after this
       };
-    },
-    [getToken, setStatusBoth]
-  );
-
-  // ── Connect WebSocket ───────────────────────────────────────────────────
-  useEffect(() => {
-    connectWebSocketRef.current = connectWebSocket;
-    if (id) {
-      void connectWebSocket(id);
     }
+
+    void connect(id);
+
     return () => {
+      cancelled = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       if (wsRef.current) {
         wsRef.current.close(1000, "navigating away");
         wsRef.current = null;
@@ -432,7 +454,7 @@ function SessionPageInner() {
         statsFlushTimerRef.current = null;
       }
     };
-  }, [id, connectWebSocket]);
+  }, [id, getToken, setStatusBoth, scrollToBottom]);
 
   // ── Stop/abort session ────────────────────────────────────────────────
 
