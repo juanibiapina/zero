@@ -19,6 +19,7 @@ import SessionDeleteDialog from "@/components/SessionDeleteDialog";
 import ProviderPickerDialog from "@/components/ProviderPickerDialog";
 import ModelPickerDialog from "@/components/ModelPickerDialog";
 import ThinkingLevelPickerDialog from "@/components/ThinkingLevelPickerDialog";
+import { createManagedWebSocket, type ManagedWebSocket } from "@/lib/managed-websocket";
 
 // ─── Keyed wrapper ───────────────────────────────────────────────────────────
 // Forces full remount when navigating between sessions so stale state
@@ -90,11 +91,10 @@ function SessionPageInner() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const pendingAutoScrollRef = useRef(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const connRef = useRef<ManagedWebSocket | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastSeqRef = useRef<number>(0);
   const pendingPromptRef = useRef<string | null>(null);
-  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Track user messages we've sent optimistically, to dedup on replay */
   const sentUserMessagesRef = useRef<Set<string>>(new Set());
   const caughtUpRef = useRef(false);
@@ -208,62 +208,26 @@ function SessionPageInner() {
   }, [status]);
 
   // ── WebSocket connection ────────────────────────────────────────────────
-  // Uses the React-recommended local `cancelled` flag pattern to prevent
-  // orphaned WebSocket connections. In StrictMode, effects run twice
-  // (mount → cleanup → mount). Because `getToken()` is async, the cleanup
-  // runs before the WebSocket is created, so `wsRef.current` is still null
-  // and the cleanup can't close it. Without the flag, both effect instances
-  // would create live WebSockets, doubling every ephemeral streaming event.
-  // A local `let cancelled` (not a ref) is scoped per effect invocation,
-  // so each cleanup marks only its own instance as stale.
 
   useEffect(() => {
     if (!id) return;
 
-    let cancelled = false;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-    async function connect(sessionId: string) {
-      let token: string | null;
-      try {
-        token = await getToken();
-      } catch {
-        if (!cancelled) {
-          setStatusBoth("error");
-          setError("Failed to get auth token");
-        }
-        return;
-      }
-      if (cancelled || !token) return;
-
-      // Close any prior WS (belt-and-suspenders for edge cases)
-      if (wsRef.current) {
-        wsRef.current.close(1000, "reconnecting");
-        wsRef.current = null;
-      }
-
-      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      const url = `${protocol}//${location.host}/api/sessions/${sessionId}/ws?token=${token}`;
-
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
+    const conn = createManagedWebSocket({
+      getToken,
+      path: `sessions/${id}/ws`,
+      pingIntervalMs: 30000,
+      onTokenError() {
+        setStatusBoth("error");
+        setError("Failed to get auth token");
+      },
+      onOpen() {
         setStatusBoth("connecting");
         caughtUpRef.current = false;
         replayBufferRef.current = [];
         statsRef.current = emptyStats();
         replayStartRef.current = Date.now();
-
-        // Start ping keepalive every 30s
-        pingIntervalRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "ping" }));
-          }
-        }, 30000);
-      };
-
-      ws.onmessage = (e) => {
+      },
+      onMessage(e) {
         try {
           const rawData = e.data as string;
           statsRef.current.totalBytes += rawData.length;
@@ -294,7 +258,7 @@ function SessionPageInner() {
               if (pendingPromptRef.current) {
                 const pending = pendingPromptRef.current;
                 pendingPromptRef.current = null;
-                ws.send(pending);
+                conn.send(pending);
               }
               return;
 
@@ -309,7 +273,7 @@ function SessionPageInner() {
               if (msg.status === "idle" && pendingPromptRef.current && caughtUpRef.current) {
                 const pending = pendingPromptRef.current;
                 pendingPromptRef.current = null;
-                ws.send(pending);
+                conn.send(pending);
               }
               return;
             }
@@ -413,42 +377,13 @@ function SessionPageInner() {
         } catch {
           // Ignore parse errors
         }
-      };
-
-      ws.onclose = (e) => {
-        wsRef.current = null;
-        if (pingIntervalRef.current) {
-          clearInterval(pingIntervalRef.current);
-          pingIntervalRef.current = null;
-        }
-
-        // Reconnect on unexpected close (not clean 1000)
-        if (e.code !== 1000 && !cancelled) {
-          reconnectTimer = setTimeout(() => void connect(sessionId), 2000);
-        }
-      };
-
-      ws.onerror = () => {
-        // onclose will fire after this
-      };
-    }
-
-    void connect(id);
+      },
+    });
+    connRef.current = conn;
 
     return () => {
-      cancelled = true;
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      if (wsRef.current) {
-        wsRef.current.close(1000, "navigating away");
-        wsRef.current = null;
-      }
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
-        pingIntervalRef.current = null;
-      }
+      conn.close();
+      connRef.current = null;
       if (statsFlushTimerRef.current) {
         clearTimeout(statsFlushTimerRef.current);
         statsFlushTimerRef.current = null;
@@ -459,10 +394,7 @@ function SessionPageInner() {
   // ── Stop/abort session ────────────────────────────────────────────────
 
   const handleStop = useCallback(() => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "stop" }));
-    }
+    connRef.current?.send(JSON.stringify({ type: "stop" }));
   }, []);
 
   // ── Fetch model reasoning capability ─────────────────────────────────────
@@ -489,12 +421,9 @@ function SessionPageInner() {
   // ── Configure provider/model ────────────────────────────────────────────
 
   const sendConfigure = useCallback((newProvider: string, newModel: string, newThinkingLevel?: ThinkingLevel) => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const msg: Record<string, string> = { type: "configure", provider: newProvider, model: newModel };
-      if (newThinkingLevel !== undefined) msg.thinkingLevel = newThinkingLevel;
-      ws.send(JSON.stringify(msg));
-    }
+    const msg: Record<string, string> = { type: "configure", provider: newProvider, model: newModel };
+    if (newThinkingLevel !== undefined) msg.thinkingLevel = newThinkingLevel;
+    connRef.current?.send(JSON.stringify(msg));
   }, []);
 
   const handleProviderSelect = useCallback(
@@ -619,10 +548,7 @@ function SessionPageInner() {
         originalText: resolved.originalText,
       });
 
-      const ws = wsRef.current;
-      if (ws && ws.readyState === WebSocket.OPEN && caughtUpRef.current) {
-        ws.send(wsMessage);
-      } else {
+      if (!(caughtUpRef.current && connRef.current?.send(wsMessage))) {
         pendingPromptRef.current = wsMessage;
       }
     } else {
@@ -632,10 +558,7 @@ function SessionPageInner() {
 
       const wsMessage = JSON.stringify({ type: "message", text: rawInput });
 
-      const ws = wsRef.current;
-      if (ws && ws.readyState === WebSocket.OPEN && caughtUpRef.current) {
-        ws.send(wsMessage);
-      } else {
+      if (!(caughtUpRef.current && connRef.current?.send(wsMessage))) {
         pendingPromptRef.current = wsMessage;
       }
     }
