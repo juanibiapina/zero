@@ -355,6 +355,7 @@ export const APP_ACTIONS: AppAction[] = [
   { id: "switchProvider", label: "Switch Provider", description: "Change the AI provider for the current session", category: "Actions", defaultKey: "p" },
   { id: "switchModel", label: "Switch Model", description: "Change the model for the current session", category: "Actions", defaultKey: "m" },
   { id: "switchThinking", label: "Switch Thinking", description: "Change the thinking/reasoning level", category: "Actions", defaultKey: "t" },
+  { id: "toggleDebugPanel", label: "Debug Info", description: "Toggle session debug info panel", category: "Actions", defaultKey: "i" },
 ];
 
 /** Default hotkey bindings: actionId → key string (only actions with a defaultKey). */

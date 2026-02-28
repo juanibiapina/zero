@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useAuth } from "@clerk/clerk-react";
-import { ChevronRight, Loader2, Send, Square } from "lucide-react";
+import { ChevronRight, Loader2, Send, Square, Bug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TurnView } from "@/components/TurnView";
 import { processAgentEvent } from "@/lib/process-agent-event";
-import type { AgentEvent, SessionServerMessage, PromptTemplate, ThinkingLevel } from "@zero/core";
+import type { AgentEvent, AgentAssistantMessage, SessionServerMessage, PromptTemplate, ThinkingLevel } from "@zero/core";
 import { defaultThinkingLevel } from "@zero/core";
 import type { Turn, SessionStatus } from "@/lib/session-types";
 import { SlashAutocomplete } from "@/components/SlashAutocomplete";
@@ -27,6 +27,51 @@ import ThinkingLevelPickerDialog from "@/components/ThinkingLevelPickerDialog";
 export default function SessionPage() {
   const { id } = useParams();
   return <SessionPageInner key={id} />;
+}
+
+// ─── Session Stats ───────────────────────────────────────────────────────────
+
+interface SessionStats {
+  persistedEvents: number;
+  ephemeralEvents: number;
+  userMessages: number;
+  assistantMessages: number;
+  toolCalls: number;
+  toolErrors: number;
+  totalBytes: number;
+  tokensIn: number;
+  tokensOut: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalCost: number;
+  replayMs: number;
+}
+
+function emptyStats(): SessionStats {
+  return {
+    persistedEvents: 0, ephemeralEvents: 0, userMessages: 0,
+    assistantMessages: 0, toolCalls: 0, toolErrors: 0, totalBytes: 0,
+    tokensIn: 0, tokensOut: 0, cacheRead: 0, cacheWrite: 0,
+    totalCost: 0, replayMs: 0,
+  };
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
+function formatCost(n: number): string {
+  if (n === 0) return "$0.00";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 // ─── Inner implementation ────────────────────────────────────────────────────
@@ -57,6 +102,13 @@ function SessionPageInner() {
   /** Buffer turns during replay to avoid per-event renders / scroll flicker */
   const replayBufferRef = useRef<Turn[]>([]);
   const statusRef = useRef<SessionStatus>("connecting");
+
+  // Debug panel state
+  const [showDebug, setShowDebug] = useState(false);
+  const [sessionStats, setSessionStats] = useState<SessionStats>(emptyStats);
+  const statsRef = useRef<SessionStats>(emptyStats());
+  const replayStartRef = useRef<number>(0);
+  const statsFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Provider/model/thinking state
   const [provider, setProvider] = useState<string>("");
@@ -171,6 +223,8 @@ function SessionPageInner() {
         setStatusBoth("connecting");
         caughtUpRef.current = false;
         replayBufferRef.current = [];
+        statsRef.current = emptyStats();
+        replayStartRef.current = Date.now();
 
         // Start ping keepalive every 30s
         pingIntervalRef.current = setInterval(() => {
@@ -182,11 +236,15 @@ function SessionPageInner() {
 
       ws.onmessage = (e) => {
         try {
-          const msg = JSON.parse(e.data as string) as SessionServerMessage;
+          const rawData = e.data as string;
+          statsRef.current.totalBytes += rawData.length;
+          const msg = JSON.parse(rawData) as SessionServerMessage;
 
           switch (msg.type) {
             case "caught_up":
               caughtUpRef.current = true;
+              statsRef.current.replayMs = Date.now() - replayStartRef.current;
+              setSessionStats({ ...statsRef.current });
               // Flush buffered replay turns in a single render to avoid
               // per-event re-renders and scroll flicker.
               if (replayBufferRef.current.length > 0) {
@@ -245,6 +303,42 @@ function SessionPageInner() {
               // tool_execution_update) — never persisted, so skip dedup.
               if (msg.seq > 0 && msg.seq <= lastSeqRef.current) return; // dedup
               if (msg.seq > 0) lastSeqRef.current = msg.seq;
+
+              // ── Stats accumulation ────────────────────────────────
+              {
+                const s = statsRef.current;
+                if (msg.seq > 0) s.persistedEvents++;
+                else s.ephemeralEvents++;
+
+                if (msg.source === "user") s.userMessages++;
+
+                const agentData = msg.data as Record<string, unknown>;
+                const evtType = agentData?.type as string | undefined;
+
+                if (evtType === "message_end") {
+                  const message = agentData.message as AgentAssistantMessage | undefined;
+                  if (message?.role === "assistant" && message.usage) {
+                    s.assistantMessages++;
+                    s.tokensIn += message.usage.input ?? 0;
+                    s.tokensOut += message.usage.output ?? 0;
+                    s.cacheRead += message.usage.cacheRead ?? 0;
+                    s.cacheWrite += message.usage.cacheWrite ?? 0;
+                    s.totalCost += message.usage.cost?.total ?? 0;
+                  }
+                } else if (evtType === "tool_execution_start") {
+                  s.toolCalls++;
+                } else if (evtType === "tool_execution_end") {
+                  if (agentData.isError) s.toolErrors++;
+                }
+
+                // Throttled flush to React state during live events
+                if (caughtUpRef.current && !statsFlushTimerRef.current) {
+                  statsFlushTimerRef.current = setTimeout(() => {
+                    statsFlushTimerRef.current = null;
+                    setSessionStats({ ...statsRef.current });
+                  }, 2000);
+                }
+              }
 
               if (msg.source === "user") {
                 // User message — extract text and optional template metadata
@@ -332,6 +426,10 @@ function SessionPageInner() {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = null;
+      }
+      if (statsFlushTimerRef.current) {
+        clearTimeout(statsFlushTimerRef.current);
+        statsFlushTimerRef.current = null;
       }
     };
   }, [id, connectWebSocket]);
@@ -462,10 +560,15 @@ function SessionPageInner() {
   useAction("switchModel", openModelPicker, { enabled: !anyDialogOpen && !!provider });
   useAction("switchThinking", openThinkingPicker, { enabled: !anyDialogOpen && !!provider && modelSupportsReasoning });
 
+  // Debug panel toggle
+  const toggleDebug = useCallback(() => setShowDebug((v) => !v), []);
+  useAction("toggleDebugPanel", toggleDebug, { enabled: !anyDialogOpen });
+
   // Register for command palette (visible while SessionPage is mounted)
   useRegisterAction("switchProvider", openProviderPicker);
   useRegisterAction("switchModel", openModelPicker);
   useRegisterAction("switchThinking", openThinkingPicker);
+  useRegisterAction("toggleDebugPanel", toggleDebug);
 
   // ── Handle user input ───────────────────────────────────────────────────
 
@@ -603,7 +706,42 @@ function SessionPageInner() {
               )}
             </>
           )}
+          <button
+            onClick={toggleDebug}
+            className={`ml-auto rounded-md p-1 transition-colors ${
+              showDebug
+                ? "text-foreground bg-muted"
+                : "text-muted-foreground/40 hover:text-muted-foreground"
+            }`}
+            title="Toggle debug info"
+          >
+            <Bug className="h-3.5 w-3.5" />
+          </button>
         </div>
+        {showDebug && (
+          <div className="mt-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground font-mono grid grid-cols-[auto_1fr_auto_1fr_auto_1fr] gap-x-4 gap-y-0.5">
+            <span className="text-muted-foreground/60">events</span>
+            <span>{sessionStats.persistedEvents} persisted · {sessionStats.ephemeralEvents} ephemeral</span>
+            <span className="text-muted-foreground/60">replay</span>
+            <span>~{formatBytes(sessionStats.totalBytes)} · {sessionStats.replayMs}ms</span>
+            <span className="text-muted-foreground/60">seq</span>
+            <span>{lastSeqRef.current}</span>
+
+            <span className="text-muted-foreground/60">user</span>
+            <span>{sessionStats.userMessages} msgs</span>
+            <span className="text-muted-foreground/60">assistant</span>
+            <span>{sessionStats.assistantMessages} msgs</span>
+            <span className="text-muted-foreground/60">tools</span>
+            <span>{sessionStats.toolCalls} calls{sessionStats.toolErrors > 0 ? ` · ${sessionStats.toolErrors} errors` : ""}</span>
+
+            <span className="text-muted-foreground/60">tokens</span>
+            <span>{formatTokens(sessionStats.tokensIn)} in · {formatTokens(sessionStats.tokensOut)} out</span>
+            <span className="text-muted-foreground/60">cache</span>
+            <span>{formatTokens(sessionStats.cacheRead)} read · {formatTokens(sessionStats.cacheWrite)} write</span>
+            <span className="text-muted-foreground/60">cost</span>
+            <span>{formatCost(sessionStats.totalCost)}</span>
+          </div>
+        )}
       </div>
 
       {/* Error display */}
