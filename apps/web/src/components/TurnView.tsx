@@ -18,24 +18,15 @@ import type {
 } from "@/lib/session-types";
 
 function ThinkingBlockView({ block }: { block: ThinkingBlock }) {
-  const [open, setOpen] = useState(false);
   return (
     <div className="my-1">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <Brain className="h-3 w-3" />
-        {open ? "Hide" : "Show"} thinking
-        {!open && block.text.length > 0 && (
-          <span className="ml-1 text-muted-foreground/60">({block.text.length} chars)</span>
-        )}
-      </button>
-      {open && (
-        <pre className="mt-1 rounded border bg-muted/30 p-2 text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
-          {block.text}
-        </pre>
-      )}
+        Thinking
+      </div>
+      <pre className="mt-1 rounded border bg-muted/30 p-2 text-xs text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+        {block.text}
+      </pre>
     </div>
   );
 }
