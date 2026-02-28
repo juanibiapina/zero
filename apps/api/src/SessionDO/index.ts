@@ -623,6 +623,19 @@ export class SessionDO extends DurableObject<Env> {
     const agentEvent = envelope.event as Record<string, unknown>;
     const eventType = (agentEvent?.type as string) ?? "unknown";
 
+    // Streaming events (message_update, tool_execution_update) are ephemeral:
+    // broadcast live to connected browsers but don't persist to SQLite.
+    // On replay, the frontend reconstructs content from message_end / tool_execution_end.
+    const EPHEMERAL_EVENTS: ReadonlySet<string> = new Set(["message_update", "tool_execution_update"]);
+
+    if (EPHEMERAL_EVENTS.has(eventType)) {
+      this.broadcastToWebSockets({
+        type: "event", seq: 0, source: "agent",
+        eventType, data: agentEvent,
+      });
+      return;
+    }
+
     // Persist to SQLite
     const persisted = this.appendEvents([{
       source: "agent",

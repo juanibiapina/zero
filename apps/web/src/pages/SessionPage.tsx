@@ -241,8 +241,10 @@ function SessionPageInner() {
               return;
 
             case "event": {
-              if (msg.seq <= lastSeqRef.current) return; // dedup
-              lastSeqRef.current = msg.seq;
+              // seq=0 marks ephemeral streaming events (message_update,
+              // tool_execution_update) — never persisted, so skip dedup.
+              if (msg.seq > 0 && msg.seq <= lastSeqRef.current) return; // dedup
+              if (msg.seq > 0) lastSeqRef.current = msg.seq;
 
               if (msg.source === "user") {
                 // User message — extract text and optional template metadata

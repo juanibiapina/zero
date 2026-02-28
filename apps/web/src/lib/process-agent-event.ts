@@ -98,10 +98,34 @@ export function processAgentEvent(
     }
 
     case "message_end": {
-      // Check for error on the completed message
-      if (event.message.role === "assistant" && event.message.errorMessage) {
+      if (event.message.role === "assistant") {
         const turn = ensureAssistantTurn();
-        turn.blocks.push(buildErrorBlock(event.message));
+
+        // On replay (no preceding message_update), build content blocks
+        // from the final message. During live streaming, message_update
+        // already built these blocks — the guard prevents duplication.
+        const hasContentBlocks = turn.blocks.some((b) =>
+          b.kind === "thinking" || b.kind === "text" || b.kind === "toolcall"
+        );
+        if (!hasContentBlocks) {
+          const msg = event.message as {
+            content?: Array<{ type: string; thinking?: string; text?: string; name?: string }>;
+          };
+          for (const block of msg.content ?? []) {
+            if (block.type === "thinking" && block.thinking) {
+              turn.blocks.push({ kind: "thinking", text: block.thinking });
+            } else if (block.type === "text" && block.text) {
+              turn.blocks.push({ kind: "text", text: block.text });
+            } else if (block.type === "toolCall") {
+              turn.blocks.push({ kind: "toolcall", name: block.name ?? "", text: "" });
+            }
+          }
+        }
+
+        // Surface error if present
+        if (event.message.errorMessage) {
+          turn.blocks.push(buildErrorBlock(event.message));
+        }
       }
       break;
     }
