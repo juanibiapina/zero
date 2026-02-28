@@ -75,13 +75,6 @@ export interface SessionMessage {
 // Project Types
 // ============================================================================
 
-export interface Project {
-  owner: string;
-  repo: string;
-  defaultProvider: string | null;
-  defaultModel: string | null;
-}
-
 export interface ProjectSummary {
   owner: string;
   repo: string;
@@ -373,11 +366,17 @@ export const APP_ACTION_IDS: ReadonlySet<string> = new Set(APP_ACTIONS.map((a) =
 export interface UserSettings {
   hotkeyPrefix: string;
   hotkeyBindings: Record<string, string>;
+  defaultProvider: string | null;
+  defaultModel: string | null;
+  defaultThinkingLevel: ThinkingLevel | null;
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   hotkeyPrefix: "Control+Space",
   hotkeyBindings: { ...DEFAULT_HOTKEY_BINDINGS },
+  defaultProvider: null,
+  defaultModel: null,
+  defaultThinkingLevel: null,
 };
 
 

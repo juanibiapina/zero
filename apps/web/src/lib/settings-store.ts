@@ -6,7 +6,7 @@
  */
 
 import { create } from "zustand";
-import { DEFAULT_USER_SETTINGS, type UserSettings } from "@zero/core";
+import { DEFAULT_USER_SETTINGS, type UserSettings, type ThinkingLevel } from "@zero/core";
 
 interface SettingsStore {
   settings: UserSettings;
@@ -32,6 +32,24 @@ interface SettingsStore {
   clearHotkeyBinding: (
     getToken: () => Promise<string | null>,
     actionId: string,
+  ) => Promise<void>;
+
+  /** Update the default provider for new sessions. null clears the setting. */
+  updateDefaultProvider: (
+    getToken: () => Promise<string | null>,
+    value: string | null,
+  ) => Promise<void>;
+
+  /** Update the default model for new sessions. null clears the setting. */
+  updateDefaultModel: (
+    getToken: () => Promise<string | null>,
+    value: string | null,
+  ) => Promise<void>;
+
+  /** Update the default thinking level for new sessions. null clears the setting. */
+  updateDefaultThinkingLevel: (
+    getToken: () => Promise<string | null>,
+    value: ThinkingLevel | null,
   ) => Promise<void>;
 }
 
@@ -148,6 +166,90 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     } catch {
       set((state) => ({
         settings: { ...state.settings, hotkeyBindings: prevBindings },
+      }));
+    }
+  },
+
+  updateDefaultProvider: async (getToken, value) => {
+    const prev = get().settings.defaultProvider;
+    set((state) => ({
+      settings: { ...state.settings, defaultProvider: value },
+    }));
+
+    try {
+      const token = await getToken();
+      const resp = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ defaultProvider: value }),
+      });
+      if (!resp.ok) {
+        set((state) => ({
+          settings: { ...state.settings, defaultProvider: prev },
+        }));
+      }
+    } catch {
+      set((state) => ({
+        settings: { ...state.settings, defaultProvider: prev },
+      }));
+    }
+  },
+
+  updateDefaultModel: async (getToken, value) => {
+    const prev = get().settings.defaultModel;
+    set((state) => ({
+      settings: { ...state.settings, defaultModel: value },
+    }));
+
+    try {
+      const token = await getToken();
+      const resp = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ defaultModel: value }),
+      });
+      if (!resp.ok) {
+        set((state) => ({
+          settings: { ...state.settings, defaultModel: prev },
+        }));
+      }
+    } catch {
+      set((state) => ({
+        settings: { ...state.settings, defaultModel: prev },
+      }));
+    }
+  },
+
+  updateDefaultThinkingLevel: async (getToken, value) => {
+    const prev = get().settings.defaultThinkingLevel;
+    set((state) => ({
+      settings: { ...state.settings, defaultThinkingLevel: value },
+    }));
+
+    try {
+      const token = await getToken();
+      const resp = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ defaultThinkingLevel: value }),
+      });
+      if (!resp.ok) {
+        set((state) => ({
+          settings: { ...state.settings, defaultThinkingLevel: prev },
+        }));
+      }
+    } catch {
+      set((state) => ({
+        settings: { ...state.settings, defaultThinkingLevel: prev },
       }));
     }
   },

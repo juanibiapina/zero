@@ -173,24 +173,6 @@ export class UserService {
   }
 
   /**
-   * Set the default provider and model for a project.
-   */
-  async setProjectModel(
-    owner: string,
-    repo: string,
-    provider: string,
-    model: string,
-  ): Promise<Result.Result<{ success: true }, ServiceError<"INVALID">>> {
-    if (!provider || !model) {
-      return Result.fail({ message: "Missing provider or model", code: "INVALID" });
-    }
-
-    const userDO = await this.getUserDO();
-    await userDO.updateProjectModel(owner, repo, provider, model);
-    return Result.succeed({ success: true });
-  }
-
-  /**
    * GitHub App installation URL for the user to install the app on their account.
    */
   private getInstallUrl(): string {

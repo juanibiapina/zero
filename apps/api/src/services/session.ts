@@ -13,7 +13,8 @@ import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
 import { getDefaultModel, getModel } from "@zero/providers";
-import { defaultThinkingLevel } from "@zero/core";
+import { defaultThinkingLevel, type ThinkingLevel } from "@zero/core";
+import { SettingsService } from "./settings";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -129,26 +130,54 @@ export class SessionService {
       });
     }
 
-    // Get first connected credential (API key or OAuth) — validates existence
-    // and determines provider. Actual key resolution happens inside SessionDO.
+    // Load user settings for session defaults
+    const settingsService = new SettingsService(this.env, this.callerId);
+    const { settings } = await settingsService.getSettings();
+
+    // Get connected credentials
     const credentials = await userDO.listProviderCredentials();
-    const cred =
-      credentials.find((c) => c.credentialType === "api_key" && c.apiKey) ??
-      credentials.find((c) => c.credentialType === "oauth" && c.accessToken);
-    if (!cred) {
-      return Result.fail({
-        message:
-          "No API key or OAuth connection configured. Add a provider in Settings → Providers.",
-        code: "INVALID",
-      });
+
+    // Resolve provider: prefer user default if connected, else first connected credential
+    let provider: string;
+    if (settings.defaultProvider) {
+      const defaultCred = credentials.find(
+        (c) => c.provider === settings.defaultProvider &&
+          ((c.credentialType === "api_key" && c.apiKey) || (c.credentialType === "oauth" && c.accessToken)),
+      );
+      if (defaultCred) {
+        provider = defaultCred.provider;
+      } else {
+        // Default provider not connected — fall back to first connected
+        const cred =
+          credentials.find((c) => c.credentialType === "api_key" && c.apiKey) ??
+          credentials.find((c) => c.credentialType === "oauth" && c.accessToken);
+        if (!cred) {
+          return Result.fail({
+            message:
+              "No API key or OAuth connection configured. Add a provider in Settings → Providers.",
+            code: "INVALID",
+          });
+        }
+        provider = cred.provider;
+      }
+    } else {
+      const cred =
+        credentials.find((c) => c.credentialType === "api_key" && c.apiKey) ??
+        credentials.find((c) => c.credentialType === "oauth" && c.accessToken);
+      if (!cred) {
+        return Result.fail({
+          message:
+            "No API key or OAuth connection configured. Add a provider in Settings → Providers.",
+          code: "INVALID",
+        });
+      }
+      provider = cred.provider;
     }
 
-    const provider = cred.provider;
-
-    // Resolve model: use project default or a sensible default per provider
+    // Resolve model: prefer user default (if valid for provider), else provider default
     let model: string;
-    if (project.defaultProvider === provider && project.defaultModel) {
-      model = project.defaultModel;
+    if (settings.defaultProvider === provider && settings.defaultModel) {
+      model = settings.defaultModel;
     } else {
       model = getDefaultModel(provider) ?? "claude-sonnet-4-20250514";
     }
@@ -159,9 +188,15 @@ export class SessionService {
 
     const title = `Session ${sessionDOId.toString().slice(0, 8)}`;
 
-    // Resolve default thinking level based on model capabilities
+    // Resolve thinking level: prefer user default (if model supports it), else auto
     const modelInfo = getModel(provider as Parameters<typeof getModel>[0], model as never);
-    const thinkingLevel = defaultThinkingLevel(modelInfo?.reasoning ?? false);
+    const supportsReasoning = modelInfo?.reasoning ?? false;
+    let thinkingLevel: ThinkingLevel;
+    if (settings.defaultThinkingLevel && supportsReasoning) {
+      thinkingLevel = settings.defaultThinkingLevel;
+    } else {
+      thinkingLevel = defaultThinkingLevel(supportsReasoning);
+    }
 
     await sessionDO.initSession({
       status: "stopped",

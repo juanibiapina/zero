@@ -7,7 +7,7 @@
  * Stores:
  * - Provider credentials (OAuth tokens, API keys)
  * - GitHub App installations
- * - Project references (owner/repo → default provider/model)
+ * - Project references (owner/repo → cached GitHub metadata)
  * - PKCE verifiers for in-progress OAuth flows
  *
  * Created with newUniqueId() for low-latency placement near the user.
@@ -231,8 +231,6 @@ export class UserDO extends DurableObject<Env> {
     defaultBranch?: string;
     isPrivate?: boolean;
     archived?: boolean;
-    defaultProvider?: string;
-    defaultModel?: string;
   }) {
     const now = new Date().toISOString();
     const existing = await this.getProject(data.owner, data.repo);
@@ -246,8 +244,6 @@ export class UserDO extends DurableObject<Env> {
           defaultBranch: data.defaultBranch ?? existing.defaultBranch,
           isPrivate: data.isPrivate ?? existing.isPrivate,
           archived: data.archived ?? existing.archived,
-          defaultProvider: data.defaultProvider ?? existing.defaultProvider,
-          defaultModel: data.defaultModel ?? existing.defaultModel,
           updatedAt: now,
         })
         .where(
@@ -263,8 +259,6 @@ export class UserDO extends DurableObject<Env> {
         defaultBranch: data.defaultBranch ?? null,
         isPrivate: data.isPrivate ?? null,
         archived: data.archived ?? null,
-        defaultProvider: data.defaultProvider ?? null,
-        defaultModel: data.defaultModel ?? null,
         createdAt: now,
         updatedAt: now,
       }).run();
@@ -273,7 +267,6 @@ export class UserDO extends DurableObject<Env> {
 
   /**
    * Sync projects from GitHub: upsert all repos, remove stale ones.
-   * Preserves user settings (defaultProvider, defaultModel).
    */
   async syncProjects(repos: {
     owner: string;
@@ -307,15 +300,6 @@ export class UserDO extends DurableObject<Env> {
           .run();
       }
     }
-  }
-
-  async updateProjectModel(owner: string, repo: string, provider: string, model: string) {
-    const now = new Date().toISOString();
-    this.db
-      .update(projectsTable)
-      .set({ defaultProvider: provider, defaultModel: model, updatedAt: now })
-      .where(and(eq(projectsTable.owner, owner), eq(projectsTable.repo, repo)))
-      .run();
   }
 
   // ============================================================================

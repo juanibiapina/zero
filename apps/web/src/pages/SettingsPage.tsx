@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import {
   useHotkeyRecorder,
@@ -7,10 +7,11 @@ import {
   hasNonModifierKey,
 } from "@tanstack/react-hotkeys";
 import type { Hotkey } from "@tanstack/react-hotkeys";
-import { Settings, Keyboard } from "lucide-react";
-import { APP_ACTIONS, type AppAction } from "@zero/core";
+import { Settings, Keyboard, Bot, Loader2 } from "lucide-react";
+import { APP_ACTIONS, THINKING_LEVELS, type AppAction, type ThinkingLevel, type ProviderInfo } from "@zero/core";
 import { useSettingsStore } from "@/lib/settings-store";
 import { cn } from "@/lib/utils";
+import { jsonBody } from "@/lib/api";
 
 function HotkeyBadge({ hotkey }: { hotkey: string }) {
   return (
@@ -210,6 +211,187 @@ function ActionBindingRow({ action }: { action: AppAction }) {
   );
 }
 
+// ── Session defaults ─────────────────────────────────────────────────────
+
+interface ModelInfo {
+  id: string;
+  name: string;
+  reasoning: boolean;
+}
+
+function SessionDefaults() {
+  const { getToken } = useAuth();
+  const defaultProvider = useSettingsStore((s) => s.settings.defaultProvider);
+  const defaultModel = useSettingsStore((s) => s.settings.defaultModel);
+  const defaultThinkingLevel = useSettingsStore((s) => s.settings.defaultThinkingLevel);
+  const updateDefaultProvider = useSettingsStore((s) => s.updateDefaultProvider);
+  const updateDefaultModel = useSettingsStore((s) => s.updateDefaultModel);
+  const updateDefaultThinkingLevel = useSettingsStore((s) => s.updateDefaultThinkingLevel);
+
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(true);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  // Fetch connected providers on mount
+  useEffect(() => {
+    void (async () => {
+      try {
+        const token = await getToken();
+        const resp = await fetch("/api/providers", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await jsonBody<{ providers?: ProviderInfo[] }>(resp);
+        setProviders((data.providers ?? []).filter((p) => p.connected));
+      } catch {
+        // leave empty
+      } finally {
+        setLoadingProviders(false);
+      }
+    })();
+  }, [getToken]);
+
+  // Fetch models when provider changes
+  useEffect(() => {
+    if (!defaultProvider) {
+      setModels([]);
+      return;
+    }
+    void (async () => {
+      setLoadingModels(true);
+      try {
+        const token = await getToken();
+        const resp = await fetch(`/api/providers/${defaultProvider}/models`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await jsonBody<{ models?: ModelInfo[] }>(resp);
+        setModels(data.models ?? []);
+      } catch {
+        setModels([]);
+      } finally {
+        setLoadingModels(false);
+      }
+    })();
+  }, [defaultProvider, getToken]);
+
+  const selectedModelInfo = models.find((m) => m.id === defaultModel);
+  const showThinkingLevel = defaultProvider && defaultModel && selectedModelInfo?.reasoning;
+
+  const handleProviderChange = useCallback(
+    (value: string) => {
+      if (value === "") {
+        void updateDefaultProvider(getToken, null);
+        void updateDefaultModel(getToken, null);
+        void updateDefaultThinkingLevel(getToken, null);
+      } else {
+        void updateDefaultProvider(getToken, value);
+        // Clear model & thinking when provider changes
+        void updateDefaultModel(getToken, null);
+        void updateDefaultThinkingLevel(getToken, null);
+      }
+    },
+    [getToken, updateDefaultProvider, updateDefaultModel, updateDefaultThinkingLevel],
+  );
+
+  const handleModelChange = useCallback(
+    (value: string) => {
+      if (value === "") {
+        void updateDefaultModel(getToken, null);
+        void updateDefaultThinkingLevel(getToken, null);
+      } else {
+        void updateDefaultModel(getToken, value);
+        // Clear thinking when model changes
+        void updateDefaultThinkingLevel(getToken, null);
+      }
+    },
+    [getToken, updateDefaultModel, updateDefaultThinkingLevel],
+  );
+
+  const handleThinkingChange = useCallback(
+    (value: string) => {
+      if (value === "") {
+        void updateDefaultThinkingLevel(getToken, null);
+      } else {
+        void updateDefaultThinkingLevel(getToken, value as ThinkingLevel);
+      }
+    },
+    [getToken, updateDefaultThinkingLevel],
+  );
+
+  return (
+    <div className="rounded-lg border p-4 space-y-4">
+      {/* Provider */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium text-muted-foreground w-28">Provider</span>
+        {loadingProviders ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : (
+          <select
+            className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            value={defaultProvider ?? ""}
+            onChange={(e) => handleProviderChange(e.target.value)}
+          >
+            <option value="">Auto (first connected)</option>
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Model */}
+      {defaultProvider && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground w-28">Model</span>
+          {loadingModels ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : (
+            <select
+              className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              value={defaultModel ?? ""}
+              onChange={(e) => handleModelChange(e.target.value)}
+            >
+              <option value="">Auto (provider default)</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Thinking level */}
+      {showThinkingLevel && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground w-28">Thinking</span>
+          <select
+            className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            value={defaultThinkingLevel ?? ""}
+            onChange={(e) => handleThinkingChange(e.target.value)}
+          >
+            <option value="">Auto (based on model)</option>
+            {THINKING_LEVELS.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label} — {l.description}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {!defaultProvider && (
+        <p className="text-xs text-muted-foreground">
+          When set to Auto, new sessions use the first connected provider and its default model.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Settings page ────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -219,6 +401,18 @@ export default function SettingsPage() {
         <Settings className="h-5 w-5" />
         <h1 className="text-2xl font-bold">Settings</h1>
       </div>
+
+      {/* Session defaults */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Bot className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Session Defaults</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Default provider, model, and thinking level for new sessions.
+        </p>
+        <SessionDefaults />
+      </section>
 
       {/* Keyboard shortcuts */}
       <section className="space-y-4">

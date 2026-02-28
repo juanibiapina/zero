@@ -24,12 +24,18 @@ const SettingsResponseSchema = z.object({
   settings: z.object({
     hotkeyPrefix: z.string(),
     hotkeyBindings: z.record(z.string(), z.string()),
+    defaultProvider: z.string().nullable(),
+    defaultModel: z.string().nullable(),
+    defaultThinkingLevel: z.string().nullable(),
   }),
 });
 
 const UpdateSettingsBodySchema = z.object({
   hotkeyPrefix: z.string().optional(),
   hotkeyBindings: z.record(z.string(), z.string().nullable()).optional(),
+  defaultProvider: z.string().nullable().optional(),
+  defaultModel: z.string().nullable().optional(),
+  defaultThinkingLevel: z.string().nullable().optional(),
 });
 
 const ErrorSchema = z.object({
@@ -114,6 +120,28 @@ export const createSettingsRoutes = () => {
         if (Result.isFailure(result)) {
           return c.json({ error: result.error.message }, 400);
         }
+      }
+    }
+
+    // Update session defaults
+    if (body.defaultProvider !== undefined) {
+      const result = await service.updateDefaultProvider(body.defaultProvider);
+      if (Result.isFailure(result)) {
+        return c.json({ error: result.error.message }, 400);
+      }
+    }
+
+    if (body.defaultModel !== undefined) {
+      const result = await service.updateDefaultModel(body.defaultModel);
+      if (Result.isFailure(result)) {
+        return c.json({ error: result.error.message }, 400);
+      }
+    }
+
+    if (body.defaultThinkingLevel !== undefined) {
+      const result = await service.updateDefaultThinkingLevel(body.defaultThinkingLevel as import("@zero/core").ThinkingLevel | null);
+      if (Result.isFailure(result)) {
+        return c.json({ error: result.error.message }, 400);
       }
     }
 

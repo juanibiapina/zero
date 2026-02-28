@@ -15,7 +15,7 @@ import { Result } from "@praha/byethrow";
 import type { Env } from "../types";
 import type { UserDO } from "../UserDO";
 import type { ServiceError } from "../lib/result";
-import { DEFAULT_USER_SETTINGS, DEFAULT_HOTKEY_BINDINGS, APP_ACTION_IDS, type UserSettings } from "@zero/core";
+import { DEFAULT_USER_SETTINGS, DEFAULT_HOTKEY_BINDINGS, APP_ACTION_IDS, THINKING_LEVELS, type UserSettings, type ThinkingLevel } from "@zero/core";
 
 const HOTKEY_PREFIX = "hotkey:";
 
@@ -60,6 +60,9 @@ export class SettingsService {
       settings: {
         hotkeyPrefix: stored.hotkeyPrefix ?? DEFAULT_USER_SETTINGS.hotkeyPrefix,
         hotkeyBindings,
+        defaultProvider: stored.defaultProvider ?? null,
+        defaultModel: stored.defaultModel ?? null,
+        defaultThinkingLevel: (stored.defaultThinkingLevel as ThinkingLevel) ?? null,
       },
     };
   }
@@ -85,6 +88,45 @@ export class SettingsService {
     const userDO = await this.getUserDO();
     // null → explicitly cleared (store empty string sentinel)
     await userDO.setUserSetting(`${HOTKEY_PREFIX}${actionId}`, key ?? "");
+    return Result.succeed({ success: true });
+  }
+
+  async updateDefaultProvider(
+    value: string | null,
+  ): Promise<Result.Result<{ success: true }, ServiceError<"INVALID">>> {
+    const userDO = await this.getUserDO();
+    if (value === null) {
+      await userDO.deleteUserSetting("defaultProvider");
+    } else {
+      await userDO.setUserSetting("defaultProvider", value);
+    }
+    return Result.succeed({ success: true });
+  }
+
+  async updateDefaultModel(
+    value: string | null,
+  ): Promise<Result.Result<{ success: true }, ServiceError<"INVALID">>> {
+    const userDO = await this.getUserDO();
+    if (value === null) {
+      await userDO.deleteUserSetting("defaultModel");
+    } else {
+      await userDO.setUserSetting("defaultModel", value);
+    }
+    return Result.succeed({ success: true });
+  }
+
+  async updateDefaultThinkingLevel(
+    value: ThinkingLevel | null,
+  ): Promise<Result.Result<{ success: true }, ServiceError<"INVALID">>> {
+    if (value !== null && !THINKING_LEVELS.some((t) => t.id === value)) {
+      return Result.fail({ message: `Invalid thinking level: ${value}`, code: "INVALID" });
+    }
+    const userDO = await this.getUserDO();
+    if (value === null) {
+      await userDO.deleteUserSetting("defaultThinkingLevel");
+    } else {
+      await userDO.setUserSetting("defaultThinkingLevel", value);
+    }
     return Result.succeed({ success: true });
   }
 }

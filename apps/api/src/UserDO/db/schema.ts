@@ -49,8 +49,6 @@ export const projectsTable = sqliteTable("projects", {
   defaultBranch: text(),
   isPrivate: int({ mode: "boolean" }),
   archived: int({ mode: "boolean" }),
-  defaultProvider: text(),
-  defaultModel: text(),
   createdAt: text().notNull(),
   updatedAt: text().notNull(),
 });
