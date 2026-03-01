@@ -27,38 +27,30 @@ export default function ProjectDetailPage() {
   const { owner, repo } = useParams();
   const { getToken } = useAuth();
   const navigate = useNavigate();
-  const [deleting, setDeleting] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   // Get all sessions from store and filter for current project
   const allSessions = useSessionStore((s) => s.sessions);
   const loadingSessions = useSessionStore((s) => s.loading);
-  const removeSession = useSessionStore((s) => s.removeSession);
   const sessions = allSessions.filter(
     (s) => s.owner === owner && s.repo === repo
   );
 
-  const handleDelete = async (sessionId: string) => {
-    setDeleting((prev) => new Set(prev).add(sessionId));
-    try {
-      const token = await getToken();
-      const resp = await fetch(`/api/sessions/${sessionId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        removeSession(sessionId);
+  const handleDelete = (sessionId: string) => {
+    // Optimistically remove from store; WebSocket session_deleted confirms.
+    useSessionStore.getState().removeSession(sessionId);
+    void (async () => {
+      try {
+        const token = await getToken();
+        await fetch(`/api/sessions/${sessionId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // Best-effort — session is already removed from UI
       }
-    } catch {
-      // Ignore errors
-    } finally {
-      setDeleting((prev) => {
-        const next = new Set(prev);
-        next.delete(sessionId);
-        return next;
-      });
-    }
+    })();
   };
 
   const handleCreate = async () => {
@@ -184,14 +176,9 @@ export default function ProjectDetailPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        disabled={deleting.has(session.id)}
-                        onClick={() => void handleDelete(session.id)}
+                        onClick={() => handleDelete(session.id)}
                       >
-                        {deleting.has(session.id) ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>
                   </tr>
@@ -215,14 +202,9 @@ export default function ProjectDetailPage() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                    disabled={deleting.has(session.id)}
-                    onClick={() => void handleDelete(session.id)}
+                    onClick={() => handleDelete(session.id)}
                   >
-                    {deleting.has(session.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">

@@ -14,7 +14,7 @@ import { emptyViewState, buildToolResultsMap } from "@/lib/session-types";
 import { SlashAutocomplete } from "@/components/SlashAutocomplete";
 import { resolveSlashCommand, getSlashFilteredTemplates } from "@/lib/template-utils";
 import { useAction } from "@/lib/use-action";
-import { useSessionStore } from "@/lib/session-store";
+
 import { useRegisterAction } from "@/lib/action-handlers";
 import SessionDeleteDialog from "@/components/SessionDeleteDialog";
 import ProviderPickerDialog from "@/components/ProviderPickerDialog";
@@ -131,6 +131,8 @@ function SessionPageInner() {
    *  smooth streaming: 3 per frame ≈ 180/s at 60fps, visibly incremental. */
   const STREAMING_EVENTS_PER_FRAME = 3;
 
+  const flushAgentEventsRef = useRef<() => void>(null);
+
   const flushAgentEvents = useCallback(() => {
     rafIdRef.current = null;
     const buf = agentEventBufferRef.current;
@@ -174,9 +176,13 @@ function SessionPageInner() {
 
     // Schedule next frame if there are remaining events.
     if (buf.length > 0) {
-      rafIdRef.current = requestAnimationFrame(flushAgentEvents);
+      rafIdRef.current = requestAnimationFrame(() => flushAgentEventsRef.current?.());
     }
   }, []);
+
+  useEffect(() => {
+    flushAgentEventsRef.current = flushAgentEvents;
+  }, [flushAgentEvents]);
 
   // Debug panel state
   const [showDebug, setShowDebug] = useState(false);
@@ -197,8 +203,6 @@ function SessionPageInner() {
 
   // Delete session state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const removeSession = useSessionStore((s) => s.removeSession);
 
   const setStatusBoth = useCallback((s: SessionStatus) => {
     statusRef.current = s;
@@ -672,27 +676,23 @@ function SessionPageInner() {
 
   // ── Delete session ───────────────────────────────────────────────────────
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!id) return;
-    setIsDeleting(true);
-    try {
-      const token = await getToken();
-      const resp = await fetch(`/api/sessions/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (resp.ok) {
-        // Remove from local store
-        removeSession(id);
-        // Close dialog and navigate to dashboard
-        setDeleteDialogOpen(false);
-        void navigate("/");
+    // Close dialog and navigate immediately — deletion happens in background.
+    // Store update arrives via WebSocket session_deleted event.
+    setDeleteDialogOpen(false);
+    void navigate("/");
+    void (async () => {
+      try {
+        const token = await getToken();
+        await fetch(`/api/sessions/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // Best-effort — session is already removed from UI
       }
-    } catch {
-      // Ignore errors - dialog stays open so user can try again or cancel
-    } finally {
-      setIsDeleting(false);
-    }
+    })();
   };
 
   // Wire up the delete session action (only when dialog is not open)
@@ -782,6 +782,7 @@ function SessionPageInner() {
             <span className="text-muted-foreground/60">replay</span>
             <span>~{formatBytes(sessionStats.totalBytes)} · {sessionStats.replayMs}ms</span>
             <span className="text-muted-foreground/60">seq</span>
+            {/* eslint-disable-next-line react-hooks/refs -- debug display, intentionally reads ref during render */}
             <span>{lastSeqRef.current}</span>
 
             <span className="text-muted-foreground/60">user</span>
@@ -937,7 +938,6 @@ function SessionPageInner() {
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDelete}
         sessionTitle={owner && repo ? `${owner}/${repo} session` : null}
-        isDeleting={isDeleting}
       />
 
       {/* Provider picker */}

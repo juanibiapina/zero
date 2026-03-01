@@ -233,26 +233,17 @@ export class SessionService {
     if (Result.isFailure(access)) return access;
     const { userDO } = access.value;
 
-    // Get SessionDO for cleanup
-    let sessionDO;
+    // Remove from UserDO index first (broadcasts session_deleted via WebSocket)
+    await userDO.removeSession(id);
+
+    // Background cleanup: stop container, clean R2 snapshot, clear DO storage
     try {
       const doId = this.env.SESSION_DO.idFromString(id);
-      sessionDO = this.env.SESSION_DO.get(doId);
-    } catch {
-      // Invalid ID — just remove from index
-      await userDO.removeSession(id);
-      return Result.succeed({ ok: true as const });
-    }
-
-    // Full teardown: stop container, clean R2 snapshot, clear DO storage
-    try {
+      const sessionDO = this.env.SESSION_DO.get(doId);
       await sessionDO.destroySession();
     } catch (err) {
       console.error("Delete: session destroy failed (ok):", err);
     }
-
-    // Remove from UserDO index
-    await userDO.removeSession(id);
 
     return Result.succeed({ ok: true as const });
   }

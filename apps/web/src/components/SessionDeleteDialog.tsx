@@ -7,15 +7,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 interface SessionDeleteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void> | void;
+  onConfirm: () => void;
   sessionTitle?: string | null;
-  isDeleting?: boolean;
 }
 
 export default function SessionDeleteDialog({
@@ -23,7 +22,6 @@ export default function SessionDeleteDialog({
   onOpenChange,
   onConfirm,
   sessionTitle,
-  isDeleting = false,
 }: SessionDeleteDialogProps) {
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -38,9 +36,9 @@ export default function SessionDeleteDialog({
   }, [open]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !isDeleting) {
+    if (e.key === "Enter") {
       e.preventDefault();
-      void onConfirm();
+      onConfirm();
     }
   };
 
@@ -59,27 +57,16 @@ export default function SessionDeleteDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={isDeleting}
           >
             Cancel
           </Button>
           <Button
             ref={confirmButtonRef}
             variant="destructive"
-            onClick={() => void onConfirm()}
-            disabled={isDeleting}
+            onClick={() => onConfirm()}
           >
-            {isDeleting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Deleting...
-              </>
-            ) : (
-              <>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </>
-            )}
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
           </Button>
         </DialogFooter>
       </DialogContent>
