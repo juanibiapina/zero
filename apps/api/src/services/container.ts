@@ -18,6 +18,10 @@ export type ConfigureParams = {
   model: string;
   apiKey: string;
   thinkingLevel?: string;
+  credentialType?: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  oauthProviderId?: string;
 };
 
 export type ResumeParams = {
@@ -34,6 +38,10 @@ export type ResumeParams = {
   workspaceRestored?: boolean;
   /** Thinking/reasoning level for the session. */
   thinkingLevel?: string;
+  credentialType?: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  oauthProviderId?: string;
 };
 
 // ── Error Type ───────────────────────────────────────────────────────────

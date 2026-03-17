@@ -7,8 +7,8 @@
 
 import { execSync } from "node:child_process";
 import { mkdirSync, existsSync } from "node:fs";
-import { getModel } from "@mariozechner/pi-ai";
-import type { Message } from "@mariozechner/pi-ai";
+import { getModel, refreshAnthropicToken, refreshGitHubCopilotToken, refreshOpenAICodexToken, refreshGoogleCloudToken, refreshAntigravityToken } from "@mariozechner/pi-ai";
+import type { Message, OAuthCredentials } from "@mariozechner/pi-ai";
 import { agentLoop } from "@mariozechner/pi-agent-core";
 import type { AgentEvent, AgentContext, AgentMessage } from "@mariozechner/pi-agent-core";
 import { codingTools } from "@mariozechner/pi-coding-agent";
@@ -29,6 +29,12 @@ export class SessionWrapper {
   private _workDir: string | null = null;
   private _apiKey: string | null = null;
   private _thinkingLevel: string = "high";
+
+  // OAuth token refresh state
+  private _credentialType: string | null = null;
+  private _refreshToken: string | null = null;
+  private _expiresAt: number | null = null; // epoch ms
+  private _oauthProviderId: string | null = null;
 
   // Conversation history — accumulated across turns for follow-up context
   private _messages: Message[] = [];
@@ -164,6 +170,7 @@ export class SessionWrapper {
       model,
       reasoning,
       apiKey: this._apiKey ?? undefined,
+      getApiKey: () => this.resolveApiKey(),
       signal: this._abortController.signal,
       // Identity converter — we only use standard user/assistant/toolResult messages
       convertToLlm: (msgs: AgentMessage[]) => msgs.filter(
@@ -255,6 +262,12 @@ export class SessionWrapper {
     token: string,
     workspaceRestored?: boolean,
     thinkingLevel?: string,
+    oauthMetadata?: {
+      credentialType?: string;
+      refreshToken?: string;
+      expiresAt?: string;
+      oauthProviderId?: string;
+    },
   ): Promise<void> {
     // Auto-stop existing session
     if (this._abortController) {
@@ -297,6 +310,12 @@ export class SessionWrapper {
       this._workDir = workDir;
       this._apiKey = apiKey;
       this._thinkingLevel = thinkingLevel ?? "high";
+
+      // Store OAuth metadata for token refresh
+      this._credentialType = oauthMetadata?.credentialType ?? null;
+      this._refreshToken = oauthMetadata?.refreshToken ?? null;
+      this._expiresAt = oauthMetadata?.expiresAt ? Number(oauthMetadata.expiresAt) : null;
+      this._oauthProviderId = oauthMetadata?.oauthProviderId ?? null;
 
       // Restore conversation history
       this._messages = messages;
@@ -347,7 +366,18 @@ export class SessionWrapper {
    * so a running turn continues with the old model. The next turn uses
    * the new one.
    */
-  async configure(provider: string, modelId: string, apiKey: string, thinkingLevel?: string): Promise<void> {
+  async configure(
+    provider: string,
+    modelId: string,
+    apiKey: string,
+    thinkingLevel?: string,
+    oauthMetadata?: {
+      credentialType?: string;
+      refreshToken?: string;
+      expiresAt?: string;
+      oauthProviderId?: string;
+    },
+  ): Promise<void> {
     if (!this._workDir) {
       throw new Error("Session not initialized — cannot configure before resume");
     }
@@ -365,7 +395,66 @@ export class SessionWrapper {
     if (thinkingLevel !== undefined) {
       this._thinkingLevel = thinkingLevel;
     }
+
+    // Update OAuth metadata
+    this._credentialType = oauthMetadata?.credentialType ?? null;
+    this._refreshToken = oauthMetadata?.refreshToken ?? null;
+    this._expiresAt = oauthMetadata?.expiresAt ? Number(oauthMetadata.expiresAt) : null;
+    this._oauthProviderId = oauthMetadata?.oauthProviderId ?? null;
+
     console.log(`Session reconfigured: ${provider}/${modelId} thinking=${this._thinkingLevel}`);
+  }
+
+  /**
+   * Resolve an API key for the current LLM call.
+   * For API key credentials, returns the static key.
+   * For OAuth credentials, checks expiry and refreshes when needed.
+   */
+  private async resolveApiKey(): Promise<string | undefined> {
+    if (!this._apiKey) return undefined;
+
+    // API key credentials never expire
+    if (this._credentialType !== "oauth") return this._apiKey;
+
+    // OAuth: check if token needs refresh (within 2 minutes of expiry)
+    if (!this._expiresAt || !this._refreshToken || !this._oauthProviderId) {
+      return this._apiKey;
+    }
+
+    const TWO_MINUTES = 2 * 60 * 1000;
+    if (this._expiresAt > Date.now() + TWO_MINUTES) {
+      return this._apiKey;
+    }
+
+    console.log(`OAuth token near expiry for ${this._oauthProviderId}, refreshing...`);
+    try {
+      const refreshed = await refreshOAuthTokenForProvider(
+        this._oauthProviderId,
+        this._refreshToken,
+      );
+
+      // Update local state
+      this._apiKey = refreshed.access;
+      this._refreshToken = refreshed.refresh;
+      this._expiresAt = refreshed.expires;
+
+      // Notify SessionDO via event stream so it can persist to UserDO
+      this._eventBuffer.addEvent({
+        type: "credential_update",
+        provider: this._oauthProviderId,
+        accessToken: refreshed.access,
+        refreshToken: refreshed.refresh,
+        expiresAt: String(refreshed.expires),
+      });
+
+      console.log(`OAuth token refreshed for ${this._oauthProviderId}`);
+      return this._apiKey;
+    } catch (err) {
+      console.error(`OAuth token refresh failed for ${this._oauthProviderId}:`, err);
+      // Return the existing (possibly expired) token — the LLM call
+      // will fail with an auth error, which is the correct behavior
+      return this._apiKey;
+    }
   }
 
   /**
@@ -392,5 +481,29 @@ export class SessionWrapper {
     // Transition to idle (not stopped) so the user can send follow-ups after abort
     this._status = "idle";
     this._eventBuffer.addEvent({ type: "status", status: this._status });
+  }
+}
+
+/**
+ * Refresh an OAuth token for a given provider.
+ * Uses the provider-specific refresh functions from @mariozechner/pi-ai.
+ */
+async function refreshOAuthTokenForProvider(
+  oauthProviderId: string,
+  refreshToken: string,
+): Promise<OAuthCredentials> {
+  switch (oauthProviderId) {
+    case "anthropic":
+      return refreshAnthropicToken(refreshToken);
+    case "github-copilot":
+      return refreshGitHubCopilotToken(refreshToken);
+    case "openai-codex":
+      return refreshOpenAICodexToken(refreshToken);
+    case "google-gemini-cli":
+      return refreshGoogleCloudToken(refreshToken, "");
+    case "google-antigravity":
+      return refreshAntigravityToken(refreshToken, "");
+    default:
+      throw new Error(`Unknown OAuth provider for refresh: ${oauthProviderId}`);
   }
 }

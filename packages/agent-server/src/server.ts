@@ -82,6 +82,12 @@ export function createAppServer(): Server {
             body.provider, body.model, body.apiKey,
             body.messages as Message[], body.repoUrl, body.token,
             body.workspaceRestored, body.thinkingLevel,
+            {
+              credentialType: body.credentialType,
+              refreshToken: body.refreshToken,
+              expiresAt: body.expiresAt,
+              oauthProviderId: body.oauthProviderId,
+            },
           );
           sendJson(res, 200, { ok: true });
         } catch (err) {
@@ -116,7 +122,12 @@ export function createAppServer(): Server {
           return;
         }
         try {
-          await session.configure(body.provider, body.model, body.apiKey, body.thinkingLevel);
+          await session.configure(body.provider, body.model, body.apiKey, body.thinkingLevel, {
+            credentialType: body.credentialType,
+            refreshToken: body.refreshToken,
+            expiresAt: body.expiresAt,
+            oauthProviderId: body.oauthProviderId,
+          });
           sendJson(res, 200, { ok: true });
         } catch (err) {
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });

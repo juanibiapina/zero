@@ -357,6 +357,10 @@ export class SessionDO extends DurableObject<Env> {
 
     // 1. Resolve credentials for the new provider
     let apiKey: string;
+    let credentialType: string | undefined;
+    let refreshToken: string | undefined;
+    let expiresAt: string | undefined;
+    let oauthProviderId: string | undefined;
     try {
       if (!session.userDOId) throw new Error("No userDOId");
       const userDO = this.env.USER_DO.get(
@@ -368,6 +372,12 @@ export class SessionDO extends DurableObject<Env> {
         credentials.find(c => c.provider === provider && c.accessToken);
       if (!cred) throw new Error(`No credentials for provider: ${provider}`);
       apiKey = (cred.apiKey ?? cred.accessToken)!;
+      credentialType = cred.credentialType;
+      if (cred.credentialType === "oauth") {
+        refreshToken = cred.refreshToken ?? undefined;
+        expiresAt = cred.expiresAt ?? undefined;
+        oauthProviderId = cred.provider;
+      }
     } catch (err) {
       this.broadcastError(err instanceof Error ? err.message : String(err));
       return;
@@ -392,7 +402,10 @@ export class SessionDO extends DurableObject<Env> {
     try {
       const state = await this.container.getState();
       if (state.status !== "stopped" && state.status !== "stopped_with_code") {
-        await this.container.configure({ provider, model, apiKey, thinkingLevel: effectiveThinkingLevel });
+        await this.container.configure({
+          provider, model, apiKey, thinkingLevel: effectiveThinkingLevel,
+          credentialType, refreshToken, expiresAt, oauthProviderId,
+        });
       }
     } catch {
       // Container unreachable — OK, next resume reads from sessionMetaTable
@@ -527,8 +540,8 @@ export class SessionDO extends DurableObject<Env> {
     // Ensure container knows which SessionDO to notify on stop (idempotent)
     await container.bindToSession(this.ctx.id.toString());
 
-    // 1. Resolve fresh credentials
-    const { apiKey, githubToken, secrets } = await this.resolveCredentials(session);
+    // 1. Resolve fresh credentials (including OAuth metadata for token refresh)
+    const { apiKey, githubToken, secrets, credentialType, refreshToken, expiresAt, oauthProviderId } = await this.resolveCredentials(session);
 
     // 2. Rebuild conversation history
     const messages = this.getConversationHistory();
@@ -549,6 +562,10 @@ export class SessionDO extends DurableObject<Env> {
       messages,
       workspaceRestored: hasSnapshot,
       thinkingLevel: session.thinkingLevel ?? "high",
+      credentialType,
+      refreshToken,
+      expiresAt,
+      oauthProviderId,
     });
 
     console.log(`Session resumed (${messages.length} messages restored)`);
@@ -622,6 +639,14 @@ export class SessionDO extends DurableObject<Env> {
 
     const agentEvent = envelope.event as Record<string, unknown>;
     const eventType = (agentEvent?.type as string) ?? "unknown";
+
+    // credential_update: internal event from container when it refreshes an OAuth token.
+    // Persist the new credential to UserDO so future resumes use the fresh token.
+    // Not persisted to SQLite, not broadcast to browsers.
+    if (eventType === "credential_update") {
+      this.handleCredentialUpdate(agentEvent);
+      return;
+    }
 
     // Streaming events (message_update, tool_execution_update) are ephemeral:
     // broadcast live to connected browsers but don't persist to SQLite.
@@ -712,7 +737,15 @@ export class SessionDO extends DurableObject<Env> {
   private async resolveCredentials(session: {
     provider: string;
     userDOId: string | null;
-  }): Promise<{ apiKey: string; githubToken: string; secrets: Record<string, string> }> {
+  }): Promise<{
+    apiKey: string;
+    githubToken: string;
+    secrets: Record<string, string>;
+    credentialType?: string;
+    refreshToken?: string;
+    expiresAt?: string;
+    oauthProviderId?: string;
+  }> {
     if (!session.userDOId) throw new Error("No userDOId");
 
     const userDO = this.env.USER_DO.get(
@@ -737,7 +770,57 @@ export class SessionDO extends DurableObject<Env> {
     const secrets: Record<string, string> = {};
     for (const row of secretRows) secrets[row.name] = row.value;
 
-    return { apiKey, githubToken, secrets };
+    // OAuth metadata (for token refresh in the container)
+    const oauthMeta = cred.credentialType === "oauth"
+      ? {
+          credentialType: cred.credentialType,
+          refreshToken: cred.refreshToken ?? undefined,
+          expiresAt: cred.expiresAt ?? undefined,
+          oauthProviderId: cred.provider,
+        }
+      : { credentialType: cred.credentialType };
+
+    return { apiKey, githubToken, secrets, ...oauthMeta };
+  }
+
+  /**
+   * Handle a credential_update event from the container.
+   * Persists refreshed OAuth tokens to UserDO so future resumes use the fresh token.
+   */
+  private handleCredentialUpdate(event: Record<string, unknown>): void {
+    const provider = event.provider as string | undefined;
+    const accessToken = event.accessToken as string | undefined;
+    const refreshToken = event.refreshToken as string | undefined;
+    const expiresAt = event.expiresAt as string | undefined;
+
+    if (!provider || !accessToken) {
+      console.error("credential_update missing required fields:", event);
+      return;
+    }
+
+    const row = this.db
+      .select({ userDOId: sessionMetaTable.userDOId })
+      .from(sessionMetaTable)
+      .get();
+    if (!row?.userDOId) {
+      console.error("credential_update: no userDOId");
+      return;
+    }
+
+    const userDO = this.env.USER_DO.get(
+      this.env.USER_DO.idFromString(row.userDOId),
+    );
+
+    userDO
+      .upsertProviderCredential({
+        provider,
+        credentialType: "oauth",
+        accessToken,
+        refreshToken,
+        expiresAt,
+      })
+      .then(() => console.log(`Persisted refreshed credential for ${provider}`))
+      .catch((err) => console.error(`Failed to persist refreshed credential for ${provider}:`, err));
   }
 
   // ═══════════════════════════════════════════════════════════════════════

@@ -16,6 +16,14 @@ export interface ResumeRequest {
   workspaceRestored?: boolean;
   /** Thinking/reasoning level: "off" | "low" | "medium" | "high" | "xhigh". */
   thinkingLevel?: string;
+  /** Credential type: 'oauth' credentials may need refresh, 'api_key' are static. */
+  credentialType?: string;
+  /** OAuth refresh token for token renewal. */
+  refreshToken?: string;
+  /** OAuth access token expiry (ISO string or epoch ms). */
+  expiresAt?: string;
+  /** OAuth provider ID (e.g. "anthropic") for selecting the refresh function. */
+  oauthProviderId?: string;
 }
 
 export interface MessageRequest {
@@ -32,6 +40,14 @@ export interface ConfigureRequest {
   apiKey: string;
   /** Thinking/reasoning level: "off" | "low" | "medium" | "high" | "xhigh". */
   thinkingLevel?: string;
+  /** Credential type: 'oauth' credentials may need refresh, 'api_key' are static. */
+  credentialType?: string;
+  /** OAuth refresh token for token renewal. */
+  refreshToken?: string;
+  /** OAuth access token expiry (ISO string or epoch ms). */
+  expiresAt?: string;
+  /** OAuth provider ID (e.g. "anthropic") for selecting the refresh function. */
+  oauthProviderId?: string;
 }
 
 export type SessionStatus =
