@@ -20,7 +20,7 @@ export interface ResumeRequest {
   credentialType?: string;
   /** OAuth refresh token for token renewal. */
   refreshToken?: string;
-  /** OAuth access token expiry (ISO string or epoch ms). */
+  /** OAuth access token expiry (ISO 8601 string). */
   expiresAt?: string;
   /** OAuth provider ID (e.g. "anthropic") for selecting the refresh function. */
   oauthProviderId?: string;

@@ -314,7 +314,7 @@ export class SessionWrapper {
       // Store OAuth metadata for token refresh
       this._credentialType = oauthMetadata?.credentialType ?? null;
       this._refreshToken = oauthMetadata?.refreshToken ?? null;
-      this._expiresAt = oauthMetadata?.expiresAt ? Number(oauthMetadata.expiresAt) : null;
+      this._expiresAt = oauthMetadata?.expiresAt ? new Date(oauthMetadata.expiresAt).getTime() : null;
       this._oauthProviderId = oauthMetadata?.oauthProviderId ?? null;
 
       // Restore conversation history
@@ -399,7 +399,7 @@ export class SessionWrapper {
     // Update OAuth metadata
     this._credentialType = oauthMetadata?.credentialType ?? null;
     this._refreshToken = oauthMetadata?.refreshToken ?? null;
-    this._expiresAt = oauthMetadata?.expiresAt ? Number(oauthMetadata.expiresAt) : null;
+    this._expiresAt = oauthMetadata?.expiresAt ? new Date(oauthMetadata.expiresAt).getTime() : null;
     this._oauthProviderId = oauthMetadata?.oauthProviderId ?? null;
 
     console.log(`Session reconfigured: ${provider}/${modelId} thinking=${this._thinkingLevel}`);
@@ -444,7 +444,7 @@ export class SessionWrapper {
         provider: this._oauthProviderId,
         accessToken: refreshed.access,
         refreshToken: refreshed.refresh,
-        expiresAt: String(refreshed.expires),
+        expiresAt: new Date(refreshed.expires).toISOString(),
       });
 
       console.log(`OAuth token refreshed for ${this._oauthProviderId}`);
