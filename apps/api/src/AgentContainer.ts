@@ -52,10 +52,13 @@ export class AgentContainer extends Container<Env> {
    * Snapshot the workspace to R2 before letting the container sleep.
    */
   override async onActivityExpired(): Promise<void> {
+    const sessionDOId = await this.ctx.storage.get<string>("sessionDOId");
+
     // Check if the agent is still busy before sleeping.
     // During agent execution, events stream over WebSocket which doesn't
     // reset the sleepAfter timer — only fetch() calls do. So we poll
     // the agent status here and extend the timeout if it's still running.
+    console.log(`onActivityExpired: checking agent status (session=${sessionDOId ?? "unknown"})`);
     try {
       const statusResp = await this.containerFetch(
         switchPort(new Request("http://container/status"), 8080)
@@ -67,13 +70,15 @@ export class AgentContainer extends Container<Env> {
           this.renewActivityTimeout();
           return;
         }
+        console.log(`onActivityExpired: agent idle (status=${status}), proceeding with stop`);
+      } else {
+        const body = await statusResp.text();
+        console.error(`onActivityExpired: status check returned non-ok response (httpStatus=${statusResp.status}, body=${body}), proceeding with stop`);
       }
     } catch (err) {
       // Fetch failed — container may be unhealthy, proceed with stop
       console.error("Status check failed, proceeding with stop:", err);
     }
-
-    const sessionDOId = await this.ctx.storage.get<string>("sessionDOId");
     let snapshotFailed = false;
     try {
       if (sessionDOId) {

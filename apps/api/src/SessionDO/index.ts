@@ -178,9 +178,8 @@ export class SessionDO extends DurableObject<Env> {
    * "running" forever.
    */
   async onContainerStopped(params?: { exitCode: number; reason: string }): Promise<void> {
-    if (params) {
-      console.log(`Container stopped: exitCode=${params.exitCode} reason=${params.reason}`);
-    }
+    console.log(`Container stopped: session=${this.ctx.id.toString()} exitCode=${params?.exitCode ?? "unknown"} reason=${params?.reason ?? "unknown"}`);
+
 
     this.closeEventStream();
 
@@ -262,10 +261,12 @@ export class SessionDO extends DurableObject<Env> {
     // live updates. Falls back to idle if the container is unreachable.
     const ACTIVE: Set<string> = new Set(["starting", "running", "resuming"]);
     if (ACTIVE.has(currentStatus) && !this.containerWs) {
+      console.log(`Event stream lost while active (status=${currentStatus}), attempting reconnect`);
       this.ctx.waitUntil((async () => {
         try {
           await this.connectEventStream(this.container);
         } catch {
+          console.error("Event stream reconnection failed, transitioning to stopped");
           await this.updateStatus("stopped");
           this.broadcastToWebSockets({ type: "status", status: "stopped" });
         }
@@ -610,10 +611,17 @@ export class SessionDO extends DurableObject<Env> {
 
     ws.accept();
     this.containerWs = ws;
+    console.log("Event stream connected");
 
     ws.addEventListener("message", (event) => this.handleContainerEvent(event));
-    ws.addEventListener("close", () => { this.containerWs = null; });
-    ws.addEventListener("error", () => { this.containerWs = null; });
+    ws.addEventListener("close", () => {
+      console.log("Event stream closed");
+      this.containerWs = null;
+    });
+    ws.addEventListener("error", () => {
+      console.error("Event stream error");
+      this.containerWs = null;
+    });
   }
 
   private closeEventStream(): void {
@@ -672,6 +680,7 @@ export class SessionDO extends DurableObject<Env> {
     if (eventType === "status" && agentEvent.status) {
       const newStatus = this.containerStatusToSessionStatus(agentEvent.status as string);
       if (newStatus) {
+        console.log(`Session status → ${newStatus}`);
         this.updateStatus(newStatus).catch(() => {});
         this.broadcastToWebSockets({
           type: "status",
