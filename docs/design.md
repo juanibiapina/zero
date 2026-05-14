@@ -88,6 +88,10 @@ Webhook auth: Telegram echoes the configured `secret_token` in the
 `X-Telegram-Bot-Api-Secret-Token` header. The worker compares it to
 `TELEGRAM_WEBHOOK_SECRET` and rejects mismatches with 401.
 
+The webhook URL and secret are registered with Telegram manually via the
+Bot API's `setWebhook` method — see
+[`docs/telegram-webhook.md`](telegram-webhook.md).
+
 ## Secrets
 
 Stored in Doppler (`zero-api`):
