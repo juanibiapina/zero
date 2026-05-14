@@ -14,11 +14,34 @@ it where to deliver updates and which secret token to echo back.
   `openssl rand -hex 32`), stored in Doppler `zero-api`. Telegram echoes
   this back in the `X-Telegram-Bot-Api-Secret-Token` header on every
   delivery; the worker rejects requests where it doesn't match.
+- `TELEGRAM_BOT_INFO` — the JSON `result` of `getMe`, stored in Doppler
+  `zero-api`. grammY uses this to skip the per-request `getMe` round trip
+  when constructing a `Bot` inside the worker. See
+  [Refreshing `TELEGRAM_BOT_INFO`](#refreshing-telegram_bot_info) below.
 - The public webhook URL: `https://zero.juanibiapina.dev/api/webhooks/telegram`.
 
-Both secrets must already be set in Doppler and synced to Cloudflare
+All three secrets must already be set in Doppler and synced to Cloudflare
 (`bin/sync-secrets-to-cloudflare`) before registering — otherwise the
-worker will reject deliveries with 401.
+worker will reject deliveries (401) or fail to start the bot.
+
+## Refreshing `TELEGRAM_BOT_INFO`
+
+Fetch the bot info from Telegram and put it in Doppler (both `dev` and
+`prd` use the same bot today, so set both):
+
+```bash
+TOKEN=$(doppler secrets get TELEGRAM_BOT_TOKEN --plain --project zero-api --config prd)
+BOT_INFO=$(curl -s "https://api.telegram.org/bot${TOKEN}/getMe" | jq -c .result)
+
+doppler secrets set TELEGRAM_BOT_INFO="$BOT_INFO" --project zero-api --config prd
+doppler secrets set TELEGRAM_BOT_INFO="$BOT_INFO" --project zero-api --config dev
+bin/sync-secrets-to-cloudflare
+```
+
+Re-run this whenever the bot's identity changes (rename via `@BotFather`,
+new username, toggled `can_join_groups`/inline support, etc.). The value
+is not secret — it's just the public `getMe` response — but we keep it in
+Doppler for consistency with the rest of the worker env.
 
 ## Making requests
 

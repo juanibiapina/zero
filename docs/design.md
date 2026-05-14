@@ -84,9 +84,11 @@ PUT    /api/telegram-id                  — Set/clear caller's Telegram id (Cle
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
 ```
 
-Webhook auth: Telegram echoes the configured `secret_token` in the
-`X-Telegram-Bot-Api-Secret-Token` header. The worker compares it to
-`TELEGRAM_WEBHOOK_SECRET` and rejects mismatches with 401.
+The webhook handler is built on [grammY](https://grammy.dev) via its `hono`
+adapter (`webhookCallback`). grammY does the secret-token check, parses the
+Telegram `Update`, and dispatches to bot middleware. The worker compares the
+`X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET`
+and rejects mismatches with 401.
 
 The webhook URL and secret are registered with Telegram manually via the
 Bot API's `setWebhook` method — see
@@ -97,7 +99,9 @@ Bot API's `setWebhook` method — see
 Stored in Doppler (`zero-api`):
 
 - `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
-- `TELEGRAM_BOT_TOKEN` — used later when we start replying to Telegram
+- `TELEGRAM_BOT_TOKEN` — used by grammY to authenticate as the bot
+- `TELEGRAM_BOT_INFO` — JSON `getMe` result; lets grammY skip the per-request
+  `getMe` call (see [`telegram-webhook.md`](telegram-webhook.md))
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
 
 ## Dev Environment

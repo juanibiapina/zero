@@ -5,6 +5,7 @@ export interface Env {
   CLERK_PUBLISHABLE_KEY: string;
   CLERK_SECRET_KEY: string;
   TELEGRAM_BOT_TOKEN: string;
+  TELEGRAM_BOT_INFO: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   ENVIRONMENT: string;
 
