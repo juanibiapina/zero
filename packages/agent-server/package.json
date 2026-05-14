@@ -1,9 +1,11 @@
 {
   "name": "@zero/agent-server",
   "version": "0.0.0",
+  "description": "Standalone HTTP server for agentic sessions. Runtime-agnostic; deployed as a Cloudflare Container today but designed to run on any Node host.",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
+  "files": ["dist"],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",

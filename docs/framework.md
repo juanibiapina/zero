@@ -22,19 +22,21 @@ Cloudflare Workers backend.
 │                      Routes Layer                             │
 │                (apps/api/src/routes/*.ts)                     │
 │        OpenAPIHono endpoints, Zod validation, KV access       │
+└─────────────────────────────────┬─────────────────────────────┘
+                                  ▼
+┌──────────────────────────────────────────────────────────────┐
+│                Container Layer                                │
+│              (apps/api/src/AgentContainer.ts)                 │
+│        Container DO + outboundByHost (container → worker)     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 Data flows down. Each layer only calls the one directly below it.
 
 A services layer is intentionally absent for now — routes are thin enough
-that they talk directly to KV (or the DO stub from `c.env`). Add a
+that they talk directly to KV and the container stub from `c.env`. Add a
 `services/` directory when a route needs to coordinate multiple bindings or
 apply non-trivial authorization beyond the app-level guard.
-
-A Durable Objects layer is also unused at runtime today — only the stub
-`AgentContainer` binding is declared, and no route touches it. The pattern
-below stays valid for when you re-introduce a stateful DO.
 
 ---
 
@@ -57,7 +59,11 @@ export default {
 };
 
 export { AgentContainer } from "./AgentContainer";
+export { ContainerProxy } from "@cloudflare/containers";
 ```
+
+`ContainerProxy` must be re-exported for the container's outbound
+handlers to be reachable — see the Container Layer below.
 
 ---
 
@@ -108,10 +114,39 @@ export const createTelegramRoutes = () => {
 
 Routers are mounted in `app.ts` via `app.route("/", createTelegramRoutes())`.
 
+## Container Layer
+
+**Reference:** `apps/api/src/AgentContainer.ts`
+
+`AgentContainer` extends `Container<Env>` from `@cloudflare/containers`. It
+hosts `@zero/agent-server`. One container per Clerk user — selected with
+`env.AGENT_CONTAINER.getByName(clerkUserId)` — that idles after 5 minutes
+of inactivity.
+
+The class also wires the **outbound handler** that lets the container call
+the worker without going through the public internet:
+
+```typescript
+AgentContainer.outboundByHost = {
+  "zero.worker": (req, env) => handleContainerReply(req, env),
+};
+```
+
+The container `fetch`es `http://zero.worker/reply`. That request never
+leaves the machine — the handler runs inside the Workers runtime with full
+access to `env` (KV, Telegram bot token). No public route, no shared
+secret. `index.ts` must re-export `ContainerProxy` for this to work.
+
+For docs and configuration see
+<https://developers.cloudflare.com/containers/platform-details/outbound-traffic/>.
+
 ## State
 
-Today, all persistent state is in Workers KV:
+All persistent state is in Workers KV:
 
-- `clerk:{clerkUserId} → telegramId` — written by the PUT handler, read by GET.
-- `tg:{telegramId} → clerkUserId` — written by the PUT handler, read by the
-  webhook to route updates back to the right user.
+| Key | Value | Written by | Read by |
+|---|---|---|---|
+| `clerk:{clerkUserId}` | `telegramId` | `PUT /api/telegram-id` | `GET /api/telegram-id` |
+| `tg:{telegramId}` | `clerkUserId` | `PUT /api/telegram-id` | webhook |
+| `topic:{clerkUserId}:{chatId}:{threadId}` | `sessionId` | webhook (on session create) | webhook |
+| `session:{sessionId}` | `{ clerkUserId, chatId, messageThreadId }` JSON | webhook (on session create) | `outboundByHost["zero.worker"]` |

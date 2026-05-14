@@ -8,3 +8,4 @@ export default {
 };
 
 export { AgentContainer } from "./AgentContainer";
+export { ContainerProxy } from "@cloudflare/containers";
