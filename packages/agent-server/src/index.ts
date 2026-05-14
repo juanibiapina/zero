@@ -1,23 +1,26 @@
 /**
- * Entry point — Start the agent-server HTTP server.
+ * Minimal HTTP stub for the agent-server container.
+ *
+ * The container exists as a placeholder — real agent functionality will be
+ * added later. For now it just responds to health checks so the container
+ * platform can verify the process is alive.
  */
 
-import { createAppServer } from "./server.js";
+import { createServer } from "node:http";
 
 const port = parseInt(process.env.PORT ?? "8080", 10);
-const server = createAppServer();
 
-server.listen(port, () => {
-  console.log(`agent-server listening on port ${port}`);
+const server = createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: true, path: req.url }));
 });
 
-// Graceful shutdown
+server.listen(port, () => {
+  console.log(`agent-server stub listening on port ${port}`);
+});
+
 const shutdown = () => {
-  console.log("Shutting down...");
-  server.close(() => {
-    process.exit(0);
-  });
-  // Force exit after 5 seconds
+  server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 5000);
 };
 

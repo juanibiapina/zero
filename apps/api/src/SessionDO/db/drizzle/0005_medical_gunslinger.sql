@@ -1,1 +1,0 @@
-ALTER TABLE `session_events` DROP COLUMN `containerSeq`;

@@ -1,4 +1,5 @@
 import { createApp } from "./app";
+import type { Env } from "./types";
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
@@ -6,6 +7,4 @@ export default {
   },
 };
 
-export { UserDO } from "./UserDO";
-export { SessionDO } from "./SessionDO";
 export { AgentContainer } from "./AgentContainer";

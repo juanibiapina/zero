@@ -1,1 +1,0 @@
-ALTER TABLE `session_meta` ADD `thinkingLevel` text;

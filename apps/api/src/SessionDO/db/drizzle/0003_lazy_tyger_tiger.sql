@@ -1,1 +1,0 @@
-ALTER TABLE `session_meta` DROP COLUMN `containerName`;

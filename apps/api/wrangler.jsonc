@@ -3,9 +3,6 @@
   "name": "zero-api",
   "main": "./src/index.ts",
   "compatibility_date": "2026-02-25",
-  "rules": [
-    { "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }
-  ],
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -31,12 +28,6 @@
       "preview_id": "c585ffa89cbb45448d2480491434b2ee"
     }
   ],
-  "r2_buckets": [
-    {
-      "binding": "SNAPSHOTS",
-      "bucket_name": "zero-workspace-snapshots"
-    }
-  ],
   "containers": [
     {
       "class_name": "AgentContainer",
@@ -47,14 +38,6 @@
   ],
   "durable_objects": {
     "bindings": [
-      {
-        "name": "USER_DO",
-        "class_name": "UserDO"
-      },
-      {
-        "name": "SESSION_DO",
-        "class_name": "SessionDO"
-      },
       {
         "name": "AGENT_CONTAINER",
         "class_name": "AgentContainer"
@@ -73,6 +56,10 @@
     {
       "tag": "v3",
       "deleted_classes": ["ProjectDO"]
+    },
+    {
+      "tag": "v4",
+      "deleted_classes": ["UserDO", "SessionDO"]
     }
   ]
 }

@@ -13,20 +13,20 @@ gob run bin/deploy
 
 ## Architecture
 
-Zero is an agent orchestrator with the following packages:
+Zero receives Telegram bot webhooks, routes each update to the right user via KV, and (for now) logs it. The web app is a single screen where a signed-in user pastes their Telegram numeric id.
+
+Packages:
 
 - **Worker:** `apps/api` (`@zero/api`)
 - **Frontend:** `apps/web` (`@zero/web`)
-- **Shared types:** `packages/core` (`@zero/core`)
-- **Agent server:** `packages/agent-server` (`@zero/agent-server`)
-- **Provider registry:** `packages/providers` (`@zero/providers`)
-- **Migration utility:** `packages/drizzle-migrator`
+- **Shared types:** `packages/core` (`@zero/core`) — currently empty placeholder
+- **Container stub:** `packages/agent-server` (`@zero/agent-server`)
 
 Expected dev ports:
 - **5176**: Web frontend (Vite)
 - **8790**: API worker (Wrangler)
 
-The worker backend follows a layered architecture pattern: Entry Point → App → Routes → Services → Durable Objects. See `docs/framework.md` for the full guide covering each layer's responsibilities, code patterns, and key constraints.
+The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`.
 
 ## Production Logs
 
@@ -46,10 +46,6 @@ lsof -ti :8790 | xargs -r kill -9
 
 Then restart the dev server with `gob restart <job_id>`.
 
-## Tech Debt
-
-When you introduce or discover technical debt (shortcuts, workarounds, deferred improvements), document it in `docs/tech-debt.md`. When tech debt is resolved, remove the corresponding entry.
-
 ## Secrets
 
 When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use Doppler.
@@ -58,12 +54,3 @@ Doppler projects:
 - `zero-api` — Worker backend secrets
 - `zero-web` — Frontend build-time secrets
 
-## Database Migrations
-
-When making schema changes to Durable Objects, refer to `docs/migrations.md` for the migration workflow.
-
-1. Edit schema file (`apps/api/src/{UserDO,SessionDO}/db/schema.ts`)
-2. Generate migration: `pnpm --filter @zero/api run db:generate`
-3. Run `gob run bin/ci` to verify
-
-**Do not rename migration files.** The `migrations.js` is auto-generated from `_journal.json`.

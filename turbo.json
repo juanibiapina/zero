@@ -29,7 +29,7 @@
       "cache": false
     },
     "@zero/api#deploy": {
-      "dependsOn": ["@zero/web#build"],
+      "dependsOn": ["@zero/web#build", "@zero/agent-server#build"],
       "cache": false
     }
   }

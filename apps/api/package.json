@@ -7,7 +7,6 @@
     "dev": "wrangler dev --port 8790 --inspector-port 9232",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
-    "db:generate": "drizzle-kit generate --config src/UserDO/db/drizzle.config.ts && drizzle-kit generate --config src/SessionDO/db/drizzle.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
@@ -15,11 +14,6 @@
     "@cloudflare/containers": "^0.1.0",
     "@hono/clerk-auth": "^3.1.0",
     "@hono/zod-openapi": "^1.2.2",
-    "@praha/byethrow": "^0.10.0",
-    "@zero/core": "workspace:*",
-    "@zero/providers": "workspace:*",
-    "@zero/drizzle-migrator": "workspace:*",
-    "drizzle-orm": "^0.45.1",
     "hono": "^4.12.2",
     "zod": "^4.3.6"
   },
@@ -27,8 +21,6 @@
     "@cloudflare/workers-types": "^4.20260304.0",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "dotenv": "^17.3.1",
-    "drizzle-kit": "^0.31.9",
     "eslint": "9.39.3",
     "typescript": "5.9.3",
     "wrangler": "^4.68.1"
