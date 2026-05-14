@@ -2,9 +2,10 @@
 
 ## Goal
 
-Zero receives Telegram bot webhooks and (for now) logs them against the right
-user. The web frontend exists only so a signed-in user can paste their
-Telegram numeric user id, which is used by the worker to route webhooks.
+Zero receives Telegram bot webhooks, drops anything from an unknown sender,
+and (for now) just logs everything else against the right user. The web
+frontend exists only so a signed-in user can paste their Telegram numeric
+user id, which is used by the worker to route webhooks.
 
 ## Package Structure
 
@@ -45,12 +46,16 @@ zero/
 │                                                               │
 │  GET/PUT /api/telegram-id        Clerk JWT                    │
 │  POST /api/webhooks/telegram     X-Telegram-Bot-Api-Secret-Token│
-│                                                               │
+│           │                                                   │
+│           │ 200 OK immediately, then in waitUntil:             │
+│           ▼                                                   │
 │  ┌────────────────────────────┐                              │
 │  │ KV                          │                              │
 │  │ clerk:{clerkUserId} → tgId  │                              │
 │  │ tg:{telegramId} → clerkId   │                              │
 │  └────────────────────────────┘                              │
+│     known user: log + (later) handle the update                │
+│     unknown user: log + drop                                   │
 │                                                               │
 │  ┌──────────────────────────────────────────────────────────┐│
 │  │ AgentContainer (stub, kept for future agent work)         ││
@@ -90,6 +95,16 @@ Telegram `Update`, and dispatches to bot middleware. The worker compares the
 `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET`
 and rejects mismatches with 401.
 
+The bot middleware doesn't do any KV work synchronously — it schedules
+`processUpdate` via `executionCtx.waitUntil` and returns. That keeps the
+response to Telegram fast and lets the worker do the routing decision
+after the 200. Tradeoff: a worker crash inside `waitUntil` silently drops
+the update — Telegram won't retry. Acceptable for this app today.
+
+Unknown users (no `tg:{telegramId}` entry in KV) are dropped at this stage.
+Known users are logged for now; real per-user handling will live inside
+`processUpdate` later.
+
 The webhook URL and secret are registered with Telegram manually via the
 Bot API's `setWebhook` method — see
 [`docs/telegram-webhook.md`](telegram-webhook.md).
@@ -114,7 +129,7 @@ See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 
 ## Future Work
 
-- Have the webhook do something useful with the update (reply via the bot,
-  hand off to the container, etc.).
+- Grow `processUpdate` in the Telegram webhook to do real work for known
+  users (reply via the bot, hand off to the container, etc.).
 - Flesh out the container — its binding and DO migration are already in place;
   only `packages/agent-server` and `AgentContainer` need real code.
