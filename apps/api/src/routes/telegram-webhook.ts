@@ -31,9 +31,11 @@
  *      has already gone out.
  *
  * Durability gap: a worker crash inside `waitUntil` silently drops the
- * update. Container memory loss leaves a stale topic→session mapping;
- * future messages will 404 against the container until cleared. Both are
- * accepted for the POC.
+ * update. If the container has lost its in-memory session set (e.g. after
+ * an idle eviction), `POST /sessions/{id}/messages` returns 404; we drop
+ * the stale `topic:` and `session:` KV entries, create a fresh session,
+ * and retry the message once. The user sees a new conversation start;
+ * we don't notify them.
  */
 
 import { OpenAPIHono } from "@hono/zod-openapi";
@@ -114,18 +116,17 @@ const processTopicMessage = async (
 
   const stub = env.AGENT_CONTAINER.getByName(clerkUserId);
 
-  const sessionId = await ensureSession(stub, env, clerkUserId, topic);
+  let sessionId = await ensureSession(stub, env, clerkUserId, topic);
 
-  const res = await stub.fetch(
-    new Request(
-      `http://internal/sessions/${encodeURIComponent(sessionId)}/messages`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: topic.text }),
-      },
-    ),
-  );
+  let res = await postMessage(stub, sessionId, topic.text);
+  if (res.status === 404) {
+    console.log(
+      `Stale sessionId=${sessionId} for clerkUserId=${clerkUserId}, recreating`,
+    );
+    await resetSession(env, clerkUserId, topic, sessionId);
+    sessionId = await ensureSession(stub, env, clerkUserId, topic);
+    res = await postMessage(stub, sessionId, topic.text);
+  }
   if (!res.ok) {
     console.error(
       `Container rejected message for clerkUserId=${clerkUserId} sessionId=${sessionId}: ${res.status.toString()}`,
@@ -135,6 +136,38 @@ const processTopicMessage = async (
   console.log(
     `Forwarded message to clerkUserId=${clerkUserId} sessionId=${sessionId}`,
   );
+};
+
+const postMessage = (
+  stub: { fetch: (req: Request) => Promise<Response> },
+  sessionId: string,
+  text: string,
+): Promise<Response> =>
+  stub.fetch(
+    new Request(
+      `http://internal/sessions/${encodeURIComponent(sessionId)}/messages`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      },
+    ),
+  );
+
+/**
+ * Drop both KV entries that point at a session the container no longer
+ * knows about. The next `ensureSession` call will create a fresh one.
+ */
+const resetSession = async (
+  env: Env,
+  clerkUserId: string,
+  topic: TopicMessage,
+  staleSessionId: string,
+): Promise<void> => {
+  await Promise.all([
+    env.KV.delete(topicKey(clerkUserId, topic.chatId, topic.messageThreadId)),
+    env.KV.delete(sessionKey(staleSessionId)),
+  ]);
 };
 
 /**

@@ -104,9 +104,10 @@ All persistent state is in Workers KV.
 | `session:{sessionId}`                        | `{ clerkUserId, chatId, messageThreadId }` JSON    | webhook (on session create)           | container outbound handler (for sending replies) |
 
 KV doesn't support reverse lookup, so we keep both directions of each
-relationship as explicit entries. Stale `topic:` entries (e.g. when the
-container's in-memory session set is lost on restart) are accepted today;
-recovery is future work.
+relationship as explicit entries. If the container has lost its
+in-memory session set, the next message gets a 404 from
+`/sessions/{id}/messages`; the webhook drops the stale `topic:` and
+`session:` entries and starts a fresh session transparently.
 
 ## Durable Objects
 
@@ -155,9 +156,11 @@ Tradeoffs:
 
 - A worker crash inside `waitUntil` silently drops the update; Telegram
   won't retry.
-- A container restart loses its in-memory session set, so any subsequent
-  message on a known topic will get a 404 from `/sessions/{id}/messages`.
-  We log and drop. Recovery is future work.
+- A container restart loses its in-memory session set. The next message
+  on a known topic gets a 404 from `/sessions/{id}/messages`; we drop
+  the stale `topic:`/`session:` KV entries and create a fresh session
+  before retrying. The user is not notified that their conversation
+  history was lost.
 
 The webhook URL and secret are registered with Telegram manually via the
 Bot API's `setWebhook` method — see
@@ -206,9 +209,6 @@ See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 - Persist pi sessions outside the container (snapshot on each
   `agent_end`) so they survive restarts and let other surfaces view
   them. Today `SessionManager.inMemory()` means a sleep loses state.
-- Recover from container restart: when a message to an existing topic
-  returns 404, drop the stale mapping and create a fresh session
-  transparently. (Today we log and drop.)
 - Tighten container egress: set `enableInternet = false` plus
   `allowedHosts = ["api.anthropic.com", "zero.worker"]`.
 - Per-user model preference + a switching API. Pi supports
