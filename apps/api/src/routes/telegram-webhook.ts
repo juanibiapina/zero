@@ -41,6 +41,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Bot, webhookCallback } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
+import { log, logError } from "../log";
 import type { Env } from "../types";
 
 interface TopicMessage {
@@ -60,15 +61,15 @@ export const createTelegramWebhookRoute = () => {
     bot.on("message", (ctx) => {
       const msg = ctx.message;
       if (!msg.is_topic_message || msg.message_thread_id === undefined) {
-        console.log(
-          `Dropping non-topic message from telegramId=${ctx.from.id.toString()}`,
-        );
+        log("drop_non_topic_message", {
+          telegram_id: String(ctx.from.id),
+        });
         return;
       }
       if (typeof msg.text !== "string" || msg.text.length === 0) {
-        console.log(
-          `Dropping topic message without text from telegramId=${ctx.from.id.toString()}`,
-        );
+        log("drop_topic_message_without_text", {
+          telegram_id: String(ctx.from.id),
+        });
         return;
       }
 
@@ -110,7 +111,7 @@ const processTopicMessage = async (
 ): Promise<void> => {
   const clerkUserId = await env.KV.get(tgKey(topic.telegramId));
   if (!clerkUserId) {
-    console.log(`Dropping message from unknown telegramId=${topic.telegramId}`);
+    log("drop_unknown_telegram_id", { telegram_id: topic.telegramId });
     return;
   }
 
@@ -120,22 +121,26 @@ const processTopicMessage = async (
 
   let res = await postMessage(stub, sessionId, topic.text);
   if (res.status === 404) {
-    console.log(
-      `Stale sessionId=${sessionId} for clerkUserId=${clerkUserId}, recreating`,
-    );
+    log("stale_session", {
+      session_id: sessionId,
+      clerk_user_id: clerkUserId,
+    });
     await resetSession(env, clerkUserId, topic, sessionId);
     sessionId = await ensureSession(stub, env, clerkUserId, topic);
     res = await postMessage(stub, sessionId, topic.text);
   }
   if (!res.ok) {
-    console.error(
-      `Container rejected message for clerkUserId=${clerkUserId} sessionId=${sessionId}: ${res.status.toString()}`,
-    );
+    logError("container_rejected_message", {
+      clerk_user_id: clerkUserId,
+      session_id: sessionId,
+      status: res.status,
+    });
     return;
   }
-  console.log(
-    `Forwarded message to clerkUserId=${clerkUserId} sessionId=${sessionId}`,
-  );
+  log("forwarded_message", {
+    clerk_user_id: clerkUserId,
+    session_id: sessionId,
+  });
 };
 
 const postMessage = (
@@ -216,8 +221,11 @@ const ensureSession = async (
       messageThreadId: topic.messageThreadId,
     }),
   );
-  console.log(
-    `Created sessionId=${sessionId} for clerkUserId=${clerkUserId} chat=${topic.chatId.toString()} thread=${topic.messageThreadId.toString()}`,
-  );
+  log("created_session", {
+    session_id: sessionId,
+    clerk_user_id: clerkUserId,
+    chat_id: topic.chatId,
+    thread_id: topic.messageThreadId,
+  });
   return sessionId;
 };

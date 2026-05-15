@@ -37,6 +37,7 @@ import { Container } from "@cloudflare/containers";
 import { Bot } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
+import { fmtErr, log, logError } from "./log";
 import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
 import type { Env } from "./types";
@@ -79,7 +80,7 @@ const handleContainerReply = async (
 
   const raw = await env.KV.get(`session:${sessionId}`);
   if (!raw) {
-    console.log(`Container reply for unknown sessionId=${sessionId}`);
+    log("reply_unknown_session", { session_id: sessionId });
     return new Response("unknown session", { status: 404 });
   }
 
@@ -87,10 +88,10 @@ const handleContainerReply = async (
   try {
     record = SessionRecordSchema.parse(JSON.parse(raw));
   } catch (err) {
-    console.error(
-      `Corrupt session record for sessionId=${sessionId}:`,
-      err,
-    );
+    logError("corrupt_session_record", {
+      session_id: sessionId,
+      error: fmtErr(err),
+    });
     return new Response("corrupt session", { status: 500 });
   }
 

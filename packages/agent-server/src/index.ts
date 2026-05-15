@@ -28,6 +28,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { fmtErr, log, logError } from "./log.js";
 import { createSessionBridge } from "./session-bridge.js";
 
 const port = parseInt(process.env.PORT ?? "8080", 10);
@@ -36,7 +37,7 @@ const cwd = process.env.CWD ?? "/workspace";
 const stateDir = process.env.AGENT_STATE_DIR!;
 
 if (!replyUrl) {
-  console.error("REPLY_URL env var is required");
+  logError("missing_env", { var: "REPLY_URL" });
   process.exit(1);
 }
 
@@ -50,15 +51,18 @@ const sendReply = async (sessionId: string, text: string): Promise<void> => {
       body: JSON.stringify({ sessionId, text }),
     });
     if (!res.ok) {
-      console.error(
-        `Reply to ${replyUrl} failed for sessionId=${sessionId}: ${res.status.toString()}`,
-      );
+      logError("reply_failed", {
+        session_id: sessionId,
+        reply_url: replyUrl,
+        status: res.status,
+      });
     }
   } catch (err) {
-    console.error(
-      `Reply to ${replyUrl} threw for sessionId=${sessionId}:`,
-      err,
-    );
+    logError("reply_threw", {
+      session_id: sessionId,
+      reply_url: replyUrl,
+      error: fmtErr(err),
+    });
   }
 };
 
@@ -105,11 +109,14 @@ const handle = async (
     try {
       await bridge.createSession(sessionId);
     } catch (err) {
-      console.error(`Failed to create sessionId=${sessionId}:`, err);
+      logError("create_session_failed", {
+        session_id: sessionId,
+        error: fmtErr(err),
+      });
       send(res, 500, { error: "create session failed" });
       return;
     }
-    console.log(`Created sessionId=${sessionId}`);
+    log("created_session", { session_id: sessionId });
     send(res, 200, { sessionId });
     return;
   }
@@ -134,7 +141,6 @@ const handle = async (
       send(res, 404, { error: "unknown session" });
       return;
     }
-    console.log(`Received message on sessionId=${sessionId}`);
     send(res, 202);
     return;
   }
@@ -146,15 +152,13 @@ const handle = async (
 
 const server = createServer((req, res) => {
   handle(req, res).catch((err: unknown) => {
-    console.error("Unhandled request error:", err);
+    logError("unhandled_request", { error: fmtErr(err) });
     send(res, 500, { error: "internal error" });
   });
 });
 
 server.listen(port, () => {
-  console.log(
-    `agent-server listening on port ${port.toString()}, replies to ${replyUrl}, cwd=${cwd}, stateDir=${stateDir}`,
-  );
+  log("listening", { port, reply_url: replyUrl, cwd, state_dir: stateDir });
 });
 
 const shutdown = (): void => {

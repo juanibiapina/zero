@@ -29,6 +29,7 @@
  */
 
 import type { OutboundHandler } from "@cloudflare/containers";
+import { logError } from "./log";
 import type { Env } from "./types";
 
 const SENTINEL_PREFIX = "Z3R0-FAKE-";
@@ -121,15 +122,20 @@ export const createSecretProxy = (
     }
 
     const totalMatches = urlMatches + headerMatches + bodyMatches;
-    let host = "?";
-    try {
-      host = new URL(url).host;
-    } catch {
-      /* leave as ? */
+    if (totalMatches === 0) {
+      let host: string | null = null;
+      try {
+        host = new URL(url).host;
+      } catch {
+        /* leave null */
+      }
+      logError("secret_proxy_no_substitutions", {
+        host,
+        container_id: ctx.containerId,
+        method: req.method,
+        note: "secret may have leaked or stopped flowing",
+      });
     }
-    console.log(
-      `[secret-proxy] forwarded host=${host} containerId=${ctx.containerId} method=${req.method} matches=${totalMatches.toString()}`,
-    );
 
     return fetch(url, {
       method: req.method,

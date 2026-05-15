@@ -14,9 +14,10 @@
  * Pi resolves the API key from `process.env.ANTHROPIC_API_KEY`, which the
  * container DO injects via `envVars`.
  *
- * Every pi event is logged with `[sess=<8-char-id>] <event>` so the full
- * agent loop is visible in the container's `Logs` view. Keep the lines
- * compact.
+ * Logging is deliberately sparse: prompt-in / tool-in-flight / reply-out
+ * with byte counts only. Tool results and message content are never
+ * logged so user messages, model replies, file contents, and shell
+ * output stay out of the container's `Logs` view.
  */
 
 import { existsSync, mkdirSync } from "node:fs";
@@ -30,6 +31,8 @@ import {
   type AgentSession,
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
+
+import { fmtErr, log, logError } from "./log.js";
 
 const PROVIDER = "anthropic";
 const MODEL_ID = "claude-sonnet-4-5-20250929";
@@ -49,25 +52,6 @@ interface AgentMessageLike {
   [key: string]: unknown;
 }
 
-const tag = (sessionId: string) => `[sess=${sessionId.slice(0, 8)}]`;
-
-const summariseContent = (blocks?: ContentBlock[]): string => {
-  if (!blocks || blocks.length === 0) return "[]";
-  const parts = blocks.map((b) => {
-    switch (b.type) {
-      case "text":
-        return `text(${String(b.text ?? "").length})`;
-      case "thinking":
-        return `thinking(${String(b.thinking ?? "").length})`;
-      case "toolCall":
-        return `toolCall(${String(b.name ?? "?")})`;
-      default:
-        return b.type;
-    }
-  });
-  return `[${parts.join(",")}]`;
-};
-
 const extractAssistantText = (msg: AgentMessageLike | undefined): string => {
   if (!msg?.content) return "";
   return msg.content
@@ -80,115 +64,54 @@ const extractAssistantText = (msg: AgentMessageLike | undefined): string => {
     .trim();
 };
 
-interface DeltaCounters {
-  text: number;
-  thinking: number;
-  toolcall: number;
-}
-
+/**
+ * Log only what's needed to trace a request and diagnose failures.
+ *
+ * Kept: tool_start / tool_end (name + error flag), stream errors,
+ * agent_end (count only). Skipped: every per-message and per-stream-chunk
+ * event — they fire dozens of times per turn and add nothing useful in
+ * production. Tool results and message bodies are never logged.
+ */
 const logEvent = (
   sessionId: string,
   event: AgentSessionEvent,
-  counters: DeltaCounters,
 ): void => {
-  const t = tag(sessionId);
   switch (event.type) {
-    case "agent_start":
-      console.log(`${t} agent_start`);
-      break;
-    case "turn_start":
-      console.log(`${t} turn_start`);
-      break;
-    case "message_start": {
-      const msg = event.message as unknown as AgentMessageLike;
-      console.log(`${t} message_start role=${msg.role}`);
-      break;
-    }
     case "message_update": {
       const sub = event.assistantMessageEvent;
-      switch (sub.type) {
-        case "text_delta":
-          counters.text += sub.delta.length;
-          break;
-        case "thinking_delta":
-          counters.thinking += sub.delta.length;
-          break;
-        case "toolcall_delta":
-          counters.toolcall += sub.delta.length;
-          break;
-        case "text_end":
-          console.log(`${t} text_end len=${counters.text}`);
-          counters.text = 0;
-          break;
-        case "thinking_end":
-          console.log(`${t} thinking_end len=${counters.thinking}`);
-          counters.thinking = 0;
-          break;
-        case "toolcall_end":
-          console.log(
-            `${t} toolcall_end name=${sub.toolCall.name} argLen=${counters.toolcall}`,
-          );
-          counters.toolcall = 0;
-          break;
-        case "error":
-          console.log(
-            `${t} stream_error reason=${sub.reason} msg=${sub.error.errorMessage ?? "?"}`,
-          );
-          break;
+      if (sub.type === "error") {
+        log("stream_error", {
+          session_id: sessionId,
+          reason: sub.reason,
+          error_message: sub.error.errorMessage ?? null,
+        });
       }
       break;
     }
-    case "message_end": {
-      const msg = event.message as unknown as AgentMessageLike;
-      console.log(
-        `${t} message_end role=${msg.role} stop=${msg.stopReason ?? "?"} content=${summariseContent(msg.content)}`,
-      );
-      break;
-    }
     case "tool_execution_start":
-      console.log(
-        `${t} tool_start name=${event.toolName} id=${event.toolCallId.slice(0, 8)}`,
-      );
+      log("tool_start", {
+        session_id: sessionId,
+        tool_name: event.toolName,
+        tool_call_id: event.toolCallId,
+      });
       break;
     case "tool_execution_end": {
-      const errSuffix = event.isError ? " ERROR" : "";
-      const resultPreview = (() => {
-        try {
-          const s = JSON.stringify(event.result);
-          return s.length > 80 ? s.slice(0, 80) + "…" : s;
-        } catch {
-          return "<unserialisable>";
-        }
-      })();
-      console.log(
-        `${t} tool_end name=${event.toolName}${errSuffix} result=${resultPreview}`,
-      );
-      break;
-    }
-    case "turn_end": {
-      const msg = event.message as unknown as AgentMessageLike;
-      console.log(
-        `${t} turn_end stop=${msg.stopReason ?? "?"} toolResults=${event.toolResults.length.toString()}`,
-      );
+      log("tool_end", {
+        session_id: sessionId,
+        tool_name: event.toolName,
+        is_error: event.isError,
+      });
       break;
     }
     case "agent_end": {
       const messages = event.messages as unknown as AgentMessageLike[];
-      const lastAssistant = [...messages]
-        .reverse()
-        .find((m) => m.role === "assistant");
-      console.log(
-        `${t} agent_end totalMsgs=${messages.length.toString()} lastAssistant=${summariseContent(lastAssistant?.content)}`,
-      );
+      log("agent_end", {
+        session_id: sessionId,
+        total_msgs: messages.length,
+      });
       break;
     }
-    case "compaction_start":
-    case "compaction_end":
-    case "auto_retry_start":
-    case "auto_retry_end":
-    case "thinking_level_changed":
-    case "session_info_changed":
-    case "queue_update":
+    default:
       break;
   }
 };
@@ -196,7 +119,6 @@ const logEvent = (
 interface SessionState {
   session: AgentSession;
   accumulated: string;
-  counters: DeltaCounters;
 }
 
 export type ReplyFn = (sessionId: string, text: string) => Promise<void>;
@@ -248,12 +170,10 @@ export const createSessionBridge = (
     const state: SessionState = {
       session,
       accumulated: "",
-      counters: { text: 0, thinking: 0, toolcall: 0 },
     };
 
-    const t = tag(sessionId);
     session.subscribe((event) => {
-      logEvent(sessionId, event, state.counters);
+      logEvent(sessionId, event);
 
       if (event.type === "message_update") {
         const sub = event.assistantMessageEvent;
@@ -285,15 +205,15 @@ export const createSessionBridge = (
       }
 
       if (text.length === 0) {
-        console.log(`${t} no_reply (no text content from model)`);
+        log("no_reply", { session_id: sessionId });
         return;
       }
-      console.log(`${t} postReply source=${source} len=${text.length.toString()}`);
+      log("post_reply", { session_id: sessionId, source, len: text.length });
       postReply(sessionId, text).catch((err: unknown) => {
-        console.error(
-          `${t} postReply threw:`,
-          err instanceof Error ? err.message : err,
-        );
+        logError("post_reply_threw", {
+          session_id: sessionId,
+          error: fmtErr(err),
+        });
       });
     });
 
@@ -301,10 +221,9 @@ export const createSessionBridge = (
   };
 
   const createSession = async (sessionId: string): Promise<void> => {
-    const t = tag(sessionId);
     const dir = sessionDirFor(sessionId);
     mkdirSync(dir, { recursive: true });
-    console.log(`${t} createSession cwd=${cwd} dir=${dir}`);
+    log("create_session", { session_id: sessionId, cwd, dir });
 
     const sessionManager = SessionManager.create(cwd, dir);
     const state = await buildSession(sessionId, sessionManager);
@@ -321,8 +240,7 @@ export const createSessionBridge = (
     const dir = sessionDirFor(sessionId);
     if (!existsSync(dir)) return undefined;
 
-    const t = tag(sessionId);
-    console.log(`${t} resumeSession dir=${dir}`);
+    log("resume_session", { session_id: sessionId, dir });
     const sessionManager = SessionManager.continueRecent(cwd, dir);
     const state = await buildSession(sessionId, sessionManager);
     sessions.set(sessionId, state);
@@ -339,12 +257,11 @@ export const createSessionBridge = (
     }
     if (!state) return false;
 
-    const t = tag(sessionId);
-    console.log(`${t} prompt len=${text.length.toString()}`);
+    log("prompt", { session_id: sessionId, len: text.length });
     state.session.prompt(text).catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`${t} prompt threw:`, message);
-      void postReply(sessionId, `⚠️ ${message}`);
+      const formatted = fmtErr(err);
+      logError("prompt_threw", { session_id: sessionId, error: formatted });
+      void postReply(sessionId, `⚠️ ${formatted.message}`);
     });
     return true;
   };

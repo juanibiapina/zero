@@ -20,6 +20,23 @@ MOUNT_POINT="/mnt/agent-state"
 CF_CA_SRC="/etc/cloudflare/certs/cloudflare-containers-ca.crt"
 CF_CA_DEST="/usr/local/share/ca-certificates/cloudflare-containers-ca.crt"
 
+# Emit a single JSON log line on stderr matching the agent-server log
+# shape ({"service":"agent-server","msg":"...",...}). Args after `msg`
+# are key=value pairs appended as JSON string fields.
+log_json() {
+  local msg="$1"; shift
+  local extra=""
+  for kv in "$@"; do
+    local key="${kv%%=*}"
+    local val="${kv#*=}"
+    # Escape backslashes and double quotes in the value.
+    val="${val//\\/\\\\}"
+    val="${val//\"/\\\"}"
+    extra+=",\"${key}\":\"${val}\""
+  done
+  printf '{"service":"agent-server","msg":"%s"%s}\n' "${msg}" "${extra}" >&2
+}
+
 # Trust the Cloudflare MITM cert so HTTPS traffic intercepted by the
 # Workers `outbound` handler (interceptHttps = true) round-trips cleanly.
 # Cloudflare mounts the cert at runtime; install it before tigrisfs
@@ -29,12 +46,12 @@ if [[ -f "${CF_CA_SRC}" ]]; then
   cp "${CF_CA_SRC}" "${CF_CA_DEST}"
   update-ca-certificates >/dev/null
   export NODE_EXTRA_CA_CERTS="${CF_CA_SRC}"
-  echo "[entrypoint] installed Cloudflare container CA" >&2
+  log_json "installed_cloudflare_ca"
 else
-  echo "[entrypoint] WARN: ${CF_CA_SRC} not found; HTTPS interception will fail" >&2
+  log_json "missing_cloudflare_ca" "path=${CF_CA_SRC}" "note=HTTPS interception will fail"
 fi
 
-echo "[entrypoint] mounting ${R2_BUCKET_NAME}:${R2_PREFIX} at ${MOUNT_POINT}" >&2
+log_json "mounting_r2" "bucket=${R2_BUCKET_NAME}" "prefix=${R2_PREFIX}" "mount_point=${MOUNT_POINT}"
 
 # Foreground (-f) wouldn't return; we want tigrisfs to daemonise so we
 # can exec node afterwards. Run without -f and let it fork.
@@ -51,7 +68,7 @@ tigrisfs \
 sleep 1
 mountpoint -q "${MOUNT_POINT}"
 
-echo "[entrypoint] mounted ${MOUNT_POINT}" >&2
+log_json "mounted_r2" "mount_point=${MOUNT_POINT}"
 
 export AGENT_STATE_DIR="${MOUNT_POINT}"
 
@@ -63,7 +80,7 @@ export AGENT_STATE_DIR="${MOUNT_POINT}"
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
       R2_PARENT_ACCESS_KEY_ID R2_PARENT_SECRET_ACCESS_KEY
 
-echo "[entrypoint] dropping privileges to pi (uid=1001)" >&2
+log_json "drop_privileges" "user=pi" "uid=1001"
 exec setpriv \
   --reuid=pi --regid=pi --clear-groups --inh-caps=-all \
   -- node /app/dist/index.js

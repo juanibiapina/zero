@@ -313,6 +313,34 @@ Stored in Doppler (`zero-api`):
 
 See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 
+## Logging
+
+Every log line is a single JSON object on stdout/stderr. Cloudflare's
+Workers Logs indexer auto-extracts the fields, so the dashboard can
+filter on e.g. `service`, `msg`, `clerk_user_id`, `tool_name` directly
+instead of grepping a message string. Container stdout is captured into
+the same Workers Logs index as the worker, so the two streams query
+together.
+
+Conventions:
+
+- Always go through the `log` / `logError` helpers in `apps/api/src/log.ts`
+  and `packages/agent-server/src/log.ts`. The shell entrypoint has its
+  own `log_json` matching the same shape.
+- Every log carries `service` (`"worker"` or `"agent-server"`) and `msg`
+  (a short snake_case event name).
+- Failure paths use `logError` (Cloudflare maps `console.error` to
+  `level=error`). Don't add a redundant `level` field.
+- `Error` instances must be wrapped with `fmtErr(err)` before logging —
+  the indexer otherwise serialises raw `Error` objects to `{}` (see
+  [workers-sdk#10513](https://github.com/cloudflare/workers-sdk/issues/10513)).
+- Field names are snake_case, with a stable canonical set:
+  `session_id`, `clerk_user_id`, `telegram_id`, `chat_id`, `thread_id`,
+  `tool_name`, `host`, `container_id`, `len`, `cwd`, `dir`, `error`,
+  `status`.
+- Never log message content, model replies, tool results, or request
+  bodies. Counts and identifiers only.
+
 ## Future Work
 
 - Tighten container egress: set `enableInternet = false` plus
