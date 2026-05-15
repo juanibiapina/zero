@@ -9,8 +9,15 @@ links them to the bot. From then on, every message the user sends in a
 posts a reply back into the same topic. Direct messages, channel posts,
 edits, callbacks etc. are dropped — only topic messages count today.
 
-The agent itself is a placeholder (hard-coded "Replying to: ..."); this
-document is about the wiring, not the agent.
+The agent inside the container is the pi coding agent
+([@earendil-works/pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent))
+talking directly to Anthropic. Pi-ai uses its built-in `anthropic`
+provider; the API key is read from `process.env.ANTHROPIC_API_KEY`, which
+`AgentContainer` injects via `envVars` when starting the container. The
+model is `claude-sonnet-4-5-20250929` with thinking level `high`. Replies
+flow back through an on-host outbound trick — the container POSTs to
+`http://zero.worker/reply` and the worker delivers via Telegram — so the
+only external egress from the container is to `api.anthropic.com`.
 
 ## Package Structure
 
@@ -41,6 +48,8 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 | API    | Hono + OpenAPIHono + Zod on Cloudflare Workers    |
 | State  | KV (Workers KV)                                   |
 | Container | Cloudflare Containers (`@cloudflare/containers`, with `outboundByHost`) |
+| Agent  | [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) (Node 22 inside the container) |
+| LLM    | Anthropic API direct — `claude-sonnet-4-5-20250929` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
 | Secrets | Doppler (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
 
@@ -64,13 +73,18 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │      4. POST /sessions/{sid}/messages { text }                   │
 │                                                                  │
 │  AgentContainer (Container<Env>, getByName(clerkUserId))         │
-│  ├─ hosts @zero/agent-server (Node 22 HTTP server)               │
+│  ├─ hosts @zero/agent-server + pi-coding-agent (Node 22)         │
+│  ├─ envVars.ANTHROPIC_API_KEY (set by the DO constructor)        │
 │  └─ outboundByHost["zero.worker"] = handleContainerReply         │
-│                                          ▲                       │
-│                       container POST http://zero.worker/reply    │
-│                       { sessionId, text }                        │
-│                       (intercepted on-host; no public URL)       │
 │                                                                  │
+│  pi-ai inside the container:                                     │
+│    POST https://api.anthropic.com/v1/messages  (direct egress)   │
+│    → normal Anthropic stream; tool calls, thinking, content      │
+│                                                                  │
+│  When pi emits agent_end, the container POSTs:                   │
+│    POST http://zero.worker/reply { sessionId, text }             │
+│      │   intercepted on-host                                     │
+│      ▼                                                           │
 │  handleContainerReply:                                           │
 │    KV session:{sessionId} → { chatId, messageThreadId }          │
 │    grammY bot.api.sendMessage(…, { message_thread_id })          │
@@ -98,7 +112,7 @@ recovery is future work.
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server`. One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. Also defines `outboundByHost["zero.worker"]`, the reply handler that runs in the Workers runtime. | None (in-memory session set; KV holds the topic↔session mappings) |
+| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. Injects `ANTHROPIC_API_KEY` into the container's env; defines `outboundByHost["zero.worker"]` for the Telegram reply path. | None (in-memory session set; KV holds the topic↔session mappings) |
 
 ## Routes
 
@@ -125,10 +139,17 @@ Telegram immediately. The background task:
 3. POST the message text to `/sessions/{sessionId}/messages` on the
    container.
 
-The container then POSTs a reply to `http://zero.worker/reply`. That
-call never leaves the host — `AgentContainer.outboundByHost["zero.worker"]`
-intercepts it inside the Workers runtime and uses grammY to send the
-message back into the same topic.
+Inside the container, pi-coding-agent drives the conversation. Pi-ai
+talks directly to `https://api.anthropic.com/v1/messages` using its
+built-in `anthropic` provider; the API key is read from
+`process.env.ANTHROPIC_API_KEY`, which `AgentContainer` injects via
+`envVars` when starting the container. The model is
+`claude-sonnet-4-5-20250929` with thinking level `high`.
+
+When pi emits `agent_end`, the container POSTs the final assistant text
+to `http://zero.worker/reply`. That call stays on-host —
+`AgentContainer.outboundByHost["zero.worker"]` intercepts it and uses
+grammY to send the message back into the same Telegram topic.
 
 Tradeoffs:
 
@@ -144,17 +165,20 @@ Bot API's `setWebhook` method — see
 
 ## Container Outbound Handler
 
-`AgentContainer.outboundByHost["zero.worker"]` is the only path from the
-container back into the worker. Plain HTTP (`http://zero.worker/...`) is
-fine because the request is intercepted on the same physical host before
-it ever hits the network — see Cloudflare's
+`AgentContainer.outboundByHost["zero.worker"]` is the on-host path the
+container uses to deliver Telegram replies. Plain HTTP
+(`http://zero.worker/reply`) works because the request is intercepted on
+the same physical host before it hits the network — see Cloudflare's
 [outbound traffic docs](https://developers.cloudflare.com/containers/platform-details/outbound-traffic/).
 
 For interception to work, `apps/api/src/index.ts` must re-export
 `ContainerProxy` from `@cloudflare/containers`.
 
-Today we have a single virtual host. As capabilities grow, more virtual
-hosts (e.g. `tools.worker`, `kv.worker`) can be added to the same map.
+Pi-ai's LLM traffic does *not* use this mechanism: it goes out to
+`api.anthropic.com` over normal egress, authenticated with the injected
+`ANTHROPIC_API_KEY`. The reply handler runs inside the Workers runtime
+with full access to `env` (KV, Telegram bot token). No public route, no
+shared secret.
 
 ## Secrets
 
@@ -165,6 +189,8 @@ Stored in Doppler (`zero-api`):
 - `TELEGRAM_BOT_INFO` — JSON `getMe` result; lets grammY skip the per-request
   `getMe` call (see [`telegram-webhook.md`](telegram-webhook.md))
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
+- `ANTHROPIC_API_KEY` — injected into the container's env (`envVars`) so
+  pi-ai can call `api.anthropic.com` directly
 
 ## Dev Environment
 
@@ -177,12 +203,15 @@ See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 
 ## Future Work
 
-- Real agent logic inside `@zero/agent-server` (model, tools, persistence)
-  in place of the hard-coded reply.
+- Persist pi sessions outside the container (snapshot on each
+  `agent_end`) so they survive restarts and let other surfaces view
+  them. Today `SessionManager.inMemory()` means a sleep loses state.
 - Recover from container restart: when a message to an existing topic
   returns 404, drop the stale mapping and create a fresh session
   transparently. (Today we log and drop.)
-- Tighten container egress: set `enableInternet = false` plus explicit
-  `allowedHosts`, once the agent is built.
-- Persist sessions outside the container so they survive restarts and
-  let other surfaces (the web app) view them.
+- Tighten container egress: set `enableInternet = false` plus
+  `allowedHosts = ["api.anthropic.com", "zero.worker"]`.
+- Per-user model preference + a switching API. Pi supports
+  `session.setModel(…)`; expose a Clerk-gated route to drive it.
+- Route Anthropic traffic through AI Gateway later for observability,
+  per-user cost accounting, and caching.

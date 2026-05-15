@@ -34,9 +34,9 @@ Cloudflare Workers backend.
 Data flows down. Each layer only calls the one directly below it.
 
 A services layer is intentionally absent for now — routes are thin enough
-that they talk directly to KV and the container stub from `c.env`. Add a
-`services/` directory when a route needs to coordinate multiple bindings or
-apply non-trivial authorization beyond the app-level guard.
+that they talk directly to KV and the container binding from `c.env`. Add
+a `services/` directory when a route needs to coordinate multiple bindings
+or apply non-trivial authorization beyond the app-level guard.
 
 ---
 
@@ -123,19 +123,31 @@ hosts `@zero/agent-server`. One container per Clerk user — selected with
 `env.AGENT_CONTAINER.getByName(clerkUserId)` — that idles after 5 minutes
 of inactivity.
 
-The class also wires the **outbound handler** that lets the container call
-the worker without going through the public internet:
+The class wires the **outbound handler** that lets the container deliver
+Telegram replies without going through the public internet, and the
+constructor injects `ANTHROPIC_API_KEY` into the container's process env
+so pi-ai can talk to `api.anthropic.com` directly:
 
 ```typescript
+constructor(ctx, env) {
+  super(ctx, env);
+  this.envVars = {
+    REPLY_URL: "http://zero.worker/reply",
+    ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+  };
+}
+
 AgentContainer.outboundByHost = {
   "zero.worker": (req, env) => handleContainerReply(req, env),
 };
 ```
 
-The container `fetch`es `http://zero.worker/reply`. That request never
-leaves the machine — the handler runs inside the Workers runtime with full
-access to `env` (KV, Telegram bot token). No public route, no shared
-secret. `index.ts` must re-export `ContainerProxy` for this to work.
+The container `fetch`es `http://zero.worker/reply`; that request never
+leaves the machine — the handler runs inside the Workers runtime with
+full access to `env` (KV, Telegram bot token) and uses grammY to send
+the reply. Pi-ai's LLM calls go directly to `api.anthropic.com` over
+normal egress. `index.ts` must re-export `ContainerProxy` for the
+outbound interception to work.
 
 For docs and configuration see
 <https://developers.cloudflare.com/containers/platform-details/outbound-traffic/>.

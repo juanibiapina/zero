@@ -7,6 +7,10 @@
  * user (selected with `getByName(clerkUserId)`), which idles after 5 minutes
  * of inactivity and frees its slot for other users.
  *
+ * Pi-ai inside the container talks to api.anthropic.com directly using
+ * `ANTHROPIC_API_KEY`, which the worker injects into the container's env
+ * (see the constructor below).
+ *
  * Outbound contract:
  *
  *   The container POSTs replies to `http://zero.worker/reply`. That request
@@ -84,9 +88,17 @@ const handleContainerReply = async (
 export class AgentContainer extends Container<Env> {
   defaultPort = 8080;
   sleepAfter = "5m";
-  envVars = {
-    REPLY_URL: "http://zero.worker/reply",
-  };
+
+  constructor(ctx: ConstructorParameters<typeof Container<Env>>[0], env: Env) {
+    super(ctx, env);
+    // Inject runtime env vars the container process needs. Pi-ai picks
+    // ANTHROPIC_API_KEY straight out of process.env when constructing the
+    // Anthropic client.
+    this.envVars = {
+      REPLY_URL: "http://zero.worker/reply",
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+    };
+  }
 }
 
 AgentContainer.outboundByHost = {

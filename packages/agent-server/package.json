@@ -12,6 +12,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.74.0"
+  },
   "devDependencies": {
     "@types/node": "^25.3.0",
     "@zero/eslint-config": "workspace:*",

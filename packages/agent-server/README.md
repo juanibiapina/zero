@@ -5,9 +5,13 @@ Cloudflare or Telegram coupling. Today it's packaged as the process running
 inside the `AgentContainer` Cloudflare Container, but the same binary will
 run on any Node.js host that can reach the configured `REPLY_URL`.
 
-The current implementation is a placeholder: it stores session ids in
-memory and replies with a hard-coded "Replying to: ..." string. Real agent
-behaviour will replace `sendReply` later.
+Under the hood it drives
+[`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
+Each `POST /sessions` builds a fresh `AgentSession` with an in-memory
+session manager that uses pi-ai's built-in `anthropic` provider
+(`claude-sonnet-4-5-20250929`, `thinkingLevel: "high"`). Pi reads
+`ANTHROPIC_API_KEY` from `process.env` and talks directly to
+`api.anthropic.com`.
 
 ## HTTP contract
 
@@ -34,13 +38,14 @@ body: { "text": "<string>" }
 
 ## Reply callback
 
-When a message is accepted the server POSTs to `REPLY_URL`:
+When pi emits `agent_end` for a session, the server posts the
+accumulated assistant text to `REPLY_URL`:
 
 ```
 POST $REPLY_URL
 Content-Type: application/json
 
-{ "sessionId": "<uuid>", "text": "Replying to: \"<original>\"" }
+{ "sessionId": "<uuid>", "text": "<assistant message>" }
 ```
 
 The call is fire-and-forget — errors are logged, not retried. The caller is
@@ -48,10 +53,12 @@ expected to be reachable from the server's environment.
 
 ## Environment variables
 
-| Var         | Required | Default | Notes                                              |
-|-------------|----------|---------|----------------------------------------------------|
-| `PORT`      | no       | `8080`  | Port to listen on.                                 |
-| `REPLY_URL` | yes      | —       | Full URL the server POSTs replies to. Exits if unset. |
+| Var                 | Required | Default       | Notes                                              |
+|---------------------|----------|---------------|----------------------------------------------------|
+| `PORT`              | no       | `8080`        | Port to listen on.                                 |
+| `REPLY_URL`         | yes      | —             | Full URL the server POSTs replies to. Exits if unset. |
+| `ANTHROPIC_API_KEY` | yes      | —             | Anthropic API key, used by pi-ai's built-in `anthropic` provider. |
+| `CWD`               | no       | `/workspace`  | Working directory pi exposes to its `read`/`write`/`bash`/`edit` tools. Must be writable. |
 
 ## Running
 
