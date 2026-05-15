@@ -274,9 +274,19 @@ runtime) into the system trust store and exports `NODE_EXTRA_CA_CERTS`
 so both tigrisfs (Go AWS SDK) and node (undici) accept it. Without
 this, HTTPS bypasses the catch-all entirely.
 
-Today only `ANTHROPIC_API_KEY` is registered. Other in-container
-secrets (the R2 temp credentials, etc.) still arrive in the clear and
-are addressed separately.
+Today only `ANTHROPIC_API_KEY` is registered. The R2 temporary
+credentials follow a different pattern: they are consumed exclusively
+by tigrisfs at mount time, and the entrypoint shell scrubs them from
+the environment immediately afterwards. tigrisfs (running as root)
+keeps them cached in its own address space for the lifetime of the
+daemon, while node — and therefore pi — is execed under the
+unprivileged `pi` user via `setpriv`. Because `/proc/<pid>/environ` is
+mode `0400` owned by the process, pi cannot read tigrisfs's env to
+recover the credentials. The mount itself is published with
+`-o allow_other` (and `user_allow_other` in `/etc/fuse.conf`) so the
+non-root pi user can still read and write through it. This OS-level
+fix removes the only credential currently injected into pi's process
+and replaces substitution-on-egress with simple file permissions.
 
 ## Secrets
 

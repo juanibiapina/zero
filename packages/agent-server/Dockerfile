@@ -15,6 +15,14 @@ RUN apt-get update && \
       fuse3 && \
     rm -rf /var/lib/apt/lists/*
 
+# Non-root user that pi (and everything pi spawns) runs as. tigrisfs and
+# the entrypoint shell continue to run as root so they can mount FUSE
+# and so pi can't read tigrisfs's /proc/<pid>/environ to recover the R2
+# credentials. `user_allow_other` lets pi access the root-owned mount
+# via tigrisfs's `-o allow_other`.
+RUN useradd -m -u 1001 -s /bin/bash pi && \
+    echo 'user_allow_other' >> /etc/fuse.conf
+
 # Pin tigrisfs to a known-good release. Bump deliberately when needed; see
 # docs/tech-debt.md for the rationale (avoiding non-deterministic builds).
 ARG TIGRISFS_VERSION=1.2.1
@@ -39,8 +47,12 @@ RUN node -e "const p=require('./package.json'); delete p.devDependencies; requir
 COPY dist/ ./dist/
 
 # Working dir pi exposes to its tools (read/write/bash/edit), plus the
-# fixed mount point and the home directory pi falls back to.
-RUN mkdir -p /workspace /mnt/agent-state /tmp/pi-home
+# fixed mount point and the home directory pi falls back to. /workspace
+# and /tmp/pi-home must be writable by the pi user; /mnt/agent-state
+# stays root-owned (it's just the mount point — tigrisfs publishes it
+# with `allow_other` so pi can still use it).
+RUN mkdir -p /workspace /mnt/agent-state /tmp/pi-home && \
+    chown -R pi:pi /workspace /tmp/pi-home
 WORKDIR /workspace
 
 # Entrypoint: mount the R2 prefix at /mnt/agent-state if all R2 envs are

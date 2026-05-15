@@ -96,21 +96,3 @@ body, behind a per-secret flag. Anthropic streams SSE, so the
 implementation needs to operate on a streaming `ReadableStream` rather
 than buffering the full response.
 
-## Only `ANTHROPIC_API_KEY` is sentinelised
-
-**Where:** `apps/api/src/AgentContainer.ts`, `createSecretProxy(["ANTHROPIC_API_KEY"])`.
-
-**What:** The R2 temp credentials
-(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN`) and
-the `REPLY_URL` are still injected into the container in the clear.
-They're scoped (R2 creds are 1h, prefix-locked; `REPLY_URL` is the
-on-host trick) but a leak still has *some* blast radius.
-
-**Risk:** A leaked R2 temp cred can read/write the user's prefix until
-it expires. A leaked `REPLY_URL` is harmless from outside the host.
-
-**Fix when revisited:** decide per-secret whether to sentinelise. R2
-creds are SigV4-signed in the `Authorization` header, so substitution
-would need to also re-sign the request — not a flat string replace.
-Likely needs a dedicated R2-signing handler rather than the generic
-substitution path.
