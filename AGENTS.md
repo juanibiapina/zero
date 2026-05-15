@@ -13,7 +13,7 @@ gob run bin/deploy
 
 ## Architecture
 
-Zero receives Telegram bot webhooks, routes each update to the right user via KV, and forwards forum-topic messages to a per-user Cloudflare Container that runs [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) against Claude Sonnet 4.5. The agent's reply is sent back into the same Telegram topic. The web app is a single screen where a signed-in user pastes their Telegram numeric id.
+Zero receives Telegram bot webhooks, routes each update to the right user via KV, and forwards forum-topic messages to a per-user Cloudflare Container that runs [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) against Claude Sonnet 4.5. The agent's reply is sent back into the same Telegram topic. Pi sessions persist on R2 (one prefix per user, mounted via tigrisfs FUSE inside the container) so conversations survive container sleep/wake. The web app is a single screen where a signed-in user pastes their Telegram numeric id.
 
 Packages:
 
@@ -26,7 +26,7 @@ Expected dev ports:
 - **5176**: Web frontend (Vite)
 - **8790**: API worker (Wrangler)
 
-The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`.
+The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`. Per-user R2 mount setup is in `docs/r2-mount.md`.
 
 ## Production Logs
 

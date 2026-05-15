@@ -17,7 +17,19 @@ provider; the API key is read from `process.env.ANTHROPIC_API_KEY`, which
 model is `claude-sonnet-4-5-20250929` with thinking level `high`. Replies
 flow back through an on-host outbound trick — the container POSTs to
 `http://zero.worker/reply` and the worker delivers via Telegram — so the
-only external egress from the container is to `api.anthropic.com`.
+only external egress from the container is to `api.anthropic.com` and to
+`<acct>.r2.cloudflarestorage.com` (for the FUSE-mounted session store,
+described below).
+
+Sessions are persisted on R2: each container mounts the user's prefix in
+the shared `zero-agent-state` bucket via [tigrisfs](https://github.com/tigrisdata/tigrisfs)
+(FUSE) at `/mnt/agent-state`, and pi writes its JSONL session files
+there. The mount uses prefix-scoped temporary credentials minted on
+every `AgentContainer.fetch` call (local JWT signing per the [R2 docs](https://developers.cloudflare.com/r2/api/s3/temporary-credentials/)),
+so the container can never see another user's data either at the
+filesystem layer (tigrisfs `bucket:prefix` syntax locks the FUSE root)
+or at the S3 layer (R2 rejects requests outside the prefix). See
+[`r2-mount.md`](r2-mount.md) for setup.
 
 ## Package Structure
 
@@ -74,7 +86,10 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │                                                                  │
 │  AgentContainer (Container<Env>, getByName(clerkUserId))         │
 │  ├─ hosts @zero/agent-server + pi-coding-agent (Node 22)         │
-│  ├─ envVars.ANTHROPIC_API_KEY (set by the DO constructor)        │
+│  ├─ mounts R2 prefix <clerkUserId>/ at /mnt/agent-state          │
+│  │    via tigrisfs; pi writes JSONL session files there          │
+│  ├─ fetch() refreshes envVars on every call:                    │
+│  │    ANTHROPIC_API_KEY + REPLY_URL + R2 temp creds (1h)         │
 │  └─ outboundByHost["zero.worker"] = handleContainerReply         │
 │                                                                  │
 │  pi-ai inside the container:                                     │
@@ -92,9 +107,36 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+## Persistence
+
+Pi sessions live on R2 in the shared `zero-agent-state` bucket. Each
+Clerk user owns the prefix `<clerkUserId>/`. Inside the container,
+tigrisfs mounts that prefix at the hard-coded path `/mnt/agent-state`.
+The agent-server creates one subdirectory per session id
+(`/mnt/agent-state/<sessionId>/`) and hands it to pi as the session
+directory; pi writes its JSONL file inside. On container restart, the
+bridge lazy-loads via `SessionManager.continueRecent` against the same
+directory, transparently resuming the conversation.
+
+The directory's existence is the only persisted index — there is no
+sidecar metadata file. Pi's internal session ids are not used by the
+worker; the worker only knows our opaque `sessionId` (KV `topic:` →
+`sessionId`) and the container resolves it by directory.
+
+R2 configuration is mandatory — `AgentContainer` throws on missing creds
+before the container even starts, and the container's entrypoint script
+aborts if the mount fails. There is no in-memory fallback.
+
+Isolation has two layers:
+
+1. **FUSE root locked to the user's prefix.** `tigrisfs zero-agent-state:<clerkUserId> /mnt/agent-state` makes the prefix the filesystem root from inside the container; pi has no path to traverse outside it.
+2. **Prefix-scoped R2 credentials.** The temp credential is bound to `prefixPaths: ["<clerkUserId>/"]`, so even a leaked credential cannot list or read other users' prefixes.
+
+See [`r2-mount.md`](r2-mount.md) for one-time bucket and token setup.
+
 ## State Model
 
-All persistent state is in Workers KV.
+All non-session state is in Workers KV.
 
 | Key                                          | Value                                              | Written by                            | Read by                                          |
 |----------------------------------------------|----------------------------------------------------|---------------------------------------|--------------------------------------------------|
@@ -105,15 +147,17 @@ All persistent state is in Workers KV.
 
 KV doesn't support reverse lookup, so we keep both directions of each
 relationship as explicit entries. If the container has lost its
-in-memory session set, the next message gets a 404 from
-`/sessions/{id}/messages`; the webhook drops the stale `topic:` and
-`session:` entries and starts a fresh session transparently.
+in-memory session map (e.g. just woke from sleep) but the on-disk
+session directory survives, the bridge resumes the session from disk
+transparently. A 404 only happens when the on-disk dir is also gone
+(data loss); the webhook then drops the stale `topic:` and `session:`
+entries and starts a fresh session.
 
 ## Durable Objects
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. Injects `ANTHROPIC_API_KEY` into the container's env; defines `outboundByHost["zero.worker"]` for the Telegram reply path. | None (in-memory session set; KV holds the topic↔session mappings) |
+| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` mints prefix-scoped R2 temp creds and refreshes `envVars` on every call; the container mounts the user's R2 prefix at `/mnt/agent-state`. Defines `outboundByHost["zero.worker"]` for the Telegram reply path. | None (sessions live on the R2 mount inside the container; KV holds the topic↔session mappings) |
 
 ## Routes
 
@@ -156,11 +200,12 @@ Tradeoffs:
 
 - A worker crash inside `waitUntil` silently drops the update; Telegram
   won't retry.
-- A container restart loses its in-memory session set. The next message
-  on a known topic gets a 404 from `/sessions/{id}/messages`; we drop
-  the stale `topic:`/`session:` KV entries and create a fresh session
-  before retrying. The user is not notified that their conversation
-  history was lost.
+- A container restart loses its in-memory session map but the on-disk
+  session dir on R2 survives, so the bridge resumes via
+  `SessionManager.continueRecent` on the next message. Only when the
+  on-disk dir is also gone (R2 data loss / manual cleanup) does the
+  webhook fall back to creating a fresh session and dropping the stale
+  KV entries; the user is not notified.
 
 The webhook URL and secret are registered with Telegram manually via the
 Bot API's `setWebhook` method — see
@@ -194,6 +239,10 @@ Stored in Doppler (`zero-api`):
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
 - `ANTHROPIC_API_KEY` — injected into the container's env (`envVars`) so
   pi-ai can call `api.anthropic.com` directly
+- `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PARENT_ACCESS_KEY_ID`,
+  `R2_PARENT_SECRET_ACCESS_KEY` — used by `AgentContainer` to mint
+  prefix-scoped R2 temp credentials for the per-user FUSE mount. See
+  [`r2-mount.md`](r2-mount.md).
 
 ## Dev Environment
 
@@ -206,11 +255,10 @@ See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 
 ## Future Work
 
-- Persist pi sessions outside the container (snapshot on each
-  `agent_end`) so they survive restarts and let other surfaces view
-  them. Today `SessionManager.inMemory()` means a sleep loses state.
 - Tighten container egress: set `enableInternet = false` plus
-  `allowedHosts = ["api.anthropic.com", "zero.worker"]`.
+  `allowedHosts = ["api.anthropic.com", "zero.worker", "<acct>.r2.cloudflarestorage.com"]`.
+- Surface session history (read sessions back out of R2 from the web UI
+  for browsing/export).
 - Per-user model preference + a switching API. Pi supports
   `session.setModel(…)`; expose a Clerk-gated route to drive it.
 - Route Anthropic traffic through AI Gateway later for observability,

@@ -18,10 +18,12 @@
  *       { sessionId, text }
  *
  * Environment:
- *   PORT       (optional, default 8080)
- *   REPLY_URL  (required) — full URL the server POSTs replies to.
- *   CWD        (optional, default /workspace) — working directory pi uses
- *              for its filesystem tools.
+ *   PORT             (optional, default 8080)
+ *   REPLY_URL        (required) — full URL the server POSTs replies to.
+ *   CWD              (optional, default /workspace) — working directory pi
+ *                    uses for its filesystem tools.
+ *   AGENT_STATE_DIR  (required) — directory used to persist sessions, one
+ *                    subdir per sessionId. Must be writable.
  */
 
 import { randomUUID } from "node:crypto";
@@ -31,6 +33,7 @@ import { createSessionBridge } from "./session-bridge.js";
 const port = parseInt(process.env.PORT ?? "8080", 10);
 const replyUrl = process.env.REPLY_URL;
 const cwd = process.env.CWD ?? "/workspace";
+const stateDir = process.env.AGENT_STATE_DIR!;
 
 if (!replyUrl) {
   console.error("REPLY_URL env var is required");
@@ -59,7 +62,7 @@ const sendReply = async (sessionId: string, text: string): Promise<void> => {
   }
 };
 
-const bridge = createSessionBridge(sendReply, cwd);
+const bridge = createSessionBridge(sendReply, { cwd, stateDir });
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────
 
@@ -126,7 +129,7 @@ const handle = async (
       send(res, 400, { error: "missing text" });
       return;
     }
-    const accepted = bridge.promptSession(sessionId, text);
+    const accepted = await bridge.promptSession(sessionId, text);
     if (!accepted) {
       send(res, 404, { error: "unknown session" });
       return;
@@ -150,7 +153,7 @@ const server = createServer((req, res) => {
 
 server.listen(port, () => {
   console.log(
-    `agent-server listening on port ${port.toString()}, replies to ${replyUrl}, cwd=${cwd}`,
+    `agent-server listening on port ${port.toString()}, replies to ${replyUrl}, cwd=${cwd}, stateDir=${stateDir}`,
   );
 });
 

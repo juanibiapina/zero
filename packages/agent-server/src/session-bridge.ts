@@ -5,15 +5,22 @@
  *
  * Wraps pi (@earendil-works/pi-coding-agent) per logical session id.
  *
- * Each session gets its own AgentSession with an in-memory SessionManager
- * and uses pi-ai's built-in Anthropic provider. Pi resolves the API key
- * from `process.env.ANTHROPIC_API_KEY`, which the container DO injects via
- * `envVars`.
+ * Each session is a directory under `stateDir` named by our (opaque)
+ * sessionId. Pi writes its JSONL session file inside that dir; on resume
+ * we hand the same dir back to `SessionManager.continueRecent` and pi
+ * picks up where it left off. The directory's existence is the only
+ * persisted index — no separate sidecar files.
+ *
+ * Pi resolves the API key from `process.env.ANTHROPIC_API_KEY`, which the
+ * container DO injects via `envVars`.
  *
  * Every pi event is logged with `[sess=<8-char-id>] <event>` so the full
  * agent loop is visible in the container's `Logs` view. Keep the lines
  * compact.
  */
+
+import { existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   AuthStorage,
@@ -192,23 +199,36 @@ interface SessionState {
   counters: DeltaCounters;
 }
 
-const sessions = new Map<string, SessionState>();
-
 export type ReplyFn = (sessionId: string, text: string) => Promise<void>;
+
+export interface SessionBridgeOptions {
+  cwd: string;
+  /**
+   * Directory where each session is stored as a subdirectory named by its
+   * (opaque) sessionId. Must be writable.
+   */
+  stateDir: string;
+}
 
 export interface SessionBridge {
   createSession: (sessionId: string) => Promise<void>;
-  promptSession: (sessionId: string, text: string) => boolean;
+  promptSession: (sessionId: string, text: string) => Promise<boolean>;
 }
 
 export const createSessionBridge = (
   postReply: ReplyFn,
-  cwd: string,
+  opts: SessionBridgeOptions,
 ): SessionBridge => {
-  const createSession = async (sessionId: string): Promise<void> => {
-    const t = tag(sessionId);
-    console.log(`${t} createSession cwd=${cwd}`);
+  const { cwd, stateDir } = opts;
+  const sessions = new Map<string, SessionState>();
 
+  const sessionDirFor = (sessionId: string): string =>
+    join(stateDir, sessionId);
+
+  const buildSession = async (
+    sessionId: string,
+    sessionManager: SessionManager,
+  ): Promise<SessionState> => {
     const authStorage = AuthStorage.inMemory();
     const modelRegistry = ModelRegistry.inMemory(authStorage);
     const model = modelRegistry.find(PROVIDER, MODEL_ID);
@@ -220,7 +240,7 @@ export const createSessionBridge = (
       cwd,
       modelRegistry,
       authStorage,
-      sessionManager: SessionManager.inMemory(cwd),
+      sessionManager,
       model,
       thinkingLevel: "high",
     });
@@ -231,6 +251,7 @@ export const createSessionBridge = (
       counters: { text: 0, thinking: 0, toolcall: 0 },
     };
 
+    const t = tag(sessionId);
     session.subscribe((event) => {
       logEvent(sessionId, event, state.counters);
 
@@ -276,12 +297,48 @@ export const createSessionBridge = (
       });
     });
 
+    return state;
+  };
+
+  const createSession = async (sessionId: string): Promise<void> => {
+    const t = tag(sessionId);
+    const dir = sessionDirFor(sessionId);
+    mkdirSync(dir, { recursive: true });
+    console.log(`${t} createSession cwd=${cwd} dir=${dir}`);
+
+    const sessionManager = SessionManager.create(cwd, dir);
+    const state = await buildSession(sessionId, sessionManager);
     sessions.set(sessionId, state);
   };
 
-  const promptSession = (sessionId: string, text: string): boolean => {
-    const state = sessions.get(sessionId);
+  /**
+   * Resume a session from disk. Returns the state on success, undefined if
+   * the on-disk directory is missing or empty (i.e. nothing to resume).
+   */
+  const resumeSession = async (
+    sessionId: string,
+  ): Promise<SessionState | undefined> => {
+    const dir = sessionDirFor(sessionId);
+    if (!existsSync(dir)) return undefined;
+
+    const t = tag(sessionId);
+    console.log(`${t} resumeSession dir=${dir}`);
+    const sessionManager = SessionManager.continueRecent(cwd, dir);
+    const state = await buildSession(sessionId, sessionManager);
+    sessions.set(sessionId, state);
+    return state;
+  };
+
+  const promptSession = async (
+    sessionId: string,
+    text: string,
+  ): Promise<boolean> => {
+    let state = sessions.get(sessionId);
+    if (!state) {
+      state = await resumeSession(sessionId);
+    }
     if (!state) return false;
+
     const t = tag(sessionId);
     console.log(`${t} prompt len=${text.length.toString()}`);
     state.session.prompt(text).catch((err: unknown) => {

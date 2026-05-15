@@ -1,26 +1,54 @@
 FROM node:22-bookworm-slim
 
 # Pi writes session state and config under HOME by default. Even though we
-# pass an in-memory SessionManager, several pi internals still touch the
-# filesystem (settings loader, resource loader). Point them at /tmp so
-# nothing leaks into a non-writable layer.
+# point pi at AGENT_STATE_DIR (the R2-backed mount) for sessions, several
+# pi internals still touch the filesystem (settings loader, resource
+# loader). Point those at /tmp so nothing leaks into a non-writable layer.
 ENV HOME=/tmp/pi-home
+
+# Install fuse3 + curl (for downloading tigrisfs and for the entrypoint
+# script). ca-certificates is needed for HTTPS to R2.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      fuse3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Pin tigrisfs to a known-good release. Bump deliberately when needed; see
+# docs/tech-debt.md for the rationale (avoiding non-deterministic builds).
+ARG TIGRISFS_VERSION=1.2.1
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then DEBARCH="amd64"; \
+    elif [ "$ARCH" = "aarch64" ]; then DEBARCH="arm64"; \
+    else echo "unsupported arch: $ARCH" >&2 && exit 1; fi && \
+    curl -fsSL "https://github.com/tigrisdata/tigrisfs/releases/download/v${TIGRISFS_VERSION}/tigrisfs_${TIGRISFS_VERSION}_linux_${DEBARCH}.deb" \
+      -o /tmp/tigrisfs.deb && \
+    dpkg -i /tmp/tigrisfs.deb && \
+    rm /tmp/tigrisfs.deb
 
 WORKDIR /app
 
 # Install runtime deps. pnpm uses `workspace:*` in devDependencies, which
 # npm can't parse. Strip devDependencies and install only what's in
-# `dependencies` — the actual runtime surface.
+# `dependencies` \u2014 the actual runtime surface.
 COPY package.json ./
 RUN node -e "const p=require('./package.json'); delete p.devDependencies; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2));" \
  && npm install --omit=dev --no-audit --no-fund
 
 COPY dist/ ./dist/
 
-# Working dir pi exposes to its tools (read/write/bash/edit).
-RUN mkdir -p /workspace /tmp/pi-home
+# Working dir pi exposes to its tools (read/write/bash/edit), plus the
+# fixed mount point and the home directory pi falls back to.
+RUN mkdir -p /workspace /mnt/agent-state /tmp/pi-home
 WORKDIR /workspace
 
-EXPOSE 8080
+# Entrypoint: mount the R2 prefix at /mnt/agent-state if all R2 envs are
+# present, then exec node. If anything is missing or the mount fails, log
+# and continue without setting AGENT_STATE_DIR \u2014 the agent-server falls
+# back to in-memory sessions (lost on container restart).
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-CMD ["node", "/app/dist/index.js"]
+EXPOSE 8080
+CMD ["/entrypoint.sh"]

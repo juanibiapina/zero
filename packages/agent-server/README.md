@@ -7,11 +7,16 @@ run on any Node.js host that can reach the configured `REPLY_URL`.
 
 Under the hood it drives
 [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
-Each `POST /sessions` builds a fresh `AgentSession` with an in-memory
-session manager that uses pi-ai's built-in `anthropic` provider
-(`claude-sonnet-4-5-20250929`, `thinkingLevel: "high"`). Pi reads
-`ANTHROPIC_API_KEY` from `process.env` and talks directly to
-`api.anthropic.com`.
+Each `POST /sessions` builds a fresh `AgentSession` using pi-ai's
+built-in `anthropic` provider (`claude-sonnet-4-5-20250929`,
+`thinkingLevel: "high"`). Pi reads `ANTHROPIC_API_KEY` from
+`process.env` and talks directly to `api.anthropic.com`.
+
+Sessions are persisted on disk under `AGENT_STATE_DIR` (one
+subdirectory per sessionId). Restart-resume is automatic: a
+`POST /sessions/:id/messages` for an id whose process state has been
+lost, but whose directory still exists on disk, transparently reopens
+the last session via `SessionManager.continueRecent`.
 
 ## HTTP contract
 
@@ -59,6 +64,7 @@ expected to be reachable from the server's environment.
 | `REPLY_URL`         | yes      | —             | Full URL the server POSTs replies to. Exits if unset. |
 | `ANTHROPIC_API_KEY` | yes      | —             | Anthropic API key, used by pi-ai's built-in `anthropic` provider. |
 | `CWD`               | no       | `/workspace`  | Working directory pi exposes to its `read`/`write`/`bash`/`edit` tools. Must be writable. |
+| `AGENT_STATE_DIR`   | yes      | —             | Directory to persist sessions in. One subdir per sessionId; pi writes a JSONL file inside. Must be writable. Server exits if unset. |
 
 ## Running
 

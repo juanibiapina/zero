@@ -125,22 +125,30 @@ of inactivity.
 
 The class wires the **outbound handler** that lets the container deliver
 Telegram replies without going through the public internet, and the
-constructor injects `ANTHROPIC_API_KEY` into the container's process env
-so pi-ai can talk to `api.anthropic.com` directly:
+`fetch` override refreshes `this.envVars` on every incoming call so the
+container always boots with fresh per-user credentials:
 
 ```typescript
-constructor(ctx, env) {
-  super(ctx, env);
-  this.envVars = {
-    REPLY_URL: "http://zero.worker/reply",
-    ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
-  };
+override async fetch(request) {
+  await this.refreshEnvVars();   // mint R2 temp creds + assemble envs
+  return super.fetch(request);
 }
 
 AgentContainer.outboundByHost = {
   "zero.worker": (req, env) => handleContainerReply(req, env),
 };
 ```
+
+`refreshEnvVars` mints **prefix-scoped R2 temporary credentials** for
+`<clerkUserId>/` (local JWT signing, no API call) and packs them into
+`envVars` alongside `ANTHROPIC_API_KEY`, `REPLY_URL`, `CLERK_USER_ID`,
+and the R2 mount config. The Container base class only restarts the
+underlying process when it isn't already running, so a live container
+keeps its existing creds; the next cold boot picks up the fresh ones.
+With TTL=1h and `sleepAfter=5m`, there's plenty of headroom across
+sleep/wake cycles. R2 config is mandatory: missing creds throw before
+the container even starts, and a failed FUSE mount aborts the
+container's entrypoint.
 
 The container `fetch`es `http://zero.worker/reply`; that request never
 leaves the machine — the handler runs inside the Workers runtime with
