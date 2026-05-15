@@ -11,15 +11,22 @@ edits, callbacks etc. are dropped — only topic messages count today.
 
 The agent inside the container is the pi coding agent
 ([@earendil-works/pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent))
-talking directly to Anthropic. Pi-ai uses its built-in `anthropic`
-provider; the API key is read from `process.env.ANTHROPIC_API_KEY`, which
-`AgentContainer` injects via `envVars` when starting the container. The
-model is `claude-sonnet-4-5-20250929` with thinking level `high`. Replies
-flow back through an on-host outbound trick — the container POSTs to
-`http://zero.worker/reply` and the worker delivers via Telegram — so the
-only external egress from the container is to `api.anthropic.com` and to
-`<acct>.r2.cloudflarestorage.com` (for the FUSE-mounted session store,
-described below).
+talking to Anthropic. Pi-ai uses its built-in `anthropic` provider; the
+API key is read from `process.env.ANTHROPIC_API_KEY`, which `AgentContainer`
+injects via `envVars` — but the value pi sees is a **sentinel fake**
+(`Z3R0-FAKE-ANTHROPIC_API_KEY`), not the real key. Every container
+request to anywhere except `zero.worker` is intercepted by the worker's
+catch-all `outbound` handler, which byte-replaces registered fakes with
+their real env values before forwarding. The real `ANTHROPIC_API_KEY`
+lives only in the worker; if pi exfiltrates its own env, the leaked
+string is a useless sentinel. See "Secret proxying" below.
+
+The model is `claude-sonnet-4-5-20250929` with thinking level `high`.
+Replies flow back through a separate on-host outbound trick — the
+container POSTs to `http://zero.worker/reply` and the worker delivers
+via Telegram. The only external egress from the container is to
+`api.anthropic.com` and to `<acct>.r2.cloudflarestorage.com` (for the
+FUSE-mounted session store, described below).
 
 Sessions are persisted on R2: each container mounts the user's prefix in
 the shared `zero-agent-state` bucket via [tigrisfs](https://github.com/tigrisdata/tigrisfs)
@@ -89,11 +96,19 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │  ├─ mounts R2 prefix <clerkUserId>/ at /mnt/agent-state          │
 │  │    via tigrisfs; pi writes JSONL session files there          │
 │  ├─ fetch() refreshes envVars on every call:                    │
-│  │    ANTHROPIC_API_KEY + REPLY_URL + R2 temp creds (1h)         │
-│  └─ outboundByHost["zero.worker"] = handleContainerReply         │
+│  │    ANTHROPIC_API_KEY=Z3R0-FAKE-...   (sentinel, not real)     │
+│  │    REPLY_URL + R2 temp creds (1h)                             │
+│  ├─ outboundByHost["zero.worker"] = handleContainerReply         │
+│  └─ outbound = secretProxy.outbound  (catch-all substitution)   │
 │                                                                  │
 │  pi-ai inside the container:                                     │
-│    POST https://api.anthropic.com/v1/messages  (direct egress)   │
+│    POST https://api.anthropic.com/v1/messages                    │
+│      x-api-key: Z3R0-FAKE-ANTHROPIC_API_KEY                      │
+│      │  intercepted on-host by the catch-all handler             │
+│      ▼                                                           │
+│    secretProxy.outbound:                                         │
+│      url/headers/body — byte-replace fake → env.ANTHROPIC_API_KEY │
+│      fetch(api.anthropic.com, ...)  (real key, only here)        │
 │    → normal Anthropic stream; tool calls, thinking, content      │
 │                                                                  │
 │  When pi emits agent_end, the container POSTs:                   │
@@ -222,11 +237,46 @@ the same physical host before it hits the network — see Cloudflare's
 For interception to work, `apps/api/src/index.ts` must re-export
 `ContainerProxy` from `@cloudflare/containers`.
 
-Pi-ai's LLM traffic does *not* use this mechanism: it goes out to
-`api.anthropic.com` over normal egress, authenticated with the injected
-`ANTHROPIC_API_KEY`. The reply handler runs inside the Workers runtime
-with full access to `env` (KV, Telegram bot token). No public route, no
-shared secret.
+Pi-ai's LLM traffic uses a different mechanism ("Secret proxying",
+below): the catch-all `outbound` handler intercepts every container
+egress except `zero.worker` and substitutes registered fakes for their
+real env values before forwarding to the upstream host. The reply
+handler runs inside the Workers runtime with full access to `env` (KV,
+Telegram bot token). No public route, no shared secret.
+
+## Secret Proxying
+
+The container process must never see the real value of any secret it
+can't be trusted with. The pattern is a **sentinel substitution**
+implemented in `apps/api/src/secret-proxy.ts`:
+
+1. For each registered env-var name, the worker injects the constant
+   sentinel `Z3R0-FAKE-<ENV_NAME>` into the container's `envVars`. The
+   in-container process (pi, anything pi spawns) reads the sentinel as
+   if it were the real value.
+2. `AgentContainer.outbound` is a catch-all handler. Every container
+   egress except hosts in `outboundByHost` (currently just
+   `zero.worker`) flows through it. The handler buffers the request,
+   byte-replaces every registered sentinel with the real value from
+   `env`, and forwards via plain `fetch`. Substitution covers the URL,
+   header values, and body bytes — wherever a client library might put
+   the secret.
+3. The sentinel is *not* a credential. It can leak, repeat across
+   containers, or be guessed; the only thing capable of turning it into
+   the real secret is this handler running inside the worker. The real
+   value never enters the container's address space.
+
+For the substitution to fire on HTTPS traffic (Anthropic, R2),
+`AgentContainer.interceptHttps = true` is required, and the container's
+entrypoint installs Cloudflare's MITM CA cert
+(`/etc/cloudflare/certs/cloudflare-containers-ca.crt`, mounted at
+runtime) into the system trust store and exports `NODE_EXTRA_CA_CERTS`
+so both tigrisfs (Go AWS SDK) and node (undici) accept it. Without
+this, HTTPS bypasses the catch-all entirely.
+
+Today only `ANTHROPIC_API_KEY` is registered. Other in-container
+secrets (the R2 temp credentials, etc.) still arrive in the clear and
+are addressed separately.
 
 ## Secrets
 

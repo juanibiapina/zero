@@ -7,9 +7,11 @@
  * user (selected with `getByName(clerkUserId)`), which idles after 5 minutes
  * of inactivity and frees its slot for other users.
  *
- * Pi-ai inside the container talks to api.anthropic.com directly using
- * `ANTHROPIC_API_KEY`, which the worker injects into the container's env
- * (see `refreshEnvVars` below).
+ * Pi-ai inside the container talks to api.anthropic.com using a sentinel
+ * `ANTHROPIC_API_KEY` (see `secret-proxy.ts`). The catch-all `outbound`
+ * handler intercepts every container egress except `zero.worker` and
+ * substitutes the sentinel for the real key from worker `env` before
+ * forwarding. Pi never sees the real key.
  *
  * Persistence: the container mounts an R2 prefix (`<clerkUserId>/`) at
  * `/mnt/agent-state` via tigrisfs and points pi at it. Credentials are
@@ -36,7 +38,13 @@ import { Bot } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
 import { mintR2TempCreds } from "./r2-temp-credentials";
+import { createSecretProxy } from "./secret-proxy";
 import type { Env } from "./types";
+
+// Secrets the container must never see in the clear. Their values are
+// replaced with `Z3R0-FAKE-<ENV_NAME>` sentinels in the container's env;
+// the catch-all `outbound` handler (below) swaps them back on the way out.
+const secretProxy = createSecretProxy(["ANTHROPIC_API_KEY"]);
 
 const ReplyBodySchema = z.object({
   sessionId: z.string().min(1),
@@ -102,6 +110,12 @@ export class AgentContainer extends Container<Env> {
   defaultPort = 8080;
   sleepAfter = "5m";
 
+  // Without this, the `outbound` catch-all only intercepts HTTP. Pi's call
+  // to https://api.anthropic.com would bypass substitution entirely. With
+  // it on, every HTTPS request is MITM'd via Cloudflare's container CA;
+  // the entrypoint script installs that CA into the trust store.
+  override interceptHttps = true;
+
   override async fetch(request: Request): Promise<Response> {
     await this.refreshEnvVars();
     return super.fetch(request);
@@ -134,7 +148,7 @@ export class AgentContainer extends Container<Env> {
 
     this.envVars = {
       REPLY_URL: "http://zero.worker/reply",
-      ANTHROPIC_API_KEY: this.env.ANTHROPIC_API_KEY,
+      ...secretProxy.fakes,
       CLERK_USER_ID: clerkUserId,
       R2_ACCOUNT_ID: this.env.R2_ACCOUNT_ID,
       R2_BUCKET_NAME: this.env.R2_BUCKET_NAME,
@@ -150,4 +164,11 @@ export class AgentContainer extends Container<Env> {
 
 AgentContainer.outboundByHost = {
   "zero.worker": (req, env) => handleContainerReply(req, env),
+  // R2 traffic carries no registered secrets; skip the catch-all's body
+  // buffering and substitution scan and just forward. Still runs in the
+  // worker (interceptHttps='*' when catch-all is active), but cheap.
+  "*.r2.cloudflarestorage.com": (req) => fetch(req),
 };
+
+// Catch-all: every other host goes through the secret-substitution proxy.
+AgentContainer.outbound = secretProxy.outbound;

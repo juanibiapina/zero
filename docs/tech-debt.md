@@ -56,3 +56,61 @@ verified in deployed previews / production.
 **Fix when revisited:** investigate whether `wrangler dev` gained a flag
 to enable FUSE/privileged containers, or stand up a local minio +
 remount-on-host harness for the integration test.
+
+## R2 traffic still traverses the worker (one hop)
+
+**Where:** `apps/api/src/AgentContainer.ts` (`outboundByHost["*.r2.cloudflarestorage.com"]`).
+
+**What:** R2 is exempted from the substitution catch-all via a
+pass-through `outboundByHost` glob, so we no longer buffer or scan R2
+request bodies. But because `interceptHttps = true` plus a catch-all
+handler forces intercept-all mode (which intercepts HTTPS via the `*`
+pattern), even pass-through R2 traffic still round-trips through the
+worker before reaching `<acct>.r2.cloudflarestorage.com`.
+
+**Risk:** Latency on the FUSE mount under heavy session I/O — every
+read/write/list pays one extra worker hop.
+
+**Fix when revisited:** the only way to fully skip the hop is to drop
+out of intercept-all mode, which means giving up the catch-all (and
+therefore the generic substitution). If R2 latency becomes a real
+problem, options are: (a) register every host that pi might call
+statically in `outboundByHost` (per-host mode skips R2's HTTPS
+interception entirely), or (b) move pi's Anthropic call through a
+dedicated `outboundByHost["api.anthropic.com"]` and drop the catch-all.
+
+## Secret-proxy only substitutes request bodies, not responses
+
+**Where:** `apps/api/src/secret-proxy.ts`.
+
+**What:** The handler substitutes fake → real on the way *out*. It
+doesn't scrub the response on the way back. If an upstream ever echoes
+the key (Anthropic doesn't), the real value would land in pi's address
+space.
+
+**Risk:** Today: zero (Anthropic doesn't echo). Future: depends on what
+else we register.
+
+**Fix when revisited:** add the inverse substitution to the response
+body, behind a per-secret flag. Anthropic streams SSE, so the
+implementation needs to operate on a streaming `ReadableStream` rather
+than buffering the full response.
+
+## Only `ANTHROPIC_API_KEY` is sentinelised
+
+**Where:** `apps/api/src/AgentContainer.ts`, `createSecretProxy(["ANTHROPIC_API_KEY"])`.
+
+**What:** The R2 temp credentials
+(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN`) and
+the `REPLY_URL` are still injected into the container in the clear.
+They're scoped (R2 creds are 1h, prefix-locked; `REPLY_URL` is the
+on-host trick) but a leak still has *some* blast radius.
+
+**Risk:** A leaked R2 temp cred can read/write the user's prefix until
+it expires. A leaked `REPLY_URL` is harmless from outside the host.
+
+**Fix when revisited:** decide per-secret whether to sentinelise. R2
+creds are SigV4-signed in the `Authorization` header, so substitution
+would need to also re-sign the request — not a flat string replace.
+Likely needs a dedicated R2-signing handler rather than the generic
+substitution path.

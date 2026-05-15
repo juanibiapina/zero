@@ -11,6 +11,22 @@
 set -euo pipefail
 
 MOUNT_POINT="/mnt/agent-state"
+CF_CA_SRC="/etc/cloudflare/certs/cloudflare-containers-ca.crt"
+CF_CA_DEST="/usr/local/share/ca-certificates/cloudflare-containers-ca.crt"
+
+# Trust the Cloudflare MITM cert so HTTPS traffic intercepted by the
+# Workers `outbound` handler (interceptHttps = true) round-trips cleanly.
+# Cloudflare mounts the cert at runtime; install it before tigrisfs
+# (which talks to R2 over HTTPS) and before node (which talks to
+# Anthropic over HTTPS).
+if [[ -f "${CF_CA_SRC}" ]]; then
+  cp "${CF_CA_SRC}" "${CF_CA_DEST}"
+  update-ca-certificates >/dev/null
+  export NODE_EXTRA_CA_CERTS="${CF_CA_SRC}"
+  echo "[entrypoint] installed Cloudflare container CA" >&2
+else
+  echo "[entrypoint] WARN: ${CF_CA_SRC} not found; HTTPS interception will fail" >&2
+fi
 
 echo "[entrypoint] mounting ${R2_BUCKET_NAME}:${R2_PREFIX} at ${MOUNT_POINT}" >&2
 
