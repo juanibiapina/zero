@@ -62,14 +62,19 @@ remount-on-host harness for the integration test.
 **Where:** `apps/api/src/AgentContainer.ts` (`outboundByHost["*.r2.cloudflarestorage.com"]`).
 
 **What:** R2 is exempted from the substitution catch-all via a
-pass-through `outboundByHost` glob, so we no longer buffer or scan R2
-request bodies. But because `interceptHttps = true` plus a catch-all
-handler forces intercept-all mode (which intercepts HTTPS via the `*`
-pattern), even pass-through R2 traffic still round-trips through the
-worker before reaching `<acct>.r2.cloudflarestorage.com`.
+pass-through `outboundByHost` glob, so we no longer scan R2 bodies for
+the secret sentinel. We do still buffer R2 PUT/POST bodies in that
+handler so the SigV4 signature survives Workers' `fetch` (passing the
+container's Request straight through left bodies as streams without
+Content-Length and R2 rejected them with 411 / 403 — see commit
+f4f4876). And because `interceptHttps = true` plus a catch-all handler
+forces intercept-all mode (which intercepts HTTPS via the `*` pattern),
+even pass-through R2 traffic still round-trips through the worker
+before reaching `<acct>.r2.cloudflarestorage.com`.
 
 **Risk:** Latency on the FUSE mount under heavy session I/O — every
-read/write/list pays one extra worker hop.
+read/write/list pays one extra worker hop, and writes additionally pay
+one body-buffer round-trip in worker memory.
 
 **Fix when revisited:** the only way to fully skip the hop is to drop
 out of intercept-all mode, which means giving up the catch-all (and
@@ -95,4 +100,61 @@ else we register.
 body, behind a per-secret flag. Anthropic streams SSE, so the
 implementation needs to operate on a streaming `ReadableStream` rather
 than buffering the full response.
+
+## Speculative defenses in the R2 persistence fix (commit f4f4876)
+
+**Where:**
+
+- `packages/agent-server/Dockerfile` — `tini` install + `ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]`
+- `packages/agent-server/entrypoint.sh` — supervisor pattern (tigrisfs + node both backgrounded, SIGTERM trap signals node, awaits, then unmounts tigrisfs); tigrisfs `--fsync-on-close`; tigrisfs `--file-mode=0666 --dir-mode=0777`
+- `packages/agent-server/src/index.ts` — async shutdown handler that awaits `bridge.awaitIdle({ timeoutMs: 13 * 60_000 })` before `process.exit(0)`
+- `packages/agent-server/src/session-bridge.ts` — `inflight: Set<Promise<unknown>>` tracking every prompt + reply chain; `awaitIdle` exported on the bridge
+
+**What:** While debugging “pi session writes never reach R2” we made
+several changes that *could* have been the fix, then found the real
+root cause (Workers' `fetch(req)` re-streaming bodies, breaking SigV4
+and stripping Content-Length — confirmed by the `r2_request` diagnostic
+log showing 411 / 403). The body-buffering fix in
+`AgentContainer.outboundByHost["*.r2.cloudflarestorage.com"]` was
+proven necessary; everything above shipped alongside it without
+independent verification.
+
+**Risk:** Extra complexity in container lifecycle, entrypoint shell,
+and session-bridge for no proven benefit. If a future bug appears in
+any of these areas we can't easily tell whether the code is “doing its
+job” or quietly broken — because we never confirmed it was doing
+anything in the first place. The supervisor's drain in particular has
+a 13-minute budget that delays deploys.
+
+**Fix when revisited:** verify each one by reverting and watching
+production. For each: revert, `bin/deploy` with
+`--containers-rollout=immediate`, clear KV, send messages spanning a
+`sleepAfter` window (5 min idle) plus a deploy mid-conversation,
+verify (a) replies still arrive and (b) the session JSONL on R2 grows
+after each turn (`aws s3api list-objects-v2 ... | jq '.Contents[] |
+{Key, Size, LastModified}'`).
+
+Suggested order, cheapest-to-revert and most-likely-unnecessary first:
+
+1. **tini + supervisor + drain + inflight** as a single unit. With
+   `--fsync-on-close` enforcing per-write durability, the drain's only
+   remaining role is letting in-flight pi turns complete their reply
+   before the container exits — a UX nicety, not a correctness one,
+   and it doesn't even help during Durable Object code-update resets
+   (those bypass SIGTERM).
+2. **tigrisfs `--fsync-on-close`**. With body-buffering fixing the real
+   bug, tigrisfs's default lazy writeback will eventually flush. The
+   only window this flag closes is between the last write and the next
+   abrupt kill. Measure that window in practice (deploy mid-conversation
+   without the flag; check whether the just-acknowledged turn is on R2)
+   before deciding to keep the per-write round-trip cost.
+3. **tigrisfs `--file-mode=0666 --dir-mode=0777`**. Most likely
+   required: pi runs as uid 1001 and tigrisfs reports inodes as uid=0
+   by default, so without world-writable mode pi can't append to files
+   it just created. Confirm with a fresh-session test — the first user
+   turn writes the header + user + assistant entries; if that PUT
+   doesn't appear on R2 with this flag removed, the flag is required.
+   `--uid=1001` is not an alternative because `--setuid` defaults to
+   `--uid`, which would make tigrisfs itself drop privileges and break
+   the FUSE mount.
 
