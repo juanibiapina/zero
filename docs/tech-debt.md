@@ -123,53 +123,29 @@ body, behind a per-secret flag. Anthropic streams SSE, so the
 implementation needs to operate on a streaming `ReadableStream` rather
 than buffering the full response.
 
-## Speculative defenses in the R2 persistence fix (commit f4f4876)
+## R2 persistence fix — verification history (resolved)
 
-**Where:**
+The “pi session writes never reach R2” bug (commit `f4f4876`) shipped
+a proven fix (body-buffering in
+`AgentContainer.outboundByHost["*.r2.cloudflarestorage.com"]`)
+alongside several speculative defenses we then verified one by one
+against the session-persistence integration test. Each rationale is
+now documented inline where the code lives; this section exists so
+future readers don't redo the experiments.
 
-- `packages/agent-server/entrypoint.sh` — tigrisfs `--file-mode=0666 --dir-mode=0777`
-
-**What:** While debugging “pi session writes never reach R2” we made
-several changes that *could* have been the fix, then found the real
-root cause (Workers' `fetch(req)` re-streaming bodies, breaking SigV4
-and stripping Content-Length — confirmed by the `r2_request` diagnostic
-log showing 411 / 403). The body-buffering fix in
-`AgentContainer.outboundByHost["*.r2.cloudflarestorage.com"]` was
-proven necessary; the remaining flag above shipped alongside it
-without independent verification.
-
-**Risk:** Extra complexity in the FUSE mount for no proven benefit. If
-a future bug appears in this area we can't easily tell whether the
-flag is “doing its job” or quietly broken — because we never confirmed
-it was doing anything in the first place.
-
-**Fix when revisited:** verify by reverting and watching production.
-Revert, deploy with `--containers-rollout=immediate`, clear KV, and
-run the session-persistence integration test (it sends messages,
-sleeps past `sleepAfter`, then sends another — the post-sleep turn
-only succeeds if persistence is intact).
-
-**`--file-mode=0666 --dir-mode=0777`** — most likely required: pi runs
-as uid 1001 and tigrisfs reports inodes as uid=0 by default, so
-without world-writable mode pi can't append to files it just created.
-Confirm with a fresh-session test — the first user turn writes the
-header + user + assistant entries; if that PUT doesn't appear on R2
-with this flag removed, the flag is required. `--uid=1001` is not an
-alternative because `--setuid` defaults to `--uid`, which would make
-tigrisfs itself drop privileges and break the FUSE mount.
-
----
-
-*History: `--fsync-on-close` was tested for removal (commit not
-merged); the session-persistence integration test's post-5min-idle
-turn timed out because tigrisfs's default lazy writeback hadn't
-flushed turn 2's entries before the container was killed by idle
-eviction. Flag kept; rationale updated in `entrypoint.sh`.*
-
----
-
-*History: the `tini` + supervisor + drain + inflight bundle was
-reverted in commit `b01f488` after the integration test passed without
-it. With `--fsync-on-close` keeping every acknowledged write on R2,
-there was nothing left for the drain to protect.*
+- **tini + supervisor + drain + inflight** (`b01f488`): *removed*. The
+  integration test passed without the supervisor pattern. With
+  `--fsync-on-close` already making every acknowledged write durable
+  on R2, the drain had nothing left to protect.
+- **tigrisfs `--fsync-on-close`** (`9b7d573`): *kept*. Removing it made
+  the post-5min-idle turn time out: tigrisfs's default lazy writeback
+  hadn't flushed the prior turn's JSONL entries before the container
+  was killed by idle eviction, so the cold resume read a stale file.
+  Rationale in `packages/agent-server/entrypoint.sh`.
+- **tigrisfs `--file-mode=0666 --dir-mode=0777`** (verified, kept).
+  Removing the flags made `createSession` fail with status 500
+  (`create_session_failed` in worker logs) on the very first message,
+  because pi (uid 1001) can't `mkdir` under the root-owned mount root
+  with default `--dir-mode=0755`. Rationale in
+  `packages/agent-server/entrypoint.sh`.
 

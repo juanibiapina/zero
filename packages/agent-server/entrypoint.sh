@@ -61,17 +61,18 @@ log_json "mounting_r2" "bucket=${R2_BUCKET_NAME}" "prefix=${R2_PREFIX}" "mount_p
 # `-o allow_other` lets the non-root pi user access the mount (combined
 # with `user_allow_other` in /etc/fuse.conf, set in the Dockerfile).
 # `--file-mode=0666 --dir-mode=0777` makes every inode in the mount
-# world-writable. R2 has no notion of unix ownership; these flags only
-# affect what permission bits the FUSE driver reports to the kernel.
-# Without this, files tigrisfs creates are reported as uid=0 mode=0644
-# and the unprivileged pi user gets EACCES on append. Pi's agent event
-# queue silently swallows EACCES, so the reply still goes out but the
-# JSONL write never happens \u2014 the failure mode that lost every write
-# after the privsep split. We don't use --uid because tigrisfs's
-# --setuid defaults to --uid, which would make tigrisfs itself drop
-# root privileges \u2014 and tigrisfs needs root for the FUSE mount and is
-# where the AWS creds live. Making files world-writable keeps tigrisfs
-# at root while letting pi write through the mount.
+# world-writable. Tigrisfs reports inodes as uid=0 by default; with
+# the default modes (0600 files, 0755 dirs) the unprivileged pi user
+# (uid 1001) gets EACCES on every write and even on mkdir under the
+# mount root. Verified empirically: removing these flags makes
+# `createSession` fail at `mkdirSync(/mnt/agent-state/<sessionId>)`
+# and the agent-server returns 500 on the very first message
+# (`create_session_failed` in the worker logs). `--uid=1001` is not
+# an alternative because tigrisfs's `--setuid` defaults to `--uid`,
+# which would make tigrisfs itself drop root privileges \u2014 and
+# tigrisfs needs root for the FUSE mount and is where the AWS creds
+# live. Making files world-writable keeps tigrisfs at root while
+# letting pi write through the mount.
 # `--fsync-on-close` makes every close() block until R2 confirms the
 # upload. Pi persists session entries via appendFileSync (open + write +
 # close), so without this flag the writes land in tigrisfs's in-memory
