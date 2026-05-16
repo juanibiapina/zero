@@ -13,6 +13,11 @@
  * substitutes the sentinel for the real key from worker `env` before
  * forwarding. Pi never sees the real key.
  *
+ * Per-user secrets (the Google OAuth access token used by `gws`) use
+ * the same sentinel machinery but a per-container override map
+ * pushed via `setOutboundHandler` in `refreshEnvVars`. See
+ * `secret-proxy.ts` for the mechanism.
+ *
  * Persistence: the container mounts an R2 prefix (`<clerkUserId>/`) at
  * `/mnt/agent-state` via tigrisfs and points pi at it. Credentials are
  * prefix-scoped temporary R2 credentials minted on every `fetch` call, so
@@ -37,16 +42,21 @@ import { Container } from "@cloudflare/containers";
 import { Bot } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
+import { getGoogleAccessToken } from "./google-token";
 import { fmtErr, log, logError } from "./log";
 import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
 import { lookupSessionRecord } from "./sessions";
 import type { Env } from "./types";
 
-// Secrets the container must never see in the clear. Their values are
-// replaced with `Z3R0-FAKE-<ENV_NAME>` sentinels in the container's env;
-// the catch-all `outbound` handler (below) swaps them back on the way out.
-const secretProxy = createSecretProxy(["ANTHROPIC_API_KEY"]);
+// Sentinels for everything pi must not see in the clear. The first
+// list is env-resolved (real value in worker `env`); the second is
+// runtime-resolved (real value pushed per-container via
+// `setOutboundHandler` in `refreshEnvVars`). See `secret-proxy.ts`.
+const secretProxy = createSecretProxy(
+  ["ANTHROPIC_API_KEY"],
+  ["GOOGLE_WORKSPACE_CLI_TOKEN"],
+);
 
 const ReplyBodySchema = z.object({
   sessionId: z.string().min(1),
@@ -130,19 +140,41 @@ export class AgentContainer extends Container<Env> {
       );
     }
 
-    const creds = await mintR2TempCreds({
-      bucket: this.env.R2_BUCKET_NAME,
-      accountId: this.env.R2_ACCOUNT_ID,
-      parentAccessKeyId: this.env.R2_PARENT_ACCESS_KEY_ID,
-      parentSecretAccessKey: this.env.R2_PARENT_SECRET_ACCESS_KEY,
-      scope: "object-read-write",
-      ttlSeconds: 3600,
-      prefixes: [`${clerkUserId}/`],
-    });
+    // R2 temp creds and the Google access token are independent fetches.
+    const [creds, googleToken] = await Promise.all([
+      mintR2TempCreds({
+        bucket: this.env.R2_BUCKET_NAME,
+        accountId: this.env.R2_ACCOUNT_ID,
+        parentAccessKeyId: this.env.R2_PARENT_ACCESS_KEY_ID,
+        parentSecretAccessKey: this.env.R2_PARENT_SECRET_ACCESS_KEY,
+        scope: "object-read-write",
+        ttlSeconds: 3600,
+        prefixes: [`${clerkUserId}/`],
+      }),
+      getGoogleAccessToken(this.env, clerkUserId),
+    ]);
+
+    // Push runtime-secret overrides to the substitute handler. The
+    // framework persists into DO storage and threads them into
+    // ContainerProxy props, where the handler reads them as
+    // `ctx.params.overrides`. Pushed on every fetch — simpler than
+    // diffing against the previous override set.
+    const overrides: Record<string, string> = {};
+    if (googleToken !== null) {
+      overrides.GOOGLE_WORKSPACE_CLI_TOKEN = googleToken;
+    }
+    await this.setOutboundHandler("substitute", { overrides });
+
+    // Inject every registered sentinel except those whose real value
+    // isn't available this call. With no real value to substitute, the
+    // sentinel would just reach the upstream and get rejected; omitting
+    // it lets the consumer (e.g. gws) exit with a clean auth error.
+    const sentinels = { ...secretProxy.fakes };
+    if (googleToken === null) delete sentinels.GOOGLE_WORKSPACE_CLI_TOKEN;
 
     this.envVars = {
       REPLY_URL: "http://zero.worker/reply",
-      ...secretProxy.fakes,
+      ...sentinels,
       CLERK_USER_ID: clerkUserId,
       R2_ACCOUNT_ID: this.env.R2_ACCOUNT_ID,
       R2_BUCKET_NAME: this.env.R2_BUCKET_NAME,
@@ -193,5 +225,10 @@ AgentContainer.outboundByHost = {
   },
 };
 
-// Catch-all: every other host goes through the secret-substitution proxy.
-AgentContainer.outbound = secretProxy.outbound;
+// Named registration so `setOutboundHandler('substitute', { overrides })`
+// in `refreshEnvVars` can target it. No `static outbound` fallback is
+// needed because `fetch()` awaits `refreshEnvVars()` (which awaits
+// `setOutboundHandler`) before calling `super.fetch()`, so the
+// container's first outbound always happens after the catch-all has
+// been set.
+AgentContainer.outboundHandlers = { substitute: secretProxy.outbound };

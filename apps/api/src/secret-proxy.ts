@@ -23,9 +23,21 @@
  * it into the real value is to be this catch-all handler running inside
  * the worker.
  *
- * The handler is wired onto the Container class as `static outbound` and
- * is the catch-all: anything in `static outboundByHost` (currently just
- * `zero.worker`) takes precedence and bypasses substitution.
+ * Two categories of registered secret:
+ *
+ *  - `envSecrets` — real value lives in worker `env`. Resolved on every
+ *    outbound. Used for app-wide secrets like `ANTHROPIC_API_KEY`.
+ *
+ *  - `runtimeSecrets` — real value is per-container and not in `env`
+ *    (e.g. a per-user Google OAuth access token fetched live from
+ *    Clerk). Pushed to the container's outbound config via
+ *    `Container.setOutboundHandler('substitute', { overrides })`, and
+ *    arrives in this handler as `ctx.params.overrides[name]`. The
+ *    handler must be registered as `static outboundHandlers.substitute`
+ *    so `setOutboundHandler` can find it by name.
+ *
+ * Anything in `static outboundByHost` (currently `zero.worker` and the
+ * R2 pass-through) takes precedence and bypasses substitution.
  */
 
 import type { OutboundHandler } from "@cloudflare/containers";
@@ -36,39 +48,82 @@ const SENTINEL_PREFIX = "Z3R0-FAKE-";
 
 const fakeFor = (envName: string): string => SENTINEL_PREFIX + envName;
 
+/**
+ * Params accepted by the substitute handler when registered as a named
+ * outbound handler. AgentContainer pushes the per-container override
+ * map via `setOutboundHandler('substitute', { overrides })`.
+ */
+export interface SubstituteParams {
+  /**
+   * Map of runtime-secret name → real value. Names must match those
+   * passed as `runtimeSecrets` to `createSecretProxy`.
+   */
+  overrides?: Record<string, string>;
+}
+
 export interface SecretProxy {
   /**
    * Sentinel values keyed by env-var name. Inject these into the
    * container's `envVars` so the in-container process sees the fake
-   * instead of the real secret.
+   * instead of the real secret. Includes entries for both env- and
+   * runtime-resolved secrets.
    */
   readonly fakes: Readonly<Record<string, string>>;
   /**
-   * Catch-all outbound handler. Wire onto the Container subclass as
-   * `static outbound = secretProxy.outbound`. Forwards every request
-   * after substituting registered fakes for their real env values.
+   * Catch-all outbound handler. Register on the Container subclass as a
+   * named handler so `setOutboundHandler('substitute', { overrides })`
+   * can target it:
+   *
+   *   static outboundHandlers = { substitute: secretProxy.outbound };
+   *
+   * The DO's `fetch` is expected to await `setOutboundHandler` before
+   * delegating to `super.fetch`, so there is no need to also wire it as
+   * `static outbound` — the named override is always set before the
+   * container makes any outbound request.
    */
-  readonly outbound: OutboundHandler<Env>;
+  readonly outbound: OutboundHandler<Env, SubstituteParams>;
 }
 
 export const createSecretProxy = (
-  envNames: readonly (keyof Env)[],
+  envSecrets: readonly (keyof Env)[],
+  runtimeSecrets: readonly string[] = [],
 ): SecretProxy => {
   const encoder = new TextEncoder();
   const fakes: Record<string, string> = {};
   const fakeBytesByName: Record<string, Uint8Array> = {};
-  for (const name of envNames) {
+  for (const name of [...envSecrets, ...runtimeSecrets]) {
     const fake = fakeFor(name);
     fakes[name] = fake;
     fakeBytesByName[name] = encoder.encode(fake);
   }
 
-  const outbound: OutboundHandler<Env> = async (req, env, ctx) => {
-    // Resolve real values from env now, at call time. Drop secrets whose
-    // env is missing so we never substitute an empty string into a request.
+  const outbound: OutboundHandler<Env, SubstituteParams> = async (
+    req,
+    env,
+    ctx,
+  ) => {
+    // Resolve real values for every registered secret. Drop secrets whose
+    // real value is missing/empty so we never substitute an empty string
+    // into a request — the unsubstituted sentinel reaches the upstream
+    // and gets rejected as a bad credential, which is the right signal.
     const pairs: SubstitutionPair[] = [];
-    for (const name of envNames) {
+
+    // env-resolved (app-wide)
+    for (const name of envSecrets) {
       const real = env[name];
+      if (typeof real !== "string" || real.length === 0) continue;
+      pairs.push({
+        fake: fakes[name],
+        fakeBytes: fakeBytesByName[name],
+        real,
+        realBytes: encoder.encode(real),
+      });
+    }
+
+    // runtime-resolved (per-container, pushed via ctx.params)
+    const overrides = ctx.params?.overrides ?? {};
+    for (const name of runtimeSecrets) {
+      const real = overrides[name];
       if (typeof real !== "string" || real.length === 0) continue;
       pairs.push({
         fake: fakes[name],

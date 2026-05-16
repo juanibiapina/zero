@@ -95,11 +95,14 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │  ├─ hosts @zero/agent-server + pi-coding-agent (Node 22)         │
 │  ├─ mounts R2 prefix <clerkUserId>/ at /mnt/agent-state          │
 │  │    via tigrisfs; pi writes JSONL session files there          │
-│  ├─ fetch() refreshes envVars on every call:                    │
-│  │    ANTHROPIC_API_KEY=Z3R0-FAKE-...   (sentinel, not real)     │
+│  ├─ fetch() refreshes envVars on every call:                     │
+│  │    ANTHROPIC_API_KEY=Z3R0-FAKE-... (env-resolved)             │
+│  │    GOOGLE_WORKSPACE_CLI_TOKEN=Z3R0-FAKE-... (runtime; opt-in) │
 │  │    REPLY_URL + R2 temp creds (1h)                             │
 │  ├─ outboundByHost["zero.worker"] = handleContainerReply         │
-│  └─ outbound = secretProxy.outbound  (catch-all substitution)   │
+│  └─ outboundHandlers.substitute = secretProxy.outbound           │
+│       (catch-all; per-container overrides via                    │
+│        setOutboundHandler('substitute', { overrides }))          │
 │                                                                  │
 │  pi-ai inside the container:                                     │
 │    POST https://api.anthropic.com/v1/messages                    │
@@ -236,10 +239,10 @@ never hand-encodes them.
 
 Inside the container, pi-coding-agent drives the conversation. Pi-ai
 talks directly to `https://api.anthropic.com/v1/messages` using its
-built-in `anthropic` provider; the API key is read from
-`process.env.ANTHROPIC_API_KEY`, which `AgentContainer` injects via
-`envVars` when starting the container. The model is
-`claude-sonnet-4-5-20250929` with thinking level `high`.
+built-in `anthropic` provider, reading `process.env.ANTHROPIC_API_KEY`
+— which is a sentinel that the worker's catch-all outbound handler
+swaps for the real key on the way out (see “Secret Proxying”). The
+model is `claude-sonnet-4-5-20250929` with thinking level `high`.
 
 When pi emits `agent_end`, the container POSTs the final assistant text
 to `http://zero.worker/reply`. That call stays on-host —
@@ -309,19 +312,33 @@ runtime) into the system trust store and exports `NODE_EXTRA_CA_CERTS`
 so both tigrisfs (Go AWS SDK) and node (undici) accept it. Without
 this, HTTPS bypasses the catch-all entirely.
 
-Today only `ANTHROPIC_API_KEY` is registered. The R2 temporary
-credentials follow a different pattern: they are consumed exclusively
-by tigrisfs at mount time, and the entrypoint shell scrubs them from
-the environment immediately afterwards. tigrisfs (running as root)
-keeps them cached in its own address space for the lifetime of the
-daemon, while node — and therefore pi — is execed under the
-unprivileged `pi` user via `setpriv`. Because `/proc/<pid>/environ` is
-mode `0400` owned by the process, pi cannot read tigrisfs's env to
-recover the credentials. The mount itself is published with
-`-o allow_other` (and `user_allow_other` in `/etc/fuse.conf`) so the
-non-root pi user can still read and write through it. This OS-level
-fix removes the only credential currently injected into pi's process
-and replaces substitution-on-egress with simple file permissions.
+Two categories of registered secret share the same substitution
+handler:
+
+- **env-resolved** — real value lives in worker `env`, resolved on
+  every outbound. Used for app-wide secrets like `ANTHROPIC_API_KEY`.
+- **runtime-resolved** — real value is per-container, pushed via
+  `Container.setOutboundHandler('substitute', { overrides })`. The
+  framework persists the override map into DO storage and threads it
+  through `ContainerProxy` props, where the handler reads it as
+  `ctx.params.overrides[name]`. Used for `GOOGLE_WORKSPACE_CLI_TOKEN`,
+  which is a per-user OAuth access token fetched live from Clerk in
+  `refreshEnvVars`. Pi sees the same constant sentinel in env; the
+  substitution swaps in the right token for that user on the way out.
+  When the user hasn't connected Google, the sentinel is omitted from
+  `envVars` entirely so `gws` exits with a clear auth error rather
+  than forwarding a sentinel nothing can substitute.
+
+A third secret class, **R2 temporary credentials**, follows a
+privilege-separation pattern instead of substitution: tigrisfs (root)
+consumes them at mount time, the entrypoint shell scrubs them, and
+node is execed under the unprivileged `pi` user via `setpriv`.
+`/proc/<pid>/environ` is mode `0400` owned by the process, so pi
+cannot recover them by reading tigrisfs's env. The mount is published
+with `-o allow_other` (and `user_allow_other` in `/etc/fuse.conf`) so
+the non-root pi user can still read and write through it. This
+OS-level fix replaces substitution-on-egress with simple file
+permissions for the one credential set tigrisfs needs in-process.
 
 ## Secrets
 
@@ -332,12 +349,21 @@ Stored in Doppler (`zero-api`):
 - `TELEGRAM_BOT_INFO` — JSON `getMe` result; lets grammY skip the per-request
   `getMe` call (see [`telegram-webhook.md`](telegram-webhook.md))
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
-- `ANTHROPIC_API_KEY` — injected into the container's env (`envVars`) so
-  pi-ai can call `api.anthropic.com` directly
+- `ANTHROPIC_API_KEY` — substituted on egress to `api.anthropic.com` by
+  the catch-all outbound handler; pi sees only a sentinel
 - `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PARENT_ACCESS_KEY_ID`,
   `R2_PARENT_SECRET_ACCESS_KEY` — used by `AgentContainer` to mint
   prefix-scoped R2 temp credentials for the per-user FUSE mount. See
   [`r2-mount.md`](r2-mount.md).
+
+Google Workspace access is **not** stored in Doppler. Each user opts in
+via the “Connect Google” button in the web UI (Clerk
+`createExternalAccount` with the Workspace scopes). The worker calls
+`users.getUserOauthAccessToken` per container request to fetch a fresh
+access token, pushes it to the substitute handler via
+`setOutboundHandler`, and injects the `GOOGLE_WORKSPACE_CLI_TOKEN`
+sentinel into the container. See
+[`google-workspace.md`](google-workspace.md).
 
 ## Dev Environment
 

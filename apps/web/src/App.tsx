@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react";
-import { ClerkProvider, SignIn, UserButton, useAuth } from "@clerk/clerk-react";
+import {
+  ClerkProvider,
+  SignIn,
+  UserButton,
+  useAuth,
+  useUser,
+} from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  GOOGLE_WORKSPACE_SCOPES,
+  missingScopes,
+} from "./google-scopes";
+
+// Clerk's createExternalAccount/reauthorize want a mutable string[];
+// the const-readonly array we expose lives in google-scopes.ts.
+const GOOGLE_SCOPES_MUTABLE: string[] = [...GOOGLE_WORKSPACE_SCOPES];
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
@@ -113,7 +127,112 @@ function AuthGate() {
     );
   }
 
-  return <TelegramIdForm />;
+  return (
+    <div className="space-y-6">
+      <TelegramIdForm />
+      <GoogleConnect />
+    </div>
+  );
+}
+
+function GoogleConnect() {
+  const { isLoaded, user } = useUser();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isLoaded || !user) return null;
+
+  // Clerk stores one ExternalAccountResource per provider.
+  const google = user.externalAccounts.find((a) => a.provider === "google");
+  const missing = google
+    ? missingScopes(google.approvedScopes, GOOGLE_WORKSPACE_SCOPES)
+    : [];
+
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Clerk hands back a VerificationResource with the consent URL to
+  // redirect the browser to; navigation completes the OAuth dance.
+  const redirectTo = (url: URL | null | undefined) => {
+    if (url) window.location.href = url.toString();
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-md space-y-3 px-6">
+      <h2 className="text-sm font-medium">Google Workspace</h2>
+      {!google ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Grant the bot access to your Gmail, Calendar, Drive, and Sheets.
+          </p>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                const result = await user.createExternalAccount({
+                  strategy: "oauth_google",
+                  additionalScopes: GOOGLE_SCOPES_MUTABLE,
+                  redirectUrl: window.location.origin,
+                });
+                redirectTo(result.verification?.externalVerificationRedirectURL);
+              })
+            }
+          >
+            {busy ? "Opening…" : "Connect Google"}
+          </Button>
+        </>
+      ) : missing.length > 0 ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Connected as {google.emailAddress}, but missing required scopes.
+          </p>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                const updated = await google.reauthorize({
+                  additionalScopes: GOOGLE_SCOPES_MUTABLE,
+                  redirectUrl: window.location.origin,
+                });
+                redirectTo(updated.verification?.externalVerificationRedirectURL);
+              })
+            }
+          >
+            {busy ? "Opening…" : "Grant required scopes"}
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Connected ✅ {google.emailAddress}
+          </p>
+          <Button
+            variant="link"
+            className="h-auto p-0 text-sm"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await google.destroy();
+                await user.reload();
+              })
+            }
+          >
+            Disconnect
+          </Button>
+        </>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
+  );
 }
 
 export default function App() {

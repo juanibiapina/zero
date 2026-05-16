@@ -35,6 +35,25 @@ RUN ARCH=$(uname -m) && \
     dpkg -i /tmp/tigrisfs.deb && \
     rm /tmp/tigrisfs.deb
 
+# Install the Google Workspace CLI (`gws`). Pinned by version + per-arch
+# SHA256. The musl-static build runs on debian without a libc dep. `gws`
+# reads its OAuth token from $GOOGLE_WORKSPACE_CLI_TOKEN, so no on-disk
+# credential file or login step is needed.
+ARG GWS_VERSION=0.22.5
+ARG GWS_SHA256_X86_64=4db473dde4b1ab872e4ff35d769b0d4af1f1a6441a605e79d5cf8ada9c87e920
+ARG GWS_SHA256_AARCH64=e700fe63524932b10ec2130b47ece90aa850e66005fe52ccfc4cf8767bf9919a
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then EXPECTED="${GWS_SHA256_X86_64}"; \
+    elif [ "$ARCH" = "aarch64" ]; then EXPECTED="${GWS_SHA256_AARCH64}"; \
+    else echo "unsupported arch: $ARCH" >&2 && exit 1; fi && \
+    TMPDIR=$(mktemp -d) && \
+    curl -fsSL "https://github.com/googleworkspace/cli/releases/download/v${GWS_VERSION}/google-workspace-cli-${ARCH}-unknown-linux-musl.tar.gz" \
+      -o "${TMPDIR}/gws.tar.gz" && \
+    echo "${EXPECTED}  ${TMPDIR}/gws.tar.gz" | sha256sum -c - && \
+    tar -xzf "${TMPDIR}/gws.tar.gz" -C "${TMPDIR}" && \
+    install -m 0755 "${TMPDIR}/gws" /usr/local/bin/gws && \
+    rm -rf "${TMPDIR}"
+
 WORKDIR /app
 
 # Install runtime deps. pnpm uses `workspace:*` in devDependencies, which
