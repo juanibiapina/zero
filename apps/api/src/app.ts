@@ -1,17 +1,6 @@
-/**
- * ============================================================================
- * HTTP API Application
- * ============================================================================
- *
- * Hono app. Provides:
- * - POST /api/webhooks/telegram (Telegram secret-token auth)
- * - GET/PUT /api/telegram-id    (Clerk auth)
- *
- * Middleware order matters: the webhook router is mounted *before* Clerk so
- * Telegram requests (which carry no Clerk JWT) aren't rejected; the
- * telegram-id router is mounted *after* Clerk + the auth guard so its
- * handlers always see a verified `userId`.
- */
+// Middleware order matters: the Telegram webhook is mounted before Clerk
+// (it carries no Clerk JWT); the user-settings routes are mounted after
+// Clerk + the auth guard so handlers always see a verified `userId`.
 
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { clerkMiddleware, getAuth } from "@hono/clerk-auth";
@@ -35,10 +24,8 @@ export const createApp = () => {
     })
   );
 
-  // Public: Telegram webhook (does its own secret-token auth).
   app.route("/", createTelegramWebhookRoute());
 
-  // Clerk auth + guard for everything that follows.
   app.use("/api/*", clerkMiddleware());
   app.use("/api/*", async (c, next) => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Hono context type mismatch with Clerk's expected Context type
@@ -50,7 +37,6 @@ export const createApp = () => {
     await next();
   });
 
-  // Authenticated routes.
   app.route("/", createUserSettingsRoutes());
 
   return app;

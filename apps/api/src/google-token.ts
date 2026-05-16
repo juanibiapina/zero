@@ -1,25 +1,8 @@
-/**
- * ============================================================================
- * Google OAuth Access Token Helper
- * ============================================================================
- *
- * Fetches a fresh Google OAuth access token for a Clerk user via Clerk's
- * Backend API (`users.getUserOauthAccessToken`). Clerk handles the
- * refresh-token dance — we never see the refresh token, just a
- * short-lived access token suitable for forwarding to the container as
- * `GOOGLE_WORKSPACE_CLI_TOKEN`.
- *
- * The Clerk client is constructed locally per call. Mirrors the
- * `mintR2TempCreds` style (free local operation, no shared singleton).
- *
- * Returns `null` when the user hasn't connected Google (Clerk returns
- * no tokens) or when the Clerk call throws (the throw is caught and
- * logged as `google_token_unavailable`). Never throws into the caller,
- * so a Clerk outage can't block container startup for users who don't
- * use Google at all. The caller then omits
- * `GOOGLE_WORKSPACE_CLI_TOKEN` from `envVars` entirely, and `gws`
- * inside the container exits with a clear "not authenticated" message.
- */
+// Fetch a fresh Google OAuth access token for a Clerk user via Clerk's
+// Backend API. Returns null on no token / Clerk error and never throws,
+// so a Clerk outage can't block container startup for users who haven't
+// connected Google. Caller is expected to omit the env var entirely on
+// null so `gws` exits with a clean auth error.
 
 import { createClerkClient } from "@clerk/backend";
 import { fmtErr, log } from "./log";

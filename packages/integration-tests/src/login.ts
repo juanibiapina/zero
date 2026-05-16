@@ -1,18 +1,10 @@
-/**
- * ============================================================================
- * Interactive Telegram Login
- * ============================================================================
- *
- * One-shot CLI: walks you through phone + SMS-code (+ 2FA password if set)
- * and prints a `TG_TEST_SESSION_STRING` to copy into Doppler. Run once
- * per test account, or whenever Telegram invalidates the session.
- *
- *   pnpm --filter @zero/integration-tests login
- *
- * Requires `TG_TEST_API_ID` and `TG_TEST_API_HASH` from the environment
- * (export them or run via `doppler run --project zero-tests --config dev
- * -- pnpm --filter @zero/integration-tests login`).
- */
+// One-shot CLI: walks through phone + SMS-code (+ 2FA) and prints a
+// TG_TEST_SESSION_STRING to copy into Doppler.
+//
+//   pnpm --filter @zero/integration-tests login
+//
+// Requires TG_TEST_API_ID and TG_TEST_API_HASH (Doppler zero-tests/dev).
+// See docs/integration-tests.md.
 
 import input from "input";
 import { TelegramClient } from "telegram";

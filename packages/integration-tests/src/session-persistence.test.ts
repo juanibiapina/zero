@@ -1,31 +1,16 @@
-/**
- * ============================================================================
- * Session Persistence Integration Test
- * ============================================================================
- *
- * Drives the deployed production worker through three turns in the same
- * forum topic:
- *
- *   1. Send a message mentioning the number `1`.        — any bot reply OK
- *   2. Send a message mentioning the number `2`.        — any bot reply OK
- *   3. *** Sleep > 5 minutes ***                        — container idles
- *      (Cloudflare Containers' `sleepAfter = 5 min` evicts the per-user
- *       container; pi's in-memory session map is lost.)
- *   4. Send a third message asking "what is the next number?".
- *      Assert the bot replies with `3`.
- *
- * The only way step 4 can succeed is if the container, woken cold by the
- * third message, resumed the prior conversation off the R2-mounted JSONL
- * via `SessionManager.continueRecent`. So a passing test proves both the
- * round-trip AND the persistence path.
- *
- * Pre-conditions are the same as before: TG_TEST_* env vars populated,
- * bot is a member of TG_TEST_CHAT_ID with topic TG_TEST_THREAD_ID, and
- * the test user's Telegram id is linked to a Clerk user in Zero's KV.
- *
- * Wall-clock: ~6.5 minutes when warm (sleep dominates). Cost: ~$0.01 of
- * Anthropic.
- */
+// Drives the deployed production worker through three turns:
+//
+//   1. "Remember 1."                   — any reply OK
+//   2. "Also remember 2."              — any reply OK
+//   3. Sleep > 5 min (sleepAfter)      — container idles, in-memory state lost
+//   4. "What's the next number?"       — expect exactly "3"
+//
+// Step 4 only passes if the cold-resumed container replayed the JSONL
+// off the R2 mount via `SessionManager.continueRecent`, so a green test
+// proves both round-trip and persistence.
+//
+// ~6.5 min wall clock (sleep dominates); ~$0.01 of Anthropic.
+// See docs/integration-tests.md for setup.
 
 import { afterAll, beforeAll, expect, it } from "vitest";
 
@@ -72,10 +57,8 @@ it("persists session context across container sleep", async () => {
   const reply2 = await waitForBotReply(reply1!.id, 90_000);
   expect(reply2, "no bot reply to turn 2").not.toBeNull();
 
-  // Wait out the container's `sleepAfter = 5 min` window so the per-user
-  // container is evicted before we send turn 3. The next message must
-  // wake a fresh container and the agent-server must resume the session
-  // off the R2 mount for the assertion below to pass.
+  // Wait out sleepAfter so turn 3 must wake a fresh container and resume
+  // off the R2 mount.
   const SLEEP_MS = 5 * 60_000 + 30_000;
   console.log(
     `[test] turn 2 acknowledged; sleeping ${SLEEP_MS / 1_000}s to trigger container idle eviction…`,
@@ -85,19 +68,18 @@ it("persists session context across container sleep", async () => {
   const sent3 = await sendTurn(
     `${tag} What is the next number in the sequence? Reply with only the single digit and nothing else. Do not use any tools.`,
   );
-  // 120s timeout: container cold start + FUSE mount + session resume + Anthropic round-trip.
+  // 120s: cold start + FUSE mount + resume + Anthropic round-trip.
   const reply3 = await waitForBotReply(reply2!.id, 120_000, "3");
   expect(reply3, "no reply containing '3' to turn 3").not.toBeNull();
 
-  // Strict: the bot must reply with just the digit (modulo trailing
-  // whitespace or a period). Anything chattier (e.g. "1, 2, 3" or "Three.")
-  // signals either prompt drift or session loss.
+  // Strict: just the digit (allow trailing period). Chattier replies
+  // ("1, 2, 3", "Three.") signal prompt drift or session loss.
   expect(
     reply3!.text.trim().replace(/\.$/, ""),
     `expected exactly "3", got: ${JSON.stringify(reply3!.text)}`,
   ).toBe("3");
 
-  // Cleanup on success only; failures leave the messages for inspection.
+  // Cleanup on success only; failures leave messages for inspection.
   await deleteMessages(client, env.chatId, [
     sent1.id,
     reply1!.id,

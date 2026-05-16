@@ -1,12 +1,5 @@
-/**
- * ============================================================================
- * Test Environment
- * ============================================================================
- *
- * All test config comes from environment variables, supplied by the
- * `bin/integration-test` wrapper via `doppler run --project zero-tests
- * --config dev`. Missing vars fail fast with a pointer back to Doppler.
- */
+// Test config from env; supplied by `bin/integration-test` (doppler run
+// --project zero-tests --config dev). Missing vars fail fast.
 
 export const requireEnv = (name: string): string => {
   const value = process.env[name];

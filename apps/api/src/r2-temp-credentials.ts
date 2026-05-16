@@ -1,26 +1,11 @@
-/**
- * ============================================================================
- * R2 Temporary Credentials
- * ============================================================================
- *
- * Mint short-lived, prefix-scoped R2 credentials by signing a JWT locally
- * with the parent R2 token's secret access key. No round trip to the
- * Cloudflare API is needed; the JWT *is* the session token (after a small
- * encoding step) and R2 verifies the signature on each request.
- *
- * The minted credential carries:
- *   - the parent token's access key id (reused as-is)
- *   - a derived secret access key (SHA-256 hex digest of the signed JWT)
- *   - a session token (`base64("jwt/" + signed JWT)`)
- *
- * Reference:
- *   https://developers.cloudflare.com/r2/api/s3/temporary-credentials/
- *   https://developers.cloudflare.com/r2/examples/authenticate-r2-temp-credentials/
- *
- * The container's tigrisfs adapter picks up these credentials from
- * AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN. Standard
- * AWS SDK Go (which tigrisfs uses) honours session tokens transparently.
- */
+// Mint short-lived, prefix-scoped R2 credentials by signing a JWT locally
+// with the parent token's secret access key — no Cloudflare API call
+// needed. The signed JWT *is* the session token after a small encoding
+// step; R2 verifies the signature on every request.
+//
+// References:
+//   https://developers.cloudflare.com/r2/api/s3/temporary-credentials/
+//   https://developers.cloudflare.com/r2/examples/authenticate-r2-temp-credentials/
 
 import { SignJWT } from "jose";
 

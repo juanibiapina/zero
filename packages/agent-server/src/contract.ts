@@ -1,22 +1,9 @@
-/**
- * ============================================================================
- * agent-server contract
- * ============================================================================
- *
- * The HTTP shape of the agent-server, defined once. Both the server (which
- * mounts these routes on an OpenAPIHono app) and the worker-side client
- * (which derives a typed `hc` client from the app's TS type) refer back to
- * this file for schemas; the URL grammar and method names live entirely
- * in the route definitions below and are never restated by hand.
- *
- * Pure data — no Node, Cloudflare, or filesystem imports. Importable from
- * anywhere.
- */
+// The HTTP shape of the agent-server, defined once and consumed by both
+// `app.ts` (server) and the worker's `agent-client.ts` (client). Pure
+// data — no Node, Cloudflare, or filesystem imports.
 
 import { createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-
-// ── Schemas ─────────────────────────────────────────────────────────────
 
 export const SessionCreatedSchema = z.object({
   sessionId: z.string().min(1),
@@ -33,8 +20,6 @@ export const SendMessageBodySchema = z.object({
 export const ErrorSchema = z.object({
   error: z.string(),
 });
-
-// ── Routes ──────────────────────────────────────────────────────────────
 
 export const createSessionRoute = createRoute({
   method: "post",

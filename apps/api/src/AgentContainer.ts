@@ -1,42 +1,6 @@
-/**
- * ============================================================================
- * AgentContainer
- * ============================================================================
- *
- * Cloudflare Container hosting `@zero/agent-server`. One container per Clerk
- * user (selected with `getByName(clerkUserId)`), which idles after 5 minutes
- * of inactivity and frees its slot for other users.
- *
- * Pi-ai inside the container talks to api.anthropic.com using a sentinel
- * `ANTHROPIC_API_KEY` (see `secret-proxy.ts`). The catch-all `outbound`
- * handler intercepts every container egress except `zero.worker` and
- * substitutes the sentinel for the real key from worker `env` before
- * forwarding. Pi never sees the real key.
- *
- * Per-user secrets (the Google OAuth access token used by `gws`) use
- * the same sentinel machinery but a per-container override map
- * pushed via `setOutboundHandler` in `refreshEnvVars`. See
- * `secret-proxy.ts` for the mechanism.
- *
- * Persistence: the container mounts an R2 prefix (`<clerkUserId>/`) at
- * `/mnt/agent-state` via tigrisfs and points pi at it. Credentials are
- * prefix-scoped temporary R2 credentials minted on every `fetch` call, so
- * the container can never see another user's data even at the S3 API
- * level. The temp-creds TTL is 1h, sleepAfter is 5m — plenty of headroom
- * across container sleep/wake cycles. We re-mint on every call instead of
- * on a timer because local JWT signing is essentially free (no API round
- * trip) and re-doing it ensures fresh creds on every container restart.
- *
- * Outbound contract:
- *
- *   The container POSTs replies to `http://zero.worker/reply`. That request
- *   never leaves the machine — `outboundByHost["zero.worker"]` (below)
- *   intercepts it and runs the handler inside the Workers runtime, where
- *   we have the KV binding and the Telegram bot token.
- *
- *   The Worker entrypoint must `export { ContainerProxy }` from
- *   `@cloudflare/containers` for this interception to work; see `index.ts`.
- */
+// Per-user Cloudflare Container hosting `@zero/agent-server`.
+// Architecture, secret proxying, and the R2/Telegram outbound contract are
+// documented in docs/design.md and docs/framework.md.
 
 import { Container } from "@cloudflare/containers";
 import { Bot } from "grammy";
@@ -49,10 +13,6 @@ import { createSecretProxy } from "./secret-proxy";
 import { lookupSessionRecord } from "./sessions";
 import type { Env } from "./types";
 
-// Sentinels for everything pi must not see in the clear. The first
-// list is env-resolved (real value in worker `env`); the second is
-// runtime-resolved (real value pushed per-container via
-// `setOutboundHandler` in `refreshEnvVars`). See `secret-proxy.ts`.
 const secretProxy = createSecretProxy(
   ["ANTHROPIC_API_KEY"],
   ["GOOGLE_WORKSPACE_CLI_TOKEN"],
@@ -63,10 +23,6 @@ const ReplyBodySchema = z.object({
   text: z.string().min(1),
 });
 
-/**
- * Handle a reply call from the container. Looks up the Telegram coordinates
- * for the session and sends the message back to the originating topic.
- */
 const handleContainerReply = async (
   req: Request,
   env: Env,
@@ -107,17 +63,14 @@ const handleContainerReply = async (
   return new Response(null, { status: 204 });
 };
 
-/** Hardcoded mount point inside the container. */
 const AGENT_STATE_DIR = "/mnt/agent-state";
 
 export class AgentContainer extends Container<Env> {
   defaultPort = 8080;
   sleepAfter = "5m";
 
-  // Without this, the `outbound` catch-all only intercepts HTTP. Pi's call
-  // to https://api.anthropic.com would bypass substitution entirely. With
-  // it on, every HTTPS request is MITM'd via Cloudflare's container CA;
-  // the entrypoint script installs that CA into the trust store.
+  // Required so the catch-all `outbound` handler also intercepts HTTPS
+  // (entrypoint installs Cloudflare's MITM CA into the trust store).
   override interceptHttps = true;
 
   override async fetch(request: Request): Promise<Response> {
@@ -125,13 +78,9 @@ export class AgentContainer extends Container<Env> {
     return super.fetch(request);
   }
 
-  /**
-   * Re-mint R2 temp creds and rebuild `this.envVars`. Called on every
-   * incoming worker call. The Container base class only restarts the
-   * underlying container process when it isn't already running, so a
-   * live container keeps its existing env (and its existing tigrisfs
-   * mount); the next cold start picks up the fresh values.
-   */
+  // Re-mint R2 temp creds and rebuild envVars on every call. A live
+  // container keeps its existing env; the next cold start picks up the
+  // refreshed values.
   private async refreshEnvVars(): Promise<void> {
     const clerkUserId = this.ctx.id.name;
     if (!clerkUserId) {
@@ -140,7 +89,6 @@ export class AgentContainer extends Container<Env> {
       );
     }
 
-    // R2 temp creds and the Google access token are independent fetches.
     const [creds, googleToken] = await Promise.all([
       mintR2TempCreds({
         bucket: this.env.R2_BUCKET_NAME,
@@ -154,21 +102,17 @@ export class AgentContainer extends Container<Env> {
       getGoogleAccessToken(this.env, clerkUserId),
     ]);
 
-    // Push runtime-secret overrides to the substitute handler. The
-    // framework persists into DO storage and threads them into
-    // ContainerProxy props, where the handler reads them as
-    // `ctx.params.overrides`. Pushed on every fetch — simpler than
-    // diffing against the previous override set.
+    // Push runtime-secret overrides to the substitute handler. Pushed on
+    // every fetch; simpler than diffing.
     const overrides: Record<string, string> = {};
     if (googleToken !== null) {
       overrides.GOOGLE_WORKSPACE_CLI_TOKEN = googleToken;
     }
     await this.setOutboundHandler("substitute", { overrides });
 
-    // Inject every registered sentinel except those whose real value
-    // isn't available this call. With no real value to substitute, the
-    // sentinel would just reach the upstream and get rejected; omitting
-    // it lets the consumer (e.g. gws) exit with a clean auth error.
+    // Omit sentinels whose real value isn't available this call so the
+    // consumer (e.g. gws) exits with a clean auth error instead of
+    // forwarding an unsubstituted sentinel upstream.
     const sentinels = { ...secretProxy.fakes };
     if (googleToken === null) delete sentinels.GOOGLE_WORKSPACE_CLI_TOKEN;
 
@@ -190,18 +134,12 @@ export class AgentContainer extends Container<Env> {
 
 AgentContainer.outboundByHost = {
   "zero.worker": (req, env) => handleContainerReply(req, env),
-  // R2 traffic carries no registered secrets; skip the catch-all's body
-  // buffering and substitution scan and just forward. Still runs in the
-  // worker (interceptHttps='*' when catch-all is active), but cheap.
-  // R2 PUT/POST bodies must be sent with a fixed Content-Length and the
-  // exact bytes the AWS SigV4 signature was computed over. Passing the
-  // container's Request straight through Workers fetch leaves the body
-  // as a stream (no Content-Length → R2 returns 411) and Workers can
-  // also re-frame the body in a way that invalidates the SigV4 hash
-  // (→ R2 returns 403). Buffer the body, then send a fresh Request with
-  // the original method/headers and a Uint8Array body — same pattern
-  // the secret-proxy uses for Anthropic POSTs. log() is kept so a
-  // regression here is visible in `wrangler tail`.
+  // R2 traffic carries no registered secrets, but still runs through the
+  // worker because interceptHttps='*' when the catch-all is active. Must
+  // buffer the body and rebuild the Request: streamed bodies lose their
+  // Content-Length (→ R2 411) and can be re-framed in a way that breaks
+  // the SigV4 hash (→ R2 403). log() is kept so a regression is visible
+  // in `wrangler tail`.
   "*.r2.cloudflarestorage.com": async (req) => {
     const url = req.url;
     const method = req.method;
@@ -226,9 +164,5 @@ AgentContainer.outboundByHost = {
 };
 
 // Named registration so `setOutboundHandler('substitute', { overrides })`
-// in `refreshEnvVars` can target it. No `static outbound` fallback is
-// needed because `fetch()` awaits `refreshEnvVars()` (which awaits
-// `setOutboundHandler`) before calling `super.fetch()`, so the
-// container's first outbound always happens after the catch-all has
-// been set.
+// in `refreshEnvVars` can target it.
 AgentContainer.outboundHandlers = { substitute: secretProxy.outbound };

@@ -13,8 +13,7 @@ import {
   missingScopes,
 } from "./google-scopes";
 
-// Clerk's createExternalAccount/reauthorize want a mutable string[];
-// the const-readonly array we expose lives in google-scopes.ts.
+// Clerk's createExternalAccount/reauthorize want a mutable string[].
 const GOOGLE_SCOPES_MUTABLE: string[] = [...GOOGLE_WORKSPACE_SCOPES];
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
@@ -142,7 +141,6 @@ function GoogleConnect() {
 
   if (!isLoaded || !user) return null;
 
-  // Clerk stores one ExternalAccountResource per provider.
   const google = user.externalAccounts.find((a) => a.provider === "google");
   const missing = google
     ? missingScopes(google.approvedScopes, GOOGLE_WORKSPACE_SCOPES)
@@ -160,8 +158,7 @@ function GoogleConnect() {
     }
   };
 
-  // Clerk hands back a VerificationResource with the consent URL to
-  // redirect the browser to; navigation completes the OAuth dance.
+  // Navigate to Clerk's consent URL to complete the OAuth flow.
   const redirectTo = (url: URL | null | undefined) => {
     if (url) window.location.href = url.toString();
   };

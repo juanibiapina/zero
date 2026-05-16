@@ -1,22 +1,11 @@
-/**
- * ============================================================================
- * Structured Logging
- * ============================================================================
- *
- * Every log line is a single JSON object on stdout/stderr. Cloudflare's
- * Workers Logs indexer auto-extracts the fields, so the dashboard can
- * filter on e.g. `service`, `msg`, `clerk_user_id`, `tool_name` without
- * grepping a message string.
- *
- * Conventions:
- *   - snake_case field names
- *   - every log carries `service` (constant) and `msg` (event name)
- *   - failure paths use `logError` (Cloudflare maps console.error -> level=error)
- *   - `Error` instances must be passed through `fmtErr()` because the
- *     indexer serialises raw Error objects to `{}`
- *     (see github.com/cloudflare/workers-sdk/issues/10513)
- *   - no message content, no tool results, no request bodies in fields
- */
+// One JSON object per line; Cloudflare Workers Logs auto-extracts fields.
+// Conventions:
+//   - snake_case field names
+//   - every log carries `service` and `msg`
+//   - failure paths use `logError` (mapped to level=error)
+//   - wrap `Error` instances with `fmtErr()` (workers-sdk#10513 serialises
+//     raw Error objects to `{}`)
+//   - no message content, tool results, or request bodies in fields
 
 const SERVICE = "worker";
 

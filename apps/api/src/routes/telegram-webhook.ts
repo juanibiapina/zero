@@ -1,40 +1,16 @@
-/**
- * ============================================================================
- * Telegram Webhook Route
- * ============================================================================
- *
- * POST /api/webhooks/telegram — public route.
- *
- * The route delegates to grammY's `webhookCallback` ("hono" adapter), which
- * validates the X-Telegram-Bot-Api-Secret-Token header against
- * TELEGRAM_WEBHOOK_SECRET, parses the body as a Telegram `Update`, and
- * dispatches to bot middleware.
- *
- * We only act on **forum topic messages** (supergroup messages with
- * `message_thread_id`). Everything else — DMs, channel posts, edits,
- * callbacks — is dropped here. The web app pairs a Clerk user with a
- * Telegram user id; that user is expected to talk to the bot from inside
- * topics.
- *
- * Flow for an accepted message:
- *   1. grammY validates the secret and parses the update.
- *   2. We schedule `processTopicMessage` via `executionCtx.waitUntil` and
- *      return 200 immediately.
- *   3. Background:
- *        - KV `tg:{telegramId}` → clerkUserId  (drop unknown)
- *        - `ensureSession`: lookup-or-create the topic↔session linkage
- *          (see `sessions.ts`); on miss, asks the container for a fresh
- *          session via the typed `agent-client`.
- *        - `sendMessage` posts the text to the container session.
- *      Errors are logged and dropped. Telegram won't retry because the 200
- *      has already gone out.
- *
- * Durability gap: a worker crash inside `waitUntil` silently drops the
- * update. If the container has lost its in-memory session set (e.g. after
- * an idle eviction), `sendMessage` returns `{ kind: "stale" }`; we drop
- * the stale KV entries, create a fresh session, and retry once. The
- * user sees a new conversation start; we don't notify them.
- */
+// POST /api/webhooks/telegram — public route.
+//
+// Accepts forum topic messages only; everything else (DMs, edits,
+// channel posts) is dropped. grammY's `webhookCallback` validates the
+// X-Telegram-Bot-Api-Secret-Token header. The bot middleware schedules
+// `processTopicMessage` via `executionCtx.waitUntil` and the route
+// returns 200 immediately. Background failures are logged and dropped.
+//
+// Self-heal: if `sendMessage` returns `stale` (the container lost its
+// in-memory session map), we drop the stale KV entries and create a
+// fresh session once. User sees a new conversation start; no notice.
+//
+// See docs/design.md § Routes for the full pipeline.
 
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Bot, webhookCallback } from "grammy";
@@ -99,11 +75,7 @@ export const createTelegramWebhookRoute = () => {
   return router;
 };
 
-// ── Keys ─────────────────────────────────────────────────────────────────
-
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
-
-// ── Pipeline ─────────────────────────────────────────────────────────────
 
 const processTopicMessage = async (
   topic: TopicMessage,
@@ -145,13 +117,8 @@ const processTopicMessage = async (
   });
 };
 
-/**
- * Resolve or create a session for this user's topic. On miss we ask the
- * container for a fresh sessionId via the typed `agent-client` and
- * persist the linkage in KV via `recordSession`. Returns null if the
- * container failed to create a session (logged here so the failure is
- * visible — a thrown error inside `waitUntil` would be invisible).
- */
+// Resolve or create a session for this user's topic. Returns null on
+// container error (logged here so a `waitUntil` throw stays visible).
 const ensureSession = async (
   stub: AgentStub,
   env: Env,

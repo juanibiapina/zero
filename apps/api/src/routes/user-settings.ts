@@ -1,15 +1,8 @@
-/**
- * ============================================================================
- * User Settings Routes
- * ============================================================================
- *
- * Clerk-authed endpoints for the signed-in user's settings. Today the only
- * setting is the Telegram id; more will be added here later.
- *
- * Storage (KV):
- *   clerk:{clerkUserId} → telegramId   (forward lookup for the web UI)
- *   tg:{telegramId}     → clerkUserId  (reverse lookup, read by the webhook)
- */
+// Clerk-authed routes for the signed-in user's settings.
+//
+// KV schema:
+//   clerk:{clerkUserId} → telegramId   (forward, read by the web UI)
+//   tg:{telegramId}     → clerkUserId  (reverse, read by the webhook)
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
@@ -19,8 +12,6 @@ type Variables = {
   userId: string;
 };
 
-// ── Schemas ──────────────────────────────────────────────────────────────
-
 const TelegramIdSchema = z.object({
   telegramId: z.string().nullable(),
 });
@@ -29,17 +20,11 @@ const SetTelegramIdSchema = z.object({
   telegramId: z.string().trim().min(1).max(64).nullable(),
 });
 
-// ── Keys ─────────────────────────────────────────────────────────────────
-
 const clerkKey = (clerkUserId: string) => `clerk:${clerkUserId}`;
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
-// ── Router ───────────────────────────────────────────────────────────────
-
 export const createUserSettingsRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
-
-  // ── GET /api/telegram-id ──────────────────────────────────────────────
 
   const getRoute = createRoute({
     method: "get",
@@ -59,8 +44,6 @@ export const createUserSettingsRoutes = () => {
     const telegramId = await c.env.KV.get(clerkKey(clerkUserId));
     return c.json({ telegramId }, 200);
   });
-
-  // ── PUT /api/telegram-id ──────────────────────────────────────────────
 
   const putRoute = createRoute({
     method: "put",

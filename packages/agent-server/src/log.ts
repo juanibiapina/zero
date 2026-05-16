@@ -1,22 +1,8 @@
-/**
- * ============================================================================
- * Structured Logging (agent-server)
- * ============================================================================
- *
- * Every log line is a single JSON object on stdout/stderr. The Cloudflare
- * container forwards stdout into the same Workers Logs index that the
- * worker writes to, so the dashboard can filter on `service`, `msg`,
- * `tool_name`, etc. directly.
- *
- * Conventions:
- *   - snake_case field names
- *   - every log carries `service` (constant) and `msg` (event name)
- *   - failure paths use `logError` (Cloudflare maps console.error -> level=error)
- *   - `Error` instances must be passed through `fmtErr()` because the
- *     indexer serialises raw Error objects to `{}`
- *     (see github.com/cloudflare/workers-sdk/issues/10513)
- *   - no message content, no tool results, no request bodies in fields
- */
+// One JSON object per line; container stdout is forwarded into the same
+// Workers Logs index the worker writes to. Conventions match
+// apps/api/src/log.ts: snake_case fields, `service`+`msg` on every line,
+// `logError` for failures, wrap Error instances with `fmtErr()`
+// (workers-sdk#10513), no content/results/bodies as fields.
 
 const SERVICE = "agent-server";
 

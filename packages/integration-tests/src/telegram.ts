@@ -1,13 +1,5 @@
-/**
- * ============================================================================
- * Telegram MTProto Helpers
- * ============================================================================
- *
- * Thin wrappers around gramjs (`telegram` package) used by both the
- * round-trip test and the interactive `login` script. All identifiers
- * (chat id, thread id, bot username) come from env; this module owns no
- * config of its own.
- */
+// Thin gramjs (MTProto) wrappers shared by the integration test and the
+// interactive `login` script. All identifiers come from env.
 
 import bigInt from "big-integer";
 import { TelegramClient } from "telegram";
@@ -49,12 +41,8 @@ export interface SentMessage {
   date: number;
 }
 
-/**
- * Send a message into a forum-topic thread. In gramjs, setting `replyTo`
- * to the topic header message id (which equals the `message_thread_id`
- * the Telegram Bot API surfaces) makes the new message land inside that
- * topic.
- */
+// Send into a forum topic by setting `replyTo` to the topic header id
+// (== Bot API `message_thread_id`).
 export const sendToTopic = async (
   client: TelegramClient,
   chatId: string,
@@ -85,13 +73,9 @@ export interface ReceivedMessage {
   text: string;
 }
 
-/**
- * Poll the chat for the next message from the bot with id greater than
- * `sinceMessageId`. When `needle` is set, the bot's text must contain it.
- * When `topicThreadId` is set, the search is scoped to that forum-topic
- * thread (the underlying call uses `messages.GetReplies`, which Telegram
- * uses to back forum-topic threads).
- */
+// Poll until the bot posts a message with id > sinceMessageId. When set,
+// `needle` must appear in the text and `topicThreadId` scopes the search
+// to that forum-topic thread (uses messages.GetReplies under the hood).
 export const pollForBotReply = async (
   client: TelegramClient,
   opts: PollOptions,

@@ -1,33 +1,13 @@
-/**
- * ============================================================================
- * session-bridge
- * ============================================================================
- *
- * Wraps pi (@earendil-works/pi-coding-agent) per logical session id.
- *
- * Each session is a directory under `stateDir` named by our (opaque)
- * sessionId. Pi writes its JSONL session file inside that dir; on resume
- * we hand the same dir back to `SessionManager.continueRecent` and pi
- * picks up where it left off. The directory's existence is the only
- * persisted index — no separate sidecar files.
- *
- * Pi resolves the API key from `process.env.ANTHROPIC_API_KEY`, which the
- * container DO injects via `envVars`.
- *
- * Durability: per-write only, delegated to tigrisfs `--fsync-on-close`
- * (set in entrypoint.sh). Pi persists each session entry via
- * `appendFileSync` (open + write + close); with that flag the close()
- * blocks until R2 confirms the upload, so every acknowledged turn is
- * durable before pi proceeds. SIGTERM doesn't trigger any extra
- * shutdown work here — in-flight prompts that haven't yet produced a
- * reply are dropped (no Telegram reply), but the session JSONL on R2
- * stays consistent.
- *
- * Logging is deliberately sparse: prompt-in / tool-in-flight / reply-out
- * with byte counts only. Tool results and message content are never
- * logged so user messages, model replies, file contents, and shell
- * output stay out of the container's `Logs` view.
- */
+// Wraps pi (@earendil-works/pi-coding-agent) per logical session id.
+//
+// Each session is a directory under `stateDir` named by the opaque
+// sessionId. Pi writes its JSONL session file there; on resume we hand
+// the same dir back to `SessionManager.continueRecent`. Directory
+// existence is the only persisted index — no sidecar files.
+//
+// Durability is per-write via tigrisfs `--fsync-on-close` (entrypoint.sh).
+// Logging is sparse on purpose: no user messages, model replies, file
+// contents, or shell output ever appear in fields.
 
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -73,14 +53,8 @@ const extractAssistantText = (msg: AgentMessageLike | undefined): string => {
     .trim();
 };
 
-/**
- * Log only what's needed to trace a request and diagnose failures.
- *
- * Kept: tool_start / tool_end (name + error flag), stream errors,
- * agent_end (count only). Skipped: every per-message and per-stream-chunk
- * event — they fire dozens of times per turn and add nothing useful in
- * production. Tool results and message bodies are never logged.
- */
+// Trace-level events only: tool boundaries, stream errors, and an
+// agent_end counter. Per-message and per-chunk events are dropped.
 const logEvent = (
   sessionId: string,
   event: AgentSessionEvent,
@@ -134,10 +108,7 @@ export type ReplyFn = (sessionId: string, text: string) => Promise<void>;
 
 export interface SessionBridgeOptions {
   cwd: string;
-  /**
-   * Directory where each session is stored as a subdirectory named by its
-   * (opaque) sessionId. Must be writable.
-   */
+  /** Parent dir; each session becomes a subdir named by sessionId. */
   stateDir: string;
 }
 
@@ -203,9 +174,7 @@ export const createSessionBridge = (
         .reverse()
         .find((m) => m.role === "assistant");
 
-      // Prefer streamed text. Fall back to the final assistant message's
-      // text blocks (covers cases where streaming finished but accumulator
-      // missed something).
+      // Prefer streamed text; fall back to assistant message text blocks.
       let text = accumulated;
       let source = "stream";
       if (text.length === 0) {
@@ -239,10 +208,7 @@ export const createSessionBridge = (
     sessions.set(sessionId, state);
   };
 
-  /**
-   * Resume a session from disk. Returns the state on success, undefined if
-   * the on-disk directory is missing or empty (i.e. nothing to resume).
-   */
+  // Resume a session from disk; undefined if the directory is missing.
   const resumeSession = async (
     sessionId: string,
   ): Promise<SessionState | undefined> => {
