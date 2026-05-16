@@ -40,6 +40,7 @@ import { z } from "zod";
 import { fmtErr, log, logError } from "./log";
 import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
+import { lookupSessionRecord } from "./sessions";
 import type { Env } from "./types";
 
 // Secrets the container must never see in the clear. Their values are
@@ -50,12 +51,6 @@ const secretProxy = createSecretProxy(["ANTHROPIC_API_KEY"]);
 const ReplyBodySchema = z.object({
   sessionId: z.string().min(1),
   text: z.string().min(1),
-});
-
-const SessionRecordSchema = z.object({
-  clerkUserId: z.string(),
-  chatId: z.number(),
-  messageThreadId: z.number(),
 });
 
 /**
@@ -78,21 +73,19 @@ const handleContainerReply = async (
   }
   const { sessionId, text } = parsed.data;
 
-  const raw = await env.KV.get(`session:${sessionId}`);
-  if (!raw) {
-    log("reply_unknown_session", { session_id: sessionId });
-    return new Response("unknown session", { status: 404 });
-  }
-
-  let record: z.infer<typeof SessionRecordSchema>;
+  let record;
   try {
-    record = SessionRecordSchema.parse(JSON.parse(raw));
+    record = await lookupSessionRecord(env, sessionId);
   } catch (err) {
     logError("corrupt_session_record", {
       session_id: sessionId,
       error: fmtErr(err),
     });
     return new Response("corrupt session", { status: 500 });
+  }
+  if (!record) {
+    log("reply_unknown_session", { session_id: sessionId });
+    return new Response("unknown session", { status: 404 });
   }
 
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;

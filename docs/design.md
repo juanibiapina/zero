@@ -157,8 +157,14 @@ All non-session state is in Workers KV.
 |----------------------------------------------|----------------------------------------------------|---------------------------------------|--------------------------------------------------|
 | `clerk:{clerkUserId}`                        | `telegramId`                                       | `PUT /api/telegram-id`                | `GET /api/telegram-id`                           |
 | `tg:{telegramId}`                            | `clerkUserId`                                      | `PUT /api/telegram-id`                | webhook (route messages)                         |
-| `topic:{clerkUserId}:{chatId}:{threadId}`    | `sessionId`                                        | webhook (on first message in a topic) | webhook (every message)                          |
-| `session:{sessionId}`                        | `{ clerkUserId, chatId, messageThreadId }` JSON    | webhook (on session create)           | container outbound handler (for sending replies) |
+| `topic:{clerkUserId}:{chatId}:{threadId}`    | `sessionId`                                        | `sessions.recordSession`              | `sessions.lookupSessionId`                       |
+| `session:{sessionId}`                        | `{ clerkUserId, chatId, messageThreadId }` JSON    | `sessions.recordSession`              | `sessions.lookupSessionRecord`                   |
+
+The `topic:` and `session:` pair is managed as a unit by
+`apps/api/src/sessions.ts` — it owns the key formats, the record
+schema, and the "create both, delete both" invariant. Both the webhook
+route and the container outbound reply handler call into it instead of
+touching the keys directly.
 
 KV doesn't support reverse lookup, so we keep both directions of each
 relationship as explicit entries. If the container has lost its

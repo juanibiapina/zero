@@ -168,5 +168,9 @@ All persistent state is in Workers KV:
 |---|---|---|---|
 | `clerk:{clerkUserId}` | `telegramId` | `PUT /api/telegram-id` | `GET /api/telegram-id` |
 | `tg:{telegramId}` | `clerkUserId` | `PUT /api/telegram-id` | webhook |
-| `topic:{clerkUserId}:{chatId}:{threadId}` | `sessionId` | webhook (on session create) | webhook |
-| `session:{sessionId}` | `{ clerkUserId, chatId, messageThreadId }` JSON | webhook (on session create) | `outboundByHost["zero.worker"]` |
+| `topic:{clerkUserId}:{chatId}:{threadId}` | `sessionId` | `sessions.recordSession` | `sessions.lookupSessionId` |
+| `session:{sessionId}` | `{ clerkUserId, chatId, messageThreadId }` JSON | `sessions.recordSession` | `sessions.lookupSessionRecord` |
+
+The `topic:` and `session:` pair is managed as a unit by
+`apps/api/src/sessions.ts`; the webhook route and the container outbound
+reply handler both go through it instead of touching the keys directly.

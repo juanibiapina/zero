@@ -42,6 +42,12 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { Bot, webhookCallback } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { log, logError } from "../log";
+import {
+  forgetSession,
+  lookupSessionId,
+  recordSession,
+  type SessionRecord,
+} from "../sessions";
 import type { Env } from "../types";
 
 interface TopicMessage {
@@ -94,15 +100,6 @@ export const createTelegramWebhookRoute = () => {
 
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
-const topicKey = (
-  clerkUserId: string,
-  chatId: number,
-  messageThreadId: number,
-) =>
-  `topic:${clerkUserId}:${chatId.toString()}:${messageThreadId.toString()}`;
-
-const sessionKey = (sessionId: string) => `session:${sessionId}`;
-
 // ── Pipeline ─────────────────────────────────────────────────────────────
 
 const processTopicMessage = async (
@@ -125,7 +122,7 @@ const processTopicMessage = async (
       session_id: sessionId,
       clerk_user_id: clerkUserId,
     });
-    await resetSession(env, clerkUserId, topic, sessionId);
+    await forgetSession(env, sessionId);
     sessionId = await ensureSession(stub, env, clerkUserId, topic);
     res = await postMessage(stub, sessionId, topic.text);
   }
@@ -160,25 +157,9 @@ const postMessage = (
   );
 
 /**
- * Drop both KV entries that point at a session the container no longer
- * knows about. The next `ensureSession` call will create a fresh one.
- */
-const resetSession = async (
-  env: Env,
-  clerkUserId: string,
-  topic: TopicMessage,
-  staleSessionId: string,
-): Promise<void> => {
-  await Promise.all([
-    env.KV.delete(topicKey(clerkUserId, topic.chatId, topic.messageThreadId)),
-    env.KV.delete(sessionKey(staleSessionId)),
-  ]);
-};
-
-/**
  * Resolve or create a session for this user's topic. On miss we ask the
- * container for a fresh sessionId and write both forward and reverse KV
- * mappings before returning.
+ * container for a fresh sessionId and persist the linkage in KV via
+ * `recordSession` (which writes both forward and reverse entries).
  */
 const ensureSession = async (
   stub: { fetch: (req: Request) => Promise<Response> },
@@ -186,8 +167,12 @@ const ensureSession = async (
   clerkUserId: string,
   topic: TopicMessage,
 ): Promise<string> => {
-  const key = topicKey(clerkUserId, topic.chatId, topic.messageThreadId);
-  const existing = await env.KV.get(key);
+  const record: SessionRecord = {
+    clerkUserId,
+    chatId: topic.chatId,
+    messageThreadId: topic.messageThreadId,
+  };
+  const existing = await lookupSessionId(env, record);
   if (existing) {
     return existing;
   }
@@ -212,15 +197,7 @@ const ensureSession = async (
   }
   const sessionId = body.sessionId;
 
-  await env.KV.put(key, sessionId);
-  await env.KV.put(
-    sessionKey(sessionId),
-    JSON.stringify({
-      clerkUserId,
-      chatId: topic.chatId,
-      messageThreadId: topic.messageThreadId,
-    }),
-  );
+  await recordSession(env, sessionId, record);
   log("created_session", {
     session_id: sessionId,
     clerk_user_id: clerkUserId,
