@@ -127,10 +127,7 @@ than buffering the full response.
 
 **Where:**
 
-- `packages/agent-server/Dockerfile` — `tini` install + `ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]`
-- `packages/agent-server/entrypoint.sh` — supervisor pattern (tigrisfs + node both backgrounded, SIGTERM trap signals node, awaits, then unmounts tigrisfs); tigrisfs `--fsync-on-close`; tigrisfs `--file-mode=0666 --dir-mode=0777`
-- `packages/agent-server/src/index.ts` — async shutdown handler that awaits `bridge.awaitIdle({ timeoutMs: 13 * 60_000 })` before `process.exit(0)`
-- `packages/agent-server/src/session-bridge.ts` — `inflight: Set<Promise<unknown>>` tracking every prompt + reply chain; `awaitIdle` exported on the bridge
+- `packages/agent-server/entrypoint.sh` — tigrisfs `--fsync-on-close`; tigrisfs `--file-mode=0666 --dir-mode=0777`
 
 **What:** While debugging “pi session writes never reach R2” we made
 several changes that *could* have been the fix, then found the real
@@ -138,39 +135,33 @@ root cause (Workers' `fetch(req)` re-streaming bodies, breaking SigV4
 and stripping Content-Length — confirmed by the `r2_request` diagnostic
 log showing 411 / 403). The body-buffering fix in
 `AgentContainer.outboundByHost["*.r2.cloudflarestorage.com"]` was
-proven necessary; everything above shipped alongside it without
-independent verification.
+proven necessary; the two tigrisfs flags above shipped alongside it
+without independent verification.
 
-**Risk:** Extra complexity in container lifecycle, entrypoint shell,
-and session-bridge for no proven benefit. If a future bug appears in
-any of these areas we can't easily tell whether the code is “doing its
-job” or quietly broken — because we never confirmed it was doing
-anything in the first place. The supervisor's drain in particular has
-a 13-minute budget that delays deploys.
+**Risk:** Extra complexity / latency in the FUSE mount for no proven
+benefit. If a future bug appears in this area we can't easily tell
+whether the flags are “doing their job” or quietly broken — because we
+never confirmed they were doing anything in the first place.
+`--fsync-on-close` in particular adds an R2 round-trip to every
+session-entry write.
 
 **Fix when revisited:** verify each one by reverting and watching
 production. For each: revert, `bin/deploy` with
 `--containers-rollout=immediate`, clear KV, send messages spanning a
-`sleepAfter` window (5 min idle) plus a deploy mid-conversation,
-verify (a) replies still arrive and (b) the session JSONL on R2 grows
-after each turn (`aws s3api list-objects-v2 ... | jq '.Contents[] |
-{Key, Size, LastModified}'`).
+`sleepAfter` window (5 min idle), verify (a) replies still arrive and
+(b) the session JSONL on R2 grows after each turn
+(`aws s3api list-objects-v2 ... | jq '.Contents[] | {Key, Size,
+LastModified}'`).
 
 Suggested order, cheapest-to-revert and most-likely-unnecessary first:
 
-1. **tini + supervisor + drain + inflight** as a single unit. With
-   `--fsync-on-close` enforcing per-write durability, the drain's only
-   remaining role is letting in-flight pi turns complete their reply
-   before the container exits — a UX nicety, not a correctness one,
-   and it doesn't even help during Durable Object code-update resets
-   (those bypass SIGTERM).
-2. **tigrisfs `--fsync-on-close`**. With body-buffering fixing the real
+1. **tigrisfs `--fsync-on-close`**. With body-buffering fixing the real
    bug, tigrisfs's default lazy writeback will eventually flush. The
    only window this flag closes is between the last write and the next
-   abrupt kill. Measure that window in practice (deploy mid-conversation
-   without the flag; check whether the just-acknowledged turn is on R2)
-   before deciding to keep the per-write round-trip cost.
-3. **tigrisfs `--file-mode=0666 --dir-mode=0777`**. Most likely
+   abrupt kill. Measure that window in practice (e.g. integration test
+   with idle eviction) before deciding to keep the per-write round-trip
+   cost.
+2. **tigrisfs `--file-mode=0666 --dir-mode=0777`**. Most likely
    required: pi runs as uid 1001 and tigrisfs reports inodes as uid=0
    by default, so without world-writable mode pi can't append to files
    it just created. Confirm with a fresh-session test — the first user

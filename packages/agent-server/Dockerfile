@@ -12,8 +12,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
-      fuse3 \
-      tini && \
+      fuse3 && \
     rm -rf /var/lib/apt/lists/*
 
 # Non-root user that pi (and everything pi spawns) runs as. tigrisfs and
@@ -56,13 +55,11 @@ RUN mkdir -p /workspace /mnt/agent-state /tmp/pi-home && \
     chown -R pi:pi /workspace /tmp/pi-home
 WORKDIR /workspace
 
-# Entrypoint is a supervisor: mounts R2, drops privileges to `pi`, then
-# drains in-flight pi turns on SIGTERM before unmounting tigrisfs so any
-# JSONL writes flush to R2 before the container exits. tini (PID 1, set
-# below) forwards signals to it. See entrypoint.sh for the full shutdown
-# contract.
+# Entrypoint mounts R2 via tigrisfs and then exec's node as the
+# unprivileged `pi` user. Per-write durability comes from tigrisfs
+# `--fsync-on-close`; no explicit shutdown drain is needed.
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 8080
-ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]

@@ -107,23 +107,12 @@ enough to sleep (5+ min) should produce:
 
 instead of `create_session`, confirming pi reopened the previous JSONL.
 
-On deploy or scale-down, the supervisor entrypoint drains in-flight pi
-turns before unmounting tigrisfs. The full shutdown sequence (in order,
-every time) is:
-
-```
-{"msg":"shutdown_signal","signal":"SIGTERM"}
-{"msg":"drain_started","timeout_ms":780000}
-{"msg":"drain_complete","inflight":0,"waited_ms":<n>,"timed_out":false}
-{"msg":"shutdown_begin"}
-{"msg":"node_exited"}
-{"msg":"tigrisfs_unmount_requested"}
-{"msg":"tigrisfs_exited"}
-```
-
-No `container_rejected_message` lines should appear in `wrangler tail`
-during a deploy roll, and the JSONL on R2 should contain assistant
-entries for any turn that was in flight when the signal arrived.
+On deploy or scale-down the container just exits when node receives
+SIGTERM; there is no drain. Per-write durability is provided by
+tigrisfs `--fsync-on-close`, so every turn pi has already acknowledged
+is on R2 before the container goes away. In-flight prompts that hadn't
+yet produced a reply are dropped (Telegram won't see a reply for those
+turns); the JSONL on R2 stays consistent.
 
 ## Rotating the parent token
 

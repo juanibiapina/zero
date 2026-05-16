@@ -11,22 +11,20 @@
  * The reply callback is a fire-and-forget POST to `REPLY_URL` when pi
  * emits `agent_end`; errors are logged, not retried.
  *
- * Shutdown contract (called by the entrypoint supervisor on SIGTERM):
- *   1. close the HTTP listener so no new requests are accepted,
- *   2. wait up to `DRAIN_TIMEOUT_MS` for in-flight pi turns to finish
- *      (their `agent_end` triggers a reply, which is what we need on R2
- *      before the FUSE mount goes away),
- *   3. exit 0 so the supervisor proceeds to unmount tigrisfs.
- * Cloudflare's container SIGTERM-to-SIGKILL ceiling is 15 min; we cap
- * drain at 13 min and leave 2 min for unmount + tigrisfs flush.
+ * Shutdown: SIGTERM lets the process exit naturally. Per-write
+ * durability is enforced by tigrisfs `--fsync-on-close` (see
+ * entrypoint.sh), so every session entry pi has acknowledged is
+ * already on R2 by the time SIGTERM arrives. In-flight prompts that
+ * haven't yet produced a reply are dropped; Telegram won't see a reply
+ * for that turn, but the conversation state on R2 is consistent.
  *
  * Environment:
  *   PORT             (optional, default 8080)
- *   REPLY_URL        (required) — full URL the server POSTs replies to.
- *   ANTHROPIC_API_KEY (required) — read by pi-ai directly from process.env.
- *   CWD              (optional, default /workspace) — working directory pi
+ *   REPLY_URL        (required) \u2014 full URL the server POSTs replies to.
+ *   ANTHROPIC_API_KEY (required) \u2014 read by pi-ai directly from process.env.
+ *   CWD              (optional, default /workspace) \u2014 working directory pi
  *                    uses for its filesystem tools.
- *   AGENT_STATE_DIR  (required) — directory used to persist sessions, one
+ *   AGENT_STATE_DIR  (required) \u2014 directory used to persist sessions, one
  *                    subdir per sessionId. Must be writable.
  */
 
@@ -46,7 +44,7 @@ if (!replyUrl) {
   process.exit(1);
 }
 
-// ── Reply callback ───────────────────────────────────────────────────────
+// \u2500\u2500 Reply callback \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 const sendReply = async (sessionId: string, text: string): Promise<void> => {
   try {
@@ -71,7 +69,7 @@ const sendReply = async (sessionId: string, text: string): Promise<void> => {
   }
 };
 
-// ── App wiring ───────────────────────────────────────────────────────────
+// \u2500\u2500 App wiring \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 const bridge = createSessionBridge(sendReply, { cwd, stateDir });
 
@@ -80,50 +78,11 @@ const app = createAgentApp({
   promptSession: (sessionId, text) => bridge.promptSession(sessionId, text),
 });
 
-const server = serve({ fetch: app.fetch, port }, (info) => {
+serve({ fetch: app.fetch, port }, (info) => {
   log("listening", {
     port: info.port,
     reply_url: replyUrl,
     cwd,
     state_dir: stateDir,
   });
-});
-
-// ── Lifecycle ────────────────────────────────────────────────────────────
-
-/**
- * Cap the drain at 13 min so we leave headroom under Cloudflare's 15 min
- * SIGTERM → SIGKILL ceiling for the supervisor to unmount tigrisfs and
- * for tigrisfs to flush dirty pages to R2.
- */
-const DRAIN_TIMEOUT_MS = 13 * 60_000;
-
-let shuttingDown = false;
-
-const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  log("shutdown_signal", { signal });
-
-  // Stop accepting new connections; existing ones (the HTTP request that
-  // delivered the prompt has already returned 202) are unaffected.
-  server.close();
-
-  log("drain_started", { timeout_ms: DRAIN_TIMEOUT_MS });
-  const startedAt = Date.now();
-  const result = await bridge.awaitIdle({ timeoutMs: DRAIN_TIMEOUT_MS });
-  log("drain_complete", {
-    inflight: result.inflight,
-    waited_ms: Date.now() - startedAt,
-    timed_out: result.timedOut,
-  });
-
-  process.exit(0);
-};
-
-process.on("SIGTERM", (signal) => {
-  void shutdown(signal);
-});
-process.on("SIGINT", (signal) => {
-  void shutdown(signal);
 });

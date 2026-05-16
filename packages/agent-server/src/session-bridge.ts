@@ -14,18 +14,14 @@
  * Pi resolves the API key from `process.env.ANTHROPIC_API_KEY`, which the
  * container DO injects via `envVars`.
  *
- * Durability:
- *   - Every in-flight `session.prompt(...)` is tracked in `inflight`;
- *     `awaitIdle({ timeoutMs })` lets `index.ts` drain on SIGTERM
- *     before exiting, so the supervisor doesn't unmount tigrisfs mid-turn.
- *   - Per-write durability is delegated to tigrisfs `--fsync-on-close`
- *     (set in entrypoint.sh). Pi persists each session entry via
- *     `appendFileSync` (open + write + close); with that flag the close()
- *     blocks until R2 confirms the upload. We rely on that instead of an
- *     explicit fsync from this module because (a) GeeseFS treats
- *     FUSE_FSYNCDIR as a no-op so directory fsync wouldn't help, and (b)
- *     making every close synchronous covers crash and abrupt-DO-reset
- *     paths the supervisor unmount can't reach.
+ * Durability: per-write only, delegated to tigrisfs `--fsync-on-close`
+ * (set in entrypoint.sh). Pi persists each session entry via
+ * `appendFileSync` (open + write + close); with that flag the close()
+ * blocks until R2 confirms the upload, so every acknowledged turn is
+ * durable before pi proceeds. SIGTERM doesn't trigger any extra
+ * shutdown work here — in-flight prompts that haven't yet produced a
+ * reply are dropped (no Telegram reply), but the session JSONL on R2
+ * stays consistent.
  *
  * Logging is deliberately sparse: prompt-in / tool-in-flight / reply-out
  * with byte counts only. Tool results and message content are never
@@ -145,21 +141,9 @@ export interface SessionBridgeOptions {
   stateDir: string;
 }
 
-export interface AwaitIdleResult {
-  /** Prompts still in flight when awaitIdle returned. */
-  inflight: number;
-  /** True if we returned because we hit the timeout, not because we drained. */
-  timedOut: boolean;
-}
-
 export interface SessionBridge {
   createSession: (sessionId: string) => Promise<void>;
   promptSession: (sessionId: string, text: string) => Promise<boolean>;
-  /**
-   * Resolve when all in-flight `promptSession` calls have settled, or
-   * after `timeoutMs` — whichever comes first.
-   */
-  awaitIdle: (opts: { timeoutMs: number }) => Promise<AwaitIdleResult>;
 }
 
 export const createSessionBridge = (
@@ -168,13 +152,6 @@ export const createSessionBridge = (
 ): SessionBridge => {
   const { cwd, stateDir } = opts;
   const sessions = new Map<string, SessionState>();
-
-  /**
-   * Every promise returned by `session.prompt(...)` is parked here for
-   * the lifetime of a turn. The drain path in `index.ts` awaits this set
-   * to empty so pi can finish before we unmount tigrisfs.
-   */
-  const inflight = new Set<Promise<unknown>>();
 
   const sessionDirFor = (sessionId: string): string =>
     join(stateDir, sessionId);
@@ -241,18 +218,12 @@ export const createSessionBridge = (
         return;
       }
       log("post_reply", { session_id: sessionId, source, len: text.length });
-      // Keep the reply pipeline observable to the drain in index.ts: it
-      // cares that the reply actually went out, not just that pi's prompt
-      // promise resolved. Per-write durability already happened inside
-      // tigrisfs (see module header).
-      const replied = postReply(sessionId, text).catch((err: unknown) => {
+      void postReply(sessionId, text).catch((err: unknown) => {
         logError("post_reply_threw", {
           session_id: sessionId,
           error: fmtErr(err),
         });
       });
-      inflight.add(replied);
-      void replied.finally(() => inflight.delete(replied));
     });
 
     return state;
@@ -296,37 +267,13 @@ export const createSessionBridge = (
     if (!state) return false;
 
     log("prompt", { session_id: sessionId, len: text.length });
-    const promptPromise = state.session.prompt(text).catch((err: unknown) => {
+    void state.session.prompt(text).catch((err: unknown) => {
       const formatted = fmtErr(err);
       logError("prompt_threw", { session_id: sessionId, error: formatted });
       void postReply(sessionId, `⚠️ ${formatted.message}`);
     });
-    inflight.add(promptPromise);
-    void promptPromise.finally(() => inflight.delete(promptPromise));
     return true;
   };
 
-  const awaitIdle = async (
-    opts: { timeoutMs: number },
-  ): Promise<AwaitIdleResult> => {
-    if (inflight.size === 0) {
-      return { inflight: 0, timedOut: false };
-    }
-    let timedOut = false;
-    const timeout = new Promise<void>((resolve) => {
-      setTimeout(() => {
-        timedOut = true;
-        resolve();
-      }, opts.timeoutMs).unref();
-    });
-    // Loop because new replies (postReply.finally) can be added to the
-    // set after pi's prompt promise settles. Each iteration awaits the
-    // current snapshot; if work was added meanwhile we go round again.
-    while (inflight.size > 0 && !timedOut) {
-      await Promise.race([Promise.allSettled([...inflight]), timeout]);
-    }
-    return { inflight: inflight.size, timedOut };
-  };
-
-  return { createSession, promptSession, awaitIdle };
+  return { createSession, promptSession };
 };
