@@ -3,6 +3,28 @@
 Tracked shortcuts, workarounds, and deferred improvements. When an entry
 is resolved, delete it.
 
+## Integration test runs on demand only
+
+**Where:** `bin/integration-test`, `packages/integration-tests/`.
+
+**What:** The Telegram round-trip integration test is invokable
+locally via `bin/integration-test` but is not wired into `bin/ci` or
+any scheduled GitHub Actions workflow. Regressions in the deployed
+worker (KV → container → pi → Anthropic → Telegram round-trip)
+are only caught when someone remembers to run it manually.
+
+**Why it's like this:** each run costs a few cents on Anthropic and
+takes 30–90s, so it's a poor fit for per-PR CI. A nightly cron felt
+premature for a one-user project.
+
+**Risk:** silent breakage in production between runs. Bounded by the
+fact that the only user is also the operator.
+
+**Fix when revisited:** add a GitHub Actions `schedule:` workflow
+(daily cron) that runs `bin/integration-test` with the
+`zero-tests/dev` Doppler service token in a CI secret, and pings on
+failure.
+
 ## Container image `npm install` is non-deterministic
 
 **Where:** `packages/agent-server/Dockerfile`, the `RUN … npm install --omit=dev` step.

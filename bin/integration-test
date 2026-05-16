@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Run the end-to-end Telegram round-trip test against production.
+#
+# Sends a real Telegram message as the test user, waits for the bot's
+# reply, and asserts on it. Hits Anthropic and Telegram for real — run
+# on demand, not on every commit.
+#
+# See docs/integration-tests.md for one-time setup.
+
+exec doppler run --project zero-tests --config dev -- \
+  pnpm --filter @zero/integration-tests run test:integration

@@ -21,6 +21,7 @@ Packages:
 - **Frontend:** `apps/web` (`@zero/web`)
 - **Shared types:** `packages/core` (`@zero/core`) — currently empty placeholder
 - **Agent server:** `packages/agent-server` (`@zero/agent-server`) — pi-coding-agent wrapped as an HTTP server, packaged as the container image
+- **Integration tests:** `packages/integration-tests` (`@zero/integration-tests`) — end-to-end Telegram round-trip test against prod; see `docs/integration-tests.md`
 
 Expected dev ports:
 - **5176**: Web frontend (Vite)
@@ -53,4 +54,5 @@ When you need to manage secrets (environment variables, API keys, etc.), refer t
 Doppler projects:
 - `zero-api` — Worker backend secrets
 - `zero-web` — Frontend build-time secrets
+- `zero-tests` — Integration-test secrets (Telegram MTProto app + session)
 
