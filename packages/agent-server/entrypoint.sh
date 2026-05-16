@@ -75,10 +75,15 @@ log_json "mounting_r2" "bucket=${R2_BUCKET_NAME}" "prefix=${R2_PREFIX}" "mount_p
 # `--fsync-on-close` makes every close() block until R2 confirms the
 # upload. Pi persists session entries via appendFileSync (open + write +
 # close), so without this flag the writes land in tigrisfs's in-memory
-# writeback cache and only reach R2 on a clean unmount. With no
-# supervisor draining on SIGTERM, the only durability guarantee is this
-# flag. Trade-off: each session-entry write pays one R2 round-trip (pi
-# writes 1-3 entries per turn, so ~hundreds of ms added per turn).
+# writeback cache. With no supervisor unmounting on SIGTERM, dirty
+# pages that haven't been flushed by writeback are simply lost when the
+# container exits (idle eviction, deploy, crash). Verified empirically:
+# removing this flag and running the session-persistence integration
+# test makes turn 3 (post-5min-idle) time out because the cold-resumed
+# container reads a stale JSONL missing turn 2's entries. Trade-off:
+# each session-entry write pays one R2 round-trip (pi writes 1-3
+# entries per turn, so ~hundreds of ms added per turn) in exchange for
+# correctness across idle eviction.
 tigrisfs \
   --endpoint "${R2_ENDPOINT}" \
   --file-mode=0666 \
