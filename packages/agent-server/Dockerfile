@@ -12,7 +12,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
-      fuse3 && \
+      fuse3 \
+      tini && \
     rm -rf /var/lib/apt/lists/*
 
 # Non-root user that pi (and everything pi spawns) runs as. tigrisfs and
@@ -55,12 +56,13 @@ RUN mkdir -p /workspace /mnt/agent-state /tmp/pi-home && \
     chown -R pi:pi /workspace /tmp/pi-home
 WORKDIR /workspace
 
-# Entrypoint: mount the R2 prefix at /mnt/agent-state if all R2 envs are
-# present, then exec node. If anything is missing or the mount fails, log
-# and continue without setting AGENT_STATE_DIR \u2014 the agent-server falls
-# back to in-memory sessions (lost on container restart).
+# Entrypoint is a supervisor: mounts R2, drops privileges to `pi`, then
+# drains in-flight pi turns on SIGTERM before unmounting tigrisfs so any
+# JSONL writes flush to R2 before the container exits. tini (PID 1, set
+# below) forwards signals to it. See entrypoint.sh for the full shutdown
+# contract.
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 8080
-CMD ["/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

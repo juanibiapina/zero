@@ -88,23 +88,42 @@ gob run bin/deploy
 
 After deploy, send a Telegram topic message and watch the container logs
 in the dashboard (Containers \u2192 `zero-api-agentcontainer` \u2192 **Logs**).
-Look for these lines on first contact for a user:
+Logs are structured JSON \u2014 filter on `service = "agent-server"`.
+Look for these on first contact for a user:
 
 ```
-[entrypoint] mounting zero-agent-state:<clerkUserId> at /mnt/agent-state
-[entrypoint] mounted /mnt/agent-state
-agent-server listening on port 8080, replies to http://zero.worker/reply, cwd=/workspace, stateDir=/mnt/agent-state
-[sess=<8char>] createSession cwd=/workspace dir=/mnt/agent-state/<sessionId>
+{"msg":"mounting_r2","bucket":"zero-agent-state","prefix":"<clerkUserId>",...}
+{"msg":"mounted_r2","mount_point":"/mnt/agent-state"}
+{"msg":"listening","port":8080,...}
+{"msg":"create_session","session_id":"<uuid>","dir":"/mnt/agent-state/<uuid>"}
 ```
 
 A second message in the same topic after the container has been idle long
 enough to sleep (5+ min) should produce:
 
 ```
-[sess=<8char>] resumeSession dir=/mnt/agent-state/<sessionId>
+{"msg":"resume_session","session_id":"<uuid>","dir":"/mnt/agent-state/<uuid>"}
 ```
 
-instead of `createSession`, confirming pi reopened the previous JSONL.
+instead of `create_session`, confirming pi reopened the previous JSONL.
+
+On deploy or scale-down, the supervisor entrypoint drains in-flight pi
+turns before unmounting tigrisfs. The full shutdown sequence (in order,
+every time) is:
+
+```
+{"msg":"shutdown_signal","signal":"SIGTERM"}
+{"msg":"drain_started","timeout_ms":780000}
+{"msg":"drain_complete","inflight":0,"waited_ms":<n>,"timed_out":false}
+{"msg":"shutdown_begin"}
+{"msg":"node_exited"}
+{"msg":"tigrisfs_unmount_requested"}
+{"msg":"tigrisfs_exited"}
+```
+
+No `container_rejected_message` lines should appear in `wrangler tail`
+during a deploy roll, and the JSONL on R2 should contain assistant
+entries for any turn that was in flight when the signal arrived.
 
 ## Rotating the parent token
 

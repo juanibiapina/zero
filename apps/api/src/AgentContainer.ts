@@ -161,7 +161,36 @@ AgentContainer.outboundByHost = {
   // R2 traffic carries no registered secrets; skip the catch-all's body
   // buffering and substitution scan and just forward. Still runs in the
   // worker (interceptHttps='*' when catch-all is active), but cheap.
-  "*.r2.cloudflarestorage.com": (req) => fetch(req),
+  // R2 PUT/POST bodies must be sent with a fixed Content-Length and the
+  // exact bytes the AWS SigV4 signature was computed over. Passing the
+  // container's Request straight through Workers fetch leaves the body
+  // as a stream (no Content-Length → R2 returns 411) and Workers can
+  // also re-frame the body in a way that invalidates the SigV4 hash
+  // (→ R2 returns 403). Buffer the body, then send a fresh Request with
+  // the original method/headers and a Uint8Array body — same pattern
+  // the secret-proxy uses for Anthropic POSTs. log() is kept so a
+  // regression here is visible in `wrangler tail`.
+  "*.r2.cloudflarestorage.com": async (req) => {
+    const url = req.url;
+    const method = req.method;
+    let body: BodyInit | null = null;
+    if (method !== "GET" && method !== "HEAD") {
+      body = new Uint8Array(await req.arrayBuffer());
+    }
+    const res = await fetch(url, {
+      method,
+      headers: req.headers,
+      body,
+      redirect: "manual",
+    });
+    log("r2_request", {
+      url,
+      method,
+      status: res.status,
+      content_length: res.headers.get("content-length"),
+    });
+    return res;
+  },
 };
 
 // Catch-all: every other host goes through the secret-substitution proxy.

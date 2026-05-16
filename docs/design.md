@@ -142,6 +142,45 @@ R2 configuration is mandatory — `AgentContainer` throws on missing creds
 before the container even starts, and the container's entrypoint script
 aborts if the mount fails. There is no in-memory fallback.
 
+### Durable shutdown
+
+The container's [SIGTERM contract](https://developers.cloudflare.com/containers/platform-details/lifecycle/)
+gives us up to 15 minutes between SIGTERM and SIGKILL. We use it to
+avoid truncating pi mid-turn (which both abandons the user's request
+*and* leaves the JSONL on R2 missing the assistant entries for that
+turn). The entrypoint shell is a supervisor that owns both child PIDs
+and orchestrates the shutdown in order:
+
+1. **node first.** SIGTERM forwarded to the agent-server process, which
+   stops accepting new HTTP requests and calls `bridge.awaitIdle({
+   timeoutMs: 13 min })`. That resolves when every in-flight
+   `session.prompt(...)` *and* its follow-up `postReply` have settled —
+   we wait for the reply to actually leave, not just for pi to finish.
+2. **tigrisfs second.** Once node exits, the supervisor unmounts the
+   FUSE mount (`fusermount -u`). The unmount drives tigrisfs to flush
+   any remaining dirty pages to R2 before its address space goes away.
+3. **Exit.** Supervisor exits 0 inside the 15 min ceiling; the 2 min
+   budget left over covers the unmount and tigrisfs's final flush.
+
+The supervisor logs each phase in order:
+`shutdown_begin` → `drain_started` → `drain_complete` (with
+`inflight=0`, `waited_ms`) → `node_exited` → `tigrisfs_unmount_requested`
+→ `tigrisfs_exited`. tini is PID 1 (set in the Dockerfile `ENTRYPOINT`)
+and forwards signals to the supervisor.
+
+Independent of the shutdown path, every write pi makes is durable on
+R2 before it returns. The entrypoint passes `--fsync-on-close` to
+tigrisfs, which forces every `close(2)` to block until R2 confirms the
+upload. Pi persists each session entry via `appendFileSync` (open +
+write + close), so each entry pays one R2 round-trip and is durable
+before pi proceeds. This covers crashes and Cloudflare's Durable
+Object code-update reset (which terminates the container without
+honoring SIGTERM and so bypasses the supervisor unmount). Trade-off:
+~hundreds of ms per turn (pi writes 1-3 entries per turn) in exchange
+for not losing user-visible state. An earlier `fsync` on the session
+directory was a no-op because GeeseFS (tigrisfs's library) does not
+implement `FUSE_FSYNCDIR`.
+
 Isolation has two layers:
 
 1. **FUSE root locked to the user's prefix.** `tigrisfs zero-agent-state:<clerkUserId> /mnt/agent-state` makes the prefix the filesystem root from inside the container; pi has no path to traverse outside it.

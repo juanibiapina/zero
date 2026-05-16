@@ -11,6 +11,15 @@
  * The reply callback is a fire-and-forget POST to `REPLY_URL` when pi
  * emits `agent_end`; errors are logged, not retried.
  *
+ * Shutdown contract (called by the entrypoint supervisor on SIGTERM):
+ *   1. close the HTTP listener so no new requests are accepted,
+ *   2. wait up to `DRAIN_TIMEOUT_MS` for in-flight pi turns to finish
+ *      (their `agent_end` triggers a reply, which is what we need on R2
+ *      before the FUSE mount goes away),
+ *   3. exit 0 so the supervisor proceeds to unmount tigrisfs.
+ * Cloudflare's container SIGTERM-to-SIGKILL ceiling is 15 min; we cap
+ * drain at 13 min and leave 2 min for unmount + tigrisfs flush.
+ *
  * Environment:
  *   PORT             (optional, default 8080)
  *   REPLY_URL        (required) — full URL the server POSTs replies to.
@@ -82,14 +91,39 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 
 // ── Lifecycle ────────────────────────────────────────────────────────────
 
-const shutdown = (): void => {
-  server.close(() => {
-    process.exit(0);
+/**
+ * Cap the drain at 13 min so we leave headroom under Cloudflare's 15 min
+ * SIGTERM → SIGKILL ceiling for the supervisor to unmount tigrisfs and
+ * for tigrisfs to flush dirty pages to R2.
+ */
+const DRAIN_TIMEOUT_MS = 13 * 60_000;
+
+let shuttingDown = false;
+
+const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log("shutdown_signal", { signal });
+
+  // Stop accepting new connections; existing ones (the HTTP request that
+  // delivered the prompt has already returned 202) are unaffected.
+  server.close();
+
+  log("drain_started", { timeout_ms: DRAIN_TIMEOUT_MS });
+  const startedAt = Date.now();
+  const result = await bridge.awaitIdle({ timeoutMs: DRAIN_TIMEOUT_MS });
+  log("drain_complete", {
+    inflight: result.inflight,
+    waited_ms: Date.now() - startedAt,
+    timed_out: result.timedOut,
   });
-  setTimeout(() => {
-    process.exit(1);
-  }, 5000);
+
+  process.exit(0);
 };
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+process.on("SIGTERM", (signal) => {
+  void shutdown(signal);
+});
+process.on("SIGINT", (signal) => {
+  void shutdown(signal);
+});
