@@ -157,6 +157,14 @@ the reply. Pi-ai's LLM calls go directly to `api.anthropic.com` over
 normal egress. `index.ts` must re-export `ContainerProxy` for the
 outbound interception to work.
 
+The reverse direction (worker→container) goes through
+`apps/api/src/agent-client.ts`, a Hono RPC client derived from
+`@zero/agent-server`'s typed `AppType`. The agent-server defines its
+routes once (`OpenAPIHono` + Zod) in
+`packages/agent-server/src/contract.ts`; the worker imports the app's
+TS type and uses `hc<AppType>` to call it, so URLs, methods, and
+request / response shapes are never restated.
+
 For docs and configuration see
 <https://developers.cloudflare.com/containers/platform-details/outbound-traffic/>.
 

@@ -21,6 +21,9 @@
       "persistent": true,
       "cache": false
     },
+    "@zero/api#typecheck": {
+      "dependsOn": ["@zero/agent-server#build"]
+    },
     "test": {
       "outputs": []
     },

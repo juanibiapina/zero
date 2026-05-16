@@ -205,6 +205,13 @@ Telegram immediately. The background task:
 3. POST the message text to `/sessions/{sessionId}/messages` on the
    container.
 
+The worker→container HTTP calls go through `apps/api/src/agent-client.ts`,
+which derives a fully-typed [Hono RPC](https://hono.dev/docs/guides/rpc)
+client from the contract defined in
+`packages/agent-server/src/contract.ts`. URLs, methods, and request /
+response shapes are inferred from the shared Zod schemas; the worker
+never hand-encodes them.
+
 Inside the container, pi-coding-agent drives the conversation. Pi-ai
 talks directly to `https://api.anthropic.com/v1/messages` using its
 built-in `anthropic` provider; the API key is read from

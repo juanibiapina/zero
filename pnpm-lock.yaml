@@ -43,6 +43,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20260304.0
         version: 4.20260304.0
+      '@zero/agent-server':
+        specifier: workspace:*
+        version: link:../../packages/agent-server
       '@zero/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
@@ -125,6 +128,18 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: ^0.74.0
         version: 0.74.0(ws@8.18.0)(zod@4.3.6)
+      '@hono/node-server':
+        specifier: ^2.0.2
+        version: 2.0.2(hono@4.12.2)
+      '@hono/zod-openapi':
+        specifier: ^1.2.2
+        version: 1.2.2(hono@4.12.2)(zod@4.3.6)
+      hono:
+        specifier: ^4.12.2
+        version: 4.12.2
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^25.3.0
@@ -740,6 +755,12 @@ packages:
     engines: {node: '>=16.x.x'}
     peerDependencies:
       hono: '>=3.0.0'
+
+  '@hono/node-server@2.0.2':
+    resolution: {integrity: sha512-tXlTi1h/4V7sDe7i97IVP+9re9ZU7wXZZggnR5ucCRclf1+AX6YhGStrR5w8bLj+3Mlyl0pKfBh9gqTqqnGKfQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4
 
   '@hono/zod-openapi@1.2.2':
     resolution: {integrity: sha512-va6vsL23wCJ1d0Vd+vGL1XOt+wPwItxirYafuhlW9iC2MstYr2FvsI7mctb45eBTjZfkqB/3LYDJEppPjOEiHw==}
@@ -3519,6 +3540,10 @@ snapshots:
     transitivePeerDependencies:
       - react
       - react-dom
+
+  '@hono/node-server@2.0.2(hono@4.12.2)':
+    dependencies:
+      hono: 4.12.2
 
   '@hono/zod-openapi@1.2.2(hono@4.12.2)(zod@4.3.6)':
     dependencies:

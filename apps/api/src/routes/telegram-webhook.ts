@@ -22,25 +22,28 @@
  *      return 200 immediately.
  *   3. Background:
  *        - KV `tg:{telegramId}` → clerkUserId  (drop unknown)
- *        - KV `topic:{clerkUserId}:{chatId}:{threadId}` → sessionId
- *            miss → POST /sessions on the user's container; store both
- *                   the topic mapping and the reverse `session:{sessionId}`
- *                   record used by the outbound reply handler.
- *        - POST /sessions/{sessionId}/messages with the text.
+ *        - `ensureSession`: lookup-or-create the topic↔session linkage
+ *          (see `sessions.ts`); on miss, asks the container for a fresh
+ *          session via the typed `agent-client`.
+ *        - `sendMessage` posts the text to the container session.
  *      Errors are logged and dropped. Telegram won't retry because the 200
  *      has already gone out.
  *
  * Durability gap: a worker crash inside `waitUntil` silently drops the
  * update. If the container has lost its in-memory session set (e.g. after
- * an idle eviction), `POST /sessions/{id}/messages` returns 404; we drop
- * the stale `topic:` and `session:` KV entries, create a fresh session,
- * and retry the message once. The user sees a new conversation start;
- * we don't notify them.
+ * an idle eviction), `sendMessage` returns `{ kind: "stale" }`; we drop
+ * the stale KV entries, create a fresh session, and retry once. The
+ * user sees a new conversation start; we don't notify them.
  */
 
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Bot, webhookCallback } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
+import {
+  createSession,
+  sendMessage,
+  type AgentStub,
+} from "../agent-client";
 import { log, logError } from "../log";
 import {
   forgetSession,
@@ -115,22 +118,24 @@ const processTopicMessage = async (
   const stub = env.AGENT_CONTAINER.getByName(clerkUserId);
 
   let sessionId = await ensureSession(stub, env, clerkUserId, topic);
+  if (sessionId === null) return;
 
-  let res = await postMessage(stub, sessionId, topic.text);
-  if (res.status === 404) {
+  let result = await sendMessage(stub, sessionId, topic.text);
+  if (result.kind === "stale") {
     log("stale_session", {
       session_id: sessionId,
       clerk_user_id: clerkUserId,
     });
     await forgetSession(env, sessionId);
     sessionId = await ensureSession(stub, env, clerkUserId, topic);
-    res = await postMessage(stub, sessionId, topic.text);
+    if (sessionId === null) return;
+    result = await sendMessage(stub, sessionId, topic.text);
   }
-  if (!res.ok) {
+  if (result.kind === "error") {
     logError("container_rejected_message", {
       clerk_user_id: clerkUserId,
       session_id: sessionId,
-      status: res.status,
+      status: result.status,
     });
     return;
   }
@@ -140,33 +145,19 @@ const processTopicMessage = async (
   });
 };
 
-const postMessage = (
-  stub: { fetch: (req: Request) => Promise<Response> },
-  sessionId: string,
-  text: string,
-): Promise<Response> =>
-  stub.fetch(
-    new Request(
-      `http://internal/sessions/${encodeURIComponent(sessionId)}/messages`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      },
-    ),
-  );
-
 /**
  * Resolve or create a session for this user's topic. On miss we ask the
- * container for a fresh sessionId and persist the linkage in KV via
- * `recordSession` (which writes both forward and reverse entries).
+ * container for a fresh sessionId via the typed `agent-client` and
+ * persist the linkage in KV via `recordSession`. Returns null if the
+ * container failed to create a session (logged here so the failure is
+ * visible — a thrown error inside `waitUntil` would be invisible).
  */
 const ensureSession = async (
-  stub: { fetch: (req: Request) => Promise<Response> },
+  stub: AgentStub,
   env: Env,
   clerkUserId: string,
   topic: TopicMessage,
-): Promise<string> => {
+): Promise<string | null> => {
   const record: SessionRecord = {
     clerkUserId,
     chatId: topic.chatId,
@@ -177,32 +168,21 @@ const ensureSession = async (
     return existing;
   }
 
-  const res = await stub.fetch(
-    new Request("http://internal/sessions", { method: "POST" }),
-  );
-  if (!res.ok) {
-    throw new Error(
-      `container POST /sessions returned ${res.status.toString()}`,
-    );
+  const result = await createSession(stub);
+  if (result.kind === "error") {
+    logError("create_session_failed", {
+      clerk_user_id: clerkUserId,
+      status: result.status,
+    });
+    return null;
   }
-  const body: unknown = await res.json();
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !("sessionId" in body) ||
-    typeof body.sessionId !== "string" ||
-    body.sessionId.length === 0
-  ) {
-    throw new Error("container POST /sessions returned no sessionId");
-  }
-  const sessionId = body.sessionId;
 
-  await recordSession(env, sessionId, record);
+  await recordSession(env, result.sessionId, record);
   log("created_session", {
-    session_id: sessionId,
+    session_id: result.sessionId,
     clerk_user_id: clerkUserId,
     chat_id: topic.chatId,
     thread_id: topic.messageThreadId,
   });
-  return sessionId;
+  return result.sessionId;
 };

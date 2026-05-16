@@ -20,26 +20,30 @@ the last session via `SessionManager.continueRecent`.
 
 ## HTTP contract
 
-### `POST /sessions`
+The routes are defined as Zod schemas + `createRoute()` declarations in
+[`src/contract.ts`](./src/contract.ts) and mounted on an `OpenAPIHono`
+app in [`src/app.ts`](./src/app.ts). Consumers running on Hono can
+import the typed app and derive a fully-typed client via
+[`hc<AppType>(baseUrl, { fetch })`](https://hono.dev/docs/guides/rpc):
 
-Creates a new session.
+```ts
+import type { AppType } from "@zero/agent-server/app";
+import { hc } from "hono/client";
 
+const client = hc<AppType>(baseUrl, { fetch });
+const { sessionId } = await (await client.sessions.$post()).json();
+await client.sessions[":sessionId"].messages.$post({
+  param: { sessionId },
+  json: { text: "hello" },
+});
 ```
-→ 200 { "sessionId": "<uuid>" }
-```
 
-### `POST /sessions/:sessionId/messages`
+Endpoints today:
 
-Posts a message to an existing session. Server acknowledges immediately and
-sends the reply out of band (see [Reply callback](#reply-callback)).
-
-```
-body: { "text": "<string>" }
-
-→ 202   (no body)
-→ 404   if sessionId is unknown
-→ 400   if body is invalid or `text` is missing
-```
+- `POST /sessions` — returns `{ sessionId }` (200) or `{ error }` (500).
+- `POST /sessions/{sessionId}/messages` — body `{ text }`; returns 202
+  on accept, 404 if the sessionId is unknown. Reply arrives out of band
+  (see [Reply callback](#reply-callback)).
 
 ## Reply callback
 
