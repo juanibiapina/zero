@@ -123,6 +123,28 @@ body, behind a per-secret flag. Anthropic streams SSE, so the
 implementation needs to operate on a streaming `ReadableStream` rather
 than buffering the full response.
 
+## Notes-mount seam is single-adapter on purpose
+
+**Where:** `apps/api/src/notes-mount.ts`,
+`apps/api/src/AgentContainer.ts` (`refreshEnvVars`).
+
+**What:** `resolveNotesMount(env, clerkUserId, creds)` has exactly one
+implementation (Zero-managed R2 prefix `<clerkUserId>/notes/`). There
+is no `NotesProvider` interface, registry, or strategy class. The
+entrypoint consumes a generic `MOUNT_NOTES_*` env shape so the swap
+point is the function body, not the call site.
+
+**Why it's like this:** one adapter is a hypothetical seam, not a real
+one — introducing a port today would be pure indirection. The function
+shape (env + clerkUserId + default creds in, S3-shaped spec out) is
+chosen so a second adapter slots in cleanly without breaking callers.
+
+**Fix when revisited:** the moment a second provider (user-configured
+BYO S3, WebDAV, etc.) ships, refactor the body to dispatch on a KV-
+stored per-user config and only *then* extract an interface if the
+dispatch grows beyond a small `if`. Don't anticipate the shape — let
+the second adapter inform it.
+
 ## R2 persistence fix — verification history (resolved)
 
 The “pi session writes never reach R2” bug (commit `f4f4876`) shipped

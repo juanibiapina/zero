@@ -78,13 +78,47 @@ fi
 
 log_json "mounted_r2" "mount_point=${MOUNT_POINT}"
 
+NOTES_MOUNT_POINT="/mnt/notes"
+log_json "mounting_notes" "bucket=${MOUNT_NOTES_BUCKET}" "prefix=${MOUNT_NOTES_PREFIX}" "mount_point=${NOTES_MOUNT_POINT}"
+
+# Per-invocation AWS_* override so a future notes-mount provider with
+# different creds (e.g. user-configured S3) doesn't need entrypoint
+# changes; today the values are the same temp creds as the sessions
+# mount above.
+AWS_ACCESS_KEY_ID="${MOUNT_NOTES_ACCESS_KEY_ID}" \
+AWS_SECRET_ACCESS_KEY="${MOUNT_NOTES_SECRET_ACCESS_KEY}" \
+AWS_SESSION_TOKEN="${MOUNT_NOTES_SESSION_TOKEN}" \
+tigrisfs \
+  --endpoint "${MOUNT_NOTES_ENDPOINT}" \
+  --file-mode=0666 \
+  --dir-mode=0777 \
+  --fsync-on-close \
+  -o allow_other \
+  "${MOUNT_NOTES_BUCKET}:${MOUNT_NOTES_PREFIX}" \
+  "${NOTES_MOUNT_POINT}"
+
+if ! mountpoint -q "${NOTES_MOUNT_POINT}"; then
+  log_json "mount_failed" "mount_point=${NOTES_MOUNT_POINT}"
+  exit 1
+fi
+
+log_json "mounted_notes" "mount_point=${NOTES_MOUNT_POINT}"
+
 export AGENT_STATE_DIR="${MOUNT_POINT}"
 
-# Scrub R2 creds from the env before handing control to pi. tigrisfs has
-# already cached them in its own address space (root-owned /proc), and
-# this keeps them out of pi's own /proc/self/environ.
+# Privilege separation, per docs/design.md § Secret Proxying: mount
+# credentials are consumed by tigrisfs (root) at mount time and then
+# scrubbed from the env so the unprivileged `pi` user can't recover
+# them via /proc/self/environ. tigrisfs has already cached them in its
+# own root-owned address space, so the mount keeps working after the
+# unset. Any future `MOUNT_*_*` secret must be added below for the
+# pattern to hold — do NOT reach for sentinel substitution for these:
+# tigrisfs computes SigV4 over the request body and a mid-flight byte
+# swap on egress would invalidate the signature.
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
-      R2_PARENT_ACCESS_KEY_ID R2_PARENT_SECRET_ACCESS_KEY
+      R2_PARENT_ACCESS_KEY_ID R2_PARENT_SECRET_ACCESS_KEY \
+      MOUNT_NOTES_ACCESS_KEY_ID MOUNT_NOTES_SECRET_ACCESS_KEY \
+      MOUNT_NOTES_SESSION_TOKEN
 
 log_json "drop_privileges" "user=pi" "uid=1001"
 

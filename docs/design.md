@@ -175,6 +175,38 @@ Isolation has two layers:
 
 See [`r2-mount.md`](r2-mount.md) for one-time bucket and token setup.
 
+### Notes vault (long-term memory)
+
+Alongside the sessions mount, every container also mounts a per-user
+**notes vault** at `/mnt/notes`. This is pi's long-term memory across
+conversations; the contract is described in the `AGENTS.md` baked into
+`/workspace/AGENTS.md` (see `packages/agent-server/context/AGENTS.md`),
+which pi auto-loads at session start.
+
+Layout:
+
+- Same bucket (`zero-agent-state`) as sessions.
+- Prefix `<clerkUserId>/notes/`, covered by the same
+  `prefixPaths: ["<clerkUserId>/"]` temp credential — no additional
+  R2 setup or second bucket.
+- Same durability flags (`--fsync-on-close`, `--file-mode=0666`,
+  `--dir-mode=0777`, `-o allow_other`). Mount failure aborts the
+  container (pi has been promised memory; degraded boot would risk
+  silent data loss).
+
+The mount spec the entrypoint consumes is assembled by
+`apps/api/src/notes-mount.ts → resolveNotesMount(env, clerkUserId, creds)`
+and pushed into the container as `MOUNT_NOTES_*` envs (`ENDPOINT`,
+`BUCKET`, `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`,
+`SESSION_TOKEN`). Today there is one implementation (the Zero-managed
+R2 prefix above); when user-configured mounts ship, only the body of
+`resolveNotesMount` changes — `AgentContainer` and the entrypoint stay
+the same because they consume the same `MOUNT_NOTES_*` shape
+regardless of provider. The `MOUNT_NOTES_*` envs carry their own
+AWS_* values (sourced from the same minted creds today) so a future
+provider with different credentials doesn't require an entrypoint
+change.
+
 ## State Model
 
 All non-session state is in Workers KV.

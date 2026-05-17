@@ -19,8 +19,12 @@ In the [Cloudflare R2 dashboard](https://dash.cloudflare.com/?to=/:account/r2/ov
 4. Storage class: **Standard**.
 
 Done. No public access, no lifecycle rules. The bucket holds one prefix
-per Clerk user (`<clerkUserId>/`) and pi's JSONL session files inside
-each.
+per Clerk user (`<clerkUserId>/`) and two sub-prefixes inside each:
+pi's JSONL session files (under `<clerkUserId>/<sessionId>/`) and the
+user's notes vault (`<clerkUserId>/notes/`). Both are covered by the
+same `prefixPaths: ["<clerkUserId>/"]` temp credential, so no extra
+R2 setup is needed for notes — see
+[`design.md`](design.md#notes-vault-long-term-memory).
 
 ## Step 2 — Create the parent R2 API token
 

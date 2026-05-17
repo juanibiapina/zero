@@ -8,6 +8,7 @@ import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
 import { getGoogleAccessToken } from "./google-token";
 import { fmtErr, log, logError } from "./log";
+import { resolveNotesMount } from "./notes-mount";
 import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
 import { lookupSessionRecord } from "./sessions";
@@ -102,6 +103,8 @@ export class AgentContainer extends Container<Env> {
       getGoogleAccessToken(this.env, clerkUserId),
     ]);
 
+    const notesMount = await resolveNotesMount(this.env, clerkUserId, creds);
+
     // Push runtime-secret overrides to the substitute handler. Pushed on
     // every fetch; simpler than diffing.
     const overrides: Record<string, string> = {};
@@ -128,6 +131,12 @@ export class AgentContainer extends Container<Env> {
       AWS_ACCESS_KEY_ID: creds.accessKeyId,
       AWS_SECRET_ACCESS_KEY: creds.secretAccessKey,
       AWS_SESSION_TOKEN: creds.sessionToken,
+      MOUNT_NOTES_ENDPOINT: notesMount.endpoint,
+      MOUNT_NOTES_BUCKET: notesMount.bucket,
+      MOUNT_NOTES_PREFIX: notesMount.prefix,
+      MOUNT_NOTES_ACCESS_KEY_ID: notesMount.accessKeyId,
+      MOUNT_NOTES_SECRET_ACCESS_KEY: notesMount.secretAccessKey,
+      MOUNT_NOTES_SESSION_TOKEN: notesMount.sessionToken,
     };
   }
 }

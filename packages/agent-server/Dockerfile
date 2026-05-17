@@ -56,10 +56,17 @@ RUN node -e "const p=require('./package.json'); delete p.devDependencies; requir
 
 COPY dist/ ./dist/
 
-# /workspace + /tmp/pi-home must be writable by pi; /mnt/agent-state is
-# left root-owned (it's just the mount point).
-RUN mkdir -p /workspace /mnt/agent-state /tmp/pi-home && \
+# /workspace + /tmp/pi-home must be writable by pi; /mnt/agent-state
+# and /mnt/notes are left root-owned (they're just mount points;
+# tigrisfs publishes them with `-o allow_other`).
+RUN mkdir -p /workspace /mnt/agent-state /mnt/notes /tmp/pi-home && \
     chown -R pi:pi /workspace /tmp/pi-home
+
+# Pi auto-loads AGENTS.md from CWD and its parents at session start.
+# This file describes the /mnt/notes long-term memory contract.
+COPY context/AGENTS.md /workspace/AGENTS.md
+RUN chown pi:pi /workspace/AGENTS.md
+
 WORKDIR /workspace
 
 # Entrypoint mounts R2 then exec's node as the unprivileged `pi` user.
