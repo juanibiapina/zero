@@ -55,7 +55,7 @@ identifies the test program to Telegram; it's reusable forever and is
 ### 2. Set up the test topic
 
 The test uses **your own Telegram account** as the source user, talking
-to `@AgentJuanBot` from inside a forum topic. You need:
+to `@getzerobot` from inside a forum topic. You need:
 
 - A supergroup with topics enabled.
 - The bot added as a member.
@@ -87,7 +87,7 @@ doppler secrets set TG_TEST_API_ID="..."          --project zero-tests --config 
 doppler secrets set TG_TEST_API_HASH="..."        --project zero-tests --config dev
 doppler secrets set TG_TEST_CHAT_ID="-100..."     --project zero-tests --config dev
 doppler secrets set TG_TEST_THREAD_ID="..."       --project zero-tests --config dev
-doppler secrets set TG_TEST_BOT_USERNAME="AgentJuanBot" --project zero-tests --config dev
+doppler secrets set TG_TEST_BOT_USERNAME="getzerobot" --project zero-tests --config dev
 doppler secrets set TG_TEST_SESSION_STRING=""     --project zero-tests --config dev
 ```
 
@@ -120,8 +120,10 @@ the login step.
 
 The webhook routes messages by looking up `tg:<your-telegram-id>` in
 KV. Make sure that mapping exists by signing in to
-<https://zero.juanibiapina.dev>, pasting your Telegram numeric id, and
-saving. (If you've already done this for normal use, no action needed.)
+<https://zero.juanibiapina.dev> and clicking **Log in with Telegram**;
+the Login Widget posts a signed payload that the worker verifies and
+uses to write the KV mapping. (If you've already done this for normal
+use, no action needed.) See [`telegram-login.md`](telegram-login.md).
 
 ## Running the test
 

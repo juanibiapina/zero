@@ -1,13 +1,14 @@
 # Telegram Webhook Registration
 
-Telegram doesn't pull updates — it pushes them to a URL we register. The
-registration is a one-off manual step: we call Telegram's HTTP API to tell
-it where to deliver updates and which secret token to echo back.
+Telegram doesn't pull updates — it pushes them to a URL we register.
+Registration is a one-off step per bot; thereafter the only reasons to
+re-run it are to switch bots, rotate the secret, or recover from a
+deletion.
 
 > Reference: <https://core.telegram.org/bots/api#making-requests> and
 > <https://core.telegram.org/bots/api#setwebhook>.
 
-## What you need
+## Prerequisites
 
 - `TELEGRAM_BOT_TOKEN` — from `@BotFather`, stored in Doppler `zero-api`.
 - `TELEGRAM_WEBHOOK_SECRET` — any string we choose (recommended:
@@ -18,16 +19,53 @@ it where to deliver updates and which secret token to echo back.
   `zero-api`. grammY uses this to skip the per-request `getMe` round trip
   when constructing a `Bot` inside the worker. See
   [Refreshing `TELEGRAM_BOT_INFO`](#refreshing-telegram_bot_info) below.
-- The public webhook URL: `https://zero.juanibiapina.dev/api/webhooks/telegram`.
+- The public webhook URL: `https://zero.juanibiapina.dev/api/webhooks/telegram`
+  (hard-coded in the script).
 
-All three secrets must already be set in Doppler and synced to Cloudflare
+All three secrets must be set in Doppler and synced to Cloudflare
 (`bin/sync-secrets-to-cloudflare`) before registering — otherwise the
-worker will reject deliveries (401) or fail to start the bot.
+worker rejects deliveries (401) or fails to start the bot.
+
+## Register the webhook
+
+```bash
+bin/set-telegram-webhook
+```
+
+The script reads `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` from
+Doppler `zero-api/prd`, calls `setWebhook` with `drop_pending_updates:
+true`, and prints `getWebhookInfo` for inspection. Re-run any time
+after rotating the secret, switching bots, or finding the webhook
+unset.
+
+## Privacy Mode (groups)
+
+New bots default to Privacy Mode **on** (`can_read_all_group_messages:
+false`). In groups they only see commands, mentions of `@<bot>`, and
+replies to their own messages — *not* normal topic messages. Symptom:
+webhook is healthy, `pending_update_count: 0`, but tail logs stay
+silent when you send a message.
+
+Fix in BotFather:
+
+```
+/setprivacy
+```
+
+Pick the bot, choose **Disable**. **Then remove the bot from the group
+and re-add it** — Telegram caches the privacy flag at the moment of
+join; toggling it in BotFather alone does nothing for existing
+memberships.
+
+After re-adding, refresh `TELEGRAM_BOT_INFO` (below) so the cached
+`getMe` reflects `can_read_all_group_messages: true`.
 
 ## Refreshing `TELEGRAM_BOT_INFO`
 
-Fetch the bot info from Telegram and put it in Doppler (both `dev` and
-`prd` use the same bot today, so set both):
+Re-run when the bot's identity changes (rename via `@BotFather`, new
+username, toggled `can_join_groups`/`can_read_all_group_messages`,
+inline support, etc.). The value is not secret — it's the public
+`getMe` response — but we keep it in Doppler for consistency.
 
 ```bash
 TOKEN=$(doppler secrets get TELEGRAM_BOT_TOKEN --plain --project zero-api --config prd)
@@ -38,71 +76,29 @@ doppler secrets set TELEGRAM_BOT_INFO="$BOT_INFO" --project zero-api --config de
 bin/sync-secrets-to-cloudflare
 ```
 
-Re-run this whenever the bot's identity changes (rename via `@BotFather`,
-new username, toggled `can_join_groups`/inline support, etc.). The value
-is not secret — it's just the public `getMe` response — but we keep it in
-Doppler for consistency with the rest of the worker env.
-
-## Making requests
-
-All Telegram Bot API calls go to:
-
-```
-https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/<METHOD>
-```
-
-Parameters can be passed as query string, `application/x-www-form-urlencoded`,
-or `application/json`. We use JSON below.
-
-## Register the webhook
+## Inspect or remove the webhook
 
 ```bash
-TOKEN=$(doppler secrets get TELEGRAM_BOT_TOKEN       --plain --project zero-api --config prd)
-SECRET=$(doppler secrets get TELEGRAM_WEBHOOK_SECRET --plain --project zero-api --config prd)
+TOKEN=$(doppler secrets get TELEGRAM_BOT_TOKEN --plain --project zero-api --config prd)
 
-curl -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg url 'https://zero.juanibiapina.dev/api/webhooks/telegram' \
-                --arg secret "$SECRET" \
-                '{url: $url, secret_token: $secret, drop_pending_updates: true}')"
-```
-
-Expected response:
-
-```json
-{"ok":true,"result":true,"description":"Webhook was set"}
-```
-
-Notes:
-
-- `secret_token` must be 1–256 chars, only `A-Z`, `a-z`, `0-9`, `_`, `-`.
-- `drop_pending_updates: true` clears anything Telegram queued before the
-  webhook existed. Omit it if you want to preserve a backlog.
-- To restrict update types, add `allowed_updates`, e.g. `["message"]`.
-
-## Inspect the current webhook
-
-```bash
+# Inspect
 curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" | jq
-```
 
-Useful fields: `url`, `has_custom_certificate`, `pending_update_count`,
-`last_error_date`, `last_error_message`. `last_error_message` is the first
-thing to check when deliveries stop working.
-
-## Remove the webhook
-
-```bash
+# Remove (handy before switching bots, to silence the previous one)
 curl -X POST "https://api.telegram.org/bot${TOKEN}/deleteWebhook" \
   -H 'Content-Type: application/json' \
   -d '{"drop_pending_updates": true}'
 ```
 
+`last_error_date` and `last_error_message` from `getWebhookInfo` are the
+first place to look when deliveries stop working.
+
 ## Rotating the secret
 
-1. Generate a new secret and update Doppler (`zero-api`, config `prd`).
+1. Generate a new secret and update Doppler (`zero-api`, configs `dev`
+   and `prd`).
 2. `bin/sync-secrets-to-cloudflare` to push it to the worker.
-3. Re-run the `setWebhook` call above with the new value.
+3. `bin/set-telegram-webhook` to register the new value with Telegram.
 
 Order matters: if you update Telegram before the worker, every delivery
 fails until the worker catches up.

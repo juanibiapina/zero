@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Register the Telegram bot webhook against the production worker.
+# Reads TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET from Doppler (zero-api/prd).
+# See docs/telegram-webhook.md for the full operational notes.
+
+URL="https://zero.juanibiapina.dev/api/webhooks/telegram"
+
+TOKEN=$(doppler secrets get TELEGRAM_BOT_TOKEN       --plain --project zero-api --config prd)
+SECRET=$(doppler secrets get TELEGRAM_WEBHOOK_SECRET --plain --project zero-api --config prd)
+
+echo "=== Bot identity ==="
+curl -fsS "https://api.telegram.org/bot${TOKEN}/getMe" \
+  | jq '{id: .result.id, username: .result.username}'
+
+echo
+echo "=== Setting webhook to ${URL} ==="
+curl -fsS -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg url "$URL" --arg secret "$SECRET" \
+        '{url: $url, secret_token: $secret, drop_pending_updates: true}')" \
+  | jq
+
+echo
+echo "=== Current webhook ==="
+curl -fsS "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" \
+  | jq '.result | {url, pending_update_count, last_error_date, last_error_message, ip_address}'
