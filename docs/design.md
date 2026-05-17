@@ -258,7 +258,7 @@ entries and starts a fresh session.
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` mints prefix-scoped R2 temp creds and refreshes `envVars` on every call; the container mounts the user's R2 prefix at `/mnt/agent-state`. Defines `outboundByHost["zero.worker"]` for the Telegram reply path. | None (sessions live on the R2 mount inside the container; KV holds the topic↔session mappings) |
+| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` mints prefix-scoped R2 temp creds, resolves the user's mounts via `resolveMounts`, and refreshes `envVars` on every call; the container mounts each scope (sessions, notes) via its own tigrisfs invocation. Defines `outboundByHost["zero.worker"]` for the Telegram reply path. | None (sessions and notes live on R2 mounts inside the container; KV holds the topic↔session mappings) |
 
 ## Routes
 
@@ -390,16 +390,22 @@ handler:
   `envVars` entirely so `gws` exits with a clear auth error rather
   than forwarding a sentinel nothing can substitute.
 
-A third secret class, **R2 temporary credentials**, follows a
-privilege-separation pattern instead of substitution: tigrisfs (root)
-consumes them at mount time, the entrypoint shell scrubs them, and
-node is execed under the unprivileged `pi` user via `setpriv`.
-`/proc/<pid>/environ` is mode `0400` owned by the process, so pi
-cannot recover them by reading tigrisfs's env. The mount is published
-with `-o allow_other` (and `user_allow_other` in `/etc/fuse.conf`) so
-the non-root pi user can still read and write through it. This
-OS-level fix replaces substitution-on-egress with simple file
-permissions for the one credential set tigrisfs needs in-process.
+A third secret class, **per-mount S3 credentials** (carried by every
+`MOUNT_<n>_*` env group the worker emits, see
+[Mount assembly](#mount-assembly)), follows a privilege-separation
+pattern instead of substitution: each tigrisfs invocation (root)
+consumes its own `MOUNT_<n>_ACCESS_KEY_ID`/`SECRET_ACCESS_KEY`/
+`SESSION_TOKEN` at mount time, the entrypoint shell scrubs every
+such trio in a loop, and node is execed under the unprivileged `pi`
+user via `setpriv`. `/proc/<pid>/environ` is mode `0400` owned by
+the process, so pi cannot recover them by reading tigrisfs's env.
+Mounts are published with `-o allow_other` (and `user_allow_other`
+in `/etc/fuse.conf`) so the non-root pi user can still read and
+write through them. This OS-level fix replaces substitution-on-egress
+with simple file permissions for the credentials tigrisfs needs
+in-process. Sentinels would be wrong here regardless: tigrisfs
+computes SigV4 over the request body, and a mid-flight byte swap on
+egress would invalidate the signature.
 
 ## Secrets
 
@@ -414,7 +420,8 @@ Stored in Doppler (`zero-api`):
   the catch-all outbound handler; pi sees only a sentinel
 - `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PARENT_ACCESS_KEY_ID`,
   `R2_PARENT_SECRET_ACCESS_KEY` — used by `AgentContainer` to mint
-  prefix-scoped R2 temp credentials for the per-user FUSE mount. See
+  prefix-scoped R2 temp credentials shared across the per-user FUSE
+  mounts (sessions, notes) under `<clerkUserId>/`. See
   [`r2-mount.md`](r2-mount.md).
 
 Google Workspace access is **not** stored in Doppler. Each user opts in
