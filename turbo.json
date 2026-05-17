@@ -32,6 +32,9 @@
     "@zero/api#typecheck": {
       "dependsOn": ["@zero/agent-server#build"]
     },
+    "@zero/api#lint": {
+      "dependsOn": ["@zero/agent-server#build"]
+    },
     "test": {
       "outputs": []
     },
