@@ -3,9 +3,17 @@
 // KV schema:
 //   clerk:{clerkUserId} → telegramId   (forward, read by the web UI)
 //   tg:{telegramId}     → clerkUserId  (reverse, read by the webhook)
+//
+// `POST /api/telegram-link` accepts a Telegram Login Widget payload and
+// links the caller's account after HMAC verification.
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
+import { log, logError } from "../log";
+import {
+  TelegramAuthPayloadSchema,
+  verifyTelegramAuth,
+} from "../telegram-auth";
 import type { Env } from "../types";
 
 type Variables = {
@@ -16,12 +24,25 @@ const TelegramIdSchema = z.object({
   telegramId: z.string().nullable(),
 });
 
-const SetTelegramIdSchema = z.object({
-  telegramId: z.string().trim().min(1).max(64).nullable(),
-});
-
 const clerkKey = (clerkUserId: string) => `clerk:${clerkUserId}`;
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
+
+const writeMapping = async (
+  env: Env,
+  clerkUserId: string,
+  telegramId: string | null,
+): Promise<void> => {
+  const previous = await env.KV.get(clerkKey(clerkUserId));
+  if (previous && previous !== telegramId) {
+    await env.KV.delete(tgKey(previous));
+  }
+  if (telegramId) {
+    await env.KV.put(clerkKey(clerkUserId), telegramId);
+    await env.KV.put(tgKey(telegramId), clerkUserId);
+  } else {
+    await env.KV.delete(clerkKey(clerkUserId));
+  }
+};
 
 export const createUserSettingsRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
@@ -45,44 +66,70 @@ export const createUserSettingsRoutes = () => {
     return c.json({ telegramId }, 200);
   });
 
-  const putRoute = createRoute({
-    method: "put",
-    path: "/api/telegram-id",
+  const ErrorSchema = z.object({ error: z.string() });
+
+  const linkRoute = createRoute({
+    method: "post",
+    path: "/api/telegram-link",
     tags: ["UserSettings"],
-    summary: "Set the caller's Telegram id",
+    summary: "Link the caller's Telegram account via Login Widget payload",
     request: {
       body: {
-        content: { "application/json": { schema: SetTelegramIdSchema } },
+        content: { "application/json": { schema: TelegramAuthPayloadSchema } },
       },
     },
     responses: {
       200: {
         content: { "application/json": { schema: TelegramIdSchema } },
-        description: "Updated Telegram id",
+        description: "Account linked",
+      },
+      401: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Hash mismatch or stale payload",
       },
     },
   });
 
-  router.openapi(putRoute, async (c) => {
-    const { telegramId } = c.req.valid("json");
+  router.openapi(linkRoute, async (c) => {
+    const payload = c.req.valid("json");
     const clerkUserId = c.get("userId");
-    const env = c.env;
 
-    const previous = await env.KV.get(clerkKey(clerkUserId));
-
-    // Clear stale reverse-index entry if the telegram id changed or was cleared.
-    if (previous && previous !== telegramId) {
-      await env.KV.delete(tgKey(previous));
+    const ok = await verifyTelegramAuth(payload, c.env.TELEGRAM_BOT_TOKEN);
+    if (!ok) {
+      logError("telegram_link_rejected", {
+        clerk_user_id: clerkUserId,
+        telegram_id: String(payload.id),
+      });
+      return c.json({ error: "invalid telegram auth payload" }, 401);
     }
 
-    if (telegramId) {
-      await env.KV.put(clerkKey(clerkUserId), telegramId);
-      await env.KV.put(tgKey(telegramId), clerkUserId);
-    } else {
-      await env.KV.delete(clerkKey(clerkUserId));
-    }
-
+    const telegramId = String(payload.id);
+    await writeMapping(c.env, clerkUserId, telegramId);
+    log("telegram_linked", {
+      clerk_user_id: clerkUserId,
+      telegram_id: telegramId,
+    });
     return c.json({ telegramId }, 200);
+  });
+
+  const unlinkRoute = createRoute({
+    method: "delete",
+    path: "/api/telegram-id",
+    tags: ["UserSettings"],
+    summary: "Unlink the caller's Telegram account",
+    responses: {
+      200: {
+        content: { "application/json": { schema: TelegramIdSchema } },
+        description: "Telegram id cleared",
+      },
+    },
+  });
+
+  router.openapi(unlinkRoute, async (c) => {
+    const clerkUserId = c.get("userId");
+    await writeMapping(c.env, clerkUserId, null);
+    log("telegram_unlinked", { clerk_user_id: clerkUserId });
+    return c.json({ telegramId: null }, 200);
   });
 
   return router;

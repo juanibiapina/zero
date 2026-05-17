@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ClerkProvider,
   SignIn,
@@ -7,7 +7,6 @@ import {
   useUser,
 } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   GOOGLE_WORKSPACE_SCOPES,
   missingScopes,
@@ -17,17 +16,65 @@ import {
 const GOOGLE_SCOPES_MUTABLE: string[] = [...GOOGLE_WORKSPACE_SCOPES];
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
 
 if (!PUBLISHABLE_KEY) {
   throw new Error("Add your Clerk Publishable Key to .env.local");
 }
+if (!TELEGRAM_BOT_USERNAME) {
+  throw new Error("Add VITE_TELEGRAM_BOT_USERNAME to .env.local");
+}
 
-function TelegramIdForm() {
+interface TelegramAuthPayload {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
+
+declare global {
+  interface Window {
+    onTelegramAuth?: (user: TelegramAuthPayload) => void;
+  }
+}
+
+// Renders the official Telegram Login Widget script tag. The widget
+// injects an iframe and invokes window.onTelegramAuth on success.
+function TelegramLoginWidget({
+  onAuth,
+}: {
+  onAuth: (payload: TelegramAuthPayload) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    window.onTelegramAuth = onAuth;
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", TELEGRAM_BOT_USERNAME!);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.setAttribute("data-request-access", "write");
+    containerRef.current?.appendChild(script);
+    return () => {
+      delete window.onTelegramAuth;
+      script.remove();
+    };
+  }, [onAuth]);
+
+  return <div ref={containerRef} />;
+}
+
+function TelegramConnect() {
   const { getToken } = useAuth();
-  const [value, setValue] = useState("");
+  const [telegramId, setTelegramId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,14 +85,14 @@ function TelegramIdForm() {
       });
       if (!res.ok) {
         if (!cancelled) {
-          setStatus(`Failed to load: ${res.status}`);
+          setError(`Failed to load: ${res.status}`);
           setLoaded(true);
         }
         return;
       }
       const data = (await res.json()) as { telegramId: string | null };
       if (!cancelled) {
-        setValue(data.telegramId ?? "");
+        setTelegramId(data.telegramId);
         setLoaded(true);
       }
     })();
@@ -54,27 +101,51 @@ function TelegramIdForm() {
     };
   }, [getToken]);
 
-  const onSave = async () => {
-    setSaving(true);
-    setStatus(null);
+  const onAuth = useCallback(
+    (payload: TelegramAuthPayload) => {
+      void (async () => {
+        setBusy(true);
+        setError(null);
+        try {
+          const token = await getToken();
+          const res = await fetch("/api/telegram-link", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token ?? ""}`,
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            setError(`Link failed: ${res.status}`);
+            return;
+          }
+          const data = (await res.json()) as { telegramId: string | null };
+          setTelegramId(data.telegramId);
+        } finally {
+          setBusy(false);
+        }
+      })();
+    },
+    [getToken],
+  );
+
+  const onDisconnect = async () => {
+    setBusy(true);
+    setError(null);
     try {
-      const trimmed = value.trim();
       const token = await getToken();
       const res = await fetch("/api/telegram-id", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token ?? ""}`,
-        },
-        body: JSON.stringify({ telegramId: trimmed === "" ? null : trimmed }),
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token ?? ""}` },
       });
       if (!res.ok) {
-        setStatus(`Save failed: ${res.status}`);
+        setError(`Disconnect failed: ${res.status}`);
         return;
       }
-      setStatus("Saved.");
+      setTelegramId(null);
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
 
@@ -85,24 +156,34 @@ function TelegramIdForm() {
         <UserButton />
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor="telegram-id" className="text-sm font-medium">
-          Telegram user ID
-        </label>
-        <Input
-          id="telegram-id"
-          placeholder="123456789"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          disabled={!loaded || saving}
-        />
-      </div>
-
-      <Button onClick={() => { void onSave(); }} disabled={!loaded || saving}>
-        {saving ? "Saving…" : "Save"}
-      </Button>
-
-      {status && <p className="text-sm text-muted-foreground">{status}</p>}
+      <h2 className="text-sm font-medium">Telegram</h2>
+      {!loaded ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : telegramId === null ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Link your Telegram account to talk to the bot.
+          </p>
+          <TelegramLoginWidget onAuth={onAuth} />
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Connected ✅ Telegram id {telegramId}
+          </p>
+          <Button
+            variant="link"
+            className="h-auto p-0 text-sm"
+            disabled={busy}
+            onClick={() => {
+              void onDisconnect();
+            }}
+          >
+            Disconnect
+          </Button>
+        </>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }
@@ -128,7 +209,7 @@ function AuthGate() {
 
   return (
     <div className="space-y-6">
-      <TelegramIdForm />
+      <TelegramConnect />
       <GoogleConnect />
     </div>
   );

@@ -13,7 +13,7 @@ gob run bin/deploy
 
 ## Architecture
 
-Zero receives Telegram bot webhooks, routes each update to the right user via KV, and forwards forum-topic messages to a per-user Cloudflare Container that runs [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) against Claude Sonnet 4.5. The agent's reply is sent back into the same Telegram topic. Pi sessions persist on R2 (one prefix per user, mounted via tigrisfs FUSE inside the container) so conversations survive container sleep/wake. The web app is a single screen where a signed-in user pastes their Telegram numeric id.
+Zero receives Telegram bot webhooks, routes each update to the right user via KV, and forwards forum-topic messages to a per-user Cloudflare Container that runs [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) against Claude Sonnet 4.5. The agent's reply is sent back into the same Telegram topic. Pi sessions persist on R2 (one prefix per user, mounted via tigrisfs FUSE inside the container) so conversations survive container sleep/wake. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`).
 
 Packages:
 

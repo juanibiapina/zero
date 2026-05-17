@@ -3,8 +3,9 @@
 ## Goal
 
 Zero turns a Telegram forum topic into a chat session with an agent. The
-web frontend lets a Clerk user paste their numeric Telegram id, which
-links them to the bot. From then on, every message the user sends in a
+web frontend uses Telegram's [Login Widget](https://core.telegram.org/widgets/login)
+to link a Clerk account to a Telegram numeric id (HMAC-verified server-side
+against the bot token). From then on, every message the user sends in a
 **forum topic** is routed to a per-user agent container; the container
 posts a reply back into the same topic. Direct messages, channel posts,
 edits, callbacks etc. are dropped — only topic messages count today.
@@ -209,9 +210,15 @@ entries and starts a fresh session.
 
 ```
 GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
-PUT    /api/telegram-id                  — Set/clear caller's Telegram id (Clerk)
+POST   /api/telegram-link                — Link via Login Widget payload (Clerk)
+DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
 ```
+
+The link route accepts the Login Widget callback payload and verifies
+its HMAC against `TELEGRAM_BOT_TOKEN` (`apps/api/src/telegram-auth.ts`).
+See [`telegram-login.md`](telegram-login.md) for the algorithm, BotFather
+setup, and the required `VITE_TELEGRAM_BOT_USERNAME` env var.
 
 The webhook handler is built on grammY via its `hono` adapter
 (`webhookCallback`). grammY validates the secret-token header against
