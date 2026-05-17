@@ -204,18 +204,30 @@ Layout:
   failure aborts the container (pi has been promised memory;
   degraded boot would risk silent data loss).
 
-The mount spec the entrypoint consumes is assembled by
-`apps/api/src/notes-mount.ts → resolveNotesMount(env, clerkUserId, creds)`
-and pushed into the container as `MOUNT_NOTES_*` envs (`ENDPOINT`,
-`BUCKET`, `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`,
-`SESSION_TOKEN`). Today there is one implementation (the Zero-managed
-R2 prefix above); when user-configured mounts ship, only the body of
-`resolveNotesMount` changes — `AgentContainer` and the entrypoint stay
-the same because they consume the same `MOUNT_NOTES_*` shape
-regardless of provider. The `MOUNT_NOTES_*` envs carry their own
-AWS_* values (sourced from the same minted creds today) so a future
-provider with different credentials doesn't require an entrypoint
-change.
+### Mount assembly
+
+Both the sessions mount and the notes vault are produced by a single
+seam:
+
+```
+apps/api/src/mounts.ts → resolveMounts(env, clerkUserId, creds)
+   → MountSpec[]   // ordered list of mounts to bring up
+```
+
+`AgentContainer.refreshEnvVars` flattens that list into numbered
+`MOUNT_<n>_*` env groups (`NAME`, `POINT`, `ENDPOINT`, `BUCKET`,
+`PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `SESSION_TOKEN`) plus
+a `MOUNT_COUNT`. `entrypoint.sh` loops over them and fires one
+`tigrisfs` invocation per spec; the shell is entirely scope-agnostic.
+
+Today there are two adapters — both Zero-managed prefixes on the
+shared `zero-agent-state` bucket sharing one minted temp credential.
+When a user-configured provider for a scope ships (e.g. BYO S3 for
+notes), only that entry's endpoint/creds change in `resolveMounts`;
+`AgentContainer` and `entrypoint.sh` stay untouched because they
+consume the same `MOUNT_<n>_*` shape regardless of provider. Each
+`MOUNT_<n>_*` group carries its own AWS_* values, so per-invocation
+creds in the entrypoint trivially scope to one mount.
 
 ## State Model
 

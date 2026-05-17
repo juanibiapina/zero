@@ -69,12 +69,15 @@ expected to be reachable from the server's environment.
 | `ANTHROPIC_API_KEY` | yes      | —             | Anthropic API key, used by pi-ai's built-in `anthropic` provider. |
 | `CWD`               | no       | `/workspace`  | Working directory pi exposes to its `read`/`write`/`bash`/`edit` tools. Must be writable. |
 | `AGENT_STATE_DIR`   | yes      | —             | Directory to persist sessions in. One subdir per sessionId; pi writes a JSONL file inside. Must be writable. Server exits if unset. |
-| `MOUNT_NOTES_ENDPOINT` | yes (container) | — | S3-compatible endpoint URL the entrypoint mounts at `/mnt/notes` as the user's long-term notes vault. Consumed by `entrypoint.sh`, not by the Node server. |
-| `MOUNT_NOTES_BUCKET` | yes (container) | — | Bucket name for the notes mount. |
-| `MOUNT_NOTES_PREFIX` | yes (container) | — | Prefix inside the bucket; becomes the FUSE root for the notes mount. |
-| `MOUNT_NOTES_ACCESS_KEY_ID` | yes (container) | — | Access key id used by `tigrisfs` for the notes mount (scrubbed before `exec node`). |
-| `MOUNT_NOTES_SECRET_ACCESS_KEY` | yes (container) | — | Secret access key, scrubbed before `exec node`. |
-| `MOUNT_NOTES_SESSION_TOKEN` | yes (container) | — | Session token, scrubbed before `exec node`. |
+| `MOUNT_COUNT` | yes (container) | — | Number of `MOUNT_<n>_*` groups the entrypoint should mount before `exec node`. Set by the worker. |
+| `MOUNT_<n>_NAME` | yes (container) | — | Stable identifier for the mount (e.g. `agent-state`, `notes`). |
+| `MOUNT_<n>_POINT` | yes (container) | — | Absolute path inside the container where `tigrisfs` mounts this prefix. |
+| `MOUNT_<n>_ENDPOINT` | yes (container) | — | S3-compatible endpoint URL. |
+| `MOUNT_<n>_BUCKET` | yes (container) | — | Bucket name. |
+| `MOUNT_<n>_PREFIX` | yes (container) | — | Prefix inside the bucket; becomes the FUSE root. |
+| `MOUNT_<n>_ACCESS_KEY_ID` | yes (container) | — | Access key id, scoped to just this `tigrisfs` invocation, scrubbed before `exec node`. |
+| `MOUNT_<n>_SECRET_ACCESS_KEY` | yes (container) | — | Secret access key, scrubbed before `exec node`. |
+| `MOUNT_<n>_SESSION_TOKEN` | yes (container) | — | Session token, scrubbed before `exec node`. |
 
 ## Running
 

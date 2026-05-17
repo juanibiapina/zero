@@ -8,7 +8,7 @@ import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
 import { getGoogleAccessToken } from "./google-token";
 import { fmtErr, log, logError } from "./log";
-import { resolveNotesMount } from "./notes-mount";
+import { resolveMounts, type MountSpec } from "./mounts";
 import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
 import { lookupSessionRecord } from "./sessions";
@@ -103,7 +103,7 @@ export class AgentContainer extends Container<Env> {
       getGoogleAccessToken(this.env, clerkUserId),
     ]);
 
-    const notesMount = await resolveNotesMount(this.env, clerkUserId, creds);
+    const mounts = await resolveMounts(this.env, clerkUserId, creds);
 
     // Push runtime-secret overrides to the substitute handler. Pushed on
     // every fetch; simpler than diffing.
@@ -123,23 +123,30 @@ export class AgentContainer extends Container<Env> {
       REPLY_URL: "http://zero.worker/reply",
       ...sentinels,
       CLERK_USER_ID: clerkUserId,
-      R2_ACCOUNT_ID: this.env.R2_ACCOUNT_ID,
-      R2_BUCKET_NAME: this.env.R2_BUCKET_NAME,
-      R2_PREFIX: `${clerkUserId}/sessions`,
-      R2_ENDPOINT: `https://${this.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
       AGENT_STATE_DIR,
-      AWS_ACCESS_KEY_ID: creds.accessKeyId,
-      AWS_SECRET_ACCESS_KEY: creds.secretAccessKey,
-      AWS_SESSION_TOKEN: creds.sessionToken,
-      MOUNT_NOTES_ENDPOINT: notesMount.endpoint,
-      MOUNT_NOTES_BUCKET: notesMount.bucket,
-      MOUNT_NOTES_PREFIX: notesMount.prefix,
-      MOUNT_NOTES_ACCESS_KEY_ID: notesMount.accessKeyId,
-      MOUNT_NOTES_SECRET_ACCESS_KEY: notesMount.secretAccessKey,
-      MOUNT_NOTES_SESSION_TOKEN: notesMount.sessionToken,
+      ...flattenMounts(mounts),
     };
   }
 }
+
+// Flatten the ordered MountSpec list into MOUNT_<n>_* env groups for
+// `entrypoint.sh` to iterate. The shape stays scope-agnostic so adding
+// a third mount needs no entrypoint change.
+const flattenMounts = (mounts: MountSpec[]): Record<string, string> => {
+  const out: Record<string, string> = { MOUNT_COUNT: String(mounts.length) };
+  mounts.forEach((m, idx) => {
+    const i = (idx + 1).toString();
+    out[`MOUNT_${i}_NAME`] = m.name;
+    out[`MOUNT_${i}_POINT`] = m.mountPoint;
+    out[`MOUNT_${i}_ENDPOINT`] = m.endpoint;
+    out[`MOUNT_${i}_BUCKET`] = m.bucket;
+    out[`MOUNT_${i}_PREFIX`] = m.prefix;
+    out[`MOUNT_${i}_ACCESS_KEY_ID`] = m.accessKeyId;
+    out[`MOUNT_${i}_SECRET_ACCESS_KEY`] = m.secretAccessKey;
+    out[`MOUNT_${i}_SESSION_TOKEN`] = m.sessionToken;
+  });
+  return out;
+};
 
 AgentContainer.outboundByHost = {
   "zero.worker": (req, env) => handleContainerReply(req, env),

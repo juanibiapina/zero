@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Mount R2 via tigrisfs, drop privileges to `pi`, exec node. Per-write
-# durability comes from tigrisfs `--fsync-on-close`. Privilege separation
-# keeps the R2 creds (cached in tigrisfs's address space, root-owned) out
-# of reach of pi. See docs/design.md § Secret Proxying.
+# Mount each MOUNT_<n>_* group via tigrisfs, drop privileges to `pi`,
+# exec node. Per-write durability comes from tigrisfs `--fsync-on-close`.
+# Privilege separation keeps the per-mount creds (cached in tigrisfs's
+# address space, root-owned) out of reach of pi. See docs/design.md
+# § Persistence and § Secret Proxying.
 
 set -euo pipefail
 
-MOUNT_POINT="/mnt/agent-state"
 CF_CA_SRC="/etc/cloudflare/certs/cloudflare-containers-ca.crt"
 CF_CA_DEST="/usr/local/share/ca-certificates/cloudflare-containers-ca.crt"
 
@@ -38,87 +38,78 @@ else
   log_json "missing_cloudflare_ca" "path=${CF_CA_SRC}" "note=HTTPS interception will fail"
 fi
 
-log_json "mounting_r2" "bucket=${R2_BUCKET_NAME}" "prefix=${R2_PREFIX}" "mount_point=${MOUNT_POINT}"
-
-# tigrisfs daemonises (the launcher blocks until the mount is ready, then
-# exits leaving the daemon running). We don't track the PID and exec node
-# next.
+# Iterate the MOUNT_<n>_* env groups emitted by the worker's
+# AgentContainer.refreshEnvVars. Each group is a complete tigrisfs
+# invocation; the shell stays scope-agnostic so the worker can add or
+# remove mounts without touching this file.
 #
-# `-o allow_other`: lets non-root pi access the mount (paired with
-# `user_allow_other` in /etc/fuse.conf, set in the Dockerfile).
+# Per-invocation AWS_* override scopes the creds to just one tigrisfs
+# call. A future provider (e.g. user-configured S3) with different
+# creds for one mount won't disturb the others.
 #
-# `--file-mode=0666 --dir-mode=0777`: every inode in the mount is
-# world-writable. tigrisfs reports inodes as uid=0; with the defaults
-# (0600/0755) pi (uid 1001) gets EACCES on every write and on mkdir
-# under the root. `--uid=1001` is not an alternative because
-# tigrisfs's `--setuid` defaults to `--uid`, which would drop tigrisfs
-# off root — but it needs root for the FUSE mount and to hold the AWS
-# creds out of pi's reach. (Verified by the integration test:
-# removing these flags makes the first createSession fail with 500.)
+# tigrisfs daemonises (the launcher blocks until the mount is ready,
+# then exits leaving the daemon running). We don't track the PIDs.
 #
-# `--fsync-on-close`: close(2) blocks until R2 confirms the upload.
-# Without it, pi's appendFileSync writes land in tigrisfs's writeback
-# cache and are lost on idle eviction / deploy / crash. (Verified:
-# removing this makes the post-5min-idle integration-test turn time
-# out because the cold-resumed container reads a stale JSONL.)
-tigrisfs \
-  --endpoint "${R2_ENDPOINT}" \
-  --file-mode=0666 \
-  --dir-mode=0777 \
-  --fsync-on-close \
-  -o allow_other \
-  "${R2_BUCKET_NAME}:${R2_PREFIX}" \
-  "${MOUNT_POINT}"
+# Flags rationale (verified by integration test; see docs/tech-debt.md
+# "R2 persistence fix — verification history"):
+#   -o allow_other         lets non-root pi access the mount, paired
+#                          with `user_allow_other` in /etc/fuse.conf
+#                          set in the Dockerfile.
+#   --file-mode=0666       inodes are reported as uid=0 by tigrisfs;
+#   --dir-mode=0777        without these the pi user (uid 1001) gets
+#                          EACCES on writes and mkdir.
+#   --fsync-on-close       close(2) blocks until R2 confirms; without
+#                          it, pi's appendFileSync lands in writeback
+#                          cache and is lost on idle eviction / crash.
+for i in $(seq 1 "${MOUNT_COUNT}"); do
+  name_var="MOUNT_${i}_NAME"
+  point_var="MOUNT_${i}_POINT"
+  endpoint_var="MOUNT_${i}_ENDPOINT"
+  bucket_var="MOUNT_${i}_BUCKET"
+  prefix_var="MOUNT_${i}_PREFIX"
+  ak_var="MOUNT_${i}_ACCESS_KEY_ID"
+  sk_var="MOUNT_${i}_SECRET_ACCESS_KEY"
+  st_var="MOUNT_${i}_SESSION_TOKEN"
 
-# Defensive: fail loud rather than continue with a non-functional mount.
-if ! mountpoint -q "${MOUNT_POINT}"; then
-  log_json "mount_failed" "mount_point=${MOUNT_POINT}"
-  exit 1
-fi
+  name="${!name_var}"
+  point="${!point_var}"
 
-log_json "mounted_r2" "mount_point=${MOUNT_POINT}"
+  log_json "mounting" "name=${name}" "bucket=${!bucket_var}" "prefix=${!prefix_var}" "mount_point=${point}"
 
-NOTES_MOUNT_POINT="/mnt/notes"
-log_json "mounting_notes" "bucket=${MOUNT_NOTES_BUCKET}" "prefix=${MOUNT_NOTES_PREFIX}" "mount_point=${NOTES_MOUNT_POINT}"
+  AWS_ACCESS_KEY_ID="${!ak_var}" \
+  AWS_SECRET_ACCESS_KEY="${!sk_var}" \
+  AWS_SESSION_TOKEN="${!st_var}" \
+  tigrisfs \
+    --endpoint "${!endpoint_var}" \
+    --file-mode=0666 \
+    --dir-mode=0777 \
+    --fsync-on-close \
+    -o allow_other \
+    "${!bucket_var}:${!prefix_var}" \
+    "${point}"
 
-# Per-invocation AWS_* override so a future notes-mount provider with
-# different creds (e.g. user-configured S3) doesn't need entrypoint
-# changes; today the values are the same temp creds as the sessions
-# mount above.
-AWS_ACCESS_KEY_ID="${MOUNT_NOTES_ACCESS_KEY_ID}" \
-AWS_SECRET_ACCESS_KEY="${MOUNT_NOTES_SECRET_ACCESS_KEY}" \
-AWS_SESSION_TOKEN="${MOUNT_NOTES_SESSION_TOKEN}" \
-tigrisfs \
-  --endpoint "${MOUNT_NOTES_ENDPOINT}" \
-  --file-mode=0666 \
-  --dir-mode=0777 \
-  --fsync-on-close \
-  -o allow_other \
-  "${MOUNT_NOTES_BUCKET}:${MOUNT_NOTES_PREFIX}" \
-  "${NOTES_MOUNT_POINT}"
+  # Defensive: fail loud rather than continue with a non-functional mount.
+  if ! mountpoint -q "${point}"; then
+    log_json "mount_failed" "name=${name}" "mount_point=${point}"
+    exit 1
+  fi
 
-if ! mountpoint -q "${NOTES_MOUNT_POINT}"; then
-  log_json "mount_failed" "mount_point=${NOTES_MOUNT_POINT}"
-  exit 1
-fi
-
-log_json "mounted_notes" "mount_point=${NOTES_MOUNT_POINT}"
-
-export AGENT_STATE_DIR="${MOUNT_POINT}"
+  log_json "mounted" "name=${name}" "mount_point=${point}"
+done
 
 # Privilege separation, per docs/design.md § Secret Proxying: mount
 # credentials are consumed by tigrisfs (root) at mount time and then
 # scrubbed from the env so the unprivileged `pi` user can't recover
 # them via /proc/self/environ. tigrisfs has already cached them in its
-# own root-owned address space, so the mount keeps working after the
-# unset. Any future `MOUNT_*_*` secret must be added below for the
-# pattern to hold — do NOT reach for sentinel substitution for these:
-# tigrisfs computes SigV4 over the request body and a mid-flight byte
-# swap on egress would invalidate the signature.
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
-      R2_PARENT_ACCESS_KEY_ID R2_PARENT_SECRET_ACCESS_KEY \
-      MOUNT_NOTES_ACCESS_KEY_ID MOUNT_NOTES_SECRET_ACCESS_KEY \
-      MOUNT_NOTES_SESSION_TOKEN
+# own root-owned address space, so the mounts keep working after the
+# unset. Any future per-mount secret added to a MOUNT_<n>_* group must
+# be added below for the pattern to hold — do NOT reach for sentinel
+# substitution for these: tigrisfs computes SigV4 over the request
+# body and a mid-flight byte swap on egress would invalidate the
+# signature.
+for i in $(seq 1 "${MOUNT_COUNT}"); do
+  unset "MOUNT_${i}_ACCESS_KEY_ID" "MOUNT_${i}_SECRET_ACCESS_KEY" "MOUNT_${i}_SESSION_TOKEN"
+done
 
 log_json "drop_privileges" "user=pi" "uid=1001"
 
