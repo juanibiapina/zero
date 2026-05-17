@@ -128,14 +128,24 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 
 ## Persistence
 
-Pi sessions live on R2 in the shared `zero-agent-state` bucket. Each
-Clerk user owns the prefix `<clerkUserId>/`. Inside the container,
-tigrisfs mounts that prefix at the hard-coded path `/mnt/agent-state`.
-The agent-server creates one subdirectory per session id
-(`/mnt/agent-state/<sessionId>/`) and hands it to pi as the session
-directory; pi writes its JSONL file inside. On container restart, the
-bridge lazy-loads via `SessionManager.continueRecent` against the same
-directory, transparently resuming the conversation.
+Each Clerk user owns the prefix `<clerkUserId>/` on the shared
+`zero-agent-state` bucket. Inside that prefix, top-level sub-prefixes
+partition the namespace by scope:
+
+- `<clerkUserId>/sessions/<sessionId>/` — pi session JSONL files
+- `<clerkUserId>/notes/`               — the long-term notes vault
+  (see [Notes vault](#notes-vault-long-term-memory) below)
+
+New scopes can be added as further siblings (`<clerkUserId>/<scope>/`)
+without colliding with the session-id namespace.
+
+For sessions, tigrisfs mounts `<clerkUserId>/sessions/` at the
+hard-coded path `/mnt/agent-state`. The agent-server creates one
+subdirectory per session id (`/mnt/agent-state/<sessionId>/`) and
+hands it to pi as the session directory; pi writes its JSONL file
+inside. On container restart, the bridge lazy-loads via
+`SessionManager.continueRecent` against the same directory,
+transparently resuming the conversation.
 
 The directory's existence is the only persisted index — there is no
 sidecar metadata file. Pi's internal session ids are not used by the
@@ -170,8 +180,8 @@ remains consistent.
 
 Isolation has two layers:
 
-1. **FUSE root locked to the user's prefix.** `tigrisfs zero-agent-state:<clerkUserId> /mnt/agent-state` makes the prefix the filesystem root from inside the container; pi has no path to traverse outside it.
-2. **Prefix-scoped R2 credentials.** The temp credential is bound to `prefixPaths: ["<clerkUserId>/"]`, so even a leaked credential cannot list or read other users' prefixes.
+1. **FUSE root locked to the scope sub-prefix.** `tigrisfs zero-agent-state:<clerkUserId>/sessions /mnt/agent-state` makes the sessions sub-prefix the filesystem root for the sessions mount; pi has no path to traverse out of it (not even sideways into `<clerkUserId>/notes/`, which is reachable only via the separate `/mnt/notes` mount).
+2. **Prefix-scoped R2 credentials.** The temp credential is bound to `prefixPaths: ["<clerkUserId>/"]` — covering the whole user prefix so sibling scope mounts can attach with the same token — so even a leaked credential cannot list or read other users' prefixes.
 
 See [`r2-mount.md`](r2-mount.md) for one-time bucket and token setup.
 
@@ -185,14 +195,14 @@ which pi auto-loads at session start.
 
 Layout:
 
-- Same bucket (`zero-agent-state`) as sessions.
-- Prefix `<clerkUserId>/notes/`, covered by the same
+- Sibling scope under the user prefix: `<clerkUserId>/notes/`
+  alongside `<clerkUserId>/sessions/`. Covered by the same
   `prefixPaths: ["<clerkUserId>/"]` temp credential — no additional
   R2 setup or second bucket.
-- Same durability flags (`--fsync-on-close`, `--file-mode=0666`,
-  `--dir-mode=0777`, `-o allow_other`). Mount failure aborts the
-  container (pi has been promised memory; degraded boot would risk
-  silent data loss).
+- Same durability flags as the sessions mount (`--fsync-on-close`,
+  `--file-mode=0666`, `--dir-mode=0777`, `-o allow_other`). Mount
+  failure aborts the container (pi has been promised memory;
+  degraded boot would risk silent data loss).
 
 The mount spec the entrypoint consumes is assembled by
 `apps/api/src/notes-mount.ts → resolveNotesMount(env, clerkUserId, creds)`

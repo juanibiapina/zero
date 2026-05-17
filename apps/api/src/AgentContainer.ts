@@ -125,7 +125,7 @@ export class AgentContainer extends Container<Env> {
       CLERK_USER_ID: clerkUserId,
       R2_ACCOUNT_ID: this.env.R2_ACCOUNT_ID,
       R2_BUCKET_NAME: this.env.R2_BUCKET_NAME,
-      R2_PREFIX: clerkUserId,
+      R2_PREFIX: `${clerkUserId}/sessions`,
       R2_ENDPOINT: `https://${this.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
       AGENT_STATE_DIR,
       AWS_ACCESS_KEY_ID: creds.accessKeyId,
