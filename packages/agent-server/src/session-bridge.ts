@@ -115,6 +115,8 @@ export interface SessionBridgeOptions {
 export interface SessionBridge {
   createSession: (sessionId: string) => Promise<void>;
   promptSession: (sessionId: string, text: string) => Promise<boolean>;
+  abortSession: (sessionId: string) => Promise<"aborted" | "nothing_running" | "unknown">;
+  getSessionStatus: (sessionId: string) => Promise<{ model: string; contextPercent: number | null } | null>;
 }
 
 export const createSessionBridge = (
@@ -241,5 +243,37 @@ export const createSessionBridge = (
     return true;
   };
 
-  return { createSession, promptSession };
+  const abortSession = async (
+    sessionId: string,
+  ): Promise<"aborted" | "nothing_running" | "unknown"> => {
+    let state = sessions.get(sessionId);
+    if (!state) {
+      state = await resumeSession(sessionId);
+    }
+    if (!state) return "unknown";
+
+    if (!state.session.isStreaming) return "nothing_running";
+
+    await state.session.abort();
+    log("abort_session", { session_id: sessionId });
+    return "aborted";
+  };
+
+  const getSessionStatus = async (
+    sessionId: string,
+  ): Promise<{ model: string; contextPercent: number | null } | null> => {
+    let state = sessions.get(sessionId);
+    if (!state) {
+      state = await resumeSession(sessionId);
+    }
+    if (!state) return null;
+
+    const model = state.session.model;
+    const modelStr = model ? `${model.provider}/${model.id}` : "unknown";
+    const usage = state.session.getContextUsage();
+    const contextPercent = usage?.percent ?? null;
+    return { model: modelStr, contextPercent };
+  };
+
+  return { createSession, promptSession, abortSession, getSessionStatus };
 };

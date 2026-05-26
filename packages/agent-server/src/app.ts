@@ -8,13 +8,27 @@
 import { randomUUID } from "node:crypto";
 import { OpenAPIHono } from "@hono/zod-openapi";
 
-import { createSessionRoute, sendMessageRoute } from "./contract.js";
+import {
+  abortSessionRoute,
+  createSessionRoute,
+  getSessionStatusRoute,
+  sendMessageRoute,
+} from "./contract.js";
 import { fmtErr, log, logError } from "./log.js";
+
+export interface SessionStatus {
+  model: string;
+  contextPercent: number | null;
+}
 
 export interface AgentHandlers {
   createSession: (sessionId: string) => Promise<void>;
   /** Returns false when the session id is unknown (→ 404). */
   promptSession: (sessionId: string, text: string) => Promise<boolean>;
+  /** Returns "aborted" | "nothing_running" | "unknown". */
+  abortSession: (sessionId: string) => Promise<"aborted" | "nothing_running" | "unknown">;
+  /** Returns null when the session id is unknown (→ 404). */
+  getSessionStatus: (sessionId: string) => Promise<SessionStatus | null>;
 }
 
 export const createAgentApp = (handlers: AgentHandlers) =>
@@ -41,6 +55,25 @@ export const createAgentApp = (handlers: AgentHandlers) =>
         return c.json({ error: "unknown session" }, 404);
       }
       return c.body(null, 202);
+    })
+    .openapi(abortSessionRoute, async (c) => {
+      const { sessionId } = c.req.valid("param");
+      const result = await handlers.abortSession(sessionId);
+      if (result === "unknown") {
+        return c.json({ error: "unknown session" }, 404);
+      }
+      if (result === "nothing_running") {
+        return c.json({ error: "nothing running" }, 409);
+      }
+      return c.body(null, 204);
+    })
+    .openapi(getSessionStatusRoute, async (c) => {
+      const { sessionId } = c.req.valid("param");
+      const status = await handlers.getSessionStatus(sessionId);
+      if (!status) {
+        return c.json({ error: "unknown session" }, 404);
+      }
+      return c.json(status, 200);
     });
 
 export type AppType = ReturnType<typeof createAgentApp>;

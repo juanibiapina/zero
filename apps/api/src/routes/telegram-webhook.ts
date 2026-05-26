@@ -16,7 +16,9 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { Bot, webhookCallback } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { log } from "../log";
+import { processAbortCommand } from "../commands/abort";
 import { processNewCommand } from "../commands/new";
+import { processStatusCommand } from "../commands/status";
 import {
   processTopicMessage,
   type TopicContext,
@@ -63,6 +65,44 @@ export const createTelegramWebhookRoute = () => {
       };
       c.executionCtx.waitUntil(
         processNewCommand(topic, c.env, sendReply),
+      );
+    });
+
+    bot.command("abort", (ctx) => {
+      const msg = ctx.msg;
+      if (!ctx.from) return;
+      if (!msg.is_topic_message || msg.message_thread_id === undefined) {
+        log("drop_non_topic_command", {
+          telegram_id: String(ctx.from.id),
+        });
+        return;
+      }
+      const topic: TopicContext = {
+        telegramId: String(ctx.from.id),
+        chatId: msg.chat.id,
+        messageThreadId: msg.message_thread_id,
+      };
+      c.executionCtx.waitUntil(
+        processAbortCommand(topic, c.env, sendReply),
+      );
+    });
+
+    bot.command("status", (ctx) => {
+      const msg = ctx.msg;
+      if (!ctx.from) return;
+      if (!msg.is_topic_message || msg.message_thread_id === undefined) {
+        log("drop_non_topic_command", {
+          telegram_id: String(ctx.from.id),
+        });
+        return;
+      }
+      const topic: TopicContext = {
+        telegramId: String(ctx.from.id),
+        chatId: msg.chat.id,
+        messageThreadId: msg.message_thread_id,
+      };
+      c.executionCtx.waitUntil(
+        processStatusCommand(topic, c.env, sendReply),
       );
     });
 

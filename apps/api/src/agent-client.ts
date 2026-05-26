@@ -52,3 +52,44 @@ export const sendMessage = async (
   if (res.status === 404) return { kind: "stale" };
   return { kind: "error", status: res.status };
 };
+
+export type AbortSessionResult =
+  | { kind: "aborted" }
+  | { kind: "nothing_running" }
+  | { kind: "unknown" }
+  | { kind: "error"; status: number };
+
+export const abortSession = async (
+  stub: AgentStub,
+  sessionId: string,
+): Promise<AbortSessionResult> => {
+  const res = await clientFor(stub).sessions[":sessionId"].abort.$post({
+    param: { sessionId },
+  });
+  const status = res.status as number;
+  if (status === 204) return { kind: "aborted" };
+  if (status === 404) return { kind: "unknown" };
+  if (status === 409) return { kind: "nothing_running" };
+  return { kind: "error", status };
+};
+
+export type GetSessionStatusResult =
+  | { kind: "ok"; model: string; contextPercent: number | null }
+  | { kind: "unknown" }
+  | { kind: "error"; status: number };
+
+export const getSessionStatus = async (
+  stub: AgentStub,
+  sessionId: string,
+): Promise<GetSessionStatusResult> => {
+  const res = await clientFor(stub).sessions[":sessionId"].status.$get({
+    param: { sessionId },
+  });
+  const status = res.status as number;
+  if (status === 200) {
+    const body = (await res.json()) as { model: string; contextPercent: number | null };
+    return { kind: "ok", model: body.model, contextPercent: body.contextPercent };
+  }
+  if (status === 404) return { kind: "unknown" };
+  return { kind: "error", status };
+};

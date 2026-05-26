@@ -9,9 +9,12 @@ export const SessionCreatedSchema = z.object({
   sessionId: z.string().min(1),
 });
 
-export const SendMessageParamsSchema = z.object({
+export const SessionParamsSchema = z.object({
   sessionId: z.string().min(1),
 });
+
+/** @deprecated Use SessionParamsSchema */
+export const SendMessageParamsSchema = SessionParamsSchema;
 
 export const SendMessageBodySchema = z.object({
   text: z.string().min(1),
@@ -58,6 +61,52 @@ export const sendMessageRoute = createRoute({
     500: {
       content: { "application/json": { schema: ErrorSchema } },
       description: "Unhandled server error (handler threw, framework error, etc.)",
+    },
+  },
+});
+
+export const abortSessionRoute = createRoute({
+  method: "post",
+  path: "/sessions/{sessionId}/abort",
+  summary: "Abort a running prompt",
+  request: {
+    params: SessionParamsSchema,
+  },
+  responses: {
+    204: {
+      description: "Aborted successfully",
+    },
+    404: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Unknown sessionId",
+    },
+    409: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Nothing running to abort",
+    },
+  },
+});
+
+export const SessionStatusSchema = z.object({
+  model: z.string(),
+  contextPercent: z.number().nullable(),
+});
+
+export const getSessionStatusRoute = createRoute({
+  method: "get",
+  path: "/sessions/{sessionId}/status",
+  summary: "Get session status (model, context usage)",
+  request: {
+    params: SessionParamsSchema,
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: SessionStatusSchema } },
+      description: "Session status",
+    },
+    404: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Unknown sessionId",
     },
   },
 });

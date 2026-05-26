@@ -49,6 +49,8 @@ const bridge = createSessionBridge(sendReply, { cwd, stateDir });
 const app = createAgentApp({
   createSession: (sessionId) => bridge.createSession(sessionId),
   promptSession: (sessionId, text) => bridge.promptSession(sessionId, text),
+  abortSession: (sessionId) => bridge.abortSession(sessionId),
+  getSessionStatus: (sessionId) => bridge.getSessionStatus(sessionId),
 });
 
 serve({ fetch: app.fetch, port }, (info) => {
