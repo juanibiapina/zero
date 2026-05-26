@@ -22,6 +22,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 import { fmtErr, log, logError } from "./log.js";
+import { createCloseSessionTool } from "./close-session-tool.js";
 
 const PROVIDER = "anthropic";
 const MODEL_ID = "claude-sonnet-4-5-20250929";
@@ -110,6 +111,8 @@ export interface SessionBridgeOptions {
   cwd: string;
   /** Parent dir; each session becomes a subdir named by sessionId. */
   stateDir: string;
+  /** Base URL for callback endpoints (e.g. http://zero.worker). */
+  callbackUrl: string;
 }
 
 export interface SessionBridge {
@@ -123,7 +126,7 @@ export const createSessionBridge = (
   postReply: ReplyFn,
   opts: SessionBridgeOptions,
 ): SessionBridge => {
-  const { cwd, stateDir } = opts;
+  const { cwd, stateDir, callbackUrl } = opts;
   const sessions = new Map<string, SessionState>();
 
   const sessionDirFor = (sessionId: string): string =>
@@ -140,6 +143,11 @@ export const createSessionBridge = (
       throw new Error(`model ${PROVIDER}/${MODEL_ID} not found in registry`);
     }
 
+    const closeSessionTool = createCloseSessionTool({
+      callbackUrl,
+      getSessionId: () => sessionId,
+    });
+
     const { session } = await createAgentSession({
       cwd,
       modelRegistry,
@@ -147,6 +155,7 @@ export const createSessionBridge = (
       sessionManager,
       model,
       thinkingLevel: "high",
+      customTools: [closeSessionTool],
     });
 
     const state: SessionState = {

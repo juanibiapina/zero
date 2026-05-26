@@ -99,7 +99,7 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │  ├─ fetch() refreshes envVars on every call:                     │
 │  │    ANTHROPIC_API_KEY=Z3R0-FAKE-... (env-resolved)             │
 │  │    GOOGLE_WORKSPACE_CLI_TOKEN=Z3R0-FAKE-... (runtime; opt-in) │
-│  │    REPLY_URL + R2 temp creds (1h)                             │
+│  │    CALLBACK_URL + R2 temp creds (1h)                             │
 │  ├─ outboundByHost["zero.worker"] = handleContainerReply         │
 │  └─ outboundHandlers.substitute = secretProxy.outbound           │
 │       (catch-all; per-container overrides via                    │

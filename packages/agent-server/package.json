@@ -19,7 +19,9 @@
       "default": "./dist/contract.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",
@@ -31,6 +33,7 @@
     "@hono/node-server": "^2.0.2",
     "@hono/zod-openapi": "^1.2.2",
     "hono": "^4.12.2",
+    "typebox": "^1.1.38",
     "zod": "^4.3.6"
   },
   "devDependencies": {

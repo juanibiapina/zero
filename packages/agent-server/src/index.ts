@@ -12,14 +12,16 @@ import { fmtErr, log, logError } from "./log.js";
 import { createSessionBridge } from "./session-bridge.js";
 
 const port = parseInt(process.env.PORT ?? "8080", 10);
-const replyUrl = process.env.REPLY_URL;
+const callbackUrl = process.env.CALLBACK_URL;
 const cwd = process.env.CWD ?? "/workspace";
 const stateDir = process.env.AGENT_STATE_DIR!;
 
-if (!replyUrl) {
-  logError("missing_env", { var: "REPLY_URL" });
+if (!callbackUrl) {
+  logError("missing_env", { var: "CALLBACK_URL" });
   process.exit(1);
 }
+
+const replyUrl = `${callbackUrl}/reply`;
 
 const sendReply = async (sessionId: string, text: string): Promise<void> => {
   try {
@@ -44,7 +46,7 @@ const sendReply = async (sessionId: string, text: string): Promise<void> => {
   }
 };
 
-const bridge = createSessionBridge(sendReply, { cwd, stateDir });
+const bridge = createSessionBridge(sendReply, { cwd, stateDir, callbackUrl });
 
 const app = createAgentApp({
   createSession: (sessionId) => bridge.createSession(sessionId),
@@ -56,7 +58,7 @@ const app = createAgentApp({
 serve({ fetch: app.fetch, port }, (info) => {
   log("listening", {
     port: info.port,
-    reply_url: replyUrl,
+    callback_url: callbackUrl,
     cwd,
     state_dir: stateDir,
   });

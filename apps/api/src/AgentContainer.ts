@@ -11,7 +11,7 @@ import { fmtErr, log, logError } from "./log";
 import { resolveMounts, type MountSpec } from "./mounts";
 import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
-import { lookupSessionRecord } from "./sessions";
+import { forgetSession, lookupSessionRecord, type SessionRecord } from "./sessions";
 import type { Env } from "./types";
 
 const secretProxy = createSecretProxy(
@@ -24,43 +24,93 @@ const ReplyBodySchema = z.object({
   text: z.string().min(1),
 });
 
-const handleContainerReply = async (
+const CloseSessionBodySchema = z.object({
+  sessionId: z.string().min(1),
+  message: z.string().min(1),
+});
+
+type WithSessionOk<T> = { data: T & { sessionId: string }; record: SessionRecord };
+
+const withSession = async <T extends z.ZodType>(
   req: Request,
   env: Env,
-): Promise<Response> => {
+  schema: T,
+): Promise<WithSessionOk<z.infer<T>> | Response> => {
   let body: unknown;
   try {
     body = await req.json();
   } catch {
     return new Response("invalid json", { status: 400 });
   }
-  const parsed = ReplyBodySchema.safeParse(body);
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return new Response("invalid body", { status: 400 });
   }
-  const { sessionId, text } = parsed.data;
+  const data = parsed.data as z.infer<T> & { sessionId: string };
 
-  let record;
+  let record: SessionRecord | null;
   try {
-    record = await lookupSessionRecord(env, sessionId);
+    record = await lookupSessionRecord(env, data.sessionId);
   } catch (err) {
     logError("corrupt_session_record", {
-      session_id: sessionId,
+      session_id: data.sessionId,
       error: fmtErr(err),
     });
     return new Response("corrupt session", { status: 500 });
   }
   if (!record) {
-    log("reply_unknown_session", { session_id: sessionId });
+    log("unknown_session", { session_id: data.sessionId });
     return new Response("unknown session", { status: 404 });
   }
 
+  return { data, record };
+};
+
+const handleContainerReply = async (
+  req: Request,
+  env: Env,
+): Promise<Response> => {
+  const result = await withSession(req, env, ReplyBodySchema);
+  if (result instanceof Response) return result;
+  const { data, record } = result;
+
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
-  await bot.api.sendMessage(record.chatId, text, {
+  await bot.api.sendMessage(record.chatId, data.text, {
     message_thread_id: record.messageThreadId,
   });
 
+  return new Response(null, { status: 204 });
+};
+
+const handleCloseSession = async (
+  req: Request,
+  env: Env,
+): Promise<Response> => {
+  const result = await withSession(req, env, CloseSessionBodySchema);
+  if (result instanceof Response) return result;
+  const { data, record } = result;
+
+  const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
+  const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
+
+  await bot.api.sendMessage(record.chatId, data.message, {
+    message_thread_id: record.messageThreadId,
+  });
+
+  try {
+    await bot.api.closeForumTopic(record.chatId, record.messageThreadId);
+  } catch (err) {
+    logError("close_topic_failed", {
+      session_id: data.sessionId,
+      chat_id: record.chatId,
+      thread_id: record.messageThreadId,
+      error: fmtErr(err),
+    });
+  }
+
+  await forgetSession(env, data.sessionId);
+  log("session_closed", { session_id: data.sessionId });
   return new Response(null, { status: 204 });
 };
 
@@ -120,7 +170,7 @@ export class AgentContainer extends Container<Env> {
     if (googleToken === null) delete sentinels.GOOGLE_WORKSPACE_CLI_TOKEN;
 
     this.envVars = {
-      REPLY_URL: "http://zero.worker/reply",
+      CALLBACK_URL: "http://zero.worker",
       ...sentinels,
       CLERK_USER_ID: clerkUserId,
       AGENT_STATE_DIR,
@@ -149,7 +199,12 @@ const flattenMounts = (mounts: MountSpec[]): Record<string, string> => {
 };
 
 AgentContainer.outboundByHost = {
-  "zero.worker": (req, env) => handleContainerReply(req, env),
+  "zero.worker": (req, env) => {
+    const path = new URL(req.url).pathname;
+    if (path === "/reply") return handleContainerReply(req, env);
+    if (path === "/close-session") return handleCloseSession(req, env);
+    return new Response("not found", { status: 404 });
+  },
   // R2 traffic carries no registered secrets, but still runs through the
   // worker because interceptHttps='*' when the catch-all is active. Must
   // buffer the body and rebuild the Request: streamed bodies lose their
