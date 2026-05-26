@@ -16,8 +16,10 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { Bot, webhookCallback } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { log } from "../log";
+import { processNewCommand } from "../commands/new";
 import {
   processTopicMessage,
+  type TopicContext,
   type TopicMessage,
 } from "../process-topic-message";
 import type { Env } from "../types";
@@ -34,6 +36,35 @@ export const createTelegramWebhookRoute = () => {
         message_thread_id: threadId,
       });
     };
+
+    const sendReply = async (
+      chatId: number,
+      threadId: number,
+      text: string,
+    ) => {
+      await bot.api.sendMessage(chatId, text, {
+        message_thread_id: threadId,
+      });
+    };
+
+    bot.command("new", (ctx) => {
+      const msg = ctx.msg;
+      if (!ctx.from) return;
+      if (!msg.is_topic_message || msg.message_thread_id === undefined) {
+        log("drop_non_topic_command", {
+          telegram_id: String(ctx.from.id),
+        });
+        return;
+      }
+      const topic: TopicContext = {
+        telegramId: String(ctx.from.id),
+        chatId: msg.chat.id,
+        messageThreadId: msg.message_thread_id,
+      };
+      c.executionCtx.waitUntil(
+        processNewCommand(topic, c.env, sendReply),
+      );
+    });
 
     bot.on("message", (ctx) => {
       const msg = ctx.message;

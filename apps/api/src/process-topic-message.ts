@@ -12,10 +12,13 @@ import {
 } from "./sessions";
 import type { Env } from "./types";
 
-export interface TopicMessage {
+export interface TopicContext {
   telegramId: string;
   chatId: number;
   messageThreadId: number;
+}
+
+export interface TopicMessage extends TopicContext {
   text: string;
 }
 
