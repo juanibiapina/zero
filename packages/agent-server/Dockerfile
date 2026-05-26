@@ -4,6 +4,9 @@ FROM node:22-bookworm-slim
 # elsewhere; point them at a writable location.
 ENV HOME=/tmp/pi-home
 
+# Pi's global config root. Skills under /agent/skills/ are auto-discovered.
+ENV PI_CODING_AGENT_DIR=/agent
+
 # fuse3 for the R2 mount, curl/ca-certificates for tigrisfs install + HTTPS.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -58,14 +61,20 @@ COPY dist/ ./dist/
 
 # /workspace + /tmp/pi-home must be writable by pi; /mnt/agent-state
 # and /mnt/notes are left root-owned (they're just mount points;
-# tigrisfs publishes them with `-o allow_other`).
-RUN mkdir -p /workspace /mnt/agent-state /mnt/notes /tmp/pi-home && \
-    chown -R pi:pi /workspace /tmp/pi-home
+# tigrisfs publishes them with `-o allow_other`). /agent is pi's
+# global config root (PI_CODING_AGENT_DIR).
+RUN mkdir -p /workspace /agent /mnt/agent-state /mnt/notes /tmp/pi-home && \
+    chown -R pi:pi /workspace /agent /tmp/pi-home
 
 # Pi auto-loads AGENTS.md from CWD and its parents at session start.
 # This file describes the /mnt/notes long-term memory contract.
 COPY context/AGENTS.md /workspace/AGENTS.md
 RUN chown pi:pi /workspace/AGENTS.md
+
+# Skills are auto-discovered by pi from $PI_CODING_AGENT_DIR/skills/.
+# Add new skills under packages/agent-server/skills/<name>/SKILL.md.
+COPY skills/ /agent/skills/
+RUN chown -R pi:pi /agent/skills
 
 WORKDIR /workspace
 
