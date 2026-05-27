@@ -19,6 +19,7 @@
     "grammy": "^1.42.0",
     "hono": "^4.12.2",
     "jose": "^6.0.10",
+    "marked": "^18.0.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {

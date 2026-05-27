@@ -25,6 +25,7 @@ import {
   type TopicMessage,
 } from "../process-topic-message";
 import type { Env } from "../types";
+import { formatAndSend } from "../telegram/send";
 
 export const createTelegramWebhookRoute = () => {
   const router = new OpenAPIHono<{ Bindings: Env }>();
@@ -44,9 +45,12 @@ export const createTelegramWebhookRoute = () => {
       threadId: number,
       text: string,
     ) => {
-      await bot.api.sendMessage(chatId, text, {
-        message_thread_id: threadId,
-      });
+      await formatAndSend(text, (formatted, parseMode) =>
+        bot.api.sendMessage(chatId, formatted, {
+          message_thread_id: threadId,
+          ...(parseMode && { parse_mode: parseMode }),
+        }),
+      );
     };
 
     bot.command("new", (ctx) => {

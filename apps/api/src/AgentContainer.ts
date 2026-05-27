@@ -13,6 +13,7 @@ import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
 import { forgetSession, lookupSessionRecord, type SessionRecord } from "./sessions";
 import type { Env } from "./types";
+import { formatAndSend } from "./telegram/send";
 
 const secretProxy = createSecretProxy(
   ["ANTHROPIC_API_KEY", "BRAVE_API_KEY"],
@@ -76,9 +77,12 @@ const handleContainerReply = async (
 
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
-  await bot.api.sendMessage(record.chatId, data.text, {
-    message_thread_id: record.messageThreadId,
-  });
+  await formatAndSend(data.text, (text, parseMode) =>
+    bot.api.sendMessage(record.chatId, text, {
+      message_thread_id: record.messageThreadId,
+      ...(parseMode && { parse_mode: parseMode }),
+    }),
+  );
 
   return new Response(null, { status: 204 });
 };
@@ -94,9 +98,12 @@ const handleCloseSession = async (
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
 
-  await bot.api.sendMessage(record.chatId, data.message, {
-    message_thread_id: record.messageThreadId,
-  });
+  await formatAndSend(data.message, (text, parseMode) =>
+    bot.api.sendMessage(record.chatId, text, {
+      message_thread_id: record.messageThreadId,
+      ...(parseMode && { parse_mode: parseMode }),
+    }),
+  );
 
   try {
     await bot.api.closeForumTopic(record.chatId, record.messageThreadId);
