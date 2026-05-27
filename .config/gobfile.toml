@@ -1,7 +1,7 @@
 [[job]]
 command = "pnpm turbo dev"
 description = "Run development server. Frontend starts on port 5176 and backend at 8790"
-autostart = true
+autostart = false
 
 [[job]]
 command = "bin/ci"
