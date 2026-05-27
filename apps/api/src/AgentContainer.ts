@@ -15,7 +15,7 @@ import { forgetSession, lookupSessionRecord, type SessionRecord } from "./sessio
 import type { Env } from "./types";
 
 const secretProxy = createSecretProxy(
-  ["ANTHROPIC_API_KEY"],
+  ["ANTHROPIC_API_KEY", "BRAVE_API_KEY"],
   ["GOOGLE_WORKSPACE_CLI_TOKEN"],
 );
 

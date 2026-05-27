@@ -49,6 +49,11 @@ RUN ARCH=$(uname -m) && \
     install -m 0755 "${TMPDIR}/gws" /usr/local/bin/gws && \
     rm -rf "${TMPDIR}"
 
+# Web search and content extraction CLI. Ships a pi skill under skills/
+# that the COPY block below merges into /agent/skills/.
+ARG WEBSEARCH_VERSION=2.1.0
+RUN npm install -g @juanibiapina/websearch@${WEBSEARCH_VERSION}
+
 WORKDIR /app
 
 # Strip workspace:* devDependencies (npm can't parse them) and install
@@ -73,7 +78,9 @@ RUN chown pi:pi /workspace/AGENTS.md
 
 # Skills are auto-discovered by pi from $PI_CODING_AGENT_DIR/skills/.
 # Add new skills under packages/agent-server/skills/<name>/SKILL.md.
+# Skills bundled by npm packages (e.g. websearch) are merged in too.
 COPY skills/ /agent/skills/
+RUN cp -r /usr/local/lib/node_modules/@juanibiapina/websearch/skills/* /agent/skills/
 RUN chown -R pi:pi /agent/skills
 
 WORKDIR /workspace
