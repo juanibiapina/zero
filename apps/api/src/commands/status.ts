@@ -1,7 +1,7 @@
 // Handles the /status bot command: shows model and context usage
 // for the current session.
 
-import { getSessionStatus } from "../agent-client";
+import { createAgentClient } from "../agent-client";
 import { log, logError } from "../log";
 import { lookupSessionId, type SessionRecord } from "../sessions";
 import type { TopicContext } from "../process-topic-message";
@@ -32,8 +32,8 @@ export const processStatusCommand = async (
     return;
   }
 
-  const stub = env.AGENT_CONTAINER.getByName(clerkUserId);
-  const result = await getSessionStatus(stub, sessionId);
+  const agent = createAgentClient(env, clerkUserId);
+  const result = await agent.getSessionStatus(sessionId);
 
   if (result.kind === "ok") {
     const pct = result.contextPercent !== null ? String(Math.round(result.contextPercent)) : "—";

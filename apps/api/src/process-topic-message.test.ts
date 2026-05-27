@@ -186,4 +186,18 @@ describe("processTopicMessage", () => {
     // No session recorded.
     expect(kv._store.has("topic:user_abc:100:200")).toBe(false);
   });
+
+  it("catches thrown DO errors without crashing", async () => {
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    // Stub that throws (simulates DO infrastructure error after retries exhausted).
+    const stub: AgentStub = {
+      fetch: async () => {
+        throw new Error("Durable Object reset because its code was updated");
+      },
+    };
+    const sendTyping = vi.fn().mockResolvedValue(undefined);
+
+    // Should not throw — safety net catches it.
+    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+  });
 });

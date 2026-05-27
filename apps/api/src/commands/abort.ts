@@ -1,7 +1,7 @@
 // Handles the /abort bot command: stops a running prompt in the
 // container's session for the current topic.
 
-import { abortSession } from "../agent-client";
+import { createAgentClient } from "../agent-client";
 import { log, logError } from "../log";
 import { lookupSessionId, type SessionRecord } from "../sessions";
 import type { TopicContext } from "../process-topic-message";
@@ -32,8 +32,8 @@ export const processAbortCommand = async (
     return;
   }
 
-  const stub = env.AGENT_CONTAINER.getByName(clerkUserId);
-  const result = await abortSession(stub, sessionId);
+  const agent = createAgentClient(env, clerkUserId);
+  const result = await agent.abortSession(sessionId);
 
   if (result.kind === "aborted") {
     await sendReply(ctx.chatId, ctx.messageThreadId, "Aborted");
