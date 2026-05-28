@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import type { UserDO } from "./index";
+import type { UserDO, S3MountConfig } from "./index";
 
 // ---------------------------------------------------------------------------
 // Fake UserDO stub — implements the same public RPC interface
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession" | "getMountConfig" | "setMountConfig" | "deleteMountConfig">;
 
 const createFakeUserDO = (): UserDOStub => {
   let telegramId: string | null = null;
   const sessionsByTopic = new Map<string, string>();
   const sessionsBySessionId = new Map<string, { chatId: number; topicId: number }>();
+  const mountConfigs = new Map<string, S3MountConfig>();
 
   const topicKey = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
@@ -46,9 +47,17 @@ const createFakeUserDO = (): UserDOStub => {
       }
       sessionsBySessionId.delete(sessionId);
     },
+    getMountConfig: (scope: string) => {
+      return mountConfigs.get(scope) ?? null;
+    },
+    setMountConfig: (scope: string, config: S3MountConfig) => {
+      mountConfigs.set(scope, config);
+    },
+    deleteMountConfig: (scope: string) => {
+      mountConfigs.delete(scope);
+    },
   };
 };
-
 // ---------------------------------------------------------------------------
 // Tests — verify the fake behaves like a correct UserDO
 // ---------------------------------------------------------------------------
@@ -131,5 +140,76 @@ describe("UserDO sessions contract", () => {
     userDO.recordSession(100, 200, "sess-2");
     expect(userDO.lookupSessionByTopic(100, 200)).toBe("sess-2");
     expect(userDO.lookupSessionById("sess-1")).toBeNull();
+  });
+});
+
+describe("UserDO mount config contract", () => {
+  it("getMountConfig returns null when no config exists", () => {
+    const userDO = createFakeUserDO();
+    expect(userDO.getMountConfig("notes")).toBeNull();
+  });
+
+  it("setMountConfig makes config retrievable", () => {
+    const userDO = createFakeUserDO();
+    const config: S3MountConfig = {
+      endpoint: "https://s3.example.com",
+      bucket: "my-notes",
+      prefix: "",
+      accessKeyId: "AKIA...",
+      secretAccessKey: "secret",
+    };
+    userDO.setMountConfig("notes", config);
+    expect(userDO.getMountConfig("notes")).toEqual(config);
+  });
+
+  it("setMountConfig overwrites existing config for same scope", () => {
+    const userDO = createFakeUserDO();
+    userDO.setMountConfig("notes", {
+      endpoint: "https://old.example.com",
+      bucket: "old",
+      prefix: "",
+      accessKeyId: "old-key",
+      secretAccessKey: "old-secret",
+    });
+    const updated: S3MountConfig = {
+      endpoint: "https://new.example.com",
+      bucket: "new",
+      prefix: "vault/",
+      accessKeyId: "new-key",
+      secretAccessKey: "new-secret",
+    };
+    userDO.setMountConfig("notes", updated);
+    expect(userDO.getMountConfig("notes")).toEqual(updated);
+  });
+
+  it("deleteMountConfig removes the config", () => {
+    const userDO = createFakeUserDO();
+    userDO.setMountConfig("notes", {
+      endpoint: "https://s3.example.com",
+      bucket: "my-notes",
+      prefix: "",
+      accessKeyId: "AKIA...",
+      secretAccessKey: "secret",
+    });
+    userDO.deleteMountConfig("notes");
+    expect(userDO.getMountConfig("notes")).toBeNull();
+  });
+
+  it("deleteMountConfig is safe when no config exists", () => {
+    const userDO = createFakeUserDO();
+    userDO.deleteMountConfig("notes");
+  });
+
+  it("configs for different scopes are independent", () => {
+    const userDO = createFakeUserDO();
+    const config: S3MountConfig = {
+      endpoint: "https://s3.example.com",
+      bucket: "my-notes",
+      prefix: "",
+      accessKeyId: "AKIA...",
+      secretAccessKey: "secret",
+    };
+    userDO.setMountConfig("notes", config);
+    expect(userDO.getMountConfig("other-scope")).toBeNull();
   });
 });

@@ -145,7 +145,8 @@ export class AgentContainer extends Container<Env> {
       );
     }
 
-    const [creds, googleToken] = await Promise.all([
+    const userDO = getUserDO(this.env, clerkUserId);
+    const [creds, googleToken, notesMountConfig] = await Promise.all([
       mintR2TempCreds({
         bucket: this.env.R2_BUCKET_NAME,
         accountId: this.env.R2_ACCOUNT_ID,
@@ -156,9 +157,10 @@ export class AgentContainer extends Container<Env> {
         prefixes: [`${clerkUserId}/`],
       }),
       getGoogleAccessToken(this.env, clerkUserId),
+      userDO.getMountConfig("notes"),
     ]);
 
-    const mounts = await resolveMounts(this.env, clerkUserId, creds);
+    const mounts = await resolveMounts(this.env, clerkUserId, creds, notesMountConfig);
 
     // Push runtime-secret overrides to the substitute handler. Pushed on
     // every fetch; simpler than diffing.

@@ -193,7 +193,22 @@ conversations; the contract is described in the `AGENTS.md` baked into
 `/workspace/AGENTS.md` (see `packages/agent-server/context/AGENTS.md`),
 which pi auto-loads at session start.
 
-Layout:
+By default, the notes vault is a Zero-managed R2 prefix
+(`<clerkUserId>/notes/`). Users can override this with an external
+S3-compatible endpoint via the web UI ("Configure external storage"
+under Notes Storage). The configuration is stored in the `UserDO`'s
+`mount_configs` table. When present, `resolveMounts` swaps the R2
+notes entry for a `MountSpec` using the user's endpoint, bucket,
+prefix, and credentials. The entrypoint, `AgentContainer`, and
+`flattenMounts` stay untouched — they consume the same `MOUNT_<n>_*`
+shape regardless of provider.
+
+User-supplied S3 credentials follow the same privilege-separation
+path as R2 temp creds: consumed by tigrisfs (root) at mount time,
+scrubbed from the env before node starts, inaccessible to pi.
+No sentinel substitution is used — tigrisfs computes SigV4 in-process.
+
+Default (R2) layout:
 
 - Sibling scope under the user prefix: `<clerkUserId>/notes/`
   alongside `<clerkUserId>/sessions/`. Covered by the same
@@ -203,32 +218,30 @@ Layout:
   `--file-mode=0666`, `--dir-mode=0777`, `-o allow_other`). Mount
   failure aborts the container (pi has been promised memory;
   degraded boot would risk silent data loss).
-
 ### Mount assembly
 
 Both the sessions mount and the notes vault are produced by a single
 seam:
 
 ```
-apps/api/src/mounts.ts → resolveMounts(env, clerkUserId, creds)
+apps/api/src/mounts.ts → resolveMounts(env, clerkUserId, creds, notesMountConfig?)
    → MountSpec[]   // ordered list of mounts to bring up
 ```
 
-`AgentContainer.refreshEnvVars` flattens that list into numbered
-`MOUNT_<n>_*` env groups (`NAME`, `POINT`, `ENDPOINT`, `BUCKET`,
-`PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `SESSION_TOKEN`) plus
-a `MOUNT_COUNT`. `entrypoint.sh` loops over them and fires one
-`tigrisfs` invocation per spec; the shell is entirely scope-agnostic.
+`AgentContainer.refreshEnvVars` fetches the user's mount config from
+the `UserDO` (`getMountConfig("notes")`) in parallel with R2 temp cred
+minting and Google token fetching, then passes it to `resolveMounts`.
+The result is flattened into numbered `MOUNT_<n>_*` env groups (`NAME`,
+`POINT`, `ENDPOINT`, `BUCKET`, `PREFIX`, `ACCESS_KEY_ID`,
+`SECRET_ACCESS_KEY`, `SESSION_TOKEN`) plus a `MOUNT_COUNT`.
+`entrypoint.sh` loops over them and fires one `tigrisfs` invocation
+per spec; the shell is entirely scope-agnostic.
 
-Today there are two adapters — both Zero-managed prefixes on the
-shared `zero-agent-state` bucket sharing one minted temp credential.
-When a user-configured provider for a scope ships (e.g. BYO S3 for
-notes), only that entry's endpoint/creds change in `resolveMounts`;
-`AgentContainer` and `entrypoint.sh` stay untouched because they
-consume the same `MOUNT_<n>_*` shape regardless of provider. Each
+The sessions mount always uses Zero-managed R2. The notes mount
+defaults to R2 but switches to the user's S3 endpoint/bucket/creds
+when a `mount_configs` row exists for scope `"notes"`. Each
 `MOUNT_<n>_*` group carries its own AWS_* values, so per-invocation
 creds in the entrypoint trivially scope to one mount.
-
 ## State Model
 
 Per-user data is split between a `UserDO` Durable Object (source of
@@ -250,6 +263,7 @@ to a Clerk user ID; it is kept in sync by the link/unlink routes.
 |------------------|------------------------------------|---------------------------------------------|
 | `telegram_link`  | `id`, `telegramId`                 | The user's linked Telegram account (≤1 row) |
 | `sessions`       | `id`, `chatId`, `topicId`, `sessionId` | Topic↔session mappings                  |
+| `mount_configs`  | `id`, `scope`, `endpoint`, `bucket`, `prefix`, `accessKeyId`, `secretAccessKey` | User-configured S3 mount overrides (one row per scope; only `notes` today) |
 
 The `telegram_link` table is the source of truth for the Clerk↔Telegram
 mapping. The `GET /api/telegram-id` route reads directly from the DO;
@@ -267,8 +281,8 @@ transparently. A 404 only happens when the on-disk dir is also gone
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link and session mappings. | SQLite via do-orm (`telegram_link`, `sessions` tables) |
-| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` mints prefix-scoped R2 temp creds, resolves the user's mounts via `resolveMounts`, and refreshes `envVars` on every call; the container mounts each scope (sessions, notes) via its own tigrisfs invocation. Defines `outboundByHost["zero.worker"]` for the Telegram reply path. Callbacks (reply, close-session) include `clerkUserId` so the worker can address the UserDO for session lookups. | None (sessions and notes live on R2 mounts inside the container) |
+| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, session mappings, and mount configurations. | SQLite via do-orm (`telegram_link`, `sessions`, `mount_configs` tables) |
+| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` mints prefix-scoped R2 temp creds, fetches the user's mount config from UserDO, resolves the user's mounts via `resolveMounts`, and refreshes `envVars` on every call; the container mounts each scope (sessions, notes) via its own tigrisfs invocation. Defines `outboundByHost["zero.worker"]` for the Telegram reply path. Callbacks (reply, close-session) include `clerkUserId` so the worker can address the UserDO for session lookups. | None (sessions and notes live on R2/S3 mounts inside the container) |
 
 ## Routes
 
@@ -276,6 +290,10 @@ transparently. A 404 only happens when the on-disk dir is also gone
 GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
 POST   /api/telegram-link                — Link via Login Widget payload (Clerk)
 DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
+GET    /api/mount-config/notes           — Read caller's notes mount config (Clerk)
+PUT    /api/mount-config/notes           — Validate and save notes mount config (Clerk)
+DELETE /api/mount-config/notes           — Remove notes mount config, revert to R2 (Clerk)
+POST   /api/mount-config/notes/validate  — Re-validate saved notes mount config (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
 ```
 

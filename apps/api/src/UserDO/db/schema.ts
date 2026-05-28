@@ -11,3 +11,13 @@ export const sessions = table("sessions", {
   topicId: column.integer().notNull(),
   sessionId: column.text().notNull().unique(),
 });
+
+export const mountConfigs = table("mount_configs", {
+  id: column.integer().primaryKey().autoIncrement(),
+  scope: column.text().notNull().unique(),
+  endpoint: column.text().notNull(),
+  bucket: column.text().notNull(),
+  prefix: column.text().notNull(),
+  accessKeyId: column.text().notNull(),
+  secretAccessKey: column.text().notNull(),
+});

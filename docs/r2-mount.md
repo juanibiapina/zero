@@ -4,7 +4,10 @@ This document covers the one-time setup needed for **per-user persistent
 sessions** in the agent container. Once these steps are done, every
 container mounts its user's R2 prefix at `/mnt/agent-state` via
 [tigrisfs](https://github.com/tigrisdata/tigrisfs) and pi writes its
-JSONL session files there.
+JSONL session files there. A second mount at `/mnt/notes` provides the
+long-term notes vault (also R2 by default, but users can override it
+with an external S3-compatible endpoint via the web UI — see
+[`design.md`](design.md) under **Notes vault**).
 
 The runtime mechanics are described in [`design.md`](design.md) under
 **Persistence**.

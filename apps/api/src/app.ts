@@ -8,6 +8,7 @@ import { cors } from "hono/cors";
 import type { Env } from "./types";
 import { createTelegramWebhookRoute } from "./routes/telegram-webhook";
 import { createUserSettingsRoutes } from "./routes/user-settings";
+import { createMountConfigRoutes } from "./routes/mount-config";
 
 type Variables = {
   userId: string;
@@ -38,6 +39,7 @@ export const createApp = () => {
   });
 
   app.route("/", createUserSettingsRoutes());
+  app.route("/", createMountConfigRoutes());
 
   return app;
 };

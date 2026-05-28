@@ -211,6 +211,7 @@ function AuthGate() {
     <div className="space-y-6">
       <TelegramConnect />
       <GoogleConnect />
+      <S3MountConfigConnect />
     </div>
   );
 }
@@ -305,6 +306,240 @@ function GoogleConnect() {
             }
           >
             Disconnect
+          </Button>
+        </>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+interface MountConfigResponse {
+  endpoint: string;
+  bucket: string;
+  prefix: string;
+  accessKeyId: string;
+}
+
+function S3MountConfigConnect() {
+  const { getToken } = useAuth();
+  const [config, setConfig] = useState<MountConfigResponse | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [validateOk, setValidateOk] = useState<boolean | null>(null);
+
+  // Form fields
+  const [endpoint, setEndpoint] = useState("");
+  const [bucket, setBucket] = useState("");
+  const [prefix, setPrefix] = useState("");
+  const [accessKeyId, setAccessKeyId] = useState("");
+  const [secretAccessKey, setSecretAccessKey] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const token = await getToken();
+      const res = await fetch("/api/mount-config/notes", {
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      });
+      if (!res.ok) {
+        if (!cancelled) {
+          setError(`Failed to load: ${res.status}`);
+          setLoaded(true);
+        }
+        return;
+      }
+      const data = (await res.json()) as MountConfigResponse | null;
+      if (!cancelled) {
+        setConfig(data);
+        setLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  const onSave = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/mount-config/notes", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token ?? ""}`,
+        },
+        body: JSON.stringify({
+          endpoint,
+          bucket,
+          prefix,
+          accessKeyId,
+          secretAccessKey,
+        }),
+      });
+      if (res.status === 422) {
+        const body = (await res.json()) as { error: string };
+        setError(`Validation failed: ${body.error}`);
+        return;
+      }
+      if (!res.ok) {
+        setError(`Save failed: ${res.status}`);
+        return;
+      }
+      const data = (await res.json()) as MountConfigResponse;
+      setConfig(data);
+      setShowForm(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onValidate = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/mount-config/notes/validate", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      });
+      if (!res.ok) {
+        setError(`Validate request failed: ${res.status}`);
+        return;
+      }
+      const body = (await res.json()) as { ok: boolean; error?: string };
+      if (body.ok) {
+        setError(null);
+        setValidateOk(true);
+      } else {
+        setValidateOk(false);
+        setError(`Validation failed: ${body.error ?? "unknown error"}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDisconnect = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/mount-config/notes", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token ?? ""}` },
+      });
+      if (!res.ok) {
+        setError(`Disconnect failed: ${res.status}`);
+        return;
+      }
+      setConfig(null);
+      setValidateOk(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-md space-y-3 px-6">
+      <h2 className="text-sm font-medium">Notes Storage</h2>
+      {!loaded ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : config ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Connected {validateOk === false ? "❌" : "✅"} {config.endpoint}/{config.bucket}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="link"
+              className="h-auto p-0 text-sm"
+              disabled={busy}
+              onClick={() => {
+                void onValidate();
+              }}
+            >
+              {busy ? "Checking…" : "Validate"}
+            </Button>
+            <Button
+              variant="link"
+              className="h-auto p-0 text-sm"
+              disabled={busy}
+              onClick={() => {
+                void onDisconnect();
+              }}
+            >
+              Disconnect
+            </Button>
+          </div>
+        </>
+      ) : showForm ? (
+        <div className="space-y-2">
+          <input
+            className="w-full rounded border px-2 py-1 text-sm"
+            placeholder="Endpoint (https://s3.example.com)"
+            value={endpoint}
+            onChange={(e) => setEndpoint(e.target.value)}
+          />
+          <input
+            className="w-full rounded border px-2 py-1 text-sm"
+            placeholder="Bucket"
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+          />
+          <input
+            className="w-full rounded border px-2 py-1 text-sm"
+            placeholder="Prefix (optional)"
+            value={prefix}
+            onChange={(e) => setPrefix(e.target.value)}
+          />
+          <input
+            className="w-full rounded border px-2 py-1 text-sm"
+            placeholder="Access Key ID"
+            value={accessKeyId}
+            onChange={(e) => setAccessKeyId(e.target.value)}
+          />
+          <input
+            className="w-full rounded border px-2 py-1 text-sm"
+            type="password"
+            placeholder="Secret Access Key"
+            value={secretAccessKey}
+            onChange={(e) => setSecretAccessKey(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <Button
+              disabled={busy}
+              onClick={() => {
+                void onSave();
+              }}
+            >
+              {busy ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              variant="link"
+              className="h-auto p-0 text-sm"
+              onClick={() => setShowForm(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Default (Zero storage). Configure an external S3-compatible
+            filesystem for your notes.
+          </p>
+          <Button
+            variant="link"
+            className="h-auto p-0 text-sm"
+            onClick={() => setShowForm(true)}
+          >
+            Configure external storage
           </Button>
         </>
       )}
