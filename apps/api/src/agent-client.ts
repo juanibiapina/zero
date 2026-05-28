@@ -1,26 +1,15 @@
 // Client for the agent-server running inside a Cloudflare Container (Durable
-// Object). The DO stub is cached and only refreshed before a retry — per CF
-// docs, "certain types of errors will break the Durable Object stub", so a
-// fresh stub is needed after a transient failure (.retryable). Overloaded
-// errors (.overloaded) are never retried.
-//
-// See: https://developers.cloudflare.com/durable-objects/best-practices/error-handling/
+// Object). Retry / backoff logic for transient DO stub errors is provided by
+// the shared helpers in do/retry.
 
 import { hc } from "hono/client";
 import type { AppType } from "@zero/agent-server/app";
 import type { Env } from "./types";
+import { isDOError, doBackoff, MAX_ATTEMPTS } from "./do/retry";
 
 export interface AgentStub {
   fetch: (req: Request) => Promise<Response>;
 }
-
-interface DOError {
-  retryable?: boolean;
-  overloaded?: boolean;
-}
-
-const isDOError = (err: unknown): err is Error & DOError =>
-  err instanceof Error;
 
 // ---------------------------------------------------------------------------
 // Hono typed client
@@ -67,10 +56,6 @@ export interface AgentClient {
   getSessionStatus(sessionId: string): Promise<GetSessionStatusResult>;
 }
 
-const MAX_ATTEMPTS = 3;
-const BASE_BACKOFF_MS = 100;
-const MAX_BACKOFF_MS = 20_000;
-
 export function createAgentClient(env: Env, clerkUserId: string): AgentClient {
   let stub = env.AGENT_CONTAINER.getByName(clerkUserId);
 
@@ -85,11 +70,7 @@ export function createAgentClient(env: Env, clerkUserId: string): AgentClient {
         return await fn(stub);
       } catch (err: unknown) {
         if (isDOError(err) && err.retryable && attempt + 1 < MAX_ATTEMPTS) {
-          const backoff = Math.min(
-            MAX_BACKOFF_MS,
-            BASE_BACKOFF_MS * Math.random() * Math.pow(2, attempt),
-          );
-          await new Promise((r) => setTimeout(r, backoff));
+          await doBackoff(attempt);
           attempt++;
           refreshStub();
           continue;
