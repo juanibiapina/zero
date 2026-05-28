@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
-import { createDb, eq, type Database } from "do-orm";
+import { createDb, eq, and, type Database } from "do-orm";
 import { migrate } from "do-orm";
-import { telegramLink } from "./db/schema";
+import { telegramLink, sessions } from "./db/schema";
 import { migrations } from "./db/migrations";
 import type { Env } from "../types";
 
@@ -41,5 +41,32 @@ export class UserDO extends DurableObject<Env> {
 
     this.db.delete(telegramLink, { where: eq("id", existing.id) });
     return { removed: existing.telegramId };
+  }
+  lookupSessionByTopic(chatId: number, topicId: number): string | null {
+    const row = this.db.get(sessions, {
+      where: and(eq("chatId", chatId), eq("topicId", topicId)),
+    });
+    return row?.sessionId ?? null;
+  }
+
+  lookupSessionById(sessionId: string): { chatId: number; topicId: number } | null {
+    const row = this.db.get(sessions, { where: eq("sessionId", sessionId) });
+    if (!row) return null;
+    return { chatId: row.chatId, topicId: row.topicId };
+  }
+
+  recordSession(chatId: number, topicId: number, sessionId: string): void {
+    // Remove any existing session for this topic
+    const existing = this.db.get(sessions, {
+      where: and(eq("chatId", chatId), eq("topicId", topicId)),
+    });
+    if (existing) {
+      this.db.delete(sessions, { where: eq("id", existing.id) });
+    }
+    this.db.insert(sessions, { chatId, topicId, sessionId });
+  }
+
+  forgetSession(sessionId: string): void {
+    this.db.delete(sessions, { where: eq("sessionId", sessionId) });
   }
 }

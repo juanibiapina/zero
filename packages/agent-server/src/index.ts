@@ -15,9 +15,15 @@ const port = parseInt(process.env.PORT ?? "8080", 10);
 const callbackUrl = process.env.CALLBACK_URL;
 const cwd = process.env.CWD ?? "/workspace";
 const stateDir = process.env.AGENT_STATE_DIR!;
+const clerkUserId = process.env.CLERK_USER_ID;
 
 if (!callbackUrl) {
   logError("missing_env", { var: "CALLBACK_URL" });
+  process.exit(1);
+}
+
+if (!clerkUserId) {
+  logError("missing_env", { var: "CLERK_USER_ID" });
   process.exit(1);
 }
 
@@ -28,7 +34,7 @@ const sendReply = async (sessionId: string, text: string): Promise<void> => {
     const res = await fetch(replyUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, text }),
+      body: JSON.stringify({ sessionId, text, clerkUserId }),
     });
     if (!res.ok) {
       logError("reply_failed", {
@@ -46,7 +52,7 @@ const sendReply = async (sessionId: string, text: string): Promise<void> => {
   }
 };
 
-const bridge = createSessionBridge(sendReply, { cwd, stateDir, callbackUrl });
+const bridge = createSessionBridge(sendReply, { cwd, stateDir, callbackUrl, clerkUserId });
 
 const app = createAgentApp({
   createSession: (sessionId) => bridge.createSession(sessionId),

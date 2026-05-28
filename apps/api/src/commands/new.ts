@@ -4,9 +4,9 @@
 // The new session is NOT created eagerly — `ensureSession` in
 // `process-topic-message.ts` handles that on the next message.
 
-import { forgetSession, lookupSessionId, type SessionRecord } from "../sessions";
 import { log } from "../log";
 import type { TopicContext } from "../process-topic-message";
+import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
 
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
@@ -16,6 +16,7 @@ export type SendReplyFn = (
   threadId: number,
   text: string,
 ) => Promise<void>;
+
 
 export const processNewCommand = async (
   ctx: TopicContext,
@@ -28,14 +29,10 @@ export const processNewCommand = async (
     return;
   }
 
-  const record: SessionRecord = {
-    clerkUserId,
-    chatId: ctx.chatId,
-    messageThreadId: ctx.messageThreadId,
-  };
-  const sessionId = await lookupSessionId(env, record);
+  const userDO = getUserDO(env, clerkUserId);
+  const sessionId = await userDO.lookupSessionByTopic(ctx.chatId, ctx.topicId);
   if (sessionId) {
-    await forgetSession(env, sessionId);
+    await userDO.forgetSession(sessionId);
     log("new_command_forgot_session", {
       session_id: sessionId,
       clerk_user_id: clerkUserId,
@@ -44,7 +41,7 @@ export const processNewCommand = async (
 
   await sendReply(
     ctx.chatId,
-    ctx.messageThreadId,
+    ctx.topicId,
     "New session started",
   );
   log("new_command_completed", { clerk_user_id: clerkUserId });

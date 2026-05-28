@@ -65,7 +65,7 @@ export const createTelegramWebhookRoute = () => {
       const topic: TopicContext = {
         telegramId: String(ctx.from.id),
         chatId: msg.chat.id,
-        messageThreadId: msg.message_thread_id,
+        topicId: msg.message_thread_id,
       };
       c.executionCtx.waitUntil(
         processNewCommand(topic, c.env, sendReply),
@@ -84,7 +84,7 @@ export const createTelegramWebhookRoute = () => {
       const topic: TopicContext = {
         telegramId: String(ctx.from.id),
         chatId: msg.chat.id,
-        messageThreadId: msg.message_thread_id,
+        topicId: msg.message_thread_id,
       };
       c.executionCtx.waitUntil(
         processAbortCommand(topic, c.env, sendReply),
@@ -103,7 +103,7 @@ export const createTelegramWebhookRoute = () => {
       const topic: TopicContext = {
         telegramId: String(ctx.from.id),
         chatId: msg.chat.id,
-        messageThreadId: msg.message_thread_id,
+        topicId: msg.message_thread_id,
       };
       c.executionCtx.waitUntil(
         processStatusCommand(topic, c.env, sendReply),
@@ -128,7 +128,7 @@ export const createTelegramWebhookRoute = () => {
       const topic: TopicMessage = {
         telegramId: String(ctx.from.id),
         chatId: msg.chat.id,
-        messageThreadId: msg.message_thread_id,
+        topicId: msg.message_thread_id,
         text: msg.text,
       };
       c.executionCtx.waitUntil(

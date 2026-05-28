@@ -1,0 +1,6 @@
+CREATE TABLE "sessions" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "chatId" INTEGER NOT NULL,
+  "topicId" INTEGER NOT NULL,
+  "sessionId" TEXT NOT NULL UNIQUE
+);

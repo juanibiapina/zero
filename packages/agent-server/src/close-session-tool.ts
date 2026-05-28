@@ -20,8 +20,9 @@ const closeSessionSchema = Type.Object({
 export const createCloseSessionTool = (opts: {
   callbackUrl: string;
   getSessionId: () => string;
+  getClerkUserId: () => string;
 }): ToolDefinition => {
-  const { callbackUrl, getSessionId } = opts;
+  const { callbackUrl, getSessionId, getClerkUserId } = opts;
   const url = `${callbackUrl}/close-session`;
 
   return defineTool({
@@ -38,7 +39,7 @@ export const createCloseSessionTool = (opts: {
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, message: params.message }),
+          body: JSON.stringify({ sessionId, message: params.message, clerkUserId: getClerkUserId() }),
         });
         if (!res.ok) {
           logError("close_session_failed", {

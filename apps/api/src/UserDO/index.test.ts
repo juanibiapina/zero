@@ -6,24 +6,45 @@ import type { UserDO } from "./index";
 // Fake UserDO stub — implements the same public RPC interface
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession">;
 
-const createFakeUserDO = (): UserDOStub & { _telegramId: string | null } => {
-  let stored: string | null = null;
+const createFakeUserDO = (): UserDOStub => {
+  let telegramId: string | null = null;
+  const sessionsByTopic = new Map<string, string>();
+  const sessionsBySessionId = new Map<string, { chatId: number; topicId: number }>();
+
+  const topicKey = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
+
   return {
-    get _telegramId() {
-      return stored;
-    },
-    getTelegramId: () => stored,
-    linkTelegram: (telegramId: string) => {
-      const previous = stored;
-      stored = telegramId;
+    getTelegramId: () => telegramId,
+    linkTelegram: (id: string) => {
+      const previous = telegramId;
+      telegramId = id;
       return { previous };
     },
     unlinkTelegram: () => {
-      const removed = stored;
-      stored = null;
+      const removed = telegramId;
+      telegramId = null;
       return { removed };
+    },
+    lookupSessionByTopic: (chatId: number, topicId: number) => {
+      return sessionsByTopic.get(topicKey(chatId, topicId)) ?? null;
+    },
+    lookupSessionById: (sessionId: string) => {
+      return sessionsBySessionId.get(sessionId) ?? null;
+    },
+    recordSession: (chatId: number, topicId: number, sessionId: string) => {
+      const oldSessionId = sessionsByTopic.get(topicKey(chatId, topicId));
+      if (oldSessionId) sessionsBySessionId.delete(oldSessionId);
+      sessionsByTopic.set(topicKey(chatId, topicId), sessionId);
+      sessionsBySessionId.set(sessionId, { chatId, topicId });
+    },
+    forgetSession: (sessionId: string) => {
+      const record = sessionsBySessionId.get(sessionId);
+      if (record) {
+        sessionsByTopic.delete(topicKey(record.chatId, record.topicId));
+      }
+      sessionsBySessionId.delete(sessionId);
     },
   };
 };
@@ -65,5 +86,50 @@ describe("UserDO contract", () => {
     const userDO = createFakeUserDO();
     const result = userDO.unlinkTelegram();
     expect(result).toEqual({ removed: null });
+  });
+});
+
+describe("UserDO sessions contract", () => {
+  it("lookupSessionByTopic returns null when no session exists", () => {
+    const userDO = createFakeUserDO();
+    expect(userDO.lookupSessionByTopic(100, 200)).toBeNull();
+  });
+
+  it("recordSession makes session retrievable by topic", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordSession(100, 200, "sess-1");
+    expect(userDO.lookupSessionByTopic(100, 200)).toBe("sess-1");
+  });
+
+  it("recordSession makes session retrievable by id", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordSession(100, 200, "sess-1");
+    expect(userDO.lookupSessionById("sess-1")).toEqual({ chatId: 100, topicId: 200 });
+  });
+
+  it("lookupSessionById returns null for unknown session", () => {
+    const userDO = createFakeUserDO();
+    expect(userDO.lookupSessionById("nonexistent")).toBeNull();
+  });
+
+  it("forgetSession removes both lookups", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordSession(100, 200, "sess-1");
+    userDO.forgetSession("sess-1");
+    expect(userDO.lookupSessionByTopic(100, 200)).toBeNull();
+    expect(userDO.lookupSessionById("sess-1")).toBeNull();
+  });
+
+  it("forgetSession is safe for unknown session", () => {
+    const userDO = createFakeUserDO();
+    userDO.forgetSession("nonexistent");
+  });
+
+  it("recordSession overwrites existing topic mapping", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordSession(100, 200, "sess-1");
+    userDO.recordSession(100, 200, "sess-2");
+    expect(userDO.lookupSessionByTopic(100, 200)).toBe("sess-2");
+    expect(userDO.lookupSessionById("sess-1")).toBeNull();
   });
 });

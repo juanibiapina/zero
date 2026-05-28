@@ -4,6 +4,7 @@ import { processStatusCommand } from "./status";
 import type { SendReplyFn } from "./new";
 import type { AgentStub } from "../agent-client";
 import type { TopicContext } from "../process-topic-message";
+import type { UserDO } from "../UserDO/index";
 import type { Env } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -14,14 +15,18 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   const store = new Map(Object.entries(entries));
   return {
     get: async (key: string) => store.get(key) ?? null,
-    put: async (key: string, value: string) => {
-      store.set(key, value);
-    },
-    delete: async (key: string) => {
-      store.delete(key);
-    },
     _store: store,
-  } as unknown as KVNamespace & { _store: Map<string, string> };
+  } as unknown as KVNamespace;
+};
+
+type UserDOStub = Pick<UserDO, "lookupSessionByTopic">;
+
+const createFakeUserDO = (sessions: Record<string, string> = {}): UserDOStub => {
+  // sessions maps "chatId:topicId" → sessionId
+  return {
+    lookupSessionByTopic: (chatId: number, topicId: number) =>
+      sessions[`${chatId}:${topicId}`] ?? null,
+  };
 };
 
 /** Stub that responds to GET /sessions/{id}/status. */
@@ -38,18 +43,22 @@ const fakeStub = (
   },
 });
 
-const fakeEnv = (kv: ReturnType<typeof fakeKV>, stub?: object): Env =>
+const fakeEnv = (kv: ReturnType<typeof fakeKV>, userDO?: UserDOStub, stub?: object): Env =>
   ({
     KV: kv,
     AGENT_CONTAINER: {
       getByName: () => stub ?? {},
+    },
+    USER_DO: {
+      idFromName: () => ({ toString: () => "fake-id" }),
+      get: () => userDO ?? createFakeUserDO(),
     },
   }) as unknown as Env;
 
 const ctx: TopicContext = {
   telegramId: "111",
   chatId: 100,
-  messageThreadId: 200,
+  topicId: 200,
 };
 
 // ---------------------------------------------------------------------------
@@ -68,22 +77,21 @@ describe("processStatusCommand", () => {
 
   it("replies when no session exists", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
 
-    await processStatusCommand(ctx, fakeEnv(kv), sendReply);
+    await processStatusCommand(ctx, fakeEnv(kv, userDO), sendReply);
 
     expect(sendReply).toHaveBeenCalledWith(100, 200, "No active session");
   });
 
   it("replies with model and context usage", async () => {
-    const kv = fakeKV({
-      "tg:111": "user_abc",
-      "topic:user_abc:100:200": "sess-1",
-    });
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO({ "100:200": "sess-1" });
     const stub = fakeStub({ model: "anthropic/claude-sonnet-4-5-20250929", contextPercent: 42 });
     const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
 
-    await processStatusCommand(ctx, fakeEnv(kv, stub), sendReply);
+    await processStatusCommand(ctx, fakeEnv(kv, userDO, stub), sendReply);
 
     expect(sendReply).toHaveBeenCalledWith(
       100,
@@ -93,14 +101,12 @@ describe("processStatusCommand", () => {
   });
 
   it("handles null context percent", async () => {
-    const kv = fakeKV({
-      "tg:111": "user_abc",
-      "topic:user_abc:100:200": "sess-1",
-    });
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO({ "100:200": "sess-1" });
     const stub = fakeStub({ model: "anthropic/claude-sonnet-4-5-20250929", contextPercent: null });
     const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
 
-    await processStatusCommand(ctx, fakeEnv(kv, stub), sendReply);
+    await processStatusCommand(ctx, fakeEnv(kv, userDO, stub), sendReply);
 
     expect(sendReply).toHaveBeenCalledWith(
       100,

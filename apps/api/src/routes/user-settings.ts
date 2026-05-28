@@ -13,7 +13,7 @@ import {
   verifyTelegramAuth,
 } from "../telegram-auth";
 import type { Env } from "../types";
-import type { UserDO } from "../UserDO/index";
+import { getUserDO } from "../UserDO/stub";
 
 type Variables = {
   userId: string;
@@ -25,10 +25,6 @@ const TelegramIdSchema = z.object({
 
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
-const getUserDO = (env: Env, clerkUserId: string): DurableObjectStub<UserDO> => {
-  const id = env.USER_DO.idFromName(clerkUserId);
-  return env.USER_DO.get(id);
-};
 
 export const createUserSettingsRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();

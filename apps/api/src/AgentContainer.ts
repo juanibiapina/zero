@@ -11,7 +11,7 @@ import { fmtErr, log, logError } from "./log";
 import { resolveMounts, type MountSpec } from "./mounts";
 import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
-import { forgetSession, lookupSessionRecord, type SessionRecord } from "./sessions";
+import { getUserDO } from "./UserDO/stub";
 import type { Env } from "./types";
 import { formatAndSend } from "./telegram/send";
 
@@ -23,14 +23,19 @@ const secretProxy = createSecretProxy(
 const ReplyBodySchema = z.object({
   sessionId: z.string().min(1),
   text: z.string().min(1),
+  clerkUserId: z.string().min(1),
 });
 
 const CloseSessionBodySchema = z.object({
   sessionId: z.string().min(1),
   message: z.string().min(1),
+  clerkUserId: z.string().min(1),
 });
 
-type WithSessionOk<T> = { data: T & { sessionId: string }; record: SessionRecord };
+type SessionRecord = { chatId: number; topicId: number };
+
+type WithSessionOk<T> = { data: T & { sessionId: string; clerkUserId: string }; record: SessionRecord };
+
 
 const withSession = async <T extends z.ZodType>(
   req: Request,
@@ -47,18 +52,10 @@ const withSession = async <T extends z.ZodType>(
   if (!parsed.success) {
     return new Response("invalid body", { status: 400 });
   }
-  const data = parsed.data as z.infer<T> & { sessionId: string };
+  const data = parsed.data as z.infer<T> & { sessionId: string; clerkUserId: string };
 
-  let record: SessionRecord | null;
-  try {
-    record = await lookupSessionRecord(env, data.sessionId);
-  } catch (err) {
-    logError("corrupt_session_record", {
-      session_id: data.sessionId,
-      error: fmtErr(err),
-    });
-    return new Response("corrupt session", { status: 500 });
-  }
+  const userDO = getUserDO(env, data.clerkUserId);
+  const record = await userDO.lookupSessionById(data.sessionId);
   if (!record) {
     log("unknown_session", { session_id: data.sessionId });
     return new Response("unknown session", { status: 404 });
@@ -79,7 +76,7 @@ const handleContainerReply = async (
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
   await formatAndSend(data.text, (text, parseMode) =>
     bot.api.sendMessage(record.chatId, text, {
-      message_thread_id: record.messageThreadId,
+      message_thread_id: record.topicId,
       ...(parseMode && { parse_mode: parseMode }),
     }),
   );
@@ -100,23 +97,24 @@ const handleCloseSession = async (
 
   await formatAndSend(data.message, (text, parseMode) =>
     bot.api.sendMessage(record.chatId, text, {
-      message_thread_id: record.messageThreadId,
+      message_thread_id: record.topicId,
       ...(parseMode && { parse_mode: parseMode }),
     }),
   );
 
   try {
-    await bot.api.closeForumTopic(record.chatId, record.messageThreadId);
+    await bot.api.closeForumTopic(record.chatId, record.topicId);
   } catch (err) {
     logError("close_topic_failed", {
       session_id: data.sessionId,
       chat_id: record.chatId,
-      thread_id: record.messageThreadId,
+      thread_id: record.topicId,
       error: fmtErr(err),
     });
   }
 
-  await forgetSession(env, data.sessionId);
+  const userDO = getUserDO(env, data.clerkUserId);
+  await userDO.forgetSession(data.sessionId);
   log("session_closed", { session_id: data.sessionId });
   return new Response(null, { status: 204 });
 };

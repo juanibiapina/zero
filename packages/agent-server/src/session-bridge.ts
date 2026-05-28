@@ -113,6 +113,8 @@ export interface SessionBridgeOptions {
   stateDir: string;
   /** Base URL for callback endpoints (e.g. http://zero.worker). */
   callbackUrl: string;
+  /** Clerk user ID for callback payloads. */
+  clerkUserId: string;
 }
 
 export interface SessionBridge {
@@ -126,7 +128,7 @@ export const createSessionBridge = (
   postReply: ReplyFn,
   opts: SessionBridgeOptions,
 ): SessionBridge => {
-  const { cwd, stateDir, callbackUrl } = opts;
+  const { cwd, stateDir, callbackUrl, clerkUserId } = opts;
   const sessions = new Map<string, SessionState>();
 
   const sessionDirFor = (sessionId: string): string =>
@@ -146,6 +148,7 @@ export const createSessionBridge = (
     const closeSessionTool = createCloseSessionTool({
       callbackUrl,
       getSessionId: () => sessionId,
+      getClerkUserId: () => clerkUserId,
     });
 
     const { session } = await createAgentSession({

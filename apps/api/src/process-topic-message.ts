@@ -1,17 +1,12 @@
 import { createAgentClient, type AgentClient } from "./agent-client";
 import { fmtErr, log, logError } from "./log";
-import {
-  forgetSession,
-  lookupSessionId,
-  recordSession,
-  type SessionRecord,
-} from "./sessions";
+import { getUserDO, type UserDOStub } from "./UserDO/stub";
 import type { Env } from "./types";
 
 export interface TopicContext {
   telegramId: string;
   chatId: number;
-  messageThreadId: number;
+  topicId: number;
 }
 
 export interface TopicMessage extends TopicContext {
@@ -19,6 +14,7 @@ export interface TopicMessage extends TopicContext {
 }
 
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
+
 
 export const processTopicMessage = async (
   topic: TopicMessage,
@@ -32,13 +28,14 @@ export const processTopicMessage = async (
       return;
     }
 
-    sendTyping(topic.chatId, topic.messageThreadId).catch((err) => {
+    sendTyping(topic.chatId, topic.topicId).catch((err) => {
       logError("send_typing_failed", { error: fmtErr(err) });
     });
 
     const agent = createAgentClient(env, clerkUserId);
+    const userDO = getUserDO(env, clerkUserId);
 
-    let sessionId = await ensureSession(agent, env, clerkUserId, topic);
+    let sessionId = await ensureSession(agent, userDO, clerkUserId, topic);
     if (sessionId === null) return;
 
     let result = await agent.sendMessage(sessionId, topic.text);
@@ -47,8 +44,8 @@ export const processTopicMessage = async (
         session_id: sessionId,
         clerk_user_id: clerkUserId,
       });
-      await forgetSession(env, sessionId);
-      sessionId = await ensureSession(agent, env, clerkUserId, topic);
+      await userDO.forgetSession(sessionId);
+      sessionId = await ensureSession(agent, userDO, clerkUserId, topic);
       if (sessionId === null) return;
       result = await agent.sendMessage(sessionId, topic.text);
     }
@@ -74,16 +71,11 @@ export const processTopicMessage = async (
 
 const ensureSession = async (
   agent: AgentClient,
-  env: Env,
+  userDO: UserDOStub,
   clerkUserId: string,
   topic: TopicMessage,
 ): Promise<string | null> => {
-  const record: SessionRecord = {
-    clerkUserId,
-    chatId: topic.chatId,
-    messageThreadId: topic.messageThreadId,
-  };
-  const existing = await lookupSessionId(env, record);
+  const existing = await userDO.lookupSessionByTopic(topic.chatId, topic.topicId);
   if (existing) {
     return existing;
   }
@@ -97,12 +89,12 @@ const ensureSession = async (
     return null;
   }
 
-  await recordSession(env, result.sessionId, record);
+  await userDO.recordSession(topic.chatId, topic.topicId, result.sessionId);
   log("created_session", {
     session_id: result.sessionId,
     clerk_user_id: clerkUserId,
     chat_id: topic.chatId,
-    thread_id: topic.messageThreadId,
+    thread_id: topic.topicId,
   });
   return result.sessionId;
 };

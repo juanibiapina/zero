@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentStub } from "./agent-client";
 import type { TopicMessage } from "./process-topic-message";
 import { processTopicMessage } from "./process-topic-message";
+import type { UserDO } from "./UserDO/index";
 import type { Env } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -19,9 +20,39 @@ const fakeKV = (entries: Record<string, string> = {}) => {
     delete: async (key: string) => {
       store.delete(key);
     },
-    /** Expose for assertions. */
     _store: store,
   } as unknown as KVNamespace & { _store: Map<string, string> };
+};
+
+type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession">;
+
+const createFakeUserDO = (): UserDOStub & {
+  _sessionByTopic: (chatId: number, topicId: number) => string | null;
+  _sessionById: (sessionId: string) => { chatId: number; topicId: number } | null;
+} => {
+  const byTopic = new Map<string, string>();
+  const byId = new Map<string, { chatId: number; topicId: number }>();
+  const key = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
+
+  return {
+    _sessionByTopic: (chatId, topicId) => byTopic.get(key(chatId, topicId)) ?? null,
+    _sessionById: (sessionId) => byId.get(sessionId) ?? null,
+    lookupSessionByTopic: (chatId: number, topicId: number) =>
+      byTopic.get(key(chatId, topicId)) ?? null,
+    lookupSessionById: (sessionId: string) =>
+      byId.get(sessionId) ?? null,
+    recordSession: (chatId: number, topicId: number, sessionId: string) => {
+      const old = byTopic.get(key(chatId, topicId));
+      if (old) byId.delete(old);
+      byTopic.set(key(chatId, topicId), sessionId);
+      byId.set(sessionId, { chatId, topicId });
+    },
+    forgetSession: (sessionId: string) => {
+      const record = byId.get(sessionId);
+      if (record) byTopic.delete(key(record.chatId, record.topicId));
+      byId.delete(sessionId);
+    },
+  };
 };
 
 interface StubOpts {
@@ -50,18 +81,22 @@ const fakeStub = (opts: StubOpts = {}): AgentStub => {
   };
 };
 
-const fakeEnv = (kv: ReturnType<typeof fakeKV>, stub?: object): Env =>
+const fakeEnv = (kv: ReturnType<typeof fakeKV>, userDO?: UserDOStub, stub?: object): Env =>
   ({
     KV: kv,
     AGENT_CONTAINER: {
       getByName: () => stub ?? {},
+    },
+    USER_DO: {
+      idFromName: () => ({ toString: () => "fake-id" }),
+      get: () => userDO ?? createFakeUserDO(),
     },
   }) as unknown as Env;
 
 const topic: TopicMessage = {
   telegramId: "111",
   chatId: 100,
-  messageThreadId: 200,
+  topicId: 200,
   text: "hello",
 };
 
@@ -81,21 +116,23 @@ describe("processTopicMessage", () => {
 
   it("sends typing after user identified", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     const stub = fakeStub();
     const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
 
     expect(sendTyping).toHaveBeenCalledWith(100, 200);
   });
 
   it("typing failure does not block forwarding", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     const live = new Set<string>();
     const stub = fakeStub({ liveSessions: live });
     const sendTyping = vi.fn().mockRejectedValue(new Error("network"));
 
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
 
     // Message was still forwarded despite typing failure:
     // the stub created a session and it's in the live set.
@@ -103,15 +140,15 @@ describe("processTopicMessage", () => {
   });
 
   it("reuses existing session", async () => {
-    const kv = fakeKV({
-      "tg:111": "user_abc",
-      "topic:user_abc:100:200": "existing-session",
-    });
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
+    // Pre-seed a session in the DO
+    userDO.recordSession(100, 200, "existing-session");
     const live = new Set(["existing-session"]);
     const stub = fakeStub({ liveSessions: live });
     const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
 
     // No new session was created — still just the one we seeded.
     expect(live.size).toBe(1);
@@ -120,43 +157,39 @@ describe("processTopicMessage", () => {
 
   it("creates and records new session", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     const stub = fakeStub({ sessionId: "new-sess" });
     const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
 
-    // Both KV directions written by sessions.ts:
-    expect(kv._store.get("topic:user_abc:100:200")).toBe("new-sess");
-    expect(kv._store.get("session:new-sess")).toBeDefined();
+    // Session recorded in the DO:
+    expect(userDO._sessionByTopic(100, 200)).toBe("new-sess");
+    expect(userDO._sessionById("new-sess")).toEqual({ chatId: 100, topicId: 200 });
   });
 
   it("retries on stale session", async () => {
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     // Pre-seed a session that the container no longer knows about.
-    const kv = fakeKV({
-      "tg:111": "user_abc",
-      "topic:user_abc:100:200": "stale-sess",
-      "session:stale-sess": JSON.stringify({
-        clerkUserId: "user_abc",
-        chatId: 100,
-        messageThreadId: 200,
-      }),
-    });
+    userDO.recordSession(100, 200, "stale-sess");
     // The container only recognises sessions it creates — "stale-sess" is
     // not in the live set so sendMessage returns 404 (stale).
     const live = new Set<string>();
     const stub = fakeStub({ sessionId: "fresh-sess", liveSessions: live });
     const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
 
-    // Stale entries cleaned, fresh session recorded:
-    expect(kv._store.has("session:stale-sess")).toBe(false);
-    expect(kv._store.get("topic:user_abc:100:200")).toBe("fresh-sess");
-    expect(kv._store.get("session:fresh-sess")).toBeDefined();
+    // Stale entry cleaned, fresh session recorded:
+    expect(userDO._sessionById("stale-sess")).toBeNull();
+    expect(userDO._sessionByTopic(100, 200)).toBe("fresh-sess");
+    expect(userDO._sessionById("fresh-sess")).toEqual({ chatId: 100, topicId: 200 });
   });
 
   it("handles container error without throwing", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     // Stub that always returns 500 for messages.
     const stub: AgentStub = {
       fetch: async (req: Request) => {
@@ -170,25 +203,27 @@ describe("processTopicMessage", () => {
     const sendTyping = vi.fn().mockResolvedValue(undefined);
 
     // Should not throw.
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
   });
 
   it("handles session creation failure without throwing", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     // Stub that rejects session creation.
     const stub: AgentStub = {
       fetch: async () => Response.json({ error: "no capacity" }, { status: 500 }),
     };
     const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
 
     // No session recorded.
-    expect(kv._store.has("topic:user_abc:100:200")).toBe(false);
+    expect(userDO._sessionByTopic(100, 200)).toBeNull();
   });
 
   it("catches thrown DO errors without crashing", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
     // Stub that throws (simulates DO infrastructure error after retries exhausted).
     const stub: AgentStub = {
       fetch: async () => {
@@ -198,6 +233,6 @@ describe("processTopicMessage", () => {
     const sendTyping = vi.fn().mockResolvedValue(undefined);
 
     // Should not throw — safety net catches it.
-    await processTopicMessage(topic, fakeEnv(kv, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
   });
 });
