@@ -71,10 +71,10 @@ COPY dist/ ./dist/
 RUN mkdir -p /workspace /agent /mnt/agent-state /mnt/notes /tmp/pi-home && \
     chown -R pi:pi /workspace /agent /tmp/pi-home
 
-# Pi auto-loads AGENTS.md from CWD and its parents at session start.
-# This file describes the /mnt/notes long-term memory contract.
-COPY context/AGENTS.md /workspace/AGENTS.md
-RUN chown pi:pi /workspace/AGENTS.md
+# SYSTEM.md replaces pi's default system prompt with Zero's.
+# Pi discovers it at $PI_CODING_AGENT_DIR/SYSTEM.md.
+COPY context/SYSTEM.md /agent/SYSTEM.md
+RUN chown pi:pi /agent/SYSTEM.md
 
 # Skills are auto-discovered by pi from $PI_CODING_AGENT_DIR/skills/.
 # Add new skills under packages/agent-server/skills/<name>/SKILL.md.
