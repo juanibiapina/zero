@@ -29,18 +29,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.0",
-    "@hono/node-server": "^2.0.2",
-    "@hono/zod-openapi": "^1.2.2",
-    "hono": "^4.12.2",
+    "@earendil-works/pi-coding-agent": "^0.76.0",
+    "@hono/node-server": "^2.0.4",
+    "@hono/zod-openapi": "^1.4.0",
+    "hono": "^4.12.23",
     "typebox": "^1.1.38",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.9.1",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "eslint": "9.39.3",
-    "typescript": "5.9.3"
+    "eslint": "10.4.0",
+    "typescript": "6.0.3"
   }
 }

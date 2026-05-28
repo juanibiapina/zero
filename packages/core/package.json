@@ -19,7 +19,7 @@
   "devDependencies": {
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "eslint": "9.39.3",
-    "typescript": "5.9.3"
+    "eslint": "10.4.0",
+    "typescript": "6.0.3"
   }
 }

@@ -29,7 +29,7 @@ const isDOError = (err: unknown): err is Error & DOError =>
 const clientFor = (stub: AgentStub) =>
   hc<AppType>("http://internal", {
     fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-      stub.fetch(new Request(input as RequestInfo, init)),
+      stub.fetch(new Request(input, init)),
   });
 
 // ---------------------------------------------------------------------------
