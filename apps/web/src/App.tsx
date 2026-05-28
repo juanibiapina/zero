@@ -171,16 +171,26 @@ function TelegramConnect() {
           <p className="text-sm text-muted-foreground">
             Connected ✅ Telegram id {telegramId}
           </p>
-          <Button
-            variant="link"
-            className="h-auto p-0 text-sm"
-            disabled={busy}
-            onClick={() => {
-              void onDisconnect();
-            }}
-          >
-            Disconnect
-          </Button>
+          <div className="flex gap-2">
+            <a
+              href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary underline"
+            >
+              Start chatting →
+            </a>
+            <Button
+              variant="link"
+              className="h-auto p-0 text-sm"
+              disabled={busy}
+              onClick={() => {
+                void onDisconnect();
+              }}
+            >
+              Disconnect
+            </Button>
+          </div>
         </>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}

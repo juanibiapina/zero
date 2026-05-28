@@ -168,6 +168,20 @@ describe("processTopicMessage", () => {
     expect(userDO._sessionById("new-sess")).toEqual({ chatId: 100, topicId: 200 });
   });
 
+  it("creates session for DM (topicId=0)", async () => {
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
+    const stub = fakeStub({ sessionId: "dm-sess" });
+    const sendTyping = vi.fn().mockResolvedValue(undefined);
+
+    const dm = { ...topic, topicId: 0 };
+    await processTopicMessage(dm, fakeEnv(kv, userDO, stub), sendTyping);
+
+    expect(userDO._sessionByTopic(100, 0)).toBe("dm-sess");
+    expect(userDO._sessionById("dm-sess")).toEqual({ chatId: 100, topicId: 0 });
+    expect(sendTyping).toHaveBeenCalledWith(100, 0);
+  });
+
   it("retries on stale session", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO();

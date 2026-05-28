@@ -76,7 +76,7 @@ const handleContainerReply = async (
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
   await formatAndSend(data.text, (text, parseMode) =>
     bot.api.sendMessage(record.chatId, text, {
-      message_thread_id: record.topicId,
+      ...(record.topicId && { message_thread_id: record.topicId }),
       ...(parseMode && { parse_mode: parseMode }),
     }),
   );
@@ -97,25 +97,27 @@ const handleCloseSession = async (
 
   await formatAndSend(data.message, (text, parseMode) =>
     bot.api.sendMessage(record.chatId, text, {
-      message_thread_id: record.topicId,
+      ...(record.topicId && { message_thread_id: record.topicId }),
       ...(parseMode && { parse_mode: parseMode }),
     }),
   );
 
-  try {
-    await bot.api.closeForumTopic(record.chatId, record.topicId);
-  } catch (err) {
-    logError("close_topic_failed", {
-      session_id: data.sessionId,
-      chat_id: record.chatId,
-      thread_id: record.topicId,
-      error: fmtErr(err),
-    });
+  if (record.topicId) {
+    try {
+      await bot.api.closeForumTopic(record.chatId, record.topicId);
+    } catch (err) {
+      logError("close_topic_failed", {
+        session_id: data.sessionId,
+        chat_id: record.chatId,
+        thread_id: record.topicId,
+        error: fmtErr(err),
+      });
+    }
+    const userDO = getUserDO(env, data.clerkUserId);
+    await userDO.forgetSession(data.sessionId);
+    log("session_closed", { session_id: data.sessionId });
   }
 
-  const userDO = getUserDO(env, data.clerkUserId);
-  await userDO.forgetSession(data.sessionId);
-  log("session_closed", { session_id: data.sessionId });
   return new Response(null, { status: 204 });
 };
 

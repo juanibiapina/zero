@@ -1,7 +1,9 @@
 // POST /api/webhooks/telegram — public route.
 //
-// Accepts forum topic messages only; everything else (DMs, edits,
-// channel posts) is dropped. grammY's `webhookCallback` validates the
+// Accepts forum topic messages and direct messages (DMs). Channel
+// posts and edits are dropped. DMs use topicId=0 as a convention
+// so the rest of the pipeline (UserDO session mapping, reply path)
+// works unchanged. grammY's `webhookCallback` validates the
 // X-Telegram-Bot-Api-Secret-Token header. The bot middleware schedules
 // `processTopicMessage` via `executionCtx.waitUntil` and the route
 // returns 200 immediately. Background failures are logged and dropped.
@@ -22,10 +24,28 @@ import { processStatusCommand } from "../commands/status";
 import {
   processTopicMessage,
   type TopicContext,
-  type TopicMessage,
 } from "../process-topic-message";
 import type { Env } from "../types";
 import { formatAndSend } from "../telegram/send";
+
+// Build a TopicContext from a Telegram message. Topic messages (forum
+// groups or DM topics) use message_thread_id; plain DMs use topicId=0.
+// Everything else is dropped.
+export const resolveContext = (
+  fromId: number,
+  msg: { chat: { type: string; id: number }; is_topic_message?: boolean; message_thread_id?: number },
+): TopicContext | null => {
+  // Topic messages: forum supergroups or DMs with topics enabled.
+  if (msg.is_topic_message && msg.message_thread_id !== undefined) {
+    return { telegramId: String(fromId), chatId: msg.chat.id, topicId: msg.message_thread_id };
+  }
+  // Plain DMs (no topics).
+  if (msg.chat.type === "private") {
+    return { telegramId: String(fromId), chatId: msg.chat.id, topicId: 0 };
+  }
+  log("drop_unsupported_message", { telegram_id: String(fromId), chat_type: msg.chat.type });
+  return null;
+};
 
 export const createTelegramWebhookRoute = () => {
   const router = new OpenAPIHono<{ Bindings: Env }>();
@@ -36,7 +56,7 @@ export const createTelegramWebhookRoute = () => {
 
     const sendTyping = async (chatId: number, threadId: number) => {
       await bot.api.sendChatAction(chatId, "typing", {
-        message_thread_id: threadId,
+        ...(threadId && { message_thread_id: threadId }),
       });
     };
 
@@ -47,7 +67,7 @@ export const createTelegramWebhookRoute = () => {
     ) => {
       await formatAndSend(text, (formatted, parseMode) =>
         bot.api.sendMessage(chatId, formatted, {
-          message_thread_id: threadId,
+          ...(threadId && { message_thread_id: threadId }),
           ...(parseMode && { parse_mode: parseMode }),
         }),
       );
@@ -56,17 +76,8 @@ export const createTelegramWebhookRoute = () => {
     bot.command("new", (ctx) => {
       const msg = ctx.msg;
       if (!ctx.from) return;
-      if (!msg.is_topic_message || msg.message_thread_id === undefined) {
-        log("drop_non_topic_command", {
-          telegram_id: String(ctx.from.id),
-        });
-        return;
-      }
-      const topic: TopicContext = {
-        telegramId: String(ctx.from.id),
-        chatId: msg.chat.id,
-        topicId: msg.message_thread_id,
-      };
+      const topic = resolveContext(ctx.from.id, msg);
+      if (!topic) return;
       c.executionCtx.waitUntil(
         processNewCommand(topic, c.env, sendReply),
       );
@@ -75,17 +86,8 @@ export const createTelegramWebhookRoute = () => {
     bot.command("abort", (ctx) => {
       const msg = ctx.msg;
       if (!ctx.from) return;
-      if (!msg.is_topic_message || msg.message_thread_id === undefined) {
-        log("drop_non_topic_command", {
-          telegram_id: String(ctx.from.id),
-        });
-        return;
-      }
-      const topic: TopicContext = {
-        telegramId: String(ctx.from.id),
-        chatId: msg.chat.id,
-        topicId: msg.message_thread_id,
-      };
+      const topic = resolveContext(ctx.from.id, msg);
+      if (!topic) return;
       c.executionCtx.waitUntil(
         processAbortCommand(topic, c.env, sendReply),
       );
@@ -94,17 +96,8 @@ export const createTelegramWebhookRoute = () => {
     bot.command("status", (ctx) => {
       const msg = ctx.msg;
       if (!ctx.from) return;
-      if (!msg.is_topic_message || msg.message_thread_id === undefined) {
-        log("drop_non_topic_command", {
-          telegram_id: String(ctx.from.id),
-        });
-        return;
-      }
-      const topic: TopicContext = {
-        telegramId: String(ctx.from.id),
-        chatId: msg.chat.id,
-        topicId: msg.message_thread_id,
-      };
+      const topic = resolveContext(ctx.from.id, msg);
+      if (!topic) return;
       c.executionCtx.waitUntil(
         processStatusCommand(topic, c.env, sendReply),
       );
@@ -112,27 +105,17 @@ export const createTelegramWebhookRoute = () => {
 
     bot.on("message", (ctx) => {
       const msg = ctx.message;
-      if (!msg.is_topic_message || msg.message_thread_id === undefined) {
-        log("drop_non_topic_message", {
-          telegram_id: String(ctx.from.id),
-        });
-        return;
-      }
+      const topic = resolveContext(ctx.from.id, msg);
+      if (!topic) return;
       if (typeof msg.text !== "string" || msg.text.length === 0) {
-        log("drop_topic_message_without_text", {
+        log("drop_message_without_text", {
           telegram_id: String(ctx.from.id),
         });
         return;
       }
 
-      const topic: TopicMessage = {
-        telegramId: String(ctx.from.id),
-        chatId: msg.chat.id,
-        topicId: msg.message_thread_id,
-        text: msg.text,
-      };
       c.executionCtx.waitUntil(
-        processTopicMessage(topic, c.env, sendTyping),
+        processTopicMessage({ ...topic, text: msg.text }, c.env, sendTyping),
       );
     });
 
