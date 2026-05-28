@@ -16,6 +16,7 @@
     "@cloudflare/containers": "^0.3.5",
     "@hono/clerk-auth": "^3.1.1",
     "@hono/zod-openapi": "^1.4.0",
+    "do-orm": "github:juanibiapina/do-orm",
     "grammy": "^1.43.0",
     "hono": "^4.12.23",
     "jose": "^6.2.3",

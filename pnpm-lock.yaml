@@ -30,6 +30,9 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.4.0
         version: 1.4.0(hono@4.12.23)(zod@4.4.3)
+      do-orm:
+        specifier: github:juanibiapina/do-orm
+        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/10398f6c8ac6cada6b892685ef846c5d153927f9
       grammy:
         specifier: ^1.43.0
         version: 1.43.0
@@ -1907,6 +1910,10 @@ packages:
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
     engines: {node: '>=0.3.1'}
+
+  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/10398f6c8ac6cada6b892685ef846c5d153927f9:
+    resolution: {tarball: https://codeload.github.com/juanibiapina/do-orm/tar.gz/10398f6c8ac6cada6b892685ef846c5d153927f9}
+    version: 0.1.0
 
   dom-serializer@1.4.1:
     resolution: {integrity: sha512-VHwB3KfrcOOkelEG2ZOfxqLZdfkil8PtJi4P8N2MMXucZq2yLp75ClViUlOVwyoHEDjYU433Aq+5zWP61+RGag==}
@@ -4768,6 +4775,8 @@ snapshots:
   detect-libc@2.1.2: {}
 
   diff@8.0.4: {}
+
+  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/10398f6c8ac6cada6b892685ef846c5d153927f9: {}
 
   dom-serializer@1.4.1:
     dependencies:

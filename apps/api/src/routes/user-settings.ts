@@ -1,11 +1,9 @@
 // Clerk-authed routes for the signed-in user's settings.
 //
-// KV schema:
-//   clerk:{clerkUserId} → telegramId   (forward, read by the web UI)
-//   tg:{telegramId}     → clerkUserId  (reverse, read by the webhook)
-//
-// `POST /api/telegram-link` accepts a Telegram Login Widget payload and
-// links the caller's account after HMAC verification.
+// Telegram link data lives in the UserDO (one instance per Clerk user).
+// The only KV entry is the reverse lookup `tg:{telegramId} → clerkUserId`,
+// kept in sync so the Telegram webhook can bootstrap without knowing the
+// Clerk user ID.
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
@@ -15,6 +13,7 @@ import {
   verifyTelegramAuth,
 } from "../telegram-auth";
 import type { Env } from "../types";
+import type { UserDO } from "../UserDO/index";
 
 type Variables = {
   userId: string;
@@ -24,24 +23,11 @@ const TelegramIdSchema = z.object({
   telegramId: z.string().nullable(),
 });
 
-const clerkKey = (clerkUserId: string) => `clerk:${clerkUserId}`;
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
-const writeMapping = async (
-  env: Env,
-  clerkUserId: string,
-  telegramId: string | null,
-): Promise<void> => {
-  const previous = await env.KV.get(clerkKey(clerkUserId));
-  if (previous && previous !== telegramId) {
-    await env.KV.delete(tgKey(previous));
-  }
-  if (telegramId) {
-    await env.KV.put(clerkKey(clerkUserId), telegramId);
-    await env.KV.put(tgKey(telegramId), clerkUserId);
-  } else {
-    await env.KV.delete(clerkKey(clerkUserId));
-  }
+const getUserDO = (env: Env, clerkUserId: string): DurableObjectStub<UserDO> => {
+  const id = env.USER_DO.idFromName(clerkUserId);
+  return env.USER_DO.get(id);
 };
 
 export const createUserSettingsRoutes = () => {
@@ -62,7 +48,8 @@ export const createUserSettingsRoutes = () => {
 
   router.openapi(getRoute, async (c) => {
     const clerkUserId = c.get("userId");
-    const telegramId = await c.env.KV.get(clerkKey(clerkUserId));
+    const userDO = getUserDO(c.env, clerkUserId);
+    const telegramId = await userDO.getTelegramId();
     return c.json({ telegramId }, 200);
   });
 
@@ -104,7 +91,15 @@ export const createUserSettingsRoutes = () => {
     }
 
     const telegramId = String(payload.id);
-    await writeMapping(c.env, clerkUserId, telegramId);
+    const userDO = getUserDO(c.env, clerkUserId);
+    const { previous } = await userDO.linkTelegram(telegramId);
+
+    // Sync the reverse KV lookup for the webhook
+    if (previous && previous !== telegramId) {
+      await c.env.KV.delete(tgKey(previous));
+    }
+    await c.env.KV.put(tgKey(telegramId), clerkUserId);
+
     log("telegram_linked", {
       clerk_user_id: clerkUserId,
       telegram_id: telegramId,
@@ -127,7 +122,13 @@ export const createUserSettingsRoutes = () => {
 
   router.openapi(unlinkRoute, async (c) => {
     const clerkUserId = c.get("userId");
-    await writeMapping(c.env, clerkUserId, null);
+    const userDO = getUserDO(c.env, clerkUserId);
+    const { removed } = await userDO.unlinkTelegram();
+
+    if (removed) {
+      await c.env.KV.delete(tgKey(removed));
+    }
+
     log("telegram_unlinked", { clerk_user_id: clerkUserId });
     return c.json({ telegramId: null }, 200);
   });

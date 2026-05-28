@@ -8,4 +8,5 @@ export default {
 };
 
 export { AgentContainer } from "./AgentContainer";
+export { UserDO } from "./UserDO/index";
 export { ContainerProxy } from "@cloudflare/containers";

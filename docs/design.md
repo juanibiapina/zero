@@ -66,7 +66,7 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 | Auth   | Clerk                                             |
 | Frontend | React 19, Tailwind v4, shadcn/ui primitives    |
 | API    | Hono + OpenAPIHono + Zod on Cloudflare Workers    |
-| State  | KV (Workers KV)                                   |
+| State  | KV (Workers KV) + UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) |
 | Container | Cloudflare Containers (`@cloudflare/containers`, with `outboundByHost`) |
 | Agent  | [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) (Node 22 inside the container) |
 | LLM    | Anthropic API direct — `claude-sonnet-4-5-20250929` |
@@ -231,14 +231,32 @@ creds in the entrypoint trivially scope to one mount.
 
 ## State Model
 
-All non-session state is in Workers KV.
+Per-user data is split between a `UserDO` Durable Object (source of
+truth, SQLite via [do-orm](https://github.com/juanibiapina/do-orm))
+and Workers KV (bootstrap lookups only).
+
+### KV (bootstrap)
 
 | Key                                          | Value                                              | Written by                            | Read by                                          |
 |----------------------------------------------|----------------------------------------------------|---------------------------------------|--------------------------------------------------|
-| `clerk:{clerkUserId}`                        | `telegramId`                                       | `PUT /api/telegram-id`                | `GET /api/telegram-id`                           |
-| `tg:{telegramId}`                            | `clerkUserId`                                      | `PUT /api/telegram-id`                | webhook (route messages)                         |
+| `tg:{telegramId}`                            | `clerkUserId`                                      | `POST /api/telegram-link`             | webhook (route messages)                         |
 | `topic:{clerkUserId}:{chatId}:{threadId}`    | `sessionId`                                        | `sessions.recordSession`              | `sessions.lookupSessionId`                       |
 | `session:{sessionId}`                        | `{ clerkUserId, chatId, messageThreadId }` JSON    | `sessions.recordSession`              | `sessions.lookupSessionRecord`                   |
+
+The `tg:` reverse lookup is the only way to resolve a Telegram user ID
+to a Clerk user ID; it is kept in sync by the link/unlink routes.
+Session KV keys (`topic:` and `session:`) will move to UserDO in a
+future step.
+
+### UserDO (per-user, addressed by `idFromName(clerkUserId)`)
+
+| Table            | Columns                  | Purpose                                     |
+|------------------|--------------------------|---------------------------------------------|
+| `telegram_link`  | `id`, `telegramId`       | The user's linked Telegram account (≤1 row) |
+
+The `telegram_link` table is the source of truth for the Clerk↔Telegram
+mapping. The `GET /api/telegram-id` route reads directly from the DO;
+the KV `tg:` entry is a denormalized reverse index synced on write.
 
 The `topic:` and `session:` pair is managed as a unit by
 `apps/api/src/sessions.ts` — it owns the key formats, the record
@@ -258,6 +276,7 @@ entries and starts a fresh session.
 
 | DO | Purpose | Storage |
 |---|---|---|
+| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link (source of truth). | SQLite via do-orm (`telegram_link` table) |
 | **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` mints prefix-scoped R2 temp creds, resolves the user's mounts via `resolveMounts`, and refreshes `envVars` on every call; the container mounts each scope (sessions, notes) via its own tigrisfs invocation. Defines `outboundByHost["zero.worker"]` for the Telegram reply path. | None (sessions and notes live on R2 mounts inside the container; KV holds the topic↔session mappings) |
 
 ## Routes

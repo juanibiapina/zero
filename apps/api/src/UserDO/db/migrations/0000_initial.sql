@@ -1,0 +1,4 @@
+CREATE TABLE "telegram_link" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "telegramId" TEXT NOT NULL UNIQUE
+);
