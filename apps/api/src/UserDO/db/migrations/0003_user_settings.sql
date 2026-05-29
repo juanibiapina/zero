@@ -1,4 +1,4 @@
 CREATE TABLE "user_settings" (
   "id" INTEGER PRIMARY KEY AUTOINCREMENT,
-  "onboarding_seen" INTEGER NOT NULL DEFAULT 0
+  "onboardingSeen" INTEGER NOT NULL DEFAULT 0
 );
