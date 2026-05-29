@@ -6,12 +6,12 @@ import type { UserDO, S3MountConfig } from "./index";
 // Fake UserDO stub — implements the same public RPC interface
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession" | "getMountConfig" | "setMountConfig" | "deleteMountConfig" | "getSettings" | "updateSettings">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession" | "getMountConfig" | "setMountConfig" | "deleteMountConfig" | "getSettings" | "updateSettings">;
 
 const createFakeUserDO = (): UserDOStub => {
   let telegramId: string | null = null;
   const sessionsByTopic = new Map<string, string>();
-  const sessionsBySessionId = new Map<string, { chatId: number; topicId: number }>();
+  const sessionsBySessionId = new Map<string, { type: string; chatId: number; topicId: number }>();
   const mountConfigs = new Map<string, S3MountConfig>();
   let onboardingSeen = false;
 
@@ -39,7 +39,10 @@ const createFakeUserDO = (): UserDOStub => {
       const oldSessionId = sessionsByTopic.get(topicKey(chatId, topicId));
       if (oldSessionId) sessionsBySessionId.delete(oldSessionId);
       sessionsByTopic.set(topicKey(chatId, topicId), sessionId);
-      sessionsBySessionId.set(sessionId, { chatId, topicId });
+      sessionsBySessionId.set(sessionId, { type: "telegram", chatId, topicId });
+    },
+    recordTaskSession: (sessionId: string) => {
+      sessionsBySessionId.set(sessionId, { type: "task", chatId: 0, topicId: 0 });
     },
     forgetSession: (sessionId: string) => {
       const record = sessionsBySessionId.get(sessionId);
@@ -120,7 +123,7 @@ describe("UserDO sessions contract", () => {
   it("recordSession makes session retrievable by id", () => {
     const userDO = createFakeUserDO();
     userDO.recordSession(100, 200, "sess-1");
-    expect(userDO.lookupSessionById("sess-1")).toEqual({ chatId: 100, topicId: 200 });
+    expect(userDO.lookupSessionById("sess-1")).toEqual({ type: "telegram", chatId: 100, topicId: 200 });
   });
 
   it("lookupSessionById returns null for unknown session", () => {
@@ -147,6 +150,27 @@ describe("UserDO sessions contract", () => {
     userDO.recordSession(100, 200, "sess-2");
     expect(userDO.lookupSessionByTopic(100, 200)).toBe("sess-2");
     expect(userDO.lookupSessionById("sess-1")).toBeNull();
+  });
+
+  it("recordTaskSession makes session retrievable by id with type task", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordTaskSession("task-sess-1");
+    expect(userDO.lookupSessionById("task-sess-1")).toEqual({ type: "task", chatId: 0, topicId: 0 });
+  });
+
+  it("multiple task sessions do not collide", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordTaskSession("task-1");
+    userDO.recordTaskSession("task-2");
+    expect(userDO.lookupSessionById("task-1")).toEqual({ type: "task", chatId: 0, topicId: 0 });
+    expect(userDO.lookupSessionById("task-2")).toEqual({ type: "task", chatId: 0, topicId: 0 });
+  });
+
+  it("forgetSession works for task sessions", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordTaskSession("task-sess-1");
+    userDO.forgetSession("task-sess-1");
+    expect(userDO.lookupSessionById("task-sess-1")).toBeNull();
   });
 });
 

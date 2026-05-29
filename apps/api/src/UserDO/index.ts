@@ -57,10 +57,10 @@ export class UserDO extends DurableObject<Env> {
     return row?.sessionId ?? null;
   }
 
-  lookupSessionById(sessionId: string): { chatId: number; topicId: number } | null {
+  lookupSessionById(sessionId: string): { type: string; chatId: number; topicId: number } | null {
     const row = this.db.get(sessions, { where: eq("sessionId", sessionId) });
     if (!row) return null;
-    return { chatId: row.chatId, topicId: row.topicId };
+    return { type: row.type, chatId: row.chatId, topicId: row.topicId };
   }
 
   recordSession(chatId: number, topicId: number, sessionId: string): void {
@@ -71,7 +71,11 @@ export class UserDO extends DurableObject<Env> {
     if (existing) {
       this.db.delete(sessions, { where: eq("id", existing.id) });
     }
-    this.db.insert(sessions, { chatId, topicId, sessionId });
+    this.db.insert(sessions, { type: "telegram", chatId, topicId, sessionId });
+  }
+
+  recordTaskSession(sessionId: string): void {
+    this.db.insert(sessions, { type: "task", chatId: 0, topicId: 0, sessionId });
   }
 
   forgetSession(sessionId: string): void {

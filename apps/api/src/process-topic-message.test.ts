@@ -24,14 +24,14 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   } as unknown as KVNamespace & { _store: Map<string, string> };
 };
 
-type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession">;
+type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession">;
 
 const createFakeUserDO = (): UserDOStub & {
   _sessionByTopic: (chatId: number, topicId: number) => string | null;
-  _sessionById: (sessionId: string) => { chatId: number; topicId: number } | null;
+  _sessionById: (sessionId: string) => { type: string; chatId: number; topicId: number } | null;
 } => {
   const byTopic = new Map<string, string>();
-  const byId = new Map<string, { chatId: number; topicId: number }>();
+  const byId = new Map<string, { type: string; chatId: number; topicId: number }>();
   const key = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
   return {
@@ -45,7 +45,10 @@ const createFakeUserDO = (): UserDOStub & {
       const old = byTopic.get(key(chatId, topicId));
       if (old) byId.delete(old);
       byTopic.set(key(chatId, topicId), sessionId);
-      byId.set(sessionId, { chatId, topicId });
+      byId.set(sessionId, { type: "telegram", chatId, topicId });
+    },
+    recordTaskSession: (sessionId: string) => {
+      byId.set(sessionId, { type: "task", chatId: 0, topicId: 0 });
     },
     forgetSession: (sessionId: string) => {
       const record = byId.get(sessionId);
@@ -165,7 +168,7 @@ describe("processTopicMessage", () => {
 
     // Session recorded in the DO:
     expect(userDO._sessionByTopic(100, 200)).toBe("new-sess");
-    expect(userDO._sessionById("new-sess")).toEqual({ chatId: 100, topicId: 200 });
+    expect(userDO._sessionById("new-sess")).toEqual({ type: "telegram", chatId: 100, topicId: 200 });
   });
 
   it("creates session for DM (topicId=0)", async () => {
@@ -178,7 +181,7 @@ describe("processTopicMessage", () => {
     await processTopicMessage(dm, fakeEnv(kv, userDO, stub), sendTyping);
 
     expect(userDO._sessionByTopic(100, 0)).toBe("dm-sess");
-    expect(userDO._sessionById("dm-sess")).toEqual({ chatId: 100, topicId: 0 });
+    expect(userDO._sessionById("dm-sess")).toEqual({ type: "telegram", chatId: 100, topicId: 0 });
     expect(sendTyping).toHaveBeenCalledWith(100, 0);
   });
 
@@ -198,7 +201,7 @@ describe("processTopicMessage", () => {
     // Stale entry cleaned, fresh session recorded:
     expect(userDO._sessionById("stale-sess")).toBeNull();
     expect(userDO._sessionByTopic(100, 200)).toBe("fresh-sess");
-    expect(userDO._sessionById("fresh-sess")).toEqual({ chatId: 100, topicId: 200 });
+    expect(userDO._sessionById("fresh-sess")).toEqual({ type: "telegram", chatId: 100, topicId: 200 });
   });
 
   it("handles container error without throwing", async () => {

@@ -32,7 +32,7 @@ const CloseSessionBodySchema = z.object({
   clerkUserId: z.string().min(1),
 });
 
-type SessionRecord = { chatId: number; topicId: number };
+type SessionRecord = { type: string; chatId: number; topicId: number };
 
 type WithSessionOk<T> = { data: T & { sessionId: string; clerkUserId: string }; record: SessionRecord };
 
@@ -72,6 +72,11 @@ const handleContainerReply = async (
   if (result instanceof Response) return result;
   const { data, record } = result;
 
+  if (record.type === "task") {
+    log("task_reply_discarded", { session_id: data.sessionId });
+    return new Response(null, { status: 204 });
+  }
+
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
   await formatAndSend(data.text, (text, parseMode) =>
@@ -91,6 +96,10 @@ const handleCloseSession = async (
   const result = await withSession(req, env, CloseSessionBodySchema);
   if (result instanceof Response) return result;
   const { data, record } = result;
+
+  if (record.type === "task") {
+    return Response.json({ message: "Task sessions cannot be closed." });
+  }
 
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
