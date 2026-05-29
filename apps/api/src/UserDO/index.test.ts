@@ -6,13 +6,14 @@ import type { UserDO, S3MountConfig } from "./index";
 // Fake UserDO stub — implements the same public RPC interface
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession" | "getMountConfig" | "setMountConfig" | "deleteMountConfig">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "forgetSession" | "getMountConfig" | "setMountConfig" | "deleteMountConfig" | "getSettings" | "updateSettings">;
 
 const createFakeUserDO = (): UserDOStub => {
   let telegramId: string | null = null;
   const sessionsByTopic = new Map<string, string>();
   const sessionsBySessionId = new Map<string, { chatId: number; topicId: number }>();
   const mountConfigs = new Map<string, S3MountConfig>();
+  let onboardingSeen = false;
 
   const topicKey = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
@@ -55,6 +56,12 @@ const createFakeUserDO = (): UserDOStub => {
     },
     deleteMountConfig: (scope: string) => {
       mountConfigs.delete(scope);
+    },
+    getSettings: () => {
+      return { onboardingSeen };
+    },
+    updateSettings: (patch: { onboardingSeen?: boolean }) => {
+      if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
     },
   };
 };
@@ -211,5 +218,32 @@ describe("UserDO mount config contract", () => {
     };
     userDO.setMountConfig("notes", config);
     expect(userDO.getMountConfig("other-scope")).toBeNull();
+  });
+});
+
+describe("UserDO settings contract", () => {
+  it("getSettings returns onboardingSeen false by default", () => {
+    const userDO = createFakeUserDO();
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: false });
+  });
+
+  it("updateSettings sets onboardingSeen to true", () => {
+    const userDO = createFakeUserDO();
+    userDO.updateSettings({ onboardingSeen: true });
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: true });
+  });
+
+  it("updateSettings can reset onboardingSeen to false", () => {
+    const userDO = createFakeUserDO();
+    userDO.updateSettings({ onboardingSeen: true });
+    userDO.updateSettings({ onboardingSeen: false });
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: false });
+  });
+
+  it("updateSettings with empty object does not change settings", () => {
+    const userDO = createFakeUserDO();
+    userDO.updateSettings({ onboardingSeen: true });
+    userDO.updateSettings({});
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: true });
   });
 });

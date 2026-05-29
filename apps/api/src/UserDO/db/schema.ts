@@ -21,3 +21,8 @@ export const mountConfigs = table("mount_configs", {
   accessKeyId: column.text().notNull(),
   secretAccessKey: column.text().notNull(),
 });
+
+export const userSettings = table("user_settings", {
+  id: column.integer().primaryKey().autoIncrement(),
+  onboardingSeen: column.integer().notNull(),
+});

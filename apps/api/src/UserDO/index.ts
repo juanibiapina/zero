@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDb, eq, and, type Database } from "do-orm";
 import { migrate } from "do-orm";
-import { telegramLink, sessions, mountConfigs } from "./db/schema";
+import { telegramLink, sessions, mountConfigs, userSettings } from "./db/schema";
 import { migrations } from "./db/migrations";
 import type { Env } from "../types";
 
@@ -101,5 +101,23 @@ export class UserDO extends DurableObject<Env> {
 
   deleteMountConfig(scope: string): void {
     this.db.delete(mountConfigs, { where: eq("scope", scope) });
+  }
+
+  getSettings(): { onboardingSeen: boolean } {
+    const row = this.db.get(userSettings);
+    return { onboardingSeen: !!row?.onboardingSeen };
+  }
+
+  updateSettings(patch: { onboardingSeen?: boolean }): void {
+    const existing = this.db.get(userSettings);
+    if (existing) {
+      const updates: Record<string, number> = {};
+      if (patch.onboardingSeen !== undefined) updates.onboardingSeen = patch.onboardingSeen ? 1 : 0;
+      this.db.update(userSettings, updates, { where: eq("id", existing.id) });
+    } else {
+      this.db.insert(userSettings, {
+        onboardingSeen: patch.onboardingSeen ? 1 : 0,
+      });
+    }
   }
 }

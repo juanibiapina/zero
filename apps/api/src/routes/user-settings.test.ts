@@ -36,15 +36,22 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   } as unknown as KVNamespace & { _store: Map<string, string> };
 };
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "getSettings" | "updateSettings">;
 
 const createFakeUserDO = (
   initial?: string,
-): UserDOStub & { _telegramId: string | null } => {
+): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean } => {
   let stored: string | null = initial ?? null;
+  let onboardingSeen = false;
   return {
     get _telegramId() {
       return stored;
+    },
+    get _onboardingSeen() {
+      return onboardingSeen;
+    },
+    set _onboardingSeen(v: boolean) {
+      onboardingSeen = v;
     },
     getTelegramId: () => stored,
     linkTelegram: (telegramId: string) => {
@@ -56,6 +63,10 @@ const createFakeUserDO = (
       const removed = stored;
       stored = null;
       return { removed };
+    },
+    getSettings: () => ({ onboardingSeen }),
+    updateSettings: (patch: { onboardingSeen?: boolean }) => {
+      if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
     },
   };
 };
@@ -202,5 +213,77 @@ describe("DELETE /api/telegram-id", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ telegramId: null });
+  });
+});
+
+describe("GET /api/user-settings", () => {
+  it("returns onboardingSeen false by default", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ onboardingSeen: false });
+  });
+
+  it("returns onboardingSeen true after update", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    userDO._onboardingSeen = true;
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ onboardingSeen: true });
+  });
+});
+
+describe("PATCH /api/user-settings", () => {
+  it("sets onboardingSeen to true", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ onboardingSeen: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ onboardingSeen: true });
+    expect(userDO._onboardingSeen).toBe(true);
+  });
+
+  it("resets onboardingSeen to false", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    userDO._onboardingSeen = true;
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ onboardingSeen: false }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ onboardingSeen: false });
+    expect(userDO._onboardingSeen).toBe(false);
+  });
+
+  it("empty body does not change settings", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    userDO._onboardingSeen = true;
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ onboardingSeen: true });
+    expect(userDO._onboardingSeen).toBe(true);
   });
 });

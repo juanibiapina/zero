@@ -129,5 +129,61 @@ export const createUserSettingsRoutes = () => {
     return c.json({ telegramId: null }, 200);
   });
 
+  const UserSettingsSchema = z.object({
+    onboardingSeen: z.boolean(),
+  });
+
+  const getSettingsRoute = createRoute({
+    method: "get",
+    path: "/api/user-settings",
+    tags: ["UserSettings"],
+    summary: "Get all user settings",
+    responses: {
+      200: {
+        content: { "application/json": { schema: UserSettingsSchema } },
+        description: "Current user settings",
+      },
+    },
+  });
+
+  router.openapi(getSettingsRoute, async (c) => {
+    const clerkUserId = c.get("userId");
+    const userDO = getUserDO(c.env, clerkUserId);
+    const settings = await userDO.getSettings();
+    return c.json(settings, 200);
+  });
+
+  const PatchSettingsSchema = z.object({
+    onboardingSeen: z.boolean().optional(),
+  });
+
+  const patchSettingsRoute = createRoute({
+    method: "patch",
+    path: "/api/user-settings",
+    tags: ["UserSettings"],
+    summary: "Update user settings (partial)",
+    request: {
+      body: {
+        content: { "application/json": { schema: PatchSettingsSchema } },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: UserSettingsSchema } },
+        description: "Updated user settings",
+      },
+    },
+  });
+
+  router.openapi(patchSettingsRoute, async (c) => {
+    const clerkUserId = c.get("userId");
+    const userDO = getUserDO(c.env, clerkUserId);
+    const patch = c.req.valid("json");
+    await userDO.updateSettings(patch);
+    const settings = await userDO.getSettings();
+    log("user_settings_updated", { clerk_user_id: clerkUserId, patch });
+    return c.json(settings, 200);
+  });
+
   return router;
 };
