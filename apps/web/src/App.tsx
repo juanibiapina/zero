@@ -7,6 +7,7 @@ import {
   useUser,
 } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   GOOGLE_WORKSPACE_SCOPES,
   missingScopes,
@@ -67,6 +68,18 @@ function TelegramLoginWidget({
   }, [onAuth]);
 
   return <div ref={containerRef} />;
+}
+
+function SectionDivider() {
+  return <div className="border-t border-border" />;
+}
+
+function StatusText({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm text-muted-foreground">{children}</p>;
+}
+
+function ErrorText({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm text-destructive">{children}</p>;
 }
 
 function TelegramConnect() {
@@ -150,39 +163,32 @@ function TelegramConnect() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-4 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Zero</h1>
-        <UserButton />
-      </div>
-
+    <section className="space-y-3">
       <h2 className="text-sm font-medium">Telegram</h2>
       {!loaded ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <StatusText>Loading…</StatusText>
       ) : telegramId === null ? (
         <>
-          <p className="text-sm text-muted-foreground">
+          <StatusText>
             Link your Telegram account to talk to the bot.
-          </p>
+          </StatusText>
           <TelegramLoginWidget onAuth={onAuth} />
         </>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">
-            Connected ✅ Telegram id {telegramId}
-          </p>
-          <div className="flex gap-2">
+          <StatusText>Connected · {telegramId}</StatusText>
+          <div className="flex items-center gap-3">
             <a
               href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-primary underline"
+              className="text-sm text-foreground underline underline-offset-4 hover:text-foreground/70"
             >
-              Start chatting →
+              Open in Telegram
             </a>
             <Button
-              variant="link"
-              className="h-auto p-0 text-sm"
+              variant="ghost"
+              size="sm"
               disabled={busy}
               onClick={() => {
                 void onDisconnect();
@@ -193,36 +199,8 @@ function TelegramConnect() {
           </div>
         </>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </div>
-  );
-}
-
-function AuthGate() {
-  const { isSignedIn, isLoaded } = useAuth();
-
-  if (!isLoaded) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!isSignedIn) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <SignIn />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <TelegramConnect />
-      <GoogleConnect />
-      <S3MountConfigConnect />
-    </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </section>
   );
 }
 
@@ -256,14 +234,15 @@ function GoogleConnect() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-3 px-6">
+    <section className="space-y-3">
       <h2 className="text-sm font-medium">Google Workspace</h2>
       {!google ? (
         <>
-          <p className="text-sm text-muted-foreground">
-            Grant the bot access to your Gmail, Calendar, Drive, and Sheets.
-          </p>
+          <StatusText>
+            Grant access to Gmail, Calendar, Drive, and Sheets.
+          </StatusText>
           <Button
+            size="sm"
             disabled={busy}
             onClick={() =>
               void run(async () => {
@@ -276,15 +255,16 @@ function GoogleConnect() {
               })
             }
           >
-            {busy ? "Opening…" : "Connect Google"}
+            {busy ? "Connecting…" : "Connect Google"}
           </Button>
         </>
       ) : missing.length > 0 ? (
         <>
-          <p className="text-sm text-muted-foreground">
+          <StatusText>
             Connected as {google.emailAddress}, but missing required scopes.
-          </p>
+          </StatusText>
           <Button
+            size="sm"
             disabled={busy}
             onClick={() =>
               void run(async () => {
@@ -296,17 +276,15 @@ function GoogleConnect() {
               })
             }
           >
-            {busy ? "Opening…" : "Grant required scopes"}
+            {busy ? "Opening…" : "Grant missing scopes"}
           </Button>
         </>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">
-            Connected ✅ {google.emailAddress}
-          </p>
+          <StatusText>Connected · {google.emailAddress}</StatusText>
           <Button
-            variant="link"
-            className="h-auto p-0 text-sm"
+            variant="ghost"
+            size="sm"
             disabled={busy}
             onClick={() =>
               void run(async () => {
@@ -319,8 +297,8 @@ function GoogleConnect() {
           </Button>
         </>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </section>
   );
 }
 
@@ -455,29 +433,29 @@ function S3MountConfigConnect() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-3 px-6">
+    <section className="space-y-3">
       <h2 className="text-sm font-medium">Notes Storage</h2>
       {!loaded ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <StatusText>Loading…</StatusText>
       ) : config ? (
         <>
-          <p className="text-sm text-muted-foreground">
-            Connected {validateOk === false ? "❌" : "✅"} {config.endpoint}/{config.bucket}
-          </p>
-          <div className="flex gap-2">
+          <StatusText>
+            {validateOk === false ? "Connection failed" : "Connected"} · {config.endpoint}/{config.bucket}
+          </StatusText>
+          <div className="flex items-center gap-3">
             <Button
-              variant="link"
-              className="h-auto p-0 text-sm"
+              variant="ghost"
+              size="sm"
               disabled={busy}
               onClick={() => {
                 void onValidate();
               }}
             >
-              {busy ? "Checking…" : "Validate"}
+              {busy ? "Checking…" : "Validate connection"}
             </Button>
             <Button
-              variant="link"
-              className="h-auto p-0 text-sm"
+              variant="ghost"
+              size="sm"
               disabled={busy}
               onClick={() => {
                 void onDisconnect();
@@ -488,40 +466,38 @@ function S3MountConfigConnect() {
           </div>
         </>
       ) : showForm ? (
-        <div className="space-y-2">
-          <input
-            className="w-full rounded border px-2 py-1 text-sm"
-            placeholder="Endpoint (https://s3.example.com)"
-            value={endpoint}
-            onChange={(e) => setEndpoint(e.target.value)}
-          />
-          <input
-            className="w-full rounded border px-2 py-1 text-sm"
-            placeholder="Bucket"
-            value={bucket}
-            onChange={(e) => setBucket(e.target.value)}
-          />
-          <input
-            className="w-full rounded border px-2 py-1 text-sm"
-            placeholder="Prefix (optional)"
-            value={prefix}
-            onChange={(e) => setPrefix(e.target.value)}
-          />
-          <input
-            className="w-full rounded border px-2 py-1 text-sm"
-            placeholder="Access Key ID"
-            value={accessKeyId}
-            onChange={(e) => setAccessKeyId(e.target.value)}
-          />
-          <input
-            className="w-full rounded border px-2 py-1 text-sm"
-            type="password"
-            placeholder="Secret Access Key"
-            value={secretAccessKey}
-            onChange={(e) => setSecretAccessKey(e.target.value)}
-          />
-          <div className="flex gap-2">
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Input
+              placeholder="Endpoint (https://s3.example.com)"
+              value={endpoint}
+              onChange={(e) => setEndpoint(e.target.value)}
+            />
+            <Input
+              placeholder="Bucket"
+              value={bucket}
+              onChange={(e) => setBucket(e.target.value)}
+            />
+            <Input
+              placeholder="Prefix (optional)"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value)}
+            />
+            <Input
+              placeholder="Access Key ID"
+              value={accessKeyId}
+              onChange={(e) => setAccessKeyId(e.target.value)}
+            />
+            <Input
+              type="password"
+              placeholder="Secret Access Key"
+              value={secretAccessKey}
+              onChange={(e) => setSecretAccessKey(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-3">
             <Button
+              size="sm"
               disabled={busy}
               onClick={() => {
                 void onSave();
@@ -530,8 +506,8 @@ function S3MountConfigConnect() {
               {busy ? "Saving…" : "Save"}
             </Button>
             <Button
-              variant="link"
-              className="h-auto p-0 text-sm"
+              variant="ghost"
+              size="sm"
               onClick={() => setShowForm(false)}
             >
               Cancel
@@ -540,20 +516,56 @@ function S3MountConfigConnect() {
         </div>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">
-            Default (Zero storage). Configure an external S3-compatible
-            filesystem for your notes.
-          </p>
+          <StatusText>
+            Using default storage. You can configure an external S3-compatible store.
+          </StatusText>
           <Button
-            variant="link"
-            className="h-auto p-0 text-sm"
+            variant="ghost"
+            size="sm"
             onClick={() => setShowForm(true)}
           >
             Configure external storage
           </Button>
         </>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
+    </section>
+  );
+}
+
+function AuthGate() {
+  const { isSignedIn, isLoaded } = useAuth();
+
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <SignIn />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-md px-6 py-12">
+      <header className="flex items-center justify-between">
+        <h1 className="text-base font-semibold">Zero</h1>
+        <UserButton />
+      </header>
+
+      <div className="mt-10 space-y-8">
+        <TelegramConnect />
+        <SectionDivider />
+        <GoogleConnect />
+        <SectionDivider />
+        <S3MountConfigConnect />
+      </div>
     </div>
   );
 }
