@@ -258,6 +258,18 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
   const googleConnected = google
     ? missingScopes(google.approvedScopes, GOOGLE_WORKSPACE_SCOPES).length === 0
     : false;
+
+  // Fire onboarding task once when Google is connected
+  const googleTaskFiredRef = useRef(false);
+  useEffect(() => {
+    if (!googleConnected || googleTaskFiredRef.current) return;
+    googleTaskFiredRef.current = true;
+    void fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Onboard this new user using your google-onboarding skill." }),
+    });
+  }, [googleConnected]);
   const telegramConnected = telegramId !== null;
 
   const currentStep = determineStep(googleConnected, telegramConnected);

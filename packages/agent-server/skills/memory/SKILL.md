@@ -34,3 +34,7 @@ Don't ask permission. Just take notes.
 - Name the file after the subject: `Maria.md`, `Buy a House.md`, `Sourdough Recipe.md`, `Berlin Trip 2026.md`.
 - Flat structure.
 - Markdown only.
+
+## Special Notes
+
+- User.md: User identity (load in the beginning of conversations)
