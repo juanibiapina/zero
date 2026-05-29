@@ -83,7 +83,6 @@ function ErrorText({ children }: { children: React.ReactNode }) {
 }
 
 function TelegramConnect() {
-  const { getToken } = useAuth();
   const [telegramId, setTelegramId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -92,10 +91,7 @@ function TelegramConnect() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const token = await getToken();
-      const res = await fetch("/api/telegram-id", {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      });
+      const res = await fetch("/api/telegram-id");
       if (!res.ok) {
         if (!cancelled) {
           setError(`Failed to load: ${res.status}`);
@@ -112,7 +108,7 @@ function TelegramConnect() {
     return () => {
       cancelled = true;
     };
-  }, [getToken]);
+  }, []);
 
   const onAuth = useCallback(
     (payload: TelegramAuthPayload) => {
@@ -120,12 +116,10 @@ function TelegramConnect() {
         setBusy(true);
         setError(null);
         try {
-          const token = await getToken();
           const res = await fetch("/api/telegram-link", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${token ?? ""}`,
             },
             body: JSON.stringify(payload),
           });
@@ -140,17 +134,15 @@ function TelegramConnect() {
         }
       })();
     },
-    [getToken],
+    [],
   );
 
   const onDisconnect = async () => {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
       const res = await fetch("/api/telegram-id", {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token ?? ""}` },
       });
       if (!res.ok) {
         setError(`Disconnect failed: ${res.status}`);
@@ -310,7 +302,6 @@ interface MountConfigResponse {
 }
 
 function S3MountConfigConnect() {
-  const { getToken } = useAuth();
   const [config, setConfig] = useState<MountConfigResponse | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -328,10 +319,7 @@ function S3MountConfigConnect() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const token = await getToken();
-      const res = await fetch("/api/mount-config/notes", {
-        headers: { Authorization: `Bearer ${token ?? ""}` },
-      });
+      const res = await fetch("/api/mount-config/notes");
       if (!res.ok) {
         if (!cancelled) {
           setError(`Failed to load: ${res.status}`);
@@ -348,18 +336,16 @@ function S3MountConfigConnect() {
     return () => {
       cancelled = true;
     };
-  }, [getToken]);
+  }, []);
 
   const onSave = async () => {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
       const res = await fetch("/api/mount-config/notes", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token ?? ""}`,
         },
         body: JSON.stringify({
           endpoint,
@@ -390,10 +376,8 @@ function S3MountConfigConnect() {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
       const res = await fetch("/api/mount-config/notes/validate", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token ?? ""}` },
       });
       if (!res.ok) {
         setError(`Validate request failed: ${res.status}`);
@@ -416,10 +400,8 @@ function S3MountConfigConnect() {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
       const res = await fetch("/api/mount-config/notes", {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token ?? ""}` },
       });
       if (!res.ok) {
         setError(`Disconnect failed: ${res.status}`);
