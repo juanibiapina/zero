@@ -51,6 +51,11 @@ export const createCloseSessionTool = (opts: {
             details: undefined,
           };
         }
+        const body = await res.json() as { message: string };
+        return {
+          content: [{ type: "text", text: body.message }],
+          details: undefined,
+        };
       } catch (err) {
         logError("close_session_threw", {
           session_id: sessionId,
@@ -61,11 +66,6 @@ export const createCloseSessionTool = (opts: {
           details: undefined,
         };
       }
-
-      return {
-        content: [{ type: "text", text: "Session closed." }],
-        details: undefined,
-      };
     },
   });
 };

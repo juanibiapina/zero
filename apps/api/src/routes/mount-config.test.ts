@@ -139,7 +139,7 @@ describe("PUT /api/mount-config/notes", () => {
     });
 
     expect(res.status).toBe(422);
-    const body = (await res.json()) as Record<string, unknown>;
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe("NoSuchBucket");
     expect(userDO._configs.has("notes")).toBe(false);
   });
@@ -195,7 +195,7 @@ describe("POST /api/mount-config/notes/validate", () => {
     });
 
     expect(res.status).toBe(404);
-    const body = (await res.json()) as Record<string, unknown>;
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe("no config saved");
   });
 });

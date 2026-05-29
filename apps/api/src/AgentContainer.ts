@@ -118,7 +118,7 @@ const handleCloseSession = async (
     log("session_closed", { session_id: data.sessionId });
   }
 
-  return new Response(null, { status: 204 });
+  return Response.json({ message: "Session closed." });
 };
 
 const AGENT_STATE_DIR = "/mnt/agent-state";
