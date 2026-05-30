@@ -11,6 +11,7 @@ export const sessions = table("sessions", {
   chatId: column.integer().notNull(),
   topicId: column.integer().notNull(),
   sessionId: column.text().notNull().unique(),
+  status: column.text().notNull(),
 });
 
 export const mountConfigs = table("mount_configs", {

@@ -19,7 +19,6 @@ const tgKey = (telegramId: string) => `tg:${telegramId}`;
 export const processTopicMessage = async (
   topic: TopicMessage,
   env: Env,
-  sendTyping: (chatId: number, threadId: number) => Promise<void>,
 ): Promise<void> => {
   try {
     const clerkUserId = await env.KV.get(tgKey(topic.telegramId));
@@ -27,10 +26,6 @@ export const processTopicMessage = async (
       log("drop_unknown_telegram_id", { telegram_id: topic.telegramId });
       return;
     }
-
-    sendTyping(topic.chatId, topic.topicId).catch((err) => {
-      logError("send_typing_failed", { error: fmtErr(err) });
-    });
 
     const agent = createAgentClient(env, clerkUserId);
     const userDO = getUserDO(env, clerkUserId);
@@ -57,6 +52,8 @@ export const processTopicMessage = async (
       });
       return;
     }
+
+    await userDO.markSessionActive(topic.chatId, topic.topicId);
     log("forwarded_message", {
       clerk_user_id: clerkUserId,
       session_id: sessionId,

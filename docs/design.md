@@ -334,9 +334,20 @@ swaps for the real key on the way out (see “Secret Proxying”). The
 model is `claude-sonnet-4-5-20250929` with thinking level `high`.
 
 When pi emits `agent_end`, the container POSTs the final assistant text
-to `http://zero.worker/reply`. That call stays on-host —
+to `http://zero.worker/reply` (always, even when the turn produced no
+text). That call stays on-host —
 `AgentContainer.outboundByHost["zero.worker"]` intercepts it and uses
 grammY to send the message back into the same Telegram topic.
+
+While a turn is running, Telegram shows a “typing…” indicator. It is
+driven by a `status` column (`idle`/`active`) on the `sessions` row in
+`UserDO`: `markSessionActive` flips it on after a message is forwarded
+and arms a DO alarm that re-sends the typing action every few seconds
+(Telegram's action expires after ~5s). The `/reply` callback runs
+`markSessionIdle`, and the alarm self-cancels once no session is
+`active`. Because `agent_end` always calls `/reply`, the indicator
+reliably stops at the end of every turn (reply, empty turn, abort, or
+`close_session`).
 
 Tradeoffs:
 

@@ -3,7 +3,16 @@ import { createDb, eq, and, type Database } from "do-orm";
 import { migrate } from "do-orm";
 import { telegramLink, sessions, mountConfigs, userSettings } from "./db/schema";
 import { migrations } from "./db/migrations";
+import { sendChatAction } from "../telegram/chat-action";
 import type { Env } from "../types";
+
+// How often the alarm re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
+const TYPING_INTERVAL_MS = 4000;
+
+enum SessionStatus {
+  Idle = "idle",
+  Active = "active",
+}
 
 export interface S3MountConfig {
   endpoint: string;
@@ -71,15 +80,43 @@ export class UserDO extends DurableObject<Env> {
     if (existing) {
       this.db.delete(sessions, { where: eq("id", existing.id) });
     }
-    this.db.insert(sessions, { type: "telegram", chatId, topicId, sessionId });
+    this.db.insert(sessions, { type: "telegram", chatId, topicId, sessionId, status: SessionStatus.Idle });
   }
 
   recordTaskSession(sessionId: string): void {
-    this.db.insert(sessions, { type: "task", chatId: 0, topicId: 0, sessionId });
+    this.db.insert(sessions, { type: "task", chatId: 0, topicId: 0, sessionId, status: SessionStatus.Idle });
   }
 
   forgetSession(sessionId: string): void {
     this.db.delete(sessions, { where: eq("sessionId", sessionId) });
+  }
+
+  async markSessionActive(chatId: number, topicId: number): Promise<void> {
+    this.db.update(sessions, { status: SessionStatus.Active }, {
+      where: and(eq("chatId", chatId), eq("topicId", topicId)),
+    });
+    await sendChatAction(this.env, chatId, topicId).catch(() => {});
+    if ((await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Date.now() + TYPING_INTERVAL_MS);
+    }
+  }
+
+  markSessionIdle(chatId: number, topicId: number): void {
+    this.db.update(sessions, { status: SessionStatus.Idle }, {
+      where: and(eq("chatId", chatId), eq("topicId", topicId)),
+    });
+  }
+
+  // Re-send the typing action for every active session, then re-arm while
+  // any remain. Self-cancels once all sessions are idle.
+  override async alarm(): Promise<void> {
+    const active = this.db.all(sessions, { where: eq("status", SessionStatus.Active) });
+    await Promise.all(
+      active.map((s) => sendChatAction(this.env, s.chatId, s.topicId).catch(() => {})),
+    );
+    if (active.length > 0) {
+      await this.ctx.storage.setAlarm(Date.now() + TYPING_INTERVAL_MS);
+    }
   }
 
   getMountConfig(scope: string): S3MountConfig | null {

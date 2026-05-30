@@ -123,6 +123,31 @@ body, behind a per-secret flag. Anthropic streams SSE, so the
 implementation needs to operate on a streaming `ReadableStream` rather
 than buffering the full response.
 
+## Typing indicator has no safety timeout
+
+**Where:** `apps/api/src/UserDO/index.ts` (`markSessionActive` / `markSessionIdle` /
+`alarm`), `apps/api/src/AgentContainer.ts` (`handleContainerReply`).
+
+**What:** While a turn runs, a `status` column on the `sessions` row is
+flipped to `active` and a DO alarm re-sends the Telegram "typing" action
+every few seconds. The only thing that stops it is the `/reply` callback
+running `markSessionIdle`. There is no expiry or watchdog: if a turn
+never calls back (container crash, dropped `/reply`, lost callback), the
+row stays `active` and the topic types indefinitely.
+
+**Why it's like this:** we deliberately chose `status` alone over a
+timestamp + cap to keep the state minimal, betting that `agent_end`
+always reaches `/reply` (it does on reply, empty turn, abort, and
+`close_session`).
+
+**Risk:** a lost reply leaves a perpetual "typing…" in that topic until
+the next successful turn clears it. Bounded: cosmetic, single-user, and
+self-heals on the next reply for that session.
+
+**Fix when revisited:** add a watchdog — e.g. an `activeSince` timestamp
+checked in `alarm()` so a session older than a cap is forced back to
+`idle` and the alarm stops re-arming.
+
 ## R2 persistence fix — verification history (resolved)
 
 The “pi session writes never reach R2” bug (commit `f4f4876`) shipped

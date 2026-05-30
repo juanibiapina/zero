@@ -54,12 +54,6 @@ export const createTelegramWebhookRoute = () => {
     const botInfo = JSON.parse(c.env.TELEGRAM_BOT_INFO) as UserFromGetMe;
     const bot = new Bot(c.env.TELEGRAM_BOT_TOKEN, { botInfo });
 
-    const sendTyping = async (chatId: number, threadId: number) => {
-      await bot.api.sendChatAction(chatId, "typing", {
-        ...(threadId && { message_thread_id: threadId }),
-      });
-    };
-
     const sendReply = async (
       chatId: number,
       threadId: number,
@@ -115,7 +109,7 @@ export const createTelegramWebhookRoute = () => {
       }
 
       c.executionCtx.waitUntil(
-        processTopicMessage({ ...topic, text: msg.text }, c.env, sendTyping),
+        processTopicMessage({ ...topic, text: msg.text }, c.env),
       );
     });
 

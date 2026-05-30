@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { AgentStub } from "./agent-client";
 import type { TopicMessage } from "./process-topic-message";
@@ -24,19 +24,26 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   } as unknown as KVNamespace & { _store: Map<string, string> };
 };
 
-type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession">;
+type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession" | "markSessionActive" | "markSessionIdle">;
 
 const createFakeUserDO = (): UserDOStub & {
   _sessionByTopic: (chatId: number, topicId: number) => string | null;
   _sessionById: (sessionId: string) => { type: string; chatId: number; topicId: number } | null;
+  _activeCalls: Array<[number, number]>;
 } => {
   const byTopic = new Map<string, string>();
   const byId = new Map<string, { type: string; chatId: number; topicId: number }>();
+  const activeCalls: Array<[number, number]> = [];
   const key = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
   return {
     _sessionByTopic: (chatId, topicId) => byTopic.get(key(chatId, topicId)) ?? null,
     _sessionById: (sessionId) => byId.get(sessionId) ?? null,
+    _activeCalls: activeCalls,
+    markSessionActive: async (chatId: number, topicId: number) => {
+      activeCalls.push([chatId, topicId]);
+    },
+    markSessionIdle: () => {},
     lookupSessionByTopic: (chatId: number, topicId: number) =>
       byTopic.get(key(chatId, topicId)) ?? null,
     lookupSessionById: (sessionId: string) =>
@@ -110,36 +117,39 @@ const topic: TopicMessage = {
 describe("processTopicMessage", () => {
   it("drops unknown telegram ID", async () => {
     const kv = fakeKV(); // empty — no tg:111 entry
-    const sendTyping = vi.fn();
+    const userDO = createFakeUserDO();
 
-    await processTopicMessage(topic, fakeEnv(kv), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO));
 
-    expect(sendTyping).not.toHaveBeenCalled();
+    expect(userDO._activeCalls).toEqual([]);
   });
 
-  it("sends typing after user identified", async () => {
+  it("marks session active after successful forward", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO();
     const stub = fakeStub();
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
 
-    expect(sendTyping).toHaveBeenCalledWith(100, 200);
+    expect(userDO._activeCalls).toEqual([[100, 200]]);
   });
 
-  it("typing failure does not block forwarding", async () => {
+  it("does not mark session active when the container rejects the message", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO();
-    const live = new Set<string>();
-    const stub = fakeStub({ liveSessions: live });
-    const sendTyping = vi.fn().mockRejectedValue(new Error("network"));
+    const stub: AgentStub = {
+      fetch: async (req: Request) => {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/sessions") {
+          return Response.json({ sessionId: "s1" });
+        }
+        return Response.json({ error: "boom" }, { status: 500 });
+      },
+    };
 
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
 
-    // Message was still forwarded despite typing failure:
-    // the stub created a session and it's in the live set.
-    expect(live.size).toBe(1);
+    expect(userDO._activeCalls).toEqual([]);
   });
 
   it("reuses existing session", async () => {
@@ -149,9 +159,8 @@ describe("processTopicMessage", () => {
     userDO.recordSession(100, 200, "existing-session");
     const live = new Set(["existing-session"]);
     const stub = fakeStub({ liveSessions: live });
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
 
     // No new session was created — still just the one we seeded.
     expect(live.size).toBe(1);
@@ -162,9 +171,8 @@ describe("processTopicMessage", () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO();
     const stub = fakeStub({ sessionId: "new-sess" });
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
 
     // Session recorded in the DO:
     expect(userDO._sessionByTopic(100, 200)).toBe("new-sess");
@@ -175,14 +183,13 @@ describe("processTopicMessage", () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO();
     const stub = fakeStub({ sessionId: "dm-sess" });
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
     const dm = { ...topic, topicId: 0 };
-    await processTopicMessage(dm, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(dm, fakeEnv(kv, userDO, stub));
 
     expect(userDO._sessionByTopic(100, 0)).toBe("dm-sess");
     expect(userDO._sessionById("dm-sess")).toEqual({ type: "telegram", chatId: 100, topicId: 0 });
-    expect(sendTyping).toHaveBeenCalledWith(100, 0);
+    expect(userDO._activeCalls).toEqual([[100, 0]]);
   });
 
   it("retries on stale session", async () => {
@@ -194,9 +201,8 @@ describe("processTopicMessage", () => {
     // not in the live set so sendMessage returns 404 (stale).
     const live = new Set<string>();
     const stub = fakeStub({ sessionId: "fresh-sess", liveSessions: live });
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
 
     // Stale entry cleaned, fresh session recorded:
     expect(userDO._sessionById("stale-sess")).toBeNull();
@@ -217,10 +223,9 @@ describe("processTopicMessage", () => {
         return Response.json({ error: "boom" }, { status: 500 });
       },
     };
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
     // Should not throw.
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
   });
 
   it("handles session creation failure without throwing", async () => {
@@ -230,9 +235,8 @@ describe("processTopicMessage", () => {
     const stub: AgentStub = {
       fetch: async () => Response.json({ error: "no capacity" }, { status: 500 }),
     };
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
 
     // No session recorded.
     expect(userDO._sessionByTopic(100, 200)).toBeNull();
@@ -247,9 +251,8 @@ describe("processTopicMessage", () => {
         throw new Error("Durable Object reset because its code was updated");
       },
     };
-    const sendTyping = vi.fn().mockResolvedValue(undefined);
 
     // Should not throw — safety net catches it.
-    await processTopicMessage(topic, fakeEnv(kv, userDO, stub), sendTyping);
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
   });
 });

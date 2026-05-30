@@ -77,6 +77,8 @@ const handleContainerReply = async (
     return new Response(null, { status: 204 });
   }
 
+  await getUserDO(env, data.clerkUserId).markSessionIdle(record.chatId, record.topicId);
+
   // Empty reply: agent_end with no text. Nothing to send to Telegram.
   if (data.text.length === 0) {
     return new Response(null, { status: 204 });
