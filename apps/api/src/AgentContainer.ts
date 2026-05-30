@@ -22,7 +22,7 @@ const secretProxy = createSecretProxy(
 
 const ReplyBodySchema = z.object({
   sessionId: z.string().min(1),
-  text: z.string().min(1),
+  text: z.string(),
   clerkUserId: z.string().min(1),
 });
 
@@ -74,6 +74,11 @@ const handleContainerReply = async (
 
   if (record.type === "task") {
     log("task_reply_discarded", { session_id: data.sessionId });
+    return new Response(null, { status: 204 });
+  }
+
+  // Empty reply: agent_end with no text. Nothing to send to Telegram.
+  if (data.text.length === 0) {
     return new Response(null, { status: 204 });
   }
 

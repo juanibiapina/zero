@@ -188,19 +188,9 @@ export const createSessionBridge = (
         .reverse()
         .find((m) => m.role === "assistant");
 
-      // Prefer streamed text; fall back to assistant message text blocks.
-      let text = accumulated;
-      let source = "stream";
-      if (text.length === 0) {
-        text = extractAssistantText(lastAssistant);
-        source = "message.text";
-      }
+      const text = accumulated || extractAssistantText(lastAssistant);
 
-      if (text.length === 0) {
-        log("no_reply", { session_id: sessionId });
-        return;
-      }
-      log("post_reply", { session_id: sessionId, source, len: text.length });
+      log("post_reply", { session_id: sessionId, len: text.length });
       void postReply(sessionId, text).catch((err: unknown) => {
         logError("post_reply_threw", {
           session_id: sessionId,
