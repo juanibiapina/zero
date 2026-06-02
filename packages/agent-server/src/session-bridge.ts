@@ -103,10 +103,10 @@ const logEvent = (
 
 interface SessionState {
   session: AgentSession;
-  accumulated: string;
 }
 
-export type ReplyFn = (sessionId: string, text: string) => Promise<void>;
+export type MessageEndFn = (sessionId: string, text: string) => Promise<void>;
+export type AgentEndFn = (sessionId: string, willRetry: boolean) => Promise<void>;
 
 export interface SessionBridgeOptions {
   cwd: string;
@@ -126,7 +126,8 @@ export interface SessionBridge {
 }
 
 export const createSessionBridge = (
-  postReply: ReplyFn,
+  postMessageEnd: MessageEndFn,
+  postAgentEnd: AgentEndFn,
   opts: SessionBridgeOptions,
 ): SessionBridge => {
   const { cwd, stateDir, callbackUrl, clerkUserId } = opts;
@@ -165,46 +166,41 @@ export const createSessionBridge = (
 
     const state: SessionState = {
       session,
-      accumulated: "",
     };
 
     session.subscribe((event) => {
       logEvent(sessionId, event);
 
-      if (event.type === "message_update") {
-        const sub = event.assistantMessageEvent;
-        if (sub.type === "text_delta") {
-          state.accumulated += sub.delta;
+      if (event.type === "message_end") {
+        const text = extractAssistantText(event.message as unknown as AgentMessageLike);
+        if (text.length > 0) {
+          log("post_message_end", { session_id: sessionId, len: text.length });
+          void postMessageEnd(sessionId, text).catch((err: unknown) => {
+            logError("post_message_end_threw", {
+              session_id: sessionId,
+              error: fmtErr(err),
+            });
+          });
         }
         return;
       }
 
-      if (event.type !== "agent_end") return;
-
-      const accumulated = state.accumulated.trim();
-      state.accumulated = "";
-
-      const lastAssistant = [
-        ...(event.messages as unknown as AgentMessageLike[]),
-      ]
-        .reverse()
-        .find((m) => m.role === "assistant");
-
-      const text = accumulated || extractAssistantText(lastAssistant);
-
-      log("post_reply", { session_id: sessionId, len: text.length });
-      void postReply(sessionId, text).catch((err: unknown) => {
-        logError("post_reply_threw", {
-          session_id: sessionId,
-          error: fmtErr(err),
+      if (event.type === "agent_end") {
+        log("post_agent_end", { session_id: sessionId, will_retry: event.willRetry });
+        void postAgentEnd(sessionId, event.willRetry).catch((err: unknown) => {
+          logError("post_agent_end_threw", {
+            session_id: sessionId,
+            error: fmtErr(err),
+          });
         });
-      });
-      void saveNotes(notesDir, callbackUrl, clerkUserId).catch((err: unknown) => {
-        logError("save_notes_threw", {
-          session_id: sessionId,
-          error: fmtErr(err),
+        void saveNotes(notesDir, callbackUrl, clerkUserId).catch((err: unknown) => {
+          logError("save_notes_threw", {
+            session_id: sessionId,
+            error: fmtErr(err),
+          });
         });
-      });
+        return;
+      }
     });
 
     return state;
@@ -248,7 +244,8 @@ export const createSessionBridge = (
     void state.session.prompt(text, { streamingBehavior: "steer" }).catch((err: unknown) => {
       const formatted = fmtErr(err);
       logError("prompt_threw", { session_id: sessionId, error: formatted });
-      void postReply(sessionId, `⚠️ ${formatted.message}`);
+      void postMessageEnd(sessionId, `⚠️ ${formatted.message}`);
+      void postAgentEnd(sessionId, false);
     });
     return true;
   };

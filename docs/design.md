@@ -23,9 +23,12 @@ lives only in the worker; if pi exfiltrates its own env, the leaked
 string is a useless sentinel. See "Secret proxying" below.
 
 The model is `claude-sonnet-4-5-20250929` with thinking level `high`.
-Replies flow back through a separate on-host outbound trick — the
-container POSTs to `http://zero.worker/reply` and the worker delivers
-via Telegram. The only external egress from the container is to
+Replies flow back through a separate on-host outbound trick — as the
+agent produces each assistant message, the container POSTs to
+`http://zero.worker/message-end` and the worker delivers it to Telegram
+immediately. When the agent loop finishes, the container POSTs to
+`http://zero.worker/agent-end` so the worker can stop the typing
+indicator. The only external egress from the container is to
 `api.anthropic.com` and to `<acct>.r2.cloudflarestorage.com` (for the
 FUSE-mounted session store, described below).
 
@@ -101,7 +104,7 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │  │    ANTHROPIC_API_KEY=Z3R0-FAKE-... (env-resolved)             │
 │  │    GOOGLE_WORKSPACE_CLI_TOKEN=Z3R0-FAKE-... (runtime; opt-in) │
 │  │    CALLBACK_URL + R2 temp creds (1h)                             │
-│  ├─ outboundByHost["zero.worker"] = handleContainerReply         │
+│  ├─ outboundByHost["zero.worker"] = handleMessageEnd/handleAgentEnd │
 │  └─ outboundHandlers.substitute = secretProxy.outbound           │
 │       (catch-all; per-container overrides via                    │
 │        setOutboundHandler('substitute', { overrides }))          │
@@ -116,14 +119,21 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │      fetch(api.anthropic.com, ...)  (real key, only here)        │
 │    → normal Anthropic stream; tool calls, thinking, content      │
 │                                                                  │
-│  When pi emits agent_end, the container POSTs:                   │
-│    POST http://zero.worker/reply { sessionId, text }             │
+│  On each message_end, the container POSTs:                       │
+│    POST http://zero.worker/message-end { sessionId, text }       │
 │      │   intercepted on-host                                     │
 │      ▼                                                           │
-│  handleContainerReply:                                           │
-│    KV session:{sessionId} → { chatId, messageThreadId }          │
+│  handleMessageEnd:                                               │
+│    UserDO session lookup → { chatId, topicId }                   │
 │    grammY bot.api.sendMessage(…, { message_thread_id })          │
-│    → Telegram delivers reply into the original topic.            │
+│    → Telegram delivers each message as it completes.             │
+│                                                                  │
+│  On agent_end, the container POSTs:                              │
+│    POST http://zero.worker/agent-end { sessionId, willRetry }    │
+│      │   intercepted on-host                                     │
+│      ▼                                                           │
+│  handleAgentEnd:                                                 │
+│    if !willRetry → markSessionIdle (stops typing indicator)      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -210,7 +220,7 @@ GET  /notes  →  R2 get(<userId>/notes.tar.gz) → 200 body | 404
 PUT  /notes  →  R2 put(<userId>/notes.tar.gz, body) → 204
 ```
 
-Both use the `X-Clerk-User-Id` header (same trust model as `/reply`).
+Both use the `X-Clerk-User-Id` header (same trust model as `/message-end`).
 ### Mount assembly
 
 The sessions mount is produced by:
@@ -315,20 +325,26 @@ built-in `anthropic` provider, reading `process.env.ANTHROPIC_API_KEY`
 swaps for the real key on the way out (see “Secret Proxying”). The
 model is `claude-sonnet-4-5-20250929` with thinking level `high`.
 
-When pi emits `agent_end`, the container POSTs the final assistant text
-to `http://zero.worker/reply` (always, even when the turn produced no
-text). That call stays on-host —
-`AgentContainer.outboundByHost["zero.worker"]` intercepts it and uses
-grammY to send the message back into the same Telegram topic.
+As pi produces each assistant message (the `message_end` event), the
+container POSTs the text to `http://zero.worker/message-end`. That call
+stays on-host — `AgentContainer.outboundByHost["zero.worker"]` intercepts
+it and uses grammY to send the message into the same Telegram topic.
+Multi-turn interactions (text → tools → text → tools → final text)
+surface each intermediate message immediately instead of accumulating
+them into a single blob.
+
+When the agent loop finishes (`agent_end`), the container POSTs to
+`http://zero.worker/agent-end` with `{ willRetry }`. If `!willRetry`,
+the worker marks the session idle.
 
 While a turn is running, Telegram shows a “typing…” indicator. It is
 driven by a `status` column (`idle`/`active`) on the `sessions` row in
 `UserDO`: `markSessionActive` flips it on after a message is forwarded
 and arms a DO alarm that re-sends the typing action every few seconds
-(Telegram's action expires after ~5s). The `/reply` callback runs
+(Telegram's action expires after ~5s). The `/agent-end` callback runs
 `markSessionIdle`, and the alarm self-cancels once no session is
-`active`. Because `agent_end` always calls `/reply`, the indicator
-reliably stops at the end of every turn (reply, empty turn, abort, or
+`active`. Because `agent_end` always fires, the indicator reliably
+stops at the end of every turn (reply, empty turn, abort, or
 `close_session`).
 
 Tradeoffs:
@@ -349,9 +365,10 @@ Bot API's `setWebhook` method — see
 ## Container Outbound Handler
 
 `AgentContainer.outboundByHost["zero.worker"]` is the on-host path the
-container uses to deliver Telegram replies. Plain HTTP
-(`http://zero.worker/reply`) works because the request is intercepted on
-the same physical host before it hits the network — see Cloudflare's
+container uses to deliver Telegram replies and lifecycle signals. Plain
+HTTP (`http://zero.worker/message-end`, `/agent-end`) works because the
+request is intercepted on the same physical host before it hits the
+network — see Cloudflare's
 [outbound traffic docs](https://developers.cloudflare.com/containers/platform-details/outbound-traffic/).
 
 For interception to work, `apps/api/src/index.ts` must re-export
@@ -360,8 +377,8 @@ For interception to work, `apps/api/src/index.ts` must re-export
 Pi-ai's LLM traffic uses a different mechanism ("Secret proxying",
 below): the catch-all `outbound` handler intercepts every container
 egress except `zero.worker` and substitutes registered fakes for their
-real env values before forwarding to the upstream host. The reply
-handler runs inside the Workers runtime with full access to `env` (KV,
+real env values before forwarding to the upstream host. The callback
+handlers run inside the Workers runtime with full access to `env` (KV,
 Telegram bot token). No public route, no shared secret.
 
 ## Secret Proxying

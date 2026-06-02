@@ -29,32 +29,56 @@ if (!clerkUserId) {
   process.exit(1);
 }
 
-const replyUrl = `${callbackUrl}/reply`;
+const messageEndUrl = `${callbackUrl}/message-end`;
+const agentEndUrl = `${callbackUrl}/agent-end`;
 
-const sendReply = async (sessionId: string, text: string): Promise<void> => {
+const sendMessageEnd = async (sessionId: string, text: string): Promise<void> => {
   try {
-    const res = await fetch(replyUrl, {
+    const res = await fetch(messageEndUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId, text, clerkUserId }),
     });
     if (!res.ok) {
-      logError("reply_failed", {
+      logError("message_end_failed", {
         session_id: sessionId,
-        reply_url: replyUrl,
+        url: messageEndUrl,
         status: res.status,
       });
     }
   } catch (err) {
-    logError("reply_threw", {
+    logError("message_end_threw", {
       session_id: sessionId,
-      reply_url: replyUrl,
+      url: messageEndUrl,
       error: fmtErr(err),
     });
   }
 };
 
-const bridge = createSessionBridge(sendReply, { cwd, stateDir, callbackUrl, clerkUserId });
+const sendAgentEnd = async (sessionId: string, willRetry: boolean): Promise<void> => {
+  try {
+    const res = await fetch(agentEndUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, clerkUserId, willRetry }),
+    });
+    if (!res.ok) {
+      logError("agent_end_failed", {
+        session_id: sessionId,
+        url: agentEndUrl,
+        status: res.status,
+      });
+    }
+  } catch (err) {
+    logError("agent_end_threw", {
+      session_id: sessionId,
+      url: agentEndUrl,
+      error: fmtErr(err),
+    });
+  }
+};
+
+const bridge = createSessionBridge(sendMessageEnd, sendAgentEnd, { cwd, stateDir, callbackUrl, clerkUserId });
 
 const app = createAgentApp({
   createSession: (sessionId) => bridge.createSession(sessionId),

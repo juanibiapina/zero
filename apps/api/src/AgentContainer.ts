@@ -20,10 +20,16 @@ const secretProxy = createSecretProxy(
   ["GOOGLE_WORKSPACE_CLI_TOKEN"],
 );
 
-const ReplyBodySchema = z.object({
+const MessageEndBodySchema = z.object({
   sessionId: z.string().min(1),
-  text: z.string(),
+  text: z.string().min(1),
   clerkUserId: z.string().min(1),
+});
+
+const AgentEndBodySchema = z.object({
+  sessionId: z.string().min(1),
+  clerkUserId: z.string().min(1),
+  willRetry: z.boolean(),
 });
 
 const CloseSessionBodySchema = z.object({
@@ -64,23 +70,17 @@ const withSession = async <T extends z.ZodType>(
   return { data, record };
 };
 
-const handleContainerReply = async (
+
+const handleMessageEnd = async (
   req: Request,
   env: Env,
 ): Promise<Response> => {
-  const result = await withSession(req, env, ReplyBodySchema);
+  const result = await withSession(req, env, MessageEndBodySchema);
   if (result instanceof Response) return result;
   const { data, record } = result;
 
   if (record.type === "task") {
-    log("task_reply_discarded", { session_id: data.sessionId });
-    return new Response(null, { status: 204 });
-  }
-
-  await getUserDO(env, data.clerkUserId).markSessionIdle(record.chatId, record.topicId);
-
-  // Empty reply: agent_end with no text. Nothing to send to Telegram.
-  if (data.text.length === 0) {
+    log("task_message_discarded", { session_id: data.sessionId });
     return new Response(null, { status: 204 });
   }
 
@@ -92,6 +92,26 @@ const handleContainerReply = async (
       ...(parseMode && { parse_mode: parseMode }),
     }),
   );
+
+  return new Response(null, { status: 204 });
+};
+
+const handleAgentEnd = async (
+  req: Request,
+  env: Env,
+): Promise<Response> => {
+  const result = await withSession(req, env, AgentEndBodySchema);
+  if (result instanceof Response) return result;
+  const { data, record } = result;
+
+  if (record.type === "task") {
+    log("task_reply_discarded", { session_id: data.sessionId });
+    return new Response(null, { status: 204 });
+  }
+
+  if (!data.willRetry) {
+    await getUserDO(env, data.clerkUserId).markSessionIdle(record.chatId, record.topicId);
+  }
 
   return new Response(null, { status: 204 });
 };
@@ -251,7 +271,8 @@ const flattenMounts = (mounts: MountSpec[]): Record<string, string> => {
 AgentContainer.outboundByHost = {
   "zero.worker": (req, env) => {
     const path = new URL(req.url).pathname;
-    if (path === "/reply") return handleContainerReply(req, env);
+    if (path === "/message-end") return handleMessageEnd(req, env);
+    if (path === "/agent-end") return handleAgentEnd(req, env);
     if (path === "/close-session") return handleCloseSession(req, env);
     if (path === "/notes") return handleNotes(req, env);
     return new Response("not found", { status: 404 });
