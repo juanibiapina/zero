@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDb, eq, and, type Database } from "do-orm";
 import { migrate } from "do-orm";
-import { telegramLink, sessions, mountConfigs, userSettings } from "./db/schema";
+import { telegramLink, sessions, userSettings } from "./db/schema";
 import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import type { Env } from "../types";
@@ -14,13 +14,6 @@ enum SessionStatus {
   Active = "active",
 }
 
-export interface S3MountConfig {
-  endpoint: string;
-  bucket: string;
-  prefix: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-}
 
 export class UserDO extends DurableObject<Env> {
   private db: Database;
@@ -119,30 +112,6 @@ export class UserDO extends DurableObject<Env> {
     }
   }
 
-  getMountConfig(scope: string): S3MountConfig | null {
-    const row = this.db.get(mountConfigs, { where: eq("scope", scope) });
-    if (!row) return null;
-    return {
-      endpoint: row.endpoint,
-      bucket: row.bucket,
-      prefix: row.prefix,
-      accessKeyId: row.accessKeyId,
-      secretAccessKey: row.secretAccessKey,
-    };
-  }
-
-  setMountConfig(scope: string, config: S3MountConfig): void {
-    const existing = this.db.get(mountConfigs, { where: eq("scope", scope) });
-    if (existing) {
-      this.db.update(mountConfigs, { ...config }, { where: eq("id", existing.id) });
-    } else {
-      this.db.insert(mountConfigs, { scope, ...config });
-    }
-  }
-
-  deleteMountConfig(scope: string): void {
-    this.db.delete(mountConfigs, { where: eq("scope", scope) });
-  }
 
   getSettings(): { onboardingSeen: boolean } {
     const row = this.db.get(userSettings);

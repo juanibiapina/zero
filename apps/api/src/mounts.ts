@@ -1,19 +1,10 @@
-// All R2/S3 mounts the container needs to bring up.
+// All R2 mounts the container needs to bring up.
 //
-// The sessions mount always uses Zero-managed R2. The notes mount
-// defaults to R2 but can be overridden per-user with an external
-// S3-compatible provider (configured via the web UI, stored in UserDO).
-//
-// The entrypoint loop stays scope-agnostic: it iterates MOUNT_<n>_*
-// env groups regardless of endpoint or credential source.
-//
-// The shape was deliberately not introduced when only one adapter
-// (notes) existed beyond the original hard-coded sessions mount. With
-// two adapters now sharing the same shape, the interface is real and
-// the entrypoint can iterate generically.
+// Both mounts (sessions, notes) use the same Zero-managed R2 bucket,
+// scoped by clerkUserId prefix. The entrypoint loop stays scope-agnostic:
+// it iterates MOUNT_<n>_* env groups regardless of credential source.
 
 import type { R2TempCreds } from "./r2-temp-credentials";
-import type { S3MountConfig } from "./UserDO/index";
 import type { Env } from "./types";
 
 export interface MountSpec {
@@ -32,42 +23,20 @@ export interface MountSpec {
 
 /**
  * Returns the ordered list of mounts to bring up for `clerkUserId`.
- *
- * The sessions mount always uses the shared R2 bucket. The notes mount
- * uses `notesMountConfig` when the user has configured an external S3
- * provider, falling back to the same R2 bucket otherwise.
+ * Both mounts use the shared R2 bucket.
  */
 export const resolveMounts = async (
   env: Env,
   clerkUserId: string,
-  defaultR2Creds: R2TempCreds,
-  notesMountConfig?: S3MountConfig | null,
+  creds: R2TempCreds,
 ): Promise<MountSpec[]> => {
   const shared = {
     endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     bucket: env.R2_BUCKET_NAME,
-    accessKeyId: defaultR2Creds.accessKeyId,
-    secretAccessKey: defaultR2Creds.secretAccessKey,
-    sessionToken: defaultR2Creds.sessionToken,
+    accessKeyId: creds.accessKeyId,
+    secretAccessKey: creds.secretAccessKey,
+    sessionToken: creds.sessionToken,
   };
-
-  const notesMountSpec: MountSpec = notesMountConfig
-    ? {
-        name: "notes",
-        mountPoint: "/mnt/notes",
-        endpoint: notesMountConfig.endpoint,
-        bucket: notesMountConfig.bucket,
-        prefix: notesMountConfig.prefix,
-        accessKeyId: notesMountConfig.accessKeyId,
-        secretAccessKey: notesMountConfig.secretAccessKey,
-        sessionToken: "",
-      }
-    : {
-        ...shared,
-        name: "notes",
-        mountPoint: "/mnt/notes",
-        prefix: `${clerkUserId}/notes`,
-      };
 
   return [
     {
@@ -76,6 +45,11 @@ export const resolveMounts = async (
       mountPoint: "/mnt/agent-state",
       prefix: `${clerkUserId}/sessions`,
     },
-    notesMountSpec,
+    {
+      ...shared,
+      name: "notes",
+      mountPoint: "/mnt/notes",
+      prefix: `${clerkUserId}/notes`,
+    },
   ];
 };
