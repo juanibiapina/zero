@@ -245,7 +245,7 @@ export const createSessionBridge = (
     if (!state) return false;
 
     log("prompt", { session_id: sessionId, len: text.length });
-    void state.session.prompt(text).catch((err: unknown) => {
+    void state.session.prompt(text, { streamingBehavior: "steer" }).catch((err: unknown) => {
       const formatted = fmtErr(err);
       logError("prompt_threw", { session_id: sessionId, error: formatted });
       void postReply(sessionId, `⚠️ ${formatted.message}`);
