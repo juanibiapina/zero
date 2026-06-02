@@ -137,6 +137,33 @@ const handleCloseSession = async (
   return Response.json({ message: "Session closed." });
 };
 
+const handleNotes = async (
+  req: Request,
+  env: Env,
+): Promise<Response> => {
+  const clerkUserId = req.headers.get("X-Clerk-User-Id");
+  if (!clerkUserId) return new Response("missing user id", { status: 400 });
+
+  const key = `${clerkUserId}/notes.tar.gz`;
+
+  if (req.method === "GET") {
+    const obj = await env.AGENT_STATE_BUCKET.get(key);
+    if (!obj) return new Response(null, { status: 404 });
+    return new Response(obj.body, {
+      headers: { "Content-Type": "application/gzip" },
+    });
+  }
+
+  if (req.method === "PUT") {
+    const body = await req.arrayBuffer();
+    await env.AGENT_STATE_BUCKET.put(key, body);
+    log("notes_saved", { clerk_user_id: clerkUserId, size: body.byteLength });
+    return new Response(null, { status: 204 });
+  }
+
+  return new Response("method not allowed", { status: 405 });
+};
+
 const AGENT_STATE_DIR = "/mnt/agent-state";
 
 export class AgentContainer extends Container<Env> {
@@ -226,6 +253,7 @@ AgentContainer.outboundByHost = {
     const path = new URL(req.url).pathname;
     if (path === "/reply") return handleContainerReply(req, env);
     if (path === "/close-session") return handleCloseSession(req, env);
+    if (path === "/notes") return handleNotes(req, env);
     return new Response("not found", { status: 404 });
   },
   // R2 traffic carries no registered secrets, but still runs through the

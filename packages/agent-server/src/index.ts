@@ -2,20 +2,22 @@
 // Hono app from `app.ts`, and serves it via @hono/node-server. The HTTP
 // contract lives in `contract.ts` + `app.ts`; env var list is in README.
 //
-// Per-write durability comes from tigrisfs `--fsync-on-close` (see
-// entrypoint.sh), so no shutdown drain is needed.
+// SIGTERM saves the notes archive before exiting so the last snapshot
+// reaches R2 even on idle eviction or deploy rollout.
 
 import { serve } from "@hono/node-server";
 
 import { createAgentApp } from "./app.js";
 import { fmtErr, log, logError } from "./log.js";
 import { createSessionBridge } from "./session-bridge.js";
+import { saveNotes } from "./save-notes.js";
 
 const port = parseInt(process.env.PORT ?? "8080", 10);
 const callbackUrl = process.env.CALLBACK_URL;
 const cwd = process.env.CWD ?? "/workspace";
 const stateDir = process.env.AGENT_STATE_DIR!;
 const clerkUserId = process.env.CLERK_USER_ID;
+const notesDir = "/local/notes";
 
 if (!callbackUrl) {
   logError("missing_env", { var: "CALLBACK_URL" });
@@ -67,5 +69,12 @@ serve({ fetch: app.fetch, port }, (info) => {
     callback_url: callbackUrl,
     cwd,
     state_dir: stateDir,
+  });
+});
+
+process.on("SIGTERM", () => {
+  log("sigterm");
+  void saveNotes(notesDir, callbackUrl, clerkUserId).finally(() => {
+    process.exit(0);
   });
 });

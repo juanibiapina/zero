@@ -94,8 +94,9 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │                                                                  │
 │  AgentContainer (Container<Env>, getByName(clerkUserId))         │
 │  ├─ hosts @zero/agent-server + pi-coding-agent (Node 22)         │
-│  ├─ mounts R2 prefix <clerkUserId>/ at /mnt/agent-state          │
+│  ├─ mounts R2 prefix <clerkUserId>/sessions at /mnt/agent-state   │
 │  │    via tigrisfs; pi writes JSONL session files there          │
+│  ├─ restores/saves notes archive via /notes on zero.worker       │
 │  ├─ fetch() refreshes envVars on every call:                     │
 │  │    ANTHROPIC_API_KEY=Z3R0-FAKE-... (env-resolved)             │
 │  │    GOOGLE_WORKSPACE_CLI_TOKEN=Z3R0-FAKE-... (runtime; opt-in) │
@@ -133,7 +134,7 @@ Each Clerk user owns the prefix `<clerkUserId>/` on the shared
 partition the namespace by scope:
 
 - `<clerkUserId>/sessions/<sessionId>/` — pi session JSONL files
-- `<clerkUserId>/notes/`               — the long-term notes vault
+- `<clerkUserId>/notes.tar.gz`           — the notes vault archive
   (see [Notes vault](#notes-vault-long-term-memory) below)
 
 New scopes can be added as further siblings (`<clerkUserId>/<scope>/`)
@@ -180,68 +181,49 @@ remains consistent.
 
 Isolation has two layers:
 
-1. **FUSE root locked to the scope sub-prefix.** `tigrisfs zero-agent-state:<clerkUserId>/sessions /mnt/agent-state` makes the sessions sub-prefix the filesystem root for the sessions mount; pi has no path to traverse out of it (not even sideways into `<clerkUserId>/notes/`, which is reachable only via the separate `/mnt/notes` mount).
+1. **FUSE root locked to the scope sub-prefix.** `tigrisfs zero-agent-state:<clerkUserId>/sessions /mnt/agent-state` makes the sessions sub-prefix the filesystem root; pi has no path to traverse out of it.
 2. **Prefix-scoped R2 credentials.** The temp credential is bound to `prefixPaths: ["<clerkUserId>/"]` — covering the whole user prefix so sibling scope mounts can attach with the same token — so even a leaked credential cannot list or read other users' prefixes.
 
 See [`r2-mount.md`](r2-mount.md) for one-time bucket and token setup.
 
 ### Notes vault (long-term memory)
 
-Alongside the sessions mount, every container also mounts a per-user
-**notes vault** at `/mnt/notes`. This is pi's long-term memory across
-conversations; the contract is described in the `AGENTS.md` baked into
-`/workspace/AGENTS.md` (see `packages/agent-server/context/AGENTS.md`),
-which pi auto-loads at session start.
+The per-user **notes vault** lives at `/local/notes` inside the
+container. This is pi's long-term memory across conversations.
 
-By default, the notes vault is a Zero-managed R2 prefix
-(`<clerkUserId>/notes/`). Users can override this with an external
-S3-compatible endpoint via the web UI ("Configure external storage"
-under Notes Storage). The configuration is stored in the `UserDO`'s
-`mount_configs` table. When present, `resolveMounts` swaps the R2
-notes entry for a `MountSpec` using the user's endpoint, bucket,
-prefix, and credentials. The entrypoint, `AgentContainer`, and
-`flattenMounts` stay untouched — they consume the same `MOUNT_<n>_*`
-shape regardless of provider.
+Unlike sessions (which use a FUSE mount for per-write durability),
+notes use an **archive snapshot** model:
 
-User-supplied S3 credentials follow the same privilege-separation
-path as R2 temp creds: consumed by tigrisfs (root) at mount time,
-scrubbed from the env before node starts, inaccessible to pi.
-No sentinel substitution is used — tigrisfs computes SigV4 in-process.
+- **Restore** — `entrypoint.sh` downloads `<clerkUserId>/notes.tar.gz`
+  from the worker's R2 binding via `curl | tar xz` and extracts to
+  `/local/notes`. A 404 (no prior snapshot) starts with an empty dir.
+- **Use** — pi reads/writes `/local/notes` on fast local disk.
+- **Save** — `save-notes.ts` archives `/local/notes` into a tarball
+  and PUTs it to `http://zero.worker/notes` (which writes to R2) on
+  every `agent_end` event and on SIGTERM.
 
-Default (R2) layout:
+The worker mediates R2 access via two routes on the `zero.worker`
+outbound handler:
 
-- Sibling scope under the user prefix: `<clerkUserId>/notes/`
-  alongside `<clerkUserId>/sessions/`. Covered by the same
-  `prefixPaths: ["<clerkUserId>/"]` temp credential — no additional
-  R2 setup or second bucket.
-- Same durability flags as the sessions mount (`--fsync-on-close`,
-  `--file-mode=0666`, `--dir-mode=0777`, `-o allow_other`). Mount
-  failure aborts the container (pi has been promised memory;
-  degraded boot would risk silent data loss).
+```
+GET  /notes  →  R2 get(<userId>/notes.tar.gz) → 200 body | 404
+PUT  /notes  →  R2 put(<userId>/notes.tar.gz, body) → 204
+```
+
+Both use the `X-Clerk-User-Id` header (same trust model as `/reply`).
 ### Mount assembly
 
-Both the sessions mount and the notes vault are produced by a single
-seam:
+The sessions mount is produced by:
 
 ```
-apps/api/src/mounts.ts → resolveMounts(env, clerkUserId, creds, notesMountConfig?)
-   → MountSpec[]   // ordered list of mounts to bring up
+apps/api/src/mounts.ts → resolveMounts(env, clerkUserId, creds)
+   → MountSpec[]   // single-element list (sessions only)
 ```
 
-`AgentContainer.refreshEnvVars` fetches the user's mount config from
-the `UserDO` (`getMountConfig("notes")`) in parallel with R2 temp cred
-minting and Google token fetching, then passes it to `resolveMounts`.
-The result is flattened into numbered `MOUNT_<n>_*` env groups (`NAME`,
-`POINT`, `ENDPOINT`, `BUCKET`, `PREFIX`, `ACCESS_KEY_ID`,
-`SECRET_ACCESS_KEY`, `SESSION_TOKEN`) plus a `MOUNT_COUNT`.
-`entrypoint.sh` loops over them and fires one `tigrisfs` invocation
-per spec; the shell is entirely scope-agnostic.
-
-The sessions mount always uses Zero-managed R2. The notes mount
-defaults to R2 but switches to the user's S3 endpoint/bucket/creds
-when a `mount_configs` row exists for scope `"notes"`. Each
-`MOUNT_<n>_*` group carries its own AWS_* values, so per-invocation
-creds in the entrypoint trivially scope to one mount.
+`AgentContainer.refreshEnvVars` mints R2 temp creds and passes them
+to `resolveMounts`. The result is flattened into numbered `MOUNT_<n>_*`
+env groups plus a `MOUNT_COUNT`. `entrypoint.sh` loops over them and
+fires one `tigrisfs` invocation per spec.
 ## State Model
 
 Per-user data is split between a `UserDO` Durable Object (source of

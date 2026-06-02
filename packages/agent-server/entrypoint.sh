@@ -111,6 +111,13 @@ for i in $(seq 1 "${MOUNT_COUNT}"); do
   unset "MOUNT_${i}_ACCESS_KEY_ID" "MOUNT_${i}_SECRET_ACCESS_KEY" "MOUNT_${i}_SESSION_TOKEN"
 done
 
+# Restore the notes archive from the worker's R2 binding. A 404 or
+# network error means no prior snapshot exists — start with an empty dir.
+log_json "notes_restore"
+curl -sfH "X-Clerk-User-Id: ${CLERK_USER_ID}" http://zero.worker/notes \
+  | tar xz -C /local/notes 2>/dev/null || true
+chown -R pi:pi /local/notes
+
 log_json "drop_privileges" "user=pi" "uid=1001"
 
 # Exec node as pi. SIGTERM reaches node directly (PID 1 via exec chain);

@@ -64,12 +64,12 @@ RUN node -e "const p=require('./package.json'); delete p.devDependencies; requir
 
 COPY dist/ ./dist/
 
-# /workspace + /tmp/pi-home must be writable by pi; /mnt/agent-state
-# and /mnt/notes are left root-owned (they're just mount points;
-# tigrisfs publishes them with `-o allow_other`). /agent is pi's
-# global config root (PI_CODING_AGENT_DIR).
-RUN mkdir -p /workspace /agent /mnt/agent-state /mnt/notes /tmp/pi-home && \
-    chown -R pi:pi /workspace /agent /tmp/pi-home
+# /workspace + /tmp/pi-home + /local/notes must be writable by pi.
+# /mnt/agent-state is left root-owned (FUSE mount point; tigrisfs
+# publishes it with `-o allow_other`). /agent is pi's global config
+# root (PI_CODING_AGENT_DIR).
+RUN mkdir -p /workspace /agent /mnt/agent-state /local/notes /tmp/pi-home && \
+    chown -R pi:pi /workspace /agent /local/notes /tmp/pi-home
 
 # SYSTEM.md replaces pi's default system prompt with Zero's.
 # Pi discovers it at $PI_CODING_AGENT_DIR/SYSTEM.md.

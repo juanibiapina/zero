@@ -23,6 +23,7 @@ import {
 
 import { fmtErr, log, logError } from "./log.js";
 import { createCloseSessionTool } from "./close-session-tool.js";
+import { saveNotes } from "./save-notes.js";
 
 const PROVIDER = "anthropic";
 const MODEL_ID = "claude-sonnet-4-5-20250929";
@@ -129,6 +130,7 @@ export const createSessionBridge = (
   opts: SessionBridgeOptions,
 ): SessionBridge => {
   const { cwd, stateDir, callbackUrl, clerkUserId } = opts;
+  const notesDir = "/local/notes";
   const sessions = new Map<string, SessionState>();
 
   const sessionDirFor = (sessionId: string): string =>
@@ -193,6 +195,12 @@ export const createSessionBridge = (
       log("post_reply", { session_id: sessionId, len: text.length });
       void postReply(sessionId, text).catch((err: unknown) => {
         logError("post_reply_threw", {
+          session_id: sessionId,
+          error: fmtErr(err),
+        });
+      });
+      void saveNotes(notesDir, callbackUrl, clerkUserId).catch((err: unknown) => {
+        logError("save_notes_threw", {
           session_id: sessionId,
           error: fmtErr(err),
         });

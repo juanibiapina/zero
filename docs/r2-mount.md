@@ -4,10 +4,8 @@ This document covers the one-time setup needed for **per-user persistent
 sessions** in the agent container. Once these steps are done, every
 container mounts its user's R2 prefix at `/mnt/agent-state` via
 [tigrisfs](https://github.com/tigrisdata/tigrisfs) and pi writes its
-JSONL session files there. A second mount at `/mnt/notes` provides the
-long-term notes vault (also R2 by default, but users can override it
-with an external S3-compatible endpoint via the web UI — see
-[`design.md`](design.md) under **Notes vault**).
+JSONL session files there. Notes use an archive snapshot model
+(see [`design.md`](design.md) under **Notes vault**).
 
 The runtime mechanics are described in [`design.md`](design.md) under
 **Persistence**.
@@ -26,11 +24,11 @@ prefix per Clerk user (`<clerkUserId>/`), partitioned into top-level
 scope sub-prefixes:
 
 - `<clerkUserId>/sessions/<sessionId>/` — pi's JSONL session files
-- `<clerkUserId>/notes/`               — the long-term notes vault
+- `<clerkUserId>/notes.tar.gz`           — notes vault archive
 
-Both are covered by the same `prefixPaths: ["<clerkUserId>/"]` temp
-credential, so no extra R2 setup is needed for notes — see
-[`design.md`](design.md#notes-vault-long-term-memory).
+The sessions FUSE mount uses prefix-scoped temp credentials.
+The notes archive is read/written by the worker's R2 binding
+(`AGENT_STATE_BUCKET`) — see [`design.md`](design.md#notes-vault-long-term-memory).
 
 ## Step 2 — Create the parent R2 API token
 

@@ -1,11 +1,11 @@
 ---
 name: memory
-description: "Persistent memory at /mnt/notes. Load at the start of every conversation."
+description: "Persistent memory at /local/notes. Load at the start of every conversation."
 ---
 
 # Memory
 
-Your memory consists of persistent notes at `/mnt/notes`.
+Your memory consists of persistent notes at `/local/notes`.
 This directory survives across every conversation with this user.
 Gather context from notes when interacting with the user.
 Use it to track everything that you and the user know.

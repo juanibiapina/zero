@@ -1,8 +1,8 @@
 // All R2 mounts the container needs to bring up.
 //
-// Both mounts (sessions, notes) use the same Zero-managed R2 bucket,
-// scoped by clerkUserId prefix. The entrypoint loop stays scope-agnostic:
-// it iterates MOUNT_<n>_* env groups regardless of credential source.
+// The sessions mount uses the shared Zero-managed R2 bucket, scoped by
+// clerkUserId prefix. Notes are no longer FUSE-mounted; they use archive
+// snapshots mediated by the worker's R2 binding (see AgentContainer.ts).
 
 import type { R2TempCreds } from "./r2-temp-credentials";
 import type { Env } from "./types";
@@ -23,7 +23,6 @@ export interface MountSpec {
 
 /**
  * Returns the ordered list of mounts to bring up for `clerkUserId`.
- * Both mounts use the shared R2 bucket.
  */
 export const resolveMounts = async (
   env: Env,
@@ -44,12 +43,6 @@ export const resolveMounts = async (
       name: "agent-state",
       mountPoint: "/mnt/agent-state",
       prefix: `${clerkUserId}/sessions`,
-    },
-    {
-      ...shared,
-      name: "notes",
-      mountPoint: "/mnt/notes",
-      prefix: `${clerkUserId}/notes`,
     },
   ];
 };
