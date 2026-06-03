@@ -106,7 +106,17 @@ interface SessionState {
 }
 
 export type MessageEndFn = (sessionId: string, text: string) => Promise<void>;
-export type AgentEndFn = (sessionId: string, willRetry: boolean) => Promise<void>;
+
+export interface SessionCostStats {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd: number;
+}
+
+export type AgentEndFn = (sessionId: string, willRetry: boolean, stats: SessionCostStats | null) => Promise<void>;
 
 export interface SessionBridgeOptions {
   cwd: string;
@@ -188,8 +198,28 @@ export const createSessionBridge = (
       }
 
       if (event.type === "agent_end") {
+        let costStats: SessionCostStats | null = null;
+        if (!event.willRetry) {
+          try {
+            const stats = state.session.getSessionStats();
+            const model = state.session.model;
+            costStats = {
+              model: model ? `${model.provider}/${model.id}` : "unknown",
+              inputTokens: stats.tokens.input,
+              outputTokens: stats.tokens.output,
+              cacheReadTokens: stats.tokens.cacheRead,
+              cacheWriteTokens: stats.tokens.cacheWrite,
+              costUsd: stats.cost,
+            };
+          } catch (err) {
+            logError("get_session_stats_failed", {
+              session_id: sessionId,
+              error: fmtErr(err),
+            });
+          }
+        }
         log("post_agent_end", { session_id: sessionId, will_retry: event.willRetry });
-        void postAgentEnd(sessionId, event.willRetry).catch((err: unknown) => {
+        void postAgentEnd(sessionId, event.willRetry, costStats).catch((err: unknown) => {
           logError("post_agent_end_threw", {
             session_id: sessionId,
             error: fmtErr(err),
@@ -247,7 +277,7 @@ export const createSessionBridge = (
       const formatted = fmtErr(err);
       logError("prompt_threw", { session_id: sessionId, error: formatted });
       void postMessageEnd(sessionId, `⚠️ ${formatted.message}`);
-      void postAgentEnd(sessionId, false);
+      void postAgentEnd(sessionId, false, null);
     });
     return true;
   };

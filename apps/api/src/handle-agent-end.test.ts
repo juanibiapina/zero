@@ -28,9 +28,31 @@ const createFakeUserDO = () => {
   };
 };
 
-const fakeEnv = (userDO: UserDOStub, analytics?: { writeDataPoint: ReturnType<typeof vi.fn> }): Env =>
+const fakeD1 = () => {
+  const calls: Array<{ query: string; bindings: unknown[] }> = [];
+  const stmt = {
+    bind: (...args: unknown[]) => {
+      calls[calls.length - 1].bindings = args;
+      return { run: async () => ({ success: true }) };
+    },
+  };
+  return {
+    _calls: calls,
+    prepare: (query: string) => {
+      calls.push({ query, bindings: [] });
+      return stmt;
+    },
+  };
+};
+
+const fakeEnv = (
+  userDO: UserDOStub,
+  analytics?: { writeDataPoint: ReturnType<typeof vi.fn> },
+  sessionsDb?: ReturnType<typeof fakeD1>,
+): Env =>
   ({
     ANALYTICS: analytics ?? { writeDataPoint: vi.fn() },
+    SESSIONS_DB: sessionsDb ?? fakeD1(),
     USER_DO: {
       idFromName: () => ({ toString: () => "fake-id" }),
       get: () => userDO,
@@ -114,5 +136,104 @@ describe("handleAgentEnd", () => {
       doubles: [expect.any(Number)],
       indexes: ["user_abc"],
     });
+  });
+
+  it("upserts session cost to D1 when stats are present", async () => {
+    const userDO = createFakeUserDO();
+    userDO._seed("sess-1", { type: "telegram", chatId: 100, topicId: 200 });
+    const db = fakeD1();
+
+    await handleAgentEnd(
+      agentEndRequest({
+        sessionId: "sess-1",
+        clerkUserId: "user_abc",
+        willRetry: false,
+        stats: {
+          model: "anthropic/claude-sonnet-4-5-20250929",
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheReadTokens: 200,
+          cacheWriteTokens: 100,
+          costUsd: 0.05,
+        },
+      }),
+      fakeEnv(userDO, undefined, db),
+    );
+
+    expect(db._calls).toHaveLength(1);
+    expect(db._calls[0].query).toContain("INSERT INTO sessions");
+    expect(db._calls[0].bindings[0]).toBe("sess-1");
+    expect(db._calls[0].bindings[1]).toBe("user_abc");
+    expect(db._calls[0].bindings[2]).toBe("anthropic/claude-sonnet-4-5-20250929");
+    expect(db._calls[0].bindings[7]).toBe(0.05);
+  });
+
+  it("does not write to D1 when willRetry is true", async () => {
+    const userDO = createFakeUserDO();
+    userDO._seed("sess-1", { type: "telegram", chatId: 100, topicId: 200 });
+    const db = fakeD1();
+
+    await handleAgentEnd(
+      agentEndRequest({
+        sessionId: "sess-1",
+        clerkUserId: "user_abc",
+        willRetry: true,
+        stats: {
+          model: "anthropic/claude-sonnet-4-5-20250929",
+          inputTokens: 1000,
+          outputTokens: 500,
+          cacheReadTokens: 200,
+          cacheWriteTokens: 100,
+          costUsd: 0.05,
+        },
+      }),
+      fakeEnv(userDO, undefined, db),
+    );
+
+    expect(db._calls).toHaveLength(0);
+  });
+
+  it("does not write to D1 when stats are absent", async () => {
+    const userDO = createFakeUserDO();
+    userDO._seed("sess-1", { type: "telegram", chatId: 100, topicId: 200 });
+    const db = fakeD1();
+
+    await handleAgentEnd(
+      agentEndRequest({
+        sessionId: "sess-1",
+        clerkUserId: "user_abc",
+        willRetry: false,
+      }),
+      fakeEnv(userDO, undefined, db),
+    );
+
+    expect(db._calls).toHaveLength(0);
+  });
+
+  it("upserts cost for task sessions too", async () => {
+    const userDO = createFakeUserDO();
+    userDO._seed("sess-1", { type: "task", chatId: 0, topicId: 0 });
+    const db = fakeD1();
+
+    await handleAgentEnd(
+      agentEndRequest({
+        sessionId: "sess-1",
+        clerkUserId: "user_abc",
+        willRetry: false,
+        stats: {
+          model: "anthropic/claude-sonnet-4-5-20250929",
+          inputTokens: 500,
+          outputTokens: 250,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          costUsd: 0.02,
+        },
+      }),
+      fakeEnv(userDO, undefined, db),
+    );
+
+    expect(db._calls).toHaveLength(1);
+    expect(db._calls[0].bindings[0]).toBe("sess-1");
+    expect(db._calls[0].bindings[7]).toBe(0.02);
   });
 });

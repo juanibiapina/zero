@@ -9,7 +9,7 @@ import { serve } from "@hono/node-server";
 
 import { createAgentApp } from "./app.js";
 import { fmtErr, log, logError } from "./log.js";
-import { createSessionBridge } from "./session-bridge.js";
+import { createSessionBridge, type SessionCostStats } from "./session-bridge.js";
 import { saveNotes } from "./save-notes.js";
 
 const port = parseInt(process.env.PORT ?? "8080", 10);
@@ -55,12 +55,12 @@ const sendMessageEnd = async (sessionId: string, text: string): Promise<void> =>
   }
 };
 
-const sendAgentEnd = async (sessionId: string, willRetry: boolean): Promise<void> => {
+const sendAgentEnd = async (sessionId: string, willRetry: boolean, stats: SessionCostStats | null): Promise<void> => {
   try {
     const res = await fetch(agentEndUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, clerkUserId, willRetry }),
+      body: JSON.stringify({ sessionId, clerkUserId, willRetry, ...(stats && { stats }) }),
     });
     if (!res.ok) {
       logError("agent_end_failed", {

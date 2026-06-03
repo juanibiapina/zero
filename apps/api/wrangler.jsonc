@@ -40,6 +40,13 @@
   "analytics_engine_datasets": [
     { "binding": "ANALYTICS", "dataset": "zero-events" }
   ],
+  "d1_databases": [
+    {
+      "binding": "SESSIONS_DB",
+      "database_name": "zero-sessions",
+      "database_id": "32f3e4b4-004a-4c51-a3e0-cb67fd7e3bf8"
+    }
+  ],
   "containers": [
     {
       "class_name": "AgentContainer",

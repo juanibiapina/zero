@@ -9,6 +9,7 @@ import type { Env } from "./types";
 import { createTelegramWebhookRoute } from "./routes/telegram-webhook";
 import { createUserSettingsRoutes } from "./routes/user-settings";
 import { createTaskRoutes } from "./routes/tasks";
+import { createAdminRoutes } from "./routes/admin";
 
 type Variables = {
   userId: string;
@@ -40,6 +41,7 @@ export const createApp = () => {
 
   app.route("/", createUserSettingsRoutes());
   app.route("/", createTaskRoutes());
+  app.route("/", createAdminRoutes());
 
   return app;
 };

@@ -1,12 +1,22 @@
 import { z } from "zod";
-import { log } from "./log";
+import { log, logError } from "./log";
 import { getUserDO } from "./UserDO/stub";
 import type { Env } from "./types";
+
+const StatsSchema = z.object({
+  model: z.string(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  costUsd: z.number(),
+});
 
 const AgentEndBodySchema = z.object({
   sessionId: z.string().min(1),
   clerkUserId: z.string().min(1),
   willRetry: z.boolean(),
+  stats: StatsSchema.optional(),
 });
 
 export const handleAgentEnd = async (
@@ -44,13 +54,54 @@ export const handleAgentEnd = async (
         });
       }
     }
+    if (!data.willRetry && data.stats) {
+      await upsertSessionCost(env, data.sessionId, data.clerkUserId, data.stats);
+    }
     log("task_reply_discarded", { session_id: data.sessionId });
     return new Response(null, { status: 204 });
   }
 
   if (!data.willRetry) {
     await userDO.markSessionIdle(record.chatId, record.topicId);
+    if (data.stats) {
+      await upsertSessionCost(env, data.sessionId, data.clerkUserId, data.stats);
+    }
   }
 
   return new Response(null, { status: 204 });
+};
+
+const upsertSessionCost = async (
+  env: Env,
+  sessionId: string,
+  clerkUserId: string,
+  stats: z.infer<typeof StatsSchema>,
+): Promise<void> => {
+  const now = new Date().toISOString();
+  try {
+    await env.SESSIONS_DB.prepare(`
+      INSERT INTO sessions (session_id, clerk_user_id, model, input_tokens, output_tokens,
+        cache_read_tokens, cache_write_tokens, cost_usd, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET
+        input_tokens = excluded.input_tokens,
+        output_tokens = excluded.output_tokens,
+        cache_read_tokens = excluded.cache_read_tokens,
+        cache_write_tokens = excluded.cache_write_tokens,
+        cost_usd = excluded.cost_usd,
+        updated_at = excluded.updated_at
+    `)
+      .bind(
+        sessionId, clerkUserId, stats.model,
+        stats.inputTokens, stats.outputTokens,
+        stats.cacheReadTokens, stats.cacheWriteTokens,
+        stats.costUsd, now, now,
+      )
+      .run();
+  } catch (err) {
+    logError("session_cost_upsert_failed", {
+      session_id: sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 };
