@@ -5,10 +5,11 @@ description: "First-time user onboarding after Google connect. Use when asked to
 
 # Onboarding
 
-A new user just connected their Google account. Your job is to get to know them.
+A new user just connected their Google account. Scan their email to learn who they are and write a `User.md` note with their identity:
 
-## What to do
+- Name, location, role, languages
+- Key relationships (family, partner)
+- Interests, values, life priorities
 
-Scan their inbox and sent mail. Read enough messages (including full threads when useful) to build a picture of who this person is.
-
-Write what you learn to your persistent memory.
+Capture only what shows repeated interaction or emotional weight.
+When in doubt, leave it out.
