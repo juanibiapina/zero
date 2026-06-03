@@ -21,7 +21,7 @@ const createFakeUserDO = () => {
     recordTaskSession: (sessionId: string, name?: string) => {
       sessions.set(sessionId, name ? { name } : {});
     },
-    getSettings: () => ({ onboardingSeen: false, googleOnboardingStatus }),
+    getSettings: () => ({ onboardingSeen: false, googleOnboardingStatus, createdAt: new Date().toISOString(), isNewUser: false }),
     setGoogleOnboardingStatus: (status: string) => { googleOnboardingStatus = status; },
   };
 };

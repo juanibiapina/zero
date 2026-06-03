@@ -113,9 +113,14 @@ export class UserDO extends DurableObject<Env> {
   }
 
 
-  getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null } {
+  getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; isNewUser: boolean } {
     const row = this.db.get(userSettings);
-    return { onboardingSeen: !!row?.onboardingSeen, googleOnboardingStatus: row?.googleOnboardingStatus ?? null };
+    if (!row) {
+      const createdAt = new Date().toISOString();
+      this.db.insert(userSettings, { onboardingSeen: 0, createdAt });
+      return { onboardingSeen: false, googleOnboardingStatus: null, createdAt, isNewUser: true };
+    }
+    return { onboardingSeen: !!row.onboardingSeen, googleOnboardingStatus: row.googleOnboardingStatus ?? null, createdAt: row.createdAt ?? null, isNewUser: false };
   }
 
   updateSettings(patch: { onboardingSeen?: boolean }): void {
@@ -127,6 +132,7 @@ export class UserDO extends DurableObject<Env> {
     } else {
       this.db.insert(userSettings, {
         onboardingSeen: patch.onboardingSeen ? 1 : 0,
+        createdAt: new Date().toISOString(),
       });
     }
   }
@@ -136,7 +142,7 @@ export class UserDO extends DurableObject<Env> {
     if (existing) {
       this.db.update(userSettings, { googleOnboardingStatus: status }, { where: eq("id", existing.id) });
     } else {
-      this.db.insert(userSettings, { onboardingSeen: 0, googleOnboardingStatus: status });
+      this.db.insert(userSettings, { onboardingSeen: 0, googleOnboardingStatus: status, createdAt: new Date().toISOString() });
     }
   }
 }

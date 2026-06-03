@@ -37,6 +37,9 @@
       "bucket_name": "zero-agent-state"
     }
   ],
+  "analytics_engine_datasets": [
+    { "binding": "ANALYTICS", "dataset": "zero-events" }
+  ],
   "containers": [
     {
       "class_name": "AgentContainer",

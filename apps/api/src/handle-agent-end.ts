@@ -36,6 +36,12 @@ export const handleAgentEnd = async (
     if (!data.willRetry && record.name) {
       if (record.name === "google-onboarding") {
         await userDO.setGoogleOnboardingStatus("done");
+        const settings = await userDO.getSettings();
+        env.ANALYTICS.writeDataPoint({
+          blobs: ["google_onboarding_done"],
+          doubles: [new Date(settings.createdAt ?? "").getTime()],
+          indexes: [data.clerkUserId],
+        });
       }
     }
     log("task_reply_discarded", { session_id: data.sessionId });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { UserDO } from "./UserDO/index";
 import { handleAgentEnd } from "./handle-agent-end";
@@ -8,10 +8,11 @@ import type { Env } from "./types";
 // Fakes
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "lookupSessionById" | "markSessionIdle" | "setGoogleOnboardingStatus">;
+type UserDOStub = Pick<UserDO, "lookupSessionById" | "markSessionIdle" | "setGoogleOnboardingStatus" | "getSettings">;
 
 const createFakeUserDO = () => {
   let googleOnboardingStatus: string | null = null;
+  const createdAt = new Date().toISOString();
   const sessions = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
   const idleCalls: Array<[number, number]> = [];
   return {
@@ -20,14 +21,16 @@ const createFakeUserDO = () => {
     lookupSessionById: (sessionId: string) => sessions.get(sessionId) ?? null,
     markSessionIdle: async (chatId: number, topicId: number) => { idleCalls.push([chatId, topicId]); },
     setGoogleOnboardingStatus: (status: string) => { googleOnboardingStatus = status; },
+    getSettings: () => ({ onboardingSeen: false, googleOnboardingStatus, createdAt, isNewUser: false }),
     _seed(sessionId: string, record: { type: string; chatId: number; topicId: number; name?: string }) {
       sessions.set(sessionId, record);
     },
   };
 };
 
-const fakeEnv = (userDO: UserDOStub): Env =>
+const fakeEnv = (userDO: UserDOStub, analytics?: { writeDataPoint: ReturnType<typeof vi.fn> }): Env =>
   ({
+    ANALYTICS: analytics ?? { writeDataPoint: vi.fn() },
     USER_DO: {
       idFromName: () => ({ toString: () => "fake-id" }),
       get: () => userDO,
@@ -94,5 +97,22 @@ describe("handleAgentEnd", () => {
 
     expect(userDO._idleCalls).toEqual([[100, 200]]);
     expect(userDO._googleOnboardingStatus).toBeNull();
+  });
+
+  it("writes google_onboarding_done analytics event when task finishes", async () => {
+    const userDO = createFakeUserDO();
+    userDO._seed("sess-1", { type: "task", chatId: 0, topicId: 0, name: "google-onboarding" });
+    const analytics = { writeDataPoint: vi.fn() };
+
+    await handleAgentEnd(
+      agentEndRequest({ sessionId: "sess-1", clerkUserId: "user_abc", willRetry: false }),
+      fakeEnv(userDO, analytics),
+    );
+
+    expect(analytics.writeDataPoint).toHaveBeenCalledWith({
+      blobs: ["google_onboarding_done"],
+      doubles: [expect.any(Number)],
+      indexes: ["user_abc"],
+    });
   });
 });

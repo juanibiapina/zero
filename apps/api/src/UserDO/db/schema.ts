@@ -20,4 +20,5 @@ export const userSettings = table("user_settings", {
   id: column.integer().primaryKey().autoIncrement(),
   onboardingSeen: column.integer().notNull(),
   googleOnboardingStatus: column.text(),
+  createdAt: column.text(),
 });

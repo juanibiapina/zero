@@ -132,6 +132,13 @@ export const createUserSettingsRoutes = () => {
   const UserSettingsSchema = z.object({
     onboardingSeen: z.boolean(),
     googleOnboardingStatus: z.string().nullable(),
+    createdAt: z.string().nullable(),
+  });
+
+  const toResponse = (s: { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null }) => ({
+    onboardingSeen: s.onboardingSeen,
+    googleOnboardingStatus: s.googleOnboardingStatus,
+    createdAt: s.createdAt,
   });
 
   const getSettingsRoute = createRoute({
@@ -151,7 +158,10 @@ export const createUserSettingsRoutes = () => {
     const clerkUserId = c.get("userId");
     const userDO = getUserDO(c.env, clerkUserId);
     const settings = await userDO.getSettings();
-    return c.json(settings, 200);
+    if (settings.isNewUser) {
+      c.env.ANALYTICS.writeDataPoint({ blobs: ["signup"], indexes: [clerkUserId] });
+    }
+    return c.json(toResponse(settings), 200);
   });
 
   const PatchSettingsSchema = z.object({
@@ -179,11 +189,19 @@ export const createUserSettingsRoutes = () => {
   router.openapi(patchSettingsRoute, async (c) => {
     const clerkUserId = c.get("userId");
     const userDO = getUserDO(c.env, clerkUserId);
+    const before = await userDO.getSettings();
     const patch = c.req.valid("json");
     await userDO.updateSettings(patch);
-    const settings = await userDO.getSettings();
+    const after = await userDO.getSettings();
+    if (patch.onboardingSeen === true && !before.onboardingSeen) {
+      c.env.ANALYTICS.writeDataPoint({
+        blobs: ["onboarding_completed"],
+        doubles: [new Date(after.createdAt ?? "").getTime()],
+        indexes: [clerkUserId],
+      });
+    }
     log("user_settings_updated", { clerk_user_id: clerkUserId, patch });
-    return c.json(settings, 200);
+    return c.json(toResponse(after), 200);
   });
 
   return router;

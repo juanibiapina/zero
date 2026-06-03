@@ -40,10 +40,12 @@ type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegra
 
 const createFakeUserDO = (
   initial?: string,
-): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null } => {
+): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null } => {
   let stored: string | null = initial ?? null;
   let onboardingSeen = false;
   let googleOnboardingStatus: string | null = null;
+  let createdAt: string | null = null;
+  let hasRow = false;
   return {
     get _telegramId() {
       return stored;
@@ -53,6 +55,9 @@ const createFakeUserDO = (
     },
     set _onboardingSeen(v: boolean) {
       onboardingSeen = v;
+    },
+    get _createdAt() {
+      return createdAt;
     },
     getTelegramId: () => stored,
     linkTelegram: (telegramId: string) => {
@@ -65,7 +70,14 @@ const createFakeUserDO = (
       stored = null;
       return { removed };
     },
-    getSettings: () => ({ onboardingSeen, googleOnboardingStatus }),
+    getSettings: () => {
+      if (!hasRow) {
+        createdAt = new Date().toISOString();
+        hasRow = true;
+        return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: true };
+      }
+      return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: false };
+    },
     updateSettings: (patch: { onboardingSeen?: boolean }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
     },
@@ -78,10 +90,15 @@ const createFakeUserDO = (
   };
 };
 
-const fakeEnv = (kv: ReturnType<typeof fakeKV>, userDO?: UserDOStub) => {
+const fakeAnalytics = () => ({
+  writeDataPoint: vi.fn(),
+});
+
+const fakeEnv = (kv: ReturnType<typeof fakeKV>, userDO?: UserDOStub, analytics?: ReturnType<typeof fakeAnalytics>) => {
   return {
     KV: kv,
     TELEGRAM_BOT_TOKEN: "test-bot-token",
+    ANALYTICS: analytics ?? fakeAnalytics(),
     USER_DO: {
       idFromName: (_name: string) => ({ toString: () => "fake-id" }),
       get: () => userDO ?? createFakeUserDO(),
@@ -224,25 +241,44 @@ describe("DELETE /api/telegram-id", () => {
 });
 
 describe("GET /api/user-settings", () => {
-  it("returns onboardingSeen false by default", async () => {
+  it("returns settings with createdAt on first access", async () => {
     const kv = fakeKV();
     const userDO = createFakeUserDO();
-    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+    const analytics = fakeAnalytics();
+    const app = buildApp(fakeEnv(kv, userDO, analytics), "user_abc");
 
     const res = await app.request("/api/user-settings");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.onboardingSeen).toBe(false);
+    expect(body.googleOnboardingStatus).toBeNull();
+    expect(body.createdAt).toBeDefined();
+    expect(body).not.toHaveProperty("isNewUser");
   });
 
-  it("returns onboardingSeen true after update", async () => {
+  it("writes signup analytics event on first access", async () => {
     const kv = fakeKV();
     const userDO = createFakeUserDO();
-    userDO._onboardingSeen = true;
-    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+    const analytics = fakeAnalytics();
+    const app = buildApp(fakeEnv(kv, userDO, analytics), "user_abc");
 
-    const res = await app.request("/api/user-settings");
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
+    await app.request("/api/user-settings");
+    expect(analytics.writeDataPoint).toHaveBeenCalledWith({
+      blobs: ["signup"],
+      indexes: ["user_abc"],
+    });
+  });
+
+  it("does not write signup analytics event on subsequent access", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const analytics = fakeAnalytics();
+    const app = buildApp(fakeEnv(kv, userDO, analytics), "user_abc");
+
+    await app.request("/api/user-settings");
+    analytics.writeDataPoint.mockClear();
+    await app.request("/api/user-settings");
+    expect(analytics.writeDataPoint).not.toHaveBeenCalled();
   });
 });
 
@@ -258,24 +294,53 @@ describe("PATCH /api/user-settings", () => {
       body: JSON.stringify({ onboardingSeen: true }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.onboardingSeen).toBe(true);
+    expect(body.createdAt).toBeDefined();
     expect(userDO._onboardingSeen).toBe(true);
   });
 
-  it("resets onboardingSeen to false", async () => {
+  it("writes onboarding_completed analytics when onboardingSeen flips false to true", async () => {
     const kv = fakeKV();
     const userDO = createFakeUserDO();
-    userDO._onboardingSeen = true;
-    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+    const analytics = fakeAnalytics();
+    const app = buildApp(fakeEnv(kv, userDO, analytics), "user_abc");
+
+    // First call seeds createdAt via getSettings
+    await app.request("/api/user-settings");
+    analytics.writeDataPoint.mockClear();
 
     const res = await app.request("/api/user-settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ onboardingSeen: false }),
+      body: JSON.stringify({ onboardingSeen: true }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
-    expect(userDO._onboardingSeen).toBe(false);
+    expect(analytics.writeDataPoint).toHaveBeenCalledWith({
+      blobs: ["onboarding_completed"],
+      doubles: [expect.any(Number)],
+      indexes: ["user_abc"],
+    });
+  });
+
+  it("does not write analytics when onboardingSeen is already true", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const analytics = fakeAnalytics();
+    const app = buildApp(fakeEnv(kv, userDO, analytics), "user_abc");
+
+    // Seed + set onboarding seen
+    await app.request("/api/user-settings");
+    userDO._onboardingSeen = true;
+    analytics.writeDataPoint.mockClear();
+
+    const res = await app.request("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ onboardingSeen: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(analytics.writeDataPoint).not.toHaveBeenCalled();
   });
 
   it("empty body does not change settings", async () => {
@@ -290,7 +355,8 @@ describe("PATCH /api/user-settings", () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.onboardingSeen).toBe(true);
     expect(userDO._onboardingSeen).toBe(true);
   });
 });

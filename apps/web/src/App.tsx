@@ -38,7 +38,7 @@ function AppShell() {
         if (!cancelled) setOnboardingSeen(true);
         return;
       }
-      const data = (await res.json()) as { onboardingSeen: boolean; googleOnboardingStatus: string | null };
+      const data = (await res.json()) as { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null };
       if (!cancelled) {
         setOnboardingSeen(data.onboardingSeen);
         setGoogleOnboardingStatus(data.googleOnboardingStatus);

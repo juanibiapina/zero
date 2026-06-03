@@ -14,6 +14,8 @@ const createFakeUserDO = (): UserDOStub => {
   const sessionsBySessionId = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
   let onboardingSeen = false;
   let googleOnboardingStatus: string | null = null;
+  let createdAt: string | null = null;
+  let hasRow = false;
 
   const topicKey = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
@@ -54,7 +56,12 @@ const createFakeUserDO = (): UserDOStub => {
       sessionsBySessionId.delete(sessionId);
     },
     getSettings: () => {
-      return { onboardingSeen, googleOnboardingStatus };
+      if (!hasRow) {
+        createdAt = new Date().toISOString();
+        hasRow = true;
+        return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: true };
+      }
+      return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: false };
     },
     updateSettings: (patch: { onboardingSeen?: boolean }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
@@ -178,29 +185,40 @@ describe("UserDO sessions contract", () => {
 
 
 describe("UserDO settings contract", () => {
-  it("getSettings returns onboardingSeen false by default", () => {
+  it("getSettings returns isNewUser true on first access", () => {
     const userDO = createFakeUserDO();
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
+    const settings = userDO.getSettings();
+    expect(settings.isNewUser).toBe(true);
+    expect(settings.onboardingSeen).toBe(false);
+    expect(settings.googleOnboardingStatus).toBeNull();
+    expect(settings.createdAt).toBeDefined();
+  });
+
+  it("getSettings returns isNewUser false on subsequent access", () => {
+    const userDO = createFakeUserDO();
+    userDO.getSettings();
+    const settings = userDO.getSettings();
+    expect(settings.isNewUser).toBe(false);
   });
 
   it("updateSettings sets onboardingSeen to true", () => {
     const userDO = createFakeUserDO();
     userDO.updateSettings({ onboardingSeen: true });
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
+    expect(userDO.getSettings().onboardingSeen).toBe(true);
   });
 
   it("updateSettings can reset onboardingSeen to false", () => {
     const userDO = createFakeUserDO();
     userDO.updateSettings({ onboardingSeen: true });
     userDO.updateSettings({ onboardingSeen: false });
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
+    expect(userDO.getSettings().onboardingSeen).toBe(false);
   });
 
   it("updateSettings with empty object does not change settings", () => {
     const userDO = createFakeUserDO();
     userDO.updateSettings({ onboardingSeen: true });
     userDO.updateSettings({});
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
+    expect(userDO.getSettings().onboardingSeen).toBe(true);
   });
 
   it("setGoogleOnboardingStatus updates status visible via getSettings", () => {
