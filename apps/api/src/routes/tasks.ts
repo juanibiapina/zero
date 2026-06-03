@@ -6,8 +6,9 @@
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { fmtErr, logError } from "../log";
+import { fmtErr, log, logError } from "../log";
 import { runTask } from "../tasks";
+import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
 
 type Variables = {
@@ -16,6 +17,7 @@ type Variables = {
 
 const CreateTaskSchema = z.object({
   prompt: z.string().min(1),
+  name: z.string().min(1).optional(),
 });
 
 const ErrorSchema = z.object({ error: z.string() });
@@ -34,6 +36,10 @@ export const createTaskRoutes = () => {
       },
     },
     responses: {
+      409: {
+        content: { "application/json": { schema: z.object({ status: z.string() }) } },
+        description: "Task already running or done",
+      },
       202: {
         description: "Task accepted",
       },
@@ -46,10 +52,25 @@ export const createTaskRoutes = () => {
 
   router.openapi(postRoute, async (c) => {
     const clerkUserId = c.get("userId");
-    const { prompt } = c.req.valid("json");
+    const { prompt, name } = c.req.valid("json");
+
+    // Named tasks are idempotent: skip if already running or done
+    if (name) {
+      const userDO = getUserDO(c.env, clerkUserId);
+      const settings = await userDO.getSettings();
+
+      if (name === "google-onboarding") {
+        const status = settings.googleOnboardingStatus;
+        if (status === "running" || status === "done") {
+          log("task_skipped", { name, status, clerk_user_id: clerkUserId });
+          return c.json({ status }, 409);
+        }
+        await userDO.setGoogleOnboardingStatus("running");
+      }
+    }
 
     try {
-      await runTask(c.env, clerkUserId, prompt);
+      await runTask(c.env, clerkUserId, prompt, name);
     } catch (err) {
       logError("task_route_failed", {
         clerk_user_id: clerkUserId,

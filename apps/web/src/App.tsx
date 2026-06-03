@@ -27,6 +27,7 @@ function AuthGate() {
 
 function AppShell() {
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+  const [googleOnboardingStatus, setGoogleOnboardingStatus] = useState<string | null>(null);
   const resetOnboarding = useCallback(() => setOnboardingSeen(false), []);
 
   useEffect(() => {
@@ -37,8 +38,11 @@ function AppShell() {
         if (!cancelled) setOnboardingSeen(true);
         return;
       }
-      const data = (await res.json()) as { onboardingSeen: boolean };
-      if (!cancelled) setOnboardingSeen(data.onboardingSeen);
+      const data = (await res.json()) as { onboardingSeen: boolean; googleOnboardingStatus: string | null };
+      if (!cancelled) {
+        setOnboardingSeen(data.onboardingSeen);
+        setGoogleOnboardingStatus(data.googleOnboardingStatus);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -49,7 +53,7 @@ function AppShell() {
     <>
       {onboardingSeen
         ? <SettingsPage />
-        : <Onboarding onComplete={() => setOnboardingSeen(true)} />
+        : <Onboarding onComplete={() => setOnboardingSeen(true)} googleOnboardingStatus={googleOnboardingStatus} />
       }
       <DevToolbar onResetOnboarding={resetOnboarding} />
     </>

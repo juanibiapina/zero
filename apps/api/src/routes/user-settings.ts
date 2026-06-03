@@ -131,6 +131,7 @@ export const createUserSettingsRoutes = () => {
 
   const UserSettingsSchema = z.object({
     onboardingSeen: z.boolean(),
+    googleOnboardingStatus: z.string().nullable(),
   });
 
   const getSettingsRoute = createRoute({

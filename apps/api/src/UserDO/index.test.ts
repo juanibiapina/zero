@@ -6,13 +6,14 @@ import type { UserDO } from "./index";
 // Fake UserDO stub — implements the same public RPC interface
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession" | "getSettings" | "updateSettings">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession" | "getSettings" | "updateSettings" | "setGoogleOnboardingStatus">;
 
 const createFakeUserDO = (): UserDOStub => {
   let telegramId: string | null = null;
   const sessionsByTopic = new Map<string, string>();
-  const sessionsBySessionId = new Map<string, { type: string; chatId: number; topicId: number }>();
+  const sessionsBySessionId = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
   let onboardingSeen = false;
+  let googleOnboardingStatus: string | null = null;
 
   const topicKey = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
@@ -32,7 +33,9 @@ const createFakeUserDO = (): UserDOStub => {
       return sessionsByTopic.get(topicKey(chatId, topicId)) ?? null;
     },
     lookupSessionById: (sessionId: string) => {
-      return sessionsBySessionId.get(sessionId) ?? null;
+      const r = sessionsBySessionId.get(sessionId);
+      if (!r) return null;
+      return { type: r.type, chatId: r.chatId, topicId: r.topicId, ...(r.name ? { name: r.name } : {}) };
     },
     recordSession: (chatId: number, topicId: number, sessionId: string) => {
       const oldSessionId = sessionsByTopic.get(topicKey(chatId, topicId));
@@ -40,8 +43,8 @@ const createFakeUserDO = (): UserDOStub => {
       sessionsByTopic.set(topicKey(chatId, topicId), sessionId);
       sessionsBySessionId.set(sessionId, { type: "telegram", chatId, topicId });
     },
-    recordTaskSession: (sessionId: string) => {
-      sessionsBySessionId.set(sessionId, { type: "task", chatId: 0, topicId: 0 });
+    recordTaskSession: (sessionId: string, name?: string) => {
+      sessionsBySessionId.set(sessionId, { type: "task", chatId: 0, topicId: 0, ...(name ? { name } : {}) });
     },
     forgetSession: (sessionId: string) => {
       const record = sessionsBySessionId.get(sessionId);
@@ -51,10 +54,13 @@ const createFakeUserDO = (): UserDOStub => {
       sessionsBySessionId.delete(sessionId);
     },
     getSettings: () => {
-      return { onboardingSeen };
+      return { onboardingSeen, googleOnboardingStatus };
     },
     updateSettings: (patch: { onboardingSeen?: boolean }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
+    },
+    setGoogleOnboardingStatus: (status: string) => {
+      googleOnboardingStatus = status;
     },
   };
 };
@@ -162,32 +168,46 @@ describe("UserDO sessions contract", () => {
     userDO.forgetSession("task-sess-1");
     expect(userDO.lookupSessionById("task-sess-1")).toBeNull();
   });
+
+  it("recordTaskSession stores name and lookupSessionById returns it", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordTaskSession("task-sess-1", "google-onboarding");
+    expect(userDO.lookupSessionById("task-sess-1")).toEqual({ type: "task", chatId: 0, topicId: 0, name: "google-onboarding" });
+  });
 });
 
 
 describe("UserDO settings contract", () => {
   it("getSettings returns onboardingSeen false by default", () => {
     const userDO = createFakeUserDO();
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: false });
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
   });
 
   it("updateSettings sets onboardingSeen to true", () => {
     const userDO = createFakeUserDO();
     userDO.updateSettings({ onboardingSeen: true });
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: true });
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
   });
 
   it("updateSettings can reset onboardingSeen to false", () => {
     const userDO = createFakeUserDO();
     userDO.updateSettings({ onboardingSeen: true });
     userDO.updateSettings({ onboardingSeen: false });
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: false });
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
   });
 
   it("updateSettings with empty object does not change settings", () => {
     const userDO = createFakeUserDO();
     userDO.updateSettings({ onboardingSeen: true });
     userDO.updateSettings({});
-    expect(userDO.getSettings()).toEqual({ onboardingSeen: true });
+    expect(userDO.getSettings()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
+  });
+
+  it("setGoogleOnboardingStatus updates status visible via getSettings", () => {
+    const userDO = createFakeUserDO();
+    userDO.setGoogleOnboardingStatus("running");
+    expect(userDO.getSettings().googleOnboardingStatus).toBe("running");
+    userDO.setGoogleOnboardingStatus("done");
+    expect(userDO.getSettings().googleOnboardingStatus).toBe("done");
   });
 });

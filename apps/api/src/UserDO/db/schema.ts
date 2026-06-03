@@ -12,10 +12,12 @@ export const sessions = table("sessions", {
   topicId: column.integer().notNull(),
   sessionId: column.text().notNull().unique(),
   status: column.text().notNull(),
+  name: column.text(),
 });
 
 
 export const userSettings = table("user_settings", {
   id: column.integer().primaryKey().autoIncrement(),
   onboardingSeen: column.integer().notNull(),
+  googleOnboardingStatus: column.text(),
 });

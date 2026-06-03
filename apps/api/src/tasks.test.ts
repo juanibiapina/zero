@@ -12,13 +12,13 @@ import type { Env } from "./types";
 type UserDOStub = Pick<UserDO, "recordTaskSession">;
 
 const createFakeUserDO = (): UserDOStub & {
-  _sessions: Map<string, { type: string; chatId: number; topicId: number }>;
+  _sessions: Map<string, { type: string; chatId: number; topicId: number; name?: string }>;
 } => {
-  const sessions = new Map<string, { type: string; chatId: number; topicId: number }>();
+  const sessions = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
   return {
     _sessions: sessions,
-    recordTaskSession: (sessionId: string) => {
-      sessions.set(sessionId, { type: "task", chatId: 0, topicId: 0 });
+    recordTaskSession: (sessionId: string, name?: string) => {
+      sessions.set(sessionId, { type: "task", chatId: 0, topicId: 0, ...(name ? { name } : {}) });
     },
   };
 };
@@ -74,6 +74,15 @@ describe("runTask", () => {
     await runTask(fakeEnv(userDO, stub), "user_abc", "do something");
 
     expect(userDO._sessions.get("task-1")).toEqual({ type: "task", chatId: 0, topicId: 0 });
+  });
+
+  it("passes name through to recordTaskSession", async () => {
+    const userDO = createFakeUserDO();
+    const stub = fakeStub({ sessionId: "task-1" });
+
+    await runTask(fakeEnv(userDO, stub), "user_abc", "do something", "google-onboarding");
+
+    expect(userDO._sessions.get("task-1")).toEqual({ type: "task", chatId: 0, topicId: 0, name: "google-onboarding" });
   });
 
   it("throws when session creation fails", async () => {

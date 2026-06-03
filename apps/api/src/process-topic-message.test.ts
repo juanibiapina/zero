@@ -28,17 +28,21 @@ type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "r
 
 const createFakeUserDO = (): UserDOStub & {
   _sessionByTopic: (chatId: number, topicId: number) => string | null;
-  _sessionById: (sessionId: string) => { type: string; chatId: number; topicId: number } | null;
+  _sessionById: (sessionId: string) => { type: string; chatId: number; topicId: number; name?: string } | null;
   _activeCalls: Array<[number, number]>;
 } => {
   const byTopic = new Map<string, string>();
-  const byId = new Map<string, { type: string; chatId: number; topicId: number }>();
+  const byId = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
   const activeCalls: Array<[number, number]> = [];
   const key = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
   return {
     _sessionByTopic: (chatId, topicId) => byTopic.get(key(chatId, topicId)) ?? null,
-    _sessionById: (sessionId) => byId.get(sessionId) ?? null,
+    _sessionById: (sessionId) => {
+      const r = byId.get(sessionId);
+      if (!r) return null;
+      return { type: r.type, chatId: r.chatId, topicId: r.topicId, ...(r.name ? { name: r.name } : {}) };
+    },
     _activeCalls: activeCalls,
     markSessionActive: async (chatId: number, topicId: number) => {
       activeCalls.push([chatId, topicId]);
@@ -46,16 +50,19 @@ const createFakeUserDO = (): UserDOStub & {
     markSessionIdle: () => {},
     lookupSessionByTopic: (chatId: number, topicId: number) =>
       byTopic.get(key(chatId, topicId)) ?? null,
-    lookupSessionById: (sessionId: string) =>
-      byId.get(sessionId) ?? null,
+    lookupSessionById: (sessionId: string) => {
+      const r = byId.get(sessionId);
+      if (!r) return null;
+      return { type: r.type, chatId: r.chatId, topicId: r.topicId, ...(r.name ? { name: r.name } : {}) };
+    },
     recordSession: (chatId: number, topicId: number, sessionId: string) => {
       const old = byTopic.get(key(chatId, topicId));
       if (old) byId.delete(old);
       byTopic.set(key(chatId, topicId), sessionId);
       byId.set(sessionId, { type: "telegram", chatId, topicId });
     },
-    recordTaskSession: (sessionId: string) => {
-      byId.set(sessionId, { type: "task", chatId: 0, topicId: 0 });
+    recordTaskSession: (sessionId: string, name?: string) => {
+      byId.set(sessionId, { type: "task", chatId: 0, topicId: 0, ...(name ? { name } : {}) });
     },
     forgetSession: (sessionId: string) => {
       const record = byId.get(sessionId);

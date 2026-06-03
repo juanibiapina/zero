@@ -7,6 +7,7 @@ export const runTask = async (
   env: Env,
   clerkUserId: string,
   prompt: string,
+  name?: string,
 ): Promise<void> => {
   const agent = createAgentClient(env, clerkUserId);
   const userDO = getUserDO(env, clerkUserId);
@@ -21,7 +22,7 @@ export const runTask = async (
   }
 
   const { sessionId } = result;
-  await userDO.recordTaskSession(sessionId);
+  await userDO.recordTaskSession(sessionId, name);
   log("task_created", { session_id: sessionId, clerk_user_id: clerkUserId });
 
   const sendResult = await agent.sendMessage(sessionId, prompt);

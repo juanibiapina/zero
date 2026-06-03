@@ -223,7 +223,7 @@ function determineStep(
   return "done";
 }
 
-export function Onboarding({ onComplete }: { onComplete: () => void }) {
+export function Onboarding({ onComplete, googleOnboardingStatus }: { onComplete: () => void; googleOnboardingStatus: string | null }) {
   const { isLoaded, user } = useUser();
   const [telegramId, setTelegramId] = useState<string | null>(null);
   const [telegramLoaded, setTelegramLoaded] = useState(false);
@@ -259,17 +259,15 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
     ? missingScopes(google.approvedScopes, GOOGLE_WORKSPACE_SCOPES).length === 0
     : false;
 
-  // Fire onboarding task once when Google is connected
-  const googleTaskFiredRef = useRef(false);
+  // Fire onboarding task once when Google is connected and task hasn't started
   useEffect(() => {
-    if (!googleConnected || googleTaskFiredRef.current) return;
-    googleTaskFiredRef.current = true;
+    if (!googleConnected || googleOnboardingStatus) return;
     void fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Onboard this new user using your google-onboarding skill." }),
+      body: JSON.stringify({ prompt: "Onboard this new user using your google-onboarding skill.", name: "google-onboarding" }),
     });
-  }, [googleConnected]);
+  }, [googleConnected, googleOnboardingStatus]);
   const telegramConnected = telegramId !== null;
 
   const currentStep = determineStep(googleConnected, telegramConnected);

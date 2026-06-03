@@ -36,13 +36,14 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   } as unknown as KVNamespace & { _store: Map<string, string> };
 };
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "getSettings" | "updateSettings">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "getSettings" | "updateSettings" | "setGoogleOnboardingStatus">;
 
 const createFakeUserDO = (
   initial?: string,
-): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean } => {
+): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null } => {
   let stored: string | null = initial ?? null;
   let onboardingSeen = false;
+  let googleOnboardingStatus: string | null = null;
   return {
     get _telegramId() {
       return stored;
@@ -64,9 +65,15 @@ const createFakeUserDO = (
       stored = null;
       return { removed };
     },
-    getSettings: () => ({ onboardingSeen }),
+    getSettings: () => ({ onboardingSeen, googleOnboardingStatus }),
     updateSettings: (patch: { onboardingSeen?: boolean }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
+    },
+    setGoogleOnboardingStatus: (status: string) => {
+      googleOnboardingStatus = status;
+    },
+    get _googleOnboardingStatus() {
+      return googleOnboardingStatus;
     },
   };
 };
@@ -224,7 +231,7 @@ describe("GET /api/user-settings", () => {
 
     const res = await app.request("/api/user-settings");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: false });
+    expect(await res.json()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
   });
 
   it("returns onboardingSeen true after update", async () => {
@@ -235,7 +242,7 @@ describe("GET /api/user-settings", () => {
 
     const res = await app.request("/api/user-settings");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: true });
+    expect(await res.json()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
   });
 });
 
@@ -251,7 +258,7 @@ describe("PATCH /api/user-settings", () => {
       body: JSON.stringify({ onboardingSeen: true }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: true });
+    expect(await res.json()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
     expect(userDO._onboardingSeen).toBe(true);
   });
 
@@ -267,7 +274,7 @@ describe("PATCH /api/user-settings", () => {
       body: JSON.stringify({ onboardingSeen: false }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: false });
+    expect(await res.json()).toEqual({ onboardingSeen: false, googleOnboardingStatus: null });
     expect(userDO._onboardingSeen).toBe(false);
   });
 
@@ -283,7 +290,7 @@ describe("PATCH /api/user-settings", () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ onboardingSeen: true });
+    expect(await res.json()).toEqual({ onboardingSeen: true, googleOnboardingStatus: null });
     expect(userDO._onboardingSeen).toBe(true);
   });
 });

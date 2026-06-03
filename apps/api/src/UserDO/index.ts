@@ -59,10 +59,10 @@ export class UserDO extends DurableObject<Env> {
     return row?.sessionId ?? null;
   }
 
-  lookupSessionById(sessionId: string): { type: string; chatId: number; topicId: number } | null {
+  lookupSessionById(sessionId: string): { type: string; chatId: number; topicId: number; name?: string } | null {
     const row = this.db.get(sessions, { where: eq("sessionId", sessionId) });
     if (!row) return null;
-    return { type: row.type, chatId: row.chatId, topicId: row.topicId };
+    return { type: row.type, chatId: row.chatId, topicId: row.topicId, ...(row.name ? { name: row.name } : {}) };
   }
 
   recordSession(chatId: number, topicId: number, sessionId: string): void {
@@ -76,8 +76,8 @@ export class UserDO extends DurableObject<Env> {
     this.db.insert(sessions, { type: "telegram", chatId, topicId, sessionId, status: SessionStatus.Idle });
   }
 
-  recordTaskSession(sessionId: string): void {
-    this.db.insert(sessions, { type: "task", chatId: 0, topicId: 0, sessionId, status: SessionStatus.Idle });
+  recordTaskSession(sessionId: string, name?: string): void {
+    this.db.insert(sessions, { type: "task", chatId: 0, topicId: 0, sessionId, status: SessionStatus.Idle, ...(name ? { name } : {}) });
   }
 
   forgetSession(sessionId: string): void {
@@ -113,9 +113,9 @@ export class UserDO extends DurableObject<Env> {
   }
 
 
-  getSettings(): { onboardingSeen: boolean } {
+  getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null } {
     const row = this.db.get(userSettings);
-    return { onboardingSeen: !!row?.onboardingSeen };
+    return { onboardingSeen: !!row?.onboardingSeen, googleOnboardingStatus: row?.googleOnboardingStatus ?? null };
   }
 
   updateSettings(patch: { onboardingSeen?: boolean }): void {
@@ -128,6 +128,15 @@ export class UserDO extends DurableObject<Env> {
       this.db.insert(userSettings, {
         onboardingSeen: patch.onboardingSeen ? 1 : 0,
       });
+    }
+  }
+
+  setGoogleOnboardingStatus(status: string): void {
+    const existing = this.db.get(userSettings);
+    if (existing) {
+      this.db.update(userSettings, { googleOnboardingStatus: status }, { where: eq("id", existing.id) });
+    } else {
+      this.db.insert(userSettings, { onboardingSeen: 0, googleOnboardingStatus: status });
     }
   }
 }

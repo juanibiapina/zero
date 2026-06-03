@@ -14,6 +14,7 @@ import { createSecretProxy } from "./secret-proxy";
 import { getUserDO } from "./UserDO/stub";
 import type { Env } from "./types";
 import { formatAndSend } from "./telegram/send";
+import { handleAgentEnd } from "./handle-agent-end";
 
 const secretProxy = createSecretProxy(
   ["ANTHROPIC_API_KEY", "BRAVE_API_KEY"],
@@ -26,11 +27,6 @@ const MessageEndBodySchema = z.object({
   clerkUserId: z.string().min(1),
 });
 
-const AgentEndBodySchema = z.object({
-  sessionId: z.string().min(1),
-  clerkUserId: z.string().min(1),
-  willRetry: z.boolean(),
-});
 
 const CloseSessionBodySchema = z.object({
   sessionId: z.string().min(1),
@@ -38,7 +34,7 @@ const CloseSessionBodySchema = z.object({
   clerkUserId: z.string().min(1),
 });
 
-type SessionRecord = { type: string; chatId: number; topicId: number };
+type SessionRecord = { type: string; chatId: number; topicId: number; name?: string };
 
 type WithSessionOk<T> = { data: T & { sessionId: string; clerkUserId: string }; record: SessionRecord };
 
@@ -96,25 +92,6 @@ const handleMessageEnd = async (
   return new Response(null, { status: 204 });
 };
 
-const handleAgentEnd = async (
-  req: Request,
-  env: Env,
-): Promise<Response> => {
-  const result = await withSession(req, env, AgentEndBodySchema);
-  if (result instanceof Response) return result;
-  const { data, record } = result;
-
-  if (record.type === "task") {
-    log("task_reply_discarded", { session_id: data.sessionId });
-    return new Response(null, { status: 204 });
-  }
-
-  if (!data.willRetry) {
-    await getUserDO(env, data.clerkUserId).markSessionIdle(record.chatId, record.topicId);
-  }
-
-  return new Response(null, { status: 204 });
-};
 
 const handleCloseSession = async (
   req: Request,

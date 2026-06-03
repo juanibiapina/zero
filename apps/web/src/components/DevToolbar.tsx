@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 
 export function DevToolbar({ onResetOnboarding }: { onResetOnboarding: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [taskBusy, setTaskBusy] = useState(false);
 
   if (import.meta.env.PROD) return null;
 
@@ -29,6 +30,24 @@ export function DevToolbar({ onResetOnboarding }: { onResetOnboarding: () => voi
         }}
       >
         {busy ? "Resetting…" : "Reset onboarding"}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={taskBusy}
+        onClick={() => {
+          setTaskBusy(true);
+          void (async () => {
+            await fetch("/api/tasks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt: "Onboard this new user using your google-onboarding skill.", name: "google-onboarding" }),
+            });
+            setTaskBusy(false);
+          })();
+        }}
+      >
+        {taskBusy ? "Running…" : "Run onboarding task"}
       </Button>
     </div>
   );
