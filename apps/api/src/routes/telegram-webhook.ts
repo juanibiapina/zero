@@ -26,6 +26,7 @@ import {
   type TopicContext,
 } from "../process-topic-message";
 import type { Env } from "../types";
+import { sendChatAction } from "../telegram/chat-action";
 import { formatAndSend } from "../telegram/send";
 
 // Build a TopicContext from a Telegram message. Topic messages (forum
@@ -108,6 +109,9 @@ export const createTelegramWebhookRoute = () => {
         return;
       }
 
+      c.executionCtx.waitUntil(
+        sendChatAction(c.env, topic.chatId, topic.topicId).catch(() => {}),
+      );
       c.executionCtx.waitUntil(
         processTopicMessage({ ...topic, text: msg.text }, c.env),
       );
