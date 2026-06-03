@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { UserButton, useUser } from "@clerk/clerk-react";
+import { useUser } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -8,6 +8,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AppHeader } from "@/components/AppHeader";
+import { ConnectedStatus, ErrorText } from "@/components/ConnectionStatus";
 import {
   GOOGLE_WORKSPACE_SCOPES,
   missingScopes,
@@ -26,19 +28,6 @@ const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as stri
 
 function StatusText({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
-}
-
-function ConnectedStatus({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="inline-block size-2 shrink-0 rounded-full bg-emerald-500" />
-      <span className="text-muted-foreground">{children}</span>
-    </div>
-  );
-}
-
-function ErrorText({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-destructive">{children}</p>;
 }
 
 // ─── Telegram ───────────────────────────────────────────────────────
@@ -267,12 +256,7 @@ function GoogleConnect() {
 export function SettingsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
-          <span className="text-xl font-bold tracking-tight">Zero</span>
-          <UserButton appearance={{ elements: { avatarBox: "size-8" } }} />
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">

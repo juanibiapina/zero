@@ -2,6 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { AppHeader } from "@/components/AppHeader";
+import { ConnectedStatus, ErrorText } from "@/components/ConnectionStatus";
+import {
   GOOGLE_WORKSPACE_SCOPES,
   missingScopes,
 } from "../google-scopes";
@@ -10,128 +19,87 @@ import {
   type TelegramAuthPayload,
 } from "@/components/TelegramLoginWidget";
 
+// Clerk's createExternalAccount/reauthorize want a mutable string[].
 const GOOGLE_SCOPES_MUTABLE: string[] = [...GOOGLE_WORKSPACE_SCOPES];
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string;
 
+// ─── Google ─────────────────────────────────────────────────────────
 
-// ─── Stepper ───────────────────────────────────────────────────────
-
-const STEP_LABELS = ["Google", "Telegram", "Ready"] as const;
-
-function Stepper({ activeIndex }: { activeIndex: number }) {
-  return (
-    <div className="flex items-center px-6 py-5 sm:px-8 lg:px-10">
-      {STEP_LABELS.map((label, i) => {
-        const isComplete = i < activeIndex;
-        const isActive = i === activeIndex;
-
-        return (
-          <div key={label} className="flex flex-1 items-center last:flex-none">
-            {/* Circle + label */}
-            <div className="flex items-center gap-2.5">
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors duration-300 ${
-                  isComplete
-                    ? "bg-foreground text-background"
-                    : isActive
-                      ? "bg-foreground text-background"
-                      : "border border-border text-muted-foreground"
-                }`}
-              >
-                {isComplete ? (
-                  <svg width="12" height="10" viewBox="0 0 12 10" fill="none" className="stroke-current">
-                    <path d="M1 5.5L4 8.5L11 1.5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </span>
-              <span
-                className={`text-sm transition-colors duration-300 ${
-                  isActive
-                    ? "font-medium text-foreground"
-                    : isComplete
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/50"
-                }`}
-              >
-                {label}
-              </span>
-            </div>
-
-            {/* Connecting line (not after the last step) */}
-            {i < STEP_LABELS.length - 1 && (
-              <div className="mx-4 h-px flex-1 bg-border">
-                <div
-                  className="h-full bg-foreground transition-all duration-500 ease-out"
-                  style={{ width: isComplete ? "100%" : "0%" }}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Steps ─────────────────────────────────────────────────────────
-
-function GoogleStep({ onSkip }: { onSkip: () => void }) {
+function GoogleCard() {
   const { user } = useUser();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!user) return null;
 
+  const google = user.externalAccounts.find((a) => a.provider === "google");
+  const missing = google
+    ? missingScopes(google.approvedScopes, GOOGLE_WORKSPACE_SCOPES)
+    : [];
+  const connected = !!google && missing.length === 0;
+
+  // Navigate to Clerk's consent URL to complete the OAuth flow.
   const redirectTo = (url: URL | null | undefined) => {
     if (url) window.location.href = url.toString();
   };
 
+  const connect = () => {
+    setBusy(true);
+    setError(null);
+    void (async () => {
+      try {
+        if (google && missing.length > 0) {
+          const updated = await google.reauthorize({
+            additionalScopes: GOOGLE_SCOPES_MUTABLE,
+            redirectUrl: window.location.origin,
+          });
+          redirectTo(updated.verification?.externalVerificationRedirectURL);
+        } else {
+          const result = await user.createExternalAccount({
+            strategy: "oauth_google",
+            additionalScopes: GOOGLE_SCOPES_MUTABLE,
+            redirectUrl: window.location.origin,
+          });
+          redirectTo(result.verification?.externalVerificationRedirectURL);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setBusy(false);
+      }
+    })();
+  };
+
   return (
-    <>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Connect your Google account
-        </h2>
-        <p className="text-[15px] leading-relaxed text-muted-foreground">
-          Zero needs access to Gmail, Calendar, Drive, and Sheets to work with
-          your data. You can revoke access at any time from settings.
-        </p>
-      </div>
-      <div className="flex items-center gap-3 pt-2">
-        <Button
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            setError(null);
-            void (async () => {
-              try {
-                const result = await user.createExternalAccount({
-                  strategy: "oauth_google",
-                  additionalScopes: GOOGLE_SCOPES_MUTABLE,
-                  redirectUrl: window.location.origin,
-                });
-                redirectTo(result.verification?.externalVerificationRedirectURL);
-              } catch (e) {
-                setError(e instanceof Error ? e.message : String(e));
-                setBusy(false);
-              }
-            })();
-          }}
-        >
-          {busy ? "Connecting…" : "Connect Google"}
-        </Button>
-        <Button variant="ghost" onClick={onSkip}>
-          Skip this step
-        </Button>
-      </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </>
+    <Card>
+      <CardHeader>
+        <CardTitle>Google Workspace</CardTitle>
+        <CardDescription>
+          Access to Gmail, Calendar, Drive, and Sheets.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {connected ? (
+          <ConnectedStatus>Connected · {google.emailAddress}</ConnectedStatus>
+        ) : (
+          <Button disabled={busy} onClick={connect}>
+            {busy ? "Connecting…" : google ? "Grant access" : "Connect Google"}
+          </Button>
+        )}
+        {error && <ErrorText>{error}</ErrorText>}
+      </CardContent>
+    </Card>
   );
 }
 
-function TelegramStep({ onSkip }: { onSkip: () => void }) {
+// ─── Telegram ───────────────────────────────────────────────────────
+
+function TelegramCard({
+  telegramId,
+  onLinked,
+}: {
+  telegramId: string | null;
+  onLinked: (id: string | null) => void;
+}) {
   const [error, setError] = useState<string | null>(null);
 
   const onAuth = useCallback(
@@ -141,58 +109,57 @@ function TelegramStep({ onSkip }: { onSkip: () => void }) {
         try {
           const res = await fetch("/api/telegram-link", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
           if (!res.ok) {
             setError(`Link failed: ${res.status}`);
+            return;
           }
-          window.location.reload();
+          const data = (await res.json()) as { telegramId: string | null };
+          onLinked(data.telegramId);
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e));
         }
       })();
     },
-    [],
+    [onLinked],
   );
 
   return (
-    <>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Link your Telegram
-        </h2>
-        <p className="text-[15px] leading-relaxed text-muted-foreground">
-          This connects your Telegram account so you can chat with Zero
-          directly. Use the button below to authorize.
-        </p>
-      </div>
-      <div className="pt-2">
-        <TelegramLoginWidget onAuth={onAuth} />
-      </div>
-      <Button variant="ghost" onClick={onSkip}>
-        Skip this step
-      </Button>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-    </>
+    <Card>
+      <CardHeader>
+        <CardTitle>Telegram</CardTitle>
+        <CardDescription>
+          Link your account to chat with the bot.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {telegramId === null ? (
+          <TelegramLoginWidget onAuth={onAuth} />
+        ) : (
+          <div className="animate-in fade-in duration-200 motion-reduce:animate-none">
+            <ConnectedStatus>Connected · {telegramId}</ConnectedStatus>
+          </div>
+        )}
+        {error && <ErrorText>{error}</ErrorText>}
+      </CardContent>
+    </Card>
   );
 }
 
-function DoneStep({ onFinish }: { onFinish: () => void }) {
+// ─── Completion ─────────────────────────────────────────────────────
+
+function CompletionBlock({ onFinish }: { onFinish: () => void }) {
   return (
-    <>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight">
-          You're all set
-        </h2>
-        <p className="text-[15px] leading-relaxed text-muted-foreground">
-          Everything is connected. Open Telegram and send a message to start
-          your first conversation with Zero.
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">You're all set.</p>
+        <p className="text-sm text-muted-foreground">
+          Open Telegram and send a message to start your first conversation.
         </p>
       </div>
-      <div className="flex items-center gap-3 pt-2">
+      <div className="flex items-center gap-3">
         <a
           href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
           target="_blank"
@@ -205,31 +172,35 @@ function DoneStep({ onFinish }: { onFinish: () => void }) {
           Go to settings
         </Button>
       </div>
-    </>
+    </div>
   );
 }
 
-// ─── Wizard ────────────────────────────────────────────────────────
+// ─── Page ───────────────────────────────────────────────────────────
 
-type Step = "google" | "telegram" | "done";
-const STEP_ORDER: Step[] = ["google", "telegram", "done"];
-
-function determineStep(
-  googleConnected: boolean,
-  telegramConnected: boolean,
-): Step {
-  if (!googleConnected) return "google";
-  if (!telegramConnected) return "telegram";
-  return "done";
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background">
+      <AppHeader />
+      <main className="container mx-auto px-4 py-10 sm:px-6 sm:py-14 lg:py-16">
+        <div className="mx-auto w-full max-w-md space-y-8">{children}</div>
+      </main>
+    </div>
+  );
 }
 
-export function Onboarding({ onComplete, googleOnboardingStatus }: { onComplete: () => void; googleOnboardingStatus: string | null }) {
+export function Onboarding({
+  onComplete,
+  googleOnboardingStatus,
+}: {
+  onComplete: () => void;
+  googleOnboardingStatus: string | null;
+}) {
   const { isLoaded, user } = useUser();
   const [telegramId, setTelegramId] = useState<string | null>(null);
   const [telegramLoaded, setTelegramLoaded] = useState(false);
-  const [entered, setEntered] = useState(false);
 
-  // Fetch telegram state
+  // Fetch telegram link state.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -244,163 +215,93 @@ export function Onboarding({ onComplete, googleOnboardingStatus }: { onComplete:
         setTelegramLoaded(true);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  // Entrance animation
-  useEffect(() => {
-    if (isLoaded && telegramLoaded) {
-      requestAnimationFrame(() => setEntered(true));
-    }
-  }, [isLoaded, telegramLoaded]);
 
   const google = user?.externalAccounts.find((a) => a.provider === "google");
   const googleConnected = google
     ? missingScopes(google.approvedScopes, GOOGLE_WORKSPACE_SCOPES).length === 0
     : false;
+  const telegramConnected = telegramId !== null;
+  const bothConnected = googleConnected && telegramConnected;
 
-  // Fire onboarding task once when Google is connected and task hasn't started
+  // Fire the onboarding task once, when Google connects and it hasn't started.
   useEffect(() => {
     if (!googleConnected || googleOnboardingStatus) return;
     void fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Onboard this new user using your google-onboarding skill.", name: "google-onboarding" }),
+      body: JSON.stringify({
+        prompt: "Onboard this new user using your google-onboarding skill.",
+        name: "google-onboarding",
+      }),
     });
   }, [googleConnected, googleOnboardingStatus]);
-  const telegramConnected = telegramId !== null;
 
-  const currentStep = determineStep(googleConnected, telegramConnected);
-
-  // Animation state
-  const [displayedStep, setDisplayedStep] = useState<Step>(currentStep);
-  const [animating, setAnimating] = useState(false);
-  const [slideDirection, setSlideDirection] = useState<"left" | "right">("left");
-  const prevStepRef = useRef(currentStep);
-
-  useEffect(() => {
-    if (!isLoaded || !telegramLoaded) return;
-    if (currentStep === prevStepRef.current) return;
-    const fromIdx = STEP_ORDER.indexOf(prevStepRef.current);
-    const toIdx = STEP_ORDER.indexOf(currentStep);
-    prevStepRef.current = currentStep;
-    setSlideDirection(toIdx > fromIdx ? "left" : "right");
-    setAnimating(true);
-    const timeout = setTimeout(() => {
-      setDisplayedStep(currentStep);
-      requestAnimationFrame(() => setAnimating(false));
-    }, 200);
-    return () => clearTimeout(timeout);
-  }, [currentStep, isLoaded, telegramLoaded]);
-
-  // Mark onboarding seen when done step is displayed
+  // Mark onboarding seen once both connections are complete.
   const completedRef = useRef(false);
-  useEffect(() => {
-    if (displayedStep !== "done" || completedRef.current) return;
+  const markSeen = useCallback(() => {
+    if (completedRef.current) return;
     completedRef.current = true;
-    void (async () => {
-      await fetch("/api/user-settings", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ onboardingSeen: true }),
-      });
-    })();
-  }, [displayedStep]);
+    void fetch("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ onboardingSeen: true }),
+    });
+  }, []);
 
-  const markComplete = useCallback(() => {
-    if (!completedRef.current) {
-      completedRef.current = true;
-      void (async () => {
-        await fetch("/api/user-settings", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ onboardingSeen: true }),
-        });
-      })();
-    }
+  useEffect(() => {
+    if (bothConnected) markSeen();
+  }, [bothConnected, markSeen]);
+
+  const finish = useCallback(() => {
+    markSeen();
     onComplete();
-  }, [onComplete]);
-
-  const advanceToNext = useCallback(() => {
-    if (!displayedStep) return;
-    const idx = STEP_ORDER.indexOf(displayedStep);
-    if (idx >= STEP_ORDER.length - 1) return;
-    const next = STEP_ORDER[idx + 1];
-    setSlideDirection("left");
-    setAnimating(true);
-    setTimeout(() => {
-      setDisplayedStep(next);
-      requestAnimationFrame(() => setAnimating(false));
-    }, 200);
-  }, [displayedStep]);
+  }, [markSeen, onComplete]);
 
   if (!isLoaded || !telegramLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <Shell>
         <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
+      </Shell>
     );
   }
 
-  const displayedStepIndex = STEP_ORDER.indexOf(displayedStep);
-
-  const contentTranslate = animating
-    ? slideDirection === "left"
-      ? "-translate-x-3 opacity-0"
-      : "translate-x-3 opacity-0"
-    : "translate-x-0 opacity-100";
-
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-12 sm:px-6">
-      <div
-        className={`w-full max-w-lg md:max-w-xl lg:max-w-2xl transition-all duration-500 ease-out motion-reduce:transition-none ${
-          entered
-            ? "translate-y-0 opacity-100"
-            : "translate-y-4 opacity-0"
-        }`}
-      >
-        {/* Card */}
-        <div className="overflow-hidden rounded-xl border border-border">
-          {/* Stepper header */}
-          <Stepper activeIndex={displayedStepIndex} />
+    <Shell>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Welcome to Zero
+        </h1>
+        <p className="text-[15px] leading-relaxed text-muted-foreground">
+          Connect your accounts to start chatting with your assistant in
+          Telegram.
+        </p>
+      </div>
 
-          <div className="border-t border-border" />
+      <div className="space-y-4">
+        <GoogleCard />
+        <TelegramCard telegramId={telegramId} onLinked={setTelegramId} />
+      </div>
 
-          {/* Content — fixed height so the card never resizes between steps */}
-          <div className="flex h-[320px] flex-col justify-center px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
-            <div
-              className={`flex flex-col gap-6 transition-all duration-200 ease-out motion-reduce:transition-none ${contentTranslate}`}
-            >
-              {displayedStep === "google" && (
-                <GoogleStep onSkip={advanceToNext} />
-              )}
-              {displayedStep === "telegram" && (
-                <TelegramStep onSkip={advanceToNext} />
-              )}
-              {displayedStep === "done" && (
-                <DoneStep onFinish={markComplete} />
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-4 flex items-center justify-between px-1">
-          <p className="text-xs text-muted-foreground/60">
-            You can change these connections later in settings.
-          </p>
+      {bothConnected ? (
+        <CompletionBlock onFinish={finish} />
+      ) : (
+        <div className="flex justify-center">
           <button
-            className="text-xs text-muted-foreground/60 transition-colors hover:text-foreground"
-            onClick={markComplete}
+            className="text-sm text-muted-foreground/70 transition-colors hover:text-foreground"
+            onClick={finish}
           >
-            Skip setup
+            I'll do this later
           </button>
         </div>
-      </div>
-    </div>
+      )}
+
+      <p className="text-center text-xs text-muted-foreground/60">
+        You can change these connections anytime in settings.
+      </p>
+    </Shell>
   );
 }
