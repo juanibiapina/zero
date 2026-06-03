@@ -2,6 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { UserButton, useUser } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   GOOGLE_WORKSPACE_SCOPES,
   missingScopes,
 } from "../google-scopes";
@@ -17,12 +24,17 @@ const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as stri
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-function SectionDivider() {
-  return <div className="border-t border-border" />;
-}
-
 function StatusText({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
+}
+
+function ConnectedStatus({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="inline-block size-2 shrink-0 rounded-full bg-emerald-500" />
+      <span className="text-muted-foreground">{children}</span>
+    </div>
+  );
 }
 
 function ErrorText({ children }: { children: React.ReactNode }) {
@@ -104,44 +116,46 @@ function TelegramConnect() {
   };
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-medium">Telegram</h2>
-      {!loaded ? (
-        <StatusText>Loading…</StatusText>
-      ) : telegramId === null ? (
-        <>
-          <StatusText>
-            Link your Telegram account to talk to the bot.
-          </StatusText>
+    <Card>
+      <CardHeader>
+        <CardTitle>Telegram</CardTitle>
+        <CardDescription>
+          Link your Telegram account to talk to the bot.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!loaded ? (
+          <StatusText>Loading…</StatusText>
+        ) : telegramId === null ? (
           <TelegramLoginWidget onAuth={onAuth} />
-        </>
-      ) : (
-        <>
-          <StatusText>Connected · {telegramId}</StatusText>
-          <div className="flex items-center gap-3">
-            <a
-              href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-foreground underline underline-offset-4 hover:text-foreground/70"
-            >
-              Open in Telegram
-            </a>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                void onDisconnect();
-              }}
-            >
-              Disconnect
-            </Button>
-          </div>
-        </>
-      )}
-      {error && <ErrorText>{error}</ErrorText>}
-    </section>
+        ) : (
+          <>
+            <ConnectedStatus>Connected · {telegramId}</ConnectedStatus>
+            <div className="flex items-center gap-3">
+              <a
+                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-foreground underline underline-offset-4 hover:text-foreground/70"
+              >
+                Open in Telegram
+              </a>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  void onDisconnect();
+                }}
+              >
+                Disconnect
+              </Button>
+            </div>
+          </>
+        )}
+        {error && <ErrorText>{error}</ErrorText>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -177,13 +191,15 @@ function GoogleConnect() {
   };
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-medium">Google Workspace</h2>
-      {!google ? (
-        <>
-          <StatusText>
-            Grant access to Gmail, Calendar, Drive, and Sheets.
-          </StatusText>
+    <Card>
+      <CardHeader>
+        <CardTitle>Google Workspace</CardTitle>
+        <CardDescription>
+          Grant access to Gmail, Calendar, Drive, and Sheets.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!google ? (
           <Button
             size="sm"
             disabled={busy}
@@ -200,48 +216,48 @@ function GoogleConnect() {
           >
             {busy ? "Connecting…" : "Connect Google"}
           </Button>
-        </>
-      ) : missing.length > 0 ? (
-        <>
-          <StatusText>
-            Connected as {google.emailAddress}, but missing required scopes.
-          </StatusText>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                const updated = await google.reauthorize({
-                  additionalScopes: GOOGLE_SCOPES_MUTABLE,
-                  redirectUrl: window.location.origin,
-                });
-                redirectTo(updated.verification?.externalVerificationRedirectURL);
-              })
-            }
-          >
-            {busy ? "Opening…" : "Grant missing scopes"}
-          </Button>
-        </>
-      ) : (
-        <>
-          <StatusText>Connected · {google.emailAddress}</StatusText>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                await google.destroy();
-                await user.reload();
-              })
-            }
-          >
-            Disconnect
-          </Button>
-        </>
-      )}
-      {error && <ErrorText>{error}</ErrorText>}
-    </section>
+        ) : missing.length > 0 ? (
+          <>
+            <StatusText>
+              Connected as {google.emailAddress}, but missing required scopes.
+            </StatusText>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  const updated = await google.reauthorize({
+                    additionalScopes: GOOGLE_SCOPES_MUTABLE,
+                    redirectUrl: window.location.origin,
+                  });
+                  redirectTo(updated.verification?.externalVerificationRedirectURL);
+                })
+              }
+            >
+              {busy ? "Opening…" : "Grant missing scopes"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <ConnectedStatus>Connected · {google.emailAddress}</ConnectedStatus>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await google.destroy();
+                  await user.reload();
+                })
+              }
+            >
+              Disconnect
+            </Button>
+          </>
+        )}
+        {error && <ErrorText>{error}</ErrorText>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -250,17 +266,20 @@ function GoogleConnect() {
 
 export function SettingsPage() {
   return (
-    <div className="mx-auto w-full max-w-md px-6 py-12">
-      <header className="flex items-center justify-between">
-        <h1 className="text-base font-semibold">Zero</h1>
-        <UserButton />
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
+          <span className="text-xl font-bold tracking-tight">Zero</span>
+          <UserButton appearance={{ elements: { avatarBox: "size-8" } }} />
+        </div>
       </header>
 
-      <div className="mt-10 space-y-8">
-        <TelegramConnect />
-        <SectionDivider />
-        <GoogleConnect />
-      </div>
+      <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+        <div className="mx-auto w-full max-w-2xl space-y-6">
+          <TelegramConnect />
+          <GoogleConnect />
+        </div>
+      </main>
     </div>
   );
 }
