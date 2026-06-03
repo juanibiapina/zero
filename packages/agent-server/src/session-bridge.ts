@@ -172,7 +172,9 @@ export const createSessionBridge = (
       logEvent(sessionId, event);
 
       if (event.type === "message_end") {
-        const text = extractAssistantText(event.message as unknown as AgentMessageLike);
+        const msg = event.message as unknown as AgentMessageLike;
+        if (msg.role !== "assistant") return;
+        const text = extractAssistantText(msg);
         if (text.length > 0) {
           log("post_message_end", { session_id: sessionId, len: text.length });
           void postMessageEnd(sessionId, text).catch((err: unknown) => {
