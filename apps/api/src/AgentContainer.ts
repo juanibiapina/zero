@@ -181,10 +181,7 @@ export class AgentContainer extends Container<Env> {
   // Rebuild envVars on every call. A live container keeps its existing
   // env; the next cold start picks up the refreshed values.
   private async refreshEnvVars(): Promise<void> {
-    // ctx.id.name is the clerk user ID passed via getByName(). Some local
-    // wrangler versions don't populate it; fall back to the hex id which
-    // is stable per-name and sufficient for state-archive keying.
-    const clerkUserId = this.ctx.id.name ?? this.ctx.id.toString();
+    const clerkUserId = this.ctx.id.name;
     if (!clerkUserId) {
       throw new Error(
         "AgentContainer must be addressed via env.AGENT_CONTAINER.getByName(clerkUserId)",

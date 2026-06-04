@@ -9,4 +9,4 @@ onlyBuiltDependencies:
 
 patchedDependencies:
   '@cloudflare/containers@0.3.5': patches/@cloudflare__containers@0.3.5.patch
-  wrangler@4.95.0: patches/wrangler@4.95.0.patch
+  wrangler@4.97.0: patches/wrangler@4.97.0.patch

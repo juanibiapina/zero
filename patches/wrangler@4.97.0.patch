@@ -1,8 +1,8 @@
 diff --git a/wrangler-dist/cli.js b/wrangler-dist/cli.js
-index 1e209b6573a54062682f8814730ba7314b23c8e7..941feaba0b7a90652604cbafe2b6430eb7b35525 100644
+index 80c5612052f44c2396d0aa7321743ca0070a439b..06d2d3623ccd1585346236b80b652bee2838cfc1 100644
 --- a/wrangler-dist/cli.js
 +++ b/wrangler-dist/cli.js
-@@ -45403,7 +45403,7 @@ async function buildImage(dockerPath, options) {
+@@ -46887,7 +46887,7 @@ async function buildImage(dockerPath, options) {
      pathToDockerfile: options.dockerfile,
      buildContext: options.image_build_context,
      args: options.image_vars,
@@ -11,7 +11,7 @@ index 1e209b6573a54062682f8814730ba7314b23c8e7..941feaba0b7a90652604cbafe2b6430e
    });
    return dockerBuild(dockerPath, { buildCmd, dockerfile });
  }
-@@ -45787,7 +45787,7 @@ function getEgressInterceptorImage() {
+@@ -47271,7 +47271,7 @@ function getEgressInterceptorImage() {
  }
  async function pullEgressInterceptorImage(dockerPath) {
    const image = getEgressInterceptorImage();
@@ -20,7 +20,7 @@ index 1e209b6573a54062682f8814730ba7314b23c8e7..941feaba0b7a90652604cbafe2b6430e
  }
  async function pullImage(dockerPath, options, logger4) {
    const domain2 = new URL(`http://${options.image_uri}`).hostname;
-@@ -45806,8 +45806,8 @@ async function pullImage(dockerPath, options, logger4) {
+@@ -47290,8 +47290,8 @@ async function pullImage(dockerPath, options, logger4) {
      "pull",
      options.image_uri,
      // All containers running on our platform need to be built for amd64 architecture, but by default docker pull seems to look for an image matching the host system, so we need to specify this here
