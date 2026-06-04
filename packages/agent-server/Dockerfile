@@ -7,30 +7,15 @@ ENV HOME=/tmp/pi-home
 # Pi's global config root. Skills under /agent/skills/ are auto-discovered.
 ENV PI_CODING_AGENT_DIR=/agent
 
-# fuse3 for the R2 mount, curl/ca-certificates for tigrisfs install + HTTPS.
+# curl/ca-certificates for state restore + HTTPS interception.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
-      curl \
-      fuse3 && \
+      curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Pi runs as a non-root user; tigrisfs stays root so pi can't read its
-# /proc/<pid>/environ and recover the R2 creds. `user_allow_other` lets
-# pi access the root-owned mount published with `-o allow_other`.
-RUN useradd -m -u 1001 -s /bin/bash pi && \
-    echo 'user_allow_other' >> /etc/fuse.conf
-
-# Pinned for reproducible builds; bump deliberately. See docs/tech-debt.md.
-ARG TIGRISFS_VERSION=1.2.1
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then DEBARCH="amd64"; \
-    elif [ "$ARCH" = "aarch64" ]; then DEBARCH="arm64"; \
-    else echo "unsupported arch: $ARCH" >&2 && exit 1; fi && \
-    curl -fsSL "https://github.com/tigrisdata/tigrisfs/releases/download/v${TIGRISFS_VERSION}/tigrisfs_${TIGRISFS_VERSION}_linux_${DEBARCH}.deb" \
-      -o /tmp/tigrisfs.deb && \
-    dpkg -i /tmp/tigrisfs.deb && \
-    rm /tmp/tigrisfs.deb
+# Pi runs as a non-root user.
+RUN useradd -m -u 1001 -s /bin/bash pi
 
 # Google Workspace CLI. Musl-static build; reads its OAuth token from
 # $GOOGLE_WORKSPACE_CLI_TOKEN, so no on-disk credential file is needed.
@@ -64,12 +49,11 @@ RUN node -e "const p=require('./package.json'); delete p.devDependencies; requir
 
 COPY dist/ ./dist/
 
-# /workspace + /tmp/pi-home + /local/notes must be writable by pi.
-# /mnt/agent-state is left root-owned (FUSE mount point; tigrisfs
-# publishes it with `-o allow_other`). /agent is pi's global config
-# root (PI_CODING_AGENT_DIR).
-RUN mkdir -p /workspace /agent /mnt/agent-state /local/notes /tmp/pi-home && \
-    chown -R pi:pi /workspace /agent /local/notes /tmp/pi-home
+# /workspace is the single persisted tree (sessions + notes + pi's
+# working files). /tmp/pi-home and /agent (PI_CODING_AGENT_DIR) also
+# need to be writable by pi.
+RUN mkdir -p /workspace/sessions /workspace/notes /agent /tmp/pi-home && \
+    chown -R pi:pi /workspace /agent /tmp/pi-home
 
 # SYSTEM.md replaces pi's default system prompt with Zero's.
 # Pi discovers it at $PI_CODING_AGENT_DIR/SYSTEM.md.
@@ -85,7 +69,7 @@ RUN chown -R pi:pi /agent/skills
 
 WORKDIR /workspace
 
-# Entrypoint mounts R2 then exec's node as the unprivileged `pi` user.
+# Entrypoint restores the state archive then exec's node as the unprivileged `pi` user.
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

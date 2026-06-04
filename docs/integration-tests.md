@@ -17,9 +17,10 @@ the same topic:
 4. Send "what is the next number?" and assert the bot replies `3`.
 
 The only way step 4 can succeed is if the cold-started container
-resumes the prior conversation off the R2-mounted JSONL via
-`SessionManager.continueRecent`. Passing the test therefore proves both
-the basic round-trip *and* the durable-session path.
+resumes the prior conversation from the restored `/workspace` state
+archive (`GET /state` on boot) via `SessionManager.continueRecent`.
+Passing the test therefore proves both the basic round-trip *and* the
+durable-session path.
 
 Full production layering exercises end-to-end:
 
@@ -27,9 +28,9 @@ Full production layering exercises end-to-end:
 Telegram (user account)
   → POST /api/webhooks/telegram (secret-token auth)
     → waitUntil → KV (tg:* → clerk)
-      → AgentContainer (getByName) → R2 FUSE mount
+      → AgentContainer (getByName) → restore /workspace via /state
         → pi-coding-agent (lazy-resume on cold start) → Anthropic
-          → POST http://zero.worker/reply → grammY sendMessage
+          → POST http://zero.worker/message-end → grammY sendMessage
             → Telegram (back into the same topic)
 ```
 

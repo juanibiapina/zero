@@ -2,22 +2,21 @@
 // Hono app from `app.ts`, and serves it via @hono/node-server. The HTTP
 // contract lives in `contract.ts` + `app.ts`; env var list is in README.
 //
-// SIGTERM saves the notes archive before exiting so the last snapshot
-// reaches R2 even on idle eviction or deploy rollout.
+// SIGTERM saves the /workspace state archive before exiting so the last
+// snapshot reaches R2 even on idle eviction or deploy rollout.
 
 import { serve } from "@hono/node-server";
 
 import { createAgentApp } from "./app.js";
 import { fmtErr, log, logError } from "./log.js";
 import { createSessionBridge, type SessionCostStats } from "./session-bridge.js";
-import { saveNotes } from "./save-notes.js";
+import { saveState } from "./save-state.js";
 
 const port = parseInt(process.env.PORT ?? "8080", 10);
 const callbackUrl = process.env.CALLBACK_URL;
-const cwd = process.env.CWD ?? "/workspace";
-const stateDir = process.env.AGENT_STATE_DIR!;
+const cwd = "/workspace";
+const stateDir = "/workspace/sessions";
 const clerkUserId = process.env.CLERK_USER_ID;
-const notesDir = "/local/notes";
 
 if (!callbackUrl) {
   logError("missing_env", { var: "CALLBACK_URL" });
@@ -98,7 +97,7 @@ serve({ fetch: app.fetch, port }, (info) => {
 
 process.on("SIGTERM", () => {
   log("sigterm");
-  void saveNotes(notesDir, callbackUrl, clerkUserId).finally(() => {
+  void saveState(cwd, callbackUrl, clerkUserId).finally(() => {
     process.exit(0);
   });
 });

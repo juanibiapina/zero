@@ -5,7 +5,8 @@
 // the same dir back to `SessionManager.continueRecent`. Directory
 // existence is the only persisted index — no sidecar files.
 //
-// Durability is per-write via tigrisfs `--fsync-on-close` (entrypoint.sh).
+// Durability is per-turn: on agent_end the whole /workspace tree is
+// archived and uploaded to R2 via the worker (save-state.ts).
 // Logging is sparse on purpose: no user messages, model replies, file
 // contents, or shell output ever appear in fields.
 
@@ -23,7 +24,7 @@ import {
 
 import { fmtErr, log, logError } from "./log.js";
 import { createCloseSessionTool } from "./close-session-tool.js";
-import { saveNotes } from "./save-notes.js";
+import { saveState } from "./save-state.js";
 
 const PROVIDER = "anthropic";
 const MODEL_ID = "claude-sonnet-4-5-20250929";
@@ -141,7 +142,7 @@ export const createSessionBridge = (
   opts: SessionBridgeOptions,
 ): SessionBridge => {
   const { cwd, stateDir, callbackUrl, clerkUserId } = opts;
-  const notesDir = "/local/notes";
+  const workspaceDir = "/workspace";
   const sessions = new Map<string, SessionState>();
 
   const sessionDirFor = (sessionId: string): string =>
@@ -225,8 +226,8 @@ export const createSessionBridge = (
             error: fmtErr(err),
           });
         });
-        void saveNotes(notesDir, callbackUrl, clerkUserId).catch((err: unknown) => {
-          logError("save_notes_threw", {
+        void saveState(workspaceDir, callbackUrl, clerkUserId).catch((err: unknown) => {
+          logError("save_state_threw", {
             session_id: sessionId,
             error: fmtErr(err),
           });

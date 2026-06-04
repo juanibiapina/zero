@@ -1,14 +1,15 @@
-# R2 Mount Setup
+# R2 State Setup
 
 This document covers the one-time setup needed for **per-user persistent
-sessions** in the agent container. Once these steps are done, every
-container mounts its user's R2 prefix at `/mnt/agent-state` via
-[tigrisfs](https://github.com/tigrisdata/tigrisfs) and pi writes its
-JSONL session files there. Notes use an archive snapshot model
-(see [`design.md`](design.md) under **Notes vault**).
+state** in the agent container. All mutable state — pi sessions, the
+notes vault, and any files pi writes — is stored as a single compressed
+archive of the container's `/workspace` tree at
+`<clerkUserId>/state.tar.gz` in the `zero-agent-state` bucket.
 
-The runtime mechanics are described in [`design.md`](design.md) under
-**Persistence**.
+The container never talks to R2 directly. It restores and saves the
+archive through the worker (`GET`/`PUT http://zero.worker/state`), which
+mediates R2 via its `AGENT_STATE_BUCKET` binding. The runtime mechanics
+are described in [`design.md`](design.md) under **Persistence**.
 
 ## Step 1 — Create the bucket
 
@@ -19,74 +20,23 @@ In the [Cloudflare R2 dashboard](https://dash.cloudflare.com/?to=/:account/r2/ov
 3. Location: leave **Automatic** (lands close to the worker).
 4. Storage class: **Standard**.
 
-Done. No public access, no lifecycle rules. The bucket holds one
-prefix per Clerk user (`<clerkUserId>/`), partitioned into top-level
-scope sub-prefixes:
+Done. No public access, no lifecycle rules. The bucket holds one object
+per Clerk user:
 
-- `<clerkUserId>/sessions/<sessionId>/` — pi's JSONL session files
-- `<clerkUserId>/notes.tar.gz`           — notes vault archive
+- `<clerkUserId>/state.tar.gz` — the full `/workspace` snapshot
 
-The sessions FUSE mount uses prefix-scoped temp credentials.
-The notes archive is read/written by the worker's R2 binding
-(`AGENT_STATE_BUCKET`) — see [`design.md`](design.md#notes-vault-long-term-memory).
+No R2 API token is needed: the worker reaches the bucket through its
+`AGENT_STATE_BUCKET` binding (declared in `apps/api/wrangler.jsonc`), so
+there are no R2 credentials to mint, store, or rotate.
 
-## Step 2 — Create the parent R2 API token
+## Step 2 — Verify
 
-The worker mints short-lived, prefix-scoped credentials for each container
-boot using **local JWT signing** against a long-lived parent token.
-
-In the R2 dashboard, **Manage R2 API tokens \u2192 Create API token**:
-
-| Field | Value |
-|---|---|
-| Token name | `zero-agent-state-parent` |
-| Permissions | **Object Read & Write** |
-| Specify bucket(s) | **Apply to specific buckets only** \u2192 `zero-agent-state` |
-| TTL | **Never expire** |
-| Client IP filter | none |
-
-Click **Create API Token**. Copy the displayed values:
-
-- **Access Key ID** \u2192 used as `R2_PARENT_ACCESS_KEY_ID`
-- **Secret Access Key** \u2192 used as `R2_PARENT_SECRET_ACCESS_KEY`
-- The token's **Account ID** is your existing Cloudflare account id (find
-  it in the dashboard sidebar) \u2192 `R2_ACCOUNT_ID`
-
-The token is shown only once; if you lose it, rotate via this same page.
-
-## Step 3 \u2014 Push secrets to Doppler
-
-Set the four secrets in both `dev` and `prd` configs of the `zero-api`
-project:
+Local (`wrangler dev` runs the full container path, including the
+state restore/save round-trip):
 
 ```bash
-for cfg in dev prd; do
-  doppler secrets set --project zero-api --config "$cfg" \
-    R2_ACCOUNT_ID="<account-id>" \
-    R2_BUCKET_NAME="zero-agent-state" \
-    R2_PARENT_ACCESS_KEY_ID="<access-key-id>" \
-    R2_PARENT_SECRET_ACCESS_KEY="<secret-access-key>" \
-    --no-interactive
-done
-```
-
-Then sync local + Cloudflare:
-
-```bash
-bin/fetch-secrets                    # refreshes apps/api/.dev.vars
-bin/sync-secrets-to-cloudflare       # uploads prd to Worker
-```
-
-## Step 4 \u2014 Verify
-
-Local:
-
-```bash
-pnpm --filter @zero/api run cf-typegen
 gob run bin/ci
 ```
-
-`bin/ci` should pass with the new secrets baked into the type definitions.
 
 Production:
 
@@ -95,57 +45,48 @@ gob run bin/deploy
 ```
 
 After deploy, send a Telegram topic message and watch the container logs
-in the dashboard (Containers \u2192 `zero-api-agentcontainer` \u2192 **Logs**).
-Logs are structured JSON \u2014 filter on `service = "agent-server"`.
+in the dashboard (Containers → `zero-api-agentcontainer` → **Logs**).
+Logs are structured JSON — filter on `service = "agent-server"`.
 Look for these on first contact for a user:
 
 ```
-{"msg":"mounting_r2","bucket":"zero-agent-state","prefix":"<clerkUserId>",...}
-{"msg":"mounted_r2","mount_point":"/mnt/agent-state"}
+{"msg":"state_restore"}
 {"msg":"listening","port":8080,...}
-{"msg":"create_session","session_id":"<uuid>","dir":"/mnt/agent-state/<uuid>"}
+{"msg":"create_session","session_id":"<uuid>","dir":"/workspace/sessions/<uuid>"}
+```
+
+After the first `agent_end`, the worker writes the archive:
+
+```
+{"msg":"save_state_ok","size":...}
+{"msg":"state_saved","clerk_user_id":"<clerkUserId>","size":...}
 ```
 
 A second message in the same topic after the container has been idle long
 enough to sleep (5+ min) should produce:
 
 ```
-{"msg":"resume_session","session_id":"<uuid>","dir":"/mnt/agent-state/<uuid>"}
+{"msg":"resume_session","session_id":"<uuid>","dir":"/workspace/sessions/<uuid>"}
 ```
 
-instead of `create_session`, confirming pi reopened the previous JSONL.
+instead of `create_session`, confirming pi reopened the previous JSONL
+from the restored archive.
 
-On deploy or scale-down the container just exits when node receives
-SIGTERM; there is no drain. Per-write durability is provided by
-tigrisfs `--fsync-on-close`, so every turn pi has already acknowledged
-is on R2 before the container goes away. In-flight prompts that hadn't
-yet produced a reply are dropped (Telegram won't see a reply for those
-turns); the JSONL on R2 stays consistent.
-
-## Rotating the parent token
-
-1. Create a new token in the R2 dashboard (same scope as Step 2).
-2. Update Doppler in both configs (Step 3).
-3. `bin/sync-secrets-to-cloudflare`.
-4. Existing live containers keep using the old creds in their env until
-   their next cold boot. Optional: restart all containers to force a
-   refresh (`wrangler deploy` triggers a rolling restart of containers).
-5. Delete the old token in the R2 dashboard.
-
-In-flight temp credentials (already minted, TTL 1h) remain valid until
-expiry even if the parent token is deleted \u2014 they are signed material,
-not server-side state.
+On deploy or scale-down the container saves the archive on SIGTERM
+before node exits; there is no drain. Durability is per-turn: every
+turn that reached `agent_end` is already on R2. In-flight prompts that
+hadn't yet produced a reply are dropped (Telegram won't see a reply for
+those turns).
 
 ## Backup / restore
 
 R2 has no built-in versioning yet, but the `zero-agent-state` bucket is
-small (JSONL session files only). For a one-shot snapshot:
+small (one `state.tar.gz` per user). For a one-shot snapshot:
 
 ```bash
 # Sync to a local directory
 rclone sync r2:zero-agent-state ./backup-$(date +%Y%m%d)/
 ```
 
-Restore by syncing in the other direction. Pi reads sessions on demand
-via `SessionManager.continueRecent`; no service restart needed after a
-restore, the next message in a topic will pick up the restored state.
+Restore by syncing in the other direction. The next container boot
+restores the archive into `/workspace`; no service restart is needed.

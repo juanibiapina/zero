@@ -130,31 +130,36 @@ container always boots with fresh per-user credentials:
 
 ```typescript
 override async fetch(request) {
-  await this.refreshEnvVars();   // mint R2 temp creds + assemble envs
+  await this.refreshEnvVars();   // assemble per-user envVars
   return super.fetch(request);
 }
 
 AgentContainer.outboundByHost = {
-  "zero.worker": (req, env) => handleContainerReply(req, env),
+  "zero.worker": (req, env) => {
+    const path = new URL(req.url).pathname;
+    if (path === "/message-end") return handleMessageEnd(req, env);
+    if (path === "/agent-end") return handleAgentEnd(req, env);
+    if (path === "/close-session") return handleCloseSession(req, env);
+    if (path === "/state") return handleState(req, env);
+    return new Response("not found", { status: 404 });
+  },
 };
 ```
 
-`refreshEnvVars` mints **prefix-scoped R2 temporary credentials** for
-`<clerkUserId>/` (local JWT signing, no API call), assembles the
-user's mounts via `resolveMounts(env, clerkUserId, creds)` in
-`apps/api/src/mounts.ts`, and packs everything into `envVars`
-alongside `ANTHROPIC_API_KEY`, `REPLY_URL`, and `CLERK_USER_ID`. Each
-resolved mount is flattened into a `MOUNT_<n>_*` env group the
-entrypoint loops over (one `tigrisfs` invocation per group). The
-Container base class only restarts the underlying process when it
-isn't already running, so a live container keeps its existing creds;
-the next cold boot picks up the fresh ones. With TTL=1h and
-`sleepAfter=5m`, there's plenty of headroom across sleep/wake cycles.
-R2 config is mandatory: missing creds throw before the container even
-starts, and any failed FUSE mount aborts the container's entrypoint.
+`refreshEnvVars` packs `envVars` with `CALLBACK_URL`, the secret
+sentinels (`ANTHROPIC_API_KEY` and, when the user has connected Google,
+`GOOGLE_WORKSPACE_CLI_TOKEN`), and `CLERK_USER_ID`. It also fetches a
+live Google access token and pushes it to the `substitute` outbound
+handler. There are no R2 credentials and no mount specs: the container
+persists its `/workspace` tree as a single `state.tar.gz` archive
+through the worker's `/state` route (see [`design.md`](design.md) under
+**Persistence**). The Container base class only restarts the underlying
+process when it isn't already running, so a live container keeps its
+existing env; the next cold boot picks up the fresh values.
 
-The container `fetch`es `http://zero.worker/reply`; that request never
-leaves the machine — the handler runs inside the Workers runtime with
+The container `fetch`es `http://zero.worker/message-end` (and
+`/agent-end`, `/state`); that request never leaves the machine — the
+handler runs inside the Workers runtime with
 full access to `env` (KV, Telegram bot token) and uses grammY to send
 the reply. Pi-ai's LLM calls go directly to `api.anthropic.com` over
 normal egress. `index.ts` must re-export `ContainerProxy` for the

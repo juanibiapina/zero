@@ -1,8 +1,8 @@
 // Clerk-authed route for fire-and-forget task execution.
 //
 // POST /api/tasks accepts a prompt, creates a container session, and
-// sends the prompt. The reply is discarded (see handleContainerReply
-// guard for type="task" sessions in AgentContainer.ts).
+// sends the prompt. The reply is discarded (see the type="task" guard
+// in handleMessageEnd in AgentContainer.ts).
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";

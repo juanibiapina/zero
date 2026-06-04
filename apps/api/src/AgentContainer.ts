@@ -1,6 +1,6 @@
 // Per-user Cloudflare Container hosting `@zero/agent-server`.
-// Architecture, secret proxying, and the R2/Telegram outbound contract are
-// documented in docs/design.md and docs/framework.md.
+// Architecture, secret proxying, and the state-archive/Telegram outbound
+// contract are documented in docs/design.md and docs/framework.md.
 
 import { Container } from "@cloudflare/containers";
 import { Bot } from "grammy";
@@ -8,8 +8,6 @@ import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
 import { getGoogleAccessToken } from "./google-token";
 import { fmtErr, log, logError } from "./log";
-import { resolveMounts, type MountSpec } from "./mounts";
-import { mintR2TempCreds } from "./r2-temp-credentials";
 import { createSecretProxy } from "./secret-proxy";
 import { getUserDO } from "./UserDO/stub";
 import type { Env } from "./types";
@@ -134,14 +132,14 @@ const handleCloseSession = async (
   return Response.json({ message: "Session closed." });
 };
 
-const handleNotes = async (
+const handleState = async (
   req: Request,
   env: Env,
 ): Promise<Response> => {
   const clerkUserId = req.headers.get("X-Clerk-User-Id");
   if (!clerkUserId) return new Response("missing user id", { status: 400 });
 
-  const key = `${clerkUserId}/notes.tar.gz`;
+  const key = `${clerkUserId}/state.tar.gz`;
 
   if (req.method === "GET") {
     const obj = await env.AGENT_STATE_BUCKET.get(key);
@@ -154,14 +152,12 @@ const handleNotes = async (
   if (req.method === "PUT") {
     const body = await req.arrayBuffer();
     await env.AGENT_STATE_BUCKET.put(key, body);
-    log("notes_saved", { clerk_user_id: clerkUserId, size: body.byteLength });
+    log("state_saved", { clerk_user_id: clerkUserId, size: body.byteLength });
     return new Response(null, { status: 204 });
   }
 
   return new Response("method not allowed", { status: 405 });
 };
-
-const AGENT_STATE_DIR = "/mnt/agent-state";
 
 export class AgentContainer extends Container<Env> {
   defaultPort = 8080;
@@ -176,9 +172,8 @@ export class AgentContainer extends Container<Env> {
     return super.fetch(request);
   }
 
-  // Re-mint R2 temp creds and rebuild envVars on every call. A live
-  // container keeps its existing env; the next cold start picks up the
-  // refreshed values.
+  // Rebuild envVars on every call. A live container keeps its existing
+  // env; the next cold start picks up the refreshed values.
   private async refreshEnvVars(): Promise<void> {
     const clerkUserId = this.ctx.id.name;
     if (!clerkUserId) {
@@ -187,20 +182,7 @@ export class AgentContainer extends Container<Env> {
       );
     }
 
-    const [creds, googleToken] = await Promise.all([
-      mintR2TempCreds({
-        bucket: this.env.R2_BUCKET_NAME,
-        accountId: this.env.R2_ACCOUNT_ID,
-        parentAccessKeyId: this.env.R2_PARENT_ACCESS_KEY_ID,
-        parentSecretAccessKey: this.env.R2_PARENT_SECRET_ACCESS_KEY,
-        scope: "object-read-write",
-        ttlSeconds: 3600,
-        prefixes: [`${clerkUserId}/`],
-      }),
-      getGoogleAccessToken(this.env, clerkUserId),
-    ]);
-
-    const mounts = await resolveMounts(this.env, clerkUserId, creds);
+    const googleToken = await getGoogleAccessToken(this.env, clerkUserId);
 
     // Push runtime-secret overrides to the substitute handler. Pushed on
     // every fetch; simpler than diffing.
@@ -220,30 +202,9 @@ export class AgentContainer extends Container<Env> {
       CALLBACK_URL: "http://zero.worker",
       ...sentinels,
       CLERK_USER_ID: clerkUserId,
-      AGENT_STATE_DIR,
-      ...flattenMounts(mounts),
     };
   }
 }
-
-// Flatten the ordered MountSpec list into MOUNT_<n>_* env groups for
-// `entrypoint.sh` to iterate. The shape stays scope-agnostic so adding
-// a third mount needs no entrypoint change.
-const flattenMounts = (mounts: MountSpec[]): Record<string, string> => {
-  const out: Record<string, string> = { MOUNT_COUNT: String(mounts.length) };
-  mounts.forEach((m, idx) => {
-    const i = (idx + 1).toString();
-    out[`MOUNT_${i}_NAME`] = m.name;
-    out[`MOUNT_${i}_POINT`] = m.mountPoint;
-    out[`MOUNT_${i}_ENDPOINT`] = m.endpoint;
-    out[`MOUNT_${i}_BUCKET`] = m.bucket;
-    out[`MOUNT_${i}_PREFIX`] = m.prefix;
-    out[`MOUNT_${i}_ACCESS_KEY_ID`] = m.accessKeyId;
-    out[`MOUNT_${i}_SECRET_ACCESS_KEY`] = m.secretAccessKey;
-    out[`MOUNT_${i}_SESSION_TOKEN`] = m.sessionToken;
-  });
-  return out;
-};
 
 AgentContainer.outboundByHost = {
   "zero.worker": (req, env) => {
@@ -251,35 +212,8 @@ AgentContainer.outboundByHost = {
     if (path === "/message-end") return handleMessageEnd(req, env);
     if (path === "/agent-end") return handleAgentEnd(req, env);
     if (path === "/close-session") return handleCloseSession(req, env);
-    if (path === "/notes") return handleNotes(req, env);
+    if (path === "/state") return handleState(req, env);
     return new Response("not found", { status: 404 });
-  },
-  // R2 traffic carries no registered secrets, but still runs through the
-  // worker because interceptHttps='*' when the catch-all is active. Must
-  // buffer the body and rebuild the Request: streamed bodies lose their
-  // Content-Length (→ R2 411) and can be re-framed in a way that breaks
-  // the SigV4 hash (→ R2 403). log() is kept so a regression is visible
-  // in `wrangler tail`.
-  "*.r2.cloudflarestorage.com": async (req) => {
-    const url = req.url;
-    const method = req.method;
-    let body: BodyInit | null = null;
-    if (method !== "GET" && method !== "HEAD") {
-      body = new Uint8Array(await req.arrayBuffer());
-    }
-    const res = await fetch(url, {
-      method,
-      headers: req.headers,
-      body,
-      redirect: "manual",
-    });
-    log("r2_request", {
-      url,
-      method,
-      status: res.status,
-      content_length: res.headers.get("content-length"),
-    });
-    return res;
   },
 };
 

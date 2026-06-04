@@ -5,9 +5,10 @@
 //   3. Sleep > 5 min (sleepAfter)      — container idles, in-memory state lost
 //   4. "What's the next number?"       — expect exactly "3"
 //
-// Step 4 only passes if the cold-resumed container replayed the JSONL
-// off the R2 mount via `SessionManager.continueRecent`, so a green test
-// proves both round-trip and persistence.
+// Step 4 only passes if the cold-resumed container restored the
+// /workspace state archive from R2 (via GET /state on boot) and
+// replayed the JSONL via `SessionManager.continueRecent`, so a green
+// test proves both round-trip and persistence.
 //
 // ~6.5 min wall clock (sleep dominates); ~$0.01 of Anthropic.
 // See docs/integration-tests.md for setup.
@@ -68,7 +69,7 @@ it("persists session context across container sleep", async () => {
   const sent3 = await sendTurn(
     `${tag} What is the next number in the sequence? Reply with only the single digit and nothing else. Do not use any tools.`,
   );
-  // 120s: cold start + FUSE mount + resume + Anthropic round-trip.
+  // 120s: cold start + state-archive restore + resume + Anthropic round-trip.
   const reply3 = await waitForBotReply(reply2!.id, 120_000, "3");
   expect(reply3, "no reply containing '3' to turn 3").not.toBeNull();
 

@@ -29,17 +29,16 @@ agent produces each assistant message, the container POSTs to
 immediately. When the agent loop finishes, the container POSTs to
 `http://zero.worker/agent-end` so the worker can stop the typing
 indicator. The only external egress from the container is to
-`api.anthropic.com` and to `<acct>.r2.cloudflarestorage.com` (for the
-FUSE-mounted session store, described below).
+`api.anthropic.com`. State is persisted through the worker (see below),
+not by talking to R2 directly.
 
-Sessions are persisted on R2: each container mounts the user's prefix in
-the shared `zero-agent-state` bucket via [tigrisfs](https://github.com/tigrisdata/tigrisfs)
-(FUSE) at `/mnt/agent-state`, and pi writes its JSONL session files
-there. The mount uses prefix-scoped temporary credentials minted on
-every `AgentContainer.fetch` call (local JWT signing per the [R2 docs](https://developers.cloudflare.com/r2/api/s3/temporary-credentials/)),
-so the container can never see another user's data either at the
-filesystem layer (tigrisfs `bucket:prefix` syntax locks the FUSE root)
-or at the S3 layer (R2 rejects requests outside the prefix). See
+All mutable state is persisted as a single compressed archive of the
+container's `/workspace` tree (pi's `cwd`). On boot the entrypoint
+restores `<clerkUserId>/state.tar.gz` from the `zero-agent-state` bucket
+via `GET http://zero.worker/state`; on every `agent_end` and on SIGTERM
+the container PUTs a fresh archive back. Sessions, notes, and any files
+pi writes under `/workspace` all persist through this one path. The
+worker mediates R2 via its `AGENT_STATE_BUCKET` binding. See
 [`r2-mount.md`](r2-mount.md) for setup.
 
 ## Package Structure
@@ -97,13 +96,12 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │                                                                  │
 │  AgentContainer (Container<Env>, getByName(clerkUserId))         │
 │  ├─ hosts @zero/agent-server + pi-coding-agent (Node 22)         │
-│  ├─ mounts R2 prefix <clerkUserId>/sessions at /mnt/agent-state   │
-│  │    via tigrisfs; pi writes JSONL session files there          │
-│  ├─ restores/saves notes archive via /notes on zero.worker       │
+│  ├─ restores/saves /workspace archive via /state on zero.worker  │
+│  │    sessions/, notes/, and pi's working files all persist      │
 │  ├─ fetch() refreshes envVars on every call:                     │
 │  │    ANTHROPIC_API_KEY=Z3R0-FAKE-... (env-resolved)             │
 │  │    GOOGLE_WORKSPACE_CLI_TOKEN=Z3R0-FAKE-... (runtime; opt-in) │
-│  │    CALLBACK_URL + R2 temp creds (1h)                             │
+│  │    CALLBACK_URL + sentinels + CLERK_USER_ID                   │
 │  ├─ outboundByHost["zero.worker"] = handleMessageEnd/handleAgentEnd │
 │  └─ outboundHandlers.substitute = secretProxy.outbound           │
 │       (catch-all; per-container overrides via                    │
@@ -140,100 +138,65 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 ## Persistence
 
 Each Clerk user owns the prefix `<clerkUserId>/` on the shared
-`zero-agent-state` bucket. Inside that prefix, top-level sub-prefixes
-partition the namespace by scope:
+`zero-agent-state` bucket. A single compressed archive of the
+container's `/workspace` tree is stored there:
 
-- `<clerkUserId>/sessions/<sessionId>/` — pi session JSONL files
-- `<clerkUserId>/notes.tar.gz`           — the notes vault archive
-  (see [Notes vault](#notes-vault-long-term-memory) below)
+- `<clerkUserId>/state.tar.gz` — the full `/workspace` snapshot
 
-New scopes can be added as further siblings (`<clerkUserId>/<scope>/`)
-without colliding with the session-id namespace.
-
-For sessions, tigrisfs mounts `<clerkUserId>/sessions/` at the
-hard-coded path `/mnt/agent-state`. The agent-server creates one
-subdirectory per session id (`/mnt/agent-state/<sessionId>/`) and
-hands it to pi as the session directory; pi writes its JSONL file
-inside. On container restart, the bridge lazy-loads via
-`SessionManager.continueRecent` against the same directory,
-transparently resuming the conversation.
-
-The directory's existence is the only persisted index — there is no
-sidecar metadata file. Pi's internal session ids are not used by the
-worker; the worker only knows our opaque `sessionId` (KV `topic:` →
-`sessionId`) and the container resolves it by directory.
-
-R2 configuration is mandatory — `AgentContainer` throws on missing creds
-before the container even starts, and the container's entrypoint script
-aborts if the mount fails. There is no in-memory fallback.
-
-### Durable writes
-
-Every write pi makes is durable on R2 before it returns. The entrypoint
-passes `--fsync-on-close` to tigrisfs, which forces every `close(2)` to
-block until R2 confirms the upload. Pi persists each session entry via
-`appendFileSync` (open + write + close), so each entry pays one R2
-round-trip and is durable before pi proceeds. This covers crashes,
-idle eviction, deploy rollouts, and Cloudflare's Durable Object
-code-update reset — by the time any of those tear the container down,
-every entry pi has acknowledged is already on R2. Trade-off: ~hundreds
-of ms per turn (pi writes 1-3 entries per turn) in exchange for not
-losing user-visible state. An earlier `fsync` on the session directory
-was a no-op because GeeseFS (tigrisfs's library) does not implement
-`FUSE_FSYNCDIR`.
-
-The entrypoint is intentionally minimal: it mounts tigrisfs (which
-daemonises after the mount is ready), drops privileges, and `exec`s
-node. SIGTERM goes directly to node, which closes its HTTP listener
-and exits; in-flight prompts that haven't yet produced a Telegram
-reply are dropped (no reply for that turn), but the JSONL on R2
-remains consistent.
-
-Isolation has two layers:
-
-1. **FUSE root locked to the scope sub-prefix.** `tigrisfs zero-agent-state:<clerkUserId>/sessions /mnt/agent-state` makes the sessions sub-prefix the filesystem root; pi has no path to traverse out of it.
-2. **Prefix-scoped R2 credentials.** The temp credential is bound to `prefixPaths: ["<clerkUserId>/"]` — covering the whole user prefix so sibling scope mounts can attach with the same token — so even a leaked credential cannot list or read other users' prefixes.
-
-See [`r2-mount.md`](r2-mount.md) for one-time bucket and token setup.
-
-### Notes vault (long-term memory)
-
-The per-user **notes vault** lives at `/local/notes` inside the
-container. This is pi's long-term memory across conversations.
-
-Unlike sessions (which use a FUSE mount for per-write durability),
-notes use an **archive snapshot** model:
-
-- **Restore** — `entrypoint.sh` downloads `<clerkUserId>/notes.tar.gz`
-  from the worker's R2 binding via `curl | tar xz` and extracts to
-  `/local/notes`. A 404 (no prior snapshot) starts with an empty dir.
-- **Use** — pi reads/writes `/local/notes` on fast local disk.
-- **Save** — `save-notes.ts` archives `/local/notes` into a tarball
-  and PUTs it to `http://zero.worker/notes` (which writes to R2) on
-  every `agent_end` event and on SIGTERM.
-
-The worker mediates R2 access via two routes on the `zero.worker`
-outbound handler:
+`/workspace` is pi's working directory (`cwd`) and the one persisted
+tree:
 
 ```
-GET  /notes  →  R2 get(<userId>/notes.tar.gz) → 200 body | 404
-PUT  /notes  →  R2 put(<userId>/notes.tar.gz, body) → 204
+/workspace/                      (cwd — pi's working dir)
+├── sessions/<sessionId>/        pi session JSONL files
+├── notes/                       the notes vault (long-term memory)
+└── …                            pi's working files, uploads, documents
+```
+
+Everything pi writes under `/workspace` — sessions, notes, and any
+future data (telegram uploads, user documents, scratch files) —
+persists through the same restore-on-boot / save-on-event path with no
+per-type wiring.
+
+### Lifecycle
+
+- **Restore on boot** — `entrypoint.sh` runs
+  `curl -sf http://zero.worker/state | tar xz -C /workspace`. A 404 (no
+  prior snapshot) starts with an empty tree.
+- **Save on `agent_end` and SIGTERM** — `save-state.ts` runs
+  `tar cz -C /workspace .` and PUTs the archive to
+  `http://zero.worker/state`. Every completed turn snapshots the whole
+  tree; SIGTERM covers idle eviction and deploy rollouts.
+
+The worker mediates R2 via two routes on the `zero.worker` outbound
+handler, backed by the `AGENT_STATE_BUCKET` binding:
+
+```
+GET  /state  →  R2 get(<userId>/state.tar.gz) → 200 body | 404
+PUT  /state  →  R2 put(<userId>/state.tar.gz, body) → 204
 ```
 
 Both use the `X-Clerk-User-Id` header (same trust model as `/message-end`).
-### Mount assembly
 
-The sessions mount is produced by:
+### Durability
 
-```
-apps/api/src/mounts.ts → resolveMounts(env, clerkUserId, creds)
-   → MountSpec[]   // single-element list (sessions only)
-```
+Durability is **per-turn**, not per-write. Session and notes writes are
+local until the next save. `save-state.ts` fires on every `agent_end`
+(each turn boundary) and on SIGTERM (idle eviction, deploy rollout,
+Durable Object code-update reset). Only a hard crash (SIGKILL) mid-turn
+loses the in-progress turn — acceptable for a chat bot, since
+`agent_end` fires reliably at every turn boundary.
 
-`AgentContainer.refreshEnvVars` mints R2 temp creds and passes them
-to `resolveMounts`. The result is flattened into numbered `MOUNT_<n>_*`
-env groups plus a `MOUNT_COUNT`. `entrypoint.sh` loops over them and
-fires one `tigrisfs` invocation per spec.
+On container restart, the bridge lazy-loads each session via
+`SessionManager.continueRecent` against
+`/workspace/sessions/<sessionId>`, transparently resuming the
+conversation. The directory's existence is the only persisted index —
+there is no sidecar metadata file. Pi's internal session ids are not
+used by the worker; the worker only knows our opaque `sessionId` (KV
+`topic:` → `sessionId`) and the container resolves it by directory.
+
+See [`r2-mount.md`](r2-mount.md) for one-time bucket and binding setup.
+
 ## State Model
 
 Per-user data is split between a `UserDO` Durable Object (source of
@@ -255,7 +218,6 @@ to a Clerk user ID; it is kept in sync by the link/unlink routes.
 |------------------|------------------------------------|---------------------------------------------|
 | `telegram_link`  | `id`, `telegramId`                 | The user's linked Telegram account (≤1 row) |
 | `sessions`       | `id`, `chatId`, `topicId`, `sessionId` | Topic↔session mappings                  |
-| `mount_configs`  | `id`, `scope`, `endpoint`, `bucket`, `prefix`, `accessKeyId`, `secretAccessKey` | User-configured S3 mount overrides (one row per scope; only `notes` today) |
 
 The `telegram_link` table is the source of truth for the Clerk↔Telegram
 mapping. The `GET /api/telegram-id` route reads directly from the DO;
@@ -273,8 +235,8 @@ transparently. A 404 only happens when the on-disk dir is also gone
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, session mappings, and mount configurations. | SQLite via do-orm (`telegram_link`, `sessions`, `mount_configs` tables) |
-| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` mints prefix-scoped R2 temp creds, fetches the user's mount config from UserDO, resolves the user's mounts via `resolveMounts`, and refreshes `envVars` on every call; the container mounts each scope (sessions, notes) via its own tigrisfs invocation. Defines `outboundByHost["zero.worker"]` for the Telegram reply path. Callbacks (reply, close-session) include `clerkUserId` so the worker can address the UserDO for session lookups. | None (sessions and notes live on R2/S3 mounts inside the container) |
+| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link and session mappings. | SQLite via do-orm (`telegram_link`, `sessions` tables) |
+| **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` refreshes `envVars` on every call (callback URL, sentinels, `CLERK_USER_ID`, and a live Google token override). Persists the `/workspace` tree as a single `state.tar.gz` archive via `/state` on `zero.worker`. Defines `outboundByHost["zero.worker"]` for the Telegram reply and state-archive paths. Callbacks (reply, close-session) include `clerkUserId` so the worker can address the UserDO for session lookups. | None (state persists as `<clerkUserId>/state.tar.gz` in R2 via the worker) |
 
 ## Routes
 
@@ -282,10 +244,6 @@ transparently. A 404 only happens when the on-disk dir is also gone
 GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
 POST   /api/telegram-link                — Link via Login Widget payload (Clerk)
 DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
-GET    /api/mount-config/notes           — Read caller's notes mount config (Clerk)
-PUT    /api/mount-config/notes           — Validate and save notes mount config (Clerk)
-DELETE /api/mount-config/notes           — Remove notes mount config, revert to R2 (Clerk)
-POST   /api/mount-config/notes/validate  — Re-validate saved notes mount config (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
 ```
 
@@ -403,12 +361,12 @@ implemented in `apps/api/src/secret-proxy.ts`:
    the real secret is this handler running inside the worker. The real
    value never enters the container's address space.
 
-For the substitution to fire on HTTPS traffic (Anthropic, R2),
+For the substitution to fire on HTTPS traffic (Anthropic),
 `AgentContainer.interceptHttps = true` is required, and the container's
 entrypoint installs Cloudflare's MITM CA cert
 (`/etc/cloudflare/certs/cloudflare-containers-ca.crt`, mounted at
 runtime) into the system trust store and exports `NODE_EXTRA_CA_CERTS`
-so both tigrisfs (Go AWS SDK) and node (undici) accept it. Without
+so node (undici) accepts it. Without
 this, HTTPS bypasses the catch-all entirely.
 
 Two categories of registered secret share the same substitution
@@ -428,23 +386,6 @@ handler:
   `envVars` entirely so `gws` exits with a clear auth error rather
   than forwarding a sentinel nothing can substitute.
 
-A third secret class, **per-mount S3 credentials** (carried by every
-`MOUNT_<n>_*` env group the worker emits, see
-[Mount assembly](#mount-assembly)), follows a privilege-separation
-pattern instead of substitution: each tigrisfs invocation (root)
-consumes its own `MOUNT_<n>_ACCESS_KEY_ID`/`SECRET_ACCESS_KEY`/
-`SESSION_TOKEN` at mount time, the entrypoint shell scrubs every
-such trio in a loop, and node is execed under the unprivileged `pi`
-user via `setpriv`. `/proc/<pid>/environ` is mode `0400` owned by
-the process, so pi cannot recover them by reading tigrisfs's env.
-Mounts are published with `-o allow_other` (and `user_allow_other`
-in `/etc/fuse.conf`) so the non-root pi user can still read and
-write through them. This OS-level fix replaces substitution-on-egress
-with simple file permissions for the credentials tigrisfs needs
-in-process. Sentinels would be wrong here regardless: tigrisfs
-computes SigV4 over the request body, and a mid-flight byte swap on
-egress would invalidate the signature.
-
 ## Secrets
 
 Stored in Doppler (`zero-api`):
@@ -456,11 +397,6 @@ Stored in Doppler (`zero-api`):
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
 - `ANTHROPIC_API_KEY` — substituted on egress to `api.anthropic.com` by
   the catch-all outbound handler; pi sees only a sentinel
-- `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PARENT_ACCESS_KEY_ID`,
-  `R2_PARENT_SECRET_ACCESS_KEY` — used by `AgentContainer` to mint
-  prefix-scoped R2 temp credentials shared across the per-user FUSE
-  mounts (sessions, notes) under `<clerkUserId>/`. See
-  [`r2-mount.md`](r2-mount.md).
 
 Google Workspace access is **not** stored in Doppler. Each user opts in
 via the “Connect Google” button in the web UI (Clerk
@@ -511,7 +447,7 @@ Conventions:
 ## Future Work
 
 - Tighten container egress: set `enableInternet = false` plus
-  `allowedHosts = ["api.anthropic.com", "zero.worker", "<acct>.r2.cloudflarestorage.com"]`.
+  `allowedHosts = ["api.anthropic.com", "zero.worker"]`.
 - Surface session history (read sessions back out of R2 from the web UI
   for browsing/export).
 - Per-user model preference + a switching API. Pi supports
