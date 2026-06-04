@@ -8,8 +8,6 @@ pnpm install
 bin/fetch-secrets
 pnpm --filter @zero/api run cf-typegen
 # Order matches .github/workflows/ci.yml: lint first, then typecheck.
-# Reversing them hid a turbo dep bug where `@zero/api` lint needed the
-# agent-server dist; typecheck happened to build it as a side effect.
 pnpm run lint -- --fix
 pnpm run typecheck
 pnpm run build

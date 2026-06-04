@@ -249,7 +249,7 @@ describe("GET /api/user-settings", () => {
 
     const res = await app.request("/api/user-settings");
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = await res.json<Record<string, unknown>>();
     expect(body.onboardingSeen).toBe(false);
     expect(body.googleOnboardingStatus).toBeNull();
     expect(body.createdAt).toBeDefined();
@@ -294,7 +294,7 @@ describe("PATCH /api/user-settings", () => {
       body: JSON.stringify({ onboardingSeen: true }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = await res.json<Record<string, unknown>>();
     expect(body.onboardingSeen).toBe(true);
     expect(body.createdAt).toBeDefined();
     expect(userDO._onboardingSeen).toBe(true);
@@ -355,7 +355,7 @@ describe("PATCH /api/user-settings", () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = await res.json<Record<string, unknown>>();
     expect(body.onboardingSeen).toBe(true);
     expect(userDO._onboardingSeen).toBe(true);
   });
