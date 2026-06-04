@@ -1,0 +1,18 @@
+{
+  "name": "@zero/e2e-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.3",
+    "hono": "^4.12.23"
+  },
+  "devDependencies": {
+    "@zero/typescript-config": "workspace:*",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

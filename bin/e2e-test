@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# E2E test orchestrator: starts mock servers, wrangler dev, seeds KV, runs tests.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR"
+
+PIDS=()
+cleanup() {
+  echo "Cleaning up..."
+  for pid in "${PIDS[@]}"; do
+    kill "$pid" 2>/dev/null || true
+  done
+  lsof -ti :3501 | xargs -r kill -9 2>/dev/null || true
+  lsof -ti :3502 | xargs -r kill -9 2>/dev/null || true
+  lsof -ti :8791 | xargs -r kill -9 2>/dev/null || true
+  lsof -ti :9233 | xargs -r kill -9 2>/dev/null || true
+  # Restore original .dev.vars
+  if [ -f apps/api/.dev.vars.bak ]; then
+    mv apps/api/.dev.vars.bak apps/api/.dev.vars
+  fi
+}
+trap cleanup EXIT
+
+echo "=== Preparing secrets ==="
+# Wrangler reads .dev.vars which may have dotenv-incompatible quoting from
+# doppler's env format (JSON values with escaped quotes). Write a clean
+# version using env-no-quotes, and restore the original on exit.
+cp apps/api/.dev.vars apps/api/.dev.vars.bak
+doppler secrets download --config dev --project zero-api --no-file --format env-no-quotes \
+  | grep -v '^DOPPLER_' > apps/api/.dev.vars
+echo "=== Starting mock Telegram API on :3501 ==="
+pnpm exec tsx packages/e2e-tests/src/mock-telegram.ts &
+PIDS+=($!)
+
+echo "=== Starting mock Anthropic API on :3502 ==="
+pnpm exec tsx packages/e2e-tests/src/mock-anthropic.ts &
+PIDS+=($!)
+
+echo "=== Starting wrangler dev (test config) on :8791 ==="
+pnpm --dir apps/api exec wrangler dev \
+  --config wrangler.test.jsonc \
+  --port 8791 \
+  --inspector-port 9233 &
+PIDS+=($!)
+
+echo "=== Waiting for ports ==="
+for port in 3501 3502 8791; do
+  echo -n "  Waiting for :$port"
+  timeout=60
+  while ! nc -z localhost "$port" 2>/dev/null; do
+    sleep 0.3
+    timeout=$((timeout - 1))
+    if [ "$timeout" -le 0 ]; then
+      echo " TIMEOUT"
+      echo "ERROR: Port $port did not become available"
+      exit 1
+    fi
+    echo -n "."
+  done
+  echo " OK"
+done
+
+echo "=== Seeding KV (tg:12345 → user_test) ==="
+pnpm --dir apps/api exec wrangler kv key put \
+  --binding KV --local --preview false --config wrangler.test.jsonc \
+  "tg:12345" "user_test" || echo "WARN: KV seed may have failed"
+
+echo "=== Running E2E tests ==="
+doppler run --project zero-api --config dev -- \
+  pnpm --dir packages/e2e-tests exec vitest run
+
+echo "=== E2E tests passed ==="

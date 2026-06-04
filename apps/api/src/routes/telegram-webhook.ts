@@ -53,7 +53,10 @@ export const createTelegramWebhookRoute = () => {
 
   router.post("/api/webhooks/telegram", async (c) => {
     const botInfo = JSON.parse(c.env.TELEGRAM_BOT_INFO) as UserFromGetMe;
-    const bot = new Bot(c.env.TELEGRAM_BOT_TOKEN, { botInfo });
+    const bot = new Bot(c.env.TELEGRAM_BOT_TOKEN, {
+      botInfo,
+      client: { apiRoot: c.env.TELEGRAM_API_ROOT },
+    });
 
     const sendReply = async (
       chatId: number,

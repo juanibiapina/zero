@@ -79,7 +79,10 @@ const handleMessageEnd = async (
   }
 
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
-  const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
+  const bot = new Bot(env.TELEGRAM_BOT_TOKEN, {
+    botInfo,
+    client: { apiRoot: env.TELEGRAM_API_ROOT },
+  });
   await formatAndSend(data.text, (text, parseMode) =>
     bot.api.sendMessage(record.chatId, text, {
       ...(record.topicId && { message_thread_id: record.topicId }),
@@ -104,7 +107,10 @@ const handleCloseSession = async (
   }
 
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
-  const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
+  const bot = new Bot(env.TELEGRAM_BOT_TOKEN, {
+    botInfo,
+    client: { apiRoot: env.TELEGRAM_API_ROOT },
+  });
 
   await formatAndSend(data.message, (text, parseMode) =>
     bot.api.sendMessage(record.chatId, text, {
@@ -175,7 +181,10 @@ export class AgentContainer extends Container<Env> {
   // Rebuild envVars on every call. A live container keeps its existing
   // env; the next cold start picks up the refreshed values.
   private async refreshEnvVars(): Promise<void> {
-    const clerkUserId = this.ctx.id.name;
+    // ctx.id.name is the clerk user ID passed via getByName(). Some local
+    // wrangler versions don't populate it; fall back to the hex id which
+    // is stable per-name and sufficient for state-archive keying.
+    const clerkUserId = this.ctx.id.name ?? this.ctx.id.toString();
     if (!clerkUserId) {
       throw new Error(
         "AgentContainer must be addressed via env.AGENT_CONTAINER.getByName(clerkUserId)",
@@ -202,6 +211,7 @@ export class AgentContainer extends Container<Env> {
       CALLBACK_URL: "http://zero.worker",
       ...sentinels,
       CLERK_USER_ID: clerkUserId,
+      ANTHROPIC_BASE_URL: this.env.ANTHROPIC_BASE_URL,
     };
   }
 }
