@@ -16,9 +16,21 @@ export const SessionParamsSchema = z.object({
 /** @deprecated Use SessionParamsSchema */
 export const SendMessageParamsSchema = SessionParamsSchema;
 
-export const SendMessageBodySchema = z.object({
-  text: z.string().min(1),
+export const AttachmentSchema = z.object({
+  filename: z.string().min(1),
+  mimeType: z.string().min(1),
+  dataBase64: z.string().min(1),
 });
+
+export const SendMessageBodySchema = z
+  .object({
+    text: z.string().default(""),
+    attachments: z.array(AttachmentSchema).optional(),
+  })
+  .refine(
+    (b) => b.text.length > 0 || (b.attachments?.length ?? 0) > 0,
+    { message: "text or attachments required" },
+  );
 
 export const ErrorSchema = z.object({
   error: z.string(),

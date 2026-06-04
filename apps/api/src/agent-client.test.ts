@@ -72,6 +72,52 @@ describe("createAgentClient", () => {
       const result = await agent.sendMessage("sess-1", "hello");
       expect(result).toEqual({ kind: "error", status: 500 });
     });
+
+    it("posts base64-encoded attachments in the body", async () => {
+      let captured: unknown;
+      const stub = fakeStub(async (req) => {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname.includes("/messages")) {
+          captured = await req.json();
+          return new Response(null, { status: 202 });
+        }
+        return new Response("bad", { status: 500 });
+      });
+      const agent = createAgentClient(staticEnv(stub), "user_1");
+
+      const data = new Uint8Array([1, 2, 3, 4]);
+      const result = await agent.sendMessage("sess-1", "caption", [
+        { filename: "a.bin", mimeType: "application/octet-stream", data },
+      ]);
+
+      expect(result.kind).toBe("ok");
+      expect(captured).toEqual({
+        text: "caption",
+        attachments: [
+          {
+            filename: "a.bin",
+            mimeType: "application/octet-stream",
+            dataBase64: btoa(String.fromCharCode(1, 2, 3, 4)),
+          },
+        ],
+      });
+    });
+
+    it("omits attachments key when none provided", async () => {
+      let captured: unknown;
+      const stub = fakeStub(async (req) => {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname.includes("/messages")) {
+          captured = await req.json();
+          return new Response(null, { status: 202 });
+        }
+        return new Response("bad", { status: 500 });
+      });
+      const agent = createAgentClient(staticEnv(stub), "user_1");
+
+      await agent.sendMessage("sess-1", "hello");
+      expect(captured).toEqual({ text: "hello" });
+    });
   });
 
   describe("createSession", () => {

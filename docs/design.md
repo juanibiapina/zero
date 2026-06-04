@@ -150,11 +150,12 @@ tree:
 /workspace/                      (cwd — pi's working dir)
 ├── sessions/<sessionId>/        pi session JSONL files
 ├── notes/                       the notes vault (long-term memory)
-└── …                            pi's working files, uploads, documents
+├── attachments/                 files the user sent over Telegram
+└── …                            pi's working files, documents
 ```
 
 Everything pi writes under `/workspace` — sessions, notes, and any
-future data (telegram uploads, user documents, scratch files) —
+future data (telegram attachments, user documents, scratch files) —
 persists through the same restore-on-boot / save-on-event path with no
 per-type wiring.
 
@@ -257,17 +258,38 @@ The webhook handler is built on grammY via its `hono` adapter
 `TELEGRAM_WEBHOOK_SECRET`, parses the `Update`, and dispatches to bot
 middleware.
 
-The bot middleware accepts only **forum topic messages** (those with
-`is_topic_message` and `message_thread_id` set). It schedules
-`processTopicMessage` via `executionCtx.waitUntil` and returns 200 to
-Telegram immediately. The background task:
+The bot middleware accepts **forum topic messages** and **DMs**. A message
+is processed if it has text/caption or a downloadable attachment (photo,
+document, audio, voice, video, video note, animation, sticker); messages
+with neither are dropped. It schedules `processTopicMessage` via
+`executionCtx.waitUntil` and returns 200 to Telegram immediately. The
+background task:
 
 1. KV `tg:{telegramId}` → `clerkUserId`; drop the message if unknown.
 2. KV `topic:{clerkUserId}:{chatId}:{threadId}` → `sessionId`; on miss,
    ask the container for a fresh session and store both the topic mapping
    and the reverse `session:{sessionId}` record.
-3. POST the message text to `/sessions/{sessionId}/messages` on the
-   container.
+3. POST the message text (and any attachment bytes) to
+   `/sessions/{sessionId}/messages` on the container.
+
+### Attachments
+
+Any non-text Telegram message (photo, document, audio, voice, video,
+video note, animation, sticker) is downloaded and forwarded. The webhook
+resolves the single attachment in priority order (`photo` first, since
+back-compat fields are double-set: `animation` also sets `document`,
+`live_photo` also sets `photo`), calls grammY `getFile` to get a
+`file_path`, then fetches the bytes from
+`${TELEGRAM_API_ROOT}/file/bot<token>/<file_path>` (Telegram caps bot
+downloads at 20MB). Bytes are base64-encoded into the `sendMessage` RPC
+body (`attachments: [{ filename, mimeType, dataBase64 }]`, schema in
+`contract.ts`). The container writes each file to `/workspace/attachments/`
+and appends a `[File saved to <path> (<mime>)]` note to the prompt so pi
+can `read` images, run `pdftotext`/`pdftoppm` on PDFs (poppler-utils,
+see the `attachments` skill), or inspect anything else via bash. Files persist
+with the rest of `/workspace` on R2. Oversized or undownloadable files
+produce a graceful user-facing reply instead of a silent drop. Albums
+(`media_group_id`) arrive as separate updates and become separate turns.
 
 The worker→container HTTP calls go through `apps/api/src/agent-client.ts`,
 which derives a fully-typed [Hono RPC](https://hono.dev/docs/guides/rpc)

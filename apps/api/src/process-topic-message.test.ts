@@ -141,6 +141,49 @@ describe("processTopicMessage", () => {
     expect(userDO._activeCalls).toEqual([[100, 200]]);
   });
 
+  it("forwards attachments to the container", async () => {
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
+    let captured: unknown;
+    const stub: AgentStub = {
+      fetch: async (req: Request) => {
+        const url = new URL(req.url);
+        if (req.method === "POST" && url.pathname === "/sessions") {
+          return Response.json({ sessionId: "s1" });
+        }
+        if (req.method === "POST" && url.pathname.includes("/messages")) {
+          captured = await req.json();
+          return new Response(null, { status: 202 });
+        }
+        return new Response("bad", { status: 500 });
+      },
+    };
+
+    const withAttachment: TopicMessage = {
+      ...topic,
+      text: "see file",
+      attachments: [
+        {
+          filename: "a.bin",
+          mimeType: "application/octet-stream",
+          data: new Uint8Array([5, 6, 7]),
+        },
+      ],
+    };
+    await processTopicMessage(withAttachment, fakeEnv(kv, userDO, stub));
+
+    expect(captured).toEqual({
+      text: "see file",
+      attachments: [
+        {
+          filename: "a.bin",
+          mimeType: "application/octet-stream",
+          dataBase64: btoa(String.fromCharCode(5, 6, 7)),
+        },
+      ],
+    });
+  });
+
   it("does not mark session active when the container rejects the message", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO();

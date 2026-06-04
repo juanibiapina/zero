@@ -81,7 +81,7 @@ const bridge = createSessionBridge(sendMessageEnd, sendAgentEnd, { cwd, stateDir
 
 const app = createAgentApp({
   createSession: (sessionId) => bridge.createSession(sessionId),
-  promptSession: (sessionId, text) => bridge.promptSession(sessionId, text),
+  promptSession: (sessionId, text, attachments) => bridge.promptSession(sessionId, text, attachments),
   abortSession: (sessionId) => bridge.abortSession(sessionId),
   getSessionStatus: (sessionId) => bridge.getSessionStatus(sessionId),
 });

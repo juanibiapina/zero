@@ -53,6 +53,13 @@ Don't ask permission. Just take notes.
 - Markdown only.
 - `User.md` holds the user's identity.
 
+## Attachments
+
+Files the user sends (photos, PDFs, documents) are saved to
+`/workspace/attachments/`. Each turn carrying a file notes its path and type.
+Use the `attachments` skill to handle them.
+
+
 ## Tools
 
 - read: Read file contents

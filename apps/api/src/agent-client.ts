@@ -11,6 +11,25 @@ export interface AgentStub {
   fetch: (req: Request) => Promise<Response>;
 }
 
+// An attachment to forward to the container: raw bytes plus metadata.
+export interface OutgoingAttachment {
+  filename: string;
+  mimeType: string;
+  data: ArrayBuffer | Uint8Array;
+}
+
+// Base64-encode bytes in chunks to avoid blowing the argument stack on
+// large (up to ~20MB) attachments.
+const toBase64 = (data: ArrayBuffer | Uint8Array): string => {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+};
+
 // ---------------------------------------------------------------------------
 // Hono typed client
 // ---------------------------------------------------------------------------
@@ -51,7 +70,7 @@ export type GetSessionStatusResult =
 
 export interface AgentClient {
   createSession(): Promise<CreateSessionResult>;
-  sendMessage(sessionId: string, text: string): Promise<SendMessageResult>;
+  sendMessage(sessionId: string, text: string, attachments?: OutgoingAttachment[]): Promise<SendMessageResult>;
   abortSession(sessionId: string): Promise<AbortSessionResult>;
   getSessionStatus(sessionId: string): Promise<GetSessionStatusResult>;
 }
@@ -92,11 +111,16 @@ export function createAgentClient(env: Env, clerkUserId: string): AgentClient {
       });
     },
 
-    sendMessage(sessionId: string, text: string): Promise<SendMessageResult> {
+    sendMessage(sessionId: string, text: string, attachments?: OutgoingAttachment[]): Promise<SendMessageResult> {
+      const encoded = attachments?.map((a) => ({
+        filename: a.filename,
+        mimeType: a.mimeType,
+        dataBase64: toBase64(a.data),
+      }));
       return withRetry(async (s) => {
         const res = await clientFor(s).sessions[":sessionId"].messages.$post({
           param: { sessionId },
-          json: { text },
+          json: { text, ...(encoded && encoded.length > 0 && { attachments: encoded }) },
         });
         if (res.ok) return { kind: "ok" };
         if (res.status === 404) return { kind: "stale" };

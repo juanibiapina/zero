@@ -8,10 +8,12 @@ ENV HOME=/tmp/pi-home
 ENV PI_CODING_AGENT_DIR=/agent
 
 # curl/ca-certificates for state restore + HTTPS interception.
+# poppler-utils (pdftotext/pdftoppm/pdfinfo) for PDF attachments.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
-      curl && \
+      curl \
+      poppler-utils && \
     rm -rf /var/lib/apt/lists/*
 
 # Pi runs as a non-root user.
@@ -52,7 +54,7 @@ COPY dist/ ./dist/
 # /workspace is the single persisted tree (sessions + notes + pi's
 # working files). /tmp/pi-home and /agent (PI_CODING_AGENT_DIR) also
 # need to be writable by pi.
-RUN mkdir -p /workspace/sessions /workspace/notes /agent /tmp/pi-home && \
+RUN mkdir -p /workspace/sessions /workspace/notes /workspace/attachments /agent /tmp/pi-home && \
     chown -R pi:pi /workspace /agent /tmp/pi-home
 
 # SYSTEM.md replaces pi's default system prompt with Zero's.

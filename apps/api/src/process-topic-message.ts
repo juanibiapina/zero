@@ -1,4 +1,4 @@
-import { createAgentClient, type AgentClient } from "./agent-client";
+import { createAgentClient, type AgentClient, type OutgoingAttachment } from "./agent-client";
 import { fmtErr, log, logError } from "./log";
 import { getUserDO, type UserDOStub } from "./UserDO/stub";
 import type { Env } from "./types";
@@ -11,6 +11,7 @@ export interface TopicContext {
 
 export interface TopicMessage extends TopicContext {
   text: string;
+  attachments?: OutgoingAttachment[];
 }
 
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
@@ -33,7 +34,7 @@ export const processTopicMessage = async (
     let sessionId = await ensureSession(agent, userDO, clerkUserId, topic);
     if (sessionId === null) return;
 
-    let result = await agent.sendMessage(sessionId, topic.text);
+    let result = await agent.sendMessage(sessionId, topic.text, topic.attachments);
     if (result.kind === "stale") {
       log("stale_session", {
         session_id: sessionId,
@@ -42,7 +43,7 @@ export const processTopicMessage = async (
       await userDO.forgetSession(sessionId);
       sessionId = await ensureSession(agent, userDO, clerkUserId, topic);
       if (sessionId === null) return;
-      result = await agent.sendMessage(sessionId, topic.text);
+      result = await agent.sendMessage(sessionId, topic.text, topic.attachments);
     }
     if (result.kind === "error") {
       logError("container_rejected_message", {

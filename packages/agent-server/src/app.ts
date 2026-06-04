@@ -21,10 +21,20 @@ export interface SessionStatus {
   contextPercent: number | null;
 }
 
+export interface PromptAttachment {
+  filename: string;
+  mimeType: string;
+  dataBase64: string;
+}
+
 export interface AgentHandlers {
   createSession: (sessionId: string) => Promise<void>;
   /** Returns false when the session id is unknown (→ 404). */
-  promptSession: (sessionId: string, text: string) => Promise<boolean>;
+  promptSession: (
+    sessionId: string,
+    text: string,
+    attachments?: PromptAttachment[],
+  ) => Promise<boolean>;
   /** Returns "aborted" | "nothing_running" | "unknown". */
   abortSession: (sessionId: string) => Promise<"aborted" | "nothing_running" | "unknown">;
   /** Returns null when the session id is unknown (→ 404). */
@@ -49,8 +59,8 @@ export const createAgentApp = (handlers: AgentHandlers) =>
     })
     .openapi(sendMessageRoute, async (c) => {
       const { sessionId } = c.req.valid("param");
-      const { text } = c.req.valid("json");
-      const accepted = await handlers.promptSession(sessionId, text);
+      const { text, attachments } = c.req.valid("json");
+      const accepted = await handlers.promptSession(sessionId, text, attachments);
       if (!accepted) {
         return c.json({ error: "unknown session" }, 404);
       }

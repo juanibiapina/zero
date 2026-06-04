@@ -10,8 +10,9 @@
 // Logging is sparse on purpose: no user messages, model replies, file
 // contents, or shell output ever appear in fields.
 
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { basename, join } from "node:path";
 
 import {
   AuthStorage,
@@ -24,10 +25,40 @@ import {
 
 import { fmtErr, log, logError } from "./log.js";
 import { createCloseSessionTool } from "./close-session-tool.js";
+import type { PromptAttachment } from "./app.js";
 import { saveState } from "./save-state.js";
 
 const PROVIDER = "anthropic";
 const MODEL_ID = "claude-sonnet-4-5-20250929";
+const ATTACHMENTS_DIR = "/workspace/attachments";
+
+// Reduce an untrusted client filename to a safe basename: no path
+// separators, no parent-dir traversal. Empty results fall back to "file".
+const sanitizeFilename = (name: string): string => {
+  const base = basename(name).replace(/[/\\]/g, "").replace(/\.\.+/g, ".").trim();
+  return base.length > 0 ? base : "file";
+};
+
+// Persist attachments under `attachmentsDir`, resolving name collisions
+// with a short random prefix. Returns the on-disk paths and their MIME types.
+export const writeAttachments = (
+  attachmentsDir: string,
+  attachments: PromptAttachment[],
+): { path: string; mimeType: string }[] => {
+  mkdirSync(attachmentsDir, { recursive: true });
+  const written: { path: string; mimeType: string }[] = [];
+  for (const att of attachments) {
+    const safe = sanitizeFilename(att.filename);
+    let target = join(attachmentsDir, safe);
+    if (existsSync(target)) {
+      target = join(attachmentsDir, `${randomUUID().slice(0, 8)}_${safe}`);
+    }
+    const data = Buffer.from(att.dataBase64, "base64");
+    writeFileSync(target, data);
+    written.push({ path: target, mimeType: att.mimeType });
+  }
+  return written;
+};
 
 interface ContentBlock {
   type: string;
@@ -131,7 +162,7 @@ export interface SessionBridgeOptions {
 
 export interface SessionBridge {
   createSession: (sessionId: string) => Promise<void>;
-  promptSession: (sessionId: string, text: string) => Promise<boolean>;
+  promptSession: (sessionId: string, text: string, attachments?: PromptAttachment[]) => Promise<boolean>;
   abortSession: (sessionId: string) => Promise<"aborted" | "nothing_running" | "unknown">;
   getSessionStatus: (sessionId: string) => Promise<{ model: string; contextPercent: number | null } | null>;
 }
@@ -263,9 +294,11 @@ export const createSessionBridge = (
     return state;
   };
 
+
   const promptSession = async (
     sessionId: string,
     text: string,
+    attachments: PromptAttachment[] = [],
   ): Promise<boolean> => {
     let state = sessions.get(sessionId);
     if (!state) {
@@ -273,8 +306,20 @@ export const createSessionBridge = (
     }
     if (!state) return false;
 
-    log("prompt", { session_id: sessionId, len: text.length });
-    void state.session.prompt(text, { streamingBehavior: "steer" }).catch((err: unknown) => {
+    let promptText = text;
+    if (attachments.length > 0) {
+      const written = writeAttachments(ATTACHMENTS_DIR, attachments);
+      for (const w of written) {
+        log("attachment_saved", { session_id: sessionId, path: w.path });
+      }
+      const notes = written
+        .map((w) => `[File saved to ${w.path} (${w.mimeType})]`)
+        .join("\n");
+      promptText = text.length > 0 ? `${text}\n\n${notes}` : notes;
+    }
+
+    log("prompt", { session_id: sessionId, len: promptText.length });
+    void state.session.prompt(promptText, { streamingBehavior: "steer" }).catch((err: unknown) => {
       const formatted = fmtErr(err);
       logError("prompt_threw", { session_id: sessionId, error: formatted });
       void postMessageEnd(sessionId, `⚠️ ${formatted.message}`);
