@@ -7,26 +7,36 @@ interface CapturedMessage {
   parse_mode?: string;
 }
 
-/** Build a Telegram webhook update JSON for a forum topic text message. */
+/** Build a Telegram webhook update JSON for a forum topic message. */
 export function buildWebhookUpdate(opts: {
   updateId?: number;
   messageId?: number;
   fromId: number;
   chatId: number;
   topicId: number;
-  text: string;
+  text?: string;
+  caption?: string;
+  document?: {
+    file_id: string;
+    file_unique_id: string;
+    file_name?: string;
+    mime_type?: string;
+  };
 }) {
+  const message: Record<string, unknown> = {
+    message_id: opts.messageId ?? 1,
+    from: { id: opts.fromId, is_bot: false, first_name: "Test" },
+    chat: { id: opts.chatId, type: "supergroup" },
+    date: Math.floor(Date.now() / 1000),
+    is_topic_message: true,
+    message_thread_id: opts.topicId,
+  };
+  if (opts.text !== undefined) message.text = opts.text;
+  if (opts.caption !== undefined) message.caption = opts.caption;
+  if (opts.document !== undefined) message.document = opts.document;
   return {
     update_id: opts.updateId ?? 1,
-    message: {
-      message_id: opts.messageId ?? 1,
-      from: { id: opts.fromId, is_bot: false, first_name: "Test" },
-      chat: { id: opts.chatId, type: "supergroup" },
-      text: opts.text,
-      date: Math.floor(Date.now() / 1000),
-      is_topic_message: true,
-      message_thread_id: opts.topicId,
-    },
+    message,
   };
 }
 

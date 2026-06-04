@@ -14,7 +14,18 @@ interface CapturedMessage {
   parse_mode?: string;
 }
 
+interface RegisteredFile {
+  file_path: string;
+  content: Buffer;
+}
+
 const messages: CapturedMessage[] = [];
+// Files the test registers so getFile + the download URL can resolve them.
+const filesById = new Map<string, RegisteredFile>();
+const filesByPath = new Map<string, Buffer>();
+// Worker-side events for assertions: getFile lookups and file downloads.
+const getFileCalls: string[] = [];
+const downloads: string[] = [];
 let messageIdCounter = 1;
 
 const app = new Hono();
@@ -24,10 +35,48 @@ app.get("/test/messages", (c) => {
   return c.json({ messages });
 });
 
+app.get("/test/events", (c) => {
+  return c.json({ getFileCalls, downloads });
+});
+
 app.delete("/test/messages", (c) => {
   messages.length = 0;
   messageIdCounter = 1;
+  filesById.clear();
+  filesByPath.clear();
+  getFileCalls.length = 0;
+  downloads.length = 0;
   return c.body(null, 204);
+});
+
+// Register a downloadable file: { file_id, file_path, content_base64 }.
+app.post("/test/files", async (c) => {
+  const body = await c.req.json<{
+    file_id: string;
+    file_path?: string;
+    content_base64: string;
+  }>();
+  const file_path = body.file_path ?? `documents/${body.file_id}`;
+  const content = Buffer.from(body.content_base64, "base64");
+  filesById.set(body.file_id, { file_path, content });
+  filesByPath.set(file_path, content);
+  return c.json({ ok: true });
+});
+
+// File download: GET /file/bot<token>/<file_path>. Must precede the
+// catch-all POST below (this is a GET, so no conflict, but keep it near).
+app.get("/file/*", (c) => {
+  const path = new URL(c.req.url).pathname;
+  const match = path.match(/^\/file\/bot[^/]+\/(.+)$/);
+  if (!match) {
+    return c.json({ ok: false, description: "not a file path" }, 404);
+  }
+  const content = filesByPath.get(match[1]);
+  downloads.push(match[1]);
+  if (!content) {
+    return c.json({ ok: false, description: "file not found" }, 404);
+  }
+  return c.body(content, 200, { "Content-Type": "application/octet-stream" });
 });
 
 // Catch all Bot API calls: /bot<token>/<method>
@@ -48,6 +97,24 @@ app.post("/*", async (c) => {
       result: {
         message_id: messageIdCounter++,
         chat: { id: body.chat_id },
+      },
+    });
+  }
+
+  if (method === "getFile") {
+    const body = await c.req.json<{ file_id: string }>();
+    getFileCalls.push(body.file_id);
+    const file = filesById.get(body.file_id);
+    if (!file) {
+      return c.json({ ok: false, description: "file not found" }, 400);
+    }
+    return c.json({
+      ok: true,
+      result: {
+        file_id: body.file_id,
+        file_unique_id: body.file_id,
+        file_size: file.content.length,
+        file_path: file.file_path,
       },
     });
   }
