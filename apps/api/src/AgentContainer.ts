@@ -7,6 +7,7 @@ import { Bot } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
 import { getGoogleAccessToken } from "./google-token";
+import { getGithubInstallationToken } from "./github-token";
 import { fmtErr, log, logError } from "./log";
 import { createSecretProxy } from "./secret-proxy";
 import { getUserDO } from "./UserDO/stub";
@@ -16,7 +17,7 @@ import { handleAgentEnd } from "./handle-agent-end";
 
 const secretProxy = createSecretProxy(
   ["ANTHROPIC_API_KEY", "BRAVE_API_KEY"],
-  ["GOOGLE_WORKSPACE_CLI_TOKEN"],
+  ["GOOGLE_WORKSPACE_CLI_TOKEN", "GH_TOKEN"],
 );
 
 const MessageEndBodySchema = z.object({
@@ -189,6 +190,7 @@ export class AgentContainer extends Container<Env> {
     }
 
     const googleToken = await getGoogleAccessToken(this.env, clerkUserId);
+    const githubToken = await getGithubInstallationToken(this.env, clerkUserId);
 
     // Push runtime-secret overrides to the substitute handler. Pushed on
     // every fetch; simpler than diffing.
@@ -196,13 +198,17 @@ export class AgentContainer extends Container<Env> {
     if (googleToken !== null) {
       overrides.GOOGLE_WORKSPACE_CLI_TOKEN = googleToken;
     }
+    if (githubToken !== null) {
+      overrides.GH_TOKEN = githubToken;
+    }
     await this.setOutboundHandler("substitute", { overrides });
 
     // Omit sentinels whose real value isn't available this call so the
-    // consumer (e.g. gws) exits with a clean auth error instead of
+    // consumer (e.g. gws, git/gh) exits with a clean auth error instead of
     // forwarding an unsubstituted sentinel upstream.
     const sentinels = { ...secretProxy.fakes };
     if (googleToken === null) delete sentinels.GOOGLE_WORKSPACE_CLI_TOKEN;
+    if (githubToken === null) delete sentinels.GH_TOKEN;
 
     this.envVars = {
       CALLBACK_URL: "http://zero.worker",

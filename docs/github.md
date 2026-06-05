@@ -12,6 +12,11 @@ Clerk-vended token carries login scopes only. All repository work is done
 by the **GitHub App acting as itself** (`zerocoding-app[bot]`), not as the
 user.
 
+> **Current capability: read-only.** The app grants `contents: read`, so
+> the container can clone and read repos but cannot commit, push, or open
+> PRs. Write access is a future step (bump the app's `contents` permission
+> to write, add a bot git identity, extend the skill).
+
 ## How repo access works
 
 1. The user installs the GitHub App on their own GitHub account (on
@@ -27,11 +32,19 @@ user.
      (`POST /app/installations/{id}/access_tokens`), valid ~1 hour.
 3. The token is **never injected directly** into the container. It rides
    through `setOutboundHandler('substitute', { overrides })` so the
-   container's env only holds the sentinel `Z3R0-FAKE-GH_TOKEN`. The
-   outbound proxy swaps the sentinel for the real token on egress to
-   github.com — including inside `Authorization: Basic` headers, so
-   `git push` works (see `docs/design.md` "Secret Proxying" and the
-   Basic-auth-aware branch in `secret-proxy.ts`).
+   container's env only holds the sentinel `Z3R0-FAKE-GH_TOKEN`
+   (`AgentContainer.refreshEnvVars`). The outbound proxy swaps the
+   sentinel for the real token on egress to github.com — including inside
+   `Authorization: Basic` headers, so authenticated `git` over HTTPS works
+   (see `docs/design.md` "Secret Proxying" and the Basic-auth-aware branch
+   in `secret-proxy.ts`).
+
+Inside the container, `git` and `gh` are installed. `gh` reads `GH_TOKEN`
+from the env automatically. `git` uses a credential helper (baked into
+pi's global gitconfig) that emits the sentinel `$GH_TOKEN` as the HTTP
+Basic password, which the proxy then substitutes. The `github` skill
+(`packages/agent-server/skills/github/`) tells the agent to clone under
+`/workspace/repos/<owner>/<repo>` and reuse existing clones.
 
 The worker never persists the token; it expires within the hour and is
 re-minted on the next container start.

@@ -26,14 +26,23 @@ first in Phase 0.
   least-privilege path the original plan deferred to "later" is adopted
   now. Commits/PRs are attributed to `zerocoding-app[bot]`. This replaces
   the OAuth-token plan in Phase 2 below. See `docs/github.md`.
-- **Phase 2 (token plumbing) — IN PROGRESS.** Worker-side installation
-  token minting landed: `apps/api/src/github-token.ts`
+- **Phase 2 (token plumbing) — DONE.** Worker-side installation token
+  minting landed: `apps/api/src/github-token.ts`
   (`getGithubInstallationToken` + `getGithubInstallationStatus`), plus an
   admin verification surface (`GET /api/admin/github/status`, per-user
   GitHub column in `/admin`). The app private key in Doppler was converted
-  PKCS#1 → PKCS#8 (Workers/`jose` require PKCS#8). Verified end-to-end
-  against real GitHub. Still TODO: inject `GH_TOKEN` into `AgentContainer`
-  and bump the app's `contents` permission read → write for `git push`.
+  PKCS#1 → PKCS#8 (Workers/`jose` require PKCS#8). `AgentContainer`
+  injects `GH_TOKEN` as a sentinel (omitted when the user has no
+  installation). Verified end-to-end against real GitHub.
+- **Phase 3 + 4 (tooling + skill) — DONE (read-only).** `git` + `gh`
+  installed in the container image; `git` auth via a credential helper
+  that emits the `$GH_TOKEN` sentinel as the HTTP Basic password. Added
+  the read-only `github` skill (clone to `/workspace/repos/<owner>/<repo>`,
+  reuse clones, read code/issues/PRs). Scoped read-only on purpose: the
+  app still has `contents: read`, so `git push` is rejected by GitHub.
+- **Next: write access (deferred).** Bump the app's `contents` permission
+  read → write, add a `zerocoding-app[bot]` git identity, and extend the
+  skill with branch/commit/push/PR. To be tested separately.
 
 ## What we can reuse (the Google blueprint)
 
