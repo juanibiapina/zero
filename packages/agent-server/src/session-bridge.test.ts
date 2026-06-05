@@ -1,12 +1,82 @@
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { writeAttachments } from "./session-bridge.js";
+import {
+  clampBashTimeout,
+  createTimeoutBashOperations,
+  writeAttachments,
+} from "./session-bridge.js";
+
+const OPTS = { defaultSecs: 300, maxSecs: 1800 };
 
 const b64 = (...bytes: number[]) =>
   Buffer.from(Uint8Array.from(bytes)).toString("base64");
+
+describe("clampBashTimeout", () => {
+  it("applies the default when unset", () => {
+    expect(clampBashTimeout(undefined, OPTS)).toBe(300);
+  });
+
+  it("applies the default for non-positive values", () => {
+    expect(clampBashTimeout(0, OPTS)).toBe(300);
+    expect(clampBashTimeout(-5, OPTS)).toBe(300);
+  });
+
+  it("passes through an in-range value", () => {
+    expect(clampBashTimeout(120, OPTS)).toBe(120);
+  });
+
+  it("caps a value above the max", () => {
+    expect(clampBashTimeout(5000, OPTS)).toBe(1800);
+  });
+});
+
+describe("createTimeoutBashOperations", () => {
+  it("forwards the clamped timeout to the base backend", async () => {
+    const base = { exec: vi.fn().mockResolvedValue({ exitCode: 0 }) };
+    const ops = createTimeoutBashOperations(base, () => {}, OPTS);
+
+    await ops.exec("echo hi", "/tmp", { onData: () => {} });
+    expect(base.exec).toHaveBeenCalledWith(
+      "echo hi",
+      "/tmp",
+      expect.objectContaining({ timeout: 300 }),
+    );
+
+    await ops.exec("echo hi", "/tmp", { onData: () => {}, timeout: 9999 });
+    expect(base.exec).toHaveBeenLastCalledWith(
+      "echo hi",
+      "/tmp",
+      expect.objectContaining({ timeout: 1800 }),
+    );
+  });
+
+  it("reports a timeout error once and re-throws it", async () => {
+    const base = {
+      exec: vi.fn().mockRejectedValue(new Error("timeout:300")),
+    };
+    const onTimeout = vi.fn();
+    const ops = createTimeoutBashOperations(base, onTimeout, OPTS);
+
+    await expect(
+      ops.exec("sleep 999", "/tmp", { onData: () => {} }),
+    ).rejects.toThrow("timeout:300");
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call onTimeout for non-timeout errors", async () => {
+    const base = { exec: vi.fn().mockRejectedValue(new Error("boom")) };
+    const onTimeout = vi.fn();
+    const ops = createTimeoutBashOperations(base, onTimeout, OPTS);
+
+    await expect(
+      ops.exec("bad", "/tmp", { onData: () => {} }),
+    ).rejects.toThrow("boom");
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+});
 
 describe("writeAttachments", () => {
   let dir: string;

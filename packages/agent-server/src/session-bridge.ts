@@ -19,8 +19,12 @@ import {
   ModelRegistry,
   SessionManager,
   createAgentSession,
+  createBashToolDefinition,
+  createLocalBashOperations,
   type AgentSession,
   type AgentSessionEvent,
+  type BashOperations,
+  type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 
 import { fmtErr, log, logError } from "./log.js";
@@ -31,6 +35,49 @@ import { saveState } from "./save-state.js";
 const PROVIDER = "anthropic";
 const MODEL_ID = "claude-sonnet-4-5-20250929";
 const ATTACHMENTS_DIR = "/workspace/attachments";
+
+// pi's bash tool takes an optional per-command timeout (seconds) but has
+// no default, so a hung command can block an agent turn forever. We
+// enforce a default and cap any agent-specified value.
+const DEFAULT_BASH_TIMEOUT_SECS = 300; // 5 min
+const MAX_BASH_TIMEOUT_SECS = 1800; // 30 min
+
+// Resolve the timeout (seconds) actually applied to a bash command:
+// fall back to the default when unset/non-positive, and cap to the max
+// so the agent can't disable the safety net with a huge value.
+export const clampBashTimeout = (
+  requested: number | undefined,
+  opts: { defaultSecs: number; maxSecs: number },
+): number => {
+  const base =
+    typeof requested === "number" && requested > 0
+      ? requested
+      : opts.defaultSecs;
+  return Math.min(base, opts.maxSecs);
+};
+
+// Wrap a bash operations backend so every command gets a clamped timeout.
+// On timeout pi's local backend throws `timeout:<secs>`; we invoke
+// `onTimeout` (for an anonymous metric — no command text) and re-throw so
+// the bash tool still surfaces "Command timed out after N seconds" to the
+// agent.
+export const createTimeoutBashOperations = (
+  base: BashOperations,
+  onTimeout: () => void,
+  opts: { defaultSecs: number; maxSecs: number },
+): BashOperations => ({
+  exec: async (command, cwd, options) => {
+    const timeout = clampBashTimeout(options.timeout, opts);
+    try {
+      return await base.exec(command, cwd, { ...options, timeout });
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("timeout:")) {
+        onTimeout();
+      }
+      throw err;
+    }
+  },
+});
 
 // Reduce an untrusted client filename to a safe basename: no path
 // separators, no parent-dir traversal. Empty results fall back to "file".
@@ -196,6 +243,20 @@ export const createSessionBridge = (
       getClerkUserId: () => clerkUserId,
     });
 
+    // Custom bash tool that enforces a default/capped timeout. Registered
+    // as a custom tool named "bash", it overrides pi's built-in bash by
+    // name while leaving read/edit/write untouched.
+    const bashOperations = createTimeoutBashOperations(
+      createLocalBashOperations(),
+      () => log("bash_timeout", { session_id: sessionId }),
+      { defaultSecs: DEFAULT_BASH_TIMEOUT_SECS, maxSecs: MAX_BASH_TIMEOUT_SECS },
+    );
+    // Concrete bash definition widened to the generic ToolDefinition that
+    // `customTools` expects (same pattern as close_session via defineTool).
+    const bashTool = createBashToolDefinition(cwd, {
+      operations: bashOperations,
+    }) as unknown as ToolDefinition;
+
     const { session } = await createAgentSession({
       cwd,
       modelRegistry,
@@ -203,7 +264,7 @@ export const createSessionBridge = (
       sessionManager,
       model,
       thinkingLevel: "high",
-      customTools: [closeSessionTool],
+      customTools: [bashTool, closeSessionTool],
     });
 
     const state: SessionState = {

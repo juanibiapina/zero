@@ -16,3 +16,4 @@ description: "Read a user's GitHub repositories. Use to clone, browse, search, o
 - reuse existing clones
 - pull latest changes before working
 - use HTTPS remotes (`https://github.com/<owner>/<repo>.git`). do not use SSH. auth flows through the HTTPS token only
+- bash commands time out after 5 minutes by default. for a large clone or other long operation, pass an explicit `timeout` (seconds, up to 1800) to the bash tool

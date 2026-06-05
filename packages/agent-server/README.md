@@ -101,6 +101,17 @@ Durability is therefore **per-turn**: state is local until the next
 save. The host is expected to store the archive keyed by the user (the
 `AgentContainer` worker stores it at `<clerkUserId>/state.tar.gz` in R2).
 
+## Bash timeout
+
+pi's bash tool has no default command timeout, so a hung command would
+block an agent turn indefinitely. The session bridge wraps the bash
+backend (`createTimeoutBashOperations` in `src/session-bridge.ts`) to
+enforce a **default 5-minute timeout**, capped at **30 minutes**. The
+agent can still pass an explicit `timeout` (seconds) up to the cap for
+legitimately long commands. A timed-out command is reported to the agent
+as `Command timed out after N seconds` and emits an anonymous
+`bash_timeout` log (session id only — no command text).
+
 ## Running
 
 ```bash
