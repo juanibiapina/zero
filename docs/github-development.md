@@ -11,6 +11,30 @@ credential to `github.com` through the secret proxy without the container
 ever seeing the real token, especially for `git push`. That is de-risked
 first in Phase 0.
 
+## Status & key decision (update)
+
+- **Phase 0 (proxy spike)** — DONE.
+- **Phase 2a (Basic-auth-aware proxy)** — DONE.
+- **Phase 1 (GitHub login via Clerk)** — DONE and live in prod. This is a
+  classic OAuth App ("Zero") used purely for sign-in; its Clerk-vended
+  token only carries `read:user` / `user:email` and is **not** used for
+  repo work.
+- **Repo credential decision — use the GitHub App, not OAuth `repo`.**
+  Research showed the login token lacks repo scope, while the GitHub App
+  `zerocoding-app` is already installed (all repos). So repo work uses
+  short-lived **installation tokens** minted from the app key — the
+  least-privilege path the original plan deferred to "later" is adopted
+  now. Commits/PRs are attributed to `zerocoding-app[bot]`. This replaces
+  the OAuth-token plan in Phase 2 below. See `docs/github.md`.
+- **Phase 2 (token plumbing) — IN PROGRESS.** Worker-side installation
+  token minting landed: `apps/api/src/github-token.ts`
+  (`getGithubInstallationToken` + `getGithubInstallationStatus`), plus an
+  admin verification surface (`GET /api/admin/github/status`, per-user
+  GitHub column in `/admin`). The app private key in Doppler was converted
+  PKCS#1 → PKCS#8 (Workers/`jose` require PKCS#8). Verified end-to-end
+  against real GitHub. Still TODO: inject `GH_TOKEN` into `AgentContainer`
+  and bump the app's `contents` permission read → write for `git push`.
+
 ## What we can reuse (the Google blueprint)
 
 The Google Workspace integration already implements the exact shape we

@@ -29,6 +29,15 @@ interface UserCost {
   outputTokens: number;
 }
 
+interface GithubStatus {
+  githubConnected: boolean;
+  githubUsername: string | null;
+  installationId: number | null;
+  tokenMinted: boolean;
+  tokenPrefix: string | null;
+  expiresAt: string | null;
+}
+
 interface SessionCost {
   sessionId: string;
   clerkUserId: string;
@@ -97,6 +106,43 @@ function SummaryCards({ data }: { data: CostSummary | null }) {
   );
 }
 
+// ─── GitHub status ──────────────────────────────────────────────────
+
+// Per-user check of the GitHub App installation + token minting. Fetched
+// lazily per row so the cost table doesn't block on N GitHub calls.
+function GithubStatusCell({ userId }: { userId: string }) {
+  const [status, setStatus] = useState<GithubStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch(
+        `/api/admin/github/status?userId=${encodeURIComponent(userId)}`,
+      );
+      if (cancelled) return;
+      if (res.ok) setStatus((await res.json()) as GithubStatus);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  if (loading) return <span className="text-muted-foreground">…</span>;
+  if (!status || !status.githubConnected)
+    return <span className="text-muted-foreground">not connected</span>;
+  if (status.installationId === null)
+    return <span className="text-muted-foreground">no app</span>;
+  if (status.tokenMinted)
+    return (
+      <span className="text-foreground">
+        ✓ {status.githubUsername} (#{status.installationId})
+      </span>
+    );
+  return <span className="text-destructive">token failed</span>;
+}
+
 // ─── User Costs ─────────────────────────────────────────────────────
 
 function UserCostsTable({
@@ -117,6 +163,7 @@ function UserCostsTable({
         <TableHeader>
           <TableRow>
             <TableHead>User</TableHead>
+            <TableHead>GitHub</TableHead>
             <TableHead className="text-right">Cost</TableHead>
             <TableHead className="text-right">Sessions</TableHead>
             <TableHead className="text-right">Input</TableHead>
@@ -140,6 +187,9 @@ function UserCostsTable({
             >
               <TableCell className="font-mono text-sm">
                 {truncateId(u.clerkUserId)}
+              </TableCell>
+              <TableCell className="text-sm">
+                <GithubStatusCell userId={u.clerkUserId} />
               </TableCell>
               <TableCell className="text-right font-mono">
                 {formatCost(u.costUsd)}

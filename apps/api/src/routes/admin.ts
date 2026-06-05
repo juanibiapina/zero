@@ -7,6 +7,7 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
+import { getGithubInstallationStatus } from "../github-token";
 
 type Variables = {
   userId: string;
@@ -153,6 +154,41 @@ export const createAdminRoutes = () => {
         description: "Session cost data",
       },
     },
+  });
+
+  // GET /api/admin/github/status — per-user GitHub App install/token check.
+  // Takes an explicit userId so the admin can inspect any user; defaults
+  // to the caller. Returns non-secret diagnostics only.
+  const GithubStatusSchema = z.object({
+    githubConnected: z.boolean(),
+    githubUsername: z.string().nullable(),
+    installationId: z.number().nullable(),
+    tokenMinted: z.boolean(),
+    tokenPrefix: z.string().nullable(),
+    expiresAt: z.string().nullable(),
+  });
+
+  const githubStatusRoute = createRoute({
+    method: "get",
+    path: "/api/admin/github/status",
+    tags: ["Admin"],
+    summary: "Check a user's GitHub App installation and token minting",
+    request: {
+      query: z.object({ userId: z.string().optional() }),
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: GithubStatusSchema } },
+        description: "GitHub installation status (non-secret diagnostics)",
+      },
+    },
+  });
+
+  router.openapi(githubStatusRoute, async (c) => {
+    const { userId } = c.req.valid("query");
+    const target = userId ?? c.get("userId");
+    const status = await getGithubInstallationStatus(c.env, target);
+    return c.json(status, 200);
   });
 
   router.openapi(sessionsRoute, async (c) => {

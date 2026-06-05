@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { OpenAPIHono } from "@hono/zod-openapi";
 
 import { createAdminRoutes } from "./admin";
 import type { Env } from "../types";
+import { getGithubInstallationStatus } from "../github-token";
+
+vi.mock("../github-token", () => ({
+  getGithubInstallationStatus: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -65,6 +70,47 @@ describe("admin gate", () => {
     const app = buildApp(fakeEnv("admin_123"), "admin_123");
     const res = await app.request("/api/admin/costs");
     expect(res.status).toBe(200);
+  });
+});
+
+describe("GET /api/admin/github/status", () => {
+  const status = {
+    githubConnected: true,
+    githubUsername: "octocat",
+    installationId: 42,
+    tokenMinted: true,
+    tokenPrefix: "ghs_",
+    expiresAt: "2026-06-05T13:00:00Z",
+  };
+
+  it("returns 403 for non-admin users", async () => {
+    const app = buildApp(fakeEnv("admin_123"), "other_user");
+    const res = await app.request("/api/admin/github/status");
+    expect(res.status).toBe(403);
+  });
+
+  it("returns non-secret diagnostics for the caller by default", async () => {
+    vi.mocked(getGithubInstallationStatus).mockResolvedValue(status);
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request("/api/admin/github/status");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(status);
+    expect(getGithubInstallationStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      "admin_1",
+    );
+  });
+
+  it("checks the requested userId when provided", async () => {
+    vi.mocked(getGithubInstallationStatus).mockResolvedValue(status);
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    await app.request("/api/admin/github/status?userId=user_target");
+    expect(getGithubInstallationStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      "user_target",
+    );
   });
 });
 
