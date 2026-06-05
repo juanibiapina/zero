@@ -93,6 +93,38 @@ the container:
 with only a sentinel in env, `gh api user` works today, and `git push`
 works once the Basic-aware substitution lands.
 
+## Phase 2a — Basic-auth-aware secret proxy (testing plan)
+
+First concrete implementation step, done TDD. The proxy
+(`apps/api/src/secret-proxy.ts`) gains a branch that decodes
+`Authorization: Basic <b64>` header values, runs the existing
+sentinel→real substitution on the decoded `user:pass`, and re-encodes,
+so `git push` (which only sends Basic auth) works with an injected
+sentinel.
+
+Tested through the public `outbound` handler by stubbing global `fetch`
+and asserting on the forwarded request (no implementation-detail tests).
+Behaviors, in TDD order:
+
+1. **Regression — verbatim header substitution** still swaps a sentinel
+   that appears raw in a header value (locks existing behavior; builds
+   the harness).
+2. **Basic auth, token as password** —
+   `Authorization: Basic base64("x-access-token:<sentinel>")` is
+   forwarded as `base64("x-access-token:<real>")`.
+3. **Basic auth, token as username** —
+   `base64("<sentinel>:x-oauth-basic")` is substituted the same way
+   (covers both git credential conventions).
+4. **Runtime secret via overrides** — a `GH_TOKEN` override (not an env
+   secret) is substituted inside a Basic header (the real GitHub path).
+5. **Pass-through** — a Basic header whose decoded value contains no
+   sentinel is forwarded byte-for-byte unchanged.
+6. **Malformed/non-base64 Basic value** — left untouched, never throws.
+
+**End-to-end validation (the point of doing this now):** once landed,
+deploy and confirm from a real container that, with only a sentinel in
+env, `gh api user` and a real `git push` to a test repo both succeed.
+
 ## Phase 1 — GitHub OAuth login via Clerk
 
 - Register a GitHub OAuth App; configure GitHub as a Clerk social

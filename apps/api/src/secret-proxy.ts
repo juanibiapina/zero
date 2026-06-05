@@ -83,12 +83,16 @@ export const createSecretProxy = (
     const headers = new Headers(req.headers);
     let headerMatches = 0;
     for (const [name, value] of headers.entries()) {
-      let updated = value;
-      for (const p of pairs) {
-        if (updated.includes(p.fake)) {
-          headerMatches += countOccurrences(updated, p.fake);
-          updated = updated.split(p.fake).join(p.real);
-        }
+      const direct = substituteInString(value, pairs);
+      let updated = direct.value;
+      headerMatches += direct.matches;
+      // git push only authenticates with HTTP Basic, where the token is
+      // base64-wrapped (`Basic base64("user:token")`) and so never appears
+      // verbatim. Decode, substitute on the plaintext, re-encode.
+      if (name.toLowerCase() === "authorization") {
+        const basic = substituteBasicAuth(updated, pairs);
+        headerMatches += basic.matches;
+        updated = basic.value;
       }
       if (updated !== value) {
         headers.set(name, updated);
@@ -139,6 +143,44 @@ interface SubstitutionPair {
   real: string;
   realBytes: Uint8Array;
 }
+
+// Replace every sentinel with its real value in a string, reporting how
+// many replacements happened (callers use the count to detect a secret
+// that stopped flowing).
+const substituteInString = (
+  input: string,
+  pairs: readonly SubstitutionPair[],
+): { value: string; matches: number } => {
+  let value = input;
+  let matches = 0;
+  for (const p of pairs) {
+    if (value.includes(p.fake)) {
+      matches += countOccurrences(value, p.fake);
+      value = value.split(p.fake).join(p.real);
+    }
+  }
+  return { value, matches };
+};
+
+// Substitute sentinels inside an `Authorization: Basic <b64>` header by
+// decoding the credentials, substituting on the plaintext `user:pass`,
+// and re-encoding. Non-Basic values, undecodable payloads, and values
+// with no sentinel are returned untouched.
+const substituteBasicAuth = (
+  value: string,
+  pairs: readonly SubstitutionPair[],
+): { value: string; matches: number } => {
+  const match = /^Basic (.+)$/i.exec(value);
+  if (!match) return { value, matches: 0 };
+  try {
+    const decoded = atob(match[1]);
+    const sub = substituteInString(decoded, pairs);
+    if (sub.matches === 0) return { value, matches: 0 };
+    return { value: `Basic ${btoa(sub.value)}`, matches: sub.matches };
+  } catch {
+    return { value, matches: 0 };
+  }
+};
 
 const countOccurrences = (haystack: string, needle: string): number => {
   if (needle.length === 0) return 0;
