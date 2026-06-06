@@ -256,11 +256,16 @@ export const createAdminRoutes = () => {
     method: "post",
     path: "/api/admin/import-notes/{userId}",
     tags: ["Admin"],
-    summary: "Import notes from a zip archive into a user's container",
+    summary: "Import notes from an archive (zip or tar.gz) into a user's container",
     request: {
       params: z.object({ userId: z.string().min(1) }),
       body: {
-        content: { "application/zip": { schema: { type: "string", format: "binary" } } },
+        content: {
+          "application/zip": { schema: { type: "string", format: "binary" } },
+          "application/gzip": { schema: { type: "string", format: "binary" } },
+          "application/x-gzip": { schema: { type: "string", format: "binary" } },
+          "application/x-tar": { schema: { type: "string", format: "binary" } },
+        },
       },
     },
     responses: {

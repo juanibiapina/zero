@@ -110,34 +110,64 @@ export const writeAttachments = (
 
 const NOTES_DIR = "/workspace/notes";
 
-// Extract a base64-encoded zip archive into /workspace/notes/.
+// Detect archive type from magic bytes.
+const detectArchiveType = (data: Buffer): "zip" | "gzip" | "unknown" => {
+  // ZIP: starts with PK (0x50 0x4B)
+  if (data[0] === 0x50 && data[1] === 0x4b) return "zip";
+  // GZIP: starts with 0x1F 0x8B
+  if (data[0] === 0x1f && data[1] === 0x8b) return "gzip";
+  return "unknown";
+};
+
+// Extract a base64-encoded archive (zip or tar.gz) into /workspace/notes/.
 // Returns the number of files extracted.
 export const importNotes = (dataBase64: string): number => {
   mkdirSync(NOTES_DIR, { recursive: true });
 
-  const tmpZip = `/tmp/import-${randomUUID()}.zip`;
+  const data = Buffer.from(dataBase64, "base64");
+  const archiveType = detectArchiveType(data);
+  log("import_notes_start", { size: data.length, type: archiveType });
+
+  if (archiveType === "unknown") {
+    throw new Error("Unsupported archive format. Use .zip or .tar.gz");
+  }
+
+  const ext = archiveType === "zip" ? ".zip" : ".tar.gz";
+  const tmpFile = `/tmp/import-${randomUUID()}${ext}`;
+
   try {
-    const data = Buffer.from(dataBase64, "base64");
-    writeFileSync(tmpZip, data);
-    log("import_notes_start", { size: data.length });
+    writeFileSync(tmpFile, data);
 
-    // Extract with overwrite (-o), preserve directory structure
-    const output = execSync(`unzip -o "${tmpZip}" -d "${NOTES_DIR}"`, {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    let output: string;
+    if (archiveType === "zip") {
+      output = execSync(`unzip -o "${tmpFile}" -d "${NOTES_DIR}"`, {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } else {
+      output = execSync(`tar -xzvf "${tmpFile}" -C "${NOTES_DIR}"`, {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    }
 
-    // Count extracted files from unzip output (lines starting with "  inflating:" or "   creating:" or " extracting:")
-    const lines = output.split("\n");
-    const filesExtracted = lines.filter(
-      (l) => l.includes("inflating:") || l.includes("extracting:"),
-    ).length;
+    // Count extracted files
+    const lines = output.split("\n").filter((l) => l.trim().length > 0);
+    let filesExtracted: number;
+    if (archiveType === "zip") {
+      filesExtracted = lines.filter(
+        (l) => l.includes("inflating:") || l.includes("extracting:"),
+      ).length;
+    } else {
+      // tar -v outputs one line per file
+      filesExtracted = lines.filter((l) => !l.endsWith("/")).length;
+    }
 
     log("import_notes_done", { files_extracted: filesExtracted });
     return filesExtracted;
   } finally {
     try {
-      unlinkSync(tmpZip);
+      unlinkSync(tmpFile);
     } catch {
       // Ignore cleanup errors
     }
