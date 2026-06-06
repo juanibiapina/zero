@@ -10,9 +10,10 @@
 // Logging is sparse on purpose: no user messages, model replies, file
 // contents, or shell output ever appear in fields.
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
+import { execSync } from "node:child_process";
 
 import {
   AuthStorage,
@@ -105,6 +106,42 @@ export const writeAttachments = (
     written.push({ path: target, mimeType: att.mimeType });
   }
   return written;
+};
+
+const NOTES_DIR = "/workspace/notes";
+
+// Extract a base64-encoded zip archive into /workspace/notes/.
+// Returns the number of files extracted.
+export const importNotes = (dataBase64: string): number => {
+  mkdirSync(NOTES_DIR, { recursive: true });
+
+  const tmpZip = `/tmp/import-${randomUUID()}.zip`;
+  try {
+    const data = Buffer.from(dataBase64, "base64");
+    writeFileSync(tmpZip, data);
+    log("import_notes_start", { size: data.length });
+
+    // Extract with overwrite (-o), preserve directory structure
+    const output = execSync(`unzip -o "${tmpZip}" -d "${NOTES_DIR}"`, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    // Count extracted files from unzip output (lines starting with "  inflating:" or "   creating:" or " extracting:")
+    const lines = output.split("\n");
+    const filesExtracted = lines.filter(
+      (l) => l.includes("inflating:") || l.includes("extracting:"),
+    ).length;
+
+    log("import_notes_done", { files_extracted: filesExtracted });
+    return filesExtracted;
+  } finally {
+    try {
+      unlinkSync(tmpZip);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 };
 
 interface ContentBlock {
@@ -212,6 +249,7 @@ export interface SessionBridge {
   promptSession: (sessionId: string, text: string, attachments?: PromptAttachment[]) => Promise<boolean>;
   abortSession: (sessionId: string) => Promise<"aborted" | "nothing_running" | "unknown">;
   getSessionStatus: (sessionId: string) => Promise<{ model: string; contextPercent: number | null } | null>;
+  importNotes: (dataBase64: string) => Promise<number>;
 }
 
 export const createSessionBridge = (
@@ -421,5 +459,11 @@ export const createSessionBridge = (
     return { model: modelStr, contextPercent };
   };
 
-  return { createSession, promptSession, abortSession, getSessionStatus };
+  return {
+    createSession,
+    promptSession,
+    abortSession,
+    getSessionStatus,
+    importNotes: (dataBase64: string) => Promise.resolve(importNotes(dataBase64)),
+  };
 };

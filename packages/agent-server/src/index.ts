@@ -84,6 +84,7 @@ const app = createAgentApp({
   promptSession: (sessionId, text, attachments) => bridge.promptSession(sessionId, text, attachments),
   abortSession: (sessionId) => bridge.abortSession(sessionId),
   getSessionStatus: (sessionId) => bridge.getSessionStatus(sessionId),
+  importNotes: (dataBase64) => bridge.importNotes(dataBase64),
 });
 
 serve({ fetch: app.fetch, port }, (info) => {

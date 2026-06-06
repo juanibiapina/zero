@@ -12,6 +12,7 @@ import {
   abortSessionRoute,
   createSessionRoute,
   getSessionStatusRoute,
+  importNotesRoute,
   sendMessageRoute,
 } from "./contract.js";
 import { fmtErr, log, logError } from "./log.js";
@@ -39,6 +40,8 @@ export interface AgentHandlers {
   abortSession: (sessionId: string) => Promise<"aborted" | "nothing_running" | "unknown">;
   /** Returns null when the session id is unknown (→ 404). */
   getSessionStatus: (sessionId: string) => Promise<SessionStatus | null>;
+  /** Import notes from a zip archive. Returns number of files extracted. */
+  importNotes: (dataBase64: string) => Promise<number>;
 }
 
 export const createAgentApp = (handlers: AgentHandlers) =>
@@ -84,6 +87,16 @@ export const createAgentApp = (handlers: AgentHandlers) =>
         return c.json({ error: "unknown session" }, 404);
       }
       return c.json(status, 200);
+    })
+    .openapi(importNotesRoute, async (c) => {
+      const { dataBase64 } = c.req.valid("json");
+      try {
+        const filesExtracted = await handlers.importNotes(dataBase64);
+        return c.json({ filesExtracted }, 200);
+      } catch (err) {
+        logError("import_notes_failed", { error: fmtErr(err) });
+        return c.json({ error: "import failed" }, 500);
+      }
     });
 
 export type AppType = ReturnType<typeof createAgentApp>;

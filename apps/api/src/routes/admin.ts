@@ -8,6 +8,8 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
+import { createAgentClient } from "../agent-client";
+import { log, logError } from "../log";
 
 type Variables = {
   userId: string;
@@ -243,6 +245,52 @@ export const createAdminRoutes = () => {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     })), 200);
+  });
+
+  // POST /api/admin/import-notes/:userId — import notes from a zip file
+  const ImportNotesResultSchema = z.object({
+    filesExtracted: z.number(),
+  });
+
+  const importNotesRoute = createRoute({
+    method: "post",
+    path: "/api/admin/import-notes/{userId}",
+    tags: ["Admin"],
+    summary: "Import notes from a zip archive into a user's container",
+    request: {
+      params: z.object({ userId: z.string().min(1) }),
+      body: {
+        content: { "application/zip": { schema: { type: "string", format: "binary" } } },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: ImportNotesResultSchema } },
+        description: "Notes imported successfully",
+      },
+      500: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "Import failed",
+      },
+    },
+  });
+
+  router.openapi(importNotesRoute, async (c) => {
+    const { userId } = c.req.valid("param");
+    const body = await c.req.arrayBuffer();
+
+    log("import_notes_request", { clerk_user_id: userId, size: body.byteLength });
+
+    const client = createAgentClient(c.env, userId);
+    const result = await client.importNotes(body);
+
+    if (result.kind === "error") {
+      logError("import_notes_failed", { clerk_user_id: userId, status: result.status });
+      return c.json({ error: `Import failed with status ${result.status}` }, 500);
+    }
+
+    log("import_notes_success", { clerk_user_id: userId, files_extracted: result.filesExtracted });
+    return c.json({ filesExtracted: result.filesExtracted }, 200);
   });
 
   return router;

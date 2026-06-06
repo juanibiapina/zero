@@ -7,6 +7,7 @@ const baseHandlers = (): AgentHandlers => ({
   promptSession: vi.fn(async () => true),
   abortSession: vi.fn(async () => "aborted" as const),
   getSessionStatus: vi.fn(async () => ({ model: "m", contextPercent: null })),
+  importNotes: vi.fn(async () => 0),
 });
 
 const postMessage = (app: ReturnType<typeof createAgentApp>, body: unknown) =>

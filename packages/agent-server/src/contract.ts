@@ -104,6 +104,14 @@ export const SessionStatusSchema = z.object({
   contextPercent: z.number().nullable(),
 });
 
+export const ImportNotesBodySchema = z.object({
+  dataBase64: z.string().min(1),
+});
+
+export const ImportNotesResultSchema = z.object({
+  filesExtracted: z.number(),
+});
+
 export const getSessionStatusRoute = createRoute({
   method: "get",
   path: "/sessions/{sessionId}/status",
@@ -119,6 +127,27 @@ export const getSessionStatusRoute = createRoute({
     404: {
       content: { "application/json": { schema: ErrorSchema } },
       description: "Unknown sessionId",
+    },
+  },
+});
+
+export const importNotesRoute = createRoute({
+  method: "post",
+  path: "/import-notes",
+  summary: "Import notes from a zip archive",
+  request: {
+    body: {
+      content: { "application/json": { schema: ImportNotesBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: ImportNotesResultSchema } },
+      description: "Notes imported successfully",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorSchema } },
+      description: "Import failed",
     },
   },
 });

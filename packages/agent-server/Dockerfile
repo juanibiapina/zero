@@ -10,12 +10,14 @@ ENV PI_CODING_AGENT_DIR=/agent
 # curl/ca-certificates for state restore + HTTPS interception.
 # poppler-utils (pdftotext/pdftoppm/pdfinfo) for PDF attachments.
 # git for cloning/reading GitHub repositories.
+# unzip for notes import.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       git \
-      poppler-utils && \
+      poppler-utils \
+      unzip && \
     rm -rf /var/lib/apt/lists/*
 
 # Pi runs as a non-root user.

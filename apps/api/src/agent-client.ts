@@ -64,6 +64,10 @@ export type GetSessionStatusResult =
   | { kind: "unknown" }
   | { kind: "error"; status: number };
 
+export type ImportNotesResult =
+  | { kind: "ok"; filesExtracted: number }
+  | { kind: "error"; status: number };
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -73,6 +77,7 @@ export interface AgentClient {
   sendMessage(sessionId: string, text: string, attachments?: OutgoingAttachment[]): Promise<SendMessageResult>;
   abortSession(sessionId: string): Promise<AbortSessionResult>;
   getSessionStatus(sessionId: string): Promise<GetSessionStatusResult>;
+  importNotes(data: ArrayBuffer | Uint8Array): Promise<ImportNotesResult>;
 }
 
 export function createAgentClient(env: Env, clerkUserId: string): AgentClient {
@@ -152,6 +157,21 @@ export function createAgentClient(env: Env, clerkUserId: string): AgentClient {
           return { kind: "ok", model: body.model, contextPercent: body.contextPercent };
         }
         if (status === 404) return { kind: "unknown" };
+        return { kind: "error", status };
+      });
+    },
+
+    importNotes(data: ArrayBuffer | Uint8Array): Promise<ImportNotesResult> {
+      const dataBase64 = toBase64(data);
+      return withRetry(async (s) => {
+        const res = await clientFor(s)["import-notes"].$post({
+          json: { dataBase64 },
+        });
+        const status = res.status as number;
+        if (status === 200) {
+          const body = (await res.json()) as { filesExtracted: number };
+          return { kind: "ok", filesExtracted: body.filesExtracted };
+        }
         return { kind: "error", status };
       });
     },

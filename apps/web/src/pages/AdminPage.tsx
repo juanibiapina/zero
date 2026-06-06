@@ -143,6 +143,90 @@ function GithubStatusCell({ userId }: { userId: string }) {
   return <span className="text-destructive">token failed</span>;
 }
 
+// ─── Import Notes ───────────────────────────────────────────────────
+
+function ImportNotesForm({ users }: { users: UserCost[] }) {
+  const [selectedUser, setSelectedUser] = useState<string>("");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser || !file) return;
+
+    setUploading(true);
+    setResult(null);
+
+    try {
+      const res = await fetch(`/api/admin/import-notes/${encodeURIComponent(selectedUser)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/zip" },
+        body: file,
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as { filesExtracted: number };
+        setResult({ success: true, message: `Imported ${data.filesExtracted} files` });
+        setFile(null);
+      } else {
+        const data = (await res.json()) as { error: string };
+        setResult({ success: false, message: data.error || "Import failed" });
+      }
+    } catch (err) {
+      setResult({ success: false, message: String(err) });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold">Import Notes</h2>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-2">
+              <label className="text-sm font-medium">User</label>
+              <select
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={selectedUser}
+                onChange={(e) => setSelectedUser(e.target.value)}
+                required
+              >
+                <option value="">Select a user...</option>
+                {users.map((u) => (
+                  <option key={u.clerkUserId} value={u.clerkUserId}>
+                    {truncateId(u.clerkUserId)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 space-y-2">
+              <label className="text-sm font-medium">Zip File</label>
+              <input
+                type="file"
+                accept=".zip,application/zip"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm file:mr-4 file:rounded file:border-0 file:bg-primary file:px-4 file:py-1 file:text-sm file:font-semibold file:text-primary-foreground"
+                required
+              />
+            </div>
+            <Button type="submit" disabled={uploading || !selectedUser || !file}>
+              {uploading ? "Importing..." : "Import"}
+            </Button>
+          </form>
+          {result && (
+            <p className={`mt-4 text-sm ${result.success ? "text-green-600" : "text-destructive"}`}>
+              {result.message}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 // ─── User Costs ─────────────────────────────────────────────────────
 
 function UserCostsTable({
@@ -418,6 +502,7 @@ export function AdminPage() {
 
       <main className="container mx-auto space-y-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <SummaryCards data={summary} />
+        <ImportNotesForm users={users} />
         <UserCostsTable
           users={users}
           selectedUser={filterUserId}
