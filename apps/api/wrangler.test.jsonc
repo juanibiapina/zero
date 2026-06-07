@@ -15,7 +15,8 @@
   "vars": {
     "TELEGRAM_API_ROOT": "http://localhost:3501",
     "ANTHROPIC_BASE_URL": "http://localhost:3502",
-    "ENVIRONMENT": "test"
+    "ENVIRONMENT": "test",
+    "MODEL_ID": "claude-sonnet-4-5-20250929"
   },
   "kv_namespaces": [
     {

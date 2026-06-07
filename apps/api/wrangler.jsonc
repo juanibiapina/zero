@@ -19,7 +19,8 @@
   },
   "vars": {
     "TELEGRAM_API_ROOT": "https://api.telegram.org",
-    "ANTHROPIC_BASE_URL": "https://api.anthropic.com"
+    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+    "MODEL_ID": "claude-sonnet-4-5-20250929"
   },
   "routes": [
     { "pattern": "zero.juanibiapina.dev/*", "zone_name": "juanibiapina.dev" }

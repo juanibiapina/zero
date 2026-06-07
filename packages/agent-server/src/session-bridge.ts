@@ -34,7 +34,6 @@ import type { PromptAttachment } from "./app.js";
 import { saveState } from "./save-state.js";
 
 const PROVIDER = "anthropic";
-const MODEL_ID = "claude-sonnet-4-5-20250929";
 const ATTACHMENTS_DIR = "/workspace/attachments";
 
 // pi's bash tool takes an optional per-command timeout (seconds) but has
@@ -272,6 +271,8 @@ export interface SessionBridgeOptions {
   callbackUrl: string;
   /** Clerk user ID for callback payloads. */
   clerkUserId: string;
+  /** Anthropic model id every session runs on. Required; no fallback. */
+  modelId: string;
 }
 
 export interface SessionBridge {
@@ -287,7 +288,7 @@ export const createSessionBridge = (
   postAgentEnd: AgentEndFn,
   opts: SessionBridgeOptions,
 ): SessionBridge => {
-  const { cwd, stateDir, callbackUrl, clerkUserId } = opts;
+  const { cwd, stateDir, callbackUrl, clerkUserId, modelId } = opts;
   const workspaceDir = "/workspace";
   const sessions = new Map<string, SessionState>();
 
@@ -300,9 +301,9 @@ export const createSessionBridge = (
   ): Promise<SessionState> => {
     const authStorage = AuthStorage.inMemory();
     const modelRegistry = ModelRegistry.inMemory(authStorage);
-    const model = modelRegistry.find(PROVIDER, MODEL_ID);
+    const model = modelRegistry.find(PROVIDER, modelId);
     if (!model) {
-      throw new Error(`model ${PROVIDER}/${MODEL_ID} not found in registry`);
+      throw new Error(`model ${PROVIDER}/${modelId} not found in registry`);
     }
 
     const closeSessionTool = createCloseSessionTool({

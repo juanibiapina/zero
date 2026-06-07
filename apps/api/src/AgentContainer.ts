@@ -215,6 +215,7 @@ export class AgentContainer extends Container<Env> {
       ...sentinels,
       CLERK_USER_ID: clerkUserId,
       ANTHROPIC_BASE_URL: this.env.ANTHROPIC_BASE_URL,
+      MODEL_ID: this.env.MODEL_ID,
     };
   }
 }
