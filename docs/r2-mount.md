@@ -78,6 +78,17 @@ turn that reached `agent_end` is already on R2. In-flight prompts that
 hadn't yet produced a reply are dropped (Telegram won't see a reply for
 those turns).
 
+## Import notes
+
+Admins can bulk-import notes into a user's `/workspace/notes/` directory
+via the web UI (Admin → Import Notes). Upload a `.zip` or `.tar.gz`
+archive; the container extracts it and state persists on the next agent
+turn.
+
+The archive format is auto-detected from magic bytes. Contents are
+extracted with `unzip -o` (zip) or `tar -xzvf` (gzip), overwriting
+existing files with the same name.
+
 ## Backup / restore
 
 R2 has no built-in versioning yet, but the `zero-agent-state` bucket is
