@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { UserButton } from "@clerk/clerk-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -11,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatCost, formatTokens, truncateId, type AdminUser } from "./admin-shared";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -19,62 +19,6 @@ interface CostSummary {
   totalSessions: number;
   totalInputTokens: number;
   totalOutputTokens: number;
-}
-
-interface UserCost {
-  clerkUserId: string;
-  costUsd: number;
-  sessions: number;
-  inputTokens: number;
-  outputTokens: number;
-}
-
-interface GithubStatus {
-  githubConnected: boolean;
-  githubUsername: string | null;
-  installationId: number | null;
-  tokenMinted: boolean;
-  tokenPrefix: string | null;
-  expiresAt: string | null;
-}
-
-interface SessionCost {
-  sessionId: string;
-  clerkUserId: string;
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  costUsd: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
-
-function formatCost(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function truncateId(id: string): string {
-  return id.length > 12 ? `${id.slice(0, 12)}…` : id;
 }
 
 // ─── Stat Cards ─────────────────────────────────────────────────────
@@ -106,148 +50,24 @@ function SummaryCards({ data }: { data: CostSummary | null }) {
   );
 }
 
-// ─── GitHub status ──────────────────────────────────────────────────
+// ─── Users ──────────────────────────────────────────────────────────
 
-// Per-user check of the GitHub App installation + token minting. Fetched
-// lazily per row so the cost table doesn't block on N GitHub calls.
-function GithubStatusCell({ userId }: { userId: string }) {
-  const [status, setStatus] = useState<GithubStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const res = await fetch(
-        `/api/admin/github/status?userId=${encodeURIComponent(userId)}`,
-      );
-      if (cancelled) return;
-      if (res.ok) setStatus((await res.json()) as GithubStatus);
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  if (loading) return <span className="text-muted-foreground">…</span>;
-  if (!status || !status.githubConnected)
-    return <span className="text-muted-foreground">not connected</span>;
-  if (status.installationId === null)
-    return <span className="text-muted-foreground">no app</span>;
-  if (status.tokenMinted)
-    return (
-      <span className="text-foreground">
-        ✓ {status.githubUsername} (#{status.installationId})
-      </span>
-    );
-  return <span className="text-destructive">token failed</span>;
+function userLabel(u: AdminUser): string {
+  return u.email ?? u.username ?? truncateId(u.clerkUserId);
 }
 
-// ─── Import Notes ───────────────────────────────────────────────────
-
-function ImportNotesForm({ users }: { users: UserCost[] }) {
-  const [selectedUser, setSelectedUser] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUser || !file) return;
-
-    setUploading(true);
-    setResult(null);
-
-    try {
-      const res = await fetch(`/api/admin/import-notes/${encodeURIComponent(selectedUser)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/zip" },
-        body: file,
-      });
-
-      if (res.ok) {
-        const data = (await res.json()) as { filesExtracted: number };
-        setResult({ success: true, message: `Imported ${data.filesExtracted} files` });
-        setFile(null);
-      } else {
-        const data = (await res.json()) as { error: string };
-        setResult({ success: false, message: data.error || "Import failed" });
-      }
-    } catch (err) {
-      setResult({ success: false, message: String(err) });
-    } finally {
-      setUploading(false);
-    }
-  };
+function UsersTable({ users }: { users: AdminUser[] }) {
+  if (users.length === 0) {
+    return <p className="text-sm text-muted-foreground">No users found.</p>;
+  }
 
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Import Notes</h2>
-      <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="flex-1 space-y-2">
-              <label className="text-sm font-medium">User</label>
-              <select
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
-                required
-              >
-                <option value="">Select a user...</option>
-                {users.map((u) => (
-                  <option key={u.clerkUserId} value={u.clerkUserId}>
-                    {truncateId(u.clerkUserId)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1 space-y-2">
-              <label className="text-sm font-medium">Archive (zip or tar.gz)</label>
-              <input
-                type="file"
-                accept=".zip,.tar.gz,.tgz,application/zip,application/gzip,application/x-gzip"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm file:mr-4 file:rounded file:border-0 file:bg-primary file:px-4 file:py-1 file:text-sm file:font-semibold file:text-primary-foreground"
-                required
-              />
-            </div>
-            <Button type="submit" disabled={uploading || !selectedUser || !file}>
-              {uploading ? "Importing..." : "Import"}
-            </Button>
-          </form>
-          {result && (
-            <p className={`mt-4 text-sm ${result.success ? "text-green-600" : "text-destructive"}`}>
-              {result.message}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    </section>
-  );
-}
-
-// ─── User Costs ─────────────────────────────────────────────────────
-
-function UserCostsTable({
-  users,
-  onSelectUser,
-  selectedUser,
-}: {
-  users: UserCost[];
-  onSelectUser: (userId: string | null) => void;
-  selectedUser: string | null;
-}) {
-  if (users.length === 0) return null;
-
-  return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Cost by User</h2>
+      <h2 className="text-lg font-semibold">Users</h2>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>User</TableHead>
-            <TableHead>GitHub</TableHead>
             <TableHead className="text-right">Cost</TableHead>
             <TableHead className="text-right">Sessions</TableHead>
             <TableHead className="text-right">Input</TableHead>
@@ -256,24 +76,15 @@ function UserCostsTable({
         </TableHeader>
         <TableBody>
           {users.map((u) => (
-            <TableRow
-              key={u.clerkUserId}
-              className={
-                selectedUser === u.clerkUserId
-                  ? "bg-accent"
-                  : "cursor-pointer"
-              }
-              onClick={() =>
-                onSelectUser(
-                  selectedUser === u.clerkUserId ? null : u.clerkUserId,
-                )
-              }
-            >
-              <TableCell className="font-mono text-sm">
-                {truncateId(u.clerkUserId)}
-              </TableCell>
-              <TableCell className="text-sm">
-                <GithubStatusCell userId={u.clerkUserId} />
+            <TableRow key={u.clerkUserId} className="cursor-pointer">
+              <TableCell>
+                <Link
+                  to={`/admin/users/${encodeURIComponent(u.clerkUserId)}`}
+                  state={{ user: u }}
+                  className="block text-foreground hover:underline"
+                >
+                  {userLabel(u)}
+                </Link>
               </TableCell>
               <TableCell className="text-right font-mono">
                 {formatCost(u.costUsd)}
@@ -293,148 +104,11 @@ function UserCostsTable({
   );
 }
 
-// ─── Sessions ───────────────────────────────────────────────────────
-
-const PAGE_SIZE = 50;
-
-function SessionsTable({
-  filterUserId,
-  users,
-  onChangeFilter,
-}: {
-  filterUserId: string | null;
-  users: UserCost[];
-  onChangeFilter: (userId: string | null) => void;
-}) {
-  const [sessions, setSessions] = useState<SessionCost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const params = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        offset: "0",
-      });
-      if (filterUserId) params.set("userId", filterUserId);
-      const res = await fetch(`/api/admin/costs/sessions?${params}`);
-      if (cancelled || !res.ok) return;
-      const data = (await res.json()) as SessionCost[];
-      setSessions(data);
-      setHasMore(data.length === PAGE_SIZE);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- runs once on mount; remount via key
-
-  const loadMore = () => {
-    const next = offset + PAGE_SIZE;
-    setOffset(next);
-    void (async () => {
-      setLoading(true);
-      const params = new URLSearchParams({
-        limit: String(PAGE_SIZE),
-        offset: String(next),
-      });
-      if (filterUserId) params.set("userId", filterUserId);
-      const res = await fetch(`/api/admin/costs/sessions?${params}`);
-      if (!res.ok) {
-        setLoading(false);
-        return;
-      }
-      const data = (await res.json()) as SessionCost[];
-      setSessions((prev) => [...prev, ...data]);
-      setHasMore(data.length === PAGE_SIZE);
-      setLoading(false);
-    })();
-  };
-
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Sessions</h2>
-        <select
-          className="rounded-md border bg-background px-3 py-1.5 text-sm"
-          value={filterUserId ?? ""}
-          onChange={(e) => onChangeFilter(e.target.value || null)}
-        >
-          <option value="">All users</option>
-          {users.map((u) => (
-            <option key={u.clerkUserId} value={u.clerkUserId}>
-              {truncateId(u.clerkUserId)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Session</TableHead>
-            <TableHead>User</TableHead>
-            <TableHead>Model</TableHead>
-            <TableHead className="text-right">Cost</TableHead>
-            <TableHead className="text-right">In</TableHead>
-            <TableHead className="text-right">Out</TableHead>
-            <TableHead className="text-right">Cache R</TableHead>
-            <TableHead className="text-right">Cache W</TableHead>
-            <TableHead>Updated</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sessions.map((s) => (
-            <TableRow key={s.sessionId}>
-              <TableCell className="font-mono text-sm">
-                {truncateId(s.sessionId)}
-              </TableCell>
-              <TableCell className="font-mono text-sm">
-                {truncateId(s.clerkUserId)}
-              </TableCell>
-              <TableCell className="text-sm">{s.model}</TableCell>
-              <TableCell className="text-right font-mono">
-                {formatCost(s.costUsd)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.inputTokens)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.outputTokens)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.cacheReadTokens)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.cacheWriteTokens)}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {formatDate(s.updatedAt)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {loading && (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      )}
-      {!loading && sessions.length === 0 && (
-        <p className="text-sm text-muted-foreground">No sessions found.</p>
-      )}
-      {hasMore && !loading && (
-        <Button variant="outline" size="sm" onClick={loadMore}>
-          Load more
-        </Button>
-      )}
-    </section>
-  );
-}
-
 // ─── Page ───────────────────────────────────────────────────────────
 
 export function AdminPage() {
   const [summary, setSummary] = useState<CostSummary | null>(null);
-  const [users, setUsers] = useState<UserCost[]>([]);
-  const [filterUserId, setFilterUserId] = useState<string | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -443,7 +117,7 @@ export function AdminPage() {
     void (async () => {
       const [costsRes, usersRes] = await Promise.all([
         fetch("/api/admin/costs"),
-        fetch("/api/admin/costs/by-user"),
+        fetch("/api/admin/users"),
       ]);
       if (!costsRes.ok || !usersRes.ok) {
         if (!cancelled) {
@@ -453,7 +127,7 @@ export function AdminPage() {
         return;
       }
       const costsData = (await costsRes.json()) as CostSummary;
-      const usersData = (await usersRes.json()) as UserCost[];
+      const usersData = (await usersRes.json()) as AdminUser[];
       if (!cancelled) {
         setSummary(costsData);
         setUsers(usersData);
@@ -502,18 +176,7 @@ export function AdminPage() {
 
       <main className="container mx-auto space-y-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <SummaryCards data={summary} />
-        <ImportNotesForm users={users} />
-        <UserCostsTable
-          users={users}
-          selectedUser={filterUserId}
-          onSelectUser={setFilterUserId}
-        />
-        <SessionsTable
-          key={filterUserId ?? "__all__"}
-          filterUserId={filterUserId}
-          users={users}
-          onChangeFilter={setFilterUserId}
-        />
+        <UsersTable users={users} />
       </main>
     </div>
   );

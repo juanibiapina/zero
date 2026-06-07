@@ -8,6 +8,8 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
+import { listClerkUsers, getClerkUser } from "../admin-users";
+import { getUserDO } from "../UserDO/stub";
 import { createAgentClient } from "../agent-client";
 import { log, logError } from "../log";
 
@@ -23,12 +25,25 @@ const CostSummarySchema = z.object({
   totalOutputTokens: z.number(),
 });
 
-const UserCostSchema = z.object({
+const AdminUserSchema = z.object({
   clerkUserId: z.string(),
+  email: z.string().nullable(),
+  username: z.string().nullable(),
+  createdAt: z.string(),
   costUsd: z.number(),
   sessions: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
+});
+
+const AdminUserDetailSchema = z.object({
+  clerkUserId: z.string(),
+  email: z.string().nullable(),
+  username: z.string().nullable(),
+  createdAt: z.string(),
+  telegramId: z.string().nullable(),
+  googleOnboardingStatus: z.string().nullable(),
+  onboardingSeen: z.boolean(),
 });
 
 const SessionCostSchema = z.object({
@@ -94,21 +109,26 @@ export const createAdminRoutes = () => {
     }, 200);
   });
 
-  // GET /api/admin/costs/by-user — per-user breakdown
-  const byUserRoute = createRoute({
+  // GET /api/admin/users — complete roster from Clerk, joined with cost.
+  //
+  // Clerk is the source of truth so every signed-up user appears, even
+  // those with no sessions. Cost comes from a single D1 aggregate joined
+  // in memory; no per-user UserDO/GitHub calls happen here (those live on
+  // the details route).
+  const usersRoute = createRoute({
     method: "get",
-    path: "/api/admin/costs/by-user",
+    path: "/api/admin/users",
     tags: ["Admin"],
-    summary: "Get cost breakdown by user",
+    summary: "List all users with cost data",
     responses: {
       200: {
-        content: { "application/json": { schema: z.array(UserCostSchema) } },
-        description: "Per-user cost data",
+        content: { "application/json": { schema: z.array(AdminUserSchema) } },
+        description: "All users joined with cost",
       },
     },
   });
 
-  router.openapi(byUserRoute, async (c) => {
+  router.openapi(usersRoute, async (c) => {
     interface UserRow {
       clerk_user_id: string;
       cost_usd: number;
@@ -116,25 +136,83 @@ export const createAdminRoutes = () => {
       input_tokens: number;
       output_tokens: number;
     }
-    const res = await c.env.SESSIONS_DB.prepare(`
-      SELECT
-        clerk_user_id,
-        SUM(cost_usd) AS cost_usd,
-        COUNT(*) AS sessions,
-        SUM(input_tokens) AS input_tokens,
-        SUM(output_tokens) AS output_tokens
-      FROM sessions
-      GROUP BY clerk_user_id
-      ORDER BY cost_usd DESC
-    `).all<UserRow>();
+    const [users, costRes] = await Promise.all([
+      listClerkUsers(c.env),
+      c.env.SESSIONS_DB.prepare(`
+        SELECT
+          clerk_user_id,
+          SUM(cost_usd) AS cost_usd,
+          COUNT(*) AS sessions,
+          SUM(input_tokens) AS input_tokens,
+          SUM(output_tokens) AS output_tokens
+        FROM sessions
+        GROUP BY clerk_user_id
+      `).all<UserRow>(),
+    ]);
 
-    return c.json(res.results.map((r) => ({
-      clerkUserId: r.clerk_user_id,
-      costUsd: r.cost_usd,
-      sessions: r.sessions,
-      inputTokens: r.input_tokens,
-      outputTokens: r.output_tokens,
-    })), 200);
+    const costByUser = new Map(costRes.results.map((r) => [r.clerk_user_id, r]));
+
+    const merged = users.map((u) => {
+      const cost = costByUser.get(u.clerkUserId);
+      return {
+        clerkUserId: u.clerkUserId,
+        email: u.email,
+        username: u.username,
+        createdAt: u.createdAt,
+        costUsd: cost?.cost_usd ?? 0,
+        sessions: cost?.sessions ?? 0,
+        inputTokens: cost?.input_tokens ?? 0,
+        outputTokens: cost?.output_tokens ?? 0,
+      };
+    });
+    merged.sort((a, b) => b.costUsd - a.costUsd);
+
+    return c.json(merged, 200);
+  });
+
+  // GET /api/admin/users/{userId} — per-user details for the detail page.
+  //
+  // The only admin path that pays for per-user Clerk + UserDO reads.
+  const userDetailRoute = createRoute({
+    method: "get",
+    path: "/api/admin/users/{userId}",
+    tags: ["Admin"],
+    summary: "Get a single user's identity and link status",
+    request: {
+      params: z.object({ userId: z.string().min(1) }),
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: AdminUserDetailSchema } },
+        description: "User identity and link status",
+      },
+      404: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "Unknown user",
+      },
+    },
+  });
+
+  router.openapi(userDetailRoute, async (c) => {
+    const { userId } = c.req.valid("param");
+    const identity = await getClerkUser(c.env, userId);
+    if (!identity) {
+      return c.json({ error: "Unknown user" }, 404);
+    }
+    const userDO = getUserDO(c.env, userId);
+    const [telegramId, settings] = await Promise.all([
+      userDO.getTelegramId(),
+      userDO.getSettings(),
+    ]);
+    return c.json({
+      clerkUserId: identity.clerkUserId,
+      email: identity.email,
+      username: identity.username,
+      createdAt: identity.createdAt,
+      telegramId,
+      googleOnboardingStatus: settings.googleOnboardingStatus,
+      onboardingSeen: settings.onboardingSeen,
+    }, 200);
   });
 
   // GET /api/admin/costs/sessions — list sessions with cost

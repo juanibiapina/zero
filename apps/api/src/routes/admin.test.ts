@@ -4,10 +4,19 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { createAdminRoutes } from "./admin";
 import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
+import { listClerkUsers, getClerkUser } from "../admin-users";
 
 vi.mock("../github-token", () => ({
   getGithubInstallationStatus: vi.fn(),
 }));
+
+vi.mock("../admin-users", () => ({
+  listClerkUsers: vi.fn(),
+  getClerkUser: vi.fn(),
+}));
+
+const { getUserDO } = vi.hoisted(() => ({ getUserDO: vi.fn() }));
+vi.mock("../UserDO/stub", () => ({ getUserDO }));
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -146,20 +155,88 @@ describe("GET /api/admin/costs", () => {
   });
 });
 
-describe("GET /api/admin/costs/by-user", () => {
-  it("returns per-user breakdown", async () => {
+describe("GET /api/admin/users", () => {
+  const identities = [
+    { clerkUserId: "user_a", email: "a@example.com", username: "alice", createdAt: "2025-01-01T00:00:00Z" },
+    { clerkUserId: "user_b", email: "b@example.com", username: null, createdAt: "2025-02-01T00:00:00Z" },
+  ];
+
+  it("returns 403 for non-admin users", async () => {
+    const app = buildApp(fakeEnv("admin_1"), "other_user");
+    const res = await app.request("/api/admin/users");
+    expect(res.status).toBe(403);
+  });
+
+  it("merges Clerk identities with D1 cost, defaulting zero-session users", async () => {
+    vi.mocked(listClerkUsers).mockResolvedValue(identities);
     const db = fakeD1([
       { clerk_user_id: "user_a", cost_usd: 0.80, sessions: 3, input_tokens: 5000, output_tokens: 2000 },
-      { clerk_user_id: "user_b", cost_usd: 0.20, sessions: 1, input_tokens: 1000, output_tokens: 500 },
     ]);
     const app = buildApp(fakeEnv("admin_1", db), "admin_1");
 
-    const res = await app.request("/api/admin/costs/by-user");
+    const res = await app.request("/api/admin/users");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
-      { clerkUserId: "user_a", costUsd: 0.80, sessions: 3, inputTokens: 5000, outputTokens: 2000 },
-      { clerkUserId: "user_b", costUsd: 0.20, sessions: 1, inputTokens: 1000, outputTokens: 500 },
+      {
+        clerkUserId: "user_a", email: "a@example.com", username: "alice",
+        createdAt: "2025-01-01T00:00:00Z",
+        costUsd: 0.80, sessions: 3, inputTokens: 5000, outputTokens: 2000,
+      },
+      {
+        clerkUserId: "user_b", email: "b@example.com", username: null,
+        createdAt: "2025-02-01T00:00:00Z",
+        costUsd: 0, sessions: 0, inputTokens: 0, outputTokens: 0,
+      },
     ]);
+  });
+
+  it("does not read the UserDO", async () => {
+    vi.mocked(listClerkUsers).mockResolvedValue(identities);
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    await app.request("/api/admin/users");
+    expect(getUserDO).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/admin/users/{userId}", () => {
+  it("returns 403 for non-admin users", async () => {
+    const app = buildApp(fakeEnv("admin_1"), "other_user");
+    const res = await app.request("/api/admin/users/user_a");
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when Clerk does not know the user", async () => {
+    vi.mocked(getClerkUser).mockResolvedValue(null);
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request("/api/admin/users/ghost");
+    expect(res.status).toBe(404);
+  });
+
+  it("merges Clerk identity with UserDO link status", async () => {
+    vi.mocked(getClerkUser).mockResolvedValue({
+      clerkUserId: "user_a", email: "a@example.com", username: "alice",
+      createdAt: "2025-01-01T00:00:00Z",
+    });
+    getUserDO.mockReturnValue({
+      getTelegramId: async () => "12345",
+      getSettings: async () => ({
+        onboardingSeen: true,
+        googleOnboardingStatus: "done",
+        createdAt: "2025-01-01T00:00:00Z",
+        isNewUser: false,
+      }),
+    });
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request("/api/admin/users/user_a");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      clerkUserId: "user_a", email: "a@example.com", username: "alice",
+      createdAt: "2025-01-01T00:00:00Z",
+      telegramId: "12345", googleOnboardingStatus: "done", onboardingSeen: true,
+    });
   });
 });
 

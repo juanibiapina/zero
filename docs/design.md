@@ -246,7 +246,23 @@ GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
 POST   /api/telegram-link                — Link via Login Widget payload (Clerk)
 DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
+
+GET    /api/admin/users                  — List all users + cost (admin)
+GET    /api/admin/users/{userId}         — One user's identity + link status (admin)
+GET    /api/admin/costs                  — Aggregate cost summary (admin)
+GET    /api/admin/costs/sessions         — Session cost list, ?userId= filter (admin)
+GET    /api/admin/github/status          — A user's GitHub install/token check (admin)
+POST   /api/admin/import-notes/{userId}  — Import a notes archive (admin)
 ```
+
+Admin routes are gated by the `ADMIN_USER_ID` env var. The user list is
+sourced from Clerk (`apps/api/src/admin-users.ts`), so every signed-up
+user appears — even those with no sessions — joined in memory with a
+single D1 cost aggregate; it does **no** per-user UserDO or GitHub calls.
+The detail route is the only admin path that pays for a per-user Clerk
+`getUser` plus one UserDO read (Telegram link, Google/onboarding status);
+GitHub status, the session list, and notes import stay separate endpoints
+the detail page composes on the client.
 
 The link route accepts the Login Widget callback payload and verifies
 its HMAC against `TELEGRAM_BOT_TOKEN` (`apps/api/src/telegram-auth.ts`).

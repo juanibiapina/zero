@@ -19,6 +19,7 @@ import { DevToolbar } from "@/components/DevToolbar";
 import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AdminPage } from "./pages/AdminPage";
+import { UserDetailPage } from "./pages/UserDetailPage";
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
@@ -48,6 +49,7 @@ function AuthGate() {
         <Route index element={<HomeRoute />} />
         <Route path="onboarding" element={<OnboardingRoute />} />
         <Route path="admin" element={<AdminPage />} />
+        <Route path="admin/users/:userId" element={<UserDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
