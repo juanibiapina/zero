@@ -149,8 +149,10 @@ AgentContainer.outboundByHost = {
 `refreshEnvVars` packs `envVars` with `CALLBACK_URL`, the secret
 sentinels (`CLOUDFLARE_API_KEY` and, when the user has connected Google,
 `GOOGLE_WORKSPACE_CLI_TOKEN`), and `CLERK_USER_ID`. It also fetches a
-live Google access token and pushes it to the `substitute` outbound
-handler. There are no R2 credentials and no mount specs: the container
+live Google access token and pushes it — along with the user id used to tag
+AI Gateway requests (`cf-aig-metadata`, see [`design.md`](design.md) under
+**Secret Proxying**) — to the `substitute` outbound handler. There are no R2
+credentials and no mount specs: the container
 persists its `/workspace` tree as a single `state.tar.gz` archive
 through the worker's `/state` route (see [`design.md`](design.md) under
 **Persistence**). The Container base class only restarts the underlying
@@ -162,7 +164,7 @@ The container `fetch`es `http://zero.worker/message-end` (and
 handler runs inside the Workers runtime with
 full access to `env` (KV, Telegram bot token) and uses grammY to send
 the reply. Pi-ai's LLM calls route through the Cloudflare AI Gateway
-(unified billing) over normal egress. `index.ts` must
+(BYOK) over normal egress. `index.ts` must
 re-export `ContainerProxy` for the outbound interception to work.
 
 The reverse direction (worker→container) goes through

@@ -10,6 +10,7 @@ import { getGoogleAccessToken } from "./google-token";
 import { getGithubInstallationToken } from "./github-token";
 import { fmtErr, log, logError } from "./log";
 import { createSecretProxy } from "./secret-proxy";
+import { withGatewayMetadata } from "./ai-gateway";
 import { getUserDO } from "./UserDO/stub";
 import type { Env } from "./types";
 import { formatAndSend } from "./telegram/send";
@@ -201,7 +202,7 @@ export class AgentContainer extends Container<Env> {
     if (githubToken !== null) {
       overrides.GH_TOKEN = githubToken;
     }
-    await this.setOutboundHandler("substitute", { overrides });
+    await this.setOutboundHandler("substitute", { overrides, userId: clerkUserId });
 
     // Omit sentinels whose real value isn't available this call so the
     // consumer (e.g. gws, git/gh) exits with a clean auth error instead of
@@ -233,6 +234,8 @@ AgentContainer.outboundByHost = {
   },
 };
 
-// Named registration so `setOutboundHandler('substitute', { overrides })`
+// Named registration so `setOutboundHandler('substitute', { overrides, userId })`
 // in `refreshEnvVars` can target it.
-AgentContainer.outboundHandlers = { substitute: secretProxy.outbound };
+AgentContainer.outboundHandlers = {
+  substitute: withGatewayMetadata(secretProxy.outbound),
+};

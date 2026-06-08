@@ -434,6 +434,20 @@ handler:
   `envVars` entirely so `gws` exits with a clear auth error rather
   than forwarding a sentinel nothing can substitute.
 
+A separate concern tags AI Gateway traffic with the requesting user. The
+substitution handler is wrapped by `withGatewayMetadata` (`ai-gateway.ts`):
+for requests whose host is `gateway.ai.cloudflare.com`, the wrapper sets
+`cf-aig-metadata: {"user_id": "<clerkUserId>"}` before delegating to the
+substitution (the `userId` is passed alongside `overrides` via
+`setOutboundHandler` in `refreshEnvVars`). Because the worker sets this
+*after* the container boundary, it is authoritative — `.set` overwrites any
+value the container supplied, so the agent can't spoof another user. The tag
+drives per-user analytics and split-by-value spend limits in the gateway
+(referenced there as `metadata.user_id`). It is only added for the gateway
+host, so the id never leaks to other egress (GitHub, Google). Substitution
+(`secret-proxy.ts`) stays oblivious to Cloudflare and users; this wrapper
+stays oblivious to secrets.
+
 ## Secrets
 
 Stored in Doppler (`zero-api`):
