@@ -19,7 +19,7 @@
   },
   "vars": {
     "TELEGRAM_API_ROOT": "https://api.telegram.org",
-    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+    "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/4e04b64af4013414441c59014392bea0/zero/anthropic",
     "MODEL_ID": "claude-sonnet-4-5-20250929"
   },
   "routes": [

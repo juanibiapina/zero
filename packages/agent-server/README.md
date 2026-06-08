@@ -10,7 +10,10 @@ Under the hood it drives
 Each `POST /sessions` builds a fresh `AgentSession` using pi-ai's
 built-in `anthropic` provider (`claude-sonnet-4-5-20250929`,
 `thinkingLevel: "high"`). Pi reads `ANTHROPIC_API_KEY` from
-`process.env` and talks directly to `api.anthropic.com`.
+`process.env`. pi-ai's `anthropic` provider hardcodes
+`https://api.anthropic.com` and ignores `ANTHROPIC_BASE_URL`, so the
+server reads that var and overrides the model's `baseUrl` itself; in prod
+it points at the Cloudflare AI Gateway, which proxies to Anthropic.
 
 All mutable state lives under the fixed `/workspace` tree (pi's `cwd`):
 
@@ -82,7 +85,8 @@ expected to be reachable from the server's environment.
 |---------------------|----------|---------------|----------------------------------------------------|
 | `PORT`              | no       | `8080`        | Port to listen on.                                 |
 | `CALLBACK_URL`    | yes      | —             | Base URL the server uses for callbacks (`$CALLBACK_URL/message-end`, `/agent-end`, `/state`). Exits if unset. |
-| `ANTHROPIC_API_KEY` | yes      | —             | Anthropic API key, used by pi-ai's built-in `anthropic` provider. |
+| `ANTHROPIC_API_KEY` | yes      | —             | Anthropic API key, used by pi-ai's built-in `anthropic` provider; sent to whatever `ANTHROPIC_BASE_URL` points at (the Cloudflare AI Gateway in prod). |
+| `ANTHROPIC_BASE_URL` | no       | provider default | Overrides the `anthropic` provider's base URL (`https://api.anthropic.com`). Set to the Cloudflare AI Gateway anthropic route in prod; the SDK appends `/v1/messages`. |
 | `CLERK_USER_ID`     | yes      | —             | Clerk user id, included in callback payloads and the `X-Clerk-User-Id` header on `/state` requests. Server exits if unset. |
 
 ## Persistence

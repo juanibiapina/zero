@@ -273,6 +273,14 @@ export interface SessionBridgeOptions {
   clerkUserId: string;
   /** Anthropic model id every session runs on. Required; no fallback. */
   modelId: string;
+  /**
+   * Overrides the provider's default API base URL when set. pi-ai's
+   * `anthropic` provider otherwise hardcodes `https://api.anthropic.com`
+   * and ignores `ANTHROPIC_BASE_URL`; setting it here routes LLM traffic
+   * through the configured endpoint (the Cloudflare AI Gateway in prod,
+   * the mock Anthropic server in e2e).
+   */
+  baseUrl?: string;
 }
 
 export interface SessionBridge {
@@ -288,7 +296,7 @@ export const createSessionBridge = (
   postAgentEnd: AgentEndFn,
   opts: SessionBridgeOptions,
 ): SessionBridge => {
-  const { cwd, stateDir, callbackUrl, clerkUserId, modelId } = opts;
+  const { cwd, stateDir, callbackUrl, clerkUserId, modelId, baseUrl } = opts;
   const workspaceDir = "/workspace";
   const sessions = new Map<string, SessionState>();
 
@@ -304,6 +312,9 @@ export const createSessionBridge = (
     const model = modelRegistry.find(PROVIDER, modelId);
     if (!model) {
       throw new Error(`model ${PROVIDER}/${modelId} not found in registry`);
+    }
+    if (baseUrl) {
+      model.baseUrl = baseUrl;
     }
 
     const closeSessionTool = createCloseSessionTool({

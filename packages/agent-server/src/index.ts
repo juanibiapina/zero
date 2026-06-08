@@ -18,6 +18,7 @@ const cwd = "/workspace";
 const stateDir = "/workspace/sessions";
 const clerkUserId = process.env.CLERK_USER_ID;
 const modelId = process.env.MODEL_ID;
+const baseUrl = process.env.ANTHROPIC_BASE_URL;
 
 if (!callbackUrl) {
   logError("missing_env", { var: "CALLBACK_URL" });
@@ -83,7 +84,7 @@ const sendAgentEnd = async (sessionId: string, willRetry: boolean, stats: Sessio
   }
 };
 
-const bridge = createSessionBridge(sendMessageEnd, sendAgentEnd, { cwd, stateDir, callbackUrl, clerkUserId, modelId });
+const bridge = createSessionBridge(sendMessageEnd, sendAgentEnd, { cwd, stateDir, callbackUrl, clerkUserId, modelId, baseUrl });
 
 const app = createAgentApp({
   createSession: (sessionId) => bridge.createSession(sessionId),

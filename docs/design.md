@@ -28,8 +28,10 @@ agent produces each assistant message, the container POSTs to
 `http://zero.worker/message-end` and the worker delivers it to Telegram
 immediately. When the agent loop finishes, the container POSTs to
 `http://zero.worker/agent-end` so the worker can stop the typing
-indicator. The only external egress from the container is to
-`api.anthropic.com`. State is persisted through the worker (see below),
+indicator. The only external egress from the container is to the
+Cloudflare AI Gateway (`gateway.ai.cloudflare.com`), which proxies to
+Anthropic — see "Secret proxying" below. State is persisted through the
+worker (see below),
 not by talking to R2 directly.
 
 All mutable state is persisted as a single compressed archive of the
@@ -108,13 +110,13 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 │        setOutboundHandler('substitute', { overrides }))          │
 │                                                                  │
 │  pi-ai inside the container:                                     │
-│    POST https://api.anthropic.com/v1/messages                    │
+│    POST {AI Gateway}/anthropic/v1/messages                       │
 │      x-api-key: Z3R0-FAKE-ANTHROPIC_API_KEY                      │
 │      │  intercepted on-host by the catch-all handler             │
 │      ▼                                                           │
 │    secretProxy.outbound:                                         │
 │      url/headers/body — byte-replace fake → env.ANTHROPIC_API_KEY │
-│      fetch(api.anthropic.com, ...)  (real key, only here)        │
+│      fetch(gateway.ai.cloudflare.com, ...)  (real key here)      │
 │    → normal Anthropic stream; tool calls, thinking, content      │
 │                                                                  │
 │  On each message_end, the container POSTs:                       │
@@ -315,10 +317,14 @@ response shapes are inferred from the shared Zod schemas; the worker
 never hand-encodes them.
 
 Inside the container, pi-coding-agent drives the conversation. Pi-ai
-talks directly to `https://api.anthropic.com/v1/messages` using its
-built-in `anthropic` provider, reading `process.env.ANTHROPIC_API_KEY`
+talks to `{ANTHROPIC_BASE_URL}/v1/messages` using its built-in
+`anthropic` provider, reading `process.env.ANTHROPIC_API_KEY`
 — which is a sentinel that the worker's catch-all outbound handler
-swaps for the real key on the way out (see “Secret Proxying”). The
+swaps for the real key on the way out (see “Secret Proxying”).
+pi-ai's `anthropic` provider hardcodes `https://api.anthropic.com` and
+ignores `ANTHROPIC_BASE_URL`, so `@zero/agent-server` reads that var and
+overrides the model's base URL — pointing it at the Cloudflare AI Gateway
+anthropic route, which proxies to Anthropic. The
 model is `claude-sonnet-4-5-20250929` with thinking level `high`.
 
 As pi produces each assistant message (the `message_end` event), the
@@ -433,7 +439,8 @@ Stored in Doppler (`zero-api`):
 - `TELEGRAM_BOT_INFO` — JSON `getMe` result; lets grammY skip the per-request
   `getMe` call (see [`telegram-webhook.md`](telegram-webhook.md))
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
-- `ANTHROPIC_API_KEY` — substituted on egress to `api.anthropic.com` by
+- `ANTHROPIC_API_KEY` — substituted on egress (to the AI Gateway, which
+  proxies to Anthropic) by
   the catch-all outbound handler; pi sees only a sentinel
 
 Google Workspace access is **not** stored in Doppler. Each user opts in
@@ -485,10 +492,13 @@ Conventions:
 ## Future Work
 
 - Tighten container egress: set `enableInternet = false` plus
-  `allowedHosts = ["api.anthropic.com", "zero.worker"]`.
+  `allowedHosts = ["gateway.ai.cloudflare.com", "zero.worker"]`.
 - Surface session history (read sessions back out of R2 from the web UI
   for browsing/export).
 - Per-user model preference + a switching API. Pi supports
   `session.setModel(…)`; expose a Clerk-gated route to drive it.
-- Route Anthropic traffic through AI Gateway later for observability,
-  per-user cost accounting, and caching.
+- Move AI billing to Cloudflare via AI Gateway unified billing: switch
+  pi to the native `cloudflare-ai-gateway` provider (authenticating with
+  a Cloudflare token instead of the Anthropic key) so Cloudflare settles
+  the upstream bill. Anthropic traffic already routes through the gateway
+  for observability, cost analytics, spend limits, and caching.

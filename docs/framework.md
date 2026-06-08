@@ -161,9 +161,9 @@ The container `fetch`es `http://zero.worker/message-end` (and
 `/agent-end`, `/state`); that request never leaves the machine — the
 handler runs inside the Workers runtime with
 full access to `env` (KV, Telegram bot token) and uses grammY to send
-the reply. Pi-ai's LLM calls go directly to `api.anthropic.com` over
-normal egress. `index.ts` must re-export `ContainerProxy` for the
-outbound interception to work.
+the reply. Pi-ai's LLM calls route through the Cloudflare AI Gateway
+(which proxies to Anthropic) over normal egress. `index.ts` must
+re-export `ContainerProxy` for the outbound interception to work.
 
 The reverse direction (worker→container) goes through
 `apps/api/src/agent-client.ts`, a Hono RPC client derived from
