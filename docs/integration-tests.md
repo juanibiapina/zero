@@ -161,7 +161,7 @@ per-PR runs. A future GitHub Actions cron workflow can call
 ## Cost notes
 
 - **Anthropic**: three turns with no tools is a couple of cents on
-  `claude-sonnet-4-5-20250929` at thinking level `high`.
+  `claude-opus-4-8` at thinking level `high`.
 - **Cloudflare Containers**: each run wakes the container if it was
   idle (free billable seconds, mostly).
 - **Telegram**: free, but counts toward your account's normal rate

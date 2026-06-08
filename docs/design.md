@@ -25,7 +25,7 @@ fakes with their real env values before forwarding. The real
 env, the leaked string is a useless sentinel. See "Secret proxying"
 below.
 
-The model is `claude-sonnet-4-5` with thinking level `high`.
+The model is `claude-opus-4-8` with thinking level `high`.
 Replies flow back through a separate on-host outbound trick — as the
 agent produces each assistant message, the container POSTs to
 `http://zero.worker/message-end` and the worker delivers it to Telegram
@@ -76,7 +76,7 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 | State  | KV (Workers KV) + UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) |
 | Container | Cloudflare Containers (`@cloudflare/containers`, with `outboundByHost`) |
 | Agent  | [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) (Node 22 inside the container) |
-| LLM    | Anthropic API direct — `claude-sonnet-4-5-20250929` |
+| LLM    | Cloudflare AI Gateway → Anthropic — `claude-opus-4-8` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
 | Secrets | Doppler (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
 
@@ -327,7 +327,7 @@ reading the token from `process.env.CLOUDFLARE_API_KEY` — a sentinel the
 worker's catch-all outbound handler swaps for the real value on the way
 out (see “Secret Proxying”). It sends no Anthropic key; Cloudflare
 authenticates upstream and settles the bill (unified billing). The model
-is `claude-sonnet-4-5` with thinking level `high`. `@zero/agent-server`
+is `claude-opus-4-8` with thinking level `high`. `@zero/agent-server`
 reads an optional `LLM_BASE_URL_OVERRIDE` to repoint the model's base URL
 at the mock Anthropic server in e2e; it is empty in prod.
 

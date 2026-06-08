@@ -21,7 +21,7 @@
     "TELEGRAM_API_ROOT": "https://api.telegram.org",
     "CLOUDFLARE_ACCOUNT_ID": "4e04b64af4013414441c59014392bea0",
     "CLOUDFLARE_GATEWAY_ID": "zero",
-    "MODEL_ID": "claude-sonnet-4-5",
+    "MODEL_ID": "claude-opus-4-8",
     "LLM_BASE_URL_OVERRIDE": ""
   },
   "routes": [

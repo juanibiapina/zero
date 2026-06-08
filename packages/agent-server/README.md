@@ -8,7 +8,7 @@ run on any Node.js host that can reach the configured `CALLBACK_URL`.
 Under the hood it drives
 [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
 Each `POST /sessions` builds a fresh `AgentSession` using pi-ai's
-built-in `cloudflare-ai-gateway` provider (`claude-sonnet-4-5`,
+built-in `cloudflare-ai-gateway` provider (`claude-opus-4-8`,
 `thinkingLevel: "high"`). The provider builds the gateway URL from
 `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_GATEWAY_ID` and authenticates with
 `cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>`, read from
@@ -90,7 +90,7 @@ expected to be reachable from the server's environment.
 | `CLOUDFLARE_API_KEY` | yes      | —             | Cloudflare AI Gateway token, sent as `cf-aig-authorization`. Resolved by pi-ai's `cloudflare-ai-gateway` provider from `process.env`. |
 | `CLOUDFLARE_ACCOUNT_ID` | yes   | —             | Cloudflare account id; substituted into the gateway base URL. |
 | `CLOUDFLARE_GATEWAY_ID` | yes   | —             | AI Gateway slug; substituted into the gateway base URL. |
-| `MODEL_ID`          | yes      | —             | Gateway model id, e.g. `claude-sonnet-4-5`. |
+| `MODEL_ID`          | yes      | —             | Gateway model id, e.g. `claude-opus-4-8`. |
 | `LLM_BASE_URL_OVERRIDE` | no   | (empty)       | Test-only override of the model's base URL (points at the mock Anthropic server in e2e). Empty/unset in prod. |
 | `CLERK_USER_ID`     | yes      | —             | Clerk user id, included in callback payloads and the `X-Clerk-User-Id` header on `/state` requests. Server exits if unset. |
 
