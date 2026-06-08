@@ -19,8 +19,10 @@
   },
   "vars": {
     "TELEGRAM_API_ROOT": "https://api.telegram.org",
-    "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/4e04b64af4013414441c59014392bea0/zero/anthropic",
-    "MODEL_ID": "claude-sonnet-4-5-20250929"
+    "CLOUDFLARE_ACCOUNT_ID": "4e04b64af4013414441c59014392bea0",
+    "CLOUDFLARE_GATEWAY_ID": "zero",
+    "MODEL_ID": "claude-sonnet-4-5",
+    "LLM_BASE_URL_OVERRIDE": ""
   },
   "routes": [
     { "pattern": "zero.juanibiapina.dev/*", "zone_name": "juanibiapina.dev" }

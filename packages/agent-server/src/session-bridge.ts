@@ -33,7 +33,7 @@ import { createCloseSessionTool } from "./close-session-tool.js";
 import type { PromptAttachment } from "./app.js";
 import { saveState } from "./save-state.js";
 
-const PROVIDER = "anthropic";
+const PROVIDER = "cloudflare-ai-gateway";
 const ATTACHMENTS_DIR = "/workspace/attachments";
 
 // pi's bash tool takes an optional per-command timeout (seconds) but has
@@ -271,16 +271,17 @@ export interface SessionBridgeOptions {
   callbackUrl: string;
   /** Clerk user ID for callback payloads. */
   clerkUserId: string;
-  /** Anthropic model id every session runs on. Required; no fallback. */
+  /** Model id every session runs on. Required; no fallback. */
   modelId: string;
   /**
-   * Overrides the provider's default API base URL when set. pi-ai's
-   * `anthropic` provider otherwise hardcodes `https://api.anthropic.com`
-   * and ignores `ANTHROPIC_BASE_URL`; setting it here routes LLM traffic
-   * through the configured endpoint (the Cloudflare AI Gateway in prod,
-   * the mock Anthropic server in e2e).
+   * Test-only override of the resolved model's API base URL. Empty/unset
+   * in prod, where the `cloudflare-ai-gateway` provider builds its own URL
+   * from CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_GATEWAY_ID. In e2e it points at
+   * the mock Anthropic server. Works because the provider's base-URL
+   * placeholder resolution returns the value unchanged when it has no
+   * `{…}` placeholders.
    */
-  baseUrl?: string;
+  baseUrlOverride?: string;
 }
 
 export interface SessionBridge {
@@ -296,7 +297,7 @@ export const createSessionBridge = (
   postAgentEnd: AgentEndFn,
   opts: SessionBridgeOptions,
 ): SessionBridge => {
-  const { cwd, stateDir, callbackUrl, clerkUserId, modelId, baseUrl } = opts;
+  const { cwd, stateDir, callbackUrl, clerkUserId, modelId, baseUrlOverride } = opts;
   const workspaceDir = "/workspace";
   const sessions = new Map<string, SessionState>();
 
@@ -313,8 +314,8 @@ export const createSessionBridge = (
     if (!model) {
       throw new Error(`model ${PROVIDER}/${modelId} not found in registry`);
     }
-    if (baseUrl) {
-      model.baseUrl = baseUrl;
+    if (baseUrlOverride) {
+      model.baseUrl = baseUrlOverride;
     }
 
     const closeSessionTool = createCloseSessionTool({

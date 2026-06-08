@@ -88,7 +88,7 @@ describe("processStatusCommand", () => {
   it("replies with model and context usage", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO({ "100:200": "sess-1" });
-    const stub = fakeStub({ model: "anthropic/claude-sonnet-4-5-20250929", contextPercent: 42 });
+    const stub = fakeStub({ model: "cloudflare-ai-gateway/claude-sonnet-4-5", contextPercent: 42 });
     const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
 
     await processStatusCommand(ctx, fakeEnv(kv, userDO, stub), sendReply);
@@ -96,14 +96,14 @@ describe("processStatusCommand", () => {
     expect(sendReply).toHaveBeenCalledWith(
       100,
       200,
-      "🤖 anthropic/claude-sonnet-4-5-20250929\n📊 42% context",
+      "🤖 cloudflare-ai-gateway/claude-sonnet-4-5\n📊 42% context",
     );
   });
 
   it("handles null context percent", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO({ "100:200": "sess-1" });
-    const stub = fakeStub({ model: "anthropic/claude-sonnet-4-5-20250929", contextPercent: null });
+    const stub = fakeStub({ model: "cloudflare-ai-gateway/claude-sonnet-4-5", contextPercent: null });
     const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
 
     await processStatusCommand(ctx, fakeEnv(kv, userDO, stub), sendReply);
@@ -111,7 +111,7 @@ describe("processStatusCommand", () => {
     expect(sendReply).toHaveBeenCalledWith(
       100,
       200,
-      "🤖 anthropic/claude-sonnet-4-5-20250929\n📊 —% context",
+      "🤖 cloudflare-ai-gateway/claude-sonnet-4-5\n📊 —% context",
     );
   });
 });

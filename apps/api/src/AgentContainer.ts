@@ -16,7 +16,7 @@ import { formatAndSend } from "./telegram/send";
 import { handleAgentEnd } from "./handle-agent-end";
 
 const secretProxy = createSecretProxy(
-  ["ANTHROPIC_API_KEY", "BRAVE_API_KEY"],
+  ["CLOUDFLARE_API_KEY", "BRAVE_API_KEY"],
   ["GOOGLE_WORKSPACE_CLI_TOKEN", "GH_TOKEN"],
 );
 
@@ -214,8 +214,10 @@ export class AgentContainer extends Container<Env> {
       CALLBACK_URL: "http://zero.worker",
       ...sentinels,
       CLERK_USER_ID: clerkUserId,
-      ANTHROPIC_BASE_URL: this.env.ANTHROPIC_BASE_URL,
+      CLOUDFLARE_ACCOUNT_ID: this.env.CLOUDFLARE_ACCOUNT_ID,
+      CLOUDFLARE_GATEWAY_ID: this.env.CLOUDFLARE_GATEWAY_ID,
       MODEL_ID: this.env.MODEL_ID,
+      LLM_BASE_URL_OVERRIDE: this.env.LLM_BASE_URL_OVERRIDE,
     };
   }
 }

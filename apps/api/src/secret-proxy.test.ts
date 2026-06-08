@@ -37,17 +37,17 @@ const decodeBasic = (header: string): string => atob(header.replace(/^Basic /, "
 
 describe("secret proxy — verbatim substitution", () => {
   it("substitutes a sentinel that appears raw in a header value", async () => {
-    const proxy = createSecretProxy(["ANTHROPIC_API_KEY"]);
-    const env = { ANTHROPIC_API_KEY: "real-anthropic-key" } as unknown as Env;
-    const req = new Request("https://api.anthropic.com/v1/messages", {
+    const proxy = createSecretProxy(["CLOUDFLARE_API_KEY"]);
+    const env = { CLOUDFLARE_API_KEY: "real-cloudflare-token" } as unknown as Env;
+    const req = new Request("https://gateway.ai.cloudflare.com/v1/acct/zero/anthropic/v1/messages", {
       method: "POST",
-      headers: { "x-api-key": "Z3R0-FAKE-ANTHROPIC_API_KEY" },
+      headers: { "cf-aig-authorization": "Bearer Z3R0-FAKE-CLOUDFLARE_API_KEY" },
       body: "{}",
     });
 
     await proxy.outbound(req, env, ctx());
 
-    expect(captured?.headers.get("x-api-key")).toBe("real-anthropic-key");
+    expect(captured?.headers.get("cf-aig-authorization")).toBe("Bearer real-cloudflare-token");
   });
 });
 

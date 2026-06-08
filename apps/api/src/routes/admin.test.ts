@@ -245,7 +245,7 @@ describe("GET /api/admin/costs/sessions", () => {
     const db = fakeD1([{
       session_id: "sess-1",
       clerk_user_id: "user_a",
-      model: "anthropic/claude-sonnet-4-5-20250929",
+      model: "cloudflare-ai-gateway/claude-sonnet-4-5",
       input_tokens: 1000,
       output_tokens: 500,
       cache_read_tokens: 100,
@@ -261,7 +261,7 @@ describe("GET /api/admin/costs/sessions", () => {
     expect(await res.json()).toEqual([{
       sessionId: "sess-1",
       clerkUserId: "user_a",
-      model: "anthropic/claude-sonnet-4-5-20250929",
+      model: "cloudflare-ai-gateway/claude-sonnet-4-5",
       inputTokens: 1000,
       outputTokens: 500,
       cacheReadTokens: 100,

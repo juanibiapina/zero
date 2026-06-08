@@ -14,9 +14,11 @@
   },
   "vars": {
     "TELEGRAM_API_ROOT": "http://localhost:3501",
-    "ANTHROPIC_BASE_URL": "http://localhost:3502",
+    "LLM_BASE_URL_OVERRIDE": "http://localhost:3502",
     "ENVIRONMENT": "test",
-    "MODEL_ID": "claude-sonnet-4-5-20250929"
+    "MODEL_ID": "claude-sonnet-4-5",
+    "CLOUDFLARE_ACCOUNT_ID": "test-account",
+    "CLOUDFLARE_GATEWAY_ID": "test-gateway"
   },
   "kv_namespaces": [
     {

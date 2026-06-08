@@ -8,12 +8,14 @@ run on any Node.js host that can reach the configured `CALLBACK_URL`.
 Under the hood it drives
 [`@earendil-works/pi-coding-agent`](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
 Each `POST /sessions` builds a fresh `AgentSession` using pi-ai's
-built-in `anthropic` provider (`claude-sonnet-4-5-20250929`,
-`thinkingLevel: "high"`). Pi reads `ANTHROPIC_API_KEY` from
-`process.env`. pi-ai's `anthropic` provider hardcodes
-`https://api.anthropic.com` and ignores `ANTHROPIC_BASE_URL`, so the
-server reads that var and overrides the model's `baseUrl` itself; in prod
-it points at the Cloudflare AI Gateway, which proxies to Anthropic.
+built-in `cloudflare-ai-gateway` provider (`claude-sonnet-4-5`,
+`thinkingLevel: "high"`). The provider builds the gateway URL from
+`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_GATEWAY_ID` and authenticates with
+`cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>`, read from
+`process.env`. No Anthropic key is sent; Cloudflare authenticates
+upstream and settles the bill (unified billing). For e2e, the server
+reads an optional `LLM_BASE_URL_OVERRIDE` and repoints the model's
+`baseUrl` at the mock Anthropic server; it is empty in prod.
 
 All mutable state lives under the fixed `/workspace` tree (pi's `cwd`):
 
@@ -85,8 +87,11 @@ expected to be reachable from the server's environment.
 |---------------------|----------|---------------|----------------------------------------------------|
 | `PORT`              | no       | `8080`        | Port to listen on.                                 |
 | `CALLBACK_URL`    | yes      | —             | Base URL the server uses for callbacks (`$CALLBACK_URL/message-end`, `/agent-end`, `/state`). Exits if unset. |
-| `ANTHROPIC_API_KEY` | yes      | —             | Anthropic API key, used by pi-ai's built-in `anthropic` provider; sent to whatever `ANTHROPIC_BASE_URL` points at (the Cloudflare AI Gateway in prod). |
-| `ANTHROPIC_BASE_URL` | no       | provider default | Overrides the `anthropic` provider's base URL (`https://api.anthropic.com`). Set to the Cloudflare AI Gateway anthropic route in prod; the SDK appends `/v1/messages`. |
+| `CLOUDFLARE_API_KEY` | yes      | —             | Cloudflare AI Gateway token, sent as `cf-aig-authorization`. Resolved by pi-ai's `cloudflare-ai-gateway` provider from `process.env`. |
+| `CLOUDFLARE_ACCOUNT_ID` | yes   | —             | Cloudflare account id; substituted into the gateway base URL. |
+| `CLOUDFLARE_GATEWAY_ID` | yes   | —             | AI Gateway slug; substituted into the gateway base URL. |
+| `MODEL_ID`          | yes      | —             | Gateway model id, e.g. `claude-sonnet-4-5`. |
+| `LLM_BASE_URL_OVERRIDE` | no   | (empty)       | Test-only override of the model's base URL (points at the mock Anthropic server in e2e). Empty/unset in prod. |
 | `CLERK_USER_ID`     | yes      | —             | Clerk user id, included in callback payloads and the `X-Clerk-User-Id` header on `/state` requests. Server exits if unset. |
 
 ## Persistence

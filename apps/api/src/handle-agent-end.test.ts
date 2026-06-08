@@ -149,7 +149,7 @@ describe("handleAgentEnd", () => {
         clerkUserId: "user_abc",
         willRetry: false,
         stats: {
-          model: "anthropic/claude-sonnet-4-5-20250929",
+          model: "cloudflare-ai-gateway/claude-sonnet-4-5",
           inputTokens: 1000,
           outputTokens: 500,
           cacheReadTokens: 200,
@@ -164,7 +164,7 @@ describe("handleAgentEnd", () => {
     expect(db._calls[0].query).toContain("INSERT INTO sessions");
     expect(db._calls[0].bindings[0]).toBe("sess-1");
     expect(db._calls[0].bindings[1]).toBe("user_abc");
-    expect(db._calls[0].bindings[2]).toBe("anthropic/claude-sonnet-4-5-20250929");
+    expect(db._calls[0].bindings[2]).toBe("cloudflare-ai-gateway/claude-sonnet-4-5");
     expect(db._calls[0].bindings[7]).toBe(0.05);
   });
 
@@ -179,7 +179,7 @@ describe("handleAgentEnd", () => {
         clerkUserId: "user_abc",
         willRetry: true,
         stats: {
-          model: "anthropic/claude-sonnet-4-5-20250929",
+          model: "cloudflare-ai-gateway/claude-sonnet-4-5",
           inputTokens: 1000,
           outputTokens: 500,
           cacheReadTokens: 200,
@@ -221,7 +221,7 @@ describe("handleAgentEnd", () => {
         clerkUserId: "user_abc",
         willRetry: false,
         stats: {
-          model: "anthropic/claude-sonnet-4-5-20250929",
+          model: "cloudflare-ai-gateway/claude-sonnet-4-5",
           inputTokens: 500,
           outputTokens: 250,
           cacheReadTokens: 0,
