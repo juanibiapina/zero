@@ -1,9 +1,14 @@
 # Google Workspace Integration
 
 The Zero web app has a "Connect Google" button that grants the bot
-access to your Gmail, Calendar, Drive, and Sheets. Once connected, pi
-(running inside the per-user agent container) can call any of those
-APIs on your behalf via the `gws` CLI.
+access to your Gmail, Calendar, and Drive. Once connected, pi (running
+inside the per-user agent container) can call those APIs on your behalf
+via the `gmcli` (Gmail), `gccli` (Calendar), and `gdcli` (Drive) CLIs.
+
+These are minimal Node clients (Mario Zechner's) chosen because they use
+OpenSSL: they tolerate the Cloudflare intercepting proxy tearing down
+TLS without a `close_notify`, where the previous rustls-based `gws`
+treated that as a hard error and failed every request behind the proxy.
 
 ## How it works
 
@@ -21,9 +26,20 @@ APIs on your behalf via the `gws` CLI.
    sentinel (`Z3R0-FAKE-GOOGLE_WORKSPACE_CLI_TOKEN`). The catch-all
    outbound handler swaps the sentinel for the real token on the way
    to Google.
-3. `gws` reads the sentinel from the env var, includes it in the
-   `Authorization: Bearer …` header, and the worker substitutes the
-   real token on egress to `*.googleapis.com`.
+3. The container's `entrypoint.sh` writes a small `accounts.json` for
+   each CLI under pi's HOME (`~/.gmcli`, `~/.gccli`, `~/.gdcli`), with
+   the sentinel as the account's `accessToken` and no `expiry_date`. The
+   clients build a googleapis `OAuth2Client` and send the sentinel
+   verbatim in the `Authorization: Bearer …` header; with no expiry the
+   client never tries to refresh, so the sentinel reaches egress
+   unmodified and the worker substitutes the real token on the way to
+   `*.googleapis.com`. These HOME files are non-persistent and rewritten
+   fresh on each cold start.
+4. The account `email` keys the CLIs' local credential store and is
+   stamped into the `From:` header of outgoing Gmail, so it must be the
+   user's real address. The worker sources it from Clerk
+   (`getGoogleAccountEmail`) and injects it as the plaintext, non-secret
+   `GOOGLE_ACCOUNT_EMAIL` env var (no sentinel, no substitution).
 
 The worker never persists the access token, and Clerk never sees the
 plaintext API responses. Tokens expire within an hour and are
@@ -32,7 +48,7 @@ Proxying” for the mechanism.
 
 ## Scopes requested
 
-The "Connect Google" button is all-or-nothing across four scopes,
+The "Connect Google" button is all-or-nothing across three scopes,
 defined in `apps/web/src/google-scopes.ts`:
 
 | Scope | Lets the bot |
@@ -40,20 +56,21 @@ defined in `apps/web/src/google-scopes.ts`:
 | `gmail.modify` | Read your mail, send mail as you, modify labels |
 | `calendar` | Read and write your calendars and events |
 | `drive` | Read and write your Drive files |
-| `spreadsheets` | Read and write your Google Sheets |
 
-If you later want to add a fifth scope, bump the array and existing
+If you later want to add a fourth scope, bump the array and existing
 users will see the button switch to "Grant required scopes"
 (driven by the `missingScopes` helper) until they re-consent.
 
 ## When the user hasn't connected Google
 
 `getGoogleAccessToken` returns `null`, the worker omits the
-`GOOGLE_WORKSPACE_CLI_TOKEN` sentinel from `envVars` entirely, and the
-override map pushed to `setOutboundHandler` is empty. Any `gws`
-invocation inside the container then exits non-zero with an “auth
-error” — pi sees that as a tool failure and can respond accordingly.
-No worker-side error, no failed container start.
+`GOOGLE_WORKSPACE_CLI_TOKEN` sentinel from `envVars` entirely (and so
+also omits `GOOGLE_ACCOUNT_EMAIL`), and the override map pushed to
+`setOutboundHandler` is empty. The entrypoint then skips the
+`accounts.json` bootstrap, so any `gmcli`/`gccli`/`gdcli` invocation
+exits non-zero with a "no account" error — pi sees that as a tool
+failure and can respond accordingly. No worker-side error, no failed
+container start.
 
 ## Revoking
 

@@ -56,7 +56,7 @@ need. GitHub mirrors it almost 1:1:
 | Token fetch | `apps/api/src/google-token.ts` → Clerk Backend API | `github-token.ts`, same pattern |
 | Token injection | `AgentContainer.refreshEnvVars` pushes `GOOGLE_WORKSPACE_CLI_TOKEN` override + sentinel | add `GH_TOKEN` runtime secret |
 | Secret hiding | `secret-proxy.ts` byte-substitutes sentinel → real on egress | reuse; **see Phase 0 caveat** |
-| In-container CLI | `gws` (installed in Dockerfile, reads token from env) | `git` + `gh` (to install) |
+| In-container CLI | `gmcli`/`gccli`/`gdcli` (installed in Dockerfile, read token from injected `accounts.json`) | `git` + `gh` (to install) |
 | Onboarding skill | `skills/google-onboarding` | new `skills/github` conventions skill |
 
 The persisted `/workspace` tree means cloned repos survive container

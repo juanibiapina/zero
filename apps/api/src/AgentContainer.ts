@@ -6,7 +6,7 @@ import { Container } from "@cloudflare/containers";
 import { Bot } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { z } from "zod";
-import { getGoogleAccessToken } from "./google-token";
+import { getGoogleAccessToken, getGoogleAccountEmail } from "./google-token";
 import { getGithubInstallationToken } from "./github-token";
 import { fmtErr, log, logError } from "./log";
 import { createSecretProxy } from "./secret-proxy";
@@ -191,6 +191,10 @@ export class AgentContainer extends Container<Env> {
     }
 
     const googleToken = await getGoogleAccessToken(this.env, clerkUserId);
+    const googleEmail =
+      googleToken !== null
+        ? await getGoogleAccountEmail(this.env, clerkUserId)
+        : null;
     const githubToken = await getGithubInstallationToken(this.env, clerkUserId);
 
     // Push runtime-secret overrides to the substitute handler. Pushed on
@@ -205,8 +209,8 @@ export class AgentContainer extends Container<Env> {
     await this.setOutboundHandler("substitute", { overrides, userId: clerkUserId });
 
     // Omit sentinels whose real value isn't available this call so the
-    // consumer (e.g. gws, git/gh) exits with a clean auth error instead of
-    // forwarding an unsubstituted sentinel upstream.
+    // consumer (e.g. gmcli/gccli/gdcli, git/gh) exits with a clean auth
+    // error instead of forwarding an unsubstituted sentinel upstream.
     const sentinels = { ...secretProxy.fakes };
     if (googleToken === null) delete sentinels.GOOGLE_WORKSPACE_CLI_TOKEN;
     if (githubToken === null) delete sentinels.GH_TOKEN;
@@ -220,6 +224,10 @@ export class AgentContainer extends Container<Env> {
       MODEL_ID: this.env.MODEL_ID,
       LLM_BASE_URL_OVERRIDE: this.env.LLM_BASE_URL_OVERRIDE,
     };
+
+    if (googleEmail !== null) {
+      this.envVars.GOOGLE_ACCOUNT_EMAIL = googleEmail;
+    }
   }
 }
 

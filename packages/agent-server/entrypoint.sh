@@ -44,6 +44,29 @@ curl -sfH "X-Clerk-User-Id: ${CLERK_USER_ID}" http://zero.worker/state \
   | tar xz -C /workspace 2>/dev/null || true
 chown -R pi:pi /workspace
 
+# Bootstrap the Google CLI credential stores. The badlogic clients
+# (gmcli/gccli/gdcli) read ~/.<tool>/accounts.json and send the
+# accessToken verbatim as `Authorization: Bearer ...`. With no
+# expiry_date the OAuth client never refreshes, so the sentinel reaches
+# egress unmodified and the worker's proxy swaps it for the real token.
+# The token sentinel is omitted entirely when Google isn't connected, so
+# both vars present == Google connected. Files live in pi's non-persistent
+# HOME, rewritten fresh each cold start.
+if [[ -n "${GOOGLE_WORKSPACE_CLI_TOKEN:-}" && -n "${GOOGLE_ACCOUNT_EMAIL:-}" ]]; then
+  accounts_json=$(cat <<EOF
+[{"email":"${GOOGLE_ACCOUNT_EMAIL}","oauth2":{"clientId":"injected","clientSecret":"injected","refreshToken":"none","accessToken":"${GOOGLE_WORKSPACE_CLI_TOKEN}"}}]
+EOF
+)
+  for tool in gmcli gccli gdcli; do
+    mkdir -p "/tmp/pi-home/.${tool}"
+    printf '%s\n' "${accounts_json}" > "/tmp/pi-home/.${tool}/accounts.json"
+  done
+  chown -R pi:pi /tmp/pi-home/.gmcli /tmp/pi-home/.gccli /tmp/pi-home/.gdcli
+  log_json "google_accounts_bootstrapped" "email=${GOOGLE_ACCOUNT_EMAIL}"
+else
+  log_json "google_not_connected" "note=skipping Google CLI bootstrap"
+fi
+
 log_json "drop_privileges" "user=pi" "uid=1001"
 
 # Exec node as pi. SIGTERM reaches node directly (PID 1 via exec chain);

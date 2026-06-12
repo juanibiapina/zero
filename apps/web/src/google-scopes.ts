@@ -1,10 +1,10 @@
 // Google Workspace scopes requested by the "Connect Google" flow.
-// Requested as one block; matches what the container's `gws` CLI needs.
+// Requested as one block; matches what the container's Gmail/Calendar/
+// Drive CLIs (gmcli/gccli/gdcli) need.
 export const GOOGLE_WORKSPACE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/drive",
-  "https://www.googleapis.com/auth/spreadsheets",
 ] as const;
 
 // Return entries from `required` missing from the space-separated

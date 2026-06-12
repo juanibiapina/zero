@@ -431,8 +431,9 @@ handler:
   `refreshEnvVars`. Pi sees the same constant sentinel in env; the
   substitution swaps in the right token for that user on the way out.
   When the user hasn't connected Google, the sentinel is omitted from
-  `envVars` entirely so `gws` exits with a clear auth error rather
-  than forwarding a sentinel nothing can substitute.
+  `envVars` entirely so the Google CLIs (gmcli/gccli/gdcli) exit with a
+  clear auth error rather than forwarding a sentinel nothing can
+  substitute.
 
 A separate concern tags AI Gateway traffic with the requesting user. The
 substitution handler is wrapped by `withGatewayMetadata` (`ai-gateway.ts`):
