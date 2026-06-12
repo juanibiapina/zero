@@ -12,11 +12,13 @@ edits, callbacks etc. are dropped — only topic messages count today.
 
 The agent inside the container is the pi coding agent
 ([@earendil-works/pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent))
-talking to Anthropic **through a Cloudflare AI Gateway** (unified
-billing: Cloudflare authenticates upstream and settles the bill). Pi-ai
-uses its built-in `cloudflare-ai-gateway` provider, which authenticates
-to the gateway with `cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>`
-and sends no Anthropic key at all. The token pi sees is a **sentinel
+talking to Anthropic **through a Cloudflare AI Gateway** (BYOK: the
+Anthropic key is stored in the gateway config, so Cloudflare injects it
+upstream and Anthropic bills us directly at standard per-token rates with
+no markup). Pi-ai uses its built-in `cloudflare-ai-gateway` provider,
+which authenticates to the gateway with
+`cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>` and sends no Anthropic
+key itself. The token pi sees is a **sentinel
 fake** (`Z3R0-FAKE-CLOUDFLARE_API_KEY`), not the real value. Every
 container request to anywhere except `zero.worker` is intercepted by the
 worker's catch-all `outbound` handler, which byte-replaces registered
@@ -325,8 +327,9 @@ gateway URL from `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_GATEWAY_ID` and
 authenticates with `cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>`,
 reading the token from `process.env.CLOUDFLARE_API_KEY` — a sentinel the
 worker's catch-all outbound handler swaps for the real value on the way
-out (see “Secret Proxying”). It sends no Anthropic key; Cloudflare
-authenticates upstream and settles the bill (unified billing). The model
+out (see “Secret Proxying”). It sends no Anthropic key itself; the gateway
+holds the stored Anthropic key (BYOK), injects it upstream, and Anthropic
+bills us directly at standard rates. The model
 is `claude-opus-4-8` with thinking level `high`. `@zero/agent-server`
 reads an optional `LLM_BASE_URL_OVERRIDE` to repoint the model's base URL
 at the mock Anthropic server in e2e; it is empty in prod.
@@ -460,8 +463,8 @@ Stored in Doppler (`zero-api`):
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
 - `CLOUDFLARE_API_KEY` — Cloudflare AI Gateway token, sent as
   `cf-aig-authorization` and substituted on egress by the catch-all
-  outbound handler; pi sees only a sentinel. Cloudflare authenticates
-  upstream and bills the usage (unified billing). The non-secret
+  outbound handler; pi sees only a sentinel. The gateway injects the stored
+  Anthropic key (BYOK) upstream, and Anthropic bills the usage directly. The non-secret
   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_GATEWAY_ID` live in
   `wrangler.jsonc` vars.
 

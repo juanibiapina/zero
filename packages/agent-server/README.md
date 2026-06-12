@@ -12,8 +12,9 @@ built-in `cloudflare-ai-gateway` provider (`claude-opus-4-8`,
 `thinkingLevel: "high"`). The provider builds the gateway URL from
 `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_GATEWAY_ID` and authenticates with
 `cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>`, read from
-`process.env`. No Anthropic key is sent; Cloudflare authenticates
-upstream and settles the bill (unified billing). For e2e, the server
+`process.env`. No Anthropic key is sent; the gateway holds the stored
+Anthropic key (BYOK), injects it upstream, and Anthropic bills us directly
+at standard rates. For e2e, the server
 reads an optional `LLM_BASE_URL_OVERRIDE` and repoints the model's
 `baseUrl` at the mock Anthropic server; it is empty in prod.
 
