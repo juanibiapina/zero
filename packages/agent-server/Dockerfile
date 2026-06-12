@@ -70,9 +70,15 @@ RUN mkdir -p /workspace/sessions /workspace/notes /workspace/attachments /worksp
 # emits the sentinel $GH_TOKEN as the HTTP Basic password at git runtime;
 # the worker's outbound proxy swaps it for the real token on egress to
 # github.com. Lives in pi's HOME (/tmp/pi-home) as the global gitconfig.
+# Also sets the bot git identity (zerocoding-app[bot]) so commits succeed
+# and attribute to the app's bot account via its noreply address.
 RUN git config --file /tmp/pi-home/.gitconfig \
       credential."https://github.com".helper \
       '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f' && \
+    git config --file /tmp/pi-home/.gitconfig \
+      user.name 'zerocoding-app[bot]' && \
+    git config --file /tmp/pi-home/.gitconfig \
+      user.email '262345351+zerocoding-app[bot]@users.noreply.github.com' && \
     chown pi:pi /tmp/pi-home/.gitconfig
 
 # SYSTEM.md replaces pi's default system prompt with Zero's.

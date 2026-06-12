@@ -40,9 +40,17 @@ first in Phase 0.
   the read-only `github` skill (clone to `/workspace/repos/<owner>/<repo>`,
   reuse clones, read code/issues/PRs). Scoped read-only on purpose: the
   app still has `contents: read`, so `git push` is rejected by GitHub.
-- **Next: write access (deferred).** Bump the app's `contents` permission
-  read → write, add a `zerocoding-app[bot]` git identity, and extend the
-  skill with branch/commit/push/PR. To be tested separately.
+- **Write access — DONE.** Bumped the app's permissions (`contents`
+  read → write, plus `pull_requests: write`, `issues: write`,
+  `workflows: write`), added the `zerocoding-app[bot]` git identity to the
+  container gitconfig (`262345351+zerocoding-app[bot]@users.noreply.github.com`),
+  and rewrote the `github` skill with branch/commit/push/PR/issue flow.
+  **Behavioral boundary, not a permission boundary:** Zero gets
+  `contents: write` (needed to push feature branches) but **never pushes to
+  the default branch** — it always branches and opens a PR. The boundary is
+  enforced by the skill + Prime Directives only; no branch protection, per
+  decision. Model A (same-repo branch + PR). Re-approval of each existing
+  installation is required after the permission bump.
 
 ## What we can reuse (the Google blueprint)
 

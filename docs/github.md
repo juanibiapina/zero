@@ -12,10 +12,23 @@ Clerk-vended token carries login scopes only. All repository work is done
 by the **GitHub App acting as itself** (`zerocoding-app[bot]`), not as the
 user.
 
-> **Current capability: read-only.** The app grants `contents: read`, so
-> the container can clone and read repos but cannot commit, push, or open
-> PRs. Write access is a future step (bump the app's `contents` permission
-> to write, add a bot git identity, extend the skill).
+> **Capability: write (PR-only).** The app grants `contents: write`,
+> `pull_requests: write`, `issues: write`, and `workflows: write`, so the
+> container can clone, commit, push feature branches, open PRs, open and
+> comment on issues, and edit workflow files. Zero **never pushes to a
+> repo's default branch** — all changes land via a feature branch + PR you
+> review and merge. This boundary is enforced only by the `github` skill
+> and Prime Directives; there is no branch-protection backstop.
+>
+> **Bot git identity.** Commits attribute to `zerocoding-app[bot]` via the
+> noreply address `262345351+zerocoding-app[bot]@users.noreply.github.com`,
+> baked into the container's global gitconfig
+> (`packages/agent-server/Dockerfile`).
+>
+> **Re-approval after a permission bump.** Raising the app's permissions
+> puts every existing installation into "needs approval" until the
+> installer re-approves on GitHub (one click per install). Tokens carry the
+> new permissions only after re-approval — this is expected, not a bug.
 
 ## How repo access works
 
