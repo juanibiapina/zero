@@ -13,7 +13,7 @@ gob run bin/deploy
 
 ## Architecture
 
-Zero receives Telegram bot webhooks, routes each update to the right user via KV, and forwards forum-topic messages to a per-user Cloudflare Container that runs [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) against Claude Sonnet 4.5. The agent's reply is sent back into the same Telegram topic. Telegram attachments (photos, PDFs, any file) are downloaded by the worker and written to `/workspace/attachments` inside the container. The container's entire `/workspace` tree (pi sessions, notes, attachments, and working files) persists as a single `state.tar.gz` archive per user on R2, restored on boot and saved on each turn through the worker, so conversations survive container sleep/wake. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`).
+Zero receives Telegram bot webhooks, routes each update to the right user via KV, and forwards forum-topic messages to a per-user Cloudflare Container that runs [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). The agent's reply is sent back into the same Telegram topic. Telegram attachments (photos, PDFs, any file) are downloaded by the worker and written to `/workspace/attachments` inside the container. The container's entire `/workspace` tree (pi sessions, notes, attachments, and working files) persists as a single `state.tar.gz` archive per user on R2, restored on boot and saved on each turn through the worker, so conversations survive container sleep/wake. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`).
 
 Packages:
 

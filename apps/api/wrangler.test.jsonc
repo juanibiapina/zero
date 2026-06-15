@@ -16,7 +16,7 @@
     "TELEGRAM_API_ROOT": "http://localhost:3501",
     "LLM_BASE_URL_OVERRIDE": "http://localhost:3502",
     "ENVIRONMENT": "test",
-    "MODEL_ID": "claude-opus-4-8",
+    "MODEL_ID": "claude-sonnet-4-6",
     "CLOUDFLARE_ACCOUNT_ID": "test-account",
     "CLOUDFLARE_GATEWAY_ID": "test-gateway"
   },
