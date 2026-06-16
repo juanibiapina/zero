@@ -13,14 +13,6 @@ function esc(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function stripTags(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
 const renderer: RendererObject = {
   // ── Block-level ──────────────────────────────────────────────────────
 
@@ -41,12 +33,12 @@ const renderer: RendererObject = {
     return esc(text);
   },
 
-  heading({ tokens, depth }: Tokens.Heading): string {
+  heading({ tokens }: Tokens.Heading): string {
     const text = this.parser.parseInline(tokens);
-    if (depth <= 2) {
-      return `\n<b>${text}</b>\n\n`;
-    }
-    return `<b>${text}</b>\n`;
+    // Surround every heading depth with blank lines so headings never collide
+    // with adjacent lists or paragraphs. The trailing \n{3,} collapse keeps
+    // this from stacking up.
+    return `\n<b>${text}</b>\n\n`;
   },
 
   hr(): string {
@@ -63,7 +55,9 @@ const renderer: RendererObject = {
         return `${bullet}${body.replace(/\n+$/, "")}`;
       })
       .join("\n");
-    return items + "\n";
+    // Leading blank line separates the list from a preceding heading or
+    // paragraph.
+    return "\n" + items + "\n\n";
   },
 
   listitem(item: Tokens.ListItem): string {
@@ -78,45 +72,35 @@ const renderer: RendererObject = {
     return this.parser.parseInline(tokens) + "\n\n";
   },
 
+  // Flatten a GFM pipe table into per-row bullet groups. A monospace grid
+  // overflows on mobile Telegram, so each row becomes a bold heading (the
+  // first cell) plus `• Header: value` bullets. Ported from Hermes Agent's
+  // _render_table_block_for_telegram (gateway/platforms/telegram.py).
   table(token: Tokens.Table): string {
-    const cols = token.header.length;
+    const headers = token.header.map((cell) =>
+      this.parser.parseInline(cell.tokens),
+    );
 
-    const widths: number[] = [];
-    for (let c = 0; c < cols; c++) {
-      let max = stripTags(
-        this.parser.parseInline(token.header[c].tokens),
-      ).length;
-      for (const row of token.rows) {
-        const cellLen = stripTags(
-          this.parser.parseInline(row[c].tokens),
-        ).length;
-        if (cellLen > max) max = cellLen;
+    const groups = token.rows.map((row) => {
+      const cells = row.map((cell) => this.parser.parseInline(cell.tokens));
+      const heading = cells[0] || "Row";
+
+      // Single-column tables have no Header: value pairs to emit; fall back to
+      // a plain bullet so the cell value is not lost.
+      if (headers.length <= 1) {
+        return `• ${heading}`;
       }
-      widths.push(max);
-    }
 
-    const pad = (text: string, width: number): string => {
-      const len = text.length;
-      return len >= width ? text : text + " ".repeat(width - len);
-    };
+      const bullets: string[] = [];
+      for (let i = 1; i < headers.length; i++) {
+        const value = cells[i] ?? "";
+        if (value === "" || value === heading) continue;
+        bullets.push(`• ${headers[i]}: ${value}`);
+      }
+      return [`<b>${heading}</b>`, ...bullets].join("\n");
+    });
 
-    const headerCells = token.header.map((cell, i) =>
-      pad(stripTags(this.parser.parseInline(cell.tokens)), widths[i]),
-    );
-    const separator = widths.map((w) => "─".repeat(w));
-    const bodyRows = token.rows.map((row) =>
-      row.map((cell, i) =>
-        pad(stripTags(this.parser.parseInline(cell.tokens)), widths[i]),
-      ),
-    );
-
-    const lines = [
-      headerCells.join(" │ "),
-      separator.join("─┼─"),
-      ...bodyRows.map((r) => r.join(" │ ")),
-    ];
-
-    return `<pre>${esc(lines.join("\n"))}</pre>\n`;
+    return "\n" + groups.join("\n\n") + "\n\n";
   },
 
   tablerow(): string {

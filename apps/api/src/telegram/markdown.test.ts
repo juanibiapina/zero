@@ -82,11 +82,44 @@ describe("markdownToTelegramHtml", () => {
     expect(result).not.toContain("\n\n\n");
   });
 
-  it("renders tables as monospace pre blocks", () => {
+  it("renders tables as bullet row groups", () => {
     const md = "| Name | Age |\n|------|-----|\n| Alice | 30 |";
     const result = markdownToTelegramHtml(md);
-    expect(result).toContain("<pre>");
-    expect(result).toContain("Alice");
-    expect(result).toContain("│");
+    expect(result).toContain("<b>Alice</b>");
+    expect(result).toContain("• Age: 30");
+    expect(result).not.toContain("<pre>");
+    expect(result).not.toContain("│");
+  });
+
+  it("separates table row groups with a blank line", () => {
+    const md =
+      "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
+    const result = markdownToTelegramHtml(md);
+    expect(result).toContain("<b>Alice</b>\n• Age: 30\n\n<b>Bob</b>\n• Age: 25");
+  });
+
+  it("preserves inline formatting inside table cells", () => {
+    const md = "| Name | Note |\n|------|------|\n| Alice | **vip** |";
+    const result = markdownToTelegramHtml(md);
+    expect(result).toContain("• Note: <b>vip</b>");
+  });
+
+  it("renders single-column tables as plain bullets", () => {
+    const md = "| Name |\n|------|\n| Alice |\n| Bob |";
+    const result = markdownToTelegramHtml(md);
+    expect(result).toContain("• Alice");
+    expect(result).toContain("• Bob");
+    expect(result).not.toContain("<b></b>");
+  });
+
+  it("surrounds h3+ headings with blank lines", () => {
+    const result = markdownToTelegramHtml("### Section\nbody text");
+    expect(result).toBe("<b>Section</b>\n\nbody text");
+  });
+
+  it("separates a list from a preceding heading", () => {
+    const result = markdownToTelegramHtml("### Section\n\n- one\n- two");
+    expect(result).toContain("<b>Section</b>\n\n• one");
+    expect(result).not.toContain("\n\n\n");
   });
 });
