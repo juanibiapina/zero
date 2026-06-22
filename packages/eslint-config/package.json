@@ -8,7 +8,7 @@
     "./react": "./react.js"
   },
   "peerDependencies": {
-    "eslint": "^9.0.0"
+    "eslint": "^9.0.0 || ^10.0.0"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1",

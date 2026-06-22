@@ -12,7 +12,7 @@ import {
   ClerkProvider,
   SignIn,
   useAuth,
-} from "@clerk/clerk-react";
+} from "@clerk/react";
 import { CenteredPage } from "@/components/CenteredPage";
 import { Loading } from "@/components/Loading";
 import { DevToolbar } from "@/components/DevToolbar";

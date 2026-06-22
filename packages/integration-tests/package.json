@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "big-integer": "^1.6.52",
-    "input": "^1.0.1",
     "telegram": "^2.26.22"
   },
   "devDependencies": {

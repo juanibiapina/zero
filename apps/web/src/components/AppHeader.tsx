@@ -1,4 +1,4 @@
-import { UserButton } from "@clerk/clerk-react";
+import { UserButton } from "@clerk/react";
 
 // Sticky top bar shared across the app so every authenticated screen
 // (onboarding, settings, admin) reads as one continuous product.

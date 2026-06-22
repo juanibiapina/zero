@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useUser } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
