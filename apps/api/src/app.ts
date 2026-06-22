@@ -3,7 +3,7 @@
 // Clerk + the auth guard so handlers always see a verified `userId`.
 
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { clerkMiddleware, getAuth } from "@hono/clerk-auth";
+import { clerkMiddleware, getAuth } from "@clerk/hono";
 import { cors } from "hono/cors";
 import type { Env } from "./types";
 import { createTelegramWebhookRoute } from "./routes/telegram-webhook";
