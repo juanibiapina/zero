@@ -15,12 +15,12 @@
     "telegram": "^2.26.22"
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.0.0",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "eslint": "10.4.0",
-    "tsx": "^4.22.3",
+    "eslint": "10.5.0",
+    "tsx": "^4.22.4",
     "typescript": "6.0.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.9"
   }
 }

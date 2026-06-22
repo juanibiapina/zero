@@ -1,5 +1,5 @@
 diff --git a/dist/lib/container.js b/dist/lib/container.js
-index e4c0179a55e648352980c303d61ad472147fd3ed..1f722df7d4acbd22634487ffa0e0ea4cc0b4c75d 100644
+index b7567e2..33744e1 100644
 --- a/dist/lib/container.js
 +++ b/dist/lib/container.js
 @@ -9,7 +9,7 @@ const NO_CONTAINER_INSTANCE_ERROR = 'there is no container instance that can be

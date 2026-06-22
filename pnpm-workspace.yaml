@@ -8,5 +8,7 @@ onlyBuiltDependencies:
   - workerd
 
 patchedDependencies:
-  '@cloudflare/containers@0.3.5': patches/@cloudflare__containers@0.3.5.patch
-  wrangler@4.97.0: patches/wrangler@4.97.0.patch
+  '@cloudflare/containers@0.3.7': patches/@cloudflare__containers@0.3.7.patch
+  wrangler@4.103.0: patches/wrangler@4.103.0.patch
+
+
