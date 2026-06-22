@@ -7,6 +7,7 @@ import { clerkMiddleware, getAuth } from "@hono/clerk-auth";
 import { cors } from "hono/cors";
 import type { Env } from "./types";
 import { createTelegramWebhookRoute } from "./routes/telegram-webhook";
+import { createClerkWebhookRoute } from "./routes/clerk-webhook";
 import { createUserSettingsRoutes } from "./routes/user-settings";
 import { createTaskRoutes } from "./routes/tasks";
 import { createAdminRoutes } from "./routes/admin";
@@ -27,6 +28,7 @@ export const createApp = () => {
   );
 
   app.route("/", createTelegramWebhookRoute());
+  app.route("/", createClerkWebhookRoute());
 
   app.use("/api/*", clerkMiddleware());
   app.use("/api/*", async (c, next) => {

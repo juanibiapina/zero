@@ -253,6 +253,7 @@ GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
 POST   /api/telegram-link                — Link via Login Widget payload (Clerk)
 DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
+POST   /api/webhooks/clerk               — Clerk webhook, Discord signup notice (Svix-signed)
 
 GET    /api/admin/users                  — List all users + cost (admin)
 GET    /api/admin/users/{userId}         — One user's identity + link status (admin)
