@@ -72,24 +72,24 @@ Capture two ids:
 - **`TG_TEST_THREAD_ID`** — the topic's `message_thread_id`. Same log
   line carries `thread_id`.
 
-### 3. Create the Doppler project
+### 3. Create the ZeroVault project
 
 ```bash
-doppler projects create zero-tests
-# create the dev config explicitly if `doppler projects create` doesn't:
-doppler configs create dev --project zero-tests
+pnpm dlx zerovault-cli@0.1.0 projects create zero-tests
 ```
 
-Populate it with placeholder values for now (`TG_TEST_SESSION_STRING`
-gets filled in by the next step):
+This creates `development` and `production` environments. Populate the
+`development` environment with placeholder values for now
+(`TG_TEST_SESSION_STRING` gets filled in by the next step):
 
 ```bash
-doppler secrets set TG_TEST_API_ID="..."          --project zero-tests --config dev
-doppler secrets set TG_TEST_API_HASH="..."        --project zero-tests --config dev
-doppler secrets set TG_TEST_CHAT_ID="-100..."     --project zero-tests --config dev
-doppler secrets set TG_TEST_THREAD_ID="..."       --project zero-tests --config dev
-doppler secrets set TG_TEST_BOT_USERNAME="getzerobot" --project zero-tests --config dev
-doppler secrets set TG_TEST_SESSION_STRING=""     --project zero-tests --config dev
+ZV="pnpm dlx zerovault-cli@0.1.0"
+$ZV secrets set TG_TEST_API_ID="..."          -p zero-tests -e development
+$ZV secrets set TG_TEST_API_HASH="..."        -p zero-tests -e development
+$ZV secrets set TG_TEST_CHAT_ID="-100..."     -p zero-tests -e development
+$ZV secrets set TG_TEST_THREAD_ID="..."       -p zero-tests -e development
+$ZV secrets set TG_TEST_BOT_USERNAME="getzerobot" -p zero-tests -e development
+$ZV secrets set TG_TEST_SESSION_STRING=""     -p zero-tests -e development
 ```
 
 ### 4. Capture a session string
@@ -98,17 +98,17 @@ The session string is the per-user credential. Capture it once via SMS
 login:
 
 ```bash
-doppler run --project zero-tests --config dev -- \
-  pnpm --filter @zero/integration-tests login
+eval "$(pnpm dlx zerovault-cli@0.1.0 secrets download -p zero-tests -e development --format shell)" \
+  && pnpm --filter @zero/integration-tests login
 ```
 
 The script prompts for your phone number (with country code), the SMS
 code Telegram sends, and your 2FA password if you have one. It then
-prints a long base64-looking blob. Paste it into Doppler:
+prints a long base64-looking blob. Paste it into ZeroVault:
 
 ```bash
-doppler secrets set TG_TEST_SESSION_STRING="<the printed blob>" \
-  --project zero-tests --config dev
+pnpm dlx zerovault-cli@0.1.0 secrets set TG_TEST_SESSION_STRING="<the printed blob>" \
+  -p zero-tests -e development
 ```
 
 The session string is long-lived but not immortal: Telegram can
@@ -132,9 +132,8 @@ use, no action needed.) See [`telegram-login.md`](telegram-login.md).
 bin/integration-test
 ```
 
-The wrapper invokes `doppler run --project zero-tests --config dev`,
-which loads every `TG_TEST_*` var into the environment for the vitest
-process.
+The wrapper loads every `TG_TEST_*` var from ZeroVault
+(`zero-tests/development`) into the environment for the vitest process.
 
 A successful run takes ~6.5 minutes and ends with `1 passed`. The 5.5
 min sleep between turns 2 and 3 dominates the wall-clock; the test

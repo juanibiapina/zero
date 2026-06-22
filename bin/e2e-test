@@ -25,12 +25,12 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== Preparing secrets ==="
-# Wrangler reads .dev.vars which may have dotenv-incompatible quoting from
-# doppler's env format (JSON values with escaped quotes). Write a clean
-# version using env-no-quotes, and restore the original on exit.
+# Regenerate .dev.vars from ZeroVault (json -> dotenv) and restore on exit.
+# Requires ZEROVAULT_API_KEY and ZEROVAULT_API_URL.
+ZV="pnpm dlx zerovault-cli@0.1.0"
 cp apps/api/.dev.vars apps/api/.dev.vars.bak
-doppler secrets download --config dev --project zero-api --no-file --format env-no-quotes \
-  | grep -v '^DOPPLER_' > apps/api/.dev.vars
+$ZV secrets download -p zero-api -e development --format json \
+  | node bin/json-to-dotenv.mjs > apps/api/.dev.vars
 echo "=== Starting mock Telegram API on :3501 ==="
 pnpm exec tsx packages/e2e-tests/src/mock-telegram.ts &
 PIDS+=($!)
@@ -69,7 +69,7 @@ pnpm --dir apps/api exec wrangler kv key put \
   "tg:12345" "user_test" || echo "WARN: KV seed may have failed"
 
 echo "=== Running E2E tests ==="
-doppler run --project zero-api --config dev -- \
-  pnpm --dir packages/e2e-tests exec vitest run
+( eval "$($ZV secrets download -p zero-api -e development --format shell)"
+  pnpm --dir packages/e2e-tests exec vitest run )
 
 echo "=== E2E tests passed ==="

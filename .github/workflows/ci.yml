@@ -37,14 +37,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v3
-
-      - name: Fetch secrets from Doppler
-        run: bin/fetch-secrets
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
@@ -56,6 +48,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Fetch secrets from ZeroVault
+        run: bin/fetch-secrets
+        env:
+          ZEROVAULT_API_KEY: ${{ secrets.ZEROVAULT_API_KEY }}
+          ZEROVAULT_API_URL: ${{ secrets.ZEROVAULT_API_URL }}
 
       - name: Build application
         run: pnpm run build

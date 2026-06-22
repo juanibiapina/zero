@@ -49,9 +49,9 @@ Then restart the dev server with `gob restart <job_id>`.
 
 ## Secrets
 
-When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use Doppler.
+When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx zerovault-cli@0.1.0` and needs `ZEROVAULT_API_KEY` and `ZEROVAULT_API_URL` env vars.
 
-Doppler projects:
+ZeroVault projects (each with `development` and `production` environments):
 - `zero-api` — Worker backend secrets
 - `zero-web` — Frontend build-time secrets
 - `zero-tests` — Integration-test secrets (Telegram MTProto app + session)

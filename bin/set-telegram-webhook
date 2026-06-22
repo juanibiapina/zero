@@ -3,13 +3,15 @@
 set -euo pipefail
 
 # Register the Telegram bot webhook against the production worker.
-# Reads TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET from Doppler (zero-api/prd).
+# Reads TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET from ZeroVault
+# (zero-api/production). Requires ZEROVAULT_API_KEY and ZEROVAULT_API_URL.
 # See docs/telegram-webhook.md for the full operational notes.
 
 URL="https://zero.juanibiapina.dev/api/webhooks/telegram"
 
-TOKEN=$(doppler secrets get TELEGRAM_BOT_TOKEN       --plain --project zero-api --config prd)
-SECRET=$(doppler secrets get TELEGRAM_WEBHOOK_SECRET --plain --project zero-api --config prd)
+ZV="pnpm dlx zerovault-cli@0.1.0"
+TOKEN=$($ZV secrets get TELEGRAM_BOT_TOKEN       -p zero-api -e production)
+SECRET=$($ZV secrets get TELEGRAM_WEBHOOK_SECRET -p zero-api -e production)
 
 echo "=== Bot identity ==="
 curl -fsS "https://api.telegram.org/bot${TOKEN}/getMe" \

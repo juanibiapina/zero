@@ -80,7 +80,7 @@ no Cloudflare or Telegram coupling. The Cloudflare Container packages its
 | Agent  | [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) (Node 22 inside the container) |
 | LLM    | Cloudflare AI Gateway → Anthropic — `claude-opus-4-8` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
-| Secrets | Doppler (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
+| Secrets | ZeroVault (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
 
 ## Architecture
 
@@ -455,7 +455,7 @@ stays oblivious to secrets.
 
 ## Secrets
 
-Stored in Doppler (`zero-api`):
+Stored in ZeroVault (`zero-api`):
 
 - `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
 - `TELEGRAM_BOT_TOKEN` — used by grammY to authenticate as the bot
@@ -469,7 +469,7 @@ Stored in Doppler (`zero-api`):
   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_GATEWAY_ID` live in
   `wrangler.jsonc` vars.
 
-Google Workspace access is **not** stored in Doppler. Each user opts in
+Google Workspace access is **not** stored in ZeroVault. Each user opts in
 via the “Connect Google” button in the web UI (Clerk
 `createExternalAccount` with the Workspace scopes). The worker calls
 `users.getUserOauthAccessToken` per container request to fetch a fresh

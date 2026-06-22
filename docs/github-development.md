@@ -30,7 +30,7 @@ first in Phase 0.
   minting landed: `apps/api/src/github-token.ts`
   (`getGithubInstallationToken` + `getGithubInstallationStatus`), plus an
   admin verification surface (`GET /api/admin/github/status`, shown on
-  each user's `/admin/users/{userId}` detail page). The app private key in Doppler was converted
+  each user's `/admin/users/{userId}` detail page). The app private key in ZeroVault was converted
   PKCS#1 → PKCS#8 (Workers/`jose` require PKCS#8). `AgentContainer`
   injects `GH_TOKEN` as a sentinel (omitted when the user has no
   installation). Verified end-to-end against real GitHub.

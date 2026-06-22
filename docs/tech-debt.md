@@ -21,8 +21,8 @@ premature for a one-user project.
 fact that the only user is also the operator.
 
 **Fix when revisited:** add a GitHub Actions `schedule:` workflow
-(daily cron) that runs `bin/integration-test` with the
-`zero-tests/dev` Doppler service token in a CI secret, and pings on
+(daily cron) that runs `bin/integration-test` with
+`ZEROVAULT_API_KEY` and `ZEROVAULT_API_URL` in CI secrets, and pings on
 failure.
 
 ## Container image `npm install` is non-deterministic

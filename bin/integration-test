@@ -9,6 +9,11 @@ set -e
 # on demand, not on every commit.
 #
 # See docs/integration-tests.md for one-time setup.
+#
+# Loads test config from ZeroVault (zero-tests/development).
+# Requires ZEROVAULT_API_KEY and ZEROVAULT_API_URL env vars.
 
-exec doppler run --project zero-tests --config dev -- \
-  pnpm --filter @zero/integration-tests run test:integration
+ZV="pnpm dlx zerovault-cli@0.1.0"
+eval "$($ZV secrets download -p zero-tests -e development --format shell)"
+
+exec pnpm --filter @zero/integration-tests run test:integration

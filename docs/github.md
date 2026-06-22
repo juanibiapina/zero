@@ -88,7 +88,7 @@ minted — without ever exposing the token itself.
 
 ## Secrets
 
-Stored in the `zero-api` Doppler project:
+Stored in the `zero-api` ZeroVault project:
 
 - `GITHUB_APP_ID` — the app's numeric id.
 - `GITHUB_APP_PRIVATE_KEY` — **PKCS#8** PEM (`BEGIN PRIVATE KEY`). GitHub

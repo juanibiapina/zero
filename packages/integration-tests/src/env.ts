@@ -1,11 +1,11 @@
-// Test config from env; supplied by `bin/integration-test` (doppler run
-// --project zero-tests --config dev). Missing vars fail fast.
+// Test config from env; supplied by `bin/integration-test` (loaded from
+// ZeroVault zero-tests/development). Missing vars fail fast.
 
 export const requireEnv = (name: string): string => {
   const value = process.env[name];
   if (!value) {
     throw new Error(
-      `Missing env var: ${name}. Run via 'bin/integration-test' or 'doppler run --project zero-tests --config dev -- ...'.`,
+      `Missing env var: ${name}. Run via 'bin/integration-test' (loads ZeroVault zero-tests/development).`,
     );
   }
   return value;

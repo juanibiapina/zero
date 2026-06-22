@@ -20,16 +20,15 @@ zero.juanibiapina.dev
 (Send each line as a separate message to `@BotFather`. The inline form
 `/setdomain @getzerobot zero.juanibiapina.dev` also works.)
 
-### Doppler: bot username for the web app
+### ZeroVault: bot username for the web app
 
 The widget script tag needs the bot's username at render time. Set it
-in `zero-web` (both configs use the same bot today):
+in `zero-web` (both environments use the same bot today):
 
 ```bash
-doppler secrets set VITE_TELEGRAM_BOT_USERNAME=getzerobot \
-  --project zero-web --config prd
-doppler secrets set VITE_TELEGRAM_BOT_USERNAME=getzerobot \
-  --project zero-web --config dev
+ZV="pnpm dlx zerovault-cli@0.1.0"
+$ZV secrets set VITE_TELEGRAM_BOT_USERNAME=getzerobot -p zero-web -e production
+$ZV secrets set VITE_TELEGRAM_BOT_USERNAME=getzerobot -p zero-web -e development
 bin/fetch-secrets
 ```
 

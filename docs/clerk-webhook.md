@@ -18,8 +18,8 @@ Code: `apps/api/src/routes/clerk-webhook.ts` (route + `formatSignupMessage` +
 
 ## Secrets
 
-Both live in Doppler project `zero-api` (configs `dev` and `prd`); never
-hand-edit `.dev.vars` (see `docs/secrets.md`).
+Both live in ZeroVault project `zero-api` (environments `development` and
+`production`); never hand-edit `.dev.vars` (see `docs/secrets.md`).
 
 - `CLERK_WEBHOOK_SIGNING_SECRET` — `whsec_…`, from the Clerk Dashboard webhook
   endpoint.
@@ -28,10 +28,11 @@ hand-edit `.dev.vars` (see `docs/secrets.md`).
 Set them:
 
 ```bash
-doppler secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." --project zero-api --config dev
-doppler secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." --project zero-api --config prd
-doppler secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." --project zero-api --config dev
-doppler secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." --project zero-api --config prd
+ZV="pnpm dlx zerovault-cli@0.1.0"
+$ZV secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zero-api -e development
+$ZV secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zero-api -e production
+$ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zero-api -e development
+$ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zero-api -e production
 
 bin/fetch-secrets                 # regenerate apps/api/.dev.vars
 pnpm --dir apps/api cf-typegen    # regenerate Env types

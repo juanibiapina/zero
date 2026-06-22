@@ -10,7 +10,7 @@ describe("hello", () => {
   beforeAll(() => {
     if (!WEBHOOK_SECRET) {
       throw new Error(
-        "TELEGRAM_WEBHOOK_SECRET must be set (use doppler run or .dev.vars)",
+        "TELEGRAM_WEBHOOK_SECRET must be set (run via bin/e2e-test or from .dev.vars)",
       );
     }
   });

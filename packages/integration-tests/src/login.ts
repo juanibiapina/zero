@@ -1,9 +1,9 @@
 // One-shot CLI: walks through phone + SMS-code (+ 2FA) and prints a
-// TG_TEST_SESSION_STRING to copy into Doppler.
+// TG_TEST_SESSION_STRING to copy into ZeroVault.
 //
 //   pnpm --filter @zero/integration-tests login
 //
-// Requires TG_TEST_API_ID and TG_TEST_API_HASH (Doppler zero-tests/dev).
+// Requires TG_TEST_API_ID and TG_TEST_API_HASH (ZeroVault zero-tests/development).
 // See docs/integration-tests.md.
 
 import input from "input";
@@ -28,7 +28,7 @@ await client.start({
   onError: (err) => console.error(err),
 });
 
-console.log("\n=== TG_TEST_SESSION_STRING (paste into Doppler zero-tests/dev) ===");
+console.log("\n=== TG_TEST_SESSION_STRING (paste into ZeroVault zero-tests/development) ===");
 console.log(client.session.save());
 console.log("===================================================================\n");
 
