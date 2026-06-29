@@ -12,24 +12,24 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/backend": "^3.8.2",
-    "@clerk/hono": "^0.1.40",
+    "@clerk/backend": "^3.8.4",
+    "@clerk/hono": "^0.1.42",
     "@cloudflare/containers": "^0.3.7",
     "@hono/zod-openapi": "^1.4.0",
     "aws4fetch": "^1.0.20",
     "do-orm": "github:juanibiapina/do-orm",
     "grammy": "^1.44.0",
-    "hono": "^4.12.26",
+    "hono": "^4.12.27",
     "jose": "^6.2.3",
     "marked": "^18.0.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260621.1",
+    "@cloudflare/workers-types": "^4.20260629.1",
     "@zero/agent-server": "workspace:*",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "eslint": "10.5.0",
+    "eslint": "10.6.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.9",
     "wrangler": "^4.103.0"
