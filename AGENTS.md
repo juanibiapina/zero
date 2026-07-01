@@ -6,7 +6,12 @@ During development, use `gob run bin/ci` to run all necessary checks including b
 
 ## Deployment
 
-To deploy to production:
+Pushing to `main` auto-deploys to production via the Cloudflare Git
+connector (Workers Builds). No manual step is needed; after pushing,
+wait for the Cloudflare build to finish. GitHub Actions CI only lints,
+typechecks, tests, and runs a deploy dry-run; it does not deploy.
+
+To deploy manually (e.g. from a branch, without pushing):
 ```bash
 gob run bin/deploy
 ```
