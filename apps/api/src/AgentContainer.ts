@@ -80,6 +80,14 @@ const handleMessageEnd = async (
     return new Response(null, { status: 204 });
   }
 
+  const userDO = getUserDO(env, data.clerkUserId);
+  await userDO.appendMessage(data.sessionId, "agent", data.text);
+
+  if (record.type === "webui") {
+    // The append is the delivery; the browser polls the message log.
+    return new Response(null, { status: 204 });
+  }
+
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN, {
     botInfo,
@@ -106,6 +114,14 @@ const handleCloseSession = async (
 
   if (record.type === "task") {
     return Response.json({ message: "Task sessions cannot be closed." });
+  }
+
+  if (record.type === "webui") {
+    const userDO = getUserDO(env, data.clerkUserId);
+    await userDO.appendMessage(data.sessionId, "agent", data.message);
+    await userDO.markSessionIdleById(data.sessionId);
+    log("session_closed", { session_id: data.sessionId });
+    return Response.json({ message: "Session closed." });
   }
 
   const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;

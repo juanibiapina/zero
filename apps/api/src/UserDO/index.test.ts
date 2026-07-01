@@ -6,12 +6,14 @@ import type { UserDO } from "./index";
 // Fake UserDO stub — implements the same public RPC interface
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession" | "getSettings" | "updateSettings" | "setGoogleOnboardingStatus">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "createWebuiSession" | "listSessions" | "appendMessage" | "listMessages" | "markSessionActiveById" | "markSessionIdleById" | "forgetSession" | "getSettings" | "updateSettings" | "setGoogleOnboardingStatus">;
 
 const createFakeUserDO = (): UserDOStub => {
   let telegramId: string | null = null;
   const sessionsByTopic = new Map<string, string>();
-  const sessionsBySessionId = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
+  const sessionsBySessionId = new Map<string, { type: string; chatId: number; topicId: number; name?: string; status: string; updatedAt: string | null }>();
+  const messagesBySession = new Map<string, Array<{ id: number; role: string; text: string; createdAt: string }>>();
+  let nextMessageId = 1;
   let onboardingSeen = false;
   let googleOnboardingStatus: string | null = null;
   let createdAt: string | null = null;
@@ -43,10 +45,41 @@ const createFakeUserDO = (): UserDOStub => {
       const oldSessionId = sessionsByTopic.get(topicKey(chatId, topicId));
       if (oldSessionId) sessionsBySessionId.delete(oldSessionId);
       sessionsByTopic.set(topicKey(chatId, topicId), sessionId);
-      sessionsBySessionId.set(sessionId, { type: "telegram", chatId, topicId });
+      sessionsBySessionId.set(sessionId, { type: "telegram", chatId, topicId, status: "idle", updatedAt: null });
     },
     recordTaskSession: (sessionId: string, name?: string) => {
-      sessionsBySessionId.set(sessionId, { type: "task", chatId: 0, topicId: 0, ...(name ? { name } : {}) });
+      sessionsBySessionId.set(sessionId, { type: "task", chatId: 0, topicId: 0, status: "idle", updatedAt: null, ...(name ? { name } : {}) });
+    },
+    createWebuiSession: (sessionId: string, name?: string) => {
+      sessionsBySessionId.set(sessionId, { type: "webui", chatId: 0, topicId: 0, status: "idle", updatedAt: new Date().toISOString(), ...(name ? { name } : {}) });
+    },
+    listSessions: () =>
+      [...sessionsBySessionId.entries()].map(([sessionId, s]) => ({
+        sessionId,
+        type: s.type,
+        name: s.name ?? null,
+        status: s.status,
+        updatedAt: s.updatedAt,
+      })),
+    appendMessage: (sessionId: string, role: "user" | "agent", text: string) => {
+      const list = messagesBySession.get(sessionId) ?? [];
+      list.push({ id: nextMessageId++, role, text, createdAt: new Date().toISOString() });
+      messagesBySession.set(sessionId, list);
+      const s = sessionsBySessionId.get(sessionId);
+      if (s) s.updatedAt = new Date().toISOString();
+    },
+    listMessages: (sessionId: string, since?: number) => {
+      const list = messagesBySession.get(sessionId) ?? [];
+      const filtered = since !== undefined ? list.filter((m) => m.id > since) : list;
+      return { messages: filtered, status: sessionsBySessionId.get(sessionId)?.status ?? null };
+    },
+    markSessionActiveById: async (sessionId: string) => {
+      const s = sessionsBySessionId.get(sessionId);
+      if (s) s.status = "active";
+    },
+    markSessionIdleById: (sessionId: string) => {
+      const s = sessionsBySessionId.get(sessionId);
+      if (s) s.status = "idle";
     },
     forgetSession: (sessionId: string) => {
       const record = sessionsBySessionId.get(sessionId);
@@ -183,6 +216,62 @@ describe("UserDO sessions contract", () => {
   });
 });
 
+
+describe("UserDO webui sessions and messages contract", () => {
+  it("createWebuiSession makes a webui session retrievable by id", () => {
+    const userDO = createFakeUserDO();
+    userDO.createWebuiSession("web-1", "Chat");
+    expect(userDO.lookupSessionById("web-1")).toEqual({ type: "webui", chatId: 0, topicId: 0, name: "Chat" });
+  });
+
+  it("listSessions returns telegram and webui sessions", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordSession(100, 200, "tg-1");
+    userDO.createWebuiSession("web-1", "Chat");
+    const list = userDO.listSessions();
+    expect(list.map((s) => s.sessionId).sort()).toEqual(["tg-1", "web-1"]);
+    expect(list.find((s) => s.sessionId === "web-1")).toMatchObject({ type: "webui", name: "Chat", status: "idle" });
+  });
+
+  it("appendMessage then listMessages returns both directions in order", () => {
+    const userDO = createFakeUserDO();
+    userDO.createWebuiSession("web-1");
+    userDO.appendMessage("web-1", "user", "hi");
+    userDO.appendMessage("web-1", "agent", "hello");
+    const { messages, status } = userDO.listMessages("web-1");
+    expect(messages.map((m) => [m.role, m.text])).toEqual([["user", "hi"], ["agent", "hello"]]);
+    expect(status).toBe("idle");
+  });
+
+  it("listMessages honors the since cursor", () => {
+    const userDO = createFakeUserDO();
+    userDO.createWebuiSession("web-1");
+    userDO.appendMessage("web-1", "user", "one");
+    userDO.appendMessage("web-1", "agent", "two");
+    const first = userDO.listMessages("web-1").messages[0].id;
+    const { messages } = userDO.listMessages("web-1", first);
+    expect(messages.map((m) => m.text)).toEqual(["two"]);
+  });
+
+  it("messages for different sessions do not mix", () => {
+    const userDO = createFakeUserDO();
+    userDO.recordSession(100, 200, "tg-1");
+    userDO.createWebuiSession("web-1");
+    userDO.appendMessage("tg-1", "user", "from telegram");
+    userDO.appendMessage("web-1", "user", "from web");
+    expect(userDO.listMessages("tg-1").messages.map((m) => m.text)).toEqual(["from telegram"]);
+    expect(userDO.listMessages("web-1").messages.map((m) => m.text)).toEqual(["from web"]);
+  });
+
+  it("markSessionActiveById and markSessionIdleById toggle status", async () => {
+    const userDO = createFakeUserDO();
+    userDO.createWebuiSession("web-1");
+    await userDO.markSessionActiveById("web-1");
+    expect(userDO.listMessages("web-1").status).toBe("active");
+    userDO.markSessionIdleById("web-1");
+    expect(userDO.listMessages("web-1").status).toBe("idle");
+  });
+});
 
 describe("UserDO settings contract", () => {
   it("getSettings returns isNewUser true on first access", () => {

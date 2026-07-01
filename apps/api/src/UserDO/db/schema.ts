@@ -13,6 +13,15 @@ export const sessions = table("sessions", {
   sessionId: column.text().notNull().unique(),
   status: column.text().notNull(),
   name: column.text(),
+  updatedAt: column.text(),
+});
+
+export const messages = table("messages", {
+  id: column.integer().primaryKey().autoIncrement(),
+  sessionId: column.text().notNull(),
+  role: column.text().notNull(),
+  text: column.text().notNull(),
+  createdAt: column.text().notNull(),
 });
 
 

@@ -18,6 +18,8 @@ import { Loading } from "@/components/Loading";
 import { DevToolbar } from "@/components/DevToolbar";
 import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ChatPage } from "./pages/ChatPage";
+import { useFeature } from "@/lib/features";
 import { AdminPage } from "./pages/AdminPage";
 import { UserDetailPage } from "./pages/UserDetailPage";
 
@@ -39,6 +41,7 @@ function useAppContext() {
 
 function AuthGate() {
   const { isSignedIn, isLoaded } = useAuth();
+  const chatEnabled = useFeature("chat");
 
   if (!isLoaded) return <Loading />;
   if (!isSignedIn) return <CenteredPage><SignIn /></CenteredPage>;
@@ -47,6 +50,8 @@ function AuthGate() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<HomeRoute />} />
+        {chatEnabled && <Route path="chat" element={<ChatPage />} />}
+        {chatEnabled && <Route path="chat/:sessionId" element={<ChatPage />} />}
         <Route path="onboarding" element={<OnboardingRoute />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users/:userId" element={<UserDetailPage />} />

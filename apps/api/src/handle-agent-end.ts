@@ -62,7 +62,11 @@ export const handleAgentEnd = async (
   }
 
   if (!data.willRetry) {
-    await userDO.markSessionIdle(record.chatId, record.topicId);
+    if (record.type === "webui") {
+      await userDO.markSessionIdleById(data.sessionId);
+    } else {
+      await userDO.markSessionIdle(record.chatId, record.topicId);
+    }
     if (data.stats) {
       await upsertSessionCost(env, data.sessionId, data.clerkUserId, data.stats);
     }

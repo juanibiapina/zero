@@ -8,18 +8,21 @@ import type { Env } from "./types";
 // Fakes
 // ---------------------------------------------------------------------------
 
-type UserDOStub = Pick<UserDO, "lookupSessionById" | "markSessionIdle" | "setGoogleOnboardingStatus" | "getSettings">;
+type UserDOStub = Pick<UserDO, "lookupSessionById" | "markSessionIdle" | "markSessionIdleById" | "setGoogleOnboardingStatus" | "getSettings">;
 
 const createFakeUserDO = () => {
   let googleOnboardingStatus: string | null = null;
   const createdAt = new Date().toISOString();
   const sessions = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
   const idleCalls: Array<[number, number]> = [];
+  const idleByIdCalls: string[] = [];
   return {
     get _googleOnboardingStatus() { return googleOnboardingStatus; },
     _idleCalls: idleCalls,
+    _idleByIdCalls: idleByIdCalls,
     lookupSessionById: (sessionId: string) => sessions.get(sessionId) ?? null,
     markSessionIdle: async (chatId: number, topicId: number) => { idleCalls.push([chatId, topicId]); },
+    markSessionIdleById: (sessionId: string) => { idleByIdCalls.push(sessionId); },
     setGoogleOnboardingStatus: (status: string) => { googleOnboardingStatus = status; },
     getSettings: () => ({ onboardingSeen: false, googleOnboardingStatus, createdAt, isNewUser: false }),
     _seed(sessionId: string, record: { type: string; chatId: number; topicId: number; name?: string }) {
@@ -119,6 +122,19 @@ describe("handleAgentEnd", () => {
 
     expect(userDO._idleCalls).toEqual([[100, 200]]);
     expect(userDO._googleOnboardingStatus).toBeNull();
+  });
+
+  it("marks webui session idle by id when willRetry is false", async () => {
+    const userDO = createFakeUserDO();
+    userDO._seed("sess-1", { type: "webui", chatId: 0, topicId: 0 });
+
+    await handleAgentEnd(
+      agentEndRequest({ sessionId: "sess-1", clerkUserId: "user_abc", willRetry: false }),
+      fakeEnv(userDO),
+    );
+
+    expect(userDO._idleByIdCalls).toEqual(["sess-1"]);
+    expect(userDO._idleCalls).toEqual([]);
   });
 
   it("writes google_onboarding_done analytics event when task finishes", async () => {

@@ -192,3 +192,10 @@ All persistent state is in Workers KV:
 The `topic:` and `session:` pair is managed as a unit by
 `apps/api/src/sessions.ts`; the webhook route and the container outbound
 reply handler both go through it instead of touching the keys directly.
+
+Session state now lives in the per-user `UserDO` (SQLite via do-orm), not
+KV. The `sessions` table holds one row per session for every provider
+(`type` = `telegram` | `task` | `webui`), and the `messages` table is a
+unified display/audit transcript keyed by `sessionId` (`role` =
+`user` | `agent`), whose autoincrement `id` is the poll cursor. See
+`docs/design.md` (State Model) for the full schema and the WebUI flow.

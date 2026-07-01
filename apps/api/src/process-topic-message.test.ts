@@ -24,19 +24,25 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   } as unknown as KVNamespace & { _store: Map<string, string> };
 };
 
-type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession" | "markSessionActive" | "markSessionIdle">;
+type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "lookupSessionById" | "recordSession" | "recordTaskSession" | "forgetSession" | "markSessionActive" | "markSessionIdle" | "appendMessage">;
 
 const createFakeUserDO = (): UserDOStub & {
   _sessionByTopic: (chatId: number, topicId: number) => string | null;
   _sessionById: (sessionId: string) => { type: string; chatId: number; topicId: number; name?: string } | null;
   _activeCalls: Array<[number, number]>;
+  _messages: Array<{ sessionId: string; role: string; text: string }>;
 } => {
   const byTopic = new Map<string, string>();
   const byId = new Map<string, { type: string; chatId: number; topicId: number; name?: string }>();
   const activeCalls: Array<[number, number]> = [];
+  const messages: Array<{ sessionId: string; role: string; text: string }> = [];
   const key = (chatId: number, topicId: number) => `${chatId}:${topicId}`;
 
   return {
+    _messages: messages,
+    appendMessage: (sessionId: string, role: "user" | "agent", text: string) => {
+      messages.push({ sessionId, role, text });
+    },
     _sessionByTopic: (chatId, topicId) => byTopic.get(key(chatId, topicId)) ?? null,
     _sessionById: (sessionId) => {
       const r = byId.get(sessionId);
@@ -139,6 +145,16 @@ describe("processTopicMessage", () => {
     await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
 
     expect(userDO._activeCalls).toEqual([[100, 200]]);
+  });
+
+  it("appends the user message to the transcript for the resolved session", async () => {
+    const kv = fakeKV({ "tg:111": "user_abc" });
+    const userDO = createFakeUserDO();
+    const stub = fakeStub({ sessionId: "new-sess" });
+
+    await processTopicMessage(topic, fakeEnv(kv, userDO, stub));
+
+    expect(userDO._messages).toEqual([{ sessionId: "new-sess", role: "user", text: "hello" }]);
   });
 
   it("forwards attachments to the container", async () => {

@@ -34,6 +34,8 @@ export const processTopicMessage = async (
     let sessionId = await ensureSession(agent, userDO, clerkUserId, topic);
     if (sessionId === null) return;
 
+    await userDO.appendMessage(sessionId, "user", topic.text);
+
     let result = await agent.sendMessage(sessionId, topic.text, topic.attachments);
     if (result.kind === "stale") {
       log("stale_session", {
@@ -43,6 +45,7 @@ export const processTopicMessage = async (
       await userDO.forgetSession(sessionId);
       sessionId = await ensureSession(agent, userDO, clerkUserId, topic);
       if (sessionId === null) return;
+      await userDO.appendMessage(sessionId, "user", topic.text);
       result = await agent.sendMessage(sessionId, topic.text, topic.attachments);
     }
     if (result.kind === "error") {

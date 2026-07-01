@@ -225,7 +225,8 @@ to a Clerk user ID; it is kept in sync by the link/unlink routes.
 | Table            | Columns                            | Purpose                                     |
 |------------------|------------------------------------|---------------------------------------------|
 | `telegram_link`  | `id`, `telegramId`                 | The user's linked Telegram account (≤1 row) |
-| `sessions`       | `id`, `chatId`, `topicId`, `sessionId` | Topic↔session mappings                  |
+| `sessions`       | `id`, `type`, `chatId`, `topicId`, `sessionId`, `status`, `name`, `updatedAt` | Session records for every provider |
+| `messages`       | `id`, `sessionId`, `role`, `text`, `createdAt` | Unified display/audit transcript, keyed by `sessionId` |
 
 The `telegram_link` table is the source of truth for the Clerk↔Telegram
 mapping. The `GET /api/telegram-id` route reads directly from the DO;
@@ -239,11 +240,36 @@ session directory survives, the bridge resumes the session from disk
 transparently. A 404 only happens when the on-disk dir is also gone
 (data loss); the webhook creates a fresh session.
 
+The `type` column distinguishes providers: `telegram` rows carry real
+`chatId`/`topicId` coordinates; `task` and `webui` rows use `0`/`0`.
+WebUI is the in-app chat provider. The web request is already
+Clerk-authenticated, so `sessionId` (minted by the container on
+`POST /sessions`) is both the URL identifier and the transcript key. No
+account linking is needed. The container is provider-agnostic; WebUI
+reuses the same per-user container and `agent-client.ts` as Telegram.
+
+The `messages` table is a single per-user log for **every** provider.
+Both inbound (user) and outbound (agent) text are appended, keyed by
+`sessionId`; the autoincrement `id` doubles as the poll cursor. It is
+the browser's display source and a cross-provider history (a Telegram
+session is readable through the sessions API). The container's pi
+session JSONL remains the agent's real working context; the `messages`
+log is a text-only display/audit copy. Session rotation (`/new`, "New
+session", or a rare data-loss `stale`) mints a new `sessionId` and thus
+starts a new transcript, which is the intended meaning of a session.
+
+WebUI reply delivery is **polling** for now: after the out-of-band
+container reply lands via `handleMessageEnd`, `appendMessage` writes it
+and the browser's next `GET /api/sessions/{sessionId}/messages?since=`
+poll picks it up. The `status` column (`idle`/`active`) drives the
+browser's "thinking" indicator. See Future Work for the WebSocket
+upgrade, which reuses this same log.
+
 ## Durable Objects
 
 | DO | Purpose | Storage |
 |---|---|---|
-| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link and session mappings. | SQLite via do-orm (`telegram_link`, `sessions` tables) |
+| **UserDO** | Per-user data store. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, session records (telegram/task/webui), and the unified message log. | SQLite via do-orm (`telegram_link`, `sessions`, `messages` tables) |
 | **AgentContainer** | Cloudflare Container hosting `@zero/agent-server` (pi-coding-agent). One container per Clerk user (`getByName(clerkUserId)`), idles after 5 minutes. `fetch` refreshes `envVars` on every call (callback URL, sentinels, `CLERK_USER_ID`, and a live Google token override). Persists the `/workspace` tree as a single `state.tar.gz` archive via `/state` on `zero.worker`. Defines `outboundByHost["zero.worker"]` for the Telegram reply and state-archive paths. Callbacks (reply, close-session) include `clerkUserId` so the worker can address the UserDO for session lookups. | None (state persists as `<clerkUserId>/state.tar.gz` in R2 via the worker) |
 
 ## Routes
@@ -254,6 +280,11 @@ POST   /api/telegram-link                — Link via Login Widget payload (Cler
 DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
 POST   /api/webhooks/clerk               — Clerk webhook, Discord signup notice (Svix-signed)
+
+POST   /api/sessions                     — Create a WebUI chat session (Clerk)
+GET    /api/sessions                     — List the caller's sessions (Clerk)
+POST   /api/sessions/{sessionId}/messages — Send a message; returns landed sessionId (Clerk)
+GET    /api/sessions/{sessionId}/messages — Poll messages, ?since=<cursor> (Clerk)
 
 GET    /api/admin/users                  — List all users + cost (admin)
 GET    /api/admin/users/{userId}         — One user's identity + link status (admin)
@@ -521,5 +552,14 @@ Conventions:
   `allowedHosts = ["gateway.ai.cloudflare.com", "zero.worker"]`.
 - Surface session history (read sessions back out of R2 from the web UI
   for browsing/export).
+- Swap WebUI reply delivery from polling to a hibernatable WebSocket on
+  the UserDO: a Clerk-verified upgrade route calls
+  `state.acceptWebSocket(ws, [sessionId])`; `handleMessageEnd`'s append
+  additionally pushes to `getWebSockets(sessionId)`. The `messages` table
+  stays as history and reconnect gap-fill (client reconnects with a
+  cursor). Ingress, routes, and schema are unchanged, which is why
+  polling first is not throwaway work.
+- WebUI attachments (inbound uploads and a transcript representation;
+  the log stores text/caption only today).
 - Per-user model preference + a switching API. Pi supports
   `session.setModel(…)`; expose a Clerk-gated route to drive it.
