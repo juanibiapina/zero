@@ -12,8 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/backend": "^3.8.4",
-    "@clerk/hono": "^0.1.42",
+    "@clerk/backend": "^3.10.0",
+    "@clerk/hono": "^0.1.45",
     "@cloudflare/containers": "^0.3.7",
     "@hono/zod-openapi": "^1.4.0",
     "aws4fetch": "^1.0.20",
