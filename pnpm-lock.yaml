@@ -18,7 +18,7 @@ importers:
     dependencies:
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@4.20260629.1)(@opentelemetry/api@1.9.0)
+        version: 0.45.2(@cloudflare/workers-types@5.20260706.1)(@opentelemetry/api@1.9.0)
     devDependencies:
       tsx:
         specifier: ^4.23.0
@@ -64,8 +64,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20260629.1
-        version: 4.20260629.1
+        specifier: ^5.20260706.1
+        version: 5.20260706.1
       '@zero/agent-server':
         specifier: workspace:*
         version: link:../../packages/agent-server
@@ -86,7 +86,7 @@ importers:
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@26.1.0)(vite@8.1.3(@types/node@26.1.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
       wrangler:
         specifier: ^4.103.0
-        version: 4.103.0(patch_hash=68cbc6c618302fe060921eea5ec715fc3fd4bed135927f11e0be4b69acd2fc60)(@cloudflare/workers-types@4.20260629.1)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+        version: 4.103.0(patch_hash=68cbc6c618302fe060921eea5ec715fc3fd4bed135927f11e0be4b69acd2fc60)(@cloudflare/workers-types@5.20260706.1)(bufferutil@4.1.0)(utf-8-validate@5.0.10)
 
   apps/web:
     dependencies:
@@ -542,8 +542,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20260629.1':
-    resolution: {integrity: sha512-5vq2ErIFVRSQ8Dcw5YOeEoBdZBudqBjHFKTWD3SBGiJR5hD1+/86aRUV/DTpEK9sXXCGOTGgpWBGlPSlW7djVg==}
+  '@cloudflare/workers-types@5.20260706.1':
+    resolution: {integrity: sha512-PdGrKyJMmKjrZs6xPN/LYN2zpKo9bgn8Iq3JLYho1/76t0HEfUYnssgUljqFxQYPzH4SZ8wsIThaGHmW5GZkLg==}
 
   '@cryptography/aes@0.1.1':
     resolution: {integrity: sha512-PcYz4FDGblO6tM2kSC+VzhhK62vml6k6/YAkiWtyPvrgJVfnDRoHGDtKn5UiaRRUrvUTTocBpvc2rRgTCqxjsg==}
@@ -3177,7 +3177,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260617.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260629.1': {}
+  '@cloudflare/workers-types@5.20260706.1': {}
 
   '@cryptography/aes@0.1.1': {}
 
@@ -4174,9 +4174,9 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 4.3.1
 
-  drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260629.1)(@opentelemetry/api@1.9.0):
+  drizzle-orm@0.45.2(@cloudflare/workers-types@5.20260706.1)(@opentelemetry/api@1.9.0):
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260629.1
+      '@cloudflare/workers-types': 5.20260706.1
       '@opentelemetry/api': 1.9.0
 
   ecdsa-sig-formatter@1.0.11:
@@ -5090,7 +5090,7 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260617.1
       '@cloudflare/workerd-windows-64': 1.20260617.1
 
-  wrangler@4.103.0(patch_hash=68cbc6c618302fe060921eea5ec715fc3fd4bed135927f11e0be4b69acd2fc60)(@cloudflare/workers-types@4.20260629.1)(bufferutil@4.1.0)(utf-8-validate@5.0.10):
+  wrangler@4.103.0(patch_hash=68cbc6c618302fe060921eea5ec715fc3fd4bed135927f11e0be4b69acd2fc60)(@cloudflare/workers-types@5.20260706.1)(bufferutil@4.1.0)(utf-8-validate@5.0.10):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260617.1)
@@ -5101,7 +5101,7 @@ snapshots:
       unenv: 2.0.0-rc.24
       workerd: 1.20260617.1
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260629.1
+      '@cloudflare/workers-types': 5.20260706.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - bufferutil
