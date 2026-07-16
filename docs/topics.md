@@ -28,9 +28,14 @@ pass).
    works. Tools (`tools/topics.ts`):
    - `reply(text)` — send a message to the user immediately. The agent is
      prompted to acknowledge first, then answer, so the user sees live progress.
-     As a safety net, if the agent finishes a turn without calling `reply()` at
-     all, its final prose is sent as the reply so the turn is never silently
-     dropped (trailing filler after a real `reply()` is not sent).
+     As a safety net, on a clean finish the model's final message is always
+     delivered (unless empty, or an exact echo of the reply just sent). The
+     model routinely puts the substantive answer in its final text rather than a
+     `reply()` call — notably after a `research` tool call that followed an
+     acknowledgement reply — so suppressing that text whenever any earlier reply
+     (even a bare "Searching now..." ack) had gone out silently dropped the real
+     answer. Delivering the final message keeps ack-then-answer intact; the echo
+     guard prevents re-sending text already delivered.
    - `list_topics`, `get_topic`, `create_topic`, `update_topic` — read/write the
      knowledge model. Every topic touched is added to an `accessed` set.
 2. **Writer agent** (`agents/writer.ts`, stateless per turn). Given the accessed

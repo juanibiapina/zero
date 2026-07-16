@@ -45,7 +45,7 @@ describe("runTurn", () => {
       store,
       model: scriptedModel([
         { tools: [{ name: "reply", input: { text: "hello there" } }] },
-        { text: "done" },
+        { text: "" },
       ]),
       send: sink.send,
       search: createMemorySearch(),
@@ -74,7 +74,7 @@ describe("runTurn", () => {
         store,
         model: scriptedModel([
           { tools: [{ name: "reply", input: { text: "hello there" } }] },
-          { text: "done" },
+          { text: "" },
         ]),
         send: sink.send,
         search: createMemorySearch(),
@@ -104,7 +104,7 @@ describe("runTurn", () => {
         // interface: read topic, then reply
         { tools: [{ name: "get_topic", input: { name: "travel" } }] },
         { tools: [{ name: "reply", input: { text: "Have fun!" } }] },
-        { text: "done" },
+        { text: "" },
         // writer: save the topic
         {
           tools: [

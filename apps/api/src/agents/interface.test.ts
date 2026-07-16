@@ -45,7 +45,7 @@ describe("runInterfaceAgent", () => {
     const model = scriptedModel([
       { tools: [{ name: "reply", input: { text: "Got it, let me check." } }] },
       { tools: [{ name: "reply", input: { text: "Here is the answer." } }] },
-      { text: "done" },
+      { text: "" },
     ]);
 
     const result = await runInterfaceAgent({
@@ -78,7 +78,7 @@ describe("runInterfaceAgent", () => {
       },
       { tools: [{ name: "update_topic", input: { name: "travel", body: "notes" } }] },
       { tools: [{ name: "reply", input: { text: "ok" } }] },
-      { text: "done" },
+      { text: "" },
     ]);
 
     const result = await runInterfaceAgent({
@@ -114,7 +114,7 @@ describe("runInterfaceAgent", () => {
           { name: "reply", input: { text: "Mars is far. Source: https://ex.com/mars" } },
         ],
       },
-      { text: "done" },
+      { text: "" },
     ]);
 
     const result = await runInterfaceAgent({
@@ -137,7 +137,7 @@ describe("runInterfaceAgent", () => {
     const order: string[] = [];
     const model = scriptedModel([
       { tools: [{ name: "reply", input: { text: "hi" } }] },
-      { text: "done" },
+      { text: "" },
     ]);
 
     await runInterfaceAgent({
@@ -258,7 +258,7 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(["Let me check.", FALLBACK_MESSAGE]);
   });
 
-  it("does not send trailing filler text when reply was already called", async () => {
+  it("delivers the final message even after an earlier reply", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const model = scriptedModel([
@@ -275,8 +275,61 @@ describe("runInterfaceAgent", () => {
       userMessage: "hi",
     });
 
+    expect(sink.sent).toEqual(["the answer", "done"]);
+    expect(result.replies).toEqual(["the answer", "done"]);
+  });
+
+  it("does not re-send the final text when it echoes the last reply", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "the answer" } }] },
+      { text: "the answer" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "hi",
+    });
+
     expect(sink.sent).toEqual(["the answer"]);
     expect(result.replies).toEqual(["the answer"]);
+  });
+
+  it("delivers the post-research answer sent as final prose after an ack reply", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const search = createMemorySearch([
+      { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
+    ]);
+    // The real failure: model acks, researches, then puts the answer in its
+    // final text instead of another reply(). The ack must not suppress it.
+    const model = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "Searching now..." } }] },
+      { tools: [{ name: "research", input: { prompt: "distance to Mars" } }] },
+      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
+      { text: "Mars is far. Source: https://ex.com/mars" },
+      { text: "Mars averages 225M km away. Source: https://ex.com/mars" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search,
+      history: [],
+      userMessage: "how far is Mars",
+    });
+
+    expect(sink.sent).toEqual([
+      "Searching now...",
+      "Mars averages 225M km away. Source: https://ex.com/mars",
+    ]);
+    expect(result.replies).toEqual(sink.sent);
   });
 
   it("re-raises when a reply send fails and still persists before sending", async () => {

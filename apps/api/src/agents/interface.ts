@@ -114,24 +114,29 @@ export const runInterfaceAgent = async (
   // tradeoff as a mid-run eviction (see docs/topics.md), now visible not silent.
   if (firstSendError !== null) throw firstSendError as Error;
 
-  const delivered = replies.length > 0;
+  const lastReply = replies[replies.length - 1]?.trim();
 
-  // Clean finish with prose but no reply(): deliver that text so the turn is
-  // never silently dropped. Guarded on no prior reply so trailing filler (e.g.
-  // "done") after real replies is not sent.
-  if (finishReason === "stop" && !delivered && text.trim()) {
+  // Clean finish: the model's final message is the substantive answer, so
+  // deliver it — unless it is empty or an exact echo of the reply we already
+  // sent. The model routinely puts the answer in its final text rather than a
+  // reply() call, notably after a research tool call that followed an
+  // acknowledgement reply. Earlier logic suppressed this whenever ANY reply had
+  // gone out (even a bare "Searching now..." ack), which silently dropped the
+  // real answer. Always sending the final message keeps ack-then-answer intact;
+  // the echo guard prevents re-sending text the model already delivered.
+  if (finishReason === "stop" && text.trim() && text.trim() !== lastReply) {
     persistReply(text);
     await input.send(text);
     replies.push(text);
     return { replies, accessed: [...accessed] };
   }
 
-  // Cap cut-off (finishReason !== "stop"), or a clean finish that delivered
-  // nothing: the model never produced its intended answer. Send a fallback so
-  // the user is never left in silence, even if an ack reply() already went out
-  // (the real answer never arrived). Record it in replies so it is persisted
-  // and the thread stops awaiting reply.
-  if (finishReason !== "stop" || !delivered) {
+  // Cap cut-off (finishReason !== "stop"), or a clean finish that produced no
+  // final message and never sent a reply: the model never produced its intended
+  // answer. Send a fallback so the user is never left in silence. (A clean
+  // finish that already sent a reply and ended with empty/echo text needs no
+  // fallback — the reply was the answer.)
+  if (finishReason !== "stop" || replies.length === 0) {
     log("turn_incomplete", { finish_reason: finishReason, steps });
     persistReply(FALLBACK_MESSAGE);
     await input.send(FALLBACK_MESSAGE);
