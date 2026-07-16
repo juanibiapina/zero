@@ -30,6 +30,12 @@
   "observability": {
     "enabled": true
   },
+  "limits": {
+    "cpu_ms": 300000
+  },
+  "ai": {
+    "binding": "AI"
+  },
   "upload_source_maps": true,
   "kv_namespaces": [
     {
