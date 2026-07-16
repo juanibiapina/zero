@@ -3,10 +3,11 @@
 // appends a log line to any accessed topic the model skipped, so no exchange is
 // lost even if the model declines to call the tool.
 
-import { generateText, stepCountIs, type LanguageModel } from "ai";
+import type { LanguageModel } from "ai";
 import { buildSaveTopicTool } from "../tools/save-topic";
 import type { Topic, TopicStore } from "../store/types";
 import { writerSystemPrompt } from "./prompts";
+import { runAgent } from "./run";
 
 export interface WriterAgentInput {
   model: LanguageModel;
@@ -36,17 +37,11 @@ export const runWriterAgent = async (
     .join("\n\n---\n\n");
   const exchangeText = `User: ${exchange.user}\n\nAssistant: ${exchange.assistant.join("\n\n")}`;
 
-  await generateText({
+  await runAgent({
     model,
     system: writerSystemPrompt(),
-    messages: [
-      {
-        role: "user",
-        content: `# Accessed topics\n\n${topicsContext}\n\n# Exchange\n\n${exchangeText}\n\nUpdate each topic as needed.`,
-      },
-    ],
+    prompt: `# Accessed topics\n\n${topicsContext}\n\n# Exchange\n\n${exchangeText}\n\nUpdate each topic as needed.`,
     tools,
-    stopWhen: stepCountIs(topics.length + 2),
   });
 
   // Fallback: nothing durable should be silently dropped. For any accessed
