@@ -23,9 +23,12 @@ export interface TurnInput {
   clerkUserId?: string;
 }
 
-// Process one awaiting-reply thread: run the interface agent (which sends
-// replies live), persist those replies, then consolidate any accessed topics
-// via the writer. The tail of history must be the user message being answered.
+// Process one awaiting-reply thread: run the interface agent (which persists
+// each reply then sends it live), then consolidate any accessed topics via the
+// writer. The tail of history must be the user message being answered. Replies
+// are persisted as they are sent (persist-before-send) so a mid-run eviction
+// retry sees the tail is already `assistant` and skips the thread — no
+// duplicate Telegram messages.
 export const runTurn = async (input: TurnInput): Promise<void> => {
   const { store, model, send, search, chatId, topicId } = input;
   const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
@@ -45,20 +48,20 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     history_len: history.length,
   });
 
+  const persistReply = (text: string) =>
+    store.storeMessage(conversationId, "assistant", text);
+
   store.markBusy(conversationId);
   try {
     const { replies, accessed } = await runInterfaceAgent({
       model,
       store,
       send,
+      persistReply,
       search,
       history,
       userMessage,
     });
-
-    for (const reply of replies) {
-      store.storeMessage(conversationId, "assistant", reply);
-    }
 
     if (accessed.length > 0) {
       const topics = store.getTopicsWithBodies(accessed);

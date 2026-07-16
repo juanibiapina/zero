@@ -9,6 +9,7 @@ import { DbStore } from "../store/db";
 import { createModel } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
+import { runAlarmTurns } from "../do/alarm";
 import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
 
@@ -124,11 +125,15 @@ export class UserDO extends DurableObject<Env> {
   // The turn runner. Drains every thread whose tail is a user message. A
   // concurrent enqueueTurn arms a fresh alarm (this handler cleared the old
   // one on entry), so messages that arrive mid-run are picked up on the next
-  // fire. DO alarms auto-retry on throw/eviction, giving crash durability.
+  // fire. On a catchable failure runAlarmTurns self-reschedules with backoff
+  // while any thread still awaits reply, and returns normally (never rethrows,
+  // which would discard the reschedule). See do/alarm.ts.
   override async alarm(): Promise<void> {
-    for (const thread of this.store.findThreadsAwaitingReply()) {
-      await this.runTurn(thread.chatId, thread.topicId);
-    }
+    await runAlarmTurns({
+      storage: this.ctx.storage,
+      findThreadsAwaitingReply: () => this.store.findThreadsAwaitingReply(),
+      runTurn: (chatId, topicId) => this.runTurn(chatId, topicId),
+    });
   }
 
   // Run one thread end to end inside the DO: local typing loop, model creation

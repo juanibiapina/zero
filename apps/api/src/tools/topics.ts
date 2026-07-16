@@ -1,7 +1,10 @@
 // Interface-agent tools. Every topic read or write records the topic name in
 // `accessed` so the writer agent can later consolidate exactly those topics.
-// `reply` sends to the user immediately (live progress) and collects the text
-// for persistence.
+// `reply` persists the assistant message then sends it to the user immediately
+// (live progress). Persist-before-send makes retries idempotent: the durable
+// row commits behind the DO output gate before the Telegram fetch leaves, so a
+// mid-run eviction leaves the tail already `assistant` and the retry skips the
+// thread instead of re-sending.
 
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
@@ -10,12 +13,15 @@ import type { TopicStore } from "../store/types";
 export interface InterfaceToolDeps {
   store: TopicStore;
   send: (text: string) => Promise<void>;
+  // Persist the assistant message durably before it is sent. Called by `reply`
+  // for every message the user sees.
+  persistReply: (text: string) => void;
   accessed: Set<string>;
   replies: string[];
 }
 
 export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
-  const { store, send, accessed, replies } = deps;
+  const { store, send, persistReply, accessed, replies } = deps;
 
   return {
     reply: tool({
@@ -24,6 +30,7 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
       inputSchema: z.object({ text: z.string() }),
       execute: async ({ text }) => {
         replies.push(text);
+        persistReply(text);
         await send(text);
         return "sent";
       },

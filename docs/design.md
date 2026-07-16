@@ -72,14 +72,16 @@ zero/
 │          arm the DO alarm) → return                              │
 │                                                                  │
 │  UserDO (idFromName(clerkUserId), SQLite via do-orm)             │
-│  ├─ alarm(): drain threads whose tail is a user message          │
+│  ├─ alarm(): drain threads whose tail is a user message;         │
+│  │    on catchable failure self-reschedule w/ backoff while work  │
+│  │    remains, else stop (see do/alarm.ts)                        │
 │  ├─ runTurn(chatId, topicId):                                    │
 │  │    ├─ create model (AI Gateway, cf-aig-metadata)              │
 │  │    ├─ setTimeout typing loop (chatAction every 4s)            │
 │  │    └─ orchestrateTurn(store, model, send, search):            │
 │  │         1. interface agent — reply()/topic + research tools   │
-│  │         2. persist assistant replies                          │
-│  │         3. writer agent — consolidate accessed topics         │
+│  │            (each reply persisted before it is sent)            │
+│  │         2. writer agent — consolidate accessed topics         │
 │  └─ send: grammY bot.api.sendMessage(…, { message_thread_id })   │
 │                                                                  │
 │  LLM: POST {AI Gateway}/anthropic/v1/messages                    │

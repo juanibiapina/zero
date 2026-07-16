@@ -21,6 +21,10 @@ export interface InterfaceAgentInput {
   model: LanguageModel;
   store: TopicStore;
   send: (text: string) => Promise<void>;
+  // Persist an assistant message durably before it is sent. Wired by the
+  // orchestrator to the message store; defaults to a no-op in tests that only
+  // assert on send/replies. Persist-before-send keeps retries idempotent.
+  persistReply?: (text: string) => void;
   history: Message[];
   userMessage: string;
   search: WebSearch;
@@ -54,11 +58,13 @@ export const runInterfaceAgent = async (
 ): Promise<InterfaceAgentResult> => {
   const accessed = new Set<string>();
   const replies: string[] = [];
+  const persistReply = input.persistReply ?? (() => {});
 
   const tools = {
     ...buildInterfaceTools({
       store: input.store,
       send: input.send,
+      persistReply,
       accessed,
       replies,
     }),
@@ -90,6 +96,7 @@ export const runInterfaceAgent = async (
   // never silently dropped. Guarded on no prior reply so trailing filler (e.g.
   // "done") after real replies is not sent.
   if (finishReason === "stop" && !delivered && text.trim()) {
+    persistReply(text);
     await input.send(text);
     replies.push(text);
     return { replies, accessed: [...accessed] };
@@ -102,6 +109,7 @@ export const runInterfaceAgent = async (
   // and the thread stops awaiting reply.
   if (finishReason !== "stop" || !delivered) {
     log("turn_incomplete", { finish_reason: finishReason, steps });
+    persistReply(FALLBACK_MESSAGE);
     await input.send(FALLBACK_MESSAGE);
     replies.push(FALLBACK_MESSAGE);
   }

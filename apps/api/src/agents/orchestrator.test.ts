@@ -63,6 +63,34 @@ describe("runTurn", () => {
     expect(store.findThreadsAwaitingReply()).toEqual([]);
   });
 
+  it("does not resend when the alarm re-fires after a completed turn", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+
+    const run = () =>
+      runTurn({
+        store,
+        model: scriptedModel([
+          { tools: [{ name: "reply", input: { text: "hello there" } }] },
+          { text: "done" },
+        ]),
+        send: sink.send,
+        search: createMemorySearch(),
+        chatId: 1,
+        topicId: 0,
+      });
+
+    await run();
+    // Reply persisted → tail is assistant → the thread no longer awaits reply,
+    // so a re-fired alarm re-runs the turn as a no-op (no duplicate send).
+    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    await run();
+
+    expect(sink.sent).toEqual(["hello there"]);
+  });
+
   it("consolidates accessed topics via the writer", async () => {
     const store = new MemoryStore();
     store.createTopic("travel", "trips");

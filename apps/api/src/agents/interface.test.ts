@@ -132,6 +132,45 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
+  it("persists each reply before sending it", async () => {
+    const store = new MemoryStore();
+    const order: string[] = [];
+    const model = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "hi" } }] },
+      { text: "done" },
+    ]);
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: async (t) => void order.push(`send:${t}`),
+      persistReply: (t) => order.push(`persist:${t}`),
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "x",
+    });
+
+    expect(order).toEqual(["persist:hi", "send:hi"]);
+  });
+
+  it("persists the prose fallback before sending it", async () => {
+    const store = new MemoryStore();
+    const order: string[] = [];
+    const model = scriptedModel([{ text: "prose answer" }]);
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: async (t) => void order.push(`send:${t}`),
+      persistReply: (t) => order.push(`persist:${t}`),
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "x",
+    });
+
+    expect(order).toEqual(["persist:prose answer", "send:prose answer"]);
+  });
+
   it("sends the final text when the model never calls reply", async () => {
     const store = new MemoryStore();
     const sink = collectSink();

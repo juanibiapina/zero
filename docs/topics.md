@@ -41,8 +41,20 @@ pass).
    exchange is silently dropped.
 
 The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
-load history, run the interface agent, persist replies, then run the writer over
-the accessed topics. It knows nothing about alarms, DOs, or Telegram.
+load history, run the interface agent, then run the writer over the accessed
+topics. It knows nothing about alarms, DOs, or Telegram.
+
+Replies are persisted **as they are sent**, not after the turn. The `reply` tool
+(and both no-silence fallbacks) persist the assistant message before calling
+`send()`. Behind the DO output gate the durable row commits before the Telegram
+fetch leaves, so a mid-run eviction leaves the thread tail already `assistant`
+and the retry skips it — no duplicate Telegram messages. Trade-off: if an
+eviction lands between two replies within one turn (reply 1 persisted, reply 2
+not yet sent), the retry skips the thread and reply 2 is lost. This converts a
+rare "duplicate message" into a rare "partial turn," which is preferred. On such
+a skipped retry the writer consolidation for that turn also does not re-run; live
+topic create/update calls already persisted the durable facts, only the writer's
+Log-line/summary refresh is lost for that one turn.
 
 The orchestrator is the turn's error boundary. If the agent path throws, it logs
 `turn_failed`, sends the user a fallback message, and persists that fallback as
@@ -63,6 +75,18 @@ orchestrator for each. A concurrent enqueue arms a fresh alarm, so messages that
 arrive mid-run are picked up on the next fire. A self-rescheduling `setTimeout`
 re-sends the Telegram typing action every 4s while a turn runs; the DO alarm
 stays dedicated to turn scheduling.
+
+If draining throws a **catchable** error (LLM gateway error, network abort),
+`do/alarm.ts` self-reschedules the alarm with exponential backoff — but only
+while `findThreadsAwaitingReply()` still returns work. Once every thread's tail
+is `assistant` it stops, which is the circuit breaker against a runaway paid
+alarm loop. It catches and returns rather than rethrowing: rethrowing would break
+the DO output gate and discard the reschedule write, falling back to CF's
+built-in retry (capped at 6). Backoff grows from a storage-backed attempt counter
+(`alarmAttempts`), not `alarmInfo.retryCount`, which resets on the catch-return
+path. This does **not** cover a DO isolate reset ("code was updated"): that tears
+the isolate down before the catch runs, so it relies on CF's built-in
+at-least-once retry plus the next user message re-arming the alarm.
 
 ## Storage seam
 
