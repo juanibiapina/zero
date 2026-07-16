@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { runInterfaceAgent } from "./interface";
+import {
+  CONVERSATION_HEADER,
+  renderConversation,
+  runInterfaceAgent,
+} from "./interface";
 import { scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
 
@@ -7,6 +11,26 @@ const collectSink = () => {
   const sent: string[] = [];
   return { sent, send: async (t: string) => void sent.push(t) };
 };
+
+describe("renderConversation", () => {
+  it("renders empty history with only the new user message", () => {
+    expect(renderConversation([], "hi")).toBe(`${CONVERSATION_HEADER}\n\nUser: hi`);
+  });
+
+  it("renders mixed history in order, ending with the new user message", () => {
+    const rendered = renderConversation(
+      [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi there" },
+      ],
+      "how are you",
+    );
+
+    expect(rendered).toBe(
+      `${CONVERSATION_HEADER}\n\nUser: hello\n\nYou: hi there\n\nUser: how are you`,
+    );
+  });
+});
 
 describe("runInterfaceAgent", () => {
   it("sends each reply immediately and collects them", async () => {

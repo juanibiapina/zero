@@ -22,6 +22,22 @@ export interface InterfaceAgentResult {
   accessed: string[];
 }
 
+export const CONVERSATION_HEADER =
+  'Here is the conversation so far. Lines beginning "User:" are from the ' +
+  'user; lines beginning "You:" are your own earlier replies. Respond to the ' +
+  "latest user message.";
+
+export const renderConversation = (
+  history: Message[],
+  userMessage: string,
+): string => {
+  const turns = [...history, { role: "user" as const, content: userMessage }];
+  const body = turns
+    .map((m) => `${m.role === "user" ? "User" : "You"}: ${m.content}`)
+    .join("\n\n");
+  return `${CONVERSATION_HEADER}\n\n${body}`;
+};
+
 export const runInterfaceAgent = async (
   input: InterfaceAgentInput,
 ): Promise<InterfaceAgentResult> => {
@@ -35,13 +51,11 @@ export const runInterfaceAgent = async (
     replies,
   });
 
+  const prompt = renderConversation(input.history, input.userMessage);
   await generateText({
     model: input.model,
     system: interfaceSystemPrompt(),
-    messages: [
-      ...input.history.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user" as const, content: input.userMessage },
-    ],
+    messages: [{ role: "user", content: prompt }],
     tools,
     stopWhen: stepCountIs(MAX_STEPS),
   });
