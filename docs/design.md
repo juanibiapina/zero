@@ -76,8 +76,8 @@ zero/
 │  ├─ runTurn(chatId, topicId):                                    │
 │  │    ├─ create model (AI Gateway, cf-aig-metadata)              │
 │  │    ├─ setTimeout typing loop (chatAction every 4s)            │
-│  │    └─ orchestrateTurn(store, model, send):                    │
-│  │         1. interface agent — reply()/topic tools, live sends  │
+│  │    └─ orchestrateTurn(store, model, send, search):            │
+│  │         1. interface agent — reply()/topic + research tools   │
 │  │         2. persist assistant replies                          │
 │  │         3. writer agent — consolidate accessed topics         │
 │  └─ send: grammY bot.api.sendMessage(…, { message_thread_id })   │
@@ -89,11 +89,20 @@ zero/
 ```
 
 The agents and the turn orchestrator (`apps/api/src/agents/*`) depend on the
-`Store` port (`apps/api/src/store/types.ts`) and a model factory
-(`agents/model.ts`), not on the DO or do-orm. They are unit-tested with an
-in-memory store and a scripted mock model; `UserDO` supplies the production
-`DbStore` adapter and the alarm-driven execution. See [`topics.md`](topics.md)
-and [`framework.md`](framework.md).
+`Store` port (`apps/api/src/store/types.ts`), a model factory
+(`agents/model.ts`), and a `WebSearch` port (`apps/api/src/websearch/types.ts`),
+not on the DO or do-orm. They are unit-tested with an in-memory store, a scripted
+mock model, and an in-memory search adapter; `UserDO` supplies the production
+`DbStore` and `createBraveSearch` adapters and the alarm-driven execution.
+
+The interface agent and the research agent are the **same runner**
+(`agents/run.ts`: `model + system + prompt + tools → final text`) instantiated
+with different system prompts and toolsets. The interface agent's returned text
+is ignored (its output is the `{ replies, accessed }` collected by its tool
+closures); it exposes a `research` tool that spawns a research-prompted agent
+armed with `web_search`, whose final message becomes the tool result. Both run
+inline in the turn's DO alarm. See [`topics.md`](topics.md),
+[`research.md`](research.md), and [`framework.md`](framework.md).
 
 ## State Model
 

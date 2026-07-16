@@ -6,6 +6,7 @@ import {
 } from "./interface";
 import { scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
+import { createMemorySearch } from "../websearch/memory";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -46,6 +47,7 @@ describe("runInterfaceAgent", () => {
       model,
       store,
       send: sink.send,
+      search: createMemorySearch(),
       history: [],
       userMessage: "hi",
     });
@@ -78,6 +80,7 @@ describe("runInterfaceAgent", () => {
       model,
       store,
       send: sink.send,
+      search: createMemorySearch(),
       history: [],
       userMessage: "plan a trip",
     });
@@ -85,6 +88,43 @@ describe("runInterfaceAgent", () => {
     expect(result.accessed.sort()).toEqual(["travel", "weather"]);
     expect(store.getTopic("travel")?.body).toBe("notes");
     expect(result.replies).toEqual(["ok"]);
+  });
+
+  it("researches then replies with the result", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const search = createMemorySearch([
+      { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
+    ]);
+    const model = scriptedModel([
+      // interface acknowledges, then researches
+      { tools: [{ name: "reply", input: { text: "Let me check." } }] },
+      { tools: [{ name: "research", input: { prompt: "distance to Mars" } }] },
+      // research agent: search then summarise
+      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
+      { text: "Mars is far. Source: https://ex.com/mars" },
+      // interface relays the finding
+      {
+        tools: [
+          { name: "reply", input: { text: "Mars is far. Source: https://ex.com/mars" } },
+        ],
+      },
+      { text: "done" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search,
+      history: [],
+      userMessage: "how far is Mars",
+    });
+
+    expect(result.replies).toEqual([
+      "Let me check.",
+      "Mars is far. Source: https://ex.com/mars",
+    ]);
   });
 
   it("does not track a topic that was not found", async () => {
@@ -100,6 +140,7 @@ describe("runInterfaceAgent", () => {
       model,
       store,
       send: sink.send,
+      search: createMemorySearch(),
       history: [],
       userMessage: "tell me about ghost",
     });

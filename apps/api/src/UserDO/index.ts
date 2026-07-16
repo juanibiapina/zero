@@ -7,6 +7,7 @@ import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
 import { createModel } from "../agents/model";
+import { createBraveSearch } from "../websearch/brave";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
 import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
@@ -138,6 +139,7 @@ export class UserDO extends DurableObject<Env> {
     const clerkUserId =
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
     const model = await createModel(this.env, clerkUserId);
+    const search = createBraveSearch(this.env.BRAVE_API_KEY);
     const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -147,7 +149,7 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, model, send, chatId, topicId });
+      await orchestrateTurn({ store: this.store, model, send, search, chatId, topicId });
     } finally {
       if (timer) clearTimeout(timer);
     }

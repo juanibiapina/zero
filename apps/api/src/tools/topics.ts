@@ -20,7 +20,7 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
   return {
     reply: tool({
       description:
-        "Send a message to the user now. Call once per message you want shown.",
+        "Send a message to the user, shown immediately. Call once per message you want the user to see; text not sent via reply is never shown.",
       inputSchema: z.object({ text: z.string() }),
       execute: async ({ text }) => {
         replies.push(text);
@@ -30,13 +30,15 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
     }),
 
     list_topics: tool({
-      description: "List all topics with their metadata (no bodies).",
+      description:
+        "List every topic with its metadata (name, description, summary) but no bodies. Use to see what topics exist.",
       inputSchema: z.object({}),
       execute: async () => store.listTopics(),
     }),
 
     get_topic: tool({
-      description: "Get a topic's full content including its body.",
+      description:
+        "Get a topic's full content including its body. Read it before answering about that topic.",
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
         const topic = store.getTopic(name);
@@ -47,7 +49,8 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
     }),
 
     create_topic: tool({
-      description: "Create a new topic for a subject worth remembering.",
+      description:
+        "Create a new topic for a subject worth remembering (a project, a person, an ongoing thread).",
       inputSchema: z.object({ name: z.string(), description: z.string() }),
       execute: async ({ name, description }) => {
         if (store.getTopic(name)) return { error: `topic exists: ${name}` };
@@ -58,7 +61,8 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
     }),
 
     update_topic: tool({
-      description: "Replace a topic's body with revised content.",
+      description:
+        "Revise a topic's body with fresh context. Replaces the body with the content you provide.",
       inputSchema: z.object({ name: z.string(), body: z.string() }),
       execute: async ({ name, body }) => {
         if (!store.getTopic(name)) return { error: `topic not found: ${name}` };

@@ -2,10 +2,13 @@
 // goes, and reports which topics it touched so the writer can consolidate them.
 // The returned { replies, accessed } is the test surface for the whole system.
 
-import { generateText, stepCountIs, type LanguageModel } from "ai";
+import { type LanguageModel } from "ai";
 import { buildInterfaceTools } from "../tools/topics";
+import { buildResearchTool } from "../tools/research";
 import type { Message, TopicStore } from "../store/types";
+import type { WebSearch } from "../websearch/types";
 import { interfaceSystemPrompt } from "./prompts";
+import { runAgent } from "./run";
 
 const MAX_STEPS = 10;
 
@@ -15,6 +18,7 @@ export interface InterfaceAgentInput {
   send: (text: string) => Promise<void>;
   history: Message[];
   userMessage: string;
+  search: WebSearch;
 }
 
 export interface InterfaceAgentResult {
@@ -44,20 +48,24 @@ export const runInterfaceAgent = async (
   const accessed = new Set<string>();
   const replies: string[] = [];
 
-  const tools = buildInterfaceTools({
-    store: input.store,
-    send: input.send,
-    accessed,
-    replies,
-  });
+  const tools = {
+    ...buildInterfaceTools({
+      store: input.store,
+      send: input.send,
+      accessed,
+      replies,
+    }),
+    ...buildResearchTool({ model: input.model, search: input.search }),
+  };
 
-  const prompt = renderConversation(input.history, input.userMessage);
-  await generateText({
+  // The runner's returned text is ignored; the interface agent's output is the
+  // { replies, accessed } collected by the tool closures above.
+  await runAgent({
     model: input.model,
     system: interfaceSystemPrompt(),
-    messages: [{ role: "user", content: prompt }],
+    prompt: renderConversation(input.history, input.userMessage),
     tools,
-    stopWhen: stepCountIs(MAX_STEPS),
+    maxSteps: MAX_STEPS,
   });
 
   return { replies, accessed: [...accessed] };

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runTurn } from "./orchestrator";
 import { scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
+import { createMemorySearch } from "../websearch/memory";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -20,6 +21,7 @@ describe("runTurn", () => {
       store,
       model: scriptedModel([]),
       send: sink.send,
+      search: createMemorySearch(),
       chatId: 1,
       topicId: 0,
     });
@@ -40,6 +42,7 @@ describe("runTurn", () => {
         { text: "done" },
       ]),
       send: sink.send,
+      search: createMemorySearch(),
       chatId: 1,
       topicId: 0,
     });
@@ -85,6 +88,7 @@ describe("runTurn", () => {
         { text: "done" },
       ]),
       send: sink.send,
+      search: createMemorySearch(),
       chatId: 1,
       topicId: 0,
     });

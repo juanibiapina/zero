@@ -7,6 +7,7 @@ import { runInterfaceAgent } from "./interface";
 import { runWriterAgent } from "./writer";
 import type { LanguageModel } from "ai";
 import type { Store } from "../store/types";
+import type { WebSearch } from "../websearch/types";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 
@@ -14,6 +15,7 @@ export interface TurnInput {
   store: Store;
   model: LanguageModel;
   send: (text: string) => Promise<void>;
+  search: WebSearch;
   chatId: number;
   topicId: number;
   historyLimit?: number;
@@ -23,7 +25,7 @@ export interface TurnInput {
 // replies live), persist those replies, then consolidate any accessed topics
 // via the writer. The tail of history must be the user message being answered.
 export const runTurn = async (input: TurnInput): Promise<void> => {
-  const { store, model, send, chatId, topicId } = input;
+  const { store, model, send, search, chatId, topicId } = input;
   const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
@@ -40,6 +42,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       model,
       store,
       send,
+      search,
       history,
       userMessage,
     });
