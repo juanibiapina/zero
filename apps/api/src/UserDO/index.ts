@@ -1,9 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDb, eq, and, gt, asc, type Database } from "do-orm";
 import { migrate } from "do-orm";
-import { telegramLink, sessions, messages, userSettings } from "./db/schema";
+import { telegramLink, sessions, messages, userSettings, processedUpdates } from "./db/schema";
 import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
+import { DbStore } from "../store/db";
+import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
 
 // How often the alarm re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
@@ -17,14 +19,83 @@ enum SessionStatus {
 
 export class UserDO extends DurableObject<Env> {
   private db: Database;
+  private store: DbStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = createDb(ctx.storage);
+    this.store = new DbStore(this.db);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
     });
+  }
+
+  // --- Topic model (delegated to the Store) ---
+
+  listTopics(): TopicMeta[] {
+    return this.store.listTopics();
+  }
+
+  getTopic(name: string): Topic | null {
+    return this.store.getTopic(name);
+  }
+
+  createTopic(name: string, description: string): void {
+    this.store.createTopic(name, description);
+  }
+
+  updateTopicBody(name: string, body: string): void {
+    this.store.updateTopicBody(name, body);
+  }
+
+  getTopicsWithBodies(names: string[]): Topic[] {
+    return this.store.getTopicsWithBodies(names);
+  }
+
+  saveTopic(
+    name: string,
+    patch: { body: string; description: string; summary: string },
+    newName?: string,
+  ): void {
+    this.store.saveTopic(name, patch, newName);
+  }
+
+  // --- Conversations and messages ---
+
+  getOrCreateConversation(chatId: number, topicId: number): string {
+    return this.store.getOrCreateConversation(chatId, topicId);
+  }
+
+  storeMessage(conversationId: string, role: Role, content: string): void {
+    this.store.storeMessage(conversationId, role, content);
+  }
+
+  getConversationHistory(conversationId: string, limit: number): Message[] {
+    return this.store.getConversationHistory(conversationId, limit);
+  }
+
+  resetConversation(chatId: number, topicId: number): void {
+    this.store.resetConversation(chatId, topicId);
+  }
+
+  findThreadsAwaitingReply(): Thread[] {
+    return this.store.findThreadsAwaitingReply();
+  }
+
+  // --- Webhook idempotency ---
+
+  // Record an update id; returns true if newly seen, false if already processed.
+  markProcessed(updateId: string): boolean {
+    const existing = this.db.get(processedUpdates, {
+      where: eq("updateId", updateId),
+    });
+    if (existing) return false;
+    this.db.insert(processedUpdates, {
+      updateId,
+      createdAt: new Date().toISOString(),
+    });
+    return true;
   }
 
   getTelegramId(): string | null {
