@@ -131,6 +131,48 @@ describe("runTurn", () => {
     expect(store.getTopic("travel")?.body).toContain("Rome trip planned.");
   });
 
+  it("delivers a fallback and logs turn_failed when a reply send fails", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    // The transport is down for the model's reply but recovers for the
+    // fallback, so the user still gets told the turn failed.
+    const sent: string[] = [];
+    const send = async (text: string) => {
+      if (text !== FALLBACK_MESSAGE) throw new Error("telegram down");
+      sent.push(text);
+    };
+
+    await expect(
+      runTurn({
+        store,
+        model: scriptedModel([
+          { tools: [{ name: "reply", input: { text: "undelivered" } }] },
+          { text: "done" },
+        ]),
+        send,
+        search: createMemorySearch(),
+        chatId: 1,
+        topicId: 0,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sent).toEqual([FALLBACK_MESSAGE]);
+    // The undelivered reply was persisted (persist-before-send) before the
+    // send failed, so it remains in history alongside the fallback.
+    expect(store.getConversationHistory(id, 10)).toEqual([
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "undelivered" },
+      { role: "assistant", content: FALLBACK_MESSAGE },
+    ]);
+    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
+    expect(events.some((e) => e.msg === "turn_failed")).toBe(true);
+  });
+
   it("delivers a fallback, persists it, clears busy, and logs turn_failed when the agent throws", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);

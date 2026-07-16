@@ -5,6 +5,7 @@
 import { Bot } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { formatAndSend } from "./send";
+import { logError, fmtErr } from "../log";
 import type { Env } from "../types";
 
 export const sendMessage = async (
@@ -18,10 +19,21 @@ export const sendMessage = async (
     botInfo,
     client: { apiRoot: env.TELEGRAM_API_ROOT },
   });
-  await formatAndSend(text, (formatted, parseMode) =>
-    bot.api.sendMessage(chatId, formatted, {
-      ...(topicId && { message_thread_id: topicId }),
-      ...(parseMode && { parse_mode: parseMode }),
-    }),
-  );
+  try {
+    await formatAndSend(text, (formatted, parseMode) =>
+      bot.api.sendMessage(chatId, formatted, {
+        ...(topicId && { message_thread_id: topicId }),
+        ...(parseMode && { parse_mode: parseMode }),
+      }),
+    );
+  } catch (err) {
+    // Never let a Telegram failure be silent. No message content is logged
+    // (log.ts convention); chat/topic ids are metadata already in turn_started.
+    logError("telegram_send_failed", {
+      chat_id: chatId,
+      topic_id: topicId,
+      error: fmtErr(err),
+    });
+    throw err;
+  }
 };

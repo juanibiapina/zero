@@ -60,10 +60,27 @@ export const runInterfaceAgent = async (
   const replies: string[] = [];
   const persistReply = input.persistReply ?? (() => {});
 
+  // A send failure inside the `reply` tool is swallowed by the AI SDK (a thrown
+  // tool execute becomes a tool-error fed back to the model, not a rejected
+  // generateText). Capture the first failure here and re-raise it after the
+  // loop so it reaches the orchestrator's error boundary (turn_failed +
+  // fallback). Short-circuit after the first failure so a fully-broken
+  // transport is not hammered by repeated model retries within the step cap.
+  let firstSendError: Error | null = null;
+  const recordingSend = async (text: string): Promise<void> => {
+    if (firstSendError !== null) throw firstSendError;
+    try {
+      await input.send(text);
+    } catch (err) {
+      firstSendError = err instanceof Error ? err : new Error(String(err));
+      throw firstSendError;
+    }
+  };
+
   const tools = {
     ...buildInterfaceTools({
       store: input.store,
-      send: input.send,
+      send: recordingSend,
       persistReply,
       accessed,
       replies,
@@ -89,6 +106,13 @@ export const runInterfaceAgent = async (
     accessed_count: accessed.size,
     duration_ms: Date.now() - start,
   });
+
+  // A `reply` send failed and the AI SDK swallowed it. Re-raise so the
+  // orchestrator's error boundary logs turn_failed and delivers the fallback.
+  // The undelivered reply row was already persisted (persist-before-send), so
+  // it stays in history alongside the fallback — the same "partial turn"
+  // tradeoff as a mid-run eviction (see docs/topics.md), now visible not silent.
+  if (firstSendError !== null) throw firstSendError as Error;
 
   const delivered = replies.length > 0;
 

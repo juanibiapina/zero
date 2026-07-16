@@ -29,9 +29,13 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
         "Send a message to the user, shown immediately. Call once per message you want the user to see; text not sent via reply is never shown.",
       inputSchema: z.object({ text: z.string() }),
       execute: async ({ text }) => {
-        replies.push(text);
+        // Persist before send (idempotency across DO eviction; see file header
+        // and docs/topics.md). Push to `replies` only after the send resolves,
+        // so a failed send is not counted as delivered — the interface agent's
+        // no-silence fallback keys off replies.length.
         persistReply(text);
         await send(text);
+        replies.push(text);
         return "sent";
       },
     }),

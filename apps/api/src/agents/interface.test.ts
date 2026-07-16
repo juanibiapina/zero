@@ -279,6 +279,32 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(["the answer"]);
   });
 
+  it("re-raises when a reply send fails and still persists before sending", async () => {
+    const store = new MemoryStore();
+    const persisted: string[] = [];
+    const model = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "undelivered" } }] },
+      { text: "done" },
+    ]);
+
+    await expect(
+      runInterfaceAgent({
+        model,
+        store,
+        send: async () => {
+          throw new Error("telegram down");
+        },
+        persistReply: (t) => persisted.push(t),
+        search: createMemorySearch(),
+        history: [],
+        userMessage: "hi",
+      }),
+    ).rejects.toThrow("telegram down");
+
+    // Persist-before-send preserved even though the send failed.
+    expect(persisted).toEqual(["undelivered"]);
+  });
+
   it("does not track a topic that was not found", async () => {
     const store = new MemoryStore();
     const sink = collectSink();

@@ -56,6 +56,16 @@ a skipped retry the writer consolidation for that turn also does not re-run; liv
 topic create/update calls already persisted the durable facts, only the writer's
 Log-line/summary refresh is lost for that one turn.
 
+A `reply` whose `send()` fails is a related case. The AI SDK swallows a thrown
+tool `execute` (it becomes a tool-error fed back to the model, not a rejected
+`generateText`), so the interface agent captures the first send failure and
+re-raises it after the tool loop. That routes to the orchestrator boundary
+below: `turn_failed` is logged and the user gets the fallback. The undelivered
+reply row was already persisted (persist-before-send), so it stays in history
+alongside the fallback — the same "partial turn" tradeoff, now visible instead
+of silent. Every Telegram failure is also logged at the transport
+(`telegram_send_failed`) before it propagates.
+
 The orchestrator is the turn's error boundary. If the agent path throws, it logs
 `turn_failed`, sends the user a fallback message, and persists that fallback as
 an assistant message so the thread stops awaiting reply, then returns without
