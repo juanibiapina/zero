@@ -4,7 +4,10 @@ import { migrate } from "do-orm";
 import { telegramLink, sessions, messages, userSettings, processedUpdates } from "./db/schema";
 import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
+import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
+import { createModel } from "../agents/model";
+import { runTurn as orchestrateTurn } from "../agents/orchestrator";
 import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
 
@@ -96,6 +99,63 @@ export class UserDO extends DurableObject<Env> {
       createdAt: new Date().toISOString(),
     });
     return true;
+  }
+
+  // --- Turn execution (DO alarm) ---
+
+  // Cheap, synchronous-ish enqueue: dedupe the webhook update, store the user
+  // message, and arm the alarm. No LLM work here (the webhook waitUntil caps at
+  // ~30s); the turn runs in alarm() with a much larger budget.
+  async enqueueTurn(input: {
+    updateId: string;
+    clerkUserId: string;
+    chatId: number;
+    topicId: number;
+    text: string;
+  }): Promise<void> {
+    if (!this.markProcessed(input.updateId)) return;
+    await this.ctx.storage.put("clerkUserId", input.clerkUserId);
+    const conversationId = this.store.getOrCreateConversation(
+      input.chatId,
+      input.topicId,
+    );
+    this.store.storeMessage(conversationId, "user", input.text);
+    if ((await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Date.now());
+    }
+  }
+
+  // The turn runner. Drains every thread whose tail is a user message. A
+  // concurrent enqueueTurn arms a fresh alarm (this handler cleared the old
+  // one on entry), so messages that arrive mid-run are picked up on the next
+  // fire. DO alarms auto-retry on throw/eviction, giving crash durability.
+  override async alarm(): Promise<void> {
+    for (const thread of this.store.findThreadsAwaitingReply()) {
+      await this.runTurn(thread.chatId, thread.topicId);
+    }
+  }
+
+  // Run one thread end to end inside the DO: local typing loop, model creation
+  // (per-user gateway tagging), then the runtime-agnostic orchestrator. The
+  // typing loop is a self-rescheduling setTimeout, not the DO alarm timer, so
+  // the alarm stays dedicated to turn scheduling.
+  async runTurn(chatId: number, topicId: number): Promise<void> {
+    const clerkUserId =
+      (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
+    const model = await createModel(this.env, clerkUserId);
+    const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      void sendChatAction(this.env, chatId, topicId).catch(() => {});
+      timer = setTimeout(tick, TYPING_INTERVAL_MS);
+    };
+    tick();
+    try {
+      await orchestrateTurn({ store: this.store, model, send, chatId, topicId });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   getTelegramId(): string | null {
@@ -217,9 +277,6 @@ export class UserDO extends DurableObject<Env> {
       where: and(eq("chatId", chatId), eq("topicId", topicId)),
     });
     await sendChatAction(this.env, chatId, topicId).catch(() => {});
-    if ((await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now() + TYPING_INTERVAL_MS);
-    }
   }
 
   markSessionIdle(chatId: number, topicId: number): void {
@@ -227,20 +284,6 @@ export class UserDO extends DurableObject<Env> {
       where: and(eq("chatId", chatId), eq("topicId", topicId)),
     });
   }
-
-  // Re-send the typing action for every active session, then re-arm while
-  // any remain. Self-cancels once all sessions are idle.
-  override async alarm(): Promise<void> {
-    const active = this.db.all(sessions, { where: eq("status", SessionStatus.Active) });
-    const telegramActive = active.filter((s) => s.type === "telegram");
-    await Promise.all(
-      telegramActive.map((s) => sendChatAction(this.env, s.chatId, s.topicId).catch(() => {})),
-    );
-    if (telegramActive.length > 0) {
-      await this.ctx.storage.setAlarm(Date.now() + TYPING_INTERVAL_MS);
-    }
-  }
-
 
   getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; isNewUser: boolean } {
     const row = this.db.get(userSettings);
