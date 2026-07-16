@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "4.0.3",
-    "@cloudflare/workers-types": "^4.20260629.1",
+    "@cloudflare/workers-types": "^5.20260716.1",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.7.0",
