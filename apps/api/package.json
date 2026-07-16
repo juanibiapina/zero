@@ -27,6 +27,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "4.0.3",
     "@cloudflare/workers-types": "^4.20260629.1",
     "@zero/agent-server": "workspace:*",
     "@zero/eslint-config": "workspace:*",
