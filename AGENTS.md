@@ -25,7 +25,7 @@ Packages:
 - **Worker:** `apps/api` (`@zero/api`)
 - **Frontend:** `apps/web` (`@zero/web`)
 - **Shared types:** `packages/core` (`@zero/core`) — currently empty placeholder
-- **Integration tests:** `packages/integration-tests` (`@zero/integration-tests`) — end-to-end Telegram round-trip test against prod; see `docs/integration-tests.md`
+- **E2E tests:** `packages/e2e-tests` (`@zero/e2e-tests`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 
 Expected dev ports:
 - **5176**: Web frontend (Vite)
@@ -56,6 +56,5 @@ Then restart the dev server with `gob restart <job_id>`.
 When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx zerovault-cli@0.1.0` and needs `ZEROVAULT_API_KEY` and `ZEROVAULT_API_URL` env vars.
 
 ZeroVault projects (each with `development` and `production` environments):
-- `zero-api` — Worker backend secrets
+- `zero-api` — Worker backend secrets (also used by `bin/e2e-test`)
 - `zero-web` — Frontend build-time secrets
-- `zero-tests` — Integration-test secrets (Telegram MTProto app + session)

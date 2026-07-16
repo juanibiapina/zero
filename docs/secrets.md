@@ -6,11 +6,10 @@ This document explains how environment variables and secrets are organized in th
 
 ## Secret Management with ZeroVault
 
-All secrets are managed through [ZeroVault](https://zerovault.juanibiapina.dev), a self-hosted secrets manager. Secrets are organized across three ZeroVault projects, each with `development` and `production` environments:
+All secrets are managed through [ZeroVault](https://zerovault.juanibiapina.dev), a self-hosted secrets manager. Secrets are organized across two ZeroVault projects, each with `development` and `production` environments:
 
-- **`zero-api`**: Zero Cloudflare Worker secrets
+- **`zero-api`**: Zero Cloudflare Worker secrets (also loaded by `bin/e2e-test`)
 - **`zero-web`**: Zero React app build-time secrets
-- **`zero-tests`**: Integration-test credentials
 
 | ZeroVault Project | Environment | Target | Purpose |
 |-------------------|-------------|--------|---------|
@@ -18,7 +17,6 @@ All secrets are managed through [ZeroVault](https://zerovault.juanibiapina.dev),
 | `zero-api` | `production` | Cloudflare Workers | Worker runtime variables for production (uploaded via wrangler) |
 | `zero-web` | `development` | `apps/web/.env.local` | Vite build-time variables for local development |
 | `zero-web` | `production` | `apps/web/.env.production` | Vite build-time variables for production builds |
-| `zero-tests` | `development` | integration-test env | Telegram MTProto test credentials |
 
 ### Prerequisites
 

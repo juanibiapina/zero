@@ -1,9 +1,8 @@
 // Clerk-backed user roster for the admin views.
 //
 // Clerk is the source of truth for "who are my users" — the per-user
-// UserDO can't be enumerated and the D1 sessions table only knows users
-// who completed a turn. These helpers list and fetch users from Clerk so
-// the admin can see every signed-up account, including zero-session ones.
+// UserDO can't be enumerated. These helpers list and fetch users from
+// Clerk so the admin can see every signed-up account.
 //
 // Kept in its own module (like google-token.ts / github-token.ts) so the
 // admin route can be tested without standing up the Clerk SDK.

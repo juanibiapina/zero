@@ -3,13 +3,13 @@
 // The repo capability authenticates as the GitHub App `zerocoding-app`
 // (not as the user): we sign an app JWT with the app's private key, look
 // up the user's own installation via their connected GitHub identity, and
-// exchange the JWT for an installation access token (~1h). That token is
-// what the container later uses to clone/commit/push/open PRs — injected
-// only as a sentinel so the real value never reaches the container.
+// exchange the JWT for an installation access token (~1h). The connect
+// plumbing and status live here; there is no consumer of the token yet
+// (the container that ran git/gh was removed with the container runtime).
 //
 // Every function returns null / a "not connected" status on failure and
 // never throws, mirroring google-token.ts: a GitHub outage or an
-// un-installed user must not block container startup.
+// un-installed user must not block a turn.
 
 import { createClerkClient } from "@clerk/backend";
 import { importPKCS8, SignJWT } from "jose";
