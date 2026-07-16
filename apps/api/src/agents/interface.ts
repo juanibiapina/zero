@@ -58,15 +58,23 @@ export const runInterfaceAgent = async (
     ...buildResearchTool({ model: input.model, search: input.search }),
   };
 
-  // The runner's returned text is ignored; the interface agent's output is the
-  // { replies, accessed } collected by the tool closures above.
-  await runAgent({
+  // The agent's replies are the { replies, accessed } collected by the tool
+  // closures above. The runner's returned text is the model's final prose.
+  const text = await runAgent({
     model: input.model,
     system: interfaceSystemPrompt(),
     prompt: renderConversation(input.history, input.userMessage),
     tools,
     maxSteps: MAX_STEPS,
   });
+
+  // Fallback: if the model answered in prose without calling reply(), deliver
+  // that text so the turn is never silently dropped. Guarded on no prior reply
+  // so trailing filler (e.g. "done") after real replies is not sent.
+  if (replies.length === 0 && text.trim()) {
+    await input.send(text);
+    replies.push(text);
+  }
 
   return { replies, accessed: [...accessed] };
 };

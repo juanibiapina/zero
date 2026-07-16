@@ -26,9 +26,11 @@ pass).
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new
    user message plus recent history, it runs a tool loop and sends replies as it
    works. Tools (`tools/topics.ts`):
-   - `reply(text)` — send a message to the user immediately. Every message the
-     user sees must go through `reply()`; the agent is prompted to acknowledge
-     first, then answer, so the user sees live progress.
+   - `reply(text)` — send a message to the user immediately. The agent is
+     prompted to acknowledge first, then answer, so the user sees live progress.
+     As a safety net, if the agent finishes a turn without calling `reply()` at
+     all, its final prose is sent as the reply so the turn is never silently
+     dropped (trailing filler after a real `reply()` is not sent).
    - `list_topics`, `get_topic`, `create_topic`, `update_topic` — read/write the
      knowledge model. Every topic touched is added to an `accessed` set.
 2. **Writer agent** (`agents/writer.ts`, stateless per turn). Given the accessed

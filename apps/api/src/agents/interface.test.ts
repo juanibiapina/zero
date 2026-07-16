@@ -127,6 +127,65 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
+  it("sends the final text when the model never calls reply", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const model = scriptedModel([
+      { text: "Here is the whole answer in prose." },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "hi",
+    });
+
+    expect(sink.sent).toEqual(["Here is the whole answer in prose."]);
+    expect(result.replies).toEqual(["Here is the whole answer in prose."]);
+  });
+
+  it("sends nothing when the model calls no reply and returns empty text", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const model = scriptedModel([{ text: "" }]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "hi",
+    });
+
+    expect(sink.sent).toEqual([]);
+    expect(result.replies).toEqual([]);
+  });
+
+  it("does not send trailing filler text when reply was already called", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "the answer" } }] },
+      { text: "done" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "hi",
+    });
+
+    expect(sink.sent).toEqual(["the answer"]);
+    expect(result.replies).toEqual(["the answer"]);
+  });
+
   it("does not track a topic that was not found", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
