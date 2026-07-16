@@ -17,18 +17,15 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Bot, webhookCallback } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
-import { log, logError, fmtErr } from "../log";
-import { processAbortCommand } from "../commands/abort";
+import { log } from "../log";
 import { processNewCommand } from "../commands/new";
-import { processStatusCommand } from "../commands/status";
-import {
-  processTopicMessage,
-  type TopicContext,
-} from "../process-topic-message";
+import type { TopicContext } from "../telegram/context";
+import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
-import type { OutgoingAttachment } from "../agent-client";
 import { sendChatAction } from "../telegram/chat-action";
 import { formatAndSend } from "../telegram/send";
+
+const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
 // Build a TopicContext from a Telegram message. Topic messages (forum
 // groups or DM topics) use message_thread_id; plain DMs use topicId=0.
@@ -48,9 +45,6 @@ export const resolveContext = (
   log("drop_unsupported_message", { telegram_id: String(fromId), chat_type: msg.chat.type });
   return null;
 };
-
-// Telegram bots can download files up to 20MB via getFile.
-const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
 
 interface PhotoSize {
   file_id: string;
@@ -161,35 +155,6 @@ export const refineFilename = (filename: string, filePath: string): string => {
   return m ? `${filename}.${m[1]}` : filename;
 };
 
-// Resolve a file_id to its bytes: getFile gives a file_path, then we
-// fetch it from the file endpoint. Throws on oversize or fetch failure.
-const downloadAttachment = async (
-  bot: Bot,
-  apiRoot: string,
-  token: string,
-  meta: AttachmentMeta,
-): Promise<OutgoingAttachment> => {
-  const file = await bot.api.getFile(meta.file_id);
-  if (file.file_size && file.file_size > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`file too large: ${file.file_size} bytes`);
-  }
-  if (!file.file_path) {
-    throw new Error("getFile returned no file_path");
-  }
-  const url = `${apiRoot}/file/bot${token}/${file.file_path}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`file download failed: ${res.status}`);
-  }
-  const data = await res.arrayBuffer();
-  return {
-    filename: refineFilename(meta.filename, file.file_path),
-    mimeType: meta.mimeType,
-    data,
-  };
-};
-
-
 export const createTelegramWebhookRoute = () => {
   const router = new OpenAPIHono<{ Bindings: Env }>();
 
@@ -223,26 +188,6 @@ export const createTelegramWebhookRoute = () => {
       );
     });
 
-    bot.command("abort", (ctx) => {
-      const msg = ctx.msg;
-      if (!ctx.from) return;
-      const topic = resolveContext(ctx.from.id, msg);
-      if (!topic) return;
-      c.executionCtx.waitUntil(
-        processAbortCommand(topic, c.env, sendReply),
-      );
-    });
-
-    bot.command("status", (ctx) => {
-      const msg = ctx.msg;
-      if (!ctx.from) return;
-      const topic = resolveContext(ctx.from.id, msg);
-      if (!topic) return;
-      c.executionCtx.waitUntil(
-        processStatusCommand(topic, c.env, sendReply),
-      );
-    });
-
     bot.on("message", (ctx) => {
       const msg = ctx.message;
       const topic = resolveContext(ctx.from.id, msg);
@@ -259,36 +204,46 @@ export const createTelegramWebhookRoute = () => {
         return;
       }
 
-      c.executionCtx.waitUntil(
-        sendChatAction(c.env, topic.chatId, topic.topicId).catch(() => {}),
-      );
+      const updateId = String(ctx.update.update_id);
+
       c.executionCtx.waitUntil(
         (async () => {
-          let attachments: OutgoingAttachment[] | undefined;
-          if (attachment) {
-            try {
-              attachments = [
-                await downloadAttachment(
-                  bot,
-                  c.env.TELEGRAM_API_ROOT,
-                  c.env.TELEGRAM_BOT_TOKEN,
-                  attachment,
-                ),
-              ];
-            } catch (err) {
-              logError("attachment_download_failed", {
-                telegram_id: String(ctx.from.id),
-                error: fmtErr(err),
-              });
-              await sendReply(
-                topic.chatId,
-                topic.topicId,
-                "⚠️ I couldn't download that file. It may be larger than 20MB or unavailable.",
-              ).catch(() => {});
-              return;
-            }
+          const clerkUserId = await c.env.KV.get(tgKey(topic.telegramId));
+          if (!clerkUserId) {
+            log("drop_unknown_telegram_id", { telegram_id: topic.telegramId });
+            return;
           }
-          await processTopicMessage({ ...topic, text, attachments }, c.env);
+
+          // Attachments are out of scope for the topic model MVP. If the
+          // message is attachment-only, notify and skip; if it also has text,
+          // process the text and note the attachment was ignored.
+          if (attachment && text.length === 0) {
+            await sendReply(
+              topic.chatId,
+              topic.topicId,
+              "⚠️ I can't handle attachments yet — send me a text message.",
+            ).catch(() => {});
+            return;
+          }
+
+          await sendChatAction(c.env, topic.chatId, topic.topicId).catch(
+            () => {},
+          );
+          await getUserDO(c.env, clerkUserId).enqueueTurn({
+            updateId,
+            clerkUserId,
+            chatId: topic.chatId,
+            topicId: topic.topicId,
+            text,
+          });
+
+          if (attachment) {
+            await sendReply(
+              topic.chatId,
+              topic.topicId,
+              "⚠️ I ignored the attached file (not supported yet).",
+            ).catch(() => {});
+          }
         })(),
       );
     });

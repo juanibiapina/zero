@@ -1,13 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { processNewCommand, type SendReplyFn } from "./new";
-import type { TopicContext } from "../process-topic-message";
+import type { TopicContext } from "../telegram/context";
 import type { UserDO } from "../UserDO/index";
 import type { Env } from "../types";
-
-// ---------------------------------------------------------------------------
-// Fakes
-// ---------------------------------------------------------------------------
 
 const fakeKV = (entries: Record<string, string> = {}) => {
   const store = new Map(Object.entries(entries));
@@ -17,22 +13,14 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   } as unknown as KVNamespace;
 };
 
-type UserDOStub = Pick<UserDO, "lookupSessionByTopic" | "forgetSession">;
+type UserDOStub = Pick<UserDO, "resetConversation">;
 
-const createFakeUserDO = (sessions: Record<string, string> = {}): UserDOStub & {
-  _forgotten: string[];
-} => {
-  const byTopic = new Map(Object.entries(sessions));
-  const forgotten: string[] = [];
+const createFakeUserDO = (): UserDOStub & { _reset: Array<[number, number]> } => {
+  const reset: Array<[number, number]> = [];
   return {
-    _forgotten: forgotten,
-    lookupSessionByTopic: (chatId: number, topicId: number) =>
-      byTopic.get(`${chatId}:${topicId}`) ?? null,
-    forgetSession: (sessionId: string) => {
-      forgotten.push(sessionId);
-      for (const [k, v] of byTopic) {
-        if (v === sessionId) byTopic.delete(k);
-      }
+    _reset: reset,
+    resetConversation: (chatId: number, topicId: number) => {
+      reset.push([chatId, topicId]);
     },
   };
 };
@@ -52,10 +40,6 @@ const ctx: TopicContext = {
   topicId: 200,
 };
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("processNewCommand", () => {
   it("drops unknown telegram ID", async () => {
     const kv = fakeKV(); // empty — no tg:111 entry
@@ -66,25 +50,14 @@ describe("processNewCommand", () => {
     expect(sendReply).not.toHaveBeenCalled();
   });
 
-  it("replies even when no existing session", async () => {
+  it("resets the conversation and confirms", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO();
     const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
 
     await processNewCommand(ctx, fakeEnv(kv, userDO), sendReply);
 
-    expect(sendReply).toHaveBeenCalledWith(100, 200, "New session started");
-    expect(userDO._forgotten).toEqual([]);
-  });
-
-  it("forgets existing session", async () => {
-    const kv = fakeKV({ "tg:111": "user_abc" });
-    const userDO = createFakeUserDO({ "100:200": "old-session" });
-    const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
-
-    await processNewCommand(ctx, fakeEnv(kv, userDO), sendReply);
-
-    expect(userDO._forgotten).toEqual(["old-session"]);
-    expect(sendReply).toHaveBeenCalledWith(100, 200, "New session started");
+    expect(userDO._reset).toEqual([[100, 200]]);
+    expect(sendReply).toHaveBeenCalledWith(100, 200, "Started a new conversation.");
   });
 });

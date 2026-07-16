@@ -1,11 +1,9 @@
-// Handles the /new bot command: forgets the current session for a topic
-// so the next regular message starts a fresh conversation.
-//
-// The new session is NOT created eagerly — `ensureSession` in
-// `process-topic-message.ts` handles that on the next message.
+// Handles the /new bot command: resets the conversation thread for this
+// (chatId, topicId) so the next message starts a fresh exchange. Topics (the
+// durable knowledge model) are left intact.
 
 import { log } from "../log";
-import type { TopicContext } from "../process-topic-message";
+import type { TopicContext } from "../telegram/context";
 import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
 
@@ -16,7 +14,6 @@ export type SendReplyFn = (
   threadId: number,
   text: string,
 ) => Promise<void>;
-
 
 export const processNewCommand = async (
   ctx: TopicContext,
@@ -30,19 +27,8 @@ export const processNewCommand = async (
   }
 
   const userDO = getUserDO(env, clerkUserId);
-  const sessionId = await userDO.lookupSessionByTopic(ctx.chatId, ctx.topicId);
-  if (sessionId) {
-    await userDO.forgetSession(sessionId);
-    log("new_command_forgot_session", {
-      session_id: sessionId,
-      clerk_user_id: clerkUserId,
-    });
-  }
+  await userDO.resetConversation(ctx.chatId, ctx.topicId);
 
-  await sendReply(
-    ctx.chatId,
-    ctx.topicId,
-    "New session started",
-  );
+  await sendReply(ctx.chatId, ctx.topicId, "Started a new conversation.");
   log("new_command_completed", { clerk_user_id: clerkUserId });
 };
