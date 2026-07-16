@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
-import { createDb, eq, and, gt, asc, type Database } from "do-orm";
+import { createDb, eq, type Database } from "do-orm";
 import { migrate } from "do-orm";
-import { telegramLink, sessions, messages, userSettings, processedUpdates } from "./db/schema";
+import { telegramLink, userSettings, processedUpdates } from "./db/schema";
 import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
@@ -11,13 +11,8 @@ import { runTurn as orchestrateTurn } from "../agents/orchestrator";
 import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
 
-// How often the alarm re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
+// How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
 const TYPING_INTERVAL_MS = 4000;
-
-enum SessionStatus {
-  Idle = "idle",
-  Active = "active",
-}
 
 
 export class UserDO extends DurableObject<Env> {
@@ -182,107 +177,6 @@ export class UserDO extends DurableObject<Env> {
 
     this.db.delete(telegramLink, { where: eq("id", existing.id) });
     return { removed: existing.telegramId };
-  }
-  lookupSessionByTopic(chatId: number, topicId: number): string | null {
-    const row = this.db.get(sessions, {
-      where: and(eq("chatId", chatId), eq("topicId", topicId)),
-    });
-    return row?.sessionId ?? null;
-  }
-
-  lookupSessionById(sessionId: string): { type: string; chatId: number; topicId: number; name?: string } | null {
-    const row = this.db.get(sessions, { where: eq("sessionId", sessionId) });
-    if (!row) return null;
-    return { type: row.type, chatId: row.chatId, topicId: row.topicId, ...(row.name ? { name: row.name } : {}) };
-  }
-
-  createWebuiSession(sessionId: string, name?: string): void {
-    this.db.insert(sessions, {
-      type: "webui",
-      chatId: 0,
-      topicId: 0,
-      sessionId,
-      status: SessionStatus.Idle,
-      updatedAt: new Date().toISOString(),
-      ...(name ? { name } : {}),
-    });
-  }
-
-  listSessions(): Array<{ sessionId: string; type: string; name: string | null; status: string; updatedAt: string | null }> {
-    const rows = this.db.all(sessions, { orderBy: asc("id") });
-    return rows.map((r) => ({
-      sessionId: r.sessionId,
-      type: r.type,
-      name: r.name ?? null,
-      status: r.status,
-      updatedAt: r.updatedAt ?? null,
-    }));
-  }
-
-  appendMessage(sessionId: string, role: "user" | "agent", text: string): void {
-    this.db.insert(messages, { sessionId, role, text, createdAt: new Date().toISOString() });
-    this.db.update(sessions, { updatedAt: new Date().toISOString() }, {
-      where: eq("sessionId", sessionId),
-    });
-  }
-
-  listMessages(sessionId: string, since?: number): { messages: Array<{ id: number; role: string; text: string; createdAt: string }>; status: string | null } {
-    const where = since !== undefined
-      ? and(eq("sessionId", sessionId), gt("id", since))
-      : eq("sessionId", sessionId);
-    const rows = this.db.all(messages, { where, orderBy: asc("id") });
-    const session = this.db.get(sessions, { where: eq("sessionId", sessionId) });
-    return {
-      messages: rows.map((r) => ({ id: r.id as number, role: r.role, text: r.text, createdAt: r.createdAt })),
-      status: session?.status ?? null,
-    };
-  }
-
-  async markSessionActiveById(sessionId: string): Promise<void> {
-    this.db.update(sessions, { status: SessionStatus.Active }, {
-      where: eq("sessionId", sessionId),
-    });
-    if ((await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now() + TYPING_INTERVAL_MS);
-    }
-  }
-
-  markSessionIdleById(sessionId: string): void {
-    this.db.update(sessions, { status: SessionStatus.Idle }, {
-      where: eq("sessionId", sessionId),
-    });
-  }
-
-  recordSession(chatId: number, topicId: number, sessionId: string): void {
-    // Remove any existing session for this topic
-    const existing = this.db.get(sessions, {
-      where: and(eq("chatId", chatId), eq("topicId", topicId)),
-    });
-    if (existing) {
-      this.db.delete(sessions, { where: eq("id", existing.id) });
-    }
-    this.db.insert(sessions, { type: "telegram", chatId, topicId, sessionId, status: SessionStatus.Idle });
-  }
-
-  recordTaskSession(sessionId: string, name?: string): void {
-    this.db.insert(sessions, { type: "task", chatId: 0, topicId: 0, sessionId, status: SessionStatus.Idle, ...(name ? { name } : {}) });
-  }
-
-  forgetSession(sessionId: string): void {
-    this.db.delete(sessions, { where: eq("sessionId", sessionId) });
-  }
-
-  async markSessionActive(chatId: number, topicId: number): Promise<void> {
-    this.db.update(sessions, { status: SessionStatus.Active }, {
-      where: and(eq("chatId", chatId), eq("topicId", topicId)),
-    });
-    await sendChatAction(this.env, chatId, topicId).catch(() => {});
-  }
-
-  markSessionIdle(chatId: number, topicId: number): void {
-    this.db.update(sessions, { status: SessionStatus.Idle }, {
-      where: and(eq("chatId", chatId), eq("topicId", topicId)),
-    });
   }
 
   getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; isNewUser: boolean } {

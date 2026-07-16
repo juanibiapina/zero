@@ -15,7 +15,6 @@
     "@ai-sdk/anthropic": "^4.0.15",
     "@clerk/backend": "^3.11.4",
     "@clerk/hono": "^0.1.50",
-    "@cloudflare/containers": "^0.3.7",
     "@hono/zod-openapi": "^1.4.0",
     "ai": "^7.0.29",
     "aws4fetch": "^1.0.20",
@@ -29,7 +28,6 @@
   "devDependencies": {
     "@ai-sdk/provider": "4.0.3",
     "@cloudflare/workers-types": "^4.20260629.1",
-    "@zero/agent-server": "workspace:*",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.7.0",

@@ -1,13 +1,13 @@
-// Clerk-authed route for fire-and-forget task execution.
+// Clerk-authed task route.
 //
-// POST /api/tasks accepts a prompt, creates a container session, and
-// sends the prompt. The reply is discarded (see the type="task" guard
-// in handleMessageEnd in AgentContainer.ts).
+// TODO(tasks): the container-backed task runner was removed with the
+// container runtime. This is a parked stub that accepts the request and
+// no-ops so the web onboarding call keeps working. Reimplement later as a
+// meta-agent turn on the DO-alarm runtime.
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { fmtErr, log, logError } from "../log";
-import { runTask } from "../tasks";
+import { log } from "../log";
 import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
 
@@ -20,8 +20,6 @@ const CreateTaskSchema = z.object({
   name: z.string().min(1).optional(),
 });
 
-const ErrorSchema = z.object({ error: z.string() });
-
 export const createTaskRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
@@ -29,56 +27,31 @@ export const createTaskRoutes = () => {
     method: "post",
     path: "/api/tasks",
     tags: ["Tasks"],
-    summary: "Run a fire-and-forget task",
+    summary: "Run a fire-and-forget task (parked: currently a no-op)",
     request: {
       body: {
         content: { "application/json": { schema: CreateTaskSchema } },
       },
     },
     responses: {
-      409: {
-        content: { "application/json": { schema: z.object({ status: z.string() }) } },
-        description: "Task already running or done",
-      },
       202: {
-        description: "Task accepted",
-      },
-      500: {
-        content: { "application/json": { schema: ErrorSchema } },
-        description: "Failed to start task",
+        description: "Task accepted (no-op)",
       },
     },
   });
 
   router.openapi(postRoute, async (c) => {
     const clerkUserId = c.get("userId");
-    const { prompt, name } = c.req.valid("json");
+    const { name } = c.req.valid("json");
 
-    // Named tasks are idempotent: skip if already running or done
-    if (name) {
+    // Preserve the Google onboarding contract: mark it done so the web
+    // onboarding flow completes even though no task actually runs.
+    if (name === "google-onboarding") {
       const userDO = getUserDO(c.env, clerkUserId);
-      const settings = await userDO.getSettings();
-
-      if (name === "google-onboarding") {
-        const status = settings.googleOnboardingStatus;
-        if (status === "running" || status === "done") {
-          log("task_skipped", { name, status, clerk_user_id: clerkUserId });
-          return c.json({ status }, 409);
-        }
-        await userDO.setGoogleOnboardingStatus("running");
-      }
+      await userDO.setGoogleOnboardingStatus("done");
     }
 
-    try {
-      await runTask(c.env, clerkUserId, prompt, name);
-    } catch (err) {
-      logError("task_route_failed", {
-        clerk_user_id: clerkUserId,
-        error: fmtErr(err),
-      });
-      return c.json({ error: "failed to start task" }, 500);
-    }
-
+    log("task_noop", { name: name ?? null, clerk_user_id: clerkUserId });
     return c.body(null, 202);
   });
 

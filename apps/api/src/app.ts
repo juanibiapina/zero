@@ -10,7 +10,6 @@ import { createTelegramWebhookRoute } from "./routes/telegram-webhook";
 import { createClerkWebhookRoute } from "./routes/clerk-webhook";
 import { createUserSettingsRoutes } from "./routes/user-settings";
 import { createTaskRoutes } from "./routes/tasks";
-import { createSessionRoutes } from "./routes/sessions";
 import { createAdminRoutes } from "./routes/admin";
 
 type Variables = {
@@ -44,7 +43,6 @@ export const createApp = () => {
 
   app.route("/", createUserSettingsRoutes());
   app.route("/", createTaskRoutes());
-  app.route("/", createSessionRoutes());
   app.route("/", createAdminRoutes());
 
   return app;

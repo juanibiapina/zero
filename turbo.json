@@ -24,17 +24,6 @@
       "persistent": true,
       "cache": false
     },
-    "@zero/api#dev": {
-      "dependsOn": ["@zero/agent-server#build"],
-      "persistent": true,
-      "cache": false
-    },
-    "@zero/api#typecheck": {
-      "dependsOn": ["@zero/agent-server#build"]
-    },
-    "@zero/api#lint": {
-      "dependsOn": ["@zero/agent-server#build"]
-    },
     "test": {
       "outputs": []
     },
@@ -43,7 +32,7 @@
       "cache": false
     },
     "@zero/api#deploy": {
-      "dependsOn": ["@zero/web#build", "@zero/agent-server#build"],
+      "dependsOn": ["@zero/web#build"],
       "cache": false
     }
   }

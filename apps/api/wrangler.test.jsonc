@@ -27,36 +27,14 @@
       "preview_id": "c585ffa89cbb45448d2480491434b2ee"
     }
   ],
-  "r2_buckets": [
-    {
-      "binding": "AGENT_STATE_BUCKET",
-      "bucket_name": "zero-agent-state"
-    }
-  ],
+  "ai": {
+    "binding": "AI"
+  },
   "analytics_engine_datasets": [
     { "binding": "ANALYTICS", "dataset": "zero-events" }
   ],
-  "d1_databases": [
-    {
-      "binding": "SESSIONS_DB",
-      "database_name": "zero-sessions",
-      "database_id": "32f3e4b4-004a-4c51-a3e0-cb67fd7e3bf8"
-    }
-  ],
-  "containers": [
-    {
-      "class_name": "AgentContainer",
-      "image": "../../packages/agent-server/Dockerfile",
-      "max_instances": 10,
-      "instance_type": "basic"
-    }
-  ],
   "durable_objects": {
     "bindings": [
-      {
-        "name": "AGENT_CONTAINER",
-        "class_name": "AgentContainer"
-      },
       {
         "name": "USER_DO",
         "class_name": "UserDO"
@@ -83,6 +61,10 @@
     {
       "tag": "v5",
       "new_sqlite_classes": ["UserDO"]
+    },
+    {
+      "tag": "v6",
+      "deleted_classes": ["AgentContainer"]
     }
   ]
 }

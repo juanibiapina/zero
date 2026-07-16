@@ -4,8 +4,6 @@
 interface __BaseEnv_Env {
 	KV: KVNamespace;
 	AI: Ai;
-	AGENT_STATE_BUCKET: R2Bucket;
-	SESSIONS_DB: D1Database;
 	ANALYTICS: AnalyticsEngineDataset;
 	TELEGRAM_API_ROOT: "https://api.telegram.org";
 	CLOUDFLARE_ACCOUNT_ID: "4e04b64af4013414441c59014392bea0";
@@ -26,7 +24,6 @@ interface __BaseEnv_Env {
 	TELEGRAM_BOT_INFO: string;
 	TELEGRAM_BOT_TOKEN: string;
 	TELEGRAM_WEBHOOK_SECRET: string;
-	AGENT_CONTAINER: DurableObjectNamespace<import("./src/index").AgentContainer>;
 	USER_DO: DurableObjectNamespace<import("./src/index").UserDO>;
 }
 declare namespace Cloudflare {
