@@ -18,21 +18,20 @@ gob run bin/deploy
 
 ## Architecture
 
-Zero receives Telegram bot webhooks, routes each update to the right user via KV, and forwards forum-topic messages to a per-user Cloudflare Container that runs [pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). The agent's reply is sent back into the same Telegram topic. Telegram attachments (photos, PDFs, any file) are downloaded by the worker and written to `/workspace/attachments` inside the container. The container's entire `/workspace` tree (pi sessions, notes, attachments, and working files) persists as a single `state.tar.gz` archive per user on R2, restored on boot and saved on each turn through the worker, so conversations survive container sleep/wake. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`).
+Zero receives Telegram bot webhooks and routes each update to the right user via KV. Messages are handled by a two-phase meta-agent that runs inside the per-user `UserDO` Durable Object: an **interface agent** reads the conversation and a topic-based knowledge model (stored in DO SQLite) and replies to the user, then a **writer agent** consolidates what was learned back into the accessed topics. The webhook enqueues each turn and returns 200 immediately; the turn runs on a DO alarm. LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic) with per-user `cf-aig-metadata` attribution. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`). See `docs/topics.md` for the topic model and writer policy.
 
 Packages:
 
 - **Worker:** `apps/api` (`@zero/api`)
 - **Frontend:** `apps/web` (`@zero/web`)
 - **Shared types:** `packages/core` (`@zero/core`) — currently empty placeholder
-- **Agent server:** `packages/agent-server` (`@zero/agent-server`) — pi-coding-agent wrapped as an HTTP server, packaged as the container image
 - **Integration tests:** `packages/integration-tests` (`@zero/integration-tests`) — end-to-end Telegram round-trip test against prod; see `docs/integration-tests.md`
 
 Expected dev ports:
 - **5176**: Web frontend (Vite)
 - **8790**: API worker (Wrangler)
 
-The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`. Per-user R2 mount setup is in `docs/r2-mount.md`.
+The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`.
 
 ## Production Logs
 

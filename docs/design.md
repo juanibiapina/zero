@@ -1,72 +1,51 @@
 # Zero — Design Document
 
+> **Superseded sections below.** As of the meta-agent rewrite, Zero no longer
+> uses Cloudflare Containers, pi-coding-agent, the R2 `state.tar.gz` archive,
+> secret proxying, or the `/message-end` `/agent-end` `/state` callbacks. The
+> current architecture is summarised in the Goal section here and described in
+> full in [`topics.md`](topics.md). Container-specific sections further down are
+> historical and pending removal.
+
 ## Goal
 
-Zero turns a Telegram forum topic into a chat session with an agent. The
-web frontend uses Telegram's [Login Widget](https://core.telegram.org/widgets/login)
-to link a Clerk account to a Telegram numeric id (HMAC-verified server-side
-against the bot token). From then on, every message the user sends in a
-**forum topic** is routed to a per-user agent container; the container
-posts a reply back into the same topic. Direct messages, channel posts,
-edits, callbacks etc. are dropped — only topic messages count today.
+Zero turns a Telegram chat (a forum topic, or a DM using topicId=0) into a
+conversation with a meta-agent. The web frontend uses Telegram's
+[Login Widget](https://core.telegram.org/widgets/login) to link a Clerk account
+to a Telegram numeric id (HMAC-verified server-side against the bot token). From
+then on, each message is processed by a two-phase agent that runs inside the
+per-user `UserDO` Durable Object.
 
-The agent inside the container is the pi coding agent
-([@earendil-works/pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent))
-talking to Anthropic **through a Cloudflare AI Gateway** (BYOK: the
-Anthropic key is stored in the gateway config, so Cloudflare injects it
-upstream and Anthropic bills us directly at standard per-token rates with
-no markup). Pi-ai uses its built-in `cloudflare-ai-gateway` provider,
-which authenticates to the gateway with
-`cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>` and sends no Anthropic
-key itself. The token pi sees is a **sentinel
-fake** (`Z3R0-FAKE-CLOUDFLARE_API_KEY`), not the real value. Every
-container request to anywhere except `zero.worker` is intercepted by the
-worker's catch-all `outbound` handler, which byte-replaces registered
-fakes with their real env values before forwarding. The real
-`CLOUDFLARE_API_KEY` lives only in the worker; if pi exfiltrates its own
-env, the leaked string is a useless sentinel. See "Secret proxying"
-below.
+The webhook resolves the user via `KV tg:{telegramId}` and calls
+`UserDO.enqueueTurn` (dedupe, store the user message, arm a DO alarm), then
+returns 200 immediately. The alarm runs the turn:
 
-The model is `claude-opus-4-8` with thinking level `high`.
-Replies flow back through a separate on-host outbound trick — as the
-agent produces each assistant message, the container POSTs to
-`http://zero.worker/message-end` and the worker delivers it to Telegram
-immediately. When the agent loop finishes, the container POSTs to
-`http://zero.worker/agent-end` so the worker can stop the typing
-indicator. The only external egress from the container is to the
-Cloudflare AI Gateway (`gateway.ai.cloudflare.com`), which proxies to
-Anthropic — see "Secret proxying" below. State is persisted through the
-worker (see below),
-not by talking to R2 directly.
+1. **Interface agent** reads recent conversation history and a topic-based
+   knowledge model (DO SQLite) and replies to the user via a `reply()` tool,
+   sending live progress as it works. It tracks every topic it reads or writes.
+2. **Writer agent** consolidates durable knowledge into the accessed topics.
 
-All mutable state is persisted as a single compressed archive of the
-container's `/workspace` tree (pi's `cwd`). On boot the entrypoint
-restores `<clerkUserId>/state.tar.gz` from the `zero-agent-state` bucket
-via `GET http://zero.worker/state`; on every `agent_end` and on SIGTERM
-the container PUTs a fresh archive back. Sessions, notes, and any files
-pi writes under `/workspace` all persist through this one path. The
-worker mediates R2 via its `AGENT_STATE_BUCKET` binding. See
-[`r2-mount.md`](r2-mount.md) for setup.
+LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic; the gateway
+stores the real key and bills us directly) authenticated with
+`cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
+`MODEL_ID` (`claude-sonnet-4-6`). All durable state is the DO SQLite (topics,
+conversations, messages); there is no container, no per-user filesystem, and no
+R2 archive. A self-rescheduling `setTimeout` drives the Telegram typing action
+while a turn runs. See [`topics.md`](topics.md) for the full design.
 
 ## Package Structure
 
 ```
 zero/
 ├── apps/
-│   ├── api/             (@zero/api)              — CF Worker: HTTP API, Telegram webhook, container orchestration
+│   ├── api/             (@zero/api)              — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
 │   └── web/             (@zero/web)              — Vite + React: single Telegram-id form
 ├── packages/
 │   ├── core/            (@zero/core)             — Reserved for future shared types (currently empty)
-│   ├── agent-server/    (@zero/agent-server)     — Standalone HTTP server for agentic sessions (publishable)
 │   ├── eslint-config/                            — Shared ESLint config
 │   └── typescript-config/                        — Shared TypeScript config
 └── docs/                                         — Design + ops docs
 ```
-
-`@zero/agent-server` is structured to run anywhere Node 22+ runs — it has
-no Cloudflare or Telegram coupling. The Cloudflare Container packages its
-`dist/` output via `packages/agent-server/Dockerfile`. See its
-[README](../packages/agent-server/README.md) for the HTTP contract.
 
 ## Tech Stack
 
