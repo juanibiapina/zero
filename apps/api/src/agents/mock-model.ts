@@ -12,11 +12,15 @@ export type ScriptStep =
 
 let callCounter = 0;
 
+// The V3 language-model spec models finishReason as { unified, raw }, not a
+// bare string; downstream code reads `.unified`, so the mock must match.
+const finishReason = (unified: string) => ({ unified, raw: unified });
+
 const toResult = (step: ScriptStep): LanguageModelV3GenerateResult => {
   if ("text" in step) {
     return {
       content: [{ type: "text", text: step.text }],
-      finishReason: "stop",
+      finishReason: finishReason("stop"),
       usage: { inputTokens: {}, outputTokens: {} },
       warnings: [],
     } as unknown as LanguageModelV3GenerateResult;
@@ -28,7 +32,7 @@ const toResult = (step: ScriptStep): LanguageModelV3GenerateResult => {
       toolName: t.name,
       input: JSON.stringify(t.input),
     })),
-    finishReason: "tool-calls",
+    finishReason: finishReason("tool-calls"),
     usage: { inputTokens: {}, outputTokens: {} },
     warnings: [],
   } as unknown as LanguageModelV3GenerateResult;

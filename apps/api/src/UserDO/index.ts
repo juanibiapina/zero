@@ -149,7 +149,7 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, model, send, search, chatId, topicId });
+      await orchestrateTurn({ store: this.store, model, send, search, chatId, topicId, clerkUserId });
     } finally {
       if (timer) clearTimeout(timer);
     }

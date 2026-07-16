@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CONVERSATION_HEADER,
+  FALLBACK_MESSAGE,
   renderConversation,
   runInterfaceAgent,
 } from "./interface";
@@ -12,6 +13,10 @@ const collectSink = () => {
   const sent: string[] = [];
   return { sent, send: async (t: string) => void sent.push(t) };
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("renderConversation", () => {
   it("renders empty history with only the new user message", () => {
@@ -147,7 +152,7 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(["Here is the whole answer in prose."]);
   });
 
-  it("sends nothing when the model calls no reply and returns empty text", async () => {
+  it("sends the fallback when the model calls no reply and returns empty text", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const model = scriptedModel([{ text: "" }]);
@@ -161,8 +166,57 @@ describe("runInterfaceAgent", () => {
       userMessage: "hi",
     });
 
-    expect(sink.sent).toEqual([]);
-    expect(result.replies).toEqual([]);
+    expect(sink.sent).toEqual([FALLBACK_MESSAGE]);
+    expect(result.replies).toEqual([FALLBACK_MESSAGE]);
+  });
+
+  it("sends the fallback and logs turn_incomplete when the loop hits the step cap", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    // A script of only tool steps under a low cap ends on a tool call
+    // (finishReason "tool-calls") with no final text.
+    const model = scriptedModel([
+      { tools: [{ name: "get_topic", input: { name: "x" } }] },
+      { tools: [{ name: "get_topic", input: { name: "y" } }] },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "hi",
+      maxSteps: 1,
+    });
+
+    expect(sink.sent).toEqual([FALLBACK_MESSAGE]);
+    expect(result.replies).toEqual([FALLBACK_MESSAGE]);
+    const events = logSpy.mock.calls.map((c) => c[0] as { msg: string });
+    expect(events.some((e) => e.msg === "turn_incomplete")).toBe(true);
+  });
+
+  it("sends the fallback after an ack reply when the loop hits the step cap", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "Let me check." } }] },
+      { tools: [{ name: "get_topic", input: { name: "y" } }] },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      history: [],
+      userMessage: "hi",
+      maxSteps: 2,
+    });
+
+    expect(sink.sent).toEqual(["Let me check.", FALLBACK_MESSAGE]);
+    expect(result.replies).toEqual(["Let me check.", FALLBACK_MESSAGE]);
   });
 
   it("does not send trailing filler text when reply was already called", async () => {

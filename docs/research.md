@@ -9,15 +9,17 @@ returns that agent's final message as the tool result.
 `apps/api/src/agents/run.ts` is the single agent machine:
 
 ```
-runAgent({ model, system, prompt, tools, maxSteps }) → final assistant text
+runAgent({ model, system, prompt, tools, maxSteps }) → { text, finishReason, steps }
 ```
 
 The interface agent and the research agent are the same runner with different
 system prompts and toolsets:
 
 - **Interface agent** (`agents/interface.ts`): tools are the topic tools +
-  `reply` + `research`. Its returned text is ignored; its output is the
-  `{ replies, accessed }` collected by the tool closures.
+  `reply` + `research`. Its output is the `{ replies, accessed }` collected by
+  the tool closures; the runner's `text` and `finishReason` are used only to
+  decide the no-silence fallback (deliver prose the model forgot to `reply`, or
+  send a generic fallback when the loop hit the cap without a final answer).
 - **Research agent** (spawned by `tools/research.ts`): its only tool is
   `web_search`. Its returned text *is* its output, returned to the interface
   agent as the `research` tool result (with a `"No findings."` fallback when the
@@ -25,7 +27,16 @@ system prompts and toolsets:
 
 The research agent reuses the per-turn model instance, so per-user AI Gateway
 attribution (`cf-aig-metadata`) is preserved. The research loop runs inline in
-the turn's DO alarm (no separate alarm); `maxSteps` is capped at 8.
+the turn's DO alarm (no separate alarm). Both agents share one step cap,
+`AGENT_MAX_STEPS = 200` (`agents/run.ts`). The cap is a runaway-loop guard, not
+an expected stopping point: a normal loop finishes in a handful of steps. 200
+gives headroom while bounding pathological loops; if `finish_reason != "stop"`
+with a high step count shows up in logs, lower it.
+
+The research tool logs `research_started` (`prompt_len`) and `research_completed`
+(`steps`, `finish_reason`, `duration_ms`, `result_len`); the `web_search` tool
+logs `web_search_failed` (`error`) where search errors are otherwise swallowed
+into the tool result. No message content is logged (see `log.ts` conventions).
 
 ## Web search port
 

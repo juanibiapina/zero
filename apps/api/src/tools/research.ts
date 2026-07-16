@@ -8,9 +8,8 @@ import { z } from "zod";
 import { runAgent } from "../agents/run";
 import { researchSystemPrompt } from "../agents/prompts";
 import { buildWebSearchTool } from "./web-search";
+import { log } from "../log";
 import type { WebSearch } from "../websearch/types";
-
-const RESEARCH_MAX_STEPS = 8;
 
 export interface ResearchToolDeps {
   model: LanguageModel;
@@ -26,12 +25,19 @@ export const buildResearchTool = (deps: ResearchToolDeps): ToolSet => {
         "Research a question using web search. Use for questions needing current or external information the topics do not cover. Adds latency, so acknowledge the user with reply first. Returns a concise sourced summary.",
       inputSchema: z.object({ prompt: z.string() }),
       execute: async ({ prompt }) => {
-        const text = await runAgent({
+        log("research_started", { prompt_len: prompt.length });
+        const start = Date.now();
+        const { text, finishReason, steps } = await runAgent({
           model,
           system: researchSystemPrompt(),
           prompt,
           tools: buildWebSearchTool({ search }),
-          maxSteps: RESEARCH_MAX_STEPS,
+        });
+        log("research_completed", {
+          steps,
+          finish_reason: finishReason,
+          duration_ms: Date.now() - start,
+          result_len: text.length,
         });
         return text || "No findings.";
       },

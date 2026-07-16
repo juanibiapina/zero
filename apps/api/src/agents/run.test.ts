@@ -17,7 +17,7 @@ describe("runAgent", () => {
       { text: "final answer" },
     ]);
 
-    const text = await runAgent({
+    const result = await runAgent({
       model,
       system: "sys",
       prompt: "question",
@@ -31,7 +31,8 @@ describe("runAgent", () => {
     });
 
     expect(ping).toHaveBeenCalledOnce();
-    expect(text).toBe("final answer");
+    expect(result.text).toBe("final answer");
+    expect(result.finishReason).toBe("stop");
   });
 
   it("sends a single user message equal to the prompt", async () => {
@@ -58,7 +59,32 @@ describe("runAgent", () => {
 
   it("returns empty string when the model produces no text (no fallback)", async () => {
     const model = scriptedModel([{ text: "" }]);
-    const text = await runAgent({ model, system: "sys", prompt: "q" });
-    expect(text).toBe("");
+    const result = await runAgent({ model, system: "sys", prompt: "q" });
+    expect(result.text).toBe("");
+  });
+
+  it("surfaces finishReason 'tool-calls' when the loop hits the cap mid-tool-call", async () => {
+    const ping = vi.fn(async () => "pong");
+    const model = scriptedModel([
+      { tools: [{ name: "ping", input: {} }] },
+      { tools: [{ name: "ping", input: {} }] },
+    ]);
+
+    const result = await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: {
+        ping: tool({
+          description: "ping",
+          inputSchema: z.object({}),
+          execute: ping,
+        }),
+      },
+      maxSteps: 1,
+    });
+
+    expect(result.finishReason).toBe("tool-calls");
+    expect(result.text).toBe("");
   });
 });

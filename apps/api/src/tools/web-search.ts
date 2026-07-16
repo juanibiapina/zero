@@ -4,6 +4,7 @@
 
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
+import { log } from "../log";
 import type { WebSearch } from "../websearch/types";
 
 export interface WebSearchToolDeps {
@@ -22,7 +23,9 @@ export const buildWebSearchTool = (deps: WebSearchToolDeps): ToolSet => {
         try {
           return await search.search(query);
         } catch (err) {
-          return { error: err instanceof Error ? err.message : String(err) };
+          const message = err instanceof Error ? err.message : String(err);
+          log("web_search_failed", { error: message });
+          return { error: message };
         }
       },
     }),

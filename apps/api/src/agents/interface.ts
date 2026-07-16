@@ -9,8 +9,13 @@ import type { Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import { interfaceSystemPrompt } from "./prompts";
 import { runAgent } from "./run";
+import { log } from "../log";
 
-const MAX_STEPS = 10;
+// Delivered when the model never produces its intended answer (loop hit the
+// step cap mid-tool-call, or finished clean with nothing to say). Named so
+// tests can assert on it. Short, honest, no internal jargon.
+export const FALLBACK_MESSAGE =
+  "Sorry, I couldn't finish that one. Could you try again?";
 
 export interface InterfaceAgentInput {
   model: LanguageModel;
@@ -19,6 +24,8 @@ export interface InterfaceAgentInput {
   history: Message[];
   userMessage: string;
   search: WebSearch;
+  // Test override for the step cap; production uses AGENT_MAX_STEPS.
+  maxSteps?: number;
 }
 
 export interface InterfaceAgentResult {
@@ -60,20 +67,43 @@ export const runInterfaceAgent = async (
 
   // The agent's replies are the { replies, accessed } collected by the tool
   // closures above. The runner's returned text is the model's final prose.
-  const text = await runAgent({
+  const start = Date.now();
+  const { text, finishReason, steps } = await runAgent({
     model: input.model,
     system: interfaceSystemPrompt(),
     prompt: renderConversation(input.history, input.userMessage),
     tools,
-    maxSteps: MAX_STEPS,
+    maxSteps: input.maxSteps,
   });
 
-  // Fallback: if the model answered in prose without calling reply(), deliver
-  // that text so the turn is never silently dropped. Guarded on no prior reply
-  // so trailing filler (e.g. "done") after real replies is not sent.
-  if (replies.length === 0 && text.trim()) {
+  log("interface_completed", {
+    steps,
+    finish_reason: finishReason,
+    replies_count: replies.length,
+    accessed_count: accessed.size,
+    duration_ms: Date.now() - start,
+  });
+
+  const delivered = replies.length > 0;
+
+  // Clean finish with prose but no reply(): deliver that text so the turn is
+  // never silently dropped. Guarded on no prior reply so trailing filler (e.g.
+  // "done") after real replies is not sent.
+  if (finishReason === "stop" && !delivered && text.trim()) {
     await input.send(text);
     replies.push(text);
+    return { replies, accessed: [...accessed] };
+  }
+
+  // Cap cut-off (finishReason !== "stop"), or a clean finish that delivered
+  // nothing: the model never produced its intended answer. Send a fallback so
+  // the user is never left in silence, even if an ack reply() already went out
+  // (the real answer never arrived). Record it in replies so it is persisted
+  // and the thread stops awaiting reply.
+  if (finishReason !== "stop" || !delivered) {
+    log("turn_incomplete", { finish_reason: finishReason, steps });
+    await input.send(FALLBACK_MESSAGE);
+    replies.push(FALLBACK_MESSAGE);
   }
 
   return { replies, accessed: [...accessed] };

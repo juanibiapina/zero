@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runTurn } from "./orchestrator";
+import { FALLBACK_MESSAGE } from "./interface";
 import { scriptedModel } from "./mock-model";
+import { MockLanguageModelV3 } from "ai/test";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 
@@ -8,6 +10,10 @@ const collectSink = () => {
   const sent: string[] = [];
   return { sent, send: async (t: string) => void sent.push(t) };
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("runTurn", () => {
   it("no-ops when the thread tail is not a user message", async () => {
@@ -95,5 +101,44 @@ describe("runTurn", () => {
 
     expect(sink.sent).toEqual(["Have fun!"]);
     expect(store.getTopic("travel")?.body).toContain("Rome trip planned.");
+  });
+
+  it("delivers a fallback, persists it, clears busy, and logs turn_failed when the agent throws", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    // A model whose generate call rejects: the throw propagates out of the
+    // interface agent and must be caught by the orchestrator.
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => {
+        throw new Error("gateway down");
+      },
+    });
+
+    await expect(
+      runTurn({
+        store,
+        model,
+        send: sink.send,
+        search: createMemorySearch(),
+        chatId: 1,
+        topicId: 0,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sink.sent).toEqual([FALLBACK_MESSAGE]);
+    const history = store.getConversationHistory(id, 10);
+    expect(history).toEqual([
+      { role: "user", content: "hi" },
+      { role: "assistant", content: FALLBACK_MESSAGE },
+    ]);
+    // Fallback persisted → thread tail is assistant, no longer awaiting reply.
+    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
+    expect(events.some((e) => e.msg === "turn_failed")).toBe(true);
   });
 });

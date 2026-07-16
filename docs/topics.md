@@ -44,6 +44,16 @@ The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
 load history, run the interface agent, persist replies, then run the writer over
 the accessed topics. It knows nothing about alarms, DOs, or Telegram.
 
+The orchestrator is the turn's error boundary. If the agent path throws, it logs
+`turn_failed`, sends the user a fallback message, and persists that fallback as
+an assistant message so the thread stops awaiting reply, then returns without
+rethrowing. This trades the DO alarm's blanket auto-retry for guaranteed user
+feedback plus a logged error: a poison turn that would loop on retry instead
+tells the user once and can be resent. The interface agent applies the same
+no-silence rule when the model's tool loop hits the step cap without a final
+answer (`finishReason !== "stop"`): it sends the fallback and logs
+`turn_incomplete`.
+
 ## Execution (DO alarm)
 
 The webhook resolves the user, calls `UserDO.enqueueTurn` (dedupe on

@@ -5,6 +5,19 @@
 
 import { generateText, stepCountIs, type LanguageModel, type ToolSet } from "ai";
 
+// Shared step cap for every agent (interface and research). The cap is a
+// runaway-loop guard, not an expected stopping point: the model normally
+// finishes in a handful of steps. 200 gives generous headroom (AI SDK's own
+// default is 20) while still bounding pathological loops.
+//
+// Tradeoff of a high cap: (a) the Cloudflare subrequest ceiling — 1000
+// subrequests per invocation; each step is >=1 LLM call, research adds search
+// calls, and interface x research nest multiplicatively — and (b) longer
+// wall-clock time, which widens the window for mid-run DO eviction. 200 is a
+// safety net; if runaway loops show up in logs (finish_reason != "stop" with a
+// high step count), lower it.
+export const AGENT_MAX_STEPS = 200;
+
 export interface RunAgentInput {
   model: LanguageModel;
   system: string;
@@ -13,13 +26,28 @@ export interface RunAgentInput {
   maxSteps?: number;
 }
 
-export const runAgent = async (input: RunAgentInput): Promise<string> => {
+export interface RunAgentResult {
+  text: string;
+  // "stop" means the model produced a final answer; anything else (notably
+  // "tool-calls") means the loop was cut off before a final answer — callers
+  // use this to detect cap exhaustion and deliver a fallback.
+  finishReason: string;
+  steps: number;
+}
+
+export const runAgent = async (
+  input: RunAgentInput,
+): Promise<RunAgentResult> => {
   const result = await generateText({
     model: input.model,
     system: input.system,
     messages: [{ role: "user", content: input.prompt }],
     tools: input.tools,
-    stopWhen: stepCountIs(input.maxSteps ?? 10),
+    stopWhen: stepCountIs(input.maxSteps ?? AGENT_MAX_STEPS),
   });
-  return result.text;
+  return {
+    text: result.text,
+    finishReason: result.finishReason,
+    steps: result.steps.length,
+  };
 };
