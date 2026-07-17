@@ -37,6 +37,7 @@ export class DbStore implements Store {
         summary: t.summary,
         lastActiveAt: t.lastActiveAt,
         messageCount: t.messageCount,
+        pinned: !!t.pinned,
       }));
   }
 
@@ -83,10 +84,25 @@ export class DbStore implements Store {
           summary: t.summary,
           lastActiveAt: t.lastActiveAt,
           messageCount: t.messageCount,
+          pinned: !!t.pinned,
         });
       }
     }
     return out;
+  }
+
+  setPinned(name: string, pinned: boolean): void {
+    this.db.update(
+      topics,
+      { pinned: pinned ? 1 : 0 },
+      { where: eq("name", name) },
+    );
+  }
+
+  getPinnedTopics(): Topic[] {
+    return this.db
+      .all(topics, { where: eq("pinned", 1) })
+      .map((t) => toTopic(t));
   }
 
   createTopic(name: string, description: string): void {
@@ -270,6 +286,7 @@ function toTopic(t: {
   createdAt: string;
   lastActiveAt: string;
   messageCount: number;
+  pinned: number;
 }): Topic {
   return {
     name: t.name,
@@ -279,5 +296,6 @@ function toTopic(t: {
     createdAt: t.createdAt,
     lastActiveAt: t.lastActiveAt,
     messageCount: t.messageCount,
+    pinned: !!t.pinned,
   };
 }

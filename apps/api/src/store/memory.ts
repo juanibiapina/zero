@@ -51,6 +51,7 @@ export class MemoryStore implements Store {
       summary: t.summary,
       lastActiveAt: t.lastActiveAt,
       messageCount: t.messageCount,
+      pinned: t.pinned,
     }));
   }
 
@@ -84,6 +85,7 @@ export class MemoryStore implements Store {
           summary: t.summary,
           lastActiveAt: t.lastActiveAt,
           messageCount: t.messageCount,
+          pinned: t.pinned,
         });
       }
     }
@@ -101,7 +103,20 @@ export class MemoryStore implements Store {
       createdAt: now,
       lastActiveAt: now,
       messageCount: 0,
+      pinned: false,
     });
+  }
+
+  setPinned(name: string, pinned: boolean): void {
+    const t = this.topics.get(name);
+    if (!t) throw new Error(`topic not found: ${name}`);
+    t.pinned = pinned;
+  }
+
+  getPinnedTopics(): Topic[] {
+    return [...this.topics.values()]
+      .filter((t) => t.pinned)
+      .map((t) => ({ ...t }));
   }
 
   updateTopicBody(name: string, body: string): void {

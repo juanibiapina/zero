@@ -1,6 +1,36 @@
 // System prompts for the two agents. Kept in one place so the interface and
 // writer contracts are easy to read and adjust together.
 
+import type { Topic } from "../store/types";
+
+// Cap each pinned body rendered into the interface prompt. Pinned topics keep
+// filling as the user interacts, so an uncapped body would grow the prompt
+// every turn; the cap bounds that cost. The tradeoff is that a very long pinned
+// topic is truncated in the prompt (the full body is still reachable via
+// get_topic).
+const MAX_PINNED_BODY_CHARS = 1500;
+
+const truncateBody = (body: string): string =>
+  body.length > MAX_PINNED_BODY_CHARS
+    ? `${body.slice(0, MAX_PINNED_BODY_CHARS)}…[truncated]`
+    : body;
+
+// Render the pinned topics into a bounded block for the interface prompt.
+// Returns "" when nothing is pinned so the prompt stays unchanged. Pinned
+// topics remain ordinary topics reachable by the normal tools; this block only
+// keeps their current bodies always in context.
+export const renderPinnedTopics = (topics: Topic[]): string => {
+  if (topics.length === 0) return "";
+  const blocks = topics
+    .map((t) => `### ${t.name}\n\n${truncateBody(t.body).trim()}`)
+    .join("\n\n");
+  return (
+    `\n\n## Pinned topics (always in your context)\n\n` +
+    `These topics are always available to you without a lookup. Treat them as ` +
+    `established context and keep them in mind when you reply.\n\n${blocks}`
+  );
+};
+
 // Absolute datetime anchor for the interface agent, rendered in the user's
 // timezone. The conversation renders each message's age relatively ("5 min
 // ago"), so the model needs one absolute point to resolve those against, to
@@ -32,6 +62,7 @@ const formatAnchor = (now: Date, timezone: string): string => {
 export const interfaceSystemPrompt = (
   now: Date = new Date(),
   timezone = "UTC",
+  pinned = "",
 ): string =>
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
@@ -85,7 +116,7 @@ gmail_thread and pass that message's messageIdHeader and threadId as gmail_send'
 replyTo, with the original subject prefixed "Re:".
 
 If a Gmail or Calendar tool reports Google isn't connected, tell the user to
-connect it in the Zero app; don't retry.`;
+connect it in the Zero app; don't retry.${pinned}`;
 
 export const researchSystemPrompt = (): string =>
   `You are a research agent. You are given a subject to research; you investigate

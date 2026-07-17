@@ -46,6 +46,22 @@ Agents see the graph through the topic tools: `get_topic` returns a topic's
 `outboundLinks` and `backlinks` alongside its body, and `list_backlinks` lists
 what references a topic (used before renaming or merging).
 
+### Pinned topics
+
+A topic can be **pinned** (`pinned` column, migration `0019_topic_pinned.sql`).
+Pinned topics are always rendered into the interface agent's system prompt under
+a "Pinned topics (always in your context)" block, so their current bodies are
+available every turn without a `get_topic` lookup. Pinning is a Store operation
+(`setPinned(name, pinned)` / `getPinnedTopics()`), not an agent tool; a pinned
+topic is otherwise an ordinary topic reachable by the normal tools and
+consolidated by the writer like any other. The canonical use is a stable
+`About You` topic seeded at Google onboarding (see `docs/onboarding.md`).
+
+Each pinned body is capped (~1.5 KB) when rendered into the prompt so a topic
+that keeps growing can't blow up the prompt; the full body is still reachable
+via `get_topic`. Pinning survives a `saveTopic` rename. The tradeoff is a
+slightly higher token cost every turn in exchange for always-on identity.
+
 ## Two-phase turn
 
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new

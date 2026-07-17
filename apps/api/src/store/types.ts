@@ -19,6 +19,8 @@ export interface TopicMeta {
   summary: string;
   lastActiveAt: string;
   messageCount: number;
+  // Pinned topics are always surfaced in the interface agent's prompt.
+  pinned: boolean;
 }
 
 // Full topic including the knowledge document body.
@@ -40,6 +42,11 @@ export interface TopicStore {
   createTopic(name: string, description: string): void;
   updateTopicBody(name: string, body: string): void;
   getTopicsWithBodies(names: string[]): Topic[];
+  // Pin or unpin a topic. Pinned topics are always rendered into the interface
+  // agent's prompt. Pinning survives a saveTopic rename.
+  setPinned(name: string, pinned: boolean): void;
+  // Full bodies of every pinned topic, for prompt surfacing.
+  getPinnedTopics(): Topic[];
   saveTopic(
     name: string,
     patch: { body: string; description: string; summary: string },

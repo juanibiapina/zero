@@ -6,8 +6,10 @@ import {
   renderConversation,
   runInterfaceAgent,
 } from "./interface";
-import { interfaceSystemPrompt } from "./prompts";
+import { interfaceSystemPrompt, renderPinnedTopics } from "./prompts";
 import { scriptedModel } from "./mock-model";
+import { MockLanguageModelV3 } from "ai/test";
+import type { Topic } from "../store/types";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryGoogle } from "../google/memory";
@@ -50,6 +52,76 @@ describe("interfaceSystemPrompt", () => {
       "Current time: Friday, 2026-07-17 09:00 (America/Sao_Paulo, GMT-3).",
     );
     expect(prompt).toContain("The user's timezone is America/Sao_Paulo");
+  });
+});
+
+const topic = (name: string, body: string, pinned = true): Topic => ({
+  name,
+  description: "",
+  summary: "",
+  body,
+  createdAt: NOW.toISOString(),
+  lastActiveAt: NOW.toISOString(),
+  messageCount: 0,
+  pinned,
+});
+
+describe("renderPinnedTopics", () => {
+  it("returns empty string when nothing is pinned", () => {
+    expect(renderPinnedTopics([])).toBe("");
+  });
+
+  it("renders each pinned topic's name and body", () => {
+    const block = renderPinnedTopics([topic("About You", "name: Alice")]);
+    expect(block).toContain("Pinned topics (always in your context)");
+    expect(block).toContain("### About You");
+    expect(block).toContain("name: Alice");
+  });
+
+  it("truncates a very long body", () => {
+    const block = renderPinnedTopics([topic("About You", "x".repeat(2000))]);
+    expect(block).toContain("…[truncated]");
+    expect(block.length).toBeLessThan(2000);
+  });
+});
+
+describe("runInterfaceAgent pinned surfacing", () => {
+  it("includes a pinned topic's body in the system prompt", async () => {
+    const store = new MemoryStore();
+    store.createTopic("About You", "identity");
+    store.updateTopicBody("About You", "name: Alice; city: Berlin");
+    store.setPinned("About You", true);
+
+    const captured: { system?: string } = {};
+    const model = new MockLanguageModelV3({
+      doGenerate: async (options: {
+        prompt: Array<{ role: string; content: unknown }>;
+      }) => {
+        const sys = options.prompt.find((m) => m.role === "system");
+        captured.system =
+          typeof sys?.content === "string"
+            ? sys.content
+            : JSON.stringify(sys?.content);
+        return {
+          content: [{ type: "text", text: "" }],
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: { inputTokens: {}, outputTokens: {} },
+          warnings: [],
+        } as never;
+      },
+    });
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: collectSink().send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      history: [],
+      userMessage: "hi",
+    });
+
+    expect(captured.system).toContain("name: Alice; city: Berlin");
   });
 });
 

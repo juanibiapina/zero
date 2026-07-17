@@ -26,6 +26,9 @@ export const topics = table("topics", {
   createdAt: column.text().notNull(),
   lastActiveAt: column.text().notNull(),
   messageCount: column.integer().notNull().default(0),
+  // Pinned topics are always rendered into the interface agent's prompt (see
+  // docs/topics.md). Ordinary topics otherwise; pinning is set via the Store.
+  pinned: column.integer().notNull().default(0),
 });
 
 // Topic links: the `[[Name]]` wiki-links found in a topic body, one row per

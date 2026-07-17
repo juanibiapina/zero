@@ -80,6 +80,53 @@ describe("Store contract: topics", () => {
   });
 });
 
+describe("Store contract: pinned topics", () => {
+  it("topics start unpinned", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    expect(s.getTopic("a")?.pinned).toBe(false);
+    expect(s.getPinnedTopics()).toEqual([]);
+  });
+
+  it("setPinned pins a topic and getPinnedTopics returns its full body", () => {
+    const s = makeStore();
+    s.createTopic("About You", "identity");
+    s.updateTopicBody("About You", "name: Alice");
+    s.setPinned("About You", true);
+    expect(s.getTopic("About You")?.pinned).toBe(true);
+    const pinned = s.getPinnedTopics();
+    expect(pinned.map((t) => t.name)).toEqual(["About You"]);
+    expect(pinned[0].body).toBe("name: Alice");
+  });
+
+  it("setPinned false unpins", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    s.setPinned("a", true);
+    s.setPinned("a", false);
+    expect(s.getPinnedTopics()).toEqual([]);
+  });
+
+  it("listTopics reports the pinned flag", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    s.createTopic("b", "");
+    s.setPinned("a", true);
+    const byName = Object.fromEntries(
+      s.listTopics().map((t) => [t.name, t.pinned]),
+    );
+    expect(byName).toEqual({ a: true, b: false });
+  });
+
+  it("pinned survives a saveTopic rename", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    s.setPinned("a", true);
+    s.saveTopic("a", { body: "x", description: "", summary: "" }, "b");
+    expect(s.getPinnedTopics().map((t) => t.name)).toEqual(["b"]);
+  });
+});
+
 describe("Store contract: topic links", () => {
   const save = (s: Store, name: string, body: string) =>
     s.saveTopic(name, { body, description: "", summary: "" });

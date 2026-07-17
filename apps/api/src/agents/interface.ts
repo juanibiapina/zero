@@ -10,7 +10,7 @@ import { buildGoogleTools } from "../tools/google";
 import type { Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { GoogleWorkspace } from "../google/types";
-import { interfaceSystemPrompt } from "./prompts";
+import { interfaceSystemPrompt, renderPinnedTopics } from "./prompts";
 import { runAgent } from "./run";
 import { log } from "../log";
 
@@ -212,9 +212,10 @@ export const runInterfaceAgent = async (
   // closures above. The runner's returned text is the model's final prose.
   const now = input.now ?? new Date();
   const start = Date.now();
+  const pinned = renderPinnedTopics(input.store.getPinnedTopics());
   const { text, finishReason, steps, messages } = await runAgent({
     model: input.model,
-    system: interfaceSystemPrompt(now, input.timezone),
+    system: interfaceSystemPrompt(now, input.timezone, pinned),
     prompt: renderConversation(input.history, input.userMessage, now),
     tools,
     maxSteps: input.maxSteps,
