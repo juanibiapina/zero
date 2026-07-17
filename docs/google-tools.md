@@ -62,6 +62,12 @@ confirmation of the exact content before either runs.
 Phase-2 (not built): `gmail_modify_labels`, `calendar_update_event`,
 `calendar_delete_event`, `calendar_freebusy`.
 
+The interface agent is not the only Gmail consumer. The **onboarding agent**
+(`agents/onboarding.ts`, see [`onboarding.md`](onboarding.md)) reuses the same
+`GoogleWorkspace` port but is given only the read-only Gmail tools
+(`gmail_search`, `gmail_thread`) to scan a new user's mail once and seed the
+pinned `About You` topic; it gets no `gmail_send` or calendar tools.
+
 ## Gmail id spaces
 
 Three distinct identifiers; conflating them silently breaks reply threading:

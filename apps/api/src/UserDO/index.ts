@@ -11,12 +11,20 @@ import { createBraveSearch } from "../websearch/brave";
 import { createGoogleWorkspace } from "../google/rest";
 import { getGoogleAccessToken, memoizeTokenProvider } from "../google-token";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
+import { runOnboardingAgent } from "../agents/onboarding";
 import { runAlarmTurns } from "../do/alarm";
+import { runOnboarding } from "../do/onboarding";
 import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
 const TYPING_INTERVAL_MS = 4000;
+
+// The stable pinned topic seeded by Google onboarding. The name never changes;
+// the user's actual name is a fact recorded in the body (see docs/onboarding.md).
+const ABOUT_YOU_TOPIC = "About You";
+const ABOUT_YOU_DESCRIPTION =
+  "Durable facts about the user: name, location, role, languages, key relationships.";
 
 
 export class UserDO extends DurableObject<Env> {
@@ -138,11 +146,52 @@ export class UserDO extends DurableObject<Env> {
   // fire. On a catchable failure runAlarmTurns self-reschedules with backoff
   // while any thread still awaits reply, and returns normally (never rethrows,
   // which would discard the reschedule). See do/alarm.ts.
+  //
+  // After turns are drained (replies stay low-latency), run Google onboarding
+  // if it is queued. Onboarding is best-effort and off Telegram, so it waits
+  // behind turn draining.
   override async alarm(): Promise<void> {
     await runAlarmTurns({
       storage: this.ctx.storage,
       findThreadsAwaitingReply: () => this.store.findThreadsAwaitingReply(),
       runTurn: (chatId, topicId) => this.runTurn(chatId, topicId),
+    });
+    if (this.getSettings().googleOnboardingStatus === "queued") {
+      await this.runOnboarding();
+    }
+  }
+
+  // Queue Google onboarding: set status `queued` and arm the alarm. Idempotent
+  // — once the status leaves `null` (queued/done/failed) this no-ops, so a
+  // user is onboarded at most once. Called by POST /api/onboarding/google when
+  // the web app reports Google connected.
+  async queueOnboarding(): Promise<void> {
+    if (this.getSettings().googleOnboardingStatus !== null) return;
+    this.setGoogleOnboardingStatus("queued");
+    if ((await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Date.now());
+    }
+  }
+
+  // Run the one-shot Gmail onboarding scan. Builds the per-user model and
+  // memoized Google token, then delegates the topic-seeding + status state
+  // machine to do/onboarding.ts (kept there so it is testable without a DO).
+  async runOnboarding(): Promise<void> {
+    const clerkUserId =
+      (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
+    const model = await createModel(this.env, clerkUserId);
+    const getToken = memoizeTokenProvider(() =>
+      getGoogleAccessToken(this.env, clerkUserId),
+    );
+    const google = createGoogleWorkspace(getToken);
+
+    await runOnboarding({
+      store: this.store,
+      topicName: ABOUT_YOU_TOPIC,
+      description: ABOUT_YOU_DESCRIPTION,
+      runAgent: (topicName) =>
+        runOnboardingAgent({ model, store: this.store, google, topicName }),
+      setStatus: (status) => this.setGoogleOnboardingStatus(status),
     });
   }
 

@@ -227,17 +227,10 @@ export function Onboarding({
   const telegramConnected = telegramId !== null;
   const bothConnected = googleConnected && telegramConnected;
 
-  // Fire the onboarding task once, when Google connects and it hasn't started.
+  // Fire the onboarding scan once, when Google connects and it hasn't started.
   useEffect(() => {
     if (!googleConnected || googleOnboardingStatus) return;
-    void fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: "Onboard this new user using your google-onboarding skill.",
-        name: "google-onboarding",
-      }),
-    });
+    void fetch("/api/onboarding/google", { method: "POST" });
   }, [googleConnected, googleOnboardingStatus]);
 
   // Mark onboarding seen once both connections are complete.

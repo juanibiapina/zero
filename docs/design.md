@@ -152,7 +152,7 @@ GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
 POST   /api/telegram-link                — Link via Login Widget payload (Clerk)
 DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
-POST   /api/tasks                        — Parked stub, no-ops with 202 (Clerk)
+POST   /api/onboarding/google            — Queue the Gmail onboarding scan, 202 (Clerk)
 
 GET    /api/admin/users                  — List all users (admin)
 GET    /api/admin/users/{userId}         — One user's identity + link status (admin)
@@ -167,10 +167,11 @@ Google/onboarding status). Per-request cost tracking was removed with the
 container runtime; the Cloudflare AI Gateway now logs per-user model/token/USD
 cost, attributed via `cf-aig-metadata`.
 
-`POST /api/tasks` is a parked stub. The container-backed task runner was removed;
-the route accepts the request, marks Google onboarding done (so the web
-onboarding flow completes), and returns 202. Reimplement later as a meta-agent
-turn on the DO-alarm runtime (`TODO(tasks)`).
+`POST /api/onboarding/google` queues a one-shot Gmail scan on the user's DO
+(`queueOnboarding`: set status `queued` + arm the alarm, idempotent on the
+`googleOnboardingStatus` state machine) and returns 202. The scan runs on the DO
+alarm, off Telegram, and seeds the pinned `About You` topic. See
+[`onboarding.md`](onboarding.md).
 
 The link route accepts the Login Widget callback payload and verifies its HMAC
 against `TELEGRAM_BOT_TOKEN` (`apps/api/src/telegram-auth.ts`). See
@@ -253,7 +254,9 @@ Conventions:
 ## Future Work
 
 - Reintroduce attachments behind the topic model.
-- Reimplement `/api/tasks` as a meta-agent turn (`TODO(tasks)`).
+- Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
+  shapes are known; Google onboarding is the first, deliberately minimal, one
+  (see [`onboarding.md`](onboarding.md)).
 - Add an in-app cost view sourced from the AI Gateway logs
   (`env.AI.gateway(id).getLog`, or the gateway REST API).
 - Per-user model preference + a switching API.

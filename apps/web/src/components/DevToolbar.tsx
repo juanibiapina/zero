@@ -38,11 +38,7 @@ export function DevToolbar({ onResetOnboarding }: { onResetOnboarding: () => voi
         onClick={() => {
           setTaskBusy(true);
           void (async () => {
-            await fetch("/api/tasks", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ prompt: "Onboard this new user using your google-onboarding skill.", name: "google-onboarding" }),
-            });
+            await fetch("/api/onboarding/google", { method: "POST" });
             setTaskBusy(false);
           })();
         }}
