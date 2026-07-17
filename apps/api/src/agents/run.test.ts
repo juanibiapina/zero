@@ -33,6 +33,14 @@ describe("runAgent", () => {
     expect(ping).toHaveBeenCalledOnce();
     expect(result.text).toBe("final answer");
     expect(result.finishReason).toBe("stop");
+    // messages span every step: the tool call, its result, and the final text.
+    const kinds = result.messages.flatMap((m) =>
+      Array.isArray(m.content)
+        ? m.content.map((p) => (p as { type: string }).type)
+        : ["text"],
+    );
+    expect(kinds).toContain("tool-call");
+    expect(kinds).toContain("tool-result");
   });
 
   it("sends a single user message equal to the prompt", async () => {

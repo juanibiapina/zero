@@ -41,14 +41,25 @@ pass).
 2. **Writer agent** (`agents/writer.ts`, stateless per turn). The interface
    agent's twin: the same `runAgent` machine with the same topic tools
    (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`),
-   minus `reply`/`research`. Its only extra input is the list of topic names the
-   interface agent accessed this turn. For each accessed topic that gained
-   durable information it reads the body (`get_topic`), merges new facts under
-   sensible sections, appends one `## Log` line, and writes back via
-   `update_topic`, refreshing summary and description. It never rewrites or
-   compacts a body. Because it has `list_topics` + `create_topic`, it is also
-   proactive: it creates a topic for any durable subject in the exchange with no
-   existing topic. Trivial exchanges (chit-chat, acks) get no tool call.
+   minus `reply`/`research`. Its inputs are the **turn transcript** and the list
+   of topic names the interface agent accessed this turn. The transcript is a
+   serialization of the interface run: the user message, every tool call and its
+   (truncated) result, and assistant replies. This matters because durable facts
+   often live in tool results (calendar events, email bodies, research), not in
+   the user-facing replies, which are lossy. The interface agent builds it from
+   the AI SDK step messages (`renderTranscript`), capping each tool result
+   (~1.5 KB) so a large payload cannot blow up the writer's input; the tradeoff
+   is higher writer token cost and latency, bounded by that cap. For each
+   accessed topic that gained durable information it reads the body
+   (`get_topic`), merges new facts under sensible sections, appends one `## Log`
+   line, and writes back via `update_topic`, refreshing summary and description.
+   It never rewrites or compacts a body. Because it has `list_topics` +
+   `create_topic`, it is also proactive: it creates a topic for any durable
+   subject in the turn with no existing topic. The prompt biases it toward
+   recording generously (people, projects, events, trips, gear, house/utilities,
+   goals, and any other recurring subject; the list is illustrative). Only
+   genuinely trivial turns (pure chit-chat or acks with no durable fact) get no
+   tool call.
 
 A third agent also writes topics: the **research agent** (spawned by the
 interface agent's `research` tool; see `docs/research.md`). It has the topic
@@ -73,8 +84,8 @@ The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
 load history, run the interface agent, then run the writer. It knows nothing
 about alarms, DOs, or Telegram. The writer runs **every** turn (not only when a
 topic was accessed) so proactive creation is possible on turns that introduce a
-brand-new subject; it is given the accessed-topic names, not pre-loaded bodies,
-and fetches bodies itself via `get_topic`. There is no longer a mechanical
+brand-new subject; it is given the turn transcript and the accessed-topic names,
+not pre-loaded bodies, and fetches bodies itself via `get_topic`. There is no longer a mechanical
 log-append fallback: the `## Log` line is a prompt-driven `update_topic` write,
 so a turn the writer judges trivial leaves the model untouched.
 

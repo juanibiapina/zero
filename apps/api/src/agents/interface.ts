@@ -2,7 +2,7 @@
 // goes, and reports which topics it touched so the writer can consolidate them.
 // The returned { replies, accessed } is the test surface for the whole system.
 
-import { type LanguageModel } from "ai";
+import { type LanguageModel, type ModelMessage } from "ai";
 import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
 import { buildTimezoneTool } from "../tools/timezone";
@@ -50,7 +50,68 @@ export interface InterfaceAgentInput {
 export interface InterfaceAgentResult {
   replies: string[];
   accessed: string[];
+  // A readable serialization of the turn: the user message, each tool call and
+  // its (truncated) result, and assistant text. The writer consumes this so it
+  // sees what tools returned (calendar events, emails, research), not only the
+  // final replies, which are lossy.
+  transcript: string;
 }
+
+// Cap each serialized tool result so a large payload (a full calendar listing,
+// a long email body) cannot blow up the writer's input. Truncated results keep
+// enough to extract durable facts.
+const MAX_TOOL_RESULT_CHARS = 1500;
+
+const stringify = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const truncate = (text: string): string =>
+  text.length > MAX_TOOL_RESULT_CHARS
+    ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}…[truncated]`
+    : text;
+
+// Serialize the run's model messages into a compact transcript. Generic over
+// tools: any tool call and result is captured without per-tool code.
+export const renderTranscript = (
+  userMessage: string,
+  messages: ModelMessage[],
+): string => {
+  const lines: string[] = [`User: ${userMessage}`];
+  for (const message of messages) {
+    const content = message.content;
+    if (typeof content === "string") {
+      if (content.trim()) lines.push(`Assistant: ${content}`);
+      continue;
+    }
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (part.type === "text") {
+        if (part.text.trim()) lines.push(`Assistant: ${part.text}`);
+      } else if (part.type === "tool-call") {
+        lines.push(`Tool call ${part.toolName}: ${stringify(part.input)}`);
+      } else if (part.type === "tool-result") {
+        // Tool-result output is wrapped: { type: "text"|"json"|..., value }.
+        // Unwrap to the value so the transcript shows the payload, not the
+        // wrapper.
+        const raw = (part as { output?: unknown }).output;
+        const output =
+          raw && typeof raw === "object" && "value" in raw
+            ? (raw).value
+            : raw;
+        lines.push(
+          `Tool result ${part.toolName}: ${truncate(stringify(output))}`,
+        );
+      }
+    }
+  }
+  return lines.join("\n\n");
+};
 
 export const CONVERSATION_HEADER =
   'Here is the conversation so far. Each line is prefixed with the message age ' +
@@ -151,13 +212,15 @@ export const runInterfaceAgent = async (
   // closures above. The runner's returned text is the model's final prose.
   const now = input.now ?? new Date();
   const start = Date.now();
-  const { text, finishReason, steps } = await runAgent({
+  const { text, finishReason, steps, messages } = await runAgent({
     model: input.model,
     system: interfaceSystemPrompt(now, input.timezone),
     prompt: renderConversation(input.history, input.userMessage, now),
     tools,
     maxSteps: input.maxSteps,
   });
+
+  const transcript = renderTranscript(input.userMessage, messages);
 
   log("interface_completed", {
     steps,
@@ -188,7 +251,7 @@ export const runInterfaceAgent = async (
     persistReply(text);
     await input.send(text);
     replies.push(text);
-    return { replies, accessed: [...accessed] };
+    return { replies, accessed: [...accessed], transcript };
   }
 
   // Cap cut-off (finishReason !== "stop"), or a clean finish that produced no
@@ -203,7 +266,7 @@ export const runInterfaceAgent = async (
     replies.push(FALLBACK_MESSAGE);
   }
 
-  return { replies, accessed: [...accessed] };
+  return { replies, accessed: [...accessed], transcript };
 };
 
 export type { TopicStore };

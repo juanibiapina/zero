@@ -525,6 +525,62 @@ describe("runInterfaceAgent", () => {
     expect(persisted).toEqual(["undelivered"]);
   });
 
+  it("builds a transcript with the user message, tool calls, and results", async () => {
+    const store = new MemoryStore();
+    store.createTopic("weather", "climate");
+    store.saveTopic("weather", {
+      body: "Sunny today.",
+      description: "climate",
+      summary: "sunny",
+    });
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "get_topic", input: { name: "weather" } }] },
+      { tools: [{ name: "reply", input: { text: "It's sunny." } }] },
+      { text: "" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      history: [],
+      userMessage: "weather?",
+    });
+
+    expect(result.transcript).toContain("User: weather?");
+    expect(result.transcript).toContain("Tool call get_topic");
+    expect(result.transcript).toContain("Tool result get_topic");
+    expect(result.transcript).toContain("Sunny today.");
+  });
+
+  it("truncates a large tool result in the transcript", async () => {
+    const store = new MemoryStore();
+    const big = "x".repeat(5000);
+    store.createTopic("big", "");
+    store.saveTopic("big", { body: big, description: "", summary: "" });
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "get_topic", input: { name: "big" } }] },
+      { text: "done" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      history: [],
+      userMessage: "read big",
+    });
+
+    expect(result.transcript).toContain("…[truncated]");
+    expect(result.transcript.length).toBeLessThan(big.length);
+  });
+
   it("does not track a topic that was not found", async () => {
     const store = new MemoryStore();
     const sink = collectSink();

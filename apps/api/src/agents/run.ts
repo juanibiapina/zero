@@ -3,7 +3,13 @@
 // runner instantiated with different system prompts and toolsets. It has no
 // opinion about the output (no fallback); callers decide what the text means.
 
-import { generateText, stepCountIs, type LanguageModel, type ToolSet } from "ai";
+import {
+  generateText,
+  stepCountIs,
+  type LanguageModel,
+  type ModelMessage,
+  type ToolSet,
+} from "ai";
 
 // Shared step cap for every agent (interface and research). The cap is a
 // runaway-loop guard, not an expected stopping point: the model normally
@@ -33,6 +39,12 @@ export interface RunAgentResult {
   // use this to detect cap exhaustion and deliver a fallback.
   finishReason: string;
   steps: number;
+  // The assistant + tool messages generated across every step this run (tool
+  // calls, tool results, assistant text). Callers serialize these into a turn
+  // transcript so a downstream agent sees what tools returned, not only the
+  // final text. `response.messages` alone holds only the last step, so this
+  // flattens all steps.
+  messages: ModelMessage[];
 }
 
 export const runAgent = async (
@@ -49,5 +61,6 @@ export const runAgent = async (
     text: result.text,
     finishReason: result.finishReason,
     steps: result.steps.length,
+    messages: result.steps.flatMap((s) => s.response.messages),
   };
 };

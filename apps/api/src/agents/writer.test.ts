@@ -33,7 +33,7 @@ describe("runWriterAgent", () => {
       model,
       store,
       accessed: ["travel"],
-      exchange: { user: "I'm going to Rome", assistant: ["Nice!"] },
+      transcript: "User: I'm going to Rome\n\nAssistant: Nice!",
     });
 
     const saved = store.getTopic("travel");
@@ -75,7 +75,7 @@ describe("runWriterAgent", () => {
       model,
       store,
       accessed: [],
-      exchange: { user: "I'm going to Rome in May", assistant: ["Nice!"] },
+      transcript: "User: I'm going to Rome in May\n\nAssistant: Nice!",
     });
 
     const created = store.getTopic("rome-trip");
@@ -103,7 +103,7 @@ describe("runWriterAgent", () => {
       model,
       store,
       accessed: ["trip"],
-      exchange: { user: "rome", assistant: ["ok"] },
+      transcript: "User: rome\n\nAssistant: ok",
     });
 
     expect(store.getTopic("trip")).toBeNull();
@@ -119,9 +119,52 @@ describe("runWriterAgent", () => {
       model,
       store,
       accessed: [],
-      exchange: { user: "thanks!", assistant: ["np"] },
+      transcript: "User: thanks!\n\nAssistant: np",
     });
 
     expect(store.listTopics()).toEqual([]);
+  });
+
+  it("creates a topic from a fact that only appears in a tool result", async () => {
+    const store = new MemoryStore();
+    // The user asked about their weekend; the wedding detail came from the
+    // calendar tool result, not from the user message or the reply.
+    const transcript = [
+      "User: what's on this weekend?",
+      "Tool call calendar_list_events: {}",
+      'Tool result calendar_list_events: [{"title":"Anna & Tom wedding","start":"2026-08-15T15:00","location":"Tuscany"}]',
+      "Assistant: You've got a wedding Saturday.",
+    ].join("\n\n");
+    const model = scriptedModel([
+      { tools: [{ name: "list_topics", input: {} }] },
+      {
+        tools: [
+          {
+            name: "create_topic",
+            input: { name: "anna-tom-wedding", description: "wedding event" },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            name: "update_topic",
+            input: {
+              name: "anna-tom-wedding",
+              body: "## Details\nAnna & Tom wedding, 2026-08-15 15:00, Tuscany.",
+              summary: "Wedding on 2026-08-15 in Tuscany",
+            },
+          },
+        ],
+      },
+      { text: "done" },
+    ]);
+
+    await runWriterAgent({ model, store, accessed: [], transcript });
+
+    const created = store.getTopic("anna-tom-wedding");
+    expect(created).not.toBeNull();
+    expect(created?.body).toContain("Tuscany");
+    expect(created?.body).toContain("2026-08-15");
   });
 });

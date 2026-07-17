@@ -65,7 +65,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
 
   store.markBusy(conversationId);
   try {
-    const { replies, accessed } = await runInterfaceAgent({
+    const { accessed, transcript } = await runInterfaceAgent({
       model,
       store,
       send,
@@ -87,7 +87,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       model,
       store,
       accessed,
-      exchange: { user: userMessage, assistant: replies },
+      transcript,
     });
     log("writer_completed", {
       accessed_count: accessed.length,
