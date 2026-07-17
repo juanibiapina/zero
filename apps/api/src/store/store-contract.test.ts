@@ -26,6 +26,41 @@ describe("Store contract: topics", () => {
     expect(makeStore().getTopic("nope")).toBeNull();
   });
 
+  it("deleteTopic removes the topic", () => {
+    const s = makeStore();
+    s.createTopic("gone", "");
+    s.deleteTopic("gone");
+    expect(s.getTopic("gone")).toBeNull();
+  });
+
+  it("deleteTopic throws for unknown topic", () => {
+    expect(() => makeStore().deleteTopic("nope")).toThrow();
+  });
+
+  it("deleteTopic leaves inbound links dangling and bodies untouched", () => {
+    const s = makeStore();
+    s.createTopic("trip", "");
+    s.createTopic("flights", "");
+    s.saveTopic("trip", { body: "book [[flights]]", description: "", summary: "" });
+    s.deleteTopic("flights");
+    // The source body keeps its [[flights]] token.
+    expect(s.getTopic("trip")?.body).toBe("book [[flights]]");
+    // The link is still an outbound row from trip (now dangling).
+    expect(s.getOutboundLinks("trip")).toEqual(["flights"]);
+    // Recreating the target re-resolves the dangling link.
+    s.createTopic("flights", "");
+    expect(s.getBacklinks("flights").map((t) => t.name)).toEqual(["trip"]);
+  });
+
+  it("deleteTopic drops the topic's own outbound links", () => {
+    const s = makeStore();
+    s.createTopic("trip", "");
+    s.createTopic("flights", "");
+    s.saveTopic("trip", { body: "book [[flights]]", description: "", summary: "" });
+    s.deleteTopic("trip");
+    expect(s.getBacklinks("flights")).toEqual([]);
+  });
+
   it("listTopics returns metadata without requiring bodies", () => {
     const s = makeStore();
     s.createTopic("a", "first");

@@ -40,6 +40,10 @@ export interface TopicStore {
   listTopics(): TopicMeta[];
   getTopic(name: string): Topic | null;
   createTopic(name: string, description: string): void;
+  // Delete a topic. Its own outbound link rows go; inbound links from other
+  // bodies become dangling (their [[Name]] tokens are left untouched). Throws
+  // if the topic does not exist.
+  deleteTopic(name: string): void;
   updateTopicBody(name: string, body: string): void;
   getTopicsWithBodies(names: string[]): Topic[];
   // Pin or unpin a topic. Pinned topics are always rendered into the interface

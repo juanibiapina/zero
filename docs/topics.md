@@ -80,6 +80,12 @@ slightly higher token cost every turn in exchange for always-on identity.
    - `list_topics`, `get_topic`, `create_topic`, `update_topic`,
      `list_backlinks` — read/write the knowledge model and its `[[Name]]` link
      graph. Every topic touched is added to an `accessed` set.
+   - `delete_topic` — permanently remove a topic. Interface-agent only (not in
+     the shared `buildTopicTools`, so the writer/research agents cannot delete),
+     and the prompt gates it on explicit user confirmation. Deleting a topic
+     drops its own outbound link rows; inbound links from other bodies keep
+     their `[[Name]]` text and become dangling, re-resolving if a topic of that
+     name is recreated. Bodies of other topics are left untouched.
 2. **Writer agent** (`agents/writer.ts`, stateless per turn). The interface
    agent's twin: the same `runAgent` machine with the same topic tools
    (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`/`list_backlinks`),

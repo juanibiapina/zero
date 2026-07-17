@@ -116,7 +116,11 @@ gmail_thread and pass that message's messageIdHeader and threadId as gmail_send'
 replyTo, with the original subject prefixed "Re:".
 
 If a Gmail or Calendar tool reports Google isn't connected, tell the user to
-connect it in the Zero app; don't retry.${pinned}`;
+connect it in the Zero app; don't retry.
+
+Deleting topics. You can delete a topic with delete_topic. This is irreversible:
+never call it without first naming the topic to the user and getting explicit
+confirmation.${pinned}`;
 
 export const researchSystemPrompt = (): string =>
   `You are a research agent. You are given a subject to research; you investigate

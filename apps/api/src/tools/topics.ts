@@ -131,6 +131,19 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
   return {
     ...buildTopicTools({ store, accessed }),
 
+    delete_topic: tool({
+      description:
+        "Permanently delete a topic. Irreversible: only call after the user has " +
+        "explicitly confirmed. Other topics that link to it keep their [[Name]] " +
+        "text as a dangling link.",
+      inputSchema: z.object({ name: z.string() }),
+      execute: async ({ name }) => {
+        if (!store.getTopic(name)) return { error: `topic not found: ${name}` };
+        store.deleteTopic(name);
+        return { deleted: name };
+      },
+    }),
+
     reply: tool({
       description:
         "Send a message to the user, shown immediately. Call once per message you want the user to see; text not sent via reply is never shown.",

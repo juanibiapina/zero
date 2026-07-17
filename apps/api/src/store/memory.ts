@@ -107,6 +107,15 @@ export class MemoryStore implements Store {
     });
   }
 
+  deleteTopic(name: string): void {
+    if (!this.topics.has(name)) throw new Error(`topic not found: ${name}`);
+    this.topics.delete(name);
+    // Drop this topic's own outbound rows. Inbound rows (other bodies linking
+    // to `name`) stay: their [[Name]] tokens remain in those bodies, so the
+    // links become dangling, consistent with a not-yet-created target.
+    this.links = this.links.filter((l) => l.source !== name);
+  }
+
   setPinned(name: string, pinned: boolean): void {
     const t = this.topics.get(name);
     if (!t) throw new Error(`topic not found: ${name}`);

@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { buildTopicTools } from "./topics";
+import { buildTopicTools, buildInterfaceTools } from "./topics";
 import { MemoryStore } from "../store/memory";
+
+const makeInterfaceTools = (store: MemoryStore) =>
+  buildInterfaceTools({
+    store,
+    send: async () => {},
+    persistReply: () => {},
+    accessed: new Set<string>(),
+    replies: [],
+  });
 
 const call = <T = unknown>(
   tool: { execute: (a: unknown) => Promise<unknown> },
@@ -47,5 +56,27 @@ describe("topic link tools", () => {
       name: "lonely",
     });
     expect(rows).toEqual([]);
+  });
+});
+
+describe("delete_topic tool", () => {
+  it("deletes an existing topic", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    store.createTopic("stale", "");
+    const tools = makeInterfaceTools(store);
+    const res = await call<{ deleted: string }>(tools.delete_topic as never, {
+      name: "stale",
+    });
+    expect(res).toEqual({ deleted: "stale" });
+    expect(store.getTopic("stale")).toBeNull();
+  });
+
+  it("returns an error for an unknown topic", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    const tools = makeInterfaceTools(store);
+    const res = await call<{ error: string }>(tools.delete_topic as never, {
+      name: "nope",
+    });
+    expect(res.error).toContain("topic not found");
   });
 });

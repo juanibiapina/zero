@@ -127,6 +127,22 @@ export class DbStore implements Store {
     }
   }
 
+  deleteTopic(name: string): void {
+    const t = this.db.get(topics, { where: eq("name", name) });
+    if (!t) throw new Error(`topic not found: ${name}`);
+    // Null out inbound links so no row references the deleted id (FK safety);
+    // their [[Name]] tokens stay in the source bodies, so the links become
+    // dangling and re-resolve if a topic of this name is recreated.
+    this.db.update(
+      topicLinks,
+      { targetId: null },
+      { where: eq("targetId", t.id) },
+    );
+    // Drop this topic's own outbound rows, then the topic row itself.
+    this.db.delete(topicLinks, { where: eq("sourceId", t.id) });
+    this.db.delete(topics, { where: eq("id", t.id) });
+  }
+
   updateTopicBody(name: string, body: string): void {
     this.db.update(
       topics,
