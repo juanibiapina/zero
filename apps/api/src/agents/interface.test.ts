@@ -132,6 +132,51 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
+  it("keeps research findings in a topic even when the model never replies them", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const search = createMemorySearch([
+      { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
+    ]);
+    const model = scriptedModel([
+      // interface acks then researches
+      { tools: [{ name: "reply", input: { text: "Let me check." } }] },
+      { tools: [{ name: "research", input: { prompt: "distance to Mars" } }] },
+      // research agent: search, create + fill a topic, then final text
+      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
+      {
+        tools: [
+          { name: "create_topic", input: { name: "Mars", description: "the planet" } },
+        ],
+      },
+      {
+        tools: [
+          {
+            name: "update_topic",
+            input: { name: "Mars", body: "Mars is far. Source: https://ex.com/mars" },
+          },
+        ],
+      },
+      { text: "Wrote topic 'Mars'." },
+      // interface finishes without replying the finding
+      { text: "" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search,
+      history: [],
+      userMessage: "how far is Mars",
+    });
+
+    expect(store.getTopic("Mars")?.body).toBe(
+      "Mars is far. Source: https://ex.com/mars",
+    );
+    expect(result.accessed).toContain("Mars");
+  });
+
   it("persists each reply before sending it", async () => {
     const store = new MemoryStore();
     const order: string[] = [];

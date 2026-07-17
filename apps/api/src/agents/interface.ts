@@ -85,7 +85,12 @@ export const runInterfaceAgent = async (
       accessed,
       replies,
     }),
-    ...buildResearchTool({ model: input.model, search: input.search }),
+    ...buildResearchTool({
+      model: input.model,
+      store: input.store,
+      search: input.search,
+      accessed,
+    }),
   };
 
   // The agent's replies are the { replies, accessed } collected by the tool

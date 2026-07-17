@@ -50,6 +50,19 @@ pass).
    proactive: it creates a topic for any durable subject in the exchange with no
    existing topic. Trivial exchanges (chit-chat, acks) get no tool call.
 
+A third agent also writes topics: the **research agent** (spawned by the
+interface agent's `research` tool; see `docs/research.md`). It has the topic
+tools + `web_search` and writes its findings directly into a topic (new or
+updated), which is what keeps source references verbatim — the producer stores
+them, with no lossy interface/writer hop between production and persistence. The
+topics it writes are merged into the interface agent's `accessed` set, so the
+writer consolidates them like any other accessed topic. The writer is prompted
+to **preserve research findings and their reference URLs verbatim** (refresh the
+summary rather than rewriting the body, and fold near-duplicate research topics
+together). Preservation is prompt-enforced; if it degrades in practice, the
+stronger fix is a mechanically protected body region or excluding research
+topics from the writer.
+
 The topic tools are shared: `update_topic` is a partial patch — provide only the
 fields to change (`body`, `description`, `summary`, `newName`); omitted fields
 keep their current value. The interface agent's usual body-only revision leaves
