@@ -21,6 +21,11 @@ export interface TurnInput {
   topicId: number;
   historyLimit?: number;
   clerkUserId?: string;
+  // The user's IANA timezone for the datetime anchor; undefined falls back to
+  // UTC in the prompt.
+  timezone?: string;
+  // Persist a new user timezone (from the set_timezone tool).
+  setTimezone?: (tz: string) => void;
   // Reference time for the date anchor and relative message ages. Defaults to
   // now; injected in tests for deterministic prompt rendering.
   now?: Date;
@@ -64,6 +69,8 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       search,
       history,
       userMessage,
+      timezone: input.timezone,
+      setTimezone: input.setTimezone,
       now: input.now,
     });
 

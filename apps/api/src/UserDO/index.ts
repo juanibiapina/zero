@@ -145,6 +145,8 @@ export class UserDO extends DurableObject<Env> {
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
     const model = await createModel(this.env, clerkUserId);
     const search = createBraveSearch(this.env.BRAVE_API_KEY);
+    const timezone = this.getSettings().timezone ?? undefined;
+    const setTimezone = (tz: string) => this.updateSettings({ timezone: tz });
     const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -154,7 +156,7 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, model, send, search, chatId, topicId, clerkUserId });
+      await orchestrateTurn({ store: this.store, model, send, search, chatId, topicId, clerkUserId, timezone, setTimezone });
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -186,25 +188,27 @@ export class UserDO extends DurableObject<Env> {
     return { removed: existing.telegramId };
   }
 
-  getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; isNewUser: boolean } {
+  getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; timezone: string | null; isNewUser: boolean } {
     const row = this.db.get(userSettings);
     if (!row) {
       const createdAt = new Date().toISOString();
       this.db.insert(userSettings, { onboardingSeen: 0, createdAt });
-      return { onboardingSeen: false, googleOnboardingStatus: null, createdAt, isNewUser: true };
+      return { onboardingSeen: false, googleOnboardingStatus: null, createdAt, timezone: null, isNewUser: true };
     }
-    return { onboardingSeen: !!row.onboardingSeen, googleOnboardingStatus: row.googleOnboardingStatus ?? null, createdAt: row.createdAt ?? null, isNewUser: false };
+    return { onboardingSeen: !!row.onboardingSeen, googleOnboardingStatus: row.googleOnboardingStatus ?? null, createdAt: row.createdAt ?? null, timezone: row.timezone ?? null, isNewUser: false };
   }
 
-  updateSettings(patch: { onboardingSeen?: boolean }): void {
+  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
     const existing = this.db.get(userSettings);
     if (existing) {
-      const updates: Record<string, number> = {};
+      const updates: Record<string, number | string> = {};
       if (patch.onboardingSeen !== undefined) updates.onboardingSeen = patch.onboardingSeen ? 1 : 0;
+      if (patch.timezone !== undefined) updates.timezone = patch.timezone;
       this.db.update(userSettings, updates, { where: eq("id", existing.id) });
     } else {
       this.db.insert(userSettings, {
         onboardingSeen: patch.onboardingSeen ? 1 : 0,
+        timezone: patch.timezone,
         createdAt: new Date().toISOString(),
       });
     }

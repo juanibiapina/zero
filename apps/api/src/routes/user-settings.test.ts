@@ -40,11 +40,12 @@ type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegra
 
 const createFakeUserDO = (
   initial?: string,
-): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null } => {
+): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null; _timezone: string | null } => {
   let stored: string | null = initial ?? null;
   let onboardingSeen = false;
   let googleOnboardingStatus: string | null = null;
   let createdAt: string | null = null;
+  let timezone: string | null = null;
   let hasRow = false;
   return {
     get _telegramId() {
@@ -58,6 +59,9 @@ const createFakeUserDO = (
     },
     get _createdAt() {
       return createdAt;
+    },
+    get _timezone() {
+      return timezone;
     },
     getTelegramId: () => stored,
     linkTelegram: (telegramId: string) => {
@@ -74,12 +78,13 @@ const createFakeUserDO = (
       if (!hasRow) {
         createdAt = new Date().toISOString();
         hasRow = true;
-        return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: true };
+        return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, isNewUser: true };
       }
-      return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: false };
+      return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, isNewUser: false };
     },
-    updateSettings: (patch: { onboardingSeen?: boolean }) => {
+    updateSettings: (patch: { onboardingSeen?: boolean; timezone?: string }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
+      if (patch.timezone !== undefined) timezone = patch.timezone;
     },
     setGoogleOnboardingStatus: (status: string) => {
       googleOnboardingStatus = status;
@@ -358,5 +363,45 @@ describe("PATCH /api/user-settings", () => {
     const body = await res.json<Record<string, unknown>>();
     expect(body.onboardingSeen).toBe(true);
     expect(userDO._onboardingSeen).toBe(true);
+  });
+
+  it("stores a valid IANA timezone and returns it", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timezone: "America/Sao_Paulo" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json<Record<string, unknown>>();
+    expect(body.timezone).toBe("America/Sao_Paulo");
+    expect(userDO._timezone).toBe("America/Sao_Paulo");
+  });
+
+  it("rejects a non-IANA timezone with 400 and does not store it", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timezone: "Mars/Phobos" }),
+    });
+    expect(res.status).toBe(400);
+    expect(userDO._timezone).toBeNull();
+  });
+
+  it("exposes timezone on GET (null before set)", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings");
+    const body = await res.json<Record<string, unknown>>();
+    expect(body.timezone).toBeNull();
   });
 });

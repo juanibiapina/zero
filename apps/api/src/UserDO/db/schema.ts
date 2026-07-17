@@ -10,6 +10,9 @@ export const userSettings = table("user_settings", {
   onboardingSeen: column.integer().notNull(),
   googleOnboardingStatus: column.text(),
   createdAt: column.text(),
+  // Canonical IANA name (e.g. "Europe/Berlin"), never an offset. Null until the
+  // web app reports the browser's zone on first mount.
+  timezone: column.text(),
 });
 
 // Topics: the durable knowledge model. `id` is a stable surrogate key so a

@@ -5,6 +5,7 @@
 import { type LanguageModel } from "ai";
 import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
+import { buildTimezoneTool } from "../tools/timezone";
 import type { Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import { interfaceSystemPrompt } from "./prompts";
@@ -28,6 +29,12 @@ export interface InterfaceAgentInput {
   history: Message[];
   userMessage: string;
   search: WebSearch;
+  // The user's IANA timezone for the datetime anchor. Defaults to UTC when the
+  // user has never reported one (see prompts.ts).
+  timezone?: string;
+  // Persist a new user timezone (wired by the orchestrator to user settings).
+  // Omitted in tests that don't exercise set_timezone.
+  setTimezone?: (tz: string) => void;
   // Absolute reference time for the date anchor and relative message ages.
   // Defaults to now; injected in tests for deterministic rendering.
   now?: Date;
@@ -128,6 +135,7 @@ export const runInterfaceAgent = async (
       search: input.search,
       accessed,
     }),
+    ...buildTimezoneTool({ setTimezone: input.setTimezone }),
   };
 
   // The agent's replies are the { replies, accessed } collected by the tool
@@ -136,7 +144,7 @@ export const runInterfaceAgent = async (
   const start = Date.now();
   const { text, finishReason, steps } = await runAgent({
     model: input.model,
-    system: interfaceSystemPrompt(now),
+    system: interfaceSystemPrompt(now, input.timezone),
     prompt: renderConversation(input.history, input.userMessage, now),
     tools,
     maxSteps: input.maxSteps,

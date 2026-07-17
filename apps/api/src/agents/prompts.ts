@@ -1,24 +1,45 @@
 // System prompts for the two agents. Kept in one place so the interface and
 // writer contracts are easy to read and adjust together.
 
-// Absolute date anchor for the interface agent. The conversation renders each
-// message's age relatively ("5 min ago"), so the model needs one absolute point
-// to resolve those against and to interpret relative user phrasing ("tomorrow").
-const formatAnchor = (now: Date): string => {
-  const weekday = now.toLocaleDateString("en-US", {
+// Absolute datetime anchor for the interface agent, rendered in the user's
+// timezone. The conversation renders each message's age relatively ("5 min
+// ago"), so the model needs one absolute point to resolve those against, to
+// interpret relative phrasing ("tomorrow", "this afternoon"), and to build
+// calendar windows. The zone is a canonical IANA name so DST is automatic;
+// the offset is shown too so the model can reason numerically.
+const formatAnchor = (now: Date, timezone: string): string => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
     weekday: "long",
-    timeZone: "UTC",
-  });
-  const date = now.toISOString().slice(0, 10);
-  return `${weekday}, ${date}`;
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "shortOffset",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const weekday = get("weekday");
+  const date = `${get("year")}-${get("month")}-${get("day")}`;
+  // hour12:false can render midnight as "24"; normalize to "00".
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  const time = `${hour}:${get("minute")}`;
+  const offset = get("timeZoneName");
+  return `${weekday}, ${date} ${time} (${timezone}, ${offset})`;
 };
 
-export const interfaceSystemPrompt = (now: Date = new Date()): string =>
+export const interfaceSystemPrompt = (
+  now: Date = new Date(),
+  timezone = "UTC",
+): string =>
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
 
-Current date: ${formatAnchor(now)} (UTC). Message ages in the conversation are
-relative to now.
+Current time: ${formatAnchor(now, timezone)}. Message ages in the conversation
+are relative to now. The user's timezone is ${timezone}; interpret and express
+times in it. If the user tells you they are in a different place or timezone,
+call set_timezone to update it.
 
 You have a durable knowledge model made of topics: living documents each about
 one subject (a project, a person, an ongoing thread). Recall what a topic holds

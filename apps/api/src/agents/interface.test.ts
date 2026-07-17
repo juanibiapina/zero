@@ -37,10 +37,18 @@ describe("formatAge", () => {
 });
 
 describe("interfaceSystemPrompt", () => {
-  it("anchors the prompt with the current UTC date and weekday", () => {
+  it("anchors the prompt with the current datetime in UTC by default", () => {
     expect(interfaceSystemPrompt(NOW)).toContain(
-      "Current date: Friday, 2026-07-17 (UTC).",
+      "Current time: Friday, 2026-07-17 12:00 (UTC, GMT+0).",
     );
+  });
+
+  it("renders the anchor in the user's timezone", () => {
+    const prompt = interfaceSystemPrompt(NOW, "America/Sao_Paulo");
+    expect(prompt).toContain(
+      "Current time: Friday, 2026-07-17 09:00 (America/Sao_Paulo, GMT-3).",
+    );
+    expect(prompt).toContain("The user's timezone is America/Sao_Paulo");
   });
 });
 
@@ -204,6 +212,28 @@ describe("runInterfaceAgent", () => {
       "Mars is far. Source: https://ex.com/mars",
     );
     expect(result.accessed).toContain("Mars");
+  });
+
+  it("routes set_timezone through to the setter", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const setTimezone = vi.fn();
+    const model = scriptedModel([
+      { tools: [{ name: "set_timezone", input: { timezone: "Asia/Tokyo" } }] },
+      { text: "Done, you're on Tokyo time now." },
+    ]);
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      setTimezone,
+      history: [],
+      userMessage: "I moved to Tokyo",
+    });
+
+    expect(setTimezone).toHaveBeenCalledWith("Asia/Tokyo");
   });
 
   it("persists each reply before sending it", async () => {

@@ -13,6 +13,7 @@ const createFakeUserDO = (): UserDOStub => {
   let onboardingSeen = false;
   let googleOnboardingStatus: string | null = null;
   let createdAt: string | null = null;
+  let timezone: string | null = null;
   let hasRow = false;
 
   return {
@@ -31,12 +32,13 @@ const createFakeUserDO = (): UserDOStub => {
       if (!hasRow) {
         createdAt = new Date().toISOString();
         hasRow = true;
-        return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: true };
+        return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, isNewUser: true };
       }
-      return { onboardingSeen, googleOnboardingStatus, createdAt, isNewUser: false };
+      return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, isNewUser: false };
     },
-    updateSettings: (patch: { onboardingSeen?: boolean }) => {
+    updateSettings: (patch: { onboardingSeen?: boolean; timezone?: string }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
+      if (patch.timezone !== undefined) timezone = patch.timezone;
     },
     setGoogleOnboardingStatus: (status: string) => {
       googleOnboardingStatus = status;

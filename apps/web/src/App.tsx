@@ -73,10 +73,21 @@ function AppShell() {
         if (!cancelled) setOnboardingSeen(true);
         return;
       }
-      const data = (await res.json()) as { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null };
+      const data = (await res.json()) as { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; timezone: string | null };
       if (!cancelled) {
         setOnboardingSeen(data.onboardingSeen);
         setGoogleOnboardingStatus(data.googleOnboardingStatus);
+      }
+      // Keep the stored timezone in sync with this browser. Telegram carries no
+      // timezone, so the web app is the only reliable source. Only PATCH when
+      // it's missing or has changed (travel) — steady state is zero writes.
+      const current = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (current && current !== data.timezone) {
+        void fetch("/api/user-settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ timezone: current }),
+        });
       }
     })();
     return () => { cancelled = true; };

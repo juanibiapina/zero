@@ -14,6 +14,7 @@ import {
 } from "../telegram-auth";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
+import { isValidTimezone } from "../timezone";
 
 type Variables = {
   userId: string;
@@ -133,12 +134,14 @@ export const createUserSettingsRoutes = () => {
     onboardingSeen: z.boolean(),
     googleOnboardingStatus: z.string().nullable(),
     createdAt: z.string().nullable(),
+    timezone: z.string().nullable(),
   });
 
-  const toResponse = (s: { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null }) => ({
+  const toResponse = (s: { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; timezone: string | null }) => ({
     onboardingSeen: s.onboardingSeen,
     googleOnboardingStatus: s.googleOnboardingStatus,
     createdAt: s.createdAt,
+    timezone: s.timezone,
   });
 
   const getSettingsRoute = createRoute({
@@ -166,6 +169,7 @@ export const createUserSettingsRoutes = () => {
 
   const PatchSettingsSchema = z.object({
     onboardingSeen: z.boolean().optional(),
+    timezone: z.string().optional(),
   });
 
   const patchSettingsRoute = createRoute({
@@ -183,6 +187,10 @@ export const createUserSettingsRoutes = () => {
         content: { "application/json": { schema: UserSettingsSchema } },
         description: "Updated user settings",
       },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Invalid patch (e.g. non-IANA timezone)",
+      },
     },
   });
 
@@ -191,6 +199,9 @@ export const createUserSettingsRoutes = () => {
     const userDO = getUserDO(c.env, clerkUserId);
     const before = await userDO.getSettings();
     const patch = c.req.valid("json");
+    if (patch.timezone !== undefined && !isValidTimezone(patch.timezone)) {
+      return c.json({ error: "invalid timezone" }, 400);
+    }
     await userDO.updateSettings(patch);
     const after = await userDO.getSettings();
     if (patch.onboardingSeen === true && !before.onboardingSeen) {
