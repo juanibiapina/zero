@@ -8,6 +8,8 @@ import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
 import { createModel } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
+import { createGoogleWorkspace } from "../google/rest";
+import { getGoogleAccessToken, memoizeTokenProvider } from "../google-token";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
 import { runAlarmTurns } from "../do/alarm";
 import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
@@ -145,6 +147,13 @@ export class UserDO extends DurableObject<Env> {
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
     const model = await createModel(this.env, clerkUserId);
     const search = createBraveSearch(this.env.BRAVE_API_KEY);
+    // Memoized Google token provider: the first Google tool call mints a token
+    // via Clerk and caches the promise for the turn; turns that never touch
+    // Google make zero Clerk calls. A ~1h token outlives any turn.
+    const getToken = memoizeTokenProvider(() =>
+      getGoogleAccessToken(this.env, clerkUserId),
+    );
+    const google = createGoogleWorkspace(getToken);
     const timezone = this.getSettings().timezone ?? undefined;
     const setTimezone = (tz: string) => this.updateSettings({ timezone: tz });
     const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
@@ -156,7 +165,7 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, model, send, search, chatId, topicId, clerkUserId, timezone, setTimezone });
+      await orchestrateTurn({ store: this.store, model, send, search, google, chatId, topicId, clerkUserId, timezone, setTimezone });
     } finally {
       if (timer) clearTimeout(timer);
     }

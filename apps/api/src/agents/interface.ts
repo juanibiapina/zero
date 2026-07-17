@@ -6,8 +6,10 @@ import { type LanguageModel } from "ai";
 import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
 import { buildTimezoneTool } from "../tools/timezone";
+import { buildGoogleTools } from "../tools/google";
 import type { Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
+import type { GoogleWorkspace } from "../google/types";
 import { interfaceSystemPrompt } from "./prompts";
 import { runAgent } from "./run";
 import { log } from "../log";
@@ -29,6 +31,9 @@ export interface InterfaceAgentInput {
   history: Message[];
   userMessage: string;
   search: WebSearch;
+  // Gmail + Calendar access. Threaded exactly like `search`; tests inject the
+  // memory adapter.
+  google: GoogleWorkspace;
   // The user's IANA timezone for the datetime anchor. Defaults to UTC when the
   // user has never reported one (see prompts.ts).
   timezone?: string;
@@ -136,6 +141,10 @@ export const runInterfaceAgent = async (
       accessed,
     }),
     ...buildTimezoneTool({ setTimezone: input.setTimezone }),
+    ...buildGoogleTools({
+      google: input.google,
+      timezone: input.timezone ?? "UTC",
+    }),
   };
 
   // The agent's replies are the { replies, accessed } collected by the tool

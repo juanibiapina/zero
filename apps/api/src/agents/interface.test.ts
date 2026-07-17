@@ -10,6 +10,7 @@ import { interfaceSystemPrompt } from "./prompts";
 import { scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
+import { createMemoryGoogle } from "../google/memory";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -90,6 +91,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "hi",
     });
@@ -123,6 +125,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "plan a trip",
     });
@@ -159,6 +162,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search,
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "how far is Mars",
     });
@@ -204,6 +208,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search,
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "how far is Mars",
     });
@@ -228,12 +233,60 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       setTimezone,
       history: [],
       userMessage: "I moved to Tokyo",
     });
 
     expect(setTimezone).toHaveBeenCalledWith("Asia/Tokyo");
+  });
+
+  it("reads a Gmail thread then replies, flowing the tool result back", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const google = createMemoryGoogle({
+      threadSummaries: [
+        { threadId: "T1", date: "today", from: "a@x.com", subject: "Lunch?", snippet: "s" },
+      ],
+      threads: {
+        T1: {
+          threadId: "T1",
+          messages: [
+            {
+              id: "M1",
+              threadId: "T1",
+              messageIdHeader: "<abc@mail>",
+              from: "a@x.com",
+              to: "me@x.com",
+              subject: "Lunch?",
+              date: "today",
+              body: "Want lunch?",
+            },
+          ],
+        },
+      },
+    });
+    const model = scriptedModel([
+      { tools: [{ name: "gmail_search", input: { query: "from:a" } }] },
+      { tools: [{ name: "gmail_thread", input: { threadId: "T1" } }] },
+      { tools: [{ name: "reply", input: { text: "Your last mail from a@x.com asks about lunch." } }] },
+      { text: "" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google,
+      history: [],
+      userMessage: "what did a email me?",
+    });
+
+    expect(result.replies).toEqual([
+      "Your last mail from a@x.com asks about lunch.",
+    ]);
   });
 
   it("persists each reply before sending it", async () => {
@@ -250,6 +303,7 @@ describe("runInterfaceAgent", () => {
       send: async (t) => void order.push(`send:${t}`),
       persistReply: (t) => order.push(`persist:${t}`),
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "x",
     });
@@ -268,6 +322,7 @@ describe("runInterfaceAgent", () => {
       send: async (t) => void order.push(`send:${t}`),
       persistReply: (t) => order.push(`persist:${t}`),
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "x",
     });
@@ -287,6 +342,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "hi",
     });
@@ -305,6 +361,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "hi",
     });
@@ -329,6 +386,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "hi",
       maxSteps: 1,
@@ -353,6 +411,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "hi",
       maxSteps: 2,
@@ -375,6 +434,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "hi",
     });
@@ -396,6 +456,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "hi",
     });
@@ -425,6 +486,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search,
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "how far is Mars",
     });
@@ -453,6 +515,7 @@ describe("runInterfaceAgent", () => {
         },
         persistReply: (t) => persisted.push(t),
         search: createMemorySearch(),
+        google: createMemoryGoogle(),
         history: [],
         userMessage: "hi",
       }),
@@ -476,6 +539,7 @@ describe("runInterfaceAgent", () => {
       store,
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       history: [],
       userMessage: "tell me about ghost",
     });

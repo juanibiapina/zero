@@ -9,6 +9,18 @@ import { createClerkClient } from "@clerk/backend";
 import { fmtErr, log } from "./log";
 import type { Env } from "./types";
 
+// Memoize a token provider for a single turn: the first call runs `fetchToken`
+// and caches the promise (including a null result); later calls reuse it. So a
+// turn that never touches Google mints no token, and multiple Google tool calls
+// in one turn share a single Clerk round-trip. A Google token lives ~1h, longer
+// than any turn, so per-turn caching is safe.
+export const memoizeTokenProvider = (
+  fetchToken: () => Promise<string | null>,
+): (() => Promise<string | null>) => {
+  let cached: Promise<string | null> | undefined;
+  return () => (cached ??= fetchToken());
+};
+
 export const getGoogleAccessToken = async (
   env: Env,
   clerkUserId: string,

@@ -9,6 +9,7 @@ import { log, logError, fmtErr } from "../log";
 import type { LanguageModel } from "ai";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
+import type { GoogleWorkspace } from "../google/types";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 
@@ -17,6 +18,9 @@ export interface TurnInput {
   model: LanguageModel;
   send: (text: string) => Promise<void>;
   search: WebSearch;
+  // Gmail + Calendar access, built by the DO and forwarded to the interface
+  // agent (threaded like `search`).
+  google: GoogleWorkspace;
   chatId: number;
   topicId: number;
   historyLimit?: number;
@@ -38,7 +42,7 @@ export interface TurnInput {
 // retry sees the tail is already `assistant` and skips the thread — no
 // duplicate Telegram messages.
 export const runTurn = async (input: TurnInput): Promise<void> => {
-  const { store, model, send, search, chatId, topicId } = input;
+  const { store, model, send, search, google, chatId, topicId } = input;
   const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
@@ -67,6 +71,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       send,
       persistReply,
       search,
+      google,
       history,
       userMessage,
       timezone: input.timezone,

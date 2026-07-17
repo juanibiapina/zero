@@ -78,8 +78,9 @@ zero/
 │  ├─ runTurn(chatId, topicId):                                    │
 │  │    ├─ create model (AI Gateway, cf-aig-metadata)              │
 │  │    ├─ setTimeout typing loop (chatAction every 4s)            │
-│  │    └─ orchestrateTurn(store, model, send, search):            │
-│  │         1. interface agent — reply()/topic + research tools   │
+│  │    └─ orchestrateTurn(store, model, send, search, google):     │
+│  │         1. interface agent — reply()/topic + research +        │
+│  │            set_timezone + Gmail/Calendar tools                 │
 │  │            (each reply persisted before it is sent)            │
 │  │         2. writer agent — consolidate accessed topics         │
 │  └─ send: grammY bot.api.sendMessage(…, { message_thread_id })   │
@@ -92,10 +93,12 @@ zero/
 
 The agents and the turn orchestrator (`apps/api/src/agents/*`) depend on the
 `Store` port (`apps/api/src/store/types.ts`), a model factory
-(`agents/model.ts`), and a `WebSearch` port (`apps/api/src/websearch/types.ts`),
-not on the DO or do-orm. They are unit-tested with an in-memory store, a scripted
-mock model, and an in-memory search adapter; `UserDO` supplies the production
-`DbStore` and `createBraveSearch` adapters and the alarm-driven execution.
+(`agents/model.ts`), a `WebSearch` port (`apps/api/src/websearch/types.ts`), and a
+`GoogleWorkspace` port (`apps/api/src/google/types.ts`), not on the DO or do-orm.
+They are unit-tested with an in-memory store, a scripted mock model, and
+in-memory search/Google adapters; `UserDO` supplies the production `DbStore`,
+`createBraveSearch`, and `createGoogleWorkspace` (with a memoized Clerk token
+provider) adapters and the alarm-driven execution.
 
 The interface agent and the research agent are the **same runner**
 (`agents/run.ts`: `model + system + prompt + tools → final text`) instantiated

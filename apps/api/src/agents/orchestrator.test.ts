@@ -5,6 +5,7 @@ import { scriptedModel } from "./mock-model";
 import { MockLanguageModelV3 } from "ai/test";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
+import { createMemoryGoogle } from "../google/memory";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -28,6 +29,7 @@ describe("runTurn", () => {
       model: scriptedModel([]),
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       chatId: 1,
       topicId: 0,
     });
@@ -51,6 +53,7 @@ describe("runTurn", () => {
       ]),
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       chatId: 1,
       topicId: 0,
     });
@@ -84,6 +87,7 @@ describe("runTurn", () => {
         ]),
         send: sink.send,
         search: createMemorySearch(),
+        google: createMemoryGoogle(),
         chatId: 1,
         topicId: 0,
       });
@@ -130,6 +134,7 @@ describe("runTurn", () => {
       ]),
       send: sink.send,
       search: createMemorySearch(),
+      google: createMemoryGoogle(),
       chatId: 1,
       topicId: 0,
     });
@@ -162,6 +167,7 @@ describe("runTurn", () => {
         ]),
         send,
         search: createMemorySearch(),
+        google: createMemoryGoogle(),
         chatId: 1,
         topicId: 0,
       }),
@@ -206,6 +212,7 @@ describe("runTurn", () => {
         model,
         send: sink.send,
         search: createMemorySearch(),
+        google: createMemoryGoogle(),
         chatId: 1,
         topicId: 0,
       }),

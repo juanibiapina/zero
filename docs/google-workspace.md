@@ -3,14 +3,34 @@
 The Zero web app has a "Connect Google" button that grants the bot
 access to your Gmail, Calendar, and Drive via Clerk's Google OAuth.
 
-> **Status: connect-plumbing only.** The connect button, the OAuth
-> handshake, scope tracking, admin visibility, and access-token minting
-> all exist, but there is **no consumer** yet. The per-user container that
-> used to call the Google APIs (via the `gmcli`/`gccli`/`gdcli` CLIs behind
-> a secret proxy) was removed with the container runtime (see
-> `docs/design.md`). `getGoogleAccessToken` and `getGoogleAccountEmail` in
-> `apps/api/src/google-token.ts` are currently unused; they are the
-> reattachment point for a future meta-agent Google tool.
+> **Status: wired (Gmail + Calendar).** The interface agent has in-Worker
+> Gmail and Calendar tools that call Google's REST APIs (`gmail/v1`,
+> `calendar/v3`) directly with a bearer token — no container, no CLIs. The
+> old per-user container (`gmcli`/`gccli`/`gdcli` behind a secret proxy)
+> was removed with the container runtime (see `docs/design.md`) and
+> replaced by plain `fetch` adapters. See `docs/google-tools.md` for the
+> port/adapter, the tool list, the Gmail id spaces, the calendar/timezone
+> contract, and the confirmation policy.
+>
+> **Approach.** A `GoogleWorkspace` port (`apps/api/src/google/types.ts`)
+> hides all REST/MIME/base64url detail; a REST adapter
+> (`google/rest.ts`) serves production and an in-memory adapter
+> (`google/memory.ts`) serves tests, mirroring the WebSearch seam.
+> `createGoogleWorkspace` takes a **token provider** (`() => Promise<string
+> | null>`), not a raw token, so a turn that never touches Google mints
+> nothing. The DO memoizes the provider per turn
+> (`memoizeTokenProvider`) so multiple Google tool calls share one Clerk
+> round-trip. REST calls use `users/me` (Gmail) and `calendarList` +
+> `calendars/{id}/events` (Calendar), so no account email is needed;
+> `primary` is the default write target. `getGoogleAccountEmail` remains
+> **unused** (available if a `From:` display is ever wanted). Drive is
+> still unwired.
+>
+> **Confirmation policy.** Reads (`gmail_search`, `gmail_thread`,
+> `calendar_list_calendars`, `calendar_list_events`) run freely; the
+> side-effecting `gmail_send` and `calendar_create_event` require explicit
+> user confirmation of the exact content first (enforced by the interface
+> prompt, not a hard guard — an accepted v1 risk).
 
 ## How connecting works
 
@@ -46,7 +66,12 @@ helper) until they re-consent.
 ## When the user hasn't connected Google
 
 `getGoogleAccessToken` returns `null` and never throws — a Google outage or
-an unconnected user must not block a turn.
+an unconnected user must not block a turn. The REST adapter turns a `null`
+token into a typed `GoogleNotConnectedError`; the tool layer converts that
+to `{ error: "Google isn't connected..." }` data (never a throw), so the
+model tells the user to connect it in the Zero app and the turn completes
+normally. A `401` from Google (revoked grant or missing scope) maps to a
+distinct error message.
 
 ## Revoking
 

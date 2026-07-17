@@ -6,7 +6,7 @@ vi.mock("@clerk/backend", () => ({
   createClerkClient: () => ({ users: { getUser: getUserMock } }),
 }));
 
-import { getGoogleAccountEmail } from "./google-token";
+import { getGoogleAccountEmail, memoizeTokenProvider } from "./google-token";
 import type { Env } from "./types";
 
 const env = (): Env =>
@@ -45,5 +45,25 @@ describe("getGoogleAccountEmail", () => {
     getUserMock.mockRejectedValue(new Error("clerk down"));
 
     await expect(getGoogleAccountEmail(env(), "user_1")).resolves.toBeNull();
+  });
+});
+
+describe("memoizeTokenProvider", () => {
+  it("mints once across multiple calls", async () => {
+    const fetchToken = vi.fn(async () => "tok");
+    const provider = memoizeTokenProvider(fetchToken);
+
+    const [a, b, c] = await Promise.all([provider(), provider(), provider()]);
+    expect([a, b, c]).toEqual(["tok", "tok", "tok"]);
+    expect(fetchToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("caches a null result (no retry after not-connected)", async () => {
+    const fetchToken = vi.fn(async () => null);
+    const provider = memoizeTokenProvider(fetchToken);
+
+    expect(await provider()).toBeNull();
+    expect(await provider()).toBeNull();
+    expect(fetchToken).toHaveBeenCalledTimes(1);
   });
 });
