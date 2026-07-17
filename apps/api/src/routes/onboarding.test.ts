@@ -17,8 +17,9 @@ const createFakeUserDO = () => {
     get _status() {
       return status;
     },
-    queueOnboarding: async () => {
-      if (status !== null) return;
+    setStatus: (s: string | null) => void (status = s),
+    queueOnboarding: async (force = false) => {
+      if (!force && status !== null) return;
       status = "queued";
     },
   };
@@ -64,6 +65,19 @@ describe("POST /api/onboarding/google", () => {
 
     expect(res.status).toBe(202);
     // Still "queued" (the guard prevented a second enqueue from changing it).
+    expect(userDO._status).toBe("queued");
+  });
+
+  it("force=true re-queues an already-onboarded user", async () => {
+    const userDO = createFakeUserDO();
+    userDO.setStatus("done");
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/onboarding/google?force=true", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(202);
     expect(userDO._status).toBe("queued");
   });
 });

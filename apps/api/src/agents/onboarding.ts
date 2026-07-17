@@ -18,7 +18,7 @@ export interface OnboardingAgentInput {
   model: LanguageModel;
   store: TopicStore;
   google: GoogleWorkspace;
-  // The pre-created, pinned topic the agent fills (e.g. "About You").
+  // The pre-created, pinned topic the agent fills (e.g. "User").
   topicName: string;
   // Test override for the step cap; production uses AGENT_MAX_STEPS.
   maxSteps?: number;

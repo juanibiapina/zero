@@ -55,7 +55,7 @@ available every turn without a `get_topic` lookup. Pinning is a Store operation
 (`setPinned(name, pinned)` / `getPinnedTopics()`), not an agent tool; a pinned
 topic is otherwise an ordinary topic reachable by the normal tools and
 consolidated by the writer like any other. The canonical use is a stable
-`About You` topic seeded at Google onboarding (see `docs/onboarding.md`).
+`User` topic seeded at Google onboarding (see `docs/onboarding.md`).
 
 Each pinned body is capped (~1.5 KB) when rendered into the prompt so a topic
 that keeps growing can't blow up the prompt; the full body is still reachable

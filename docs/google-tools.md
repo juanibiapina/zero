@@ -66,7 +66,7 @@ The interface agent is not the only Gmail consumer. The **onboarding agent**
 (`agents/onboarding.ts`, see [`onboarding.md`](onboarding.md)) reuses the same
 `GoogleWorkspace` port but is given only the read-only Gmail tools
 (`gmail_search`, `gmail_thread`) to scan a new user's mail once and seed the
-pinned `About You` topic; it gets no `gmail_send` or calendar tools.
+pinned `User` topic; it gets no `gmail_send` or calendar tools.
 
 ## Gmail id spaces
 

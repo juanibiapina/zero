@@ -170,7 +170,7 @@ cost, attributed via `cf-aig-metadata`.
 `POST /api/onboarding/google` queues a one-shot Gmail scan on the user's DO
 (`queueOnboarding`: set status `queued` + arm the alarm, idempotent on the
 `googleOnboardingStatus` state machine) and returns 202. The scan runs on the DO
-alarm, off Telegram, and seeds the pinned `About You` topic. See
+alarm, off Telegram, and seeds the pinned `User` topic. See
 [`onboarding.md`](onboarding.md).
 
 The link route accepts the Login Widget callback payload and verifies its HMAC

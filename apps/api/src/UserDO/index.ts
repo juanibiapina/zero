@@ -22,8 +22,8 @@ const TYPING_INTERVAL_MS = 4000;
 
 // The stable pinned topic seeded by Google onboarding. The name never changes;
 // the user's actual name is a fact recorded in the body (see docs/onboarding.md).
-const ABOUT_YOU_TOPIC = "About You";
-const ABOUT_YOU_DESCRIPTION =
+const USER_TOPIC = "User";
+const USER_TOPIC_DESCRIPTION =
   "Durable facts about the user: name, location, role, languages, key relationships.";
 
 
@@ -162,11 +162,13 @@ export class UserDO extends DurableObject<Env> {
   }
 
   // Queue Google onboarding: set status `queued` and arm the alarm. Idempotent
-  // — once the status leaves `null` (queued/done/failed) this no-ops, so a
-  // user is onboarded at most once. Called by POST /api/onboarding/google when
-  // the web app reports Google connected.
-  async queueOnboarding(): Promise<void> {
-    if (this.getSettings().googleOnboardingStatus !== null) return;
+  // by default — once the status leaves `null` (queued/done/failed) this
+  // no-ops, so the web app's fire-once effect onboards a user at most once.
+  // `force` bypasses the guard to re-run for an already-onboarded user
+  // (re-running is idempotent: it re-authors the same pinned topic). Called by
+  // POST /api/onboarding/google.
+  async queueOnboarding(force = false): Promise<void> {
+    if (!force && this.getSettings().googleOnboardingStatus !== null) return;
     this.setGoogleOnboardingStatus("queued");
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(Date.now());
@@ -187,8 +189,8 @@ export class UserDO extends DurableObject<Env> {
 
     await runOnboarding({
       store: this.store,
-      topicName: ABOUT_YOU_TOPIC,
-      description: ABOUT_YOU_DESCRIPTION,
+      topicName: USER_TOPIC,
+      description: USER_TOPIC_DESCRIPTION,
       runAgent: (topicName) =>
         runOnboardingAgent({ model, store: this.store, google, topicName }),
       setStatus: (status) => this.setGoogleOnboardingStatus(status),

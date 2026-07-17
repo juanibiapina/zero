@@ -10,7 +10,7 @@ const deps = (over: Partial<Parameters<typeof runOnboarding>[0]> = {}) => {
     statuses,
     args: {
       store,
-      topicName: "About You",
+      topicName: "User",
       description: "identity",
       runAgent: async () => {},
       setStatus: (s: string) => void statuses.push(s),
@@ -23,7 +23,7 @@ describe("runOnboarding", () => {
   it("creates and pins the topic, then marks done on success", async () => {
     const d = deps();
     await runOnboarding(d.args);
-    expect(d.store.getTopic("About You")?.pinned).toBe(true);
+    expect(d.store.getTopic("User")?.pinned).toBe(true);
     expect(d.statuses).toEqual(["done"]);
   });
 
@@ -35,7 +35,7 @@ describe("runOnboarding", () => {
     });
     await runOnboarding(d.args);
     // The topic is still created and pinned; only the run failed.
-    expect(d.store.getTopic("About You")?.pinned).toBe(true);
+    expect(d.store.getTopic("User")?.pinned).toBe(true);
     expect(d.statuses).toEqual(["failed"]);
   });
 
@@ -43,10 +43,10 @@ describe("runOnboarding", () => {
     const d = deps();
     await runOnboarding(d.args);
     // Simulate the agent having written a body on the first run.
-    d.store.updateTopicBody("About You", "name: Alice");
+    d.store.updateTopicBody("User", "name: Alice");
     await runOnboarding(d.args);
-    expect(d.store.getPinnedTopics().map((t) => t.name)).toEqual(["About You"]);
-    expect(d.store.getTopic("About You")?.body).toBe("name: Alice");
+    expect(d.store.getPinnedTopics().map((t) => t.name)).toEqual(["User"]);
+    expect(d.store.getTopic("User")?.body).toBe("name: Alice");
     expect(d.statuses).toEqual(["done", "done"]);
   });
 
@@ -54,6 +54,6 @@ describe("runOnboarding", () => {
     const runAgent = vi.fn(async () => {});
     const d = deps({ runAgent });
     await runOnboarding(d.args);
-    expect(runAgent).toHaveBeenCalledWith("About You");
+    expect(runAgent).toHaveBeenCalledWith("User");
   });
 });

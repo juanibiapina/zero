@@ -242,6 +242,7 @@ function GoogleConnect() {
             >
               Disconnect
             </Button>
+            <RerunOnboarding />
           </>
         )}
         {error && <ErrorText>{error}</ErrorText>}
@@ -250,6 +251,59 @@ function GoogleConnect() {
   );
 }
 
+// ─── Re-run onboarding ──────────────────────────────────────────────
+
+// Re-run the one-shot Gmail onboarding scan (force=true bypasses the
+// once-per-user guard). The scan runs in the background on the DO alarm and
+// rebuilds the pinned "User" topic; there is no live progress to show
+// here, so we just confirm the request was queued.
+function RerunOnboarding() {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const rerun = async () => {
+    setBusy(true);
+    setError(null);
+    setDone(false);
+    try {
+      const res = await fetch("/api/onboarding/google?force=true", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        setError(`Failed: ${res.status}`);
+        return;
+      }
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <StatusText>
+        Re-scan your Gmail to rebuild what the assistant knows about you.
+      </StatusText>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={() => void rerun()}
+      >
+        {busy ? "Queuing…" : done ? "Queued ✓" : "Re-run onboarding"}
+      </Button>
+      {done && (
+        <StatusText>
+          Queued. It runs in the background; give it a minute.
+        </StatusText>
+      )}
+      {error && <ErrorText>{error}</ErrorText>}
+    </div>
+  );
+}
 
 // ─── Page ───────────────────────────────────────────────────────────
 

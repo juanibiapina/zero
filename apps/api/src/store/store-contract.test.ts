@@ -90,12 +90,12 @@ describe("Store contract: pinned topics", () => {
 
   it("setPinned pins a topic and getPinnedTopics returns its full body", () => {
     const s = makeStore();
-    s.createTopic("About You", "identity");
-    s.updateTopicBody("About You", "name: Alice");
-    s.setPinned("About You", true);
-    expect(s.getTopic("About You")?.pinned).toBe(true);
+    s.createTopic("User", "identity");
+    s.updateTopicBody("User", "name: Alice");
+    s.setPinned("User", true);
+    expect(s.getTopic("User")?.pinned).toBe(true);
     const pinned = s.getPinnedTopics();
-    expect(pinned.map((t) => t.name)).toEqual(["About You"]);
+    expect(pinned.map((t) => t.name)).toEqual(["User"]);
     expect(pinned[0].body).toBe("name: Alice");
   });
 

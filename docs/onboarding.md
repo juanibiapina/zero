@@ -1,7 +1,7 @@
 # Google onboarding
 
 When a user connects Google, Zero runs a one-shot Gmail scan to learn who they
-are and seeds a **pinned** `About You` topic that is always in the interface
+are and seeds a **pinned** `User` topic that is always in the interface
 agent's context (see [`topics.md`](topics.md) on pinned topics). The topic keeps
 filling automatically as the user interacts; onboarding gives it a starting
 point.
@@ -14,9 +14,9 @@ Google connected (web)
   → UserDO.queueOnboarding()           set googleOnboardingStatus = "queued", arm alarm
   → UserDO.alarm()                     after draining turns, if status == "queued":
   → UserDO.runOnboarding()             build model + Google token, delegate to…
-  → do/onboarding.ts runOnboarding()   ensure pinned "About You" topic, run agent,
+  → do/onboarding.ts runOnboarding()   ensure pinned "User" topic, run agent,
                                         set status "done" (or "failed" on throw)
-  → agents/onboarding.ts               Gmail scan → update_topic on "About You"
+  → agents/onboarding.ts               Gmail scan → update_topic on "User"
 ```
 
 The web app (`apps/web/src/pages/Onboarding.tsx`) POSTs the route once, guarded
@@ -31,11 +31,15 @@ route.
 
 - **Idempotency.** `queueOnboarding` no-ops once the status has left `null`, so
   a user is onboarded at most once even if the web app fires more than once.
+  `POST /api/onboarding/google?force=true` bypasses the guard to re-run for an
+  already-onboarded user (the scan is idempotent: it re-authors the same pinned
+  topic). Handy from the signed-in browser console:
+  `fetch('/api/onboarding/google?force=true', { method: 'POST' })`.
 - **Durability trick.** The status never moves to a transient `running` state.
   It stays `queued` until success flips it to `done` (or a caught failure flips
   it to `failed`). A mid-run DO eviction skips the catch and leaves it `queued`,
   so the next alarm re-runs it. Re-running is idempotent: it re-authors the same
-  `About You` topic. A caught failure is logged (`onboarding_failed`), marked
+  `User` topic. A caught failure is logged (`onboarding_failed`), marked
   `failed`, and not retried in a loop.
 - **Alarm ordering.** `alarm()` drains conversation turns first (replies stay
   low-latency), then runs onboarding when queued. Onboarding is best-effort and
@@ -56,7 +60,7 @@ weight; when in doubt leave it out"; never invent facts.
 ## Decisions
 
 - **Stable topic name, identity in the body.** The pinned topic is always named
-  `About You`; the user's actual name is a fact recorded in the body. Avoids
+  `User`; the user's actual name is a fact recorded in the body. Avoids
   rename churn and `[[link]]` rewriting on every identity correction.
 - **Pinning is a Store/DO operation, not an agent tool.** `runOnboarding`
   pre-creates and pins the topic, then passes its name to the agent to fill.

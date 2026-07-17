@@ -7,8 +7,8 @@ import { createMemoryGoogle } from "../google/memory";
 describe("runOnboardingAgent", () => {
   it("scans Gmail and writes the pinned identity topic", async () => {
     const store = new MemoryStore();
-    store.createTopic("About You", "identity");
-    store.setPinned("About You", true);
+    store.createTopic("User", "identity");
+    store.setPinned("User", true);
 
     const google = createMemoryGoogle({
       threadSummaries: [
@@ -29,7 +29,7 @@ describe("runOnboardingAgent", () => {
           {
             name: "update_topic",
             input: {
-              name: "About You",
+              name: "User",
               body: "## Identity\n\nName: Alice Smith\nEmail: alice@example.com",
               summary: "The user is Alice Smith.",
             },
@@ -39,19 +39,19 @@ describe("runOnboardingAgent", () => {
       { text: "Recorded the user's name: Alice Smith." },
     ]);
 
-    await runOnboardingAgent({ model, store, google, topicName: "About You" });
+    await runOnboardingAgent({ model, store, google, topicName: "User" });
 
-    const topic = store.getTopic("About You");
+    const topic = store.getTopic("User");
     expect(topic?.body).toContain("Alice Smith");
     // Authoring the topic must not unpin it.
     expect(topic?.pinned).toBe(true);
-    expect(store.getPinnedTopics().map((t) => t.name)).toEqual(["About You"]);
+    expect(store.getPinnedTopics().map((t) => t.name)).toEqual(["User"]);
   });
 
   it("does not expose write-side Gmail or calendar tools", async () => {
     const store = new MemoryStore();
-    store.createTopic("About You", "identity");
-    store.setPinned("About You", true);
+    store.createTopic("User", "identity");
+    store.setPinned("User", true);
 
     // The model tries to send mail; the tool does not exist, so nothing is sent.
     const google = createMemoryGoogle();
@@ -64,7 +64,7 @@ describe("runOnboardingAgent", () => {
       { text: "done" },
     ]);
 
-    await runOnboardingAgent({ model, store, google, topicName: "About You" });
+    await runOnboardingAgent({ model, store, google, topicName: "User" });
 
     expect(google.sentMail).toEqual([]);
   });

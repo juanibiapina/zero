@@ -72,14 +72,14 @@ describe("renderPinnedTopics", () => {
   });
 
   it("renders each pinned topic's name and body", () => {
-    const block = renderPinnedTopics([topic("About You", "name: Alice")]);
+    const block = renderPinnedTopics([topic("User", "name: Alice")]);
     expect(block).toContain("Pinned topics (always in your context)");
-    expect(block).toContain("### About You");
+    expect(block).toContain("### User");
     expect(block).toContain("name: Alice");
   });
 
   it("truncates a very long body", () => {
-    const block = renderPinnedTopics([topic("About You", "x".repeat(2000))]);
+    const block = renderPinnedTopics([topic("User", "x".repeat(2000))]);
     expect(block).toContain("…[truncated]");
     expect(block.length).toBeLessThan(2000);
   });
@@ -88,9 +88,9 @@ describe("renderPinnedTopics", () => {
 describe("runInterfaceAgent pinned surfacing", () => {
   it("includes a pinned topic's body in the system prompt", async () => {
     const store = new MemoryStore();
-    store.createTopic("About You", "identity");
-    store.updateTopicBody("About You", "name: Alice; city: Berlin");
-    store.setPinned("About You", true);
+    store.createTopic("User", "identity");
+    store.updateTopicBody("User", "name: Alice; city: Berlin");
+    store.setPinned("User", true);
 
     const captured: { system?: string } = {};
     const model = new MockLanguageModelV3({
