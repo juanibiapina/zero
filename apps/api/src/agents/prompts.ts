@@ -1,9 +1,24 @@
 // System prompts for the two agents. Kept in one place so the interface and
 // writer contracts are easy to read and adjust together.
 
-export const interfaceSystemPrompt = (): string =>
+// Absolute date anchor for the interface agent. The conversation renders each
+// message's age relatively ("5 min ago"), so the model needs one absolute point
+// to resolve those against and to interpret relative user phrasing ("tomorrow").
+const formatAnchor = (now: Date): string => {
+  const weekday = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+  const date = now.toISOString().slice(0, 10);
+  return `${weekday}, ${date}`;
+};
+
+export const interfaceSystemPrompt = (now: Date = new Date()): string =>
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
+
+Current date: ${formatAnchor(now)} (UTC). Message ages in the conversation are
+relative to now.
 
 You have a durable knowledge model made of topics: living documents each about
 one subject (a project, a person, an ongoing thread). Recall what a topic holds

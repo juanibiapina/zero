@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CONVERSATION_HEADER,
   FALLBACK_MESSAGE,
+  formatAge,
   renderConversation,
   runInterfaceAgent,
 } from "./interface";
+import { interfaceSystemPrompt } from "./prompts";
 import { scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
@@ -18,22 +20,49 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const NOW = new Date("2026-07-17T12:00:00.000Z");
+const iso = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
+
+describe("formatAge", () => {
+  it("buckets deltas from just-now to absolute fallback", () => {
+    expect(formatAge(iso(0), NOW)).toBe("just now");
+    expect(formatAge(iso(30_000), NOW)).toBe("just now");
+    expect(formatAge(iso(5 * 60_000), NOW)).toBe("5 min ago");
+    expect(formatAge(iso(3 * 3_600_000), NOW)).toBe("3 h ago");
+    expect(formatAge(iso(26 * 3_600_000), NOW)).toBe("yesterday");
+    expect(formatAge(iso(3 * 86_400_000), NOW)).toBe("3 days ago");
+    expect(formatAge(iso(7 * 86_400_000), NOW)).toBe("7 days ago");
+    expect(formatAge(iso(30 * 86_400_000), NOW)).toBe("on 2026-06-17");
+  });
+});
+
+describe("interfaceSystemPrompt", () => {
+  it("anchors the prompt with the current UTC date and weekday", () => {
+    expect(interfaceSystemPrompt(NOW)).toContain(
+      "Current date: Friday, 2026-07-17 (UTC).",
+    );
+  });
+});
+
 describe("renderConversation", () => {
-  it("renders empty history with only the new user message", () => {
-    expect(renderConversation([], "hi")).toBe(`${CONVERSATION_HEADER}\n\nUser: hi`);
+  it("renders empty history with only the new user message as just now", () => {
+    expect(renderConversation([], "hi", NOW)).toBe(
+      `${CONVERSATION_HEADER}\n\n[just now] User: hi`,
+    );
   });
 
-  it("renders mixed history in order, ending with the new user message", () => {
+  it("renders mixed history with relative ages, ending with the new message", () => {
     const rendered = renderConversation(
       [
-        { role: "user", content: "hello" },
-        { role: "assistant", content: "hi there" },
+        { role: "user", content: "hello", createdAt: iso(2 * 86_400_000) },
+        { role: "assistant", content: "hi there", createdAt: iso(5 * 60_000) },
       ],
       "how are you",
+      NOW,
     );
 
     expect(rendered).toBe(
-      `${CONVERSATION_HEADER}\n\nUser: hello\n\nYou: hi there\n\nUser: how are you`,
+      `${CONVERSATION_HEADER}\n\n[2 days ago] User: hello\n\n[5 min ago] You: hi there\n\n[just now] User: how are you`,
     );
   });
 });

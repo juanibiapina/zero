@@ -28,6 +28,9 @@ export interface InterfaceAgentInput {
   history: Message[];
   userMessage: string;
   search: WebSearch;
+  // Absolute reference time for the date anchor and relative message ages.
+  // Defaults to now; injected in tests for deterministic rendering.
+  now?: Date;
   // Test override for the step cap; production uses AGENT_MAX_STEPS.
   maxSteps?: number;
 }
@@ -38,17 +41,51 @@ export interface InterfaceAgentResult {
 }
 
 export const CONVERSATION_HEADER =
-  'Here is the conversation so far. Lines beginning "User:" are from the ' +
-  'user; lines beginning "You:" are your own earlier replies. Respond to the ' +
-  "latest user message.";
+  'Here is the conversation so far. Each line is prefixed with the message age ' +
+  'in brackets. Lines beginning "User:" are from the user; lines beginning ' +
+  '"You:" are your own earlier replies. Respond to the latest user message.';
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+// Coarse relative age of a message versus `now`. Buckets stay readable: sub-
+// minute is "just now", then minutes, hours, "yesterday", days, and past a week
+// it falls back to an absolute date ("37 days ago" stops being useful). The
+// absolute anchor lives in the system prompt so these deltas are resolvable.
+export const formatAge = (createdAt: string, now: Date): string => {
+  const delta = now.getTime() - new Date(createdAt).getTime();
+  if (delta < MINUTE_MS) return "just now";
+  if (delta < HOUR_MS) {
+    const m = Math.floor(delta / MINUTE_MS);
+    return `${m} min ago`;
+  }
+  if (delta < DAY_MS) {
+    const h = Math.floor(delta / HOUR_MS);
+    return `${h} h ago`;
+  }
+  const days = Math.floor(delta / DAY_MS);
+  if (days === 1) return "yesterday";
+  if (days <= 7) return `${days} days ago`;
+  return `on ${new Date(createdAt).toISOString().slice(0, 10)}`;
+};
 
 export const renderConversation = (
   history: Message[],
   userMessage: string,
+  now: Date = new Date(),
 ): string => {
-  const turns = [...history, { role: "user" as const, content: userMessage }];
+  // The current user message was just stored, so it is "just now": render it
+  // with `now` as its createdAt rather than widening the caller's contract.
+  const turns: Message[] = [
+    ...history,
+    { role: "user", content: userMessage, createdAt: now.toISOString() },
+  ];
   const body = turns
-    .map((m) => `${m.role === "user" ? "User" : "You"}: ${m.content}`)
+    .map((m) => {
+      const who = m.role === "user" ? "User" : "You";
+      return `[${formatAge(m.createdAt, now)}] ${who}: ${m.content}`;
+    })
     .join("\n\n");
   return `${CONVERSATION_HEADER}\n\n${body}`;
 };
@@ -95,11 +132,12 @@ export const runInterfaceAgent = async (
 
   // The agent's replies are the { replies, accessed } collected by the tool
   // closures above. The runner's returned text is the model's final prose.
+  const now = input.now ?? new Date();
   const start = Date.now();
   const { text, finishReason, steps } = await runAgent({
     model: input.model,
-    system: interfaceSystemPrompt(),
-    prompt: renderConversation(input.history, input.userMessage),
+    system: interfaceSystemPrompt(now),
+    prompt: renderConversation(input.history, input.userMessage, now),
     tools,
     maxSteps: input.maxSteps,
   });

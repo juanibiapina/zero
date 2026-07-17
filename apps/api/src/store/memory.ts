@@ -24,6 +24,7 @@ interface MsgRow {
   conversationId: string;
   role: Role;
   content: string;
+  createdAt: string;
 }
 
 export class MemoryStore implements Store {
@@ -119,14 +120,20 @@ export class MemoryStore implements Store {
   }
 
   storeMessage(conversationId: string, role: Role, content: string): void {
-    this.msgs.push({ id: this.nextMsgId++, conversationId, role, content });
+    this.msgs.push({
+      id: this.nextMsgId++,
+      conversationId,
+      role,
+      content,
+      createdAt: this.now(),
+    });
   }
 
   getConversationHistory(conversationId: string, limit: number): Message[] {
     return this.msgs
       .filter((m) => m.conversationId === conversationId)
       .slice(-limit)
-      .map((m) => ({ role: m.role, content: m.content }));
+      .map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt }));
   }
 
   resetConversation(chatId: number, topicId: number): void {

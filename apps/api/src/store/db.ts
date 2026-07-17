@@ -133,7 +133,11 @@ export class DbStore implements Store {
     });
     return rows
       .reverse()
-      .map((m) => ({ role: m.role as Role, content: m.content }));
+      .map((m) => ({
+        role: m.role as Role,
+        content: m.content,
+        createdAt: m.createdAt,
+      }));
   }
 
   resetConversation(chatId: number, topicId: number): void {

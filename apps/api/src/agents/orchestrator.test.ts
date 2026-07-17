@@ -56,7 +56,9 @@ describe("runTurn", () => {
     });
 
     expect(sink.sent).toEqual(["hello there"]);
-    const history = store.getConversationHistory(id, 10);
+    const history = store
+      .getConversationHistory(id, 10)
+      .map(({ role, content }) => ({ role, content }));
     expect(history).toEqual([
       { role: "user", content: "hi" },
       { role: "assistant", content: "hello there" },
@@ -168,7 +170,11 @@ describe("runTurn", () => {
     expect(sent).toEqual([FALLBACK_MESSAGE]);
     // The undelivered reply was persisted (persist-before-send) before the
     // send failed, so it remains in history alongside the fallback.
-    expect(store.getConversationHistory(id, 10)).toEqual([
+    expect(
+      store
+        .getConversationHistory(id, 10)
+        .map(({ role, content }) => ({ role, content })),
+    ).toEqual([
       { role: "user", content: "hi" },
       { role: "assistant", content: "undelivered" },
       { role: "assistant", content: FALLBACK_MESSAGE },
@@ -206,7 +212,9 @@ describe("runTurn", () => {
     ).resolves.toBeUndefined();
 
     expect(sink.sent).toEqual([FALLBACK_MESSAGE]);
-    const history = store.getConversationHistory(id, 10);
+    const history = store
+      .getConversationHistory(id, 10)
+      .map(({ role, content }) => ({ role, content }));
     expect(history).toEqual([
       { role: "user", content: "hi" },
       { role: "assistant", content: FALLBACK_MESSAGE },

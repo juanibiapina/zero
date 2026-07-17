@@ -8,6 +8,8 @@ export type Role = "user" | "assistant";
 export interface Message {
   role: Role;
   content: string;
+  // ISO-8601 creation time; used to render each message's relative age.
+  createdAt: string;
 }
 
 // Topic listing metadata (no body).

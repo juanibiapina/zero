@@ -96,14 +96,15 @@ describe("Store contract: conversations", () => {
     s.storeMessage(id, "user", "m1");
     s.storeMessage(id, "assistant", "m2");
     s.storeMessage(id, "user", "m3");
+    const ts = "2026-01-01T00:00:00.000Z";
     expect(s.getConversationHistory(id, 10)).toEqual([
-      { role: "user", content: "m1" },
-      { role: "assistant", content: "m2" },
-      { role: "user", content: "m3" },
+      { role: "user", content: "m1", createdAt: ts },
+      { role: "assistant", content: "m2", createdAt: ts },
+      { role: "user", content: "m3", createdAt: ts },
     ]);
     expect(s.getConversationHistory(id, 2)).toEqual([
-      { role: "assistant", content: "m2" },
-      { role: "user", content: "m3" },
+      { role: "assistant", content: "m2", createdAt: ts },
+      { role: "user", content: "m3", createdAt: ts },
     ]);
   });
 

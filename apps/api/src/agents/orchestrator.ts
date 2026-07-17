@@ -21,6 +21,9 @@ export interface TurnInput {
   topicId: number;
   historyLimit?: number;
   clerkUserId?: string;
+  // Reference time for the date anchor and relative message ages. Defaults to
+  // now; injected in tests for deterministic prompt rendering.
+  now?: Date;
 }
 
 // Process one awaiting-reply thread: run the interface agent (which persists
@@ -61,6 +64,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       search,
       history,
       userMessage,
+      now: input.now,
     });
 
     // Run the writer every turn, even when nothing was accessed: proactive
