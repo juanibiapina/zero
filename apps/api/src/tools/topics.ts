@@ -1,5 +1,12 @@
-// Interface-agent tools. Every topic read or write records the topic name in
-// `accessed` so the writer agent can later consolidate exactly those topics.
+// Topic tools shared by both agents. `buildTopicTools` gives the read/write
+// surface over the knowledge model (list/get/create/update); `buildInterfaceTools`
+// adds `reply` on top for the interface agent. Every topic read or write records
+// the topic name in the optional `accessed` set so the interface agent can hand
+// the writer exactly the topics it touched. `update_topic` is a partial patch:
+// any field left out keeps its current value, so a body-only revision (the
+// interface agent's usual call) leaves description/summary untouched, while the
+// writer can also refresh those and rename in one call.
+//
 // `reply` persists the assistant message then sends it to the user immediately
 // (live progress). Persist-before-send makes retries idempotent: the durable
 // row commits behind the DO output gate before the Telegram fetch leaves, so a
@@ -9,6 +16,84 @@
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import type { TopicStore } from "../store/types";
+
+export interface TopicToolDeps {
+  store: TopicStore;
+  // Optional: the interface agent passes a set to record which topics it read or
+  // wrote. The writer omits it — it has no downstream consumer of `accessed`.
+  accessed?: Set<string>;
+}
+
+export const buildTopicTools = (deps: TopicToolDeps): ToolSet => {
+  const { store, accessed } = deps;
+
+  return {
+    list_topics: tool({
+      description:
+        "List every topic with its metadata (name, description, summary) but no bodies. Use to see what topics exist.",
+      inputSchema: z.object({}),
+      execute: async () => store.listTopics(),
+    }),
+
+    get_topic: tool({
+      description:
+        "Get a topic's full content including its body. Read it before revising it.",
+      inputSchema: z.object({ name: z.string() }),
+      execute: async ({ name }) => {
+        const topic = store.getTopic(name);
+        if (!topic) return { error: `topic not found: ${name}` };
+        accessed?.add(name);
+        return topic;
+      },
+    }),
+
+    create_topic: tool({
+      description:
+        "Create a new topic for a subject worth remembering (a project, a person, an ongoing thread). Starts empty; fill it via update_topic.",
+      inputSchema: z.object({ name: z.string(), description: z.string() }),
+      execute: async ({ name, description }) => {
+        if (store.getTopic(name)) return { error: `topic exists: ${name}` };
+        store.createTopic(name, description);
+        accessed?.add(name);
+        return { created: name };
+      },
+    }),
+
+    update_topic: tool({
+      description:
+        "Patch a topic. Provide only the fields to change: body (full markdown), " +
+        "description (routing blurb), summary (state-of-the-topic), or newName to " +
+        "rename. Omitted fields keep their current value.",
+      inputSchema: z.object({
+        name: z.string(),
+        body: z.string().optional(),
+        description: z.string().optional(),
+        summary: z.string().optional(),
+        newName: z.string().optional(),
+      }),
+      execute: async ({ name, body, description, summary, newName }) => {
+        const current = store.getTopic(name);
+        if (!current) return { error: `topic not found: ${name}` };
+        try {
+          store.saveTopic(
+            name,
+            {
+              body: body ?? current.body,
+              description: description ?? current.description,
+              summary: summary ?? current.summary,
+            },
+            newName,
+          );
+          accessed?.add(name);
+          if (newName) accessed?.add(newName);
+          return { updated: newName ?? name };
+        } catch (err) {
+          return { error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+    }),
+  };
+};
 
 export interface InterfaceToolDeps {
   store: TopicStore;
@@ -24,6 +109,8 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
   const { store, send, persistReply, accessed, replies } = deps;
 
   return {
+    ...buildTopicTools({ store, accessed }),
+
     reply: tool({
       description:
         "Send a message to the user, shown immediately. Call once per message you want the user to see; text not sent via reply is never shown.",
@@ -37,49 +124,6 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
         await send(text);
         replies.push(text);
         return "sent";
-      },
-    }),
-
-    list_topics: tool({
-      description:
-        "List every topic with its metadata (name, description, summary) but no bodies. Use to see what topics exist.",
-      inputSchema: z.object({}),
-      execute: async () => store.listTopics(),
-    }),
-
-    get_topic: tool({
-      description:
-        "Get a topic's full content including its body. Read it before answering about that topic.",
-      inputSchema: z.object({ name: z.string() }),
-      execute: async ({ name }) => {
-        const topic = store.getTopic(name);
-        if (!topic) return { error: `topic not found: ${name}` };
-        accessed.add(name);
-        return topic;
-      },
-    }),
-
-    create_topic: tool({
-      description:
-        "Create a new topic for a subject worth remembering (a project, a person, an ongoing thread).",
-      inputSchema: z.object({ name: z.string(), description: z.string() }),
-      execute: async ({ name, description }) => {
-        if (store.getTopic(name)) return { error: `topic exists: ${name}` };
-        store.createTopic(name, description);
-        accessed.add(name);
-        return { created: name };
-      },
-    }),
-
-    update_topic: tool({
-      description:
-        "Revise a topic's body with fresh context. Replaces the body with the content you provide.",
-      inputSchema: z.object({ name: z.string(), body: z.string() }),
-      execute: async ({ name, body }) => {
-        if (!store.getTopic(name)) return { error: `topic not found: ${name}` };
-        store.updateTopicBody(name, body);
-        accessed.add(name);
-        return { updated: name };
       },
     }),
   };

@@ -43,14 +43,27 @@ Answer:
   you did find. Do not invent facts or sources.`;
 
 export const writerSystemPrompt = (): string =>
-  `You maintain living knowledge documents (topic bodies). You are given the
-topics that were accessed during a conversation turn and the exchange that just
-happened. For each topic that gained durable information, call save_topic once.
+  `You maintain the whole knowledge model: a set of topics, each a living
+document about one subject (a project, a person, an ongoing thread). You are
+given the exchange that just happened and the names of the topics the interface
+agent accessed this turn. Use list_topics to see everything that exists and
+get_topic to read a body before you change it.
+
+For each accessed topic that gained durable information:
+- get_topic to read its current body first.
+- Merge the new facts into the body under sensible sections. Never rewrite or
+  compact the whole document; preserve what is already there.
+- Append exactly one line to a "## Log" section summarising this exchange
+  (create the section if absent).
+- Write the result with update_topic, refreshing the summary (current state of
+  the topic) and the description (a short routing blurb) when they have moved.
+
+Proactively create topics:
+- If the exchange introduces a durable subject with no existing topic, check
+  list_topics to be sure, then create_topic and fill it with update_topic.
+- Prefer merging into an existing topic when one fits; never create a
+  near-duplicate.
 
 Rules:
-- Merge new durable facts into the existing body under sensible sections. Never
-  rewrite or compact the whole document; preserve what is already there.
-- Append exactly one line to a "## Log" section summarising this exchange.
-- Refresh the description (a short routing blurb: what belongs in this topic)
-  and the summary (the current state of the topic).
-- Skip a topic entirely if nothing durable was learned. Do not invent facts.`;
+- Skip trivial exchanges (chit-chat, acknowledgements) — make no tool call.
+- Never invent facts. Only record what the exchange actually established.`;

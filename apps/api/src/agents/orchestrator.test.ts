@@ -46,6 +46,8 @@ describe("runTurn", () => {
       model: scriptedModel([
         { tools: [{ name: "reply", input: { text: "hello there" } }] },
         { text: "" },
+        // writer runs every turn; trivial exchange → no tool call.
+        { text: "nothing to consolidate" },
       ]),
       send: sink.send,
       search: createMemorySearch(),
@@ -75,6 +77,8 @@ describe("runTurn", () => {
         model: scriptedModel([
           { tools: [{ name: "reply", input: { text: "hello there" } }] },
           { text: "" },
+          // writer runs every turn; trivial exchange → no tool call.
+          { text: "nothing to consolidate" },
         ]),
         send: sink.send,
         search: createMemorySearch(),
@@ -105,11 +109,12 @@ describe("runTurn", () => {
         { tools: [{ name: "get_topic", input: { name: "travel" } }] },
         { tools: [{ name: "reply", input: { text: "Have fun!" } }] },
         { text: "" },
-        // writer: save the topic
+        // writer: read then revise the topic
+        { tools: [{ name: "get_topic", input: { name: "travel" } }] },
         {
           tools: [
             {
-              name: "save_topic",
+              name: "update_topic",
               input: {
                 name: "travel",
                 body: "Rome trip planned.",

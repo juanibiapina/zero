@@ -38,16 +38,32 @@ pass).
      guard prevents re-sending text already delivered.
    - `list_topics`, `get_topic`, `create_topic`, `update_topic` — read/write the
      knowledge model. Every topic touched is added to an `accessed` set.
-2. **Writer agent** (`agents/writer.ts`, stateless per turn). Given the accessed
-   topics and the exchange, it consolidates durable knowledge via a single
-   `save_topic` tool: merge new facts into the body, append one `## Log` line,
-   and refresh description + summary. It never rewrites or compacts a body. A
-   fallback appends a log line to any accessed topic the model skipped, so no
-   exchange is silently dropped.
+2. **Writer agent** (`agents/writer.ts`, stateless per turn). The interface
+   agent's twin: the same `runAgent` machine with the same topic tools
+   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`),
+   minus `reply`/`research`. Its only extra input is the list of topic names the
+   interface agent accessed this turn. For each accessed topic that gained
+   durable information it reads the body (`get_topic`), merges new facts under
+   sensible sections, appends one `## Log` line, and writes back via
+   `update_topic`, refreshing summary and description. It never rewrites or
+   compacts a body. Because it has `list_topics` + `create_topic`, it is also
+   proactive: it creates a topic for any durable subject in the exchange with no
+   existing topic. Trivial exchanges (chit-chat, acks) get no tool call.
+
+The topic tools are shared: `update_topic` is a partial patch — provide only the
+fields to change (`body`, `description`, `summary`, `newName`); omitted fields
+keep their current value. The interface agent's usual body-only revision leaves
+summary/description untouched; the writer uses the full patch and rename. All
+writes go through `store.saveTopic`.
 
 The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
-load history, run the interface agent, then run the writer over the accessed
-topics. It knows nothing about alarms, DOs, or Telegram.
+load history, run the interface agent, then run the writer. It knows nothing
+about alarms, DOs, or Telegram. The writer runs **every** turn (not only when a
+topic was accessed) so proactive creation is possible on turns that introduce a
+brand-new subject; it is given the accessed-topic names, not pre-loaded bodies,
+and fetches bodies itself via `get_topic`. There is no longer a mechanical
+log-append fallback: the `## Log` line is a prompt-driven `update_topic` write,
+so a turn the writer judges trivial leaves the model untouched.
 
 Replies are persisted **as they are sent**, not after the turn. The `reply` tool
 (and both no-silence fallbacks) persist the assistant message before calling

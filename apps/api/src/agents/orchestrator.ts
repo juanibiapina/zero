@@ -63,20 +63,20 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       userMessage,
     });
 
-    if (accessed.length > 0) {
-      const topics = store.getTopicsWithBodies(accessed);
-      const writerStart = Date.now();
-      await runWriterAgent({
-        model,
-        store,
-        topics,
-        exchange: { user: userMessage, assistant: replies },
-      });
-      log("writer_completed", {
-        topics_count: topics.length,
-        duration_ms: Date.now() - writerStart,
-      });
-    }
+    // Run the writer every turn, even when nothing was accessed: proactive
+    // topic creation must be possible on turns that introduce a brand-new
+    // subject. The prompt keeps trivial turns to a single no-tool step.
+    const writerStart = Date.now();
+    await runWriterAgent({
+      model,
+      store,
+      accessed,
+      exchange: { user: userMessage, assistant: replies },
+    });
+    log("writer_completed", {
+      accessed_count: accessed.length,
+      duration_ms: Date.now() - writerStart,
+    });
   } catch (err) {
     // The agent path threw (LLM gateway error, malformed tool loop, etc.).
     // Tell the user and persist the fallback as an assistant message so the
