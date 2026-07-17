@@ -1,6 +1,8 @@
 // Topic tools shared by both agents. `buildTopicTools` gives the read/write
-// surface over the knowledge model (list/get/create/update); `buildInterfaceTools`
-// adds `reply` on top for the interface agent. Every topic read or write records
+// surface over the knowledge model (list/get/create/update/list_backlinks);
+// `buildInterfaceTools` adds `reply` on top for the interface agent. Topics link
+// to each other with Obsidian-style `[[Name]]` tokens in their bodies; the store
+// keeps outbound/backlink rows in sync, and get_topic/list_backlinks expose them. Every topic read or write records
 // the topic name in the optional `accessed` set so the interface agent can hand
 // the writer exactly the topics it touched. `update_topic` is a partial patch:
 // any field left out keeps its current value, so a body-only revision (the
@@ -37,13 +39,31 @@ export const buildTopicTools = (deps: TopicToolDeps): ToolSet => {
 
     get_topic: tool({
       description:
-        "Get a topic's full content including its body. Read it before revising it.",
+        "Get a topic's full content including its body, plus its links: " +
+        "`outboundLinks` (topics its body links to via [[Name]]) and `backlinks` " +
+        "(topics that link to it). Read it before revising it.",
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
         const topic = store.getTopic(name);
         if (!topic) return { error: `topic not found: ${name}` };
         accessed?.add(name);
-        return topic;
+        return {
+          ...topic,
+          outboundLinks: store.getOutboundLinks(name),
+          backlinks: store.getBacklinks(name).map((t) => t.name),
+        };
+      },
+    }),
+
+    list_backlinks: tool({
+      description:
+        "List the topics whose body links to the named topic via [[Name]] " +
+        "(its back-references). Use to find what references a topic before " +
+        "renaming, merging, or answering \"what mentions X?\".",
+      inputSchema: z.object({ name: z.string() }),
+      execute: async ({ name }) => {
+        accessed?.add(name);
+        return store.getBacklinks(name);
       },
     }),
 

@@ -63,6 +63,14 @@ export class UserDO extends DurableObject<Env> {
     this.store.saveTopic(name, patch, newName);
   }
 
+  getOutboundLinks(name: string): string[] {
+    return this.store.getOutboundLinks(name);
+  }
+
+  getBacklinks(name: string): TopicMeta[] {
+    return this.store.getBacklinks(name);
+  }
+
   // --- Conversations and messages ---
 
   getOrCreateConversation(chatId: number, topicId: number): string {

@@ -7,7 +7,9 @@ import {
   conversations,
   messages,
   topics,
+  topicLinks,
 } from "../UserDO/db/schema";
+import { extractLinks, rewriteLinks } from "./links";
 import type {
   Message,
   Role,
@@ -43,6 +45,50 @@ export class DbStore implements Store {
     return t ? toTopic(t) : null;
   }
 
+  // Re-derive a topic's outbound link rows from its body. Resolves each
+  // `[[Name]]` to the target topic's id when one exists (else null: a dangling
+  // link). Called on every body write so rows never drift from the text.
+  private syncOutboundLinks(sourceId: number, body: string): void {
+    this.db.delete(topicLinks, { where: eq("sourceId", sourceId) });
+    for (const target of extractLinks(body)) {
+      const t = this.db.get(topics, { where: eq("name", target) });
+      this.db.insert(topicLinks, {
+        sourceId,
+        targetName: target,
+        targetId: t ? t.id : null,
+      });
+    }
+  }
+
+  getOutboundLinks(name: string): string[] {
+    const t = this.db.get(topics, { where: eq("name", name) });
+    if (!t) return [];
+    return this.db
+      .all(topicLinks, { where: eq("sourceId", t.id) })
+      .map((l) => l.targetName);
+  }
+
+  getBacklinks(name: string): TopicMeta[] {
+    const rows = this.db.all(topicLinks, { where: eq("targetName", name) });
+    const seen = new Set<number>();
+    const out: TopicMeta[] = [];
+    for (const r of rows) {
+      if (seen.has(r.sourceId)) continue;
+      seen.add(r.sourceId);
+      const t = this.db.get(topics, { where: eq("id", r.sourceId) });
+      if (t) {
+        out.push({
+          name: t.name,
+          description: t.description,
+          summary: t.summary,
+          lastActiveAt: t.lastActiveAt,
+          messageCount: t.messageCount,
+        });
+      }
+    }
+    return out;
+  }
+
   createTopic(name: string, description: string): void {
     const now = this.nowIso();
     this.db.insert(topics, {
@@ -54,6 +100,15 @@ export class DbStore implements Store {
       lastActiveAt: now,
       messageCount: 0,
     });
+    // Resolve any dangling links that pointed at this name before it existed.
+    const created = this.db.get(topics, { where: eq("name", name) });
+    if (created) {
+      this.db.update(
+        topicLinks,
+        { targetId: created.id },
+        { where: eq("targetName", name) },
+      );
+    }
   }
 
   updateTopicBody(name: string, body: string): void {
@@ -62,6 +117,8 @@ export class DbStore implements Store {
       { body, lastActiveAt: this.nowIso() },
       { where: eq("name", name) },
     );
+    const t = this.db.get(topics, { where: eq("name", name) });
+    if (t) this.syncOutboundLinks(t.id, body);
   }
 
   getTopicsWithBodies(names: string[]): Topic[] {
@@ -97,6 +154,31 @@ export class DbStore implements Store {
       },
       { where: eq("id", existing.id) },
     );
+
+    if (rename && newName) {
+      // Links that already targeted the new name (dangling before now) resolve
+      // to this topic.
+      this.db.update(
+        topicLinks,
+        { targetId: existing.id },
+        { where: eq("targetName", newName) },
+      );
+      // Rewrite `[[name]]` -> `[[newName]]` in every other body and re-derive
+      // their rows, so bodies and rows move together.
+      for (const other of this.db.all(topics)) {
+        if (other.id === existing.id) continue;
+        const rewritten = rewriteLinks(other.body, name, newName);
+        if (rewritten !== other.body) {
+          this.db.update(
+            topics,
+            { body: rewritten },
+            { where: eq("id", other.id) },
+          );
+          this.syncOutboundLinks(other.id, rewritten);
+        }
+      }
+    }
+    this.syncOutboundLinks(existing.id, patch.body);
   }
 
   // --- conversations ---

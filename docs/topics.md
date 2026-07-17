@@ -21,6 +21,31 @@ Topics are the agent's long-term memory. They are addressed by name through the
 tools below; the interface agent discovers them itself (no separate routing
 pass).
 
+### Links between topics
+
+Topic bodies link to each other with Obsidian-style `[[Topic Name]]` tokens, so
+the knowledge model is a graph, not a flat list. A link is the target topic's
+exact `name` wrapped in double brackets; it resolves to that topic. This lets
+the writer keep topics small and granular and connect related subjects (a person
+links `[[Trip to Japan]]`, a project links `[[Deadline]]`) instead of copying
+facts between bodies.
+
+Links are first-class rows in `topic_links` (see `schema.ts`, migration
+`0018_topic_links.sql`): one row per (source topic, target name), with a
+`targetId` foreign key resolved when a topic of that name exists (else null, a
+dangling link). The `Store` maintains one invariant: a topic's outbound rows are
+always exactly the `[[Name]]` tokens in its current body. `syncOutboundLinks`
+re-derives them on every `saveTopic`/`updateTopicBody`, so rows never drift from
+the text. Creating a topic resolves any dangling links that were waiting for that
+name. A rename rewrites `[[old]]` -> `[[new]]` in every other body and re-derives
+their rows, so bodies and links move together and never break. This logic lives
+in both Store adapters and is covered by `store/store-contract.test.ts`; the
+`[[Name]]` parsing/rewriting helpers are the pure functions in `store/links.ts`.
+
+Agents see the graph through the topic tools: `get_topic` returns a topic's
+`outboundLinks` and `backlinks` alongside its body, and `list_backlinks` lists
+what references a topic (used before renaming or merging).
+
 ## Two-phase turn
 
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new
@@ -36,11 +61,12 @@ pass).
      (even a bare "Searching now..." ack) had gone out silently dropped the real
      answer. Delivering the final message keeps ack-then-answer intact; the echo
      guard prevents re-sending text already delivered.
-   - `list_topics`, `get_topic`, `create_topic`, `update_topic` — read/write the
-     knowledge model. Every topic touched is added to an `accessed` set.
+   - `list_topics`, `get_topic`, `create_topic`, `update_topic`,
+     `list_backlinks` — read/write the knowledge model and its `[[Name]]` link
+     graph. Every topic touched is added to an `accessed` set.
 2. **Writer agent** (`agents/writer.ts`, stateless per turn). The interface
    agent's twin: the same `runAgent` machine with the same topic tools
-   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`),
+   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`/`list_backlinks`),
    minus `reply`/`research`. Its inputs are the **turn transcript** and the list
    of topic names the interface agent accessed this turn. The transcript is a
    serialization of the interface run: the user message, every tool call and its

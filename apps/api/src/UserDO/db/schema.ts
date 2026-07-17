@@ -1,4 +1,4 @@
-import { table, column } from "do-orm";
+import { table, column, ref } from "do-orm";
 
 export const telegramLink = table("telegram_link", {
   id: column.integer().primaryKey().autoIncrement(),
@@ -18,7 +18,7 @@ export const userSettings = table("user_settings", {
 // Topics: the durable knowledge model. `id` is a stable surrogate key so a
 // rename is a one-field `name` update; `name` is what the agent addresses.
 export const topics = table("topics", {
-  id: column.integer().primaryKey().autoIncrement(),
+  id: column.integer().notNull().primaryKey().autoIncrement(),
   name: column.text().notNull().unique(),
   description: column.text().notNull().default(""),
   summary: column.text().notNull().default(""),
@@ -26,6 +26,16 @@ export const topics = table("topics", {
   createdAt: column.text().notNull(),
   lastActiveAt: column.text().notNull(),
   messageCount: column.integer().notNull().default(0),
+});
+
+// Topic links: the `[[Name]]` wiki-links found in a topic body, one row per
+// (source topic, target name). `targetId` resolves to the target topic when one
+// with that exact `name` exists, else null (a dangling link). Rows are
+// re-derived from the body on every write, so they never drift from the text.
+export const topicLinks = table("topic_links", {
+  sourceId: column.integer().notNull().references(ref(topics, "id")),
+  targetName: column.text().notNull(),
+  targetId: column.integer().references(ref(topics, "id")),
 });
 
 // Conversations: one thread per Telegram (chatId, topicId). `busySince` marks a

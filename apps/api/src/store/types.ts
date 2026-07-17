@@ -45,6 +45,11 @@ export interface TopicStore {
     patch: { body: string; description: string; summary: string },
     newName?: string,
   ): void;
+  // Target names this topic links to via `[[Name]]` (distinct, includes
+  // dangling links whose target does not exist yet).
+  getOutboundLinks(name: string): string[];
+  // Topics whose body links to `name` (its back-references).
+  getBacklinks(name: string): TopicMeta[];
 }
 
 export interface ConversationStore {

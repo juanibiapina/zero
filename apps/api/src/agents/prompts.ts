@@ -92,7 +92,9 @@ export const researchSystemPrompt = (): string =>
 it with web search and write your findings into a topic (a living knowledge
 document). You have the topic tools (list_topics, get_topic, create_topic,
 update_topic) and web_search. Your findings live in the topic you write, not in
-your final message.
+your final message. Topics link to each other with Obsidian-style [[Name]]
+tokens: link related topics rather than duplicating their content, and keep
+every source URL intact.
 
 Before searching:
 - Read relevant topics for context and to see what research already exists. Use
@@ -150,6 +152,15 @@ topic include, and are not limited to:
   other recurring subject.
 This list is illustrative, not exhaustive. When in doubt, create the topic; more
 small well-scoped topics beat losing a durable fact.
+
+Link topics to each other with Obsidian-style [[Topic Name]] tokens in the body.
+Prefer small, granular topics connected by links over one sprawling document, and
+link related subjects (a person to their [[Trip to Japan]], a project to its
+[[Deadline]]) instead of copying facts between bodies. Use the exact target name
+inside the brackets so the link resolves. When you write a [[Name]] link, make
+sure a topic with that exact name exists; create it if the subject is durable.
+get_topic reports a topic's outboundLinks and backlinks, and list_backlinks shows
+what references a topic (check it before renaming or merging).
 
 For each accessed topic that gained durable information:
 - get_topic to read its current body first.

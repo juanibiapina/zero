@@ -80,6 +80,56 @@ describe("Store contract: topics", () => {
   });
 });
 
+describe("Store contract: topic links", () => {
+  const save = (s: Store, name: string, body: string) =>
+    s.saveTopic(name, { body, description: "", summary: "" });
+
+  it("derives outbound links from the body", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    save(s, "a", "see [[b]] and [[c]]");
+    expect(s.getOutboundLinks("a").sort()).toEqual(["b", "c"]);
+  });
+
+  it("re-derives outbound links when the body changes", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    save(s, "a", "[[b]] [[c]]");
+    save(s, "a", "only [[b]] now");
+    expect(s.getOutboundLinks("a")).toEqual(["b"]);
+  });
+
+  it("tracks backlinks even when the target does not exist yet", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    save(s, "a", "points at [[b]]");
+    // b does not exist: the link is dangling but still a backlink of b.
+    expect(s.getBacklinks("b").map((t) => t.name)).toEqual(["a"]);
+    s.createTopic("b", "");
+    expect(s.getBacklinks("b").map((t) => t.name)).toEqual(["a"]);
+  });
+
+  it("rename rewrites `[[old]]` tokens in other bodies and keeps backlinks", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    s.createTopic("japan", "");
+    save(s, "a", "trip: [[japan]] near [[japan bar]]");
+    s.saveTopic("japan", { body: "", description: "", summary: "" }, "japan 2026");
+    expect(s.getTopic("a")?.body).toBe("trip: [[japan 2026]] near [[japan bar]]");
+    expect(s.getBacklinks("japan 2026").map((t) => t.name)).toEqual(["a"]);
+    expect(s.getBacklinks("japan")).toEqual([]);
+  });
+
+  it("drops link rows when a link is removed from the body", () => {
+    const s = makeStore();
+    s.createTopic("a", "");
+    save(s, "a", "[[b]]");
+    save(s, "a", "no more links");
+    expect(s.getOutboundLinks("a")).toEqual([]);
+    expect(s.getBacklinks("b")).toEqual([]);
+  });
+});
+
 describe("Store contract: conversations", () => {
   it("getOrCreateConversation is stable per (chatId, topicId)", () => {
     const s = makeStore();
