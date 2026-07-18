@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-18: Send Zero a photo, PDF, or file and it can read and work with it.
 - 2026-07-18: Zero can now tell you about itself and its latest features.
 - 2026-07-17: Zero remembers what matters to you across conversations, organized into topics you can browse and that link to each other.
 - 2026-07-17: Zero reads and sends your Gmail and reads and schedules on your Google Calendar.

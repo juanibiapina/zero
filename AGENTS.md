@@ -4,6 +4,22 @@
 
 During development, use `gob run bin/ci` to run all necessary checks including build, linter, tests etc.
 
+## Changelog
+
+Any change a user can observe (new capability, changed behavior, user-visible
+fix) must add a bullet to the root `CHANGELOG.md` **in the same change**. Include
+the changelog entry in the plan and commit it together with the code, never as a
+separate follow-up after deployment.
+
+- Format: `- YYYY-MM-DD: <what the user now sees or gets>`, most recent first.
+- Write from the user's perspective. No module or function names, no internal
+  mechanics.
+- Purely internal changes (refactors, tests, infra) get no entry.
+
+`CHANGELOG.md` is surfaced in-product as the read-only "Changelog" system topic
+(`apps/api/src/store/system-topics.ts`), so every entry ships to users on the
+next deploy. Keep entries clean and user-facing.
+
 ## Deployment
 
 Pushing to `main` auto-deploys to production via the Cloudflare Git
