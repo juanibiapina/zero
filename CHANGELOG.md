@@ -8,9 +8,6 @@ User-facing changes to Zero, most recent first.
 - 2026-07-17: When you connect Google, Zero reads your inbox to learn who you are and get set up.
 - 2026-07-17: Zero follows your timezone, so "tomorrow" and "this afternoon" mean the right thing.
 - 2026-07-16: Ask Zero to look something up and it searches the web before answering.
-- 2026-06-16: Tables in replies show as readable lists instead of cramped grids.
-- 2026-06-04: Send photos and files to Zero in the chat.
 - 2026-05-28: Message Zero directly, not only inside group topics.
-- 2026-05-27: Replies are formatted for Telegram instead of raw markdown.
 - 2026-05-26: Send /new in a topic to start a fresh conversation.
 - 2026-05-17: Sign in on the web and link your Telegram account to start using Zero.

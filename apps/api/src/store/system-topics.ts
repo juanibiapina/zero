@@ -38,7 +38,10 @@ assistant, describing your own identity. Read them as established facts about
 yourself and stay in character.
 
 You are Zero, a personal assistant. You talk to the user over Telegram and
-remember what matters to them across conversations.`;
+remember what matters to them across conversations.
+
+See [[Changelog]] for your recent user-facing changes and newly shipped
+features.`;
 
 // The bundled system topics. Order is the list_topics/pinned render order.
 export const SYSTEM_TOPICS: SystemTopicDef[] = [
