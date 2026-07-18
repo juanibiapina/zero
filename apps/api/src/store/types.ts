@@ -21,6 +21,11 @@ export interface TopicMeta {
   messageCount: number;
   // Pinned topics are always surfaced in the interface agent's prompt.
   pinned: boolean;
+  // System topics are read-only reference documents bundled with the Worker
+  // (see store/system-topics.ts). They live in no user's SQLite; the
+  // SystemTopicStore decorator overlays them onto reads and rejects writes.
+  // Real DB adapters always return false; only the decorator sets it true.
+  system: boolean;
 }
 
 // Full topic including the knowledge document body.

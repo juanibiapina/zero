@@ -6,6 +6,8 @@ import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
+import { SystemTopicStore } from "../store/system-topics";
+import type { Store } from "../store/types";
 import { createModel } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
 import { createGoogleWorkspace } from "../google/rest";
@@ -29,12 +31,15 @@ const USER_TOPIC_DESCRIPTION =
 
 export class UserDO extends DurableObject<Env> {
   private db: Database;
-  private store: DbStore;
+  // Wrapped in SystemTopicStore so the read-only system topics (Zero,
+  // Changelog) are overlaid on every read and blocked from writes. See
+  // store/system-topics.ts.
+  private store: Store;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = createDb(ctx.storage);
-    this.store = new DbStore(this.db);
+    this.store = new SystemTopicStore(new DbStore(this.db));
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);

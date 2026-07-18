@@ -62,6 +62,35 @@ that keeps growing can't blow up the prompt; the full body is still reachable
 via `get_topic`. Pinning survives a `saveTopic` rename. The tradeoff is a
 slightly higher token cost every turn in exchange for always-on identity.
 
+### System topics
+
+Some topics are **read-only reference documents bundled with the Worker**, the
+same for every user and versioned with the code. They live in no user's SQLite.
+There are two: `Zero` (the assistant's own identity and how it communicates,
+pinned so it is always in context) and `Changelog` (Zero's user-facing changelog,
+unpinned but discoverable via `list_topics`, its body sourced from the repo-root
+`CHANGELOG.md`). Their definitions are `SYSTEM_TOPICS` in
+`store/system-topics.ts`; the `Zero` body is authored inline and the `Changelog`
+body is a text import of `CHANGELOG.md` (bundled via the wrangler `Text` rule for
+`**/*.md`, mirrored for vitest by the `text-imports` plugin in
+`vitest.config.ts`).
+
+They are not seeded into the database. `SystemTopicStore` (same file) decorates
+the `Store`: it overlays the bundled topics onto every read
+(`getTopic`/`listTopics`/`getPinnedTopics`/`getTopicsWithBodies`/`getOutboundLinks`,
+with `system: true` set on the returned rows) and rejects every write to a
+system name (`createTopic`/`saveTopic`/`updateTopicBody`/`deleteTopic`/`setPinned`
+throw `topic is read-only`). `getBacklinks` delegates unchanged, so a user topic
+linking `[[Zero]]` still resolves. The `UserDO` wraps its `DbStore` in this
+decorator once at construction, so every consumer (DO RPC methods, the
+orchestrator, all three agents) sees the same overlay. Read-only is thus enforced
+structurally at the store boundary, not by a prompt or a soft tool check; the
+`update_topic`/`delete_topic` tools surface the thrown error as a tool error. The
+writer prompt also tells it not to edit `Zero`/`Changelog`, to avoid a wasted,
+always-rejected call. Updating a system topic is a source edit plus deploy (edit
+the `Zero` body or `CHANGELOG.md`); every user picks up the new content with no
+migration and no per-user seeding.
+
 ## Two-phase turn
 
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new

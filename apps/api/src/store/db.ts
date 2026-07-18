@@ -38,6 +38,7 @@ export class DbStore implements Store {
         lastActiveAt: t.lastActiveAt,
         messageCount: t.messageCount,
         pinned: !!t.pinned,
+        system: false,
       }));
   }
 
@@ -85,6 +86,7 @@ export class DbStore implements Store {
           lastActiveAt: t.lastActiveAt,
           messageCount: t.messageCount,
           pinned: !!t.pinned,
+          system: false,
         });
       }
     }
@@ -313,5 +315,6 @@ function toTopic(t: {
     lastActiveAt: t.lastActiveAt,
     messageCount: t.messageCount,
     pinned: !!t.pinned,
+    system: false,
   };
 }

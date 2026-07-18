@@ -26,6 +26,13 @@ describe("Store contract: topics", () => {
     expect(makeStore().getTopic("nope")).toBeNull();
   });
 
+  it("real adapter topics are never system", () => {
+    const s = makeStore();
+    s.createTopic("weather", "");
+    expect(s.getTopic("weather")?.system).toBe(false);
+    expect(s.listTopics()[0]?.system).toBe(false);
+  });
+
   it("deleteTopic removes the topic", () => {
     const s = makeStore();
     s.createTopic("gone", "");

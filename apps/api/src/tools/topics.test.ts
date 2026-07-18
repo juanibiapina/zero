@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { buildTopicTools, buildInterfaceTools } from "./topics";
 import { MemoryStore } from "../store/memory";
+import { SystemTopicStore } from "../store/system-topics";
+import type { TopicStore } from "../store/types";
 
-const makeInterfaceTools = (store: MemoryStore) =>
+const makeInterfaceTools = (store: TopicStore) =>
   buildInterfaceTools({
     store,
     send: async () => {},
@@ -78,5 +80,31 @@ describe("delete_topic tool", () => {
       name: "nope",
     });
     expect(res.error).toContain("topic not found");
+  });
+
+  it("returns a read-only error for a system topic", async () => {
+    const store = new SystemTopicStore(
+      new MemoryStore(() => "2026-01-01T00:00:00.000Z"),
+    );
+    const tools = makeInterfaceTools(store);
+    const res = await call<{ error: string }>(tools.delete_topic as never, {
+      name: "Zero",
+    });
+    expect(res.error).toContain("read-only");
+  });
+});
+
+describe("update_topic tool on system topics", () => {
+  it("returns a read-only error", async () => {
+    const store = new SystemTopicStore(
+      new MemoryStore(() => "2026-01-01T00:00:00.000Z"),
+    );
+    const tools = buildTopicTools({ store });
+    const res = await call<{ error: string }>(tools.update_topic as never, {
+      name: "Zero",
+      body: "hacked",
+    });
+    expect(res.error).toContain("read-only");
+    expect(store.getTopic("Zero")?.body).not.toBe("hacked");
   });
 });

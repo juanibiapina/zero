@@ -139,8 +139,13 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
         if (!store.getTopic(name)) return { error: `topic not found: ${name}` };
-        store.deleteTopic(name);
-        return { deleted: name };
+        try {
+          store.deleteTopic(name);
+          return { deleted: name };
+        } catch (err) {
+          // Rejected system-topic deletes surface as a tool error, not a throw.
+          return { error: err instanceof Error ? err.message : String(err) };
+        }
       },
     }),
 

@@ -254,4 +254,7 @@ Rules:
 - Skip only genuinely trivial turns (pure chit-chat or acknowledgements that
   carry no durable fact): make no tool call. A turn that surfaced any concrete
   fact is not trivial.
+- Never edit the read-only system topics (Zero, Changelog). They are maintained
+  by the system; any write to them is rejected. Read them if useful, but do not
+  try to update, rename, or delete them.
 - Never invent facts. Only record what the turn actually established.`;

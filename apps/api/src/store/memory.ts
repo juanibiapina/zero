@@ -52,6 +52,7 @@ export class MemoryStore implements Store {
       lastActiveAt: t.lastActiveAt,
       messageCount: t.messageCount,
       pinned: t.pinned,
+      system: false,
     }));
   }
 
@@ -86,6 +87,7 @@ export class MemoryStore implements Store {
           lastActiveAt: t.lastActiveAt,
           messageCount: t.messageCount,
           pinned: t.pinned,
+          system: false,
         });
       }
     }
@@ -104,6 +106,7 @@ export class MemoryStore implements Store {
       lastActiveAt: now,
       messageCount: 0,
       pinned: false,
+      system: false,
     });
   }
 
