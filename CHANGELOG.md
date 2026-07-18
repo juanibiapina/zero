@@ -1,8 +1,5 @@
 # Changelog
 
-All notable user-facing changes to Zero are recorded here.
+User-facing changes to Zero, most recent first.
 
-## [Unreleased]
-
-### Added
-- Zero now knows about itself: ask what it is, how it works, or what's new and it can tell you, including its latest features.
+- 2026-07-18: Zero can now tell you about itself and its latest features.
