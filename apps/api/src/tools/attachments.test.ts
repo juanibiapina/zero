@@ -154,7 +154,7 @@ describe("view_attachment", () => {
     const parts = second.messages.flatMap((m) =>
       Array.isArray(m.content) ? m.content : [],
     );
-    const toolResult = parts.find((p) => p.type === "tool_result") as {
+    const toolResult = parts.find((p) => p.type === "tool_result") as unknown as {
       content: Array<{
         type: string;
         source?: { type: string; media_type: string; data: string };
