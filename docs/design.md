@@ -21,9 +21,10 @@ alarm), then returns 200 immediately. The alarm runs the turn:
 LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic; the gateway
 stores the real key and bills us directly) authenticated with
 `cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
-`MODEL_ID` (`claude-sonnet-4-6`). All durable state is the DO SQLite (topics,
-conversations, messages); there is no container, no per-user filesystem, and no
-R2 archive. A self-rescheduling `setTimeout` drives the Telegram typing action
+`MODEL_ID` (`claude-sonnet-4-6`). Durable state is the DO SQLite (topics,
+conversations, messages, attachment metadata); image bytes live in the
+`ATTACHMENTS` R2 bucket. There is no container and no per-user filesystem. A
+self-rescheduling `setTimeout` drives the Telegram typing action
 while a turn runs. See [`topics.md`](topics.md) for the full design of the topic
 model and the two agents.
 
@@ -101,13 +102,33 @@ in-memory search/Google adapters; `UserDO` supplies the production `DbStore`,
 provider) adapters and the alarm-driven execution.
 
 The interface agent and the research agent are the **same runner**
-(`agents/run.ts`: `model + system + prompt + tools → final text`) instantiated
-with different system prompts and toolsets. The interface agent's returned text
-is ignored (its output is the `{ replies, accessed }` collected by its tool
-closures); it exposes a `research` tool that spawns a research-prompted agent
-armed with `web_search`, whose final message becomes the tool result. Both run
-inline in the turn's DO alarm. See [`topics.md`](topics.md),
+(`agents/run.ts`: `model + system + (prompt | messages) + tools → final text`)
+instantiated with different system prompts and toolsets. The interface agent's
+returned text is ignored (its output is the `{ replies, accessed }` collected by
+its tool closures); it exposes a `research` tool that spawns a research-prompted
+agent armed with `web_search`, whose final message becomes the tool result. Both
+run inline in the turn's DO alarm. See [`topics.md`](topics.md),
 [`research.md`](research.md), and [`framework.md`](framework.md).
+
+**Structured message history (interface agent).** The interface agent builds a
+real `ModelMessage[]` conversation (`buildConversationMessages` in
+`agents/interface.ts`), not a single flattened blob. The split is deliberate:
+
+- **System prompt** carries everything that is instruction or stable reference,
+  not a turn: agent instructions, the datetime anchor, and the pinned-topics
+  block.
+- **`messages`** carries only the Telegram dialogue: each stored user/assistant
+  message as a native turn, ending with the current user message. The AI SDK
+  appends live tool-call/result/assistant messages to this array during the run.
+
+Each user message is prefixed with an absolute timestamp `[YYYY-MM-DD HH:MM]` in
+the user's timezone (stable turn-to-turn, cache-friendly); assistant messages
+are verbatim. Leading assistant messages are dropped so the array starts on a
+`user` turn (Anthropic requirement), and consecutive same-role turns are
+coalesced (proxy compatibility). Only final user/assistant **text** is persisted
+— never tool blocks — which structurally avoids orphaned `tool_use` 400s and
+keeps cross-turn memory in topics, not the transcript. The research, writer, and
+onboarding agents still use the single-`prompt` path.
 
 ## State Model
 
@@ -133,6 +154,7 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `topics`            | `id`, `name`, `description`, `summary`, `body`, timestamps, `messageCount` | The knowledge model (see [`topics.md`](topics.md)) |
 | `conversations`     | `id`, `chatId`, `topicId`, `createdAt`, `busySince`          | One thread per Telegram (chatId, topicId)      |
 | `messages`          | `id`, `conversationId`, `role`, `content`, `createdAt`       | User/assistant exchanges                       |
+| `attachments`       | `id`, `conversationId`, `r2Key`, `filename`, `mimeType`, `createdAt` | Image lookup-by-id (bytes live in R2)  |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |
 
 The `telegram_link` table is the source of truth for the Clerk↔Telegram mapping.
@@ -191,18 +213,46 @@ immediately. The background task:
 
 1. `resolveContext` keeps topic messages and DMs; everything else is dropped.
 2. KV `tg:{telegramId}` → `clerkUserId`; drop the message if unknown.
-3. `UserDO.enqueueTurn` dedupes on `processed_updates`, stores the user
-   message, and arms the DO alarm. The alarm runs the turn (see Architecture).
+3. For an image, the bytes are downloaded to R2 and an `attachments` row plus a
+   text marker are prepared (see Attachments).
+4. `UserDO.enqueueTurn` dedupes on `processed_updates`, stores the user
+   message (with any marker) and attachment rows, and arms the DO alarm. The
+   alarm runs the turn (see Architecture).
 
 The webhook URL and secret are registered with Telegram manually via the Bot
 API's `setWebhook` method — see [`telegram-webhook.md`](telegram-webhook.md).
 
 ### Attachments
 
-Attachments are out of scope for the topic-model MVP. An attachment-only message
-gets a short notice and is skipped; a message with both text and an attachment
-is processed as text with a notice that the file was ignored. Reintroduce
-downloading/handling later behind the topic model.
+**Images** are supported via an on-demand `view_attachment` tool. Image bytes
+never ride in the conversation history (they would cost ~1,600 tokens every turn
+they stayed in context, and could not persist at their real position across a
+re-flattened turn). Instead:
+
+1. On an image message the webhook downloads the bytes
+   (`downloadTelegramFile`), enforces a ~5 MB cap, and puts them in the
+   `ATTACHMENTS` R2 bucket under `attachments/{clerkUserId}/{file_unique_id}`
+   (per-user prefix so a user's files list/delete together; the unique-id
+   component makes duplicate webhooks idempotent). It persists an `attachments`
+   metadata row and enqueues the turn with a text marker appended to the message
+   body: `[image "cat.jpg" id=att_abc]`.
+2. The interface agent calls `view_attachment(id)` when it needs to see an
+   image; the tool resolves the id to R2 bytes (user-scoped via the DO) and
+   returns them inside an intra-turn `tool_result` image block.
+3. Across turns only the marker persists (tool results are stripped), so a later
+   reference re-fetches by id. Images are billed only on turns where they are
+   viewed.
+
+The `AttachmentStore` port (`apps/api/src/attachments/types.ts`) abstracts the
+bytes: `createR2Attachments` in prod, an in-memory adapter in tests.
+`deleteAllForUser` (wired into Telegram unlink) removes every object under the
+user's prefix. The bot token stays in the download URL and never reaches
+Anthropic.
+
+**Non-image attachments** (PDF, audio, video, voice, stickers, documents) stay
+out of scope: an attachment-only message gets a short notice and is skipped; a
+message with both text and such a file is processed as text with a notice that
+the file was ignored.
 
 ## Secrets
 
@@ -253,7 +303,14 @@ Conventions:
 
 ## Future Work
 
-- Reintroduce attachments behind the topic model.
+- Support non-image attachments (PDF, audio, video) through the same
+  `view_attachment` path once their `tool_result` serialization is verified.
+- Prompt caching: the structured message history keeps per-message content
+  stable (absolute timestamps, verbatim assistant text) so a top-level
+  `cache_control` marker can be added without a mutating prefix.
+- Consider structured `ModelMessage[]` history for the research and writer
+  agents (they currently use the single-`prompt` path).
+- An R2 lifecycle expiry rule for attachment objects.
 - Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
   shapes are known; Google onboarding is the first, deliberately minimal, one
   (see [`onboarding.md`](onboarding.md)).

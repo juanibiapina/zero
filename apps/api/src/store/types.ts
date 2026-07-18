@@ -41,6 +41,18 @@ export interface Thread {
   topicId: number;
 }
 
+// An attachment the user sent. Bytes live in R2 under `r2Key`; this row is the
+// lookup-by-id record so view_attachment can resolve an id referenced from any
+// past turn. `id` is embedded in the message marker text.
+export interface Attachment {
+  id: string;
+  conversationId: string;
+  r2Key: string;
+  filename: string;
+  mimeType: string;
+  createdAt: string;
+}
+
 export interface TopicStore {
   listTopics(): TopicMeta[];
   getTopic(name: string): Topic | null;
@@ -78,4 +90,16 @@ export interface ConversationStore {
   findThreadsAwaitingReply(): Thread[];
 }
 
-export type Store = TopicStore & ConversationStore;
+// Attachment metadata rows, keyed by the id embedded in the message marker.
+export interface AttachmentRecordStore {
+  putAttachment(attachment: {
+    id: string;
+    conversationId: string;
+    r2Key: string;
+    filename: string;
+    mimeType: string;
+  }): void;
+  getAttachment(id: string): Attachment | null;
+}
+
+export type Store = TopicStore & ConversationStore & AttachmentRecordStore;

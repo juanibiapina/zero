@@ -10,6 +10,7 @@ import type { LanguageModel } from "ai";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { GoogleWorkspace } from "../google/types";
+import type { AttachmentStore } from "../attachments/types";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 
@@ -21,6 +22,10 @@ export interface TurnInput {
   // Gmail + Calendar access, built by the DO and forwarded to the interface
   // agent (threaded like `search`).
   google: GoogleWorkspace;
+  // Attachment blob store (R2), forwarded to the interface agent's
+  // view_attachment tool. Optional so tests that don't exercise images can omit
+  // it (the tool is then not registered).
+  attachments?: AttachmentStore;
   chatId: number;
   topicId: number;
   historyLimit?: number;
@@ -72,6 +77,10 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       persistReply,
       search,
       google,
+      attachments: input.attachments,
+      getAttachment: input.attachments
+        ? (id) => store.getAttachment(id)
+        : undefined,
       history,
       userMessage,
       timezone: input.timezone,

@@ -95,7 +95,13 @@ migration and no per-user seeding.
 
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new
    user message plus recent history, it runs a tool loop and sends replies as it
-   works. Tools (`tools/topics.ts`):
+   works. The history is assembled as a real `ModelMessage[]` conversation
+   (`buildConversationMessages`), not a single flattened prompt: each stored
+   user/assistant message becomes a native turn (user turns prefixed with an
+   absolute `[YYYY-MM-DD HH:MM]` timestamp, assistant turns verbatim), leading
+   assistant messages are dropped, and consecutive same-role turns are coalesced.
+   Instructions, the datetime anchor, and pinned topics stay in the system
+   prompt; only the dialogue is in the messages array. Tools (`tools/topics.ts`):
    - `reply(text)` — send a message to the user immediately. The agent is
      prompted to acknowledge first, then answer, so the user sees live progress.
      As a safety net, on a clean finish the model's final message is always

@@ -32,11 +32,11 @@ export const renderPinnedTopics = (topics: Topic[]): string => {
 };
 
 // Absolute datetime anchor for the interface agent, rendered in the user's
-// timezone. The conversation renders each message's age relatively ("5 min
-// ago"), so the model needs one absolute point to resolve those against, to
-// interpret relative phrasing ("tomorrow", "this afternoon"), and to build
-// calendar windows. The zone is a canonical IANA name so DST is automatic;
-// the offset is shown too so the model can reason numerically.
+// timezone. Each user message carries an absolute timestamp, so the model needs
+// one absolute "now" to compare them against, to interpret relative phrasing
+// ("tomorrow", "this afternoon"), and to build calendar windows. The zone is a
+// canonical IANA name so DST is automatic; the offset is shown too so the model
+// can reason numerically.
 const formatAnchor = (now: Date, timezone: string): string => {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -67,10 +67,12 @@ export const interfaceSystemPrompt = (
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
 
-Current time: ${formatAnchor(now, timezone)}. Message ages in the conversation
-are relative to now. The user's timezone is ${timezone}; interpret and express
-times in it. If the user tells you they are in a different place or timezone,
-call set_timezone to update it.
+Current time: ${formatAnchor(now, timezone)}. Each user message in the
+conversation is prefixed with an absolute timestamp [YYYY-MM-DD HH:MM] in the
+user's timezone; compare it to the current time to judge how long ago it was.
+The user's timezone is ${timezone}; interpret and express times in it. If the
+user tells you they are in a different place or timezone, call set_timezone to
+update it.
 
 You have a durable knowledge model made of topics: living documents each about
 one subject (a project, a person, an ongoing thread). Recall what a topic holds
@@ -117,6 +119,13 @@ replyTo, with the original subject prefixed "Re:".
 
 If a Gmail or Calendar tool reports Google isn't connected, tell the user to
 connect it in the Zero app; don't retry.
+
+Images. A user message may reference an image the user sent, marked inline as
+[image "filename" id=att_xxx]. To see the image, call view_attachment with that
+id; it returns the picture so you can describe or reason about it. The marker
+persists across turns but the image itself does not, so re-call view_attachment
+whenever you need to look at an image again, including ones from earlier in the
+conversation.
 
 Deleting topics. You can delete a topic with delete_topic. This is irreversible:
 never call it without first naming the topic to the user and getting explicit

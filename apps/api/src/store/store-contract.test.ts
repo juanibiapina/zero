@@ -277,3 +277,29 @@ describe("Store contract: conversations", () => {
     expect(s.getConversationHistory(id, 10)).toHaveLength(1);
   });
 });
+
+describe("Store contract: attachments", () => {
+  it("putAttachment then getAttachment round-trips the row", () => {
+    const s = makeStore();
+    const conv = s.getOrCreateConversation(1, 0);
+    s.putAttachment({
+      id: "att_1",
+      conversationId: conv,
+      r2Key: "attachments/user_1/abc",
+      filename: "cat.jpg",
+      mimeType: "image/jpeg",
+    });
+    expect(s.getAttachment("att_1")).toEqual({
+      id: "att_1",
+      conversationId: conv,
+      r2Key: "attachments/user_1/abc",
+      filename: "cat.jpg",
+      mimeType: "image/jpeg",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("getAttachment returns null for an unknown id", () => {
+    expect(makeStore().getAttachment("nope")).toBeNull();
+  });
+});

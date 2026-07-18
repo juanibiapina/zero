@@ -45,6 +45,12 @@
       "preview_id": "c585ffa89cbb45448d2480491434b2ee"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "zero-attachments"
+    }
+  ],
   "analytics_engine_datasets": [
     { "binding": "ANALYTICS", "dataset": "zero-events" }
   ],

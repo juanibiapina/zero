@@ -3,6 +3,7 @@
 // shared contract test (store-contract.test.ts) runs against both.
 
 import type {
+  Attachment,
   ConversationStore,
   Message,
   Role,
@@ -35,6 +36,7 @@ export class MemoryStore implements Store {
   private links: { source: string; target: string }[] = [];
   private convs: ConvRow[] = [];
   private msgs: MsgRow[] = [];
+  private attachments = new Map<string, Attachment>();
   private nextMsgId = 1;
   private now: () => string;
 
@@ -242,6 +244,23 @@ export class MemoryStore implements Store {
       }
     }
     return out;
+  }
+
+  // --- attachments ---
+
+  putAttachment(a: {
+    id: string;
+    conversationId: string;
+    r2Key: string;
+    filename: string;
+    mimeType: string;
+  }): void {
+    this.attachments.set(a.id, { ...a, createdAt: this.now() });
+  }
+
+  getAttachment(id: string): Attachment | null {
+    const a = this.attachments.get(id);
+    return a ? { ...a } : null;
   }
 }
 

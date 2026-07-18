@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  CONVERSATION_HEADER,
   FALLBACK_MESSAGE,
-  formatAge,
-  renderConversation,
+  buildConversationMessages,
+  formatTimestamp,
   runInterfaceAgent,
 } from "./interface";
 import { interfaceSystemPrompt, renderPinnedTopics } from "./prompts";
@@ -13,6 +12,8 @@ import type { Topic } from "../store/types";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryGoogle } from "../google/memory";
+import { createMemoryAttachments } from "../attachments/memory";
+import { attachmentKey } from "../attachments/types";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -26,16 +27,12 @@ afterEach(() => {
 const NOW = new Date("2026-07-17T12:00:00.000Z");
 const iso = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
 
-describe("formatAge", () => {
-  it("buckets deltas from just-now to absolute fallback", () => {
-    expect(formatAge(iso(0), NOW)).toBe("just now");
-    expect(formatAge(iso(30_000), NOW)).toBe("just now");
-    expect(formatAge(iso(5 * 60_000), NOW)).toBe("5 min ago");
-    expect(formatAge(iso(3 * 3_600_000), NOW)).toBe("3 h ago");
-    expect(formatAge(iso(26 * 3_600_000), NOW)).toBe("yesterday");
-    expect(formatAge(iso(3 * 86_400_000), NOW)).toBe("3 days ago");
-    expect(formatAge(iso(7 * 86_400_000), NOW)).toBe("7 days ago");
-    expect(formatAge(iso(30 * 86_400_000), NOW)).toBe("on 2026-06-17");
+describe("formatTimestamp", () => {
+  it("renders an absolute local timestamp in the user's timezone", () => {
+    expect(formatTimestamp(NOW.toISOString(), "UTC")).toBe("2026-07-17 12:00");
+    expect(formatTimestamp(NOW.toISOString(), "America/Sao_Paulo")).toBe(
+      "2026-07-17 09:00",
+    );
   });
 });
 
@@ -59,6 +56,7 @@ const topic = (name: string, body: string, pinned = true): Topic => ({
   name,
   description: "",
   summary: "",
+  system: false,
   body,
   createdAt: NOW.toISOString(),
   lastActiveAt: NOW.toISOString(),
@@ -125,26 +123,81 @@ describe("runInterfaceAgent pinned surfacing", () => {
   });
 });
 
-describe("renderConversation", () => {
-  it("renders empty history with only the new user message as just now", () => {
-    expect(renderConversation([], "hi", NOW)).toBe(
-      `${CONVERSATION_HEADER}\n\n[just now] User: hi`,
-    );
+describe("buildConversationMessages", () => {
+  it("returns a single user message for empty history", () => {
+    expect(buildConversationMessages([], "hi", NOW, "UTC")).toEqual([
+      { role: "user", content: "[2026-07-17 12:00] hi" },
+    ]);
   });
 
-  it("renders mixed history with relative ages, ending with the new message", () => {
-    const rendered = renderConversation(
+  it("maps roles and prefixes user messages with an absolute timestamp", () => {
+    const messages = buildConversationMessages(
       [
         { role: "user", content: "hello", createdAt: iso(2 * 86_400_000) },
         { role: "assistant", content: "hi there", createdAt: iso(5 * 60_000) },
       ],
       "how are you",
       NOW,
+      "UTC",
     );
 
-    expect(rendered).toBe(
-      `${CONVERSATION_HEADER}\n\n[2 days ago] User: hello\n\n[5 min ago] You: hi there\n\n[just now] User: how are you`,
+    expect(messages).toEqual([
+      { role: "user", content: "[2026-07-15 12:00] hello" },
+      { role: "assistant", content: "hi there" },
+      { role: "user", content: "[2026-07-17 12:00] how are you" },
+    ]);
+  });
+
+  it("drops leading assistant messages so the array starts with a user turn", () => {
+    const messages = buildConversationMessages(
+      [
+        { role: "assistant", content: "earlier reply", createdAt: iso(3 * 60_000) },
+        { role: "user", content: "hi", createdAt: iso(2 * 60_000) },
+      ],
+      "now",
+      NOW,
+      "UTC",
     );
+
+    expect(messages.map((m) => m.role)).toEqual(["user"]);
+    expect(messages[0].content).toBe(
+      "[2026-07-17 11:58] hi\n\n[2026-07-17 12:00] now",
+    );
+  });
+
+  it("coalesces consecutive assistant messages", () => {
+    const messages = buildConversationMessages(
+      [
+        { role: "user", content: "q", createdAt: iso(4 * 60_000) },
+        { role: "assistant", content: "one", createdAt: iso(3 * 60_000) },
+        { role: "assistant", content: "two", createdAt: iso(2 * 60_000) },
+      ],
+      "next",
+      NOW,
+      "UTC",
+    );
+
+    expect(messages).toEqual([
+      { role: "user", content: "[2026-07-17 11:56] q" },
+      { role: "assistant", content: "one\n\ntwo" },
+      { role: "user", content: "[2026-07-17 12:00] next" },
+    ]);
+  });
+
+  it("coalesces the current message with a trailing user message", () => {
+    const messages = buildConversationMessages(
+      [{ role: "user", content: "first", createdAt: iso(2 * 60_000) }],
+      "second",
+      NOW,
+      "UTC",
+    );
+
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content: "[2026-07-17 11:58] first\n\n[2026-07-17 12:00] second",
+      },
+    ]);
   });
 });
 
@@ -651,6 +704,41 @@ describe("runInterfaceAgent", () => {
 
     expect(result.transcript).toContain("…[truncated]");
     expect(result.transcript.length).toBeLessThan(big.length);
+  });
+
+  it("views a stored image via view_attachment and answers", async () => {
+    const store = new MemoryStore();
+    const attachments = createMemoryAttachments();
+    const conv = store.getOrCreateConversation(1, 0);
+    const r2Key = attachmentKey("user_1", "u2");
+    store.putAttachment({
+      id: "att_1",
+      conversationId: conv,
+      r2Key,
+      filename: "cat.jpg",
+      mimeType: "image/jpeg",
+    });
+    await attachments.put(r2Key, new Uint8Array([1, 2, 3]), "image/jpeg");
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "view_attachment", input: { id: "att_1" } }] },
+      { tools: [{ name: "reply", input: { text: "It's a cat." } }] },
+      { text: "" },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      attachments,
+      getAttachment: (id) => store.getAttachment(id),
+      history: [],
+      userMessage: 'what is this? [image "cat.jpg" id=att_1]',
+    });
+
+    expect(result.replies).toEqual(["It's a cat."]);
   });
 
   it("does not track a topic that was not found", async () => {

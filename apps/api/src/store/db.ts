@@ -4,6 +4,7 @@
 
 import { and, desc, eq, type Database } from "do-orm";
 import {
+  attachments,
   conversations,
   messages,
   topics,
@@ -11,6 +12,7 @@ import {
 } from "../UserDO/db/schema";
 import { extractLinks, rewriteLinks } from "./links";
 import type {
+  Attachment,
   Message,
   Role,
   Store,
@@ -293,6 +295,39 @@ export class DbStore implements Store {
       }
     }
     return out;
+  }
+
+  // --- attachments ---
+
+  putAttachment(a: {
+    id: string;
+    conversationId: string;
+    r2Key: string;
+    filename: string;
+    mimeType: string;
+  }): void {
+    this.db.insert(attachments, {
+      id: a.id,
+      conversationId: a.conversationId,
+      r2Key: a.r2Key,
+      filename: a.filename,
+      mimeType: a.mimeType,
+      createdAt: this.nowIso(),
+    });
+  }
+
+  getAttachment(id: string): Attachment | null {
+    const a = this.db.get(attachments, { where: eq("id", id) });
+    return a
+      ? {
+          id: a.id,
+          conversationId: a.conversationId,
+          r2Key: a.r2Key,
+          filename: a.filename,
+          mimeType: a.mimeType,
+          createdAt: a.createdAt,
+        }
+      : null;
   }
 }
 

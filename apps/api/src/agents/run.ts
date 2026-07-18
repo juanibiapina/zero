@@ -27,7 +27,12 @@ export const AGENT_MAX_STEPS = 200;
 export interface RunAgentInput {
   model: LanguageModel;
   system: string;
-  prompt: string;
+  // Either a single user `prompt` string (wrapped into one user message) or a
+  // full `messages` array. The interface agent passes structured `messages`
+  // (native user/assistant turns); research, writer, and onboarding pass a
+  // `prompt`. When both are present, `messages` wins.
+  prompt?: string;
+  messages?: ModelMessage[];
   tools?: ToolSet;
   maxSteps?: number;
 }
@@ -50,10 +55,13 @@ export interface RunAgentResult {
 export const runAgent = async (
   input: RunAgentInput,
 ): Promise<RunAgentResult> => {
+  const messages = input.messages ?? [
+    { role: "user" as const, content: input.prompt ?? "" },
+  ];
   const result = await generateText({
     model: input.model,
     system: input.system,
-    messages: [{ role: "user", content: input.prompt }],
+    messages,
     tools: input.tools,
     stopWhen: stepCountIs(input.maxSteps ?? AGENT_MAX_STEPS),
   });

@@ -60,6 +60,18 @@ export const messages = table("messages", {
   createdAt: column.text().notNull(),
 });
 
+// Attachments: lookup-by-id metadata for files the user sent. Bytes live in R2
+// under `r2Key`; the id is embedded in the message marker so view_attachment
+// can re-fetch a file referenced from any past turn.
+export const attachments = table("attachments", {
+  id: column.text().notNull().primaryKey(),
+  conversationId: column.text().notNull(),
+  r2Key: column.text().notNull(),
+  filename: column.text().notNull(),
+  mimeType: column.text().notNull(),
+  createdAt: column.text().notNull(),
+});
+
 // Webhook idempotency: dedupe fully re-delivered Telegram updates.
 export const processedUpdates = table("processed_updates", {
   updateId: column.text().notNull().primaryKey(),

@@ -72,7 +72,7 @@ const createFakeUserDO = (
     unlinkTelegram: () => {
       const removed = stored;
       stored = null;
-      return { removed };
+      return Promise.resolve({ removed });
     },
     getSettings: () => {
       if (!hasRow) {

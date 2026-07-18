@@ -65,6 +65,36 @@ describe("runAgent", () => {
     expect(userMessages).toHaveLength(1);
   });
 
+  it("forwards a messages array unchanged when given one", async () => {
+    let captured: LanguageModelV3CallOptions | undefined;
+    const model = new MockLanguageModelV3({
+      doGenerate: (options) => {
+        captured = options;
+        return Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          finishReason: "stop",
+          usage: { inputTokens: {}, outputTokens: {} },
+          warnings: [],
+        } as unknown as LanguageModelV3GenerateResult);
+      },
+    });
+
+    await runAgent({
+      model,
+      system: "sys",
+      messages: [
+        { role: "user", content: "first" },
+        { role: "assistant", content: "reply" },
+        { role: "user", content: "second" },
+      ],
+    });
+
+    const roles = (captured?.prompt ?? [])
+      .filter((m) => m.role !== "system")
+      .map((m) => m.role);
+    expect(roles).toEqual(["user", "assistant", "user"]);
+  });
+
   it("returns empty string when the model produces no text (no fallback)", async () => {
     const model = scriptedModel([{ text: "" }]);
     const result = await runAgent({ model, system: "sys", prompt: "q" });

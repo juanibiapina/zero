@@ -11,6 +11,7 @@
 import changelogMarkdown from "../../../../CHANGELOG.md";
 import { extractLinks } from "./links";
 import type {
+  Attachment,
   ConversationStore,
   Message,
   Role,
@@ -198,6 +199,22 @@ export class SystemTopicStore implements Store {
 
   findThreadsAwaitingReply(): Thread[] {
     return this.inner.findThreadsAwaitingReply();
+  }
+
+  // --- attachments (delegate verbatim) ---
+
+  putAttachment(attachment: {
+    id: string;
+    conversationId: string;
+    r2Key: string;
+    filename: string;
+    mimeType: string;
+  }): void {
+    this.inner.putAttachment(attachment);
+  }
+
+  getAttachment(id: string): Attachment | null {
+    return this.inner.getAttachment(id);
   }
 }
 

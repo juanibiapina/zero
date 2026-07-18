@@ -7,9 +7,11 @@ import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
 import { buildTimezoneTool } from "../tools/timezone";
 import { buildGoogleTools } from "../tools/google";
-import type { Message, TopicStore } from "../store/types";
+import { buildAttachmentTool } from "../tools/attachments";
+import type { Attachment, Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { GoogleWorkspace } from "../google/types";
+import type { AttachmentStore } from "../attachments/types";
 import { interfaceSystemPrompt, renderPinnedTopics } from "./prompts";
 import { runAgent } from "./run";
 import { log } from "../log";
@@ -40,6 +42,11 @@ export interface InterfaceAgentInput {
   // Persist a new user timezone (wired by the orchestrator to user settings).
   // Omitted in tests that don't exercise set_timezone.
   setTimezone?: (tz: string) => void;
+  // Attachment blob store (R2) plus the id->row lookup, wired together into the
+  // view_attachment tool. Omitted in tests that don't exercise attachments; the
+  // tool is then not registered.
+  attachments?: AttachmentStore;
+  getAttachment?: (id: string) => Attachment | null;
   // Absolute reference time for the date anchor and relative message ages.
   // Defaults to now; injected in tests for deterministic rendering.
   now?: Date;
@@ -113,54 +120,73 @@ export const renderTranscript = (
   return lines.join("\n\n");
 };
 
-export const CONVERSATION_HEADER =
-  'Here is the conversation so far. Each line is prefixed with the message age ' +
-  'in brackets. Lines beginning "User:" are from the user; lines beginning ' +
-  '"You:" are your own earlier replies. Respond to the latest user message.';
-
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-
-// Coarse relative age of a message versus `now`. Buckets stay readable: sub-
-// minute is "just now", then minutes, hours, "yesterday", days, and past a week
-// it falls back to an absolute date ("37 days ago" stops being useful). The
-// absolute anchor lives in the system prompt so these deltas are resolvable.
-export const formatAge = (createdAt: string, now: Date): string => {
-  const delta = now.getTime() - new Date(createdAt).getTime();
-  if (delta < MINUTE_MS) return "just now";
-  if (delta < HOUR_MS) {
-    const m = Math.floor(delta / MINUTE_MS);
-    return `${m} min ago`;
-  }
-  if (delta < DAY_MS) {
-    const h = Math.floor(delta / HOUR_MS);
-    return `${h} h ago`;
-  }
-  const days = Math.floor(delta / DAY_MS);
-  if (days === 1) return "yesterday";
-  if (days <= 7) return `${days} days ago`;
-  return `on ${new Date(createdAt).toISOString().slice(0, 10)}`;
+// Absolute local timestamp (YYYY-MM-DD HH:MM) for a stored message, in the
+// user's timezone. Prefixed onto each user message so the model can place it in
+// time. Absolute (not relative "5 min ago") so the text is stable turn-to-turn:
+// a relative age would recompute every turn and mutate the prefix, defeating
+// future prompt caching. The datetime anchor in the system prompt lets the
+// model derive "how long ago".
+export const formatTimestamp = (createdAt: string, timezone: string): string => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(createdAt));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return `${get("year")}-${get("month")}-${get("day")} ${hour}:${get("minute")}`;
 };
 
-export const renderConversation = (
+// Build the model's message array from the stored dialogue plus the current
+// user message. The system prompt (instructions, datetime anchor, pinned
+// topics) is assembled separately; this array is only the Telegram dialogue.
+//
+// Rules (see PLAN.md):
+// - User messages carry an absolute timestamp prefix; assistant messages are
+//   left verbatim (never rewrite the model's own prior words).
+// - Leading assistant messages are dropped so the array starts with a user
+//   turn (Anthropic requires the first non-system message to be `user`; a
+//   windowed history slice can begin on an assistant reply).
+// - Consecutive same-role messages are coalesced into one (joined by a blank
+//   line): multiple reply() rows in a turn, or two user messages before a
+//   reply.
+// - Empty history yields a single current user message.
+export const buildConversationMessages = (
   history: Message[],
   userMessage: string,
   now: Date = new Date(),
-): string => {
-  // The current user message was just stored, so it is "just now": render it
-  // with `now` as its createdAt rather than widening the caller's contract.
+  timezone = "UTC",
+): ModelMessage[] => {
   const turns: Message[] = [
     ...history,
     { role: "user", content: userMessage, createdAt: now.toISOString() },
   ];
-  const body = turns
-    .map((m) => {
-      const who = m.role === "user" ? "User" : "You";
-      return `[${formatAge(m.createdAt, now)}] ${who}: ${m.content}`;
-    })
-    .join("\n\n");
-  return `${CONVERSATION_HEADER}\n\n${body}`;
+
+  // Drop leading assistant messages so the array opens on a user turn.
+  let start = 0;
+  while (start < turns.length && turns[start].role === "assistant") start++;
+
+  const messages: ModelMessage[] = [];
+  for (const turn of turns.slice(start)) {
+    const text =
+      turn.role === "user"
+        ? `[${formatTimestamp(turn.createdAt, timezone)}] ${turn.content}`
+        : turn.content;
+    const last = messages[messages.length - 1];
+    if (last && last.role === turn.role) {
+      // Coalesce consecutive same-role turns into one message.
+      last.content = `${last.content as string}\n\n${text}`;
+    } else if (turn.role === "user") {
+      messages.push({ role: "user", content: text });
+    } else {
+      messages.push({ role: "assistant", content: text });
+    }
+  }
+  return messages;
 };
 
 export const runInterfaceAgent = async (
@@ -206,6 +232,12 @@ export const runInterfaceAgent = async (
       google: input.google,
       timezone: input.timezone ?? "UTC",
     }),
+    ...(input.attachments && input.getAttachment
+      ? buildAttachmentTool({
+          attachments: input.attachments,
+          getAttachment: input.getAttachment,
+        })
+      : {}),
   };
 
   // The agent's replies are the { replies, accessed } collected by the tool
@@ -216,7 +248,12 @@ export const runInterfaceAgent = async (
   const { text, finishReason, steps, messages } = await runAgent({
     model: input.model,
     system: interfaceSystemPrompt(now, input.timezone, pinned),
-    prompt: renderConversation(input.history, input.userMessage, now),
+    messages: buildConversationMessages(
+      input.history,
+      input.userMessage,
+      now,
+      input.timezone ?? "UTC",
+    ),
     tools,
     maxSteps: input.maxSteps,
   });

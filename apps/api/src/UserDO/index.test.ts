@@ -26,7 +26,7 @@ const createFakeUserDO = (): UserDOStub => {
     unlinkTelegram: () => {
       const removed = telegramId;
       telegramId = null;
-      return { removed };
+      return Promise.resolve({ removed });
     },
     getSettings: () => {
       if (!hasRow) {
@@ -70,17 +70,17 @@ describe("UserDO contract", () => {
     expect(userDO.getTelegramId()).toBe("222");
   });
 
-  it("unlinkTelegram clears the id and returns the removed value", () => {
+  it("unlinkTelegram clears the id and returns the removed value", async () => {
     const userDO = createFakeUserDO();
     userDO.linkTelegram("12345");
-    const result = userDO.unlinkTelegram();
+    const result = await userDO.unlinkTelegram();
     expect(result).toEqual({ removed: "12345" });
     expect(userDO.getTelegramId()).toBeNull();
   });
 
-  it("unlinkTelegram returns null when nothing linked", () => {
+  it("unlinkTelegram returns null when nothing linked", async () => {
     const userDO = createFakeUserDO();
-    const result = userDO.unlinkTelegram();
+    const result = await userDO.unlinkTelegram();
     expect(result).toEqual({ removed: null });
   });
 });

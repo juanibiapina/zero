@@ -8,6 +8,8 @@ import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
 import { SystemTopicStore } from "../store/system-topics";
 import type { Store } from "../store/types";
+import { createR2Attachments } from "../attachments/r2";
+import type { AttachmentStore } from "../attachments/types";
 import { createModel } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
 import { createGoogleWorkspace } from "../google/rest";
@@ -35,11 +37,14 @@ export class UserDO extends DurableObject<Env> {
   // Changelog) are overlaid on every read and blocked from writes. See
   // store/system-topics.ts.
   private store: Store;
+  // Attachment bytes (R2). Metadata rows live in `store`; bytes live here.
+  private attachments: AttachmentStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = createDb(ctx.storage);
     this.store = new SystemTopicStore(new DbStore(this.db));
+    this.attachments = createR2Attachments(env.ATTACHMENTS);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
@@ -132,6 +137,14 @@ export class UserDO extends DurableObject<Env> {
     chatId: number;
     topicId: number;
     text: string;
+    // Attachment metadata rows to persist for this turn. Bytes are already in
+    // R2 (the webhook put them); the message text carries their markers.
+    attachments?: Array<{
+      id: string;
+      r2Key: string;
+      filename: string;
+      mimeType: string;
+    }>;
   }): Promise<void> {
     if (!this.markProcessed(input.updateId)) return;
     await this.ctx.storage.put("clerkUserId", input.clerkUserId);
@@ -139,6 +152,9 @@ export class UserDO extends DurableObject<Env> {
       input.chatId,
       input.topicId,
     );
+    for (const a of input.attachments ?? []) {
+      this.store.putAttachment({ ...a, conversationId });
+    }
     this.store.storeMessage(conversationId, "user", input.text);
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(Date.now());
@@ -229,7 +245,7 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, model, send, search, google, chatId, topicId, clerkUserId, timezone, setTimezone });
+      await orchestrateTurn({ store: this.store, model, send, search, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -253,11 +269,17 @@ export class UserDO extends DurableObject<Env> {
     return { previous };
   }
 
-  unlinkTelegram(): { removed: string | null } {
+  async unlinkTelegram(): Promise<{ removed: string | null }> {
     const existing = this.db.get(telegramLink);
     if (!existing) return { removed: null };
 
     this.db.delete(telegramLink, { where: eq("id", existing.id) });
+    // Purge the user's stored images: unlinking is an account teardown path, so
+    // their photos leave with their data. clerkUserId is set on first enqueue,
+    // which is also the only path that creates attachments, so a null here means
+    // nothing to purge.
+    const clerkUserId = await this.ctx.storage.get<string>("clerkUserId");
+    if (clerkUserId) await this.attachments.deleteAllForUser(clerkUserId);
     return { removed: existing.telegramId };
   }
 
