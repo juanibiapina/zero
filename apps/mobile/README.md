@@ -33,6 +33,37 @@ locally (pnpm isolated installs keep them scoped to this app):
   the repo's eslint 10.
 - **TypeScript**: extends `expo/tsconfig.base`, not `@zero/typescript-config`.
 
+## Authentication and environment
+
+The app signs in with **Clerk**, against the **same Clerk instance as the web
+app**, so a user has one account across web and mobile. Sign-in is now the entry
+screen: signed-out users see "Continue with Google" (Google OAuth via Clerk's
+`useSSO`); after signing in they reach the home screen. The Clerk session is
+persisted in `expo-secure-store`, so it survives app restarts.
+
+Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
+
+| Variable                            | Required | Default                          | Purpose                                             |
+| ----------------------------------- | -------- | -------------------------------- | --------------------------------------------------- |
+| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | yes      | —                                | Clerk publishable key (same value the web app uses) |
+| `EXPO_PUBLIC_API_URL`               | no       | `https://zero.juanibiapina.dev`  | Base URL for authenticated `/api/*` calls           |
+
+The Clerk **publishable** key is public by design (`pk_...`, already shipped in
+the web bundle), so it is committed in the `env` block of every `eas.json` build
+profile — it is **not** an EAS Secret. For local `expo start`, export the same
+value in your shell or put it in `apps/mobile/.env.local` (gitignored):
+
+```bash
+export EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+```
+
+### Clerk dashboard: native OAuth redirect
+
+Native OAuth completes via the app scheme (`zeroagent://`, set in `app.json`). If
+Google sign-in fails at the redirect step on a device, add `zeroagent://` as an
+allowed redirect in the Clerk dashboard (Native applications / SSO redirect
+allow-list). This affects on-device sign-in only; it does not change unit tests.
+
 ## Develop / test loop (no Android Studio)
 
 1. Build a **development build** (dev client) once on EAS and install it on your
@@ -87,7 +118,8 @@ produces an AAB for the Play Store (defined but unused for now).
    below). EAS prints a build URL with a QR code when done.
 2. On the phone, open the URL / scan the QR from the EAS build page.
 3. Allow **install from unknown sources** if prompted, then install.
-4. Launch **Zero Agent** — it opens to the blank home screen.
+4. Launch **Zero Agent** — it opens to the sign-in screen; sign in with Google to
+   reach the home screen.
 
 Find past builds and their install URLs:
 
