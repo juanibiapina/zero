@@ -1,9 +1,11 @@
-# Deterministic reproduction of the native OAuth redirect capture, without
+# Deterministic reproduction of the native OAuth redirect handling, without
 # Google. Taps the E2E-only "Run redirect probe" button, which opens a Custom
 # Tab that redirects to the same zeroagent://sso-callback deep link Clerk uses.
-# If expo-web-browser captures the redirect the app shows "probe=success";
-# if the redirect is lost (the bug that drops a completed sign-in) it shows
-# "probe=dismiss" and this flow fails.
+#
+# expo-web-browser captures the redirect (logged as probe=success), but Android
+# also delivers it to expo-router as a deep link. The app must recover to a
+# valid screen afterwards. Without an sso-callback route it lands on a dead
+# route and does not return to the sign-in screen, which this flow catches.
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp:
@@ -12,7 +14,10 @@ appId: dev.juanibiapina.zeroagent
     visible: "Run redirect probe"
     timeout: 45000
 - tapOn: "Run redirect probe"
+# After the redirect deep link, the app must return to the sign-in screen (it is
+# not actually signed in during the probe), proving the callback is handled
+# gracefully rather than dropping the user on a dead route.
 - extendedWaitUntil:
-    visible: "probe=success"
+    visible: "Sign in with your Zero account."
     timeout: 30000
-- takeScreenshot: probe-success
+- takeScreenshot: probe-recovered
