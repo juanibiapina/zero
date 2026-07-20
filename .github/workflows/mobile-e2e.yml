@@ -1,13 +1,14 @@
 name: Mobile E2E
 
 # Builds a self-contained Android APK and drives it on an emulator with Maestro.
-# Manual only for now (uses Actions minutes and boots an emulator). Trigger from
-# the Actions tab. Every run uploads logcat + screenshots so failures are
-# reproducible without a physical device.
+# Split into two jobs so the emulator/flow work can be re-run without the slow
+# native rebuild (re-run just the `e2e` job to iterate on flows). Manual only.
+# Every run uploads logcat + screenshots so failures are reproducible without a
+# physical device.
 on:
   workflow_dispatch:
-  # Temporary: run on pushes to the harness branch so it can be iterated without
-  # landing on main. Remove before merging.
+  # Temporary: run on pushes to the harness branch while iterating. Remove
+  # before merging.
   push:
     branches: [ mobile-e2e ]
 
@@ -15,17 +16,16 @@ env:
   # Clerk publishable keys are public by design (already shipped in the web
   # bundle and eas.json). Needed at bundle time so Clerk initialises.
   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuemVyby5qdWFuaWJpYXBpbmEuZGV2JA
+  MAESTRO_CLI_NO_ANALYTICS: '1'
 
 jobs:
-  mobile-e2e:
-    name: Mobile E2E (Android emulator)
+  build:
+    name: Build APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
-      # The RN/NDK build plus the emulator system image exceed the runner's
-      # default free disk. Reclaim space first (removes dotnet, haskell, etc.).
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -62,17 +62,33 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
 
-      - name: Stash APK and reclaim build space
-        id: apk
+      - name: Stage APK
         run: |
           APK=$(find apps/mobile/android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          cp "$APK" "${RUNNER_TEMP}/app-release.apk"
-          echo "path=${RUNNER_TEMP}/app-release.apk" >> "$GITHUB_OUTPUT"
-          echo "Built APK: $APK -> ${RUNNER_TEMP}/app-release.apk"
-          # The native build tree and gradle caches are huge and no longer
-          # needed; remove them so the emulator image fits on disk.
-          rm -rf apps/mobile/android "$HOME/.gradle/caches" "$HOME/.gradle/wrapper" || true
-          df -h /
+          mkdir -p "${RUNNER_TEMP}/apk"
+          cp "$APK" "${RUNNER_TEMP}/apk/app-release.apk"
+          echo "Staged: $APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: ${{ runner.temp }}/apk/app-release.apk
+          retention-days: 1
+
+  e2e:
+    name: E2E (Android emulator)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-apk
+          path: ${{ runner.temp }}/apk
 
       - name: Install Maestro
         run: |
@@ -95,19 +111,24 @@ jobs:
           ram-size: 4096M
           disable-animations: true
           script: |
-            adb install -r "${{ steps.apk.outputs.path }}"
+            adb install -r "${RUNNER_TEMP}/apk/app-release.apk"
             adb logcat -c
             adb logcat > "${RUNNER_TEMP}/logcat.txt" &
             mkdir -p "${RUNNER_TEMP}/maestro"
             maestro test apps/mobile/.maestro --format junit --output "${RUNNER_TEMP}/maestro/report.xml" --debug-output "${RUNNER_TEMP}/maestro"
 
-      - name: Collect screenshots
+      - name: Collect artifacts
         if: always()
         run: |
-          mkdir -p "${RUNNER_TEMP}/artifacts"
-          cp -r "${RUNNER_TEMP}/maestro" "${RUNNER_TEMP}/artifacts/" 2>/dev/null || true
-          cp "${RUNNER_TEMP}/logcat.txt" "${RUNNER_TEMP}/artifacts/" 2>/dev/null || true
-          find . -maxdepth 4 -name '*.png' -path '*maestro*' -exec cp {} "${RUNNER_TEMP}/artifacts/" \; 2>/dev/null || true
+          DEST="${RUNNER_TEMP}/artifacts"
+          mkdir -p "$DEST"
+          cp "${RUNNER_TEMP}/logcat.txt" "$DEST/" 2>/dev/null || true
+          cp -r "${RUNNER_TEMP}/maestro" "$DEST/maestro" 2>/dev/null || true
+          # Maestro writes screenshots + view hierarchy under ~/.maestro/tests.
+          cp -r "$HOME/.maestro/tests" "$DEST/maestro-tests" 2>/dev/null || true
+          # takeScreenshot writes <name>.png into the working dir.
+          find . -maxdepth 2 -name '*.png' -exec cp {} "$DEST/" \; 2>/dev/null || true
+          ls -R "$DEST" || true
 
       - name: Upload artifacts
         if: always()

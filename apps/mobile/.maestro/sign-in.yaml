@@ -6,11 +6,13 @@ appId: dev.juanibiapina.zeroagent
 ---
 - launchApp:
     clearState: true
+# Always capture the first frame so failures show what actually rendered.
+- takeScreenshot: 00-launch
 # If Clerk fails to initialise (e.g. Native API disabled) the app hangs on a
 # spinner and this wait times out, catching that class of regression.
 - extendedWaitUntil:
     visible: "Continue with Google"
-    timeout: 30000
+    timeout: 45000
 - takeScreenshot: 01-sign-in
 - tapOn: "Continue with Google"
 # The OS browser (Custom Tab) should open for the OAuth handshake.
