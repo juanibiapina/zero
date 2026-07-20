@@ -1,0 +1,18 @@
+# Deterministic reproduction of the native OAuth redirect capture, without
+# Google. Taps the E2E-only "Run redirect probe" button, which opens a Custom
+# Tab that redirects to the same zeroagent://sso-callback deep link Clerk uses.
+# If expo-web-browser captures the redirect the app shows "probe=success";
+# if the redirect is lost (the bug that drops a completed sign-in) it shows
+# "probe=dismiss" and this flow fails.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Run redirect probe"
+    timeout: 45000
+- tapOn: "Run redirect probe"
+- extendedWaitUntil:
+    visible: "probe=success"
+    timeout: 30000
+- takeScreenshot: probe-success

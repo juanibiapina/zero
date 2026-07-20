@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8" /><title>probe</title></head>
+  <body>
+    <p>redirecting…</p>
+    <script>
+      // Redirect the Custom Tab to the app's sso-callback deep link, mirroring
+      // what Clerk's Frontend API does after an OAuth handshake. The `to` param
+      // carries the full zeroagent://sso-callback?rotating_token_nonce=... URL.
+      var to = new URLSearchParams(location.search).get('to');
+      if (to) { location.replace(to); }
+    </script>
+  </body>
+</html>

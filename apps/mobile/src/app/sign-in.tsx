@@ -57,9 +57,35 @@ export default function SignInScreen() {
     }
   }, [startSSOFlow]);
 
+  // E2E-only: deterministically exercise the native OAuth redirect capture
+  // (the mechanism that decides whether a completed sign-in reaches the app)
+  // without Google. Opens a controlled page that redirects to the same
+  // `sso-callback` deep link Clerk uses, then reports whether expo-web-browser
+  // captured it (type=success) or lost it (type=dismiss).
+  const onProbePress = useCallback(async () => {
+    setStatus('probe: running');
+    const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' });
+    const probeStart =
+      (process.env.EXPO_PUBLIC_E2E_REDIRECT_URL ?? 'http://10.0.2.2:8080/redirect.html') +
+      `?to=${encodeURIComponent(redirectUrl + '?rotating_token_nonce=probe')}`;
+    try {
+      const res = await WebBrowser.openAuthSessionAsync(probeStart, redirectUrl);
+      const url = 'url' in res ? res.url : undefined;
+      const nonce = url ? new URL(url).searchParams.get('rotating_token_nonce') : null;
+      console.log('[probe]', JSON.stringify({ type: res.type, url, nonce }));
+      setStatus(`probe=${res.type} nonce=${nonce ?? '-'}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log('[probe] error', msg);
+      setStatus(`probe=error ${msg}`);
+    }
+  }, []);
+
   if (isLoaded && isSignedIn) {
     return <Redirect href="/" />;
   }
+
+  const e2e = process.env.EXPO_PUBLIC_E2E === '1';
 
   return (
     <View style={styles.container}>
@@ -68,6 +94,14 @@ export default function SignInScreen() {
       <Pressable style={styles.button} onPress={() => void onSignInPress()}>
         <Text style={styles.buttonText}>Continue with Google</Text>
       </Pressable>
+      {e2e ? (
+        <Pressable
+          style={styles.probeButton}
+          onPress={() => void onProbePress()}
+        >
+          <Text style={styles.buttonText}>Run redirect probe</Text>
+        </Pressable>
+      ) : null}
       {status ? <Text style={styles.status}>{status}</Text> : null}
     </View>
   );
@@ -93,6 +127,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 8,
     backgroundColor: '#208AEF',
+  },
+  probeButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#888',
   },
   buttonText: {
     fontSize: 16,

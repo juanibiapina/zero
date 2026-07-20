@@ -16,6 +16,8 @@ env:
   # Clerk publishable keys are public by design (already shipped in the web
   # bundle and eas.json). Needed at bundle time so Clerk initialises.
   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuemVyby5qdWFuaWJpYXBpbmEuZGV2JA
+  # Enables the E2E-only redirect probe button in the built APK.
+  EXPO_PUBLIC_E2E: '1'
   MAESTRO_CLI_NO_ANALYTICS: '1'
 
 jobs:
@@ -58,7 +60,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: apps/mobile/apk-out/app-release.apk
-          key: apk-${{ hashFiles('apps/mobile/src/**', 'apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}
+          key: apk-${{ hashFiles('apps/mobile/src/**', 'apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml', '.github/workflows/mobile-e2e.yml') }}
 
       - name: Install dependencies
         if: steps.apk-cache.outputs.cache-hit != 'true'

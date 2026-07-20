@@ -29,6 +29,12 @@ adb install -r "$APK"
 adb logcat -c
 adb logcat > "${OUT}/logcat.txt" &
 
+# Serve the redirect probe page on the host; the emulator reaches it at
+# http://10.0.2.2:8080/redirect.html (the app's default probe URL).
+python3 -m http.server 8080 --directory apps/mobile/.maestro >/dev/null 2>&1 &
+HTTP_PID=$!
+trap 'kill "$HTTP_PID" >/dev/null 2>&1 || true' EXIT
+
 # Let the system settle before driving the UI, so SystemUI is not still busy.
 sleep 20
 
