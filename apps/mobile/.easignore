@@ -1,0 +1,10 @@
+# EAS uploads the whole repo. Trim files the Android build never needs.
+# Keep every package.json so the pnpm workspace still resolves.
+/docs
+/.github
+/PLAN.md
+/PRODUCT.md
+/apps/api/src
+/apps/web/src
+/packages/e2e-tests
+/packages/integration-tests

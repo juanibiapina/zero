@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   lint-and-typecheck:
@@ -63,3 +64,33 @@ jobs:
 
       - name: Deploy dry run
         run: pnpm run deploy -- --dry-run
+
+  mobile-build:
+    name: Mobile EAS Build (Android preview)
+    runs-on: ubuntu-latest
+    # Manual only: EAS free tier is 30 builds/month, so this never runs on push/PR.
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android preview APK
+        working-directory: apps/mobile
+        run: eas build -p android --profile preview --non-interactive
