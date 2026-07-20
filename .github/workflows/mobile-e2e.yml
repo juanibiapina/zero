@@ -24,6 +24,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The RN/NDK build plus the emulator system image exceed the runner's
+      # default free disk. Reclaim space first (removes dotnet, haskell, etc.).
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: false
+          tool-cache: false
+          large-packages: true
+          dotnet: true
+          haskell: true
+          swap-storage: false
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
@@ -50,12 +62,17 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
 
-      - name: Locate APK
+      - name: Stash APK and reclaim build space
         id: apk
         run: |
           APK=$(find apps/mobile/android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
-          echo "Built APK: $APK"
+          cp "$APK" "${RUNNER_TEMP}/app-release.apk"
+          echo "path=${RUNNER_TEMP}/app-release.apk" >> "$GITHUB_OUTPUT"
+          echo "Built APK: $APK -> ${RUNNER_TEMP}/app-release.apk"
+          # The native build tree and gradle caches are huge and no longer
+          # needed; remove them so the emulator image fits on disk.
+          rm -rf apps/mobile/android "$HOME/.gradle/caches" "$HOME/.gradle/wrapper" || true
+          df -h /
 
       - name: Install Maestro
         run: |
