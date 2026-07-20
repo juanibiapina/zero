@@ -119,10 +119,13 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
-          target: google_apis
+          # ATD (Automated Test Device) images are stripped down for CI: far less
+          # background activity, so SystemUI does not ANR and mask the app.
+          target: aosp_atd
           profile: pixel_6
           ram-size: 4096M
           disable-animations: true
+          disable-spellchecker: true
           script: bash apps/mobile/.maestro/run-e2e.sh
 
       - name: Collect artifacts
