@@ -1,0 +1,19 @@
+# Smoke flow: the app must boot to the sign-in screen (not hang on a spinner),
+# and the Google button must open the OAuth browser. Runs on an emulator in CI.
+# The full Google round-trip cannot be automated (Google blocks emulators), so
+# this asserts the app-side behaviour and captures logs/screenshots for the rest.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp:
+    clearState: true
+# If Clerk fails to initialise (e.g. Native API disabled) the app hangs on a
+# spinner and this assertion fails, catching that class of regression.
+- assertVisible:
+    text: "Continue with Google"
+    timeout: 30000
+- takeScreenshot: 01-sign-in
+- tapOn: "Continue with Google"
+# The OS browser (Custom Tab) should open for the OAuth handshake.
+- waitForAnimationToEnd:
+    timeout: 10000
+- takeScreenshot: 02-after-tap

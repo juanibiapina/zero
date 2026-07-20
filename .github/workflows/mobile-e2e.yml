@@ -1,0 +1,100 @@
+name: Mobile E2E
+
+# Builds a self-contained Android APK and drives it on an emulator with Maestro.
+# Manual only for now (uses Actions minutes and boots an emulator). Trigger from
+# the Actions tab. Every run uploads logcat + screenshots so failures are
+# reproducible without a physical device.
+on:
+  workflow_dispatch:
+
+env:
+  # Clerk publishable keys are public by design (already shipped in the web
+  # bundle and eas.json). Needed at bundle time so Clerk initialises.
+  EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuemVyby5qdWFuaWJpYXBpbmEuZGV2JA
+
+jobs:
+  mobile-e2e:
+    name: Mobile E2E (Android emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prebuild Android project
+        working-directory: apps/mobile
+        run: npx expo prebuild -p android --no-install
+
+      - name: Build release APK (x86_64, debug-signed)
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(find apps/mobile/android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Built APK: $APK"
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run E2E on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          disable-animations: true
+          script: |
+            adb install -r "${{ steps.apk.outputs.path }}"
+            adb logcat -c
+            adb logcat > "${RUNNER_TEMP}/logcat.txt" &
+            mkdir -p "${RUNNER_TEMP}/maestro"
+            maestro test apps/mobile/.maestro \
+              --format junit \
+              --output "${RUNNER_TEMP}/maestro/report.xml" \
+              --debug-output "${RUNNER_TEMP}/maestro"
+
+      - name: Collect screenshots
+        if: always()
+        run: |
+          mkdir -p "${RUNNER_TEMP}/artifacts"
+          cp -r "${RUNNER_TEMP}/maestro" "${RUNNER_TEMP}/artifacts/" 2>/dev/null || true
+          cp "${RUNNER_TEMP}/logcat.txt" "${RUNNER_TEMP}/artifacts/" 2>/dev/null || true
+          find . -maxdepth 4 -name '*.png' -path '*maestro*' -exec cp {} "${RUNNER_TEMP}/artifacts/" \; 2>/dev/null || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-e2e-artifacts
+          path: ${{ runner.temp }}/artifacts
+          if-no-files-found: warn
