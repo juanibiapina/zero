@@ -95,6 +95,32 @@ pnpm --filter @zero/mobile typecheck
 pnpm --filter @zero/mobile test
 ```
 
+## End-to-end tests (emulator + Maestro)
+
+Automated UI tests run a real APK on an Android emulator and drive it with
+[Maestro](https://maestro.mobile.dev). They live in `apps/mobile/.maestro/` and
+run in CI via the **Mobile E2E** workflow (`.github/workflows/mobile-e2e.yml`),
+because the local dev box has no KVM to run an emulator.
+
+The workflow has two jobs:
+
+- **Build APK** — `expo prebuild` + `gradlew assembleRelease` (x86_64,
+  debug-signed), producing a self-contained APK (no Metro). The APK is cached by
+  a hash of the app sources, so flow/harness-only changes skip the ~24 min
+  rebuild and the run finishes in ~10 min.
+- **E2E** — boots an emulator, installs the APK, and runs `run-e2e.sh`, which
+  drives the Maestro flows and always uploads a **screenshot, logcat, and UI
+  hierarchy** as artifacts (so failures are inspectable without a device).
+
+Flows:
+
+- `sign-in.yaml` — smoke: the app boots to the sign-in screen (catches Clerk
+  init hangs / crashes). The Google OAuth round-trip needs a real browser +
+  Google account and is not automated here.
+
+Trigger it from the GitHub Actions tab (**Run workflow**). To debug a failure,
+download the `mobile-e2e-artifacts` and open `screen.png` / `ui.xml` / `logcat.txt`.
+
 ## Builds
 
 From `apps/mobile`:
