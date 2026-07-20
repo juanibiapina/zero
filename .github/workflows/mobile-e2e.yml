@@ -124,6 +124,11 @@ jobs:
           ram-size: 4096M
           disable-animations: true
           script: |
+            # The emulator's Chrome has an uninitialised first-run screen that
+            # pops over the app when the sign-in screen warms up Custom Tabs.
+            # Disable Chrome for the smoke check so it can't mask the app. The
+            # real OAuth flow (which needs a browser) is covered separately.
+            adb shell pm disable-user --user 0 com.android.chrome || true
             adb install -r "${RUNNER_TEMP}/apk/app-release.apk"
             adb logcat -c
             adb logcat > "${RUNNER_TEMP}/logcat.txt" &
