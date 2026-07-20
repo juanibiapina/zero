@@ -57,12 +57,23 @@ value in your shell or put it in `apps/mobile/.env.local` (gitignored):
 export EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
 ```
 
-### Clerk dashboard: native OAuth redirect
+### Clerk dashboard: native OAuth setup (required)
 
-Native OAuth completes via the app scheme (`zeroagent://`, set in `app.json`). If
-Google sign-in fails at the redirect step on a device, add `zeroagent://` as an
-allowed redirect in the Clerk dashboard (Native applications / SSO redirect
-allow-list). This affects on-device sign-in only; it does not change unit tests.
+Native sign-in needs two one-time settings in the Clerk dashboard, under
+**Configure → Native applications** (production instance):
+
+1. **Enable Native API** — toggle it on and click **Save** in the "Unsaved
+   changes" bar. `@clerk/clerk-expo` fails to initialise without it (the app
+   hangs on a loading spinner, and the Frontend API returns
+   `native_api_disabled`).
+2. **Allowlist the SSO redirects** — add both `zeroagent://` and
+   `zeroagent://sso-callback` to "Allowlist for mobile SSO redirect". The app
+   uses the `sso-callback` path; the app scheme is set in `app.json`.
+
+After OAuth, Clerk's Custom Tab redirects to `zeroagent://sso-callback`. Android
+delivers that to expo-router as a deep link, so the app has an `sso-callback`
+route (`src/app/sso-callback.tsx`) that bounces to `/` and lets the auth gate
+route to home. Without it the app lands on a dead route after sign-in.
 
 ## Develop / test loop (no Android Studio)
 
