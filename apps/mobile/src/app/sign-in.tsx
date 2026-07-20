@@ -23,61 +23,43 @@ export default function SignInScreen() {
   useWarmUpBrowser();
   const { isLoaded, isSignedIn } = useAuth();
   const { startSSOFlow } = useSSO();
-  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const onSignInPress = useCallback(async () => {
-    setStatus('Opening Google…');
+    setError(null);
+    setBusy(true);
     const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' });
     try {
-      const result = await startSSOFlow({
+      const { createdSessionId, setActive } = await startSSOFlow({
         strategy: 'oauth_google',
         redirectUrl,
       });
-      const { createdSessionId, setActive, authSessionResult, signIn, signUp } =
-        result;
-      // Surface the exact outcome so failures are visible without a debugger.
-      const diag = [
-        `redirect=${redirectUrl}`,
-        `browser=${authSessionResult?.type ?? 'none'}`,
-        `session=${createdSessionId ?? 'null'}`,
-        `signIn=${signIn?.status ?? '-'}`,
-        `signUp=${signUp?.status ?? '-'}`,
-      ].join('\n');
-      console.log('[sso]', diag.replace(/\n/g, ' '));
-
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
-        return; // auth gate will redirect to home
+        return; // the auth gate redirects to home
       }
-      setStatus(`Not signed in.\n${diag}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log('[sso] error', msg);
-      setStatus(`Error: ${msg}\nredirect=${redirectUrl}`);
+      setError("Sign-in didn't complete. Please try again.");
+    } catch {
+      setError('Sign-in failed. Please try again.');
+    } finally {
+      setBusy(false);
     }
   }, [startSSOFlow]);
 
-  // E2E-only: deterministically exercise the native OAuth redirect capture
-  // (the mechanism that decides whether a completed sign-in reaches the app)
-  // without Google. Opens a controlled page that redirects to the same
-  // `sso-callback` deep link Clerk uses, then reports whether expo-web-browser
-  // captured it (type=success) or lost it (type=dismiss).
+  // E2E-only: exercises the native OAuth redirect handling (the mechanism that
+  // decides whether a completed sign-in reaches the app) without Google. Hidden
+  // unless the app is built with EXPO_PUBLIC_E2E=1.
   const onProbePress = useCallback(async () => {
-    setStatus('probe: running');
     const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' });
     const probeStart =
-      (process.env.EXPO_PUBLIC_E2E_REDIRECT_URL ?? 'http://10.0.2.2:8080/redirect.html') +
+      (process.env.EXPO_PUBLIC_E2E_REDIRECT_URL ??
+        'http://10.0.2.2:8080/redirect.html') +
       `?to=${encodeURIComponent(redirectUrl + '?rotating_token_nonce=probe')}`;
     try {
-      const res = await WebBrowser.openAuthSessionAsync(probeStart, redirectUrl);
-      const url = 'url' in res ? res.url : undefined;
-      const nonce = url ? new URL(url).searchParams.get('rotating_token_nonce') : null;
-      console.log('[probe]', JSON.stringify({ type: res.type, url, nonce }));
-      setStatus(`probe=${res.type} nonce=${nonce ?? '-'}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log('[probe] error', msg);
-      setStatus(`probe=error ${msg}`);
+      await WebBrowser.openAuthSessionAsync(probeStart, redirectUrl);
+    } catch {
+      // Ignored: the probe only verifies the app recovers after the redirect.
     }
   }, []);
 
@@ -91,18 +73,21 @@ export default function SignInScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Zero Agent</Text>
       <Text style={styles.subtitle}>Sign in with your Zero account.</Text>
-      <Pressable style={styles.button} onPress={() => void onSignInPress()}>
-        <Text style={styles.buttonText}>Continue with Google</Text>
+      <Pressable
+        style={[styles.button, busy && styles.buttonDisabled]}
+        disabled={busy}
+        onPress={() => void onSignInPress()}
+      >
+        <Text style={styles.buttonText}>
+          {busy ? 'Signing in…' : 'Continue with Google'}
+        </Text>
       </Pressable>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       {e2e ? (
-        <Pressable
-          style={styles.probeButton}
-          onPress={() => void onProbePress()}
-        >
+        <Pressable style={styles.probeButton} onPress={() => void onProbePress()}>
           <Text style={styles.buttonText}>Run redirect probe</Text>
         </Pressable>
       ) : null}
-      {status ? <Text style={styles.status}>{status}</Text> : null}
     </View>
   );
 }
@@ -128,6 +113,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#208AEF',
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   probeButton: {
     paddingVertical: 10,
     paddingHorizontal: 20,
@@ -139,9 +127,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  status: {
-    fontSize: 12,
-    color: '#666',
+  error: {
+    fontSize: 14,
+    color: '#b00020',
     textAlign: 'center',
     paddingHorizontal: 24,
   },
