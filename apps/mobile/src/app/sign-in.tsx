@@ -23,20 +23,37 @@ export default function SignInScreen() {
   useWarmUpBrowser();
   const { isLoaded, isSignedIn } = useAuth();
   const { startSSOFlow } = useSSO();
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   const onSignInPress = useCallback(async () => {
-    setError(null);
+    setStatus('Opening Google…');
+    const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' });
     try {
-      const { createdSessionId, setActive } = await startSSOFlow({
+      const result = await startSSOFlow({
         strategy: 'oauth_google',
-        redirectUrl: AuthSession.makeRedirectUri(),
+        redirectUrl,
       });
+      const { createdSessionId, setActive, authSessionResult, signIn, signUp } =
+        result;
+      // Surface the exact outcome so failures are visible without a debugger.
+      const diag = [
+        `redirect=${redirectUrl}`,
+        `browser=${authSessionResult?.type ?? 'none'}`,
+        `session=${createdSessionId ?? 'null'}`,
+        `signIn=${signIn?.status ?? '-'}`,
+        `signUp=${signUp?.status ?? '-'}`,
+      ].join('\n');
+      console.log('[sso]', diag.replace(/\n/g, ' '));
+
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
+        return; // auth gate will redirect to home
       }
+      setStatus(`Not signed in.\n${diag}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed');
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log('[sso] error', msg);
+      setStatus(`Error: ${msg}\nredirect=${redirectUrl}`);
     }
   }, [startSSOFlow]);
 
@@ -51,7 +68,7 @@ export default function SignInScreen() {
       <Pressable style={styles.button} onPress={() => void onSignInPress()}>
         <Text style={styles.buttonText}>Continue with Google</Text>
       </Pressable>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {status ? <Text style={styles.status}>{status}</Text> : null}
     </View>
   );
 }
@@ -82,9 +99,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  error: {
-    fontSize: 14,
-    color: '#b00020',
+  status: {
+    fontSize: 12,
+    color: '#666',
     textAlign: 'center',
     paddingHorizontal: 24,
   },
