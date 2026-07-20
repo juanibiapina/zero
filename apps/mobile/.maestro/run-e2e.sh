@@ -9,14 +9,21 @@ APK="${RUNNER_TEMP}/apk/app-release.apk"
 OUT="${RUNNER_TEMP}"
 
 # Trim background apps that contend for CPU on the underpowered CI emulator and
-# make SystemUI ANR (an ANR dialog masks the app). Chrome also has an
-# uninitialised first-run screen that can pop over the app; disable it for the
-# smoke check. The real OAuth flow (which needs a browser) is covered separately.
-for pkg in com.android.chrome com.google.android.googlequicksearchbox \
+# make SystemUI ANR (an ANR dialog masks the app).
+for pkg in com.google.android.googlequicksearchbox \
            com.google.android.apps.messaging com.google.android.youtube \
            com.google.android.apps.photos com.google.android.videos; do
   adb shell pm disable-user --user 0 "$pkg" || true
 done
+
+# Chrome's uninitialised first-run screen otherwise pops over the app (masking
+# it) and blocks OAuth Custom Tabs. Skip it via Chrome's command-line file, which
+# a rooted emulator's Chrome reads. This keeps Chrome usable for the OAuth flow.
+adb root >/dev/null 2>&1 || true
+sleep 3
+adb wait-for-device
+adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check" > /data/local/tmp/chrome-command-line' || true
+adb shell 'chmod 644 /data/local/tmp/chrome-command-line' || true
 
 adb install -r "$APK"
 adb logcat -c
