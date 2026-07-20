@@ -8,21 +8,38 @@ set -uo pipefail
 APK="${RUNNER_TEMP}/apk/app-release.apk"
 OUT="${RUNNER_TEMP}"
 
-# The emulator's Chrome has an uninitialised first-run screen that can pop over
-# the app when the sign-in screen warms up Custom Tabs. Disable it for the smoke
-# check so it cannot mask the app. The real OAuth flow is covered separately.
-adb shell pm disable-user --user 0 com.android.chrome || true
+# Trim background apps that contend for CPU on the underpowered CI emulator and
+# make SystemUI ANR (an ANR dialog masks the app). Chrome also has an
+# uninitialised first-run screen that can pop over the app; disable it for the
+# smoke check. The real OAuth flow (which needs a browser) is covered separately.
+for pkg in com.android.chrome com.google.android.googlequicksearchbox \
+           com.google.android.apps.messaging com.google.android.youtube \
+           com.google.android.apps.photos com.google.android.videos; do
+  adb shell pm disable-user --user 0 "$pkg" || true
+done
 
 adb install -r "$APK"
 adb logcat -c
 adb logcat > "${OUT}/logcat.txt" &
 
+# Let the system settle before driving the UI, so SystemUI is not still busy.
+sleep 20
+
 mkdir -p "${OUT}/maestro"
-maestro test apps/mobile/.maestro \
-  --format junit \
-  --output "${OUT}/maestro/report.xml" \
-  --debug-output "${OUT}/maestro"
-CODE=$?
+# The CI emulator occasionally throws a transient SystemUI ANR that masks the
+# app; retry the flow once before treating it as a real failure.
+CODE=0
+for attempt in 1 2; do
+  maestro test apps/mobile/.maestro \
+    --format junit \
+    --output "${OUT}/maestro/report.xml" \
+    --debug-output "${OUT}/maestro"
+  CODE=$?
+  [ "$CODE" -eq 0 ] && break
+  echo "Maestro attempt $attempt failed (code $CODE); settling and retrying..."
+  adb shell am force-stop dev.juanibiapina.zeroagent || true
+  sleep 15
+done
 
 # Capture the final on-screen state and view hierarchy regardless of result.
 adb exec-out screencap -p > "${OUT}/screen.png" || true
