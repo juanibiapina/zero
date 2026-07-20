@@ -99,10 +99,7 @@ jobs:
             adb logcat -c
             adb logcat > "${RUNNER_TEMP}/logcat.txt" &
             mkdir -p "${RUNNER_TEMP}/maestro"
-            maestro test apps/mobile/.maestro \
-              --format junit \
-              --output "${RUNNER_TEMP}/maestro/report.xml" \
-              --debug-output "${RUNNER_TEMP}/maestro"
+            maestro test apps/mobile/.maestro --format junit --output "${RUNNER_TEMP}/maestro/report.xml" --debug-output "${RUNNER_TEMP}/maestro"
 
       - name: Collect screenshots
         if: always()
