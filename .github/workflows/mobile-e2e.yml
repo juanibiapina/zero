@@ -6,6 +6,10 @@ name: Mobile E2E
 # reproducible without a physical device.
 on:
   workflow_dispatch:
+  # Temporary: run on pushes to the harness branch so it can be iterated without
+  # landing on main. Remove before merging.
+  push:
+    branches: [ mobile-e2e ]
 
 env:
   # Clerk publishable keys are public by design (already shipped in the web
