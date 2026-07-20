@@ -51,29 +51,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Reuse a previously built APK when the app sources are unchanged, so
+      # iterating on the flow/harness does not pay the ~24 min native rebuild.
+      - name: Restore APK cache
+        id: apk-cache
+        uses: actions/cache@v4
+        with:
+          path: apps/mobile/apk-out/app-release.apk
+          key: apk-${{ hashFiles('apps/mobile/src/**', 'apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml') }}
+
       - name: Install dependencies
+        if: steps.apk-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Prebuild Android project
+        if: steps.apk-cache.outputs.cache-hit != 'true'
         working-directory: apps/mobile
         run: npx expo prebuild -p android --no-install
 
       - name: Build release APK (x86_64, debug-signed)
+        if: steps.apk-cache.outputs.cache-hit != 'true'
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
 
       - name: Stage APK
+        if: steps.apk-cache.outputs.cache-hit != 'true'
         run: |
           APK=$(find apps/mobile/android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          mkdir -p "${RUNNER_TEMP}/apk"
-          cp "$APK" "${RUNNER_TEMP}/apk/app-release.apk"
+          mkdir -p apps/mobile/apk-out
+          cp "$APK" apps/mobile/apk-out/app-release.apk
           echo "Staged: $APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: ${{ runner.temp }}/apk/app-release.apk
+          path: apps/mobile/apk-out/app-release.apk
           retention-days: 1
 
   e2e:
@@ -115,7 +128,17 @@ jobs:
             adb logcat -c
             adb logcat > "${RUNNER_TEMP}/logcat.txt" &
             mkdir -p "${RUNNER_TEMP}/maestro"
+            set +e
             maestro test apps/mobile/.maestro --format junit --output "${RUNNER_TEMP}/maestro/report.xml" --debug-output "${RUNNER_TEMP}/maestro"
+            MAESTRO_EXIT=$?
+            set -e
+            # Capture whatever is on screen when the flow ends (e.g. the stuck
+            # spinner) directly via adb, plus the view hierarchy, so the failure
+            # is inspectable without a device.
+            adb exec-out screencap -p > "${RUNNER_TEMP}/screen.png" || true
+            (adb exec-out uiautomator dump /dev/tty > "${RUNNER_TEMP}/ui.xml" 2>/dev/null) \
+              || (adb shell uiautomator dump && adb pull /sdcard/window_dump.xml "${RUNNER_TEMP}/ui.xml") || true
+            exit $MAESTRO_EXIT
 
       - name: Collect artifacts
         if: always()
@@ -123,11 +146,10 @@ jobs:
           DEST="${RUNNER_TEMP}/artifacts"
           mkdir -p "$DEST"
           cp "${RUNNER_TEMP}/logcat.txt" "$DEST/" 2>/dev/null || true
+          cp "${RUNNER_TEMP}/screen.png" "$DEST/" 2>/dev/null || true
+          cp "${RUNNER_TEMP}/ui.xml" "$DEST/" 2>/dev/null || true
           cp -r "${RUNNER_TEMP}/maestro" "$DEST/maestro" 2>/dev/null || true
-          # Maestro writes screenshots + view hierarchy under ~/.maestro/tests.
           cp -r "$HOME/.maestro/tests" "$DEST/maestro-tests" 2>/dev/null || true
-          # takeScreenshot writes <name>.png into the working dir.
-          find . -maxdepth 2 -name '*.png' -exec cp {} "$DEST/" \; 2>/dev/null || true
           ls -R "$DEST" || true
 
       - name: Upload artifacts
