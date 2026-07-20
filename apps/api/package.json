@@ -12,15 +12,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.15",
-    "@clerk/backend": "^3.11.4",
-    "@clerk/hono": "^0.1.50",
-    "@hono/zod-openapi": "^1.4.0",
-    "ai": "^7.0.29",
+    "@ai-sdk/anthropic": "^4.0.16",
+    "@clerk/backend": "^3.11.7",
+    "@clerk/hono": "^0.1.53",
+    "@hono/zod-openapi": "^1.5.1",
+    "ai": "^7.0.31",
     "aws4fetch": "^1.0.20",
     "do-orm": "github:juanibiapina/do-orm",
-    "grammy": "^1.44.0",
-    "hono": "^4.12.30",
+    "grammy": "^1.45.1",
+    "hono": "^4.12.31",
     "jose": "^6.2.3",
     "marked": "^18.0.6",
     "zod": "^4.4.3"
