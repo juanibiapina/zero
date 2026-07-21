@@ -47,3 +47,7 @@ The script (`bin/e2e-test`) orchestrates everything:
 Because everything runs locally against mocks, this suite is safe to run
 often. It is not yet wired into `bin/ci` (it needs ZeroVault credentials
 and spins up several processes); run it on demand.
+
+## Testing gotcha: LLM error paths
+
+When unit-testing an LLM error path through the Vercel AI SDK (`generateText`), throw a **non-retryable** error. A plain error carrying `statusCode` works; a default `APICallError` with a retryable status does not. Otherwise the SDK retries with exponential backoff and the test hangs past vitest's 5s timeout. Don't attach a `retry-after` header in these tests either. See the 429 case in `apps/agent-api/src/agents/orchestrator.test.ts`, which throws `Object.assign(new Error("rate limited"), { statusCode: 429 })`.

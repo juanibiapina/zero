@@ -6,6 +6,8 @@ During development, use `gob run bin/ci` to run all necessary checks including b
 
 **Mobile (`apps/agent-mobile`):** unit tests, lint, and typecheck run in the Turbo pipeline like the other packages. Automated **UI tests run on an Android emulator with Maestro**, but only in the **Mobile E2E** GitHub Actions workflow (`.github/workflows/mobile-e2e.yml`, manual dispatch) — the dev box has no KVM to run an emulator locally. Every run uploads a screenshot, logcat, and UI hierarchy as artifacts, so on-device failures are reproducible without a phone. Flows live in `apps/agent-mobile/.maestro/`. See `apps/agent-mobile/README.md`.
 
+**Local `workerd` limitation:** on dev boxes where the `workerd` binary can't start (e.g. NixOS), `gob run bin/ci` and `bin/e2e-test` can't run whole-repo: the untouched vault/errors workers, the deploy dry-run, and the e2e suite all boot `workerd`. Fallback: verify the touched package directly, e.g. `pnpm --filter @zero/agent-api run test`, plus `pnpm --filter @zero/agent-api run lint` and `pnpm --filter @zero/agent-api run typecheck`. Rely on GitHub Actions CI and the Cloudflare deploy to run the `workerd`-backed suites (e2e, cross-worker build/typecheck).
+
 ## Changelog
 
 Any change a user can observe (new capability, changed behavior, user-visible
