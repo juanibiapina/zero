@@ -9,7 +9,7 @@ import type { LanguageModel } from "ai";
 import { buildTopicTools } from "../tools/topics";
 import type { TopicStore } from "../store/types";
 import { writerSystemPrompt } from "./prompts";
-import { runAgent } from "./run";
+import { runAgent, type RunAgentUsage } from "./run";
 
 export interface WriterAgentInput {
   model: LanguageModel;
@@ -21,19 +21,22 @@ export interface WriterAgentInput {
   transcript: string;
 }
 
+// Returns the run's token usage so the orchestrator can log writer_completed
+// with cache/token counts (the writer has no completion log of its own).
 export const runWriterAgent = async (
   input: WriterAgentInput,
-): Promise<void> => {
+): Promise<RunAgentUsage> => {
   const { model, store, accessed, transcript } = input;
 
   const tools = buildTopicTools({ store });
 
   const accessedList = accessed.length > 0 ? accessed.join(", ") : "(none)";
 
-  await runAgent({
+  const { usage } = await runAgent({
     model,
     system: writerSystemPrompt(),
     prompt: `# Turn transcript\n\n${transcript}\n\n# Topics accessed this turn\n\n${accessedList}\n\nConsolidate durable knowledge. Use list_topics/get_topic to inspect, update accessed topics that gained facts, and create a topic for any durable subject that has none.`,
     tools,
   });
+  return usage;
 };

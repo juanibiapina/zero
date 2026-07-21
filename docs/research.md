@@ -46,8 +46,13 @@ tunable; err toward more triggering and tune down from logs.
 `apps/agent-api/src/agents/run.ts` is the single agent machine:
 
 ```
-runAgent({ model, system, prompt, tools, maxSteps }) → { text, finishReason, steps }
+runAgent({ model, system, prompt, tools, maxSteps }) →
+  { text, finishReason, steps, messages, usage, stepUsages }
 ```
+
+`runAgent` also applies prompt caching: it turns `system` into a cached leading
+system message and marks the last tool with a cache breakpoint, and returns token
+counts (`usage`, `stepUsages`). See [caching.md](./caching.md).
 
 The interface agent, the research agent, and the writer agent are the same
 runner with different system prompts and toolsets:
@@ -77,7 +82,7 @@ with a high step count shows up in logs, lower it.
 
 The research tool logs `research_started` (`prompt_len`, `has_topic`) and
 `research_completed` (`steps`, `finish_reason`, `duration_ms`, `result_len`,
-`topics` — the names it wrote); the `web_search` tool
+`topics` — the names it wrote, plus token/cache counts); the `web_search` tool
 logs `web_search_failed` (`error`) where search errors are otherwise swallowed
 into the tool result. No message content is logged (see `log.ts` conventions).
 

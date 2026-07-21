@@ -101,6 +101,117 @@ describe("runAgent", () => {
     expect(result.text).toBe("");
   });
 
+  it("converts system into a cached leading system message and marks the last tool", async () => {
+    let captured: LanguageModelV3CallOptions | undefined;
+    const model = new MockLanguageModelV3({
+      doGenerate: (options) => {
+        captured = options;
+        return Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          finishReason: "stop",
+          usage: { inputTokens: {}, outputTokens: {} },
+          warnings: [],
+        } as unknown as LanguageModelV3GenerateResult);
+      },
+    });
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: {
+        a: tool({ description: "a", inputSchema: z.object({}) }),
+        b: tool({ description: "b", inputSchema: z.object({}) }),
+      },
+    });
+
+    // No top-level system param; it rides as a cached leading system message.
+    expect(captured?.prompt?.[0].role).toBe("system");
+    const sysOpts = (captured?.prompt?.[0] as { providerOptions?: unknown })
+      .providerOptions as { anthropic?: { cacheControl?: unknown } };
+    expect(sysOpts?.anthropic?.cacheControl).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
+
+    // The last tool carries a cache breakpoint; the first does not.
+    const toolOpts = (name: string) =>
+      (
+        captured?.tools?.find(
+          (t) => (t as { name?: string }).name === name,
+        ) as { providerOptions?: { anthropic?: { cacheControl?: unknown } } }
+      )?.providerOptions?.anthropic?.cacheControl;
+    expect(toolOpts("b")).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(toolOpts("a")).toBeUndefined();
+  });
+
+  it("preserves caller message providerOptions", async () => {
+    let captured: LanguageModelV3CallOptions | undefined;
+    const model = new MockLanguageModelV3({
+      doGenerate: (options) => {
+        captured = options;
+        return Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          finishReason: "stop",
+          usage: { inputTokens: {}, outputTokens: {} },
+          warnings: [],
+        } as unknown as LanguageModelV3GenerateResult);
+      },
+    });
+
+    await runAgent({
+      model,
+      system: "sys",
+      messages: [
+        {
+          role: "user",
+          content: "hi",
+          providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+        },
+      ],
+    });
+
+    const user = captured?.prompt?.find((m) => m.role === "user") as {
+      providerOptions?: { anthropic?: { cacheControl?: unknown } };
+    };
+    expect(user?.providerOptions?.anthropic?.cacheControl).toEqual({
+      type: "ephemeral",
+    });
+  });
+
+  it("flows cache token counts through to the result", async () => {
+    const model = scriptedModel([{ text: "done" }]);
+    const result = await runAgent({ model, system: "sys", prompt: "q" });
+    expect(result.usage.cacheReadTokens).toBe(8);
+    expect(result.usage.cacheWriteTokens).toBe(4);
+    expect(result.usage.inputTokens).toBe(20);
+    expect(result.stepUsages).toHaveLength(1);
+    expect(result.stepUsages[0].cacheReadTokens).toBe(8);
+  });
+
+  it("passes the plain shape when cache is disabled", async () => {
+    let captured: LanguageModelV3CallOptions | undefined;
+    const model = new MockLanguageModelV3({
+      doGenerate: (options) => {
+        captured = options;
+        return Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          finishReason: "stop",
+          usage: { inputTokens: {}, outputTokens: {} },
+          warnings: [],
+        } as unknown as LanguageModelV3GenerateResult);
+      },
+    });
+
+    await runAgent({ model, system: "sys", prompt: "q", cache: false });
+    // System still reaches the model (via the top-level param) but carries no
+    // cache breakpoint.
+    const system = captured?.prompt?.find((m) => m.role === "system") as {
+      providerOptions?: { anthropic?: { cacheControl?: unknown } };
+    };
+    expect(system?.providerOptions?.anthropic?.cacheControl).toBeUndefined();
+  });
+
   it("surfaces finishReason 'tool-calls' when the loop hits the cap mid-tool-call", async () => {
     const ping = vi.fn(async () => "pong");
     const model = scriptedModel([

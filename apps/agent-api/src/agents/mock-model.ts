@@ -16,12 +16,20 @@ let callCounter = 0;
 // bare string; downstream code reads `.unified`, so the mock must match.
 const finishReason = (unified: string) => ({ unified, raw: unified });
 
+// Emit non-empty usage (with cache details) so tests can assert the token
+// counts flow through runAgent's result. No real caching happens here — the
+// mock ignores cache_control on the request; these are canned numbers.
+const usage = () => ({
+  inputTokens: { total: 20, noCache: 12, cacheRead: 8, cacheWrite: 4 },
+  outputTokens: { total: 5, text: 5, reasoning: 0 },
+});
+
 const toResult = (step: ScriptStep): LanguageModelV3GenerateResult => {
   if ("text" in step) {
     return {
       content: [{ type: "text", text: step.text }],
       finishReason: finishReason("stop"),
-      usage: { inputTokens: {}, outputTokens: {} },
+      usage: usage(),
       warnings: [],
     } as unknown as LanguageModelV3GenerateResult;
   }
@@ -33,7 +41,7 @@ const toResult = (step: ScriptStep): LanguageModelV3GenerateResult => {
       input: JSON.stringify(t.input),
     })),
     finishReason: finishReason("tool-calls"),
-    usage: { inputTokens: {}, outputTokens: {} },
+    usage: usage(),
     warnings: [],
   } as unknown as LanguageModelV3GenerateResult;
 };

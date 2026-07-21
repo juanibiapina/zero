@@ -11,7 +11,7 @@ import { buildGoogleTools } from "../tools/google";
 import type { TopicStore } from "../store/types";
 import type { GoogleWorkspace } from "../google/types";
 import { onboardingSystemPrompt } from "./prompts";
-import { runAgent } from "./run";
+import { runAgent, usageLogFields } from "./run";
 import { log } from "../log";
 
 export interface OnboardingAgentInput {
@@ -43,7 +43,7 @@ export const runOnboardingAgent = async (
   };
 
   const start = Date.now();
-  const { finishReason, steps } = await runAgent({
+  const { finishReason, steps, usage } = await runAgent({
     model,
     system: onboardingSystemPrompt(),
     prompt:
@@ -58,5 +58,6 @@ export const runOnboardingAgent = async (
     steps,
     finish_reason: finishReason,
     duration_ms: Date.now() - start,
+    ...usageLogFields(usage),
   });
 };

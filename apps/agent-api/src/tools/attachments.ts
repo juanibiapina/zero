@@ -16,10 +16,13 @@ import type { AttachmentStore } from "../attachments/types";
 import type { Attachment } from "../store/types";
 
 export interface AttachmentToolDeps {
-  attachments: AttachmentStore;
+  // Both optional so the tool can be registered unconditionally with a
+  // byte-identical schema (needed for cross-user tool-cache sharing). When
+  // either is absent the store is unwired and view_attachment returns an error.
+  attachments?: AttachmentStore;
   // Resolve an attachment id to its metadata row, scoped to this user's DO/R2.
   // A spoofed id from another user cannot resolve here (per-user DO isolation).
-  getAttachment: (id: string) => Attachment | null;
+  getAttachment?: (id: string) => Attachment | null;
 }
 
 const toBase64 = (bytes: Uint8Array): string => {
@@ -46,6 +49,10 @@ export const buildAttachmentTool = (deps: AttachmentToolDeps): ToolSet => {
         "conversation, not only the most recent.",
       inputSchema: z.object({ id: z.string() }),
       execute: async ({ id }): Promise<ViewOutput> => {
+        if (!attachments || !getAttachment) {
+          log("view_attachment_miss", { id, reason: "store_unwired" });
+          return { error: `No attachment found for id ${id}.` };
+        }
         const record = getAttachment(id);
         const bytes = record ? await attachments.get(record.r2Key) : null;
         if (!record || !bytes) {

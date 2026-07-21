@@ -5,7 +5,11 @@ import {
   formatTimestamp,
   runInterfaceAgent,
 } from "./interface";
-import { interfaceSystemPrompt, renderPinnedTopics } from "./prompts";
+import {
+  interfaceContext,
+  interfaceSystemPrompt,
+  renderPinnedTopics,
+} from "./prompts";
 import { scriptedModel } from "./mock-model";
 import { MockLanguageModelV3 } from "ai/test";
 import type { Topic } from "../store/types";
@@ -37,18 +41,35 @@ describe("formatTimestamp", () => {
 });
 
 describe("interfaceSystemPrompt", () => {
-  it("anchors the prompt with the current datetime in UTC by default", () => {
-    expect(interfaceSystemPrompt(NOW)).toContain(
+  it("carries no per-minute time or timezone value (stays cross-user cacheable)", () => {
+    const prompt = interfaceSystemPrompt();
+    expect(prompt).not.toContain("Current time:");
+    expect(prompt).not.toContain("The user's timezone is");
+    expect(prompt).toContain("given with the latest user message");
+  });
+
+  it("folds pinned topics onto the tail when present, absent when empty", () => {
+    expect(interfaceSystemPrompt()).not.toContain("Pinned topics");
+    const withPinned = interfaceSystemPrompt("\n\n## Pinned topics\n\nbody");
+    expect(withPinned).toContain("Pinned topics");
+    expect(withPinned.endsWith("body")).toBe(true);
+  });
+});
+
+describe("interfaceContext", () => {
+  it("renders the current datetime and timezone in UTC by default", () => {
+    expect(interfaceContext(NOW)).toContain(
       "Current time: Friday, 2026-07-17 12:00 (UTC, GMT+0).",
     );
+    expect(interfaceContext(NOW)).toContain("Your timezone is UTC");
   });
 
   it("renders the anchor in the user's timezone", () => {
-    const prompt = interfaceSystemPrompt(NOW, "America/Sao_Paulo");
-    expect(prompt).toContain(
+    const context = interfaceContext(NOW, "America/Sao_Paulo");
+    expect(context).toContain(
       "Current time: Friday, 2026-07-17 09:00 (America/Sao_Paulo, GMT-3).",
     );
-    expect(prompt).toContain("The user's timezone is America/Sao_Paulo");
+    expect(context).toContain("Your timezone is America/Sao_Paulo");
   });
 });
 
@@ -120,6 +141,84 @@ describe("runInterfaceAgent pinned surfacing", () => {
     });
 
     expect(captured.system).toContain("name: Alice; city: Berlin");
+  });
+});
+
+describe("runInterfaceAgent prompt shape (caching)", () => {
+  const capturePrompt = async (opts: {
+    history?: import("../store/types").Message[];
+    timezone?: string;
+  }) => {
+    const store = new MemoryStore();
+    const captured: {
+      prompt?: Array<{ role: string; content: unknown; providerOptions?: unknown }>;
+    } = {};
+    const model = new MockLanguageModelV3({
+      doGenerate: async (options: {
+        prompt: Array<{ role: string; content: unknown; providerOptions?: unknown }>;
+      }) => {
+        captured.prompt = options.prompt;
+        return {
+          content: [{ type: "text", text: "" }],
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } },
+          warnings: [],
+        } as never;
+      },
+    });
+    await runInterfaceAgent({
+      model,
+      store,
+      send: collectSink().send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      history: opts.history ?? [],
+      userMessage: "hi",
+      timezone: opts.timezone,
+      now: NOW,
+    });
+    return captured.prompt ?? [];
+  };
+
+  const cc = (m: { providerOptions?: unknown }) =>
+    (m.providerOptions as { anthropic?: { cacheControl?: unknown } })?.anthropic
+      ?.cacheControl;
+
+  it("puts the current time and timezone on the latest user message, not the system prompt", async () => {
+    const prompt = await capturePrompt({ timezone: "America/Sao_Paulo" });
+    const system = prompt.find((m) => m.role === "system");
+    const sysText =
+      typeof system?.content === "string"
+        ? system.content
+        : JSON.stringify(system?.content);
+    expect(sysText).not.toContain("Current time:");
+
+    const users = prompt.filter((m) => m.role === "user");
+    const lastUser = JSON.stringify(users[users.length - 1]?.content);
+    expect(lastUser).toContain("Current time: Friday, 2026-07-17 09:00");
+    expect(lastUser).toContain("Your timezone is America/Sao_Paulo");
+  });
+
+  it("marks the last stable message and the current message (sliding window)", async () => {
+    const prompt = await capturePrompt({
+      history: [
+        { role: "user", content: "q", createdAt: iso(5 * 60_000) },
+        { role: "assistant", content: "a", createdAt: iso(4 * 60_000) },
+      ],
+    });
+    const convo = prompt.filter((m) => m.role !== "system");
+    // Last two conversation messages (stable assistant + current user) carry a
+    // breakpoint; earlier messages do not.
+    expect(cc(convo[convo.length - 1])).toBeTruthy();
+    expect(cc(convo[convo.length - 2])).toBeTruthy();
+    expect(cc(convo[0])).toBeFalsy();
+  });
+
+  it("collapses to one breakpoint on the current message when history is empty", async () => {
+    const prompt = await capturePrompt({});
+    const convo = prompt.filter((m) => m.role !== "system");
+    expect(convo).toHaveLength(1);
+    expect(cc(convo[0])).toBeTruthy();
   });
 });
 

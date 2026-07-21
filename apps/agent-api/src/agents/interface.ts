@@ -12,8 +12,13 @@ import type { Attachment, Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { AttachmentStore } from "../attachments/types";
-import { interfaceSystemPrompt, renderPinnedTopics } from "./prompts";
-import { runAgent } from "./run";
+import {
+  interfaceContext,
+  interfaceSystemPrompt,
+  renderPinnedTopics,
+} from "./prompts";
+import { runAgent, usageLogFields } from "./run";
+import { markCacheBreakpoint } from "./cache";
 import { log } from "../log";
 
 // Delivered when the model never produces its intended answer (loop hit the
@@ -127,9 +132,9 @@ export const renderTranscript = (
 // Absolute local timestamp (YYYY-MM-DD HH:MM) for a stored message, in the
 // user's timezone. Prefixed onto each user message so the model can place it in
 // time. Absolute (not relative "5 min ago") so the text is stable turn-to-turn:
-// a relative age would recompute every turn and mutate the prefix, defeating
-// future prompt caching. The datetime anchor in the system prompt lets the
-// model derive "how long ago".
+// a relative age would recompute every turn and mutate the prefix, breaking the
+// cross-turn cache (see docs/caching.md). The datetime anchor on the latest
+// message lets the model derive "how long ago".
 export const formatTimestamp = (createdAt: string, timezone: string): string => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -146,8 +151,11 @@ export const formatTimestamp = (createdAt: string, timezone: string): string => 
 };
 
 // Build the model's message array from the stored dialogue plus the current
-// user message. The system prompt (instructions, datetime anchor, pinned
-// topics) is assembled separately; this array is only the Telegram dialogue.
+// user message. The system prompt (instructions, pinned topics) is assembled
+// separately, and the volatile per-turn context (current time, timezone) is
+// prepended to the latest message by the caller; this array is only the
+// Telegram dialogue. The history before the current message stays byte-stable
+// turn-to-turn so it caches across turns (see docs/caching.md).
 //
 // Rules (see PLAN.md):
 // - User messages carry an absolute timestamp prefix; assistant messages are
@@ -236,31 +244,54 @@ export const runInterfaceAgent = async (
       google: input.google,
       timezone: input.timezone ?? "UTC",
     }),
-    ...(input.attachments && input.getAttachment
-      ? buildAttachmentTool({
-          attachments: input.attachments,
-          getAttachment: input.getAttachment,
-        })
-      : {}),
+    // Registered unconditionally so the tool schema is byte-identical across
+    // users and turns (a conditional tool would break cross-user tool-cache
+    // sharing). When no attachment store is wired the tool returns an error.
+    ...buildAttachmentTool({
+      attachments: input.attachments,
+      getAttachment: input.getAttachment,
+    }),
   };
 
   // The agent's replies are the { replies, accessed } collected by the tool
   // closures above. The runner's returned text is the model's final prose.
   const now = input.now ?? new Date();
   const start = Date.now();
+  const timezone = input.timezone ?? "UTC";
   const pinned = renderPinnedTopics(input.store.getPinnedTopics());
-  const { text, finishReason, steps, messages } = await runAgent({
-    model: input.model,
-    system: interfaceSystemPrompt(now, input.timezone, pinned),
-    messages: buildConversationMessages(
-      input.history,
-      input.userMessage,
-      now,
-      input.timezone ?? "UTC",
-    ),
-    tools,
-    maxSteps: input.maxSteps,
-  });
+
+  const convo = buildConversationMessages(
+    input.history,
+    input.userMessage,
+    now,
+    timezone,
+  );
+  // Prepend the volatile context (current time + timezone) to the current user
+  // message so it sits after the cached history prefix and never invalidates it.
+  // The last message is always the current user turn (appended by
+  // buildConversationMessages), so rebuild it as a user message with the context
+  // prepended.
+  const lastIdx = convo.length - 1;
+  convo[lastIdx] = {
+    role: "user",
+    content: `${interfaceContext(now, timezone)}\n\n${convo[lastIdx].content as string}`,
+  };
+  // Sliding-window breakpoints in the messages region. The last stable message
+  // (previous turn's final block) is byte-identical next turn, so it is the
+  // write that yields the cross-turn history read; the current message (carrying
+  // the volatile context) only keeps the new turn warm for the within-run loop.
+  // Empty history collapses to a single current message -> one breakpoint.
+  if (lastIdx >= 1) convo[lastIdx - 1] = markCacheBreakpoint(convo[lastIdx - 1]);
+  convo[lastIdx] = markCacheBreakpoint(convo[lastIdx]);
+
+  const { text, finishReason, steps, messages, usage, stepUsages } =
+    await runAgent({
+      model: input.model,
+      system: interfaceSystemPrompt(pinned),
+      messages: convo,
+      tools,
+      maxSteps: input.maxSteps,
+    });
 
   const transcript = renderTranscript(input.userMessage, messages);
 
@@ -270,7 +301,19 @@ export const runInterfaceAgent = async (
     replies_count: replies.length,
     accessed_count: accessed.size,
     duration_ms: Date.now() - start,
+    ...usageLogFields(usage),
   });
+
+  // Per-step token line for multi-step turns: exposes the tier-1 write-then-read
+  // pattern (step 1 writes the prefix, later steps read it) that the aggregate
+  // hides. See docs/caching.md.
+  if (stepUsages.length > 1) {
+    log("interface_step_usage", {
+      cache_read: stepUsages.map((u) => u.cacheReadTokens),
+      cache_write: stepUsages.map((u) => u.cacheWriteTokens),
+      input: stepUsages.map((u) => u.inputTokens),
+    });
+  }
 
   // A `reply` send failed and the AI SDK swallowed it. Re-raise so the
   // orchestrator's error boundary logs turn_failed and delivers the fallback.

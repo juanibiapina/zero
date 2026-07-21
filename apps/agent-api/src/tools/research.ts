@@ -10,7 +10,7 @@
 
 import { tool, type LanguageModel, type ToolSet } from "ai";
 import { z } from "zod";
-import { runAgent } from "../agents/run";
+import { runAgent, usageLogFields } from "../agents/run";
 import { researchSystemPrompt } from "../agents/prompts";
 import { buildTopicTools } from "./topics";
 import { buildWebSearchTool } from "./web-search";
@@ -67,7 +67,7 @@ export const buildResearchTool = (deps: ResearchToolDeps): ToolSet => {
           ? `${prompt}\n\nPrior context: the topic "${topic}" already covers this subject. Read it first with get_topic and update it with your findings.`
           : prompt;
 
-        const { text, finishReason, steps } = await runAgent({
+        const { text, finishReason, steps, usage } = await runAgent({
           model,
           system: researchSystemPrompt(),
           prompt: agentPrompt,
@@ -94,6 +94,7 @@ export const buildResearchTool = (deps: ResearchToolDeps): ToolSet => {
           duration_ms: Date.now() - start,
           result_len: text.length,
           topics: names,
+          ...usageLogFields(usage),
         });
 
         const handle =

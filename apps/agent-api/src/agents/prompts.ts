@@ -59,20 +59,26 @@ const formatAnchor = (now: Date, timezone: string): string => {
   return `${weekday}, ${date} ${time} (${timezone}, ${offset})`;
 };
 
-export const interfaceSystemPrompt = (
+// The volatile per-turn context: current time and the user's timezone. Kept out
+// of the (cached, cross-user) system prompt and prepended to the latest user
+// message instead, so it sits after the cached history prefix and never
+// invalidates it. See docs/caching.md.
+export const interfaceContext = (
   now: Date = new Date(),
   timezone = "UTC",
-  pinned = "",
 ): string =>
+  `Current time: ${formatAnchor(now, timezone)}. Your timezone is ${timezone}; ` +
+  `interpret and express times in it.`;
+
+export const interfaceSystemPrompt = (pinned = ""): string =>
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
 
-Current time: ${formatAnchor(now, timezone)}. Each user message in the
-conversation is prefixed with an absolute timestamp [YYYY-MM-DD HH:MM] in the
-user's timezone; compare it to the current time to judge how long ago it was.
-The user's timezone is ${timezone}; interpret and express times in it. If the
-user tells you they are in a different place or timezone, call set_timezone to
-update it.
+The current time and your timezone are given with the latest user message. Each
+user message in the conversation is prefixed with an absolute timestamp
+[YYYY-MM-DD HH:MM] in the user's timezone; compare it to the current time to
+judge how long ago it was. If the user tells you they are in a different place
+or timezone, call set_timezone to update it.
 
 You have a durable knowledge model made of topics: living documents each about
 one subject (a project, a person, an ongoing thread). Recall what a topic holds

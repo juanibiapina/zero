@@ -5,6 +5,7 @@
 
 import { runInterfaceAgent, FALLBACK_MESSAGE } from "./interface";
 import { runWriterAgent } from "./writer";
+import { usageLogFields } from "./run";
 import { log, logError, fmtErr } from "../log";
 import type { AgentLabel } from "./model";
 import type { LanguageModel } from "ai";
@@ -97,7 +98,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     // topic creation must be possible on turns that introduce a brand-new
     // subject. The prompt keeps trivial turns to a single no-tool step.
     const writerStart = Date.now();
-    await runWriterAgent({
+    const writerUsage = await runWriterAgent({
       model: makeModel("writer"),
       store,
       accessed,
@@ -106,6 +107,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     log("writer_completed", {
       accessed_count: accessed.length,
       duration_ms: Date.now() - writerStart,
+      ...usageLogFields(writerUsage),
     });
   } catch (err) {
     // The agent path threw (LLM gateway error, malformed tool loop, etc.).

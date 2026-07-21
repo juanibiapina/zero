@@ -301,13 +301,13 @@ Conventions:
 - Never log message content, model replies, tool results, or request bodies.
   Counts and identifiers only.
 
+Prompt caching (system prefix, tool schemas, and conversation history) is
+documented in [caching.md](./caching.md).
+
 ## Future Work
 
 - Support non-image attachments (PDF, audio, video) through the same
   `view_attachment` path once their `tool_result` serialization is verified.
-- Prompt caching: the structured message history keeps per-message content
-  stable (absolute timestamps, verbatim assistant text) so a top-level
-  `cache_control` marker can be added without a mutating prefix.
 - Consider structured `ModelMessage[]` history for the research and writer
   agents (they currently use the single-`prompt` path).
 - An R2 lifecycle expiry rule for attachment objects.

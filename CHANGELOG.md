@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-21: Faster replies on research and calendar-heavy turns and in longer conversations.
 - 2026-07-21: Starting a new conversation now works even in threads where you had sent a photo or file.
 - 2026-07-20: Sign in to the Zero Agent mobile app with your Zero account.
 - 2026-07-18: Send Zero a photo, PDF, or file and it can read and work with it.
