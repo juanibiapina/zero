@@ -257,6 +257,21 @@ describe("Store contract: conversations", () => {
     expect(s.getConversationHistory(newId, 10)).toEqual([]);
   });
 
+  it("resetConversation drops attachments in the thread (FK-safe)", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.putAttachment({
+      id: "att_reset",
+      conversationId: id,
+      r2Key: "attachments/user_1/xyz",
+      filename: "cat.jpg",
+      mimeType: "image/jpeg",
+    });
+    // Must not throw a FOREIGN KEY constraint error when the thread has attachments.
+    s.resetConversation(1, 0);
+    expect(s.getAttachment("att_reset")).toBeNull();
+  });
+
   it("findThreadsAwaitingReply returns threads whose tail is a user message", () => {
     const s = makeStore();
     const a = s.getOrCreateConversation(1, 0);

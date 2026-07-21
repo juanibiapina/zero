@@ -263,7 +263,10 @@ export class DbStore implements Store {
       where: and(eq("chatId", chatId), eq("topicId", topicId)),
     });
     if (!conv) return;
+    // Delete FK children (messages, attachments) before the conversation row,
+    // else SQLite rejects the parent delete with a FOREIGN KEY constraint error.
     this.db.delete(messages, { where: eq("conversationId", conv.id) });
+    this.db.delete(attachments, { where: eq("conversationId", conv.id) });
     this.db.delete(conversations, { where: eq("id", conv.id) });
   }
 

@@ -221,6 +221,9 @@ export class MemoryStore implements Store {
     );
     if (!conv) return;
     this.msgs = this.msgs.filter((m) => m.conversationId !== conv.id);
+    for (const [id, a] of this.attachments) {
+      if (a.conversationId === conv.id) this.attachments.delete(id);
+    }
     this.convs = this.convs.filter((c) => c.id !== conv.id);
   }
 
