@@ -21,6 +21,12 @@
   "observability": {
     "enabled": true
   },
+  // Deterministic test-only master key (base64 of 32 bytes). Keeps the DO
+  // crypto self-contained so the suite never depends on fetching the real
+  // MASTER_KEY secret into `.dev.vars`.
+  "vars": {
+    "MASTER_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+  },
   "kv_namespaces": [
     {
       "binding": "APIKEYS",
