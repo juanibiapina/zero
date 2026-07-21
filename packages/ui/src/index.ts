@@ -13,6 +13,7 @@ export { fetchApi, type GetToken } from "./lib/api";
 
 export { AuthProvider } from "./auth/AuthProvider";
 export { AppLayout, type AppLayoutProps, type NavItem } from "./components/AppLayout";
+export { getProducts, type ProductLink, type ProductId } from "./products";
 export { SignInPage } from "./pages/SignInPage";
 export { SignUpPage } from "./pages/SignUpPage";
 

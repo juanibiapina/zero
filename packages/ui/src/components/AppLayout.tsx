@@ -7,6 +7,7 @@ import {
   OrganizationSwitcher,
 } from "@clerk/clerk-react";
 import type { LucideIcon } from "lucide-react";
+import type { ProductId, ProductLink } from "../products";
 import { Button } from "./ui/button";
 import { Toaster } from "./ui/sonner";
 import { cn } from "../lib/utils";
@@ -24,49 +25,129 @@ export interface AppLayoutProps {
   navItems: NavItem[];
   /** Where Clerk sends the user after switching/creating an org. */
   afterOrgUrl?: string;
+  /** Full Zero product list (same on every app). Omit to hide the switcher. */
+  products?: ProductLink[];
+  /** Which product this app is, so its row is highlighted and inert. */
+  currentProductId?: ProductId;
 }
 
 /**
- * The shared authenticated app shell: sticky header with brand + nav, org
- * switcher and user button, a responsive mobile nav, and a content outlet.
- * Product-specific bits (brand, nav) are props so every Zero dashboard is one
- * visual family. Unauthenticated users are redirected to sign-in.
+ * The shared authenticated app shell: a Cloudflare-style left rail (brand +
+ * product switcher + nav) on desktop with a trimmed top bar, collapsing to a
+ * top bar with a native product `<select>` and a horizontal nav strip on
+ * mobile. Product-specific bits (brand, nav, current product) are props so
+ * every Zero console is one visual family. Unauthenticated users are
+ * redirected to sign-in.
  */
-export function AppLayout({ brand, navItems, afterOrgUrl = "/" }: AppLayoutProps) {
+export function AppLayout({
+  brand,
+  navItems,
+  afterOrgUrl = "/",
+  products,
+  currentProductId,
+}: AppLayoutProps) {
   const location = useLocation();
   const BrandIcon = brand.icon;
+
+  const showSelector = products !== undefined && currentProductId !== undefined;
+
+  const onMobileProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = products?.find((p) => p.id === e.target.value);
+    if (next && next.id !== currentProductId) {
+      window.location.assign(next.href);
+    }
+  };
 
   return (
     <>
       <SignedIn>
-        <div className="min-h-screen bg-background">
-          <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="container mx-auto flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
-              <Link to={brand.to} className="flex items-center gap-2">
-                <BrandIcon className="h-5 w-5" />
-                <span className="text-xl font-bold tracking-tight">{brand.name}</span>
-              </Link>
+        <div className="flex min-h-screen bg-background">
+          {/* Desktop left rail */}
+          <aside className="hidden md:flex md:w-60 md:flex-col md:border-r bg-background">
+            <Link
+              to={brand.to}
+              className="flex h-14 items-center gap-2 border-b px-4"
+            >
+              <BrandIcon className="h-5 w-5" />
+              <span className="text-xl font-bold tracking-tight">{brand.name}</span>
+            </Link>
 
-              <nav className="hidden md:flex items-center gap-1">
-                {navItems.map((item) => (
-                  <Button
-                    key={item.to}
-                    variant="ghost"
-                    size="sm"
-                    asChild
-                    className={cn(
-                      location.pathname.startsWith(item.to) && "bg-accent text-accent-foreground"
-                    )}
+            {showSelector && (
+              <div className="flex flex-col gap-1 border-b p-2">
+                {products.map((product) => {
+                  const ProductIcon = product.icon;
+                  const isCurrent = product.id === currentProductId;
+                  const className = cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    isCurrent
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  );
+                  if (isCurrent) {
+                    return (
+                      <span key={product.id} className={className} aria-current="page">
+                        <ProductIcon className="h-4 w-4" />
+                        {product.label}
+                      </span>
+                    );
+                  }
+                  return (
+                    <a key={product.id} href={product.href} className={className}>
+                      <ProductIcon className="h-4 w-4" />
+                      {product.label}
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+
+            <nav className="flex flex-1 flex-col gap-1 p-2">
+              {navItems.map((item) => (
+                <Button
+                  key={item.to}
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className={cn(
+                    "justify-start",
+                    location.pathname.startsWith(item.to) && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  <Link to={item.to}>
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                </Button>
+              ))}
+            </nav>
+          </aside>
+
+          {/* Content column */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="sticky top-0 z-50 flex h-14 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6 lg:px-8">
+              {/* Mobile brand + product switcher */}
+              <div className="flex items-center gap-2 md:hidden">
+                <Link to={brand.to} className="flex items-center gap-2">
+                  <BrandIcon className="h-5 w-5" />
+                  <span className="text-lg font-bold tracking-tight">{brand.name}</span>
+                </Link>
+                {showSelector && (
+                  <select
+                    aria-label="Switch product"
+                    value={currentProductId}
+                    onChange={onMobileProductChange}
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <Link to={item.to}>
-                      <item.icon className="h-4 w-4" />
-                      {item.label}
-                    </Link>
-                  </Button>
-                ))}
-              </nav>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
-              <div className="flex items-center gap-2">
+              <div className="ml-auto flex items-center gap-2">
                 <OrganizationSwitcher
                   afterSelectOrganizationUrl={afterOrgUrl}
                   afterCreateOrganizationUrl={afterOrgUrl}
@@ -84,32 +165,33 @@ export function AppLayout({ brand, navItems, afterOrgUrl = "/" }: AppLayoutProps
                   }}
                 />
               </div>
-            </div>
-          </header>
+            </header>
 
-          <nav className="md:hidden border-b bg-background px-4 py-2 flex gap-1 overflow-x-auto">
-            {navItems.map((item) => (
-              <Button
-                key={item.to}
-                variant="ghost"
-                size="sm"
-                asChild
-                className={cn(
-                  "flex-shrink-0",
-                  location.pathname.startsWith(item.to) && "bg-accent text-accent-foreground"
-                )}
-              >
-                <Link to={item.to}>
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              </Button>
-            ))}
-          </nav>
+            {/* Mobile nav strip */}
+            <nav className="md:hidden border-b bg-background px-4 py-2 flex gap-1 overflow-x-auto">
+              {navItems.map((item) => (
+                <Button
+                  key={item.to}
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className={cn(
+                    "flex-shrink-0",
+                    location.pathname.startsWith(item.to) && "bg-accent text-accent-foreground",
+                  )}
+                >
+                  <Link to={item.to}>
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                </Button>
+              ))}
+            </nav>
 
-          <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-            <Outlet />
-          </main>
+            <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+              <Outlet />
+            </main>
+          </div>
 
           <Toaster position="bottom-right" />
         </div>

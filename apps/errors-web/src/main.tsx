@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
-import { AppLayout, SignInPage, SignUpPage, type NavItem } from "@zero/ui";
+import { AppLayout, SignInPage, SignUpPage, getProducts, type NavItem } from "@zero/ui";
 import { Bug, ListChecks } from "lucide-react";
 
 import "./index.css";
@@ -19,9 +19,11 @@ const router = createBrowserRouter([
       {
         element: (
           <AppLayout
-            brand={{ name: "ZeroErrors", icon: Bug, to: "/issues" }}
+            brand={{ name: "Zero", icon: Bug, to: "/issues" }}
             navItems={navItems}
             afterOrgUrl="/issues"
+            products={getProducts()}
+            currentProductId="errors"
           />
         ),
         children: [
