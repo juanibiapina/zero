@@ -96,6 +96,27 @@ describe("runAlarmTurns", () => {
     expect(storage.alarms).toEqual([1000 + backoffMs(2)]);
   });
 
+  it("reports the failure to the error sink and still reschedules", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const storage = fakeStorage();
+    const reportError = vi.fn(async () => {});
+    const boom = new Error("gateway down");
+    const runTurn = vi.fn(async () => {
+      throw boom;
+    });
+
+    await runAlarmTurns({
+      storage,
+      findThreadsAwaitingReply: () => [thread("c1", 1, 2)],
+      runTurn,
+      reportError,
+      now: () => 1000,
+    });
+
+    expect(reportError).toHaveBeenCalledWith(boom);
+    expect(storage.alarms).toEqual([1000 + BASE_BACKOFF_MS]);
+  });
+
   it("does not reschedule when nothing awaits reply (circuit breaker)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const storage = fakeStorage();

@@ -17,6 +17,7 @@ import { getGoogleAccessToken, memoizeTokenProvider } from "../google-token";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
 import { runOnboardingAgent } from "../agents/onboarding";
 import { runAlarmTurns } from "../do/alarm";
+import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
 import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
@@ -176,6 +177,7 @@ export class UserDO extends DurableObject<Env> {
       storage: this.ctx.storage,
       findThreadsAwaitingReply: () => this.store.findThreadsAwaitingReply(),
       runTurn: (chatId, topicId) => this.runTurn(chatId, topicId),
+      reportError: (err) => reportError(this.env, err, { site: "alarm_turn" }),
     });
     if (this.getSettings().googleOnboardingStatus === "queued") {
       await this.runOnboarding();

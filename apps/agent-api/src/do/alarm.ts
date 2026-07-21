@@ -44,6 +44,9 @@ export interface AlarmTurnsDeps {
   findThreadsAwaitingReply: () => Thread[];
   runTurn: (chatId: number, topicId: number) => Promise<void>;
   now?: () => number;
+  // Optional exception sink (ZeroErrors). Best-effort and must never reject;
+  // awaited so it completes within the alarm's lifetime.
+  reportError?: (err: unknown) => Promise<void>;
 }
 
 export const runAlarmTurns = async (deps: AlarmTurnsDeps): Promise<void> => {
@@ -58,6 +61,7 @@ export const runAlarmTurns = async (deps: AlarmTurnsDeps): Promise<void> => {
     await storage.delete(ATTEMPTS_KEY);
   } catch (err) {
     logError("alarm_turn_failed", { error: fmtErr(err) });
+    await deps.reportError?.(err);
 
     // Circuit breaker: only reschedule while work remains. Prevents a runaway
     // paid alarm loop once every thread has been answered.
