@@ -4,6 +4,7 @@
 // its alarm handler; tests call it directly with MemoryStore + a scripted model.
 
 import { runInterfaceAgent, FALLBACK_MESSAGE } from "./interface";
+import { isRateLimitError, RATE_LIMIT_MESSAGE } from "./llm-error";
 import { runWriterAgent } from "./writer";
 import { usageLogFields } from "./run";
 import { log, logError, fmtErr } from "../log";
@@ -117,13 +118,21 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     // an identical retry will not fix agent-level failures, and swallowing
     // keeps the user informed. Durability for enqueue still comes from the
     // alarm being re-armed by enqueueTurn.
-    logError("turn_failed", {
+    //
+    // A rate-limit / usage-cap / overloaded (429/529) failure gets an honest
+    // message telling the user we're temporarily at our usage limit, instead
+    // of the generic fallback that invites a pointless immediate retry. The
+    // logged fmtErr still carries the status + rate-limit headers so operators
+    // can tell a short throttle from a hard cap.
+    const rateLimited = isRateLimitError(err);
+    logError(rateLimited ? "turn_rate_limited" : "turn_failed", {
       chat_id: chatId,
       topic_id: topicId,
       error: fmtErr(err),
     });
-    await send(FALLBACK_MESSAGE);
-    store.storeMessage(conversationId, "assistant", FALLBACK_MESSAGE);
+    const reply = rateLimited ? RATE_LIMIT_MESSAGE : FALLBACK_MESSAGE;
+    await send(reply);
+    store.storeMessage(conversationId, "assistant", reply);
   } finally {
     store.clearBusy(conversationId);
   }

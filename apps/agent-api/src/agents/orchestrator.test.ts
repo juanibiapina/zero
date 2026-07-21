@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runTurn } from "./orchestrator";
 import { FALLBACK_MESSAGE } from "./interface";
+import { RATE_LIMIT_MESSAGE } from "./llm-error";
 import { scriptedModel } from "./mock-model";
 import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModel } from "ai";
@@ -236,6 +237,49 @@ describe("runTurn", () => {
     expect(store.findThreadsAwaitingReply()).toEqual([]);
     const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
     expect(events.some((e) => e.msg === "turn_failed")).toBe(true);
+  });
+
+  it("delivers the rate-limit message and logs turn_rate_limited on a 429", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    // A 429 that is non-retryable so the AI SDK does not back off and wait,
+    // still carrying statusCode 429 for the classifier to key on.
+    const model = new MockLanguageModelV3({
+      doGenerate: async () => {
+        throw Object.assign(new Error("rate limited"), { statusCode: 429 });
+      },
+    });
+
+    await expect(
+      runTurn({
+        store,
+        makeModel: constModel(model),
+        send: sink.send,
+        search: createMemorySearch(),
+        google: createMemoryGoogle(),
+        chatId: 1,
+        topicId: 0,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sink.sent).toEqual([RATE_LIMIT_MESSAGE]);
+    const history = store
+      .getConversationHistory(id, 10)
+      .map(({ role, content }) => ({ role, content }));
+    expect(history).toEqual([
+      { role: "user", content: "hi" },
+      { role: "assistant", content: RATE_LIMIT_MESSAGE },
+    ]);
+    // Reply persisted → thread tail is assistant, no longer awaiting reply.
+    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
+    expect(events.some((e) => e.msg === "turn_rate_limited")).toBe(true);
+    expect(events.some((e) => e.msg === "turn_failed")).toBe(false);
   });
 
   it("requests interface, research, and writer models from the factory", async () => {

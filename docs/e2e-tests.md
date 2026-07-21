@@ -14,7 +14,8 @@ mock HTTP servers so the test is fast, free, and deterministic:
   `sendMessage`/`sendChatAction` the worker makes and exposes them at
   `GET /test/messages` (cleared with `DELETE /test/messages`).
 - **Mock Anthropic** (`src/mock-anthropic.ts`, port 3502) answers the
-  agent's LLM calls with canned responses.
+  agent's LLM calls with canned responses. `POST /test/mode {"mode":"rate_limit"}`
+  switches it to return HTTP 429s (reset with `DELETE /test/mode`).
 
 `TELEGRAM_API_ROOT` and the LLM base URL are pointed at these mocks via
 the test wrangler config (`apps/agent-api/wrangler.test.jsonc`), so no real
@@ -24,6 +25,7 @@ Current tests:
 
 - `hello.test.ts` — a plain text message produces a reply.
 - `attachments.test.ts` — a document upload is handled.
+- `rate-limit.test.ts` — a 429 from the model produces the rate-limit message.
 
 ## Running
 

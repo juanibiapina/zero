@@ -65,7 +65,38 @@ function buildSSE(text: string): string {
 
 const app = new Hono();
 
+// Mutable response mode, toggled by tests via /test/mode. "rate_limit" makes
+// /v1/messages return an HTTP 429 so the worker exercises the rate-limit path.
+let mode: "normal" | "rate_limit" = "normal";
+
+app.post("/test/mode", async (c) => {
+  const body = await c.req.json<{ mode?: string }>();
+  mode = body.mode === "rate_limit" ? "rate_limit" : "normal";
+  return c.json({ ok: true, mode });
+});
+
+app.delete("/test/mode", (c) => {
+  mode = "normal";
+  return c.body(null, 204);
+});
+
 app.post("/v1/messages", (c) => {
+  if (mode === "rate_limit") {
+    return new Response(
+      JSON.stringify({
+        type: "error",
+        error: { type: "rate_limit_error", message: "rate limited" },
+      }),
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "retry-after": "1",
+          "anthropic-ratelimit-requests-remaining": "0",
+        },
+      },
+    );
+  }
   const body = buildSSE(CANNED_TEXT);
   return new Response(body, {
     headers: {
