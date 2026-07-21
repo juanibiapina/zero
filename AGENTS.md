@@ -49,11 +49,11 @@ Zero receives Telegram bot webhooks and routes each update to the right user via
 
 Packages:
 
-- **Worker:** `apps/api` (`@zero/api`)
-- **Frontend:** `apps/web` (`@zero/web`)
-- **Mobile:** `apps/mobile` (`@zero/mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Built and distributed via EAS (no local Android SDK). See `apps/mobile/README.md`.
-- **Shared types:** `packages/core` (`@zero/core`) — currently empty placeholder
-- **E2E tests:** `packages/e2e-tests` (`@zero/e2e-tests`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
+- **Worker:** `apps/api` (`@zero/agent-api`)
+- **Frontend:** `apps/web` (`@zero/agent-web`)
+- **Mobile:** `apps/mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Built and distributed via EAS (no local Android SDK). See `apps/mobile/README.md`.
+- **Shared types:** `packages/core` (`@zero/agent-core`) — currently empty placeholder
+- **E2E tests:** `packages/e2e-tests` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 
 Expected dev ports:
 - **5176**: Web frontend (Vite)

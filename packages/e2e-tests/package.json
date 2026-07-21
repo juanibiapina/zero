@@ -1,5 +1,5 @@
 {
-  "name": "@zero/e2e-tests",
+  "name": "@zero/agent-e2e",
   "version": "0.0.0",
   "private": true,
   "type": "module",

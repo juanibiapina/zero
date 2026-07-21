@@ -1,4 +1,4 @@
-# @zero/mobile — Zero Agent
+# @zero/agent-mobile — Zero Agent
 
 Expo (React Native) app for Zero, built and distributed with **EAS Build** so no
 Android Studio or Android SDK is needed locally or in CI. Native compilation runs
@@ -9,7 +9,7 @@ on Expo's servers; you only need Node and an Expo account.
 | Field             | Value                         |
 | ----------------- | ----------------------------- |
 | Display name      | `Zero Agent`                  |
-| Package (npm)     | `@zero/mobile`                |
+| Package (npm)     | `@zero/agent-mobile`                |
 | Expo slug         | `zero-agent`                  |
 | Android package   | `dev.juanibiapina.zeroagent`  |
 | Expo SDK          | 57 (React Native 0.86, React 19.2) |
@@ -81,14 +81,14 @@ route to home. Without it the app lands on a dead route after sign-in.
    phone (see below).
 2. Iterate on JS with hot reload:
    ```bash
-   pnpm --filter @zero/mobile exec expo start
+   pnpm --filter @zero/agent-mobile exec expo start
    ```
    Scan the QR with the installed dev client; saves hot-reload over wifi.
 3. Only rebuild on EAS when **native** code/modules change (e.g. adding
    `expo-location`). Pure-JS changes never need a rebuild.
 
 After a fresh install, clear the Metro cache once:
-`pnpm --filter @zero/mobile exec expo start --clear`.
+`pnpm --filter @zero/agent-mobile exec expo start --clear`.
 
 The app uses the **default** `expo/metro-config` — no custom monorepo Metro
 config is needed (SDK 52+ auto-detects the workspace, SDK 54+ supports pnpm
@@ -101,9 +101,9 @@ no `build` script, so it is excluded from `turbo run build` and the web/api
 deploy path.
 
 ```bash
-pnpm --filter @zero/mobile lint
-pnpm --filter @zero/mobile typecheck
-pnpm --filter @zero/mobile test
+pnpm --filter @zero/agent-mobile lint
+pnpm --filter @zero/agent-mobile typecheck
+pnpm --filter @zero/agent-mobile test
 ```
 
 ## End-to-end tests (emulator + Maestro)

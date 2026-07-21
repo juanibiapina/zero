@@ -33,10 +33,10 @@ model and the two agents.
 ```
 zero/
 ├── apps/
-│   ├── api/             (@zero/api)              — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
-│   └── web/             (@zero/web)              — Vite + React: single Telegram-id form
+│   ├── api/             (@zero/agent-api)        — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
+│   └── web/             (@zero/agent-web)        — Vite + React: single Telegram-id form
 ├── packages/
-│   ├── core/            (@zero/core)             — Reserved for future shared types (currently empty)
+│   ├── core/            (@zero/agent-core)       — Reserved for future shared types (currently empty)
 │   ├── eslint-config/                            — Shared ESLint config
 │   └── typescript-config/                        — Shared TypeScript config
 └── docs/                                         — Design + ops docs

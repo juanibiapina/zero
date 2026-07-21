@@ -31,8 +31,8 @@
       "dependsOn": ["build"],
       "cache": false
     },
-    "@zero/api#deploy": {
-      "dependsOn": ["@zero/web#build"],
+    "@zero/agent-api#deploy": {
+      "dependsOn": ["@zero/agent-web#build"],
       "cache": false
     }
   }
