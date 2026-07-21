@@ -35,20 +35,35 @@ trippycards build trigger to disable — trippycards stops deploying them once
 Phase 7 removes the source and `bin`/CI references there.
 
 ## Pending
+## Remove from trippycards (Phase 7) — DONE
 
-- **Remove from trippycards (Phase 7).** Delete the 9 dirs there, their
-  `turbo.json` edges, and `bin/*` references; confirm trippycards CI still passes.
-  Separate commit in that repo.
+trippycards PR #155 removed the 8 product dirs (kept `zerovault-cli`), their
+`turbo.json` edges, `bin/*` references, and stale docs; merged to trippycards
+`main` with CI green. trippycards no longer builds or deploys these products.
 
 ## Follow-up
 
-- **ESLint convergence.** The relocated packages use the looser
-  `@zero/eslint-config/legacy` and `legacy-react` presets (non-type-checked),
-  matching the config they were written under. Converge them onto the strict
-  shared `.` / `./react` presets (`recommendedTypeChecked`) and delete
-  `packages/eslint-config/legacy*.js`. The strict pass surfaces floating/misused
-  promises, unsafe-any at `cloudflare:test`/JSON boundaries, and react
-  set-state-in-effect.
+- **ESLint convergence (blocked — needs care).** The relocated packages use the
+  looser `@zero/eslint-config/legacy` / `legacy-react` presets (non-type-checked),
+  matching the config they were written under. Goal: move them onto the strict
+  shared `.` / `./react` presets and delete `packages/eslint-config/legacy*.js`.
+  Blocker found: the strict config's autofix strips needed `as {...}` assertions
+  from the worker tests because eslint's typed program resolves `res.json()` as
+  `any` while `tsc` resolves it as `unknown`. That disagreement comes from the
+  `tsconfig` `types`-array workaround (dropping the main
+  `@cloudflare/vitest-pool-workers` entry) used to stop a `lib.dom` leak. The
+  leak's real source is `@types/jsdom@20` (pulled by the mobile app's
+  `jest-expo` via `jest-environment-jsdom`) leaking `lib.dom` through vitest's
+  `optional-types`. Fix the root first (align `jsdom` to 29 so no separate
+  `@types/jsdom`, verifying the mobile jest env still works) or hand-type the
+  worker test helpers; only then converge. Also remaining: react
+  `set-state-in-effect` refactors in the web pages.
+- **zerovault-cli dedup.** trippycards still ships a local `zerovault-cli`
+  (`0.2.0`, adds `context`/`export`/`import`) for its secret tooling; the zero
+  repo consumes the published `zerovault-cli@0.1.0` via `pnpm dlx`. To dedup,
+  publish `0.2.0` from the zero repo (the CLI's new home) and point trippycards
+  at `@0.2.0`, then delete trippycards' local copy. Do not downgrade trippycards
+  to `0.1.0` (it would lose `context`/`export`/`import`).
 - **Wrangler/toolchain skew.** vault/errors run wrangler `4.103.0` and
   `@cloudflare/vitest-pool-workers` `0.18.5` (pinned to keep the existing patch
   valid and match the committed `worker-configuration.d.ts`). Realign when the
