@@ -70,12 +70,20 @@ trippycards PR #155 removed the 8 product dirs (kept `zerovault-cli`), their
   set to **warn** — the standard migration posture. Remaining as warnings (not
   blocking): a few `set-state-in-effect` / `exhaustive-deps` in the web pages,
   worth a focused pass with the apps running.
-- **zerovault-cli dedup.** trippycards still ships a local `zerovault-cli`
-  (`0.2.0`, adds `context`/`export`/`import`) for its secret tooling; the zero
-  repo consumes the published `zerovault-cli@0.1.0` via `pnpm dlx`. To dedup,
-  publish `0.2.0` from the zero repo (the CLI's new home) and point trippycards
-  at `@0.2.0`, then delete trippycards' local copy. Do not downgrade trippycards
-  to `0.1.0` (it would lose `context`/`export`/`import`).
+- **zerovault-cli dedup — DONE.** Both repos consume the published
+  `zerovault-cli@0.2.0` via `pnpm dlx`; trippycards' local copy is removed
+  (trippycards PR). The CLI source is the `zero` repo's copy — publish future
+  changes from there (one cosmetic lint fix in `vault-transfer.ts` is currently
+  ahead of the published `0.2.0`; publish a patch when convenient).
+- **Worker test secrets (`.dev.vars`) — root cause.**
+  `@cloudflare/vitest-pool-workers` loads only `main`, compatibility settings,
+  and bindings/`vars` from the wrangler config; it has **no `.dev.vars`/dotenv
+  handling** (confirmed against the package and the Jul 2026 config docs). So the
+  relocated tests could not get `MASTER_KEY` from the fetched `.dev.vars`. Fix
+  (applied): a deterministic test `MASTER_KEY` in `apps/vault-api/wrangler.test.jsonc`
+  `vars` — self-contained and the supported mechanism. Guidance: any future
+  worker test needing a secret must put a **test value in the test config `vars`**,
+  never rely on `.dev.vars`.
 - **Wrangler/toolchain skew.** vault/errors run wrangler `4.103.0` and
   `@cloudflare/vitest-pool-workers` `0.18.5` (pinned to keep the existing patch
   valid and match the committed `worker-configuration.d.ts`). Realign when the
