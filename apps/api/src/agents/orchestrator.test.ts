@@ -3,6 +3,7 @@ import { runTurn } from "./orchestrator";
 import { FALLBACK_MESSAGE } from "./interface";
 import { scriptedModel } from "./mock-model";
 import { MockLanguageModelV3 } from "ai/test";
+import type { LanguageModel } from "ai";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryGoogle } from "../google/memory";
@@ -11,6 +12,11 @@ const collectSink = () => {
   const sent: string[] = [];
   return { sent, send: async (t: string) => void sent.push(t) };
 };
+
+// A makeModel factory that hands the same model to every agent, so a single
+// scripted sequence is shared across interface + writer exactly as one model
+// was before per-agent tagging.
+const constModel = (model: LanguageModel) => () => model;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -26,7 +32,7 @@ describe("runTurn", () => {
 
     await runTurn({
       store,
-      model: scriptedModel([]),
+      makeModel: constModel(scriptedModel([])),
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
@@ -45,12 +51,12 @@ describe("runTurn", () => {
 
     await runTurn({
       store,
-      model: scriptedModel([
+      makeModel: constModel(scriptedModel([
         { tools: [{ name: "reply", input: { text: "hello there" } }] },
         { text: "" },
         // writer runs every turn; trivial exchange → no tool call.
         { text: "nothing to consolidate" },
-      ]),
+      ])),
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
@@ -79,12 +85,12 @@ describe("runTurn", () => {
     const run = () =>
       runTurn({
         store,
-        model: scriptedModel([
+        makeModel: constModel(scriptedModel([
           { tools: [{ name: "reply", input: { text: "hello there" } }] },
           { text: "" },
           // writer runs every turn; trivial exchange → no tool call.
           { text: "nothing to consolidate" },
-        ]),
+        ])),
         send: sink.send,
         search: createMemorySearch(),
         google: createMemoryGoogle(),
@@ -110,7 +116,7 @@ describe("runTurn", () => {
 
     await runTurn({
       store,
-      model: scriptedModel([
+      makeModel: constModel(scriptedModel([
         // interface: read topic, then reply
         { tools: [{ name: "get_topic", input: { name: "travel" } }] },
         { tools: [{ name: "reply", input: { text: "Have fun!" } }] },
@@ -131,7 +137,7 @@ describe("runTurn", () => {
           ],
         },
         { text: "done" },
-      ]),
+      ])),
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
@@ -161,10 +167,10 @@ describe("runTurn", () => {
     await expect(
       runTurn({
         store,
-        model: scriptedModel([
+        makeModel: constModel(scriptedModel([
           { tools: [{ name: "reply", input: { text: "undelivered" } }] },
           { text: "done" },
-        ]),
+        ])),
         send,
         search: createMemorySearch(),
         google: createMemoryGoogle(),
@@ -209,7 +215,7 @@ describe("runTurn", () => {
     await expect(
       runTurn({
         store,
-        model,
+        makeModel: constModel(model),
         send: sink.send,
         search: createMemorySearch(),
         google: createMemoryGoogle(),
@@ -230,5 +236,38 @@ describe("runTurn", () => {
     expect(store.findThreadsAwaitingReply()).toEqual([]);
     const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
     expect(events.some((e) => e.msg === "turn_failed")).toBe(true);
+  });
+
+  it("requests interface, research, and writer models from the factory", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+
+    const requested: string[] = [];
+    const shared = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "hi back" } }] },
+      { text: "" },
+      { text: "nothing to consolidate" },
+    ]);
+    const makeModel = (agent: string) => {
+      requested.push(agent);
+      return shared;
+    };
+
+    await runTurn({
+      store,
+      makeModel: makeModel,
+      send: sink.send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    // Interface, its research tool, and the writer each pull a tagged model.
+    expect(requested).toContain("interface");
+    expect(requested).toContain("research");
+    expect(requested).toContain("writer");
   });
 });

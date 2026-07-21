@@ -24,6 +24,10 @@ export const FALLBACK_MESSAGE =
 
 export interface InterfaceAgentInput {
   model: LanguageModel;
+  // Model for the nested research agent, tagged "research" for gateway
+  // attribution. Falls back to `model` when omitted (tests that don't exercise
+  // research need not distinguish the two).
+  researchModel?: LanguageModel;
   store: TopicStore;
   send: (text: string) => Promise<void>;
   // Persist an assistant message durably before it is sent. Wired by the
@@ -222,7 +226,7 @@ export const runInterfaceAgent = async (
       replies,
     }),
     ...buildResearchTool({
-      model: input.model,
+      model: input.researchModel ?? input.model,
       store: input.store,
       search: input.search,
       accessed,

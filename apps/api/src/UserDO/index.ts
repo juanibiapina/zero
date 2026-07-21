@@ -10,7 +10,7 @@ import { SystemTopicStore } from "../store/system-topics";
 import type { Store } from "../store/types";
 import { createR2Attachments } from "../attachments/r2";
 import type { AttachmentStore } from "../attachments/types";
-import { createModel } from "../agents/model";
+import { createModel, createModelFactory } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
 import { createGoogleWorkspace } from "../google/rest";
 import { getGoogleAccessToken, memoizeTokenProvider } from "../google-token";
@@ -202,7 +202,7 @@ export class UserDO extends DurableObject<Env> {
   async runOnboarding(): Promise<void> {
     const clerkUserId =
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
-    const model = await createModel(this.env, clerkUserId);
+    const model = await createModel(this.env, clerkUserId, "onboarding");
     const getToken = memoizeTokenProvider(() =>
       getGoogleAccessToken(this.env, clerkUserId),
     );
@@ -225,7 +225,7 @@ export class UserDO extends DurableObject<Env> {
   async runTurn(chatId: number, topicId: number): Promise<void> {
     const clerkUserId =
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
-    const model = await createModel(this.env, clerkUserId);
+    const makeModel = await createModelFactory(this.env, clerkUserId);
     const search = createBraveSearch(this.env.BRAVE_API_KEY);
     // Memoized Google token provider: the first Google tool call mints a token
     // via Clerk and caches the promise for the turn; turns that never touch
@@ -245,7 +245,7 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, model, send, search, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
+      await orchestrateTurn({ store: this.store, makeModel, send, search, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
     } finally {
       if (timer) clearTimeout(timer);
     }

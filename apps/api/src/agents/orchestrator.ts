@@ -6,6 +6,7 @@
 import { runInterfaceAgent, FALLBACK_MESSAGE } from "./interface";
 import { runWriterAgent } from "./writer";
 import { log, logError, fmtErr } from "../log";
+import type { AgentLabel } from "./model";
 import type { LanguageModel } from "ai";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
@@ -16,7 +17,10 @@ const DEFAULT_HISTORY_LIMIT = 20;
 
 export interface TurnInput {
   store: Store;
-  model: LanguageModel;
+  // Per-agent model factory. The orchestrator asks it for a tagged model at
+  // each agent boundary (interface, research, writer) so gateway logs attribute
+  // cost per agent. Tests inject a stub that records the labels requested.
+  makeModel: (agent: AgentLabel) => LanguageModel;
   send: (text: string) => Promise<void>;
   search: WebSearch;
   // Gmail + Calendar access, built by the DO and forwarded to the interface
@@ -47,7 +51,7 @@ export interface TurnInput {
 // retry sees the tail is already `assistant` and skips the thread — no
 // duplicate Telegram messages.
 export const runTurn = async (input: TurnInput): Promise<void> => {
-  const { store, model, send, search, google, chatId, topicId } = input;
+  const { store, makeModel, send, search, google, chatId, topicId } = input;
   const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
@@ -71,7 +75,8 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   store.markBusy(conversationId);
   try {
     const { accessed, transcript } = await runInterfaceAgent({
-      model,
+      model: makeModel("interface"),
+      researchModel: makeModel("research"),
       store,
       send,
       persistReply,
@@ -93,7 +98,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     // subject. The prompt keeps trivial turns to a single no-tool step.
     const writerStart = Date.now();
     await runWriterAgent({
-      model,
+      model: makeModel("writer"),
       store,
       accessed,
       transcript,

@@ -134,7 +134,7 @@ The agents and the turn orchestrator (`apps/api/src/agents/*`) depend on the
 `Store` port (`apps/api/src/store/types.ts`), not on the DO or do-orm, so they
 are unit-tested with an in-memory store and a scripted mock model. `UserDO`
 supplies the production `DbStore` adapter. LLM access is built in
-`agents/model.ts` (Cloudflare AI Gateway, per-user `cf-aig-metadata`).
+`agents/model.ts` (Cloudflare AI Gateway, per-user + per-agent `cf-aig-metadata`).
 
 ## State
 

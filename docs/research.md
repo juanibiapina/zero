@@ -65,8 +65,10 @@ runner with different system prompts and toolsets:
 - **Writer agent** (`agents/writer.ts`): the topic tools only. See
   `docs/topics.md`.
 
-The research agent reuses the per-turn model instance, so per-user AI Gateway
-attribution (`cf-aig-metadata`) is preserved. The research loop runs inline in
+The research agent gets its own model from the per-turn factory, tagged
+`agent: "research"` in `cf-aig-metadata` (alongside `user_id`), so the AI Gateway
+attributes its cost/tokens separately from the interface and writer agents while
+keeping per-user attribution. The research loop runs inline in
 the turn's DO alarm (no separate alarm). Both agents share one step cap,
 `AGENT_MAX_STEPS = 200` (`agents/run.ts`). The cap is a runaway-loop guard, not
 an expected stopping point: a normal loop finishes in a handful of steps. 200
