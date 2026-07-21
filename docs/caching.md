@@ -183,10 +183,54 @@ change that silently breaks a breakpoint is caught.
 
 ## Recorded baselines
 
-Fill in after each production validation run.
+Measured in production (`claude-sonnet-4-6`, version `f0ed8d06`).
 
-| tier | scenario | cache_read_tokens | cache_write_tokens | input_tokens | date |
+### Tier 1 — within one run (2026-07-21) — PASS
+
+A single "research X" message drove a multi-step turn. Per-step and per-agent
+cache tokens showed the write-then-read pattern on every agent:
+
+| agent | steps | write | read | notes |
+| --- | --- | --- | --- | --- |
+| interface | 2 | 6037 (step 1) | 6037 (step 2) | full system+tools+history prefix read on step 2 |
+| research | 14 | 1460 | 18980 | ~1460-token system+tools prefix written once, read back ~13x across the search loop |
+| writer | multi | 1626 | 6504 | same pattern |
+
+`interface_step_usage`: `cache_write=[6037, 0]`, `cache_read=[0, 6037]`.
+
+### Tier 3 — across turns (2026-07-21) — PASS
+
+Two single-step reply turns from one user, seconds apart:
+
+| turn | agent | steps | read | write | input |
 | --- | --- | --- | --- | --- | --- |
-| 1 | multi-step (research) | _tbd_ | _tbd_ | _tbd_ | _tbd_ |
-| 2 | new user first turn | _tbd_ | _tbd_ | _tbd_ | _tbd_ |
-| 3 | second turn under TTL | _tbd_ | _tbd_ | _tbd_ | _tbd_ |
+| 2 | interface | 1 | 4015 | 2090 | 6108 |
+| 3 | interface | 1 | 4015 | 1751 | 5769 |
+
+A 4015-token read on a turn's **first (only) step** can only come from a prior
+turn's write: system + tools + the stable history prefix served from cache, with
+only the new ~1.7-2k tail written. Cross-turn caching confirmed.
+
+### Writer cross-turn head — PASS
+
+The writer is single-prompt (its prompt body — the turn transcript — is unique
+every turn, so it never caches cross-turn), but its static system+tools head
+(1h TTL) is cached across turns:
+
+| turn | read | write | input |
+| --- | --- | --- | --- |
+| 1 (big consolidation, multi-step) | 6504 | 1626 | 62447 |
+| 2 | 1626 | 0 | 2064 |
+| 3 | 1626 | 0 | 2051 |
+
+The head is 1626 tokens; turns 2-3 read all 1626 with **write=0** — reused from an
+earlier turn's write, not rewritten. This also demonstrates the shared-head reuse
+mechanism that tier 2 relies on.
+
+### Tier 2 — across users — _tbd_
+
+Direct check still needs a *different* user's first turn to read the shared
+`tools` + static `system` head. Strong indirect evidence already: the writer head
+reads with `write=0` across separate requests (see above), and the interface
+first-step reads (tier 3) include the same shared head. Watch organic
+cross-user traffic to confirm directly.
