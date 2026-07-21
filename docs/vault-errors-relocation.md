@@ -34,6 +34,16 @@ own `wrangler` CI (`Manually deployed` in the version history). So there was no
 trippycards build trigger to disable — trippycards stops deploying them once
 Phase 7 removes the source and `bin`/CI references there.
 
+**Build-time web env vars.** The dashboards read `VITE_CLERK_PUBLISHABLE_KEY`
+(baked into the bundle by Vite at build time). The Workers Build runs
+`pnpm run build` but not `bin/fetch-secrets`, so this must be set as a **Workers
+Build variable** on each api's build config (as `zero-api` does), not just in
+ZeroVault. Both `zerovault-api` and `zeroerrors-api` build configs have
+`VITE_CLERK_PUBLISHABLE_KEY = pk_live_...` (the public key shared by both
+dashboards' Clerk instance). Missing it makes the deployed dashboard throw "Add
+your Clerk Publishable Key". GitHub CI's `Build & Validate` is unaffected: it
+runs `bin/fetch-secrets` first, which writes the web apps' `.env.production`.
+
 ## Pending
 ## Remove from trippycards (Phase 7) — DONE
 
