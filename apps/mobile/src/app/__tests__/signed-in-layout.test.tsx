@@ -1,6 +1,8 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { render } from '@testing-library/react-native';
 
+import SignedInLayout from '../(signed-in)/_layout';
+
 const mockUseAuth = jest.fn();
 
 jest.mock('@clerk/clerk-expo', () => ({
@@ -17,8 +19,6 @@ jest.mock('expo-router', () => ({
     return <Text>stack</Text>;
   },
 }));
-
-import SignedInLayout from '../(signed-in)/_layout';
 
 describe('SignedInLayout', () => {
   it('shows a loading indicator until Clerk is loaded', async () => {
