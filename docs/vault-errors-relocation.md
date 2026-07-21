@@ -18,20 +18,27 @@ trippycards so the live production state is untouched.
   `zeroerrors-web`, wired in `bin/fetch-secrets` and `bin/sync-secrets-to-cloudflare`.
   `MASTER_KEY` on `zerovault-api` encrypts every stored secret; do not rotate it.
 
-## Pending (not done in the code move)
+## Deploy cutover (Phase 6) — DONE
 
-- **Deploy cutover (Phase 6).** In this repo's Cloudflare Workers Builds
-  connection, add a build config for each existing worker (`zerovault-api`,
-  `zeroerrors-api`): branch `main`, build `pnpm run build`, deploy
-  `pnpm -F @zero/vault-api run deploy` / `pnpm -F @zero/errors-api run deploy`.
-  These target the already-existing workers by name (in-place update, no new
-  namespaces). Then disable the trippycards build triggers for these two workers
-  so both connectors do not race. Verify with `wrangler deployments list` and the
-  build log (watch for a silent `No projects matched`). Smoke-test `/ping` on both
-  domains. Deploy vault first (the repo bootstraps secrets from it).
+Both workers auto-deploy from `zero` `main` via this repo's Cloudflare Workers
+Builds connection. Build configs (per worker): branch `main`, build
+`pnpm run build`, deploy `pnpm -F @zero/vault-api run deploy` /
+`pnpm -F @zero/errors-api run deploy`, root `/`, non-production-branch builds
+off. Pushing `main` triggers a build per worker and updates the existing workers
+in place (names/bindings unchanged, so DO state, KV, and secrets persist).
+Verified live: `zerovault.juanibiapina.dev/ping` and
+`zeroerrors.juanibiapina.dev/ping` return `{"ok":true}`.
+
+Note: trippycards never used Workers Builds for these; it deploys them via its
+own `wrangler` CI (`Manually deployed` in the version history). So there was no
+trippycards build trigger to disable — trippycards stops deploying them once
+Phase 7 removes the source and `bin`/CI references there.
+
+## Pending
+
 - **Remove from trippycards (Phase 7).** Delete the 9 dirs there, their
-  `turbo.json` edges, `bin/*` references, and connector triggers; confirm
-  trippycards CI still passes. Separate commit in that repo.
+  `turbo.json` edges, and `bin/*` references; confirm trippycards CI still passes.
+  Separate commit in that repo.
 
 ## Follow-up
 
