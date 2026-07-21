@@ -64,7 +64,7 @@ export class ErrorsDO extends DurableObject<Env> {
     super(ctx, env);
     this.db = createDb(ctx.storage);
 
-    ctx.blockConcurrencyWhile(async () => {
+    void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
     });
   }
@@ -82,7 +82,7 @@ export class ErrorsDO extends DurableObject<Env> {
   record(input: RecordInput): RecordResult {
     const existing = this.db.get(issuesTable, {
       where: eq("fingerprint", input.fingerprint),
-    }) as IssueRow | undefined;
+    });
 
     let issueRow: IssueRow;
     let isNew: boolean;
@@ -186,9 +186,7 @@ export class ErrorsDO extends DurableObject<Env> {
   getIssue(
     id: string,
   ): { issue: IssueSummary; events: StoredEvent[] } | null {
-    const row = this.db.get(issuesTable, { where: eq("id", id) }) as
-      | IssueRow
-      | undefined;
+    const row = this.db.get(issuesTable, { where: eq("id", id) });
     if (!row) return null;
 
     const events = this.db.select(
@@ -208,9 +206,7 @@ export class ErrorsDO extends DurableObject<Env> {
    * issue does not exist.
    */
   setStatus(id: string, status: IssueStatus): IssueSummary | null {
-    const row = this.db.get(issuesTable, { where: eq("id", id) }) as
-      | IssueRow
-      | undefined;
+    const row = this.db.get(issuesTable, { where: eq("id", id) });
     if (!row) return null;
 
     this.db.update(issuesTable, { status }, { where: eq("id", id) });

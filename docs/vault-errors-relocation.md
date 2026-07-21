@@ -43,21 +43,23 @@ trippycards PR #155 removed the 8 product dirs (kept `zerovault-cli`), their
 
 ## Follow-up
 
-- **ESLint convergence (blocked — needs care).** The relocated packages use the
-  looser `@zero/eslint-config/legacy` / `legacy-react` presets (non-type-checked),
-  matching the config they were written under. Goal: move them onto the strict
-  shared `.` / `./react` presets and delete `packages/eslint-config/legacy*.js`.
-  Blocker found: the strict config's autofix strips needed `as {...}` assertions
-  from the worker tests because eslint's typed program resolves `res.json()` as
-  `any` while `tsc` resolves it as `unknown`. That disagreement comes from the
-  `tsconfig` `types`-array workaround (dropping the main
-  `@cloudflare/vitest-pool-workers` entry) used to stop a `lib.dom` leak. The
-  leak's real source is `@types/jsdom@20` (pulled by the mobile app's
-  `jest-expo` via `jest-environment-jsdom`) leaking `lib.dom` through vitest's
-  `optional-types`. Fix the root first (align `jsdom` to 29 so no separate
-  `@types/jsdom`, verifying the mobile jest env still works) or hand-type the
-  worker test helpers; only then converge. Also remaining: react
-  `set-state-in-effect` refactors in the web pages.
+- **ESLint convergence — DONE.** All relocated packages now use the strict
+  shared `@zero/eslint-config` / `./react` presets; the `legacy*` presets are
+  deleted. Root cause of the earlier blocker: the mobile app's `jest-expo` pulls
+  `@types/jsdom` into the monorepo, and eslint's `projectService` (tsserver)
+  loads its `/// <reference lib="dom" />`, typing `Response.json()` as DOM's
+  `any` in test files (tsc correctly sees `unknown`). This can't be blocked by a
+  `tsconfig` `types` array or a separate test tsconfig (the reference is forced
+  by any loaded `@types/jsdom`), and aligning `jsdom` is a mobile risk. Chosen
+  fix: worker **source** gets full strict type-aware linting (real issues fixed —
+  floating promises, redundant assertions, Clerk context variance); worker **test
+  files** relax only the `res.json()`-affected rules (`no-unnecessary-type-assertion`,
+  `no-unsafe-*`) with a documented override. React web apps use the strict
+  `./react` preset with the newer experimental react-hooks rules
+  (`set-state-in-effect`, `purity`, `immutability`, `preserve-manual-memoization`)
+  set to **warn** — the standard migration posture. Remaining as warnings (not
+  blocking): a few `set-state-in-effect` / `exhaustive-deps` in the web pages,
+  worth a focused pass with the apps running.
 - **zerovault-cli dedup.** trippycards still ships a local `zerovault-cli`
   (`0.2.0`, adds `context`/`export`/`import`) for its secret tooling; the zero
   repo consumes the published `zerovault-cli@0.1.0` via `pnpm dlx`. To dedup,

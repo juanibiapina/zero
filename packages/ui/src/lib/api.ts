@@ -30,7 +30,9 @@ export async function fetchApi<T>(
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: "Request failed" }));
+    const body: unknown = await res
+      .json()
+      .catch(() => ({ error: "Request failed" }));
     throw new Error((body as { error?: string }).error || `HTTP ${res.status}`);
   }
 

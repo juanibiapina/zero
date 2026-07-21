@@ -31,14 +31,14 @@ export default function KeysPage() {
     setLoading(false);
   }, [tokenFn, organization?.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const result = await api.createApiKey(tokenFn, newLabel.trim() || undefined);
     setNewKey(result.key);
     setNewLabel("");
-    load();
+    void load();
   };
 
   const handleCopy = async () => {
@@ -51,14 +51,14 @@ export default function KeysPage() {
   const handleRevoke = async (id: number) => {
     if (!confirm("Revoke this API key? This cannot be undone.")) return;
     await api.revokeApiKey(tokenFn, id);
-    load();
+    void load();
   };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">API Keys</h1>
 
-      <form onSubmit={handleCreate} className="flex gap-2 max-w-md">
+      <form onSubmit={(e) => void handleCreate(e)} className="flex gap-2 max-w-md">
         <Input
           placeholder="Label (optional)"
           value={newLabel}
@@ -79,7 +79,7 @@ export default function KeysPage() {
             <code className="flex-1 text-sm font-mono bg-background px-3 py-2 rounded border break-all">
               {newKey}
             </code>
-            <Button size="sm" variant="outline" onClick={handleCopy}>
+            <Button size="sm" variant="outline" onClick={() => void handleCopy()}>
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </Button>
           </div>
@@ -122,7 +122,7 @@ export default function KeysPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleRevoke(k.id)}
+                    onClick={() => void handleRevoke(k.id)}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>

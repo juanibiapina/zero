@@ -84,7 +84,9 @@ function isConflict(err: unknown): boolean {
  */
 export async function importVault(client: ImportClient, data: VaultExport): Promise<void> {
   if (data.version !== 1) {
-    throw new Error(`Unsupported vault export version: ${(data as { version: unknown }).version}`);
+    throw new Error(
+      `Unsupported vault export version: ${String((data as { version: unknown }).version)}`,
+    );
   }
 
   for (const project of data.projects) {

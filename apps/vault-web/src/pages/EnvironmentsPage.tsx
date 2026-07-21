@@ -32,21 +32,21 @@ export default function EnvironmentsPage() {
     setLoading(false);
   }, [tokenFn, project, organization?.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !project) return;
     await api.createEnvironment(tokenFn, project, newName.trim());
     setNewName("");
-    load();
+    void load();
   };
 
   const handleDelete = async (envName: string) => {
     if (!project) return;
     if (!confirm(`Delete environment "${envName}" and all its secrets?`)) return;
     await api.deleteEnvironment(tokenFn, project, envName);
-    load();
+    void load();
   };
 
   return (
@@ -60,7 +60,7 @@ export default function EnvironmentsPage() {
         <h1 className="text-2xl font-bold">{project}</h1>
       </div>
 
-      <form onSubmit={handleCreate} className="flex gap-2 max-w-md">
+      <form onSubmit={(e) => void handleCreate(e)} className="flex gap-2 max-w-md">
         <Input
           placeholder="New environment name"
           value={newName}
@@ -101,7 +101,7 @@ export default function EnvironmentsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDelete(env.name)}
+                    onClick={() => void handleDelete(env.name)}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>

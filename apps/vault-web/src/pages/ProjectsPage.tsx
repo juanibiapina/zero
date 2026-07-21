@@ -28,20 +28,20 @@ export default function ProjectsPage() {
     setLoading(false);
   }, [tokenFn, organization?.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
     await api.createProject(tokenFn, newName.trim());
     setNewName("");
-    load();
+    void load();
   };
 
   const handleDelete = async (name: string) => {
     if (!confirm(`Delete project "${name}" and all its environments and secrets?`)) return;
     await api.deleteProject(tokenFn, name);
-    load();
+    void load();
   };
 
   return (
@@ -50,7 +50,7 @@ export default function ProjectsPage() {
         <h1 className="text-2xl font-bold">Projects</h1>
       </div>
 
-      <form onSubmit={handleCreate} className="flex gap-2 max-w-md">
+      <form onSubmit={(e) => void handleCreate(e)} className="flex gap-2 max-w-md">
         <Input
           placeholder="New project name"
           value={newName}
@@ -83,7 +83,7 @@ export default function ProjectsPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleDelete(p.name)}
+                  onClick={() => void handleDelete(p.name)}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>

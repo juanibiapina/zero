@@ -114,6 +114,7 @@ export const createApp = (env: Env, options: CreateAppOptions = {}) => {
     }
 
     // Production: org context derives from the Clerk session. No org → 403.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Hono context type mismatch with Clerk's expected Context type
     const auth = getAuth(c);
     if (!auth?.userId) {
       return c.json({ error: "Unauthorized" }, 401);

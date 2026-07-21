@@ -1,3 +1,3 @@
-import base from "@zero/eslint-config/legacy";
+import base from "@zero/eslint-config";
 
 export default base;

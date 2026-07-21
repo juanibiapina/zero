@@ -36,7 +36,7 @@ export default function SecretsPage() {
     setDirty(false);
   }, [tokenFn, project, env, organization?.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +89,7 @@ export default function SecretsPage() {
           {project} / {env}
         </h1>
         {dirty && (
-          <Button size="sm" onClick={handleSave}>
+          <Button size="sm" onClick={() => void handleSave()}>
             <Save className="h-4 w-4 mr-1" />
             Save
           </Button>

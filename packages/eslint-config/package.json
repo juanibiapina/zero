@@ -5,9 +5,7 @@
   "license": "MIT",
   "exports": {
     ".": "./index.js",
-    "./react": "./react.js",
-    "./legacy": "./legacy.js",
-    "./legacy-react": "./legacy-react.js"
+    "./react": "./react.js"
   },
   "peerDependencies": {
     "eslint": "^9.0.0 || ^10.0.0"

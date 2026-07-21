@@ -32,7 +32,7 @@ export default function IssuesPage() {
   }, [tokenFn, project, organization?.id]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   return (
