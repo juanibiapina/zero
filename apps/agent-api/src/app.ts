@@ -6,6 +6,8 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { clerkMiddleware, getAuth } from "@clerk/hono";
 import { cors } from "hono/cors";
 import type { Env } from "./types";
+import { logError, fmtErr } from "./log";
+import { reportError } from "./reporting/zero-errors";
 import { createTelegramWebhookRoute } from "./routes/telegram-webhook";
 import { createClerkWebhookRoute } from "./routes/clerk-webhook";
 import { createUserSettingsRoutes } from "./routes/user-settings";
@@ -18,6 +20,21 @@ type Variables = {
 
 export const createApp = () => {
   const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+
+  // Report uncaught request errors to ZeroErrors alongside the log line. The
+  // webhook path swallows its own failures (returning 200), so this only fires
+  // for genuinely unexpected throws in the HTTP handlers.
+  app.onError((err, c) => {
+    logError("http_error", { error: fmtErr(err), path: c.req.path });
+    try {
+      c.executionCtx.waitUntil(
+        reportError(c.env, err, { site: "http", path: c.req.path }),
+      );
+    } catch {
+      // No execution context (e.g. in unit tests): skip async reporting.
+    }
+    return c.json({ error: "Internal server error" }, 500);
+  });
 
   app.use(
     "/api/*",
