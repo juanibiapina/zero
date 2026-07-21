@@ -69,15 +69,14 @@ gob add pnpm --dir apps/agent-api exec wrangler tail
 
 ## Dev Server
 
-The dev server is auto-started via gobfile (`.config/gobfile.toml`) running `pnpm turbo dev`. It should already be running - check with `gob list`. Do not start new dev server jobs; reuse the existing one.
+Start the dev server manually with `pnpm turbo dev` from the repo root. This launches every app's dev server (agent, vault, errors: 3 apis + 3 webs).
 
 If ports are unavailable or an app doesn't load, there may be lingering processes that need to be killed:
 ```bash
-lsof -ti :5176 | xargs -r kill -9
-lsof -ti :8790 | xargs -r kill -9
+for p in 5176 5177 5178 8790 8791 8792; do lsof -ti :$p | xargs -r kill -9; done
 ```
 
-Then restart the dev server with `gob restart <job_id>`.
+Then start the dev server again with `pnpm turbo dev`.
 
 ## Secrets
 
