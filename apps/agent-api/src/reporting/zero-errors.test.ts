@@ -16,7 +16,7 @@ const mockFetch = () => {
 };
 
 describe("reportError", () => {
-  it("is a no-op when ZEROERRORS_KEY is unset", async () => {
+  it("is a no-op when ZEROVAULT_API_KEY is unset", async () => {
     const fetchFn = mockFetch();
     await reportError({}, new Error("boom"));
     expect(fetchFn).not.toHaveBeenCalled();
@@ -25,7 +25,7 @@ describe("reportError", () => {
   it("posts the error to the ingest endpoint with the bearer key", async () => {
     const fetchFn = mockFetch();
 
-    await reportError({ ZEROERRORS_KEY: "zv_test" }, new Error("boom"), {
+    await reportError({ ZEROVAULT_API_KEY: "zv_test" }, new Error("boom"), {
       site: "alarm_turn",
     });
 
@@ -56,7 +56,7 @@ describe("reportError", () => {
       responseHeaders: { "retry-after": "30", "cf-ray": "abc" },
     });
 
-    await reportError({ ZEROERRORS_KEY: "zv_test" }, apiErr);
+    await reportError({ ZEROVAULT_API_KEY: "zv_test" }, apiErr);
 
     const init = fetchFn.mock.calls[0][1];
     const body = JSON.parse(init?.body as string) as {
@@ -75,7 +75,7 @@ describe("reportError", () => {
     );
 
     await expect(
-      reportError({ ZEROERRORS_KEY: "zv_test" }, new Error("boom")),
+      reportError({ ZEROVAULT_API_KEY: "zv_test" }, new Error("boom")),
     ).resolves.toBeUndefined();
   });
 });
