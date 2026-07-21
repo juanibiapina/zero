@@ -54,10 +54,19 @@ Packages:
 - **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Built and distributed via EAS (no local Android SDK). See `apps/agent-mobile/README.md`.
 - **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
+- **ZeroVault:** `apps/vault-api` (`@zero/vault-api`, worker `zerovault-api`, `zerovault.juanibiapina.dev`) + `apps/vault-web` (`@zero/vault-web`) — secrets manager this repo bootstraps from. Backed by `packages/vault-core` (`@zero/vault-core`).
+- **ZeroErrors:** `apps/errors-api` (`@zero/errors-api`, worker `zeroerrors-api`, `zeroerrors.juanibiapina.dev`) + `apps/errors-web` (`@zero/errors-web`) — error tracking. Backed by `packages/errors-core` (`@zero/errors-core`).
+- **Shared vault/errors packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
+
+All three products (agent, vault, errors) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connector, each worker updated in place.
 
 Expected dev ports:
-- **5176**: Web frontend (Vite)
-- **8790**: API worker (Wrangler)
+
+| app | api port | inspector | web (Vite) |
+|---|---|---|---|
+| agent | 8790 | 9232 | 5176 |
+| errors | 8791 | 9234 | 5177 |
+| vault | 8792 | 9233 | 5178 |
 
 The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`.
 

@@ -34,6 +34,22 @@
     "@zero/agent-api#deploy": {
       "dependsOn": ["@zero/agent-web#build"],
       "cache": false
+    },
+    "@zero/vault-api#test": {
+      "dependsOn": ["@zero/vault-web#build"],
+      "outputs": []
+    },
+    "@zero/errors-api#test": {
+      "dependsOn": ["@zero/errors-web#build"],
+      "outputs": []
+    },
+    "@zero/vault-api#deploy": {
+      "dependsOn": ["@zero/vault-web#build"],
+      "cache": false
+    },
+    "@zero/errors-api#deploy": {
+      "dependsOn": ["@zero/errors-web#build"],
+      "cache": false
     }
   }
 }

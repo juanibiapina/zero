@@ -1,0 +1,74 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zerovault-api",
+  "main": "./src/index.ts",
+  "compatibility_date": "2025-07-09",
+  "rules": [
+    { "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }
+  ],
+  "compatibility_flags": [
+    "nodejs_als",
+    "nodejs_compat"
+  ],
+  "secrets": {
+    "required": [
+      "CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY",
+      "ENVIRONMENT",
+      "MASTER_KEY"
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "../vault-web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/ping", "/v1/*", "/api/*"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "APIKEYS",
+      "id": "7c218b0980404d559204b24f9e0f1a47"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ORGDO",
+        "class_name": "OrgDO"
+      },
+      {
+        "name": "PROJECTVAULTDO",
+        "class_name": "ProjectVaultDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["VaultDO"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["OrgDO", "ProjectVaultDO"]
+    },
+    {
+      "tag": "v3",
+      "deleted_classes": ["VaultDO"]
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "2001",
+      "simple": { "limit": 100, "period": 60 }
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "zerovault.juanibiapina.dev",
+      "custom_domain": true
+    }
+  ],
+}

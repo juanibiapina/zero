@@ -4,7 +4,9 @@ packages:
 
 onlyBuiltDependencies:
   - '@clerk/shared'
+  - better-sqlite3
   - esbuild
+  - sharp
   - workerd
 
 patchedDependencies:

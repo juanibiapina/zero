@@ -1,0 +1,41 @@
+{
+  "name": "zerovault-cli",
+  "version": "0.2.0",
+  "description": "CLI for ZeroVault secrets manager",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/juanibiapina/trippycards",
+    "directory": "packages/zerovault-cli"
+  },
+  "bin": {
+    "zv": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "tsc"
+  },
+  "dependencies": {
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@zero/eslint-config": "workspace:*",
+    "@zero/typescript-config": "workspace:*",
+    "@types/node": "^26.1.1",
+    "eslint": "10.7.0",
+    "tsx": "^4.23.1",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
