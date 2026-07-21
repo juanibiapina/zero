@@ -1,7 +1,7 @@
 # User Timezone
 
 The interface agent anchors every turn to an absolute datetime rendered in
-the user's timezone (see `formatAnchor` in `apps/api/src/agents/prompts.ts`).
+the user's timezone (see `formatAnchor` in `apps/agent-api/src/agents/prompts.ts`).
 Correct time is load-bearing: relative phrasing ("this afternoon",
 "tomorrow 9am") and, later, calendar windows all resolve against it.
 
@@ -22,14 +22,14 @@ be formatted with DST resolved automatically; storing `+02:00` would break at
 the next DST transition. The value is null until first reported; the prompt
 falls back to `UTC` (see `DEFAULT_TIMEZONE`).
 
-Server-side validation (`isValidTimezone` in `apps/api/src/timezone.ts`)
+Server-side validation (`isValidTimezone` in `apps/agent-api/src/timezone.ts`)
 rejects anything that isn't a member of `Intl.supportedValuesOf("timeZone")`
 or `UTC`. Legacy abbreviations like `PST` are rejected on purpose — they
 carry a fixed offset and ignore DST.
 
 ## Sync mechanism (one code path)
 
-`apps/web/src/App.tsx` already does `GET /api/user-settings` on mount. It now
+`apps/agent-web/src/App.tsx` already does `GET /api/user-settings` on mount. It now
 compares the stored zone to `Intl...timeZone` and `PATCH`es only when the
 zone is **missing or changed**:
 
@@ -43,7 +43,7 @@ Steady state is zero extra writes.
 
 A user who travels and only uses Telegram (never opens the web app) can't be
 auto-detected. The `set_timezone` tool
-(`apps/api/src/tools/timezone.ts`) covers this: when the user says where they
+(`apps/agent-api/src/tools/timezone.ts`) covers this: when the user says where they
 are ("I'm in Tokyo now"), the model calls it with the IANA zone. The tool
 validates and, on a miss, returns near matches (`suggestTimezones`) so the
 model can correct itself. No timezone list is fed into the prompt — the model

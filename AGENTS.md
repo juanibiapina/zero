@@ -4,7 +4,7 @@
 
 During development, use `gob run bin/ci` to run all necessary checks including build, linter, tests etc.
 
-**Mobile (`apps/mobile`):** unit tests, lint, and typecheck run in the Turbo pipeline like the other packages. Automated **UI tests run on an Android emulator with Maestro**, but only in the **Mobile E2E** GitHub Actions workflow (`.github/workflows/mobile-e2e.yml`, manual dispatch) — the dev box has no KVM to run an emulator locally. Every run uploads a screenshot, logcat, and UI hierarchy as artifacts, so on-device failures are reproducible without a phone. Flows live in `apps/mobile/.maestro/`. See `apps/mobile/README.md`.
+**Mobile (`apps/agent-mobile`):** unit tests, lint, and typecheck run in the Turbo pipeline like the other packages. Automated **UI tests run on an Android emulator with Maestro**, but only in the **Mobile E2E** GitHub Actions workflow (`.github/workflows/mobile-e2e.yml`, manual dispatch) — the dev box has no KVM to run an emulator locally. Every run uploads a screenshot, logcat, and UI hierarchy as artifacts, so on-device failures are reproducible without a phone. Flows live in `apps/agent-mobile/.maestro/`. See `apps/agent-mobile/README.md`.
 
 ## Changelog
 
@@ -19,7 +19,7 @@ separate follow-up after deployment.
 - Purely internal changes (refactors, tests, infra) get no entry.
 
 `CHANGELOG.md` is surfaced in-product as the read-only "Changelog" system topic
-(`apps/api/src/store/system-topics.ts`), so every entry ships to users on the
+(`apps/agent-api/src/store/system-topics.ts`), so every entry ships to users on the
 next deploy. Keep entries clean and user-facing.
 
 ## Deployment
@@ -49,11 +49,11 @@ Zero receives Telegram bot webhooks and routes each update to the right user via
 
 Packages:
 
-- **Worker:** `apps/api` (`@zero/agent-api`)
-- **Frontend:** `apps/web` (`@zero/agent-web`)
-- **Mobile:** `apps/mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Built and distributed via EAS (no local Android SDK). See `apps/mobile/README.md`.
-- **Shared types:** `packages/core` (`@zero/agent-core`) — currently empty placeholder
-- **E2E tests:** `packages/e2e-tests` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
+- **Worker:** `apps/agent-api` (`@zero/agent-api`)
+- **Frontend:** `apps/agent-web` (`@zero/agent-web`)
+- **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Built and distributed via EAS (no local Android SDK). See `apps/agent-mobile/README.md`.
+- **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
+- **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 
 Expected dev ports:
 - **5176**: Web frontend (Vite)
@@ -64,7 +64,7 @@ The worker follows a layered architecture: Entry Point → App → Routes → Du
 ## Production Logs
 
 ```bash
-gob add pnpm --dir apps/api exec wrangler tail
+gob add pnpm --dir apps/agent-api exec wrangler tail
 ```
 
 ## Dev Server

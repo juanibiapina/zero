@@ -8,7 +8,7 @@ no per-user filesystem.
 ## Topics
 
 A **topic** is a living knowledge document about a subject (a project, a person,
-an ongoing thread). Columns (see `apps/api/src/UserDO/db/schema.ts`):
+an ongoing thread). Columns (see `apps/agent-api/src/UserDO/db/schema.ts`):
 
 - `name` — human label the agent addresses (unique). A surrogate integer `id` is
   the internal key, so a rename is a one-field `name` update.

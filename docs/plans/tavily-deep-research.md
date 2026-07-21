@@ -52,7 +52,7 @@ One tool, deep behavior behind it. This is the "as few as possible" shape.
    an alternate adapter (the port's second real adapter — justifies the seam).
 
 6. **Env + secret plumbing:**
-   - Add `TAVILY_API_KEY` to `apps/api/worker-configuration.d.ts` (or regenerate
+   - Add `TAVILY_API_KEY` to `apps/agent-api/worker-configuration.d.ts` (or regenerate
      types) and the `wrangler.jsonc` var list.
    - Store `TAVILY_API_KEY` in ZeroVault `zero-api`, both `development` and
      `production`, then `bin/fetch-secrets` and `bin/sync-secrets-to-cloudflare`.

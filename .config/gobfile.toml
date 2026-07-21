@@ -14,6 +14,6 @@ description = "Deploy to production"
 autostart = false
 
 [[job]]
-command = "pnpm --dir apps/api exec wrangler tail"
+command = "pnpm --dir apps/agent-api exec wrangler tail"
 description = "Follow production logs"
 autostart = false

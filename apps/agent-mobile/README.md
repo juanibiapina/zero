@@ -19,7 +19,7 @@ on Expo's servers; you only need Node and an Expo account.
 - Node (repo `.nvmrc`, Node 22 LTS) and pnpm 10.21 (`pnpm install` at the repo root).
 - A free [Expo account](https://expo.dev) and the EAS CLI: `pnpm dlx eas-cli`
   (or `npm i -g eas-cli`). Run `eas login` once.
-- One-time project link: `eas init` from `apps/mobile` (writes the EAS project id
+- One-time project link: `eas init` from `apps/agent-mobile` (writes the EAS project id
   into `app.json`). Requires being logged in.
 
 ## Toolchain notes (divergence from the shared configs)
@@ -51,7 +51,7 @@ Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
 The Clerk **publishable** key is public by design (`pk_...`, already shipped in
 the web bundle), so it is committed in the `env` block of every `eas.json` build
 profile — it is **not** an EAS Secret. For local `expo start`, export the same
-value in your shell or put it in `apps/mobile/.env.local` (gitignored):
+value in your shell or put it in `apps/agent-mobile/.env.local` (gitignored):
 
 ```bash
 export EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
@@ -109,7 +109,7 @@ pnpm --filter @zero/agent-mobile test
 ## End-to-end tests (emulator + Maestro)
 
 Automated UI tests run a real APK on an Android emulator and drive it with
-[Maestro](https://maestro.mobile.dev). They live in `apps/mobile/.maestro/` and
+[Maestro](https://maestro.mobile.dev). They live in `apps/agent-mobile/.maestro/` and
 run in CI via the **Mobile E2E** workflow (`.github/workflows/mobile-e2e.yml`),
 because the local dev box has no KVM to run an emulator.
 
@@ -134,7 +134,7 @@ download the `mobile-e2e-artifacts` and open `screen.png` / `ui.xml` / `logcat.t
 
 ## Builds
 
-From `apps/mobile`:
+From `apps/agent-mobile`:
 
 ```bash
 # Dev client (install once, then hot-reload JS from `expo start`)

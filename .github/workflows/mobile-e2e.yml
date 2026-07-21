@@ -55,8 +55,8 @@ jobs:
         id: apk-cache
         uses: actions/cache@v4
         with:
-          path: apps/mobile/apk-out/app-release.apk
-          key: apk-${{ hashFiles('apps/mobile/src/**', 'apps/mobile/app.json', 'apps/mobile/package.json', 'pnpm-lock.yaml', '.github/workflows/mobile-e2e.yml') }}
+          path: apps/agent-mobile/apk-out/app-release.apk
+          key: apk-${{ hashFiles('apps/agent-mobile/src/**', 'apps/agent-mobile/app.json', 'apps/agent-mobile/package.json', 'pnpm-lock.yaml', '.github/workflows/mobile-e2e.yml') }}
 
       - name: Install dependencies
         if: steps.apk-cache.outputs.cache-hit != 'true'
@@ -64,27 +64,27 @@ jobs:
 
       - name: Prebuild Android project
         if: steps.apk-cache.outputs.cache-hit != 'true'
-        working-directory: apps/mobile
+        working-directory: apps/agent-mobile
         run: npx expo prebuild -p android --no-install
 
       - name: Build release APK (x86_64, debug-signed)
         if: steps.apk-cache.outputs.cache-hit != 'true'
-        working-directory: apps/mobile/android
+        working-directory: apps/agent-mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
 
       - name: Stage APK
         if: steps.apk-cache.outputs.cache-hit != 'true'
         run: |
-          APK=$(find apps/mobile/android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          mkdir -p apps/mobile/apk-out
-          cp "$APK" apps/mobile/apk-out/app-release.apk
+          APK=$(find apps/agent-mobile/android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          mkdir -p apps/agent-mobile/apk-out
+          cp "$APK" apps/agent-mobile/apk-out/app-release.apk
           echo "Staged: $APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: apps/mobile/apk-out/app-release.apk
+          path: apps/agent-mobile/apk-out/app-release.apk
           retention-days: 1
 
   e2e:
@@ -122,7 +122,7 @@ jobs:
           ram-size: 4096M
           disable-animations: true
           disable-spellchecker: true
-          script: bash apps/mobile/.maestro/run-e2e.sh
+          script: bash apps/agent-mobile/.maestro/run-e2e.sh
 
       - name: Collect artifacts
         if: always()

@@ -6,7 +6,7 @@ import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 
 if (!CLERK_PUBLISHABLE_KEY) {
   throw new Error(
-    'Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in the environment (see apps/mobile/README.md).',
+    'Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in the environment (see apps/agent-mobile/README.md).',
   );
 }
 

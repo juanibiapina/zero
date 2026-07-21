@@ -5,7 +5,7 @@ is resolved, delete it.
 
 ## E2E tests run on demand only
 
-**Where:** `bin/e2e-test`, `packages/e2e-tests/`.
+**Where:** `bin/e2e-test`, `packages/agent-e2e/`.
 
 **What:** The end-to-end suite (local worker + mock Telegram + mock
 Anthropic) is invokable via `bin/e2e-test` but is not wired into `bin/ci`

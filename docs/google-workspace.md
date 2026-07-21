@@ -12,7 +12,7 @@ access to your Gmail, Calendar, and Drive via Clerk's Google OAuth.
 > port/adapter, the tool list, the Gmail id spaces, the calendar/timezone
 > contract, and the confirmation policy.
 >
-> **Approach.** A `GoogleWorkspace` port (`apps/api/src/google/types.ts`)
+> **Approach.** A `GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`)
 > hides all REST/MIME/base64url detail; a REST adapter
 > (`google/rest.ts`) serves production and an in-memory adapter
 > (`google/memory.ts`) serves tests, mirroring the WebSearch seam.
@@ -38,7 +38,7 @@ access to your Gmail, Calendar, and Drive via Clerk's Google OAuth.
    `user.createExternalAccount({ strategy: 'oauth_google', additionalScopes: [...] })`.
    Clerk handles the OAuth handshake with Google and stores the refresh
    token. The button lives in the settings and onboarding pages
-   (`apps/web/src/pages/SettingsPage.tsx`, `Onboarding.tsx`).
+   (`apps/agent-web/src/pages/SettingsPage.tsx`, `Onboarding.tsx`).
 2. A consumer that needs Google mints a fresh access token by calling
    Clerk's Backend API
    (`users.getUserOauthAccessToken(clerkUserId, 'google')`, wrapped by
@@ -51,7 +51,7 @@ access to your Gmail, Calendar, and Drive via Clerk's Google OAuth.
 ## Scopes requested
 
 The "Connect Google" button is all-or-nothing across three scopes,
-defined in `apps/web/src/google-scopes.ts`:
+defined in `apps/agent-web/src/google-scopes.ts`:
 
 | Scope | Lets the bot |
 |-------|--------------|

@@ -8,25 +8,25 @@ Cloudflare Workers backend.
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                      Entry Point                              │
-│                 (apps/api/src/index.ts)                       │
+│                 (apps/agent-api/src/index.ts)                       │
 │            Worker default export + DO exports                 │
 └─────────────────────────────────┬─────────────────────────────┘
                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                        App Layer                              │
-│                  (apps/api/src/app.ts)                        │
+│                  (apps/agent-api/src/app.ts)                        │
 │        Hono, CORS, Clerk middleware, auth guard               │
 └─────────────────────────────────┬─────────────────────────────┘
                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                      Routes Layer                             │
-│                (apps/api/src/routes/*.ts)                     │
+│                (apps/agent-api/src/routes/*.ts)                     │
 │        OpenAPIHono endpoints, Zod validation, KV access       │
 └─────────────────────────────────┬─────────────────────────────┘
                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                Durable Object Layer                           │
-│              (apps/api/src/UserDO/index.ts)                   │
+│              (apps/agent-api/src/UserDO/index.ts)                   │
 │   per-user SQLite (topics, conversations) + alarm turn runner │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -42,7 +42,7 @@ or apply non-trivial authorization beyond the app-level guard.
 
 ## Entry Point
 
-**Reference:** `apps/api/src/index.ts`
+**Reference:** `apps/agent-api/src/index.ts`
 
 The entry point is the Worker's default export. It creates the Hono app and
 delegates request handling to it, and re-exports the Durable Object classes
@@ -68,7 +68,7 @@ Object class — see the Durable Object Layer below.
 
 ## App Layer
 
-**Reference:** `apps/api/src/app.ts`
+**Reference:** `apps/agent-api/src/app.ts`
 
 Sets up Hono and the middleware stack:
 
@@ -90,7 +90,7 @@ Routes read `c.get("userId")` and access KV directly via `c.env.KV`.
 
 ## Routes Layer
 
-**Reference:** `apps/api/src/routes/telegram.ts`
+**Reference:** `apps/agent-api/src/routes/telegram.ts`
 
 Routes are defined with `OpenAPIHono` + Zod schemas. Each `createRoute()`
 sits immediately above its `router.openapi()` handler so the OpenAPI spec
@@ -115,7 +115,7 @@ Routers are mounted in `app.ts` via `app.route("/", createTelegramRoutes())`.
 
 ## Durable Object Layer
 
-**Reference:** `apps/api/src/UserDO/index.ts`
+**Reference:** `apps/agent-api/src/UserDO/index.ts`
 
 `UserDO` extends `DurableObject<Env>`, one instance per Clerk user
 (`env.USER_DO.idFromName(clerkUserId)`, via the typed `getUserDO` stub). It
@@ -130,8 +130,8 @@ replies go straight to Telegram via grammY. A self-rescheduling `setTimeout`
 drives the Telegram typing action while a turn runs; the alarm stays dedicated
 to turn scheduling.
 
-The agents and the turn orchestrator (`apps/api/src/agents/*`) depend on the
-`Store` port (`apps/api/src/store/types.ts`), not on the DO or do-orm, so they
+The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on the
+`Store` port (`apps/agent-api/src/store/types.ts`), not on the DO or do-orm, so they
 are unit-tested with an in-memory store and a scripted mock model. `UserDO`
 supplies the production `DbStore` adapter. LLM access is built in
 `agents/model.ts` (Cloudflare AI Gateway, per-user + per-agent `cf-aig-metadata`).

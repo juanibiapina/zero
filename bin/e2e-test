@@ -18,8 +18,8 @@ cleanup() {
   lsof -ti :8791 | xargs -r kill -9 2>/dev/null || true
   lsof -ti :9233 | xargs -r kill -9 2>/dev/null || true
   # Restore original .dev.vars
-  if [ -f apps/api/.dev.vars.bak ]; then
-    mv apps/api/.dev.vars.bak apps/api/.dev.vars
+  if [ -f apps/agent-api/.dev.vars.bak ]; then
+    mv apps/agent-api/.dev.vars.bak apps/agent-api/.dev.vars
   fi
 }
 trap cleanup EXIT
@@ -28,19 +28,19 @@ echo "=== Preparing secrets ==="
 # Regenerate .dev.vars from ZeroVault (json -> dotenv) and restore on exit.
 # Requires ZEROVAULT_API_KEY and ZEROVAULT_API_URL.
 ZV="pnpm dlx zerovault-cli@0.1.0"
-cp apps/api/.dev.vars apps/api/.dev.vars.bak
+cp apps/agent-api/.dev.vars apps/agent-api/.dev.vars.bak
 $ZV secrets download -p zero-api -e development --format json \
-  | node bin/json-to-dotenv.mjs > apps/api/.dev.vars
+  | node bin/json-to-dotenv.mjs > apps/agent-api/.dev.vars
 echo "=== Starting mock Telegram API on :3501 ==="
-pnpm exec tsx packages/e2e-tests/src/mock-telegram.ts &
+pnpm exec tsx packages/agent-e2e/src/mock-telegram.ts &
 PIDS+=($!)
 
 echo "=== Starting mock Anthropic API on :3502 ==="
-pnpm exec tsx packages/e2e-tests/src/mock-anthropic.ts &
+pnpm exec tsx packages/agent-e2e/src/mock-anthropic.ts &
 PIDS+=($!)
 
 echo "=== Starting wrangler dev (test config) on :8791 ==="
-pnpm --dir apps/api exec wrangler dev \
+pnpm --dir apps/agent-api exec wrangler dev \
   --config wrangler.test.jsonc \
   --port 8791 \
   --inspector-port 9233 &
@@ -64,12 +64,12 @@ for port in 3501 3502 8791; do
 done
 
 echo "=== Seeding KV (tg:12345 → user_test) ==="
-pnpm --dir apps/api exec wrangler kv key put \
+pnpm --dir apps/agent-api exec wrangler kv key put \
   --binding KV --local --preview false --config wrangler.test.jsonc \
   "tg:12345" "user_test" || echo "WARN: KV seed may have failed"
 
 echo "=== Running E2E tests ==="
 ( eval "$($ZV secrets download -p zero-api -e development --format shell)"
-  pnpm --dir packages/e2e-tests exec vitest run )
+  pnpm --dir packages/agent-e2e exec vitest run )
 
 echo "=== E2E tests passed ==="

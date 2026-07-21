@@ -33,10 +33,10 @@ model and the two agents.
 ```
 zero/
 ├── apps/
-│   ├── api/             (@zero/agent-api)        — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
-│   └── web/             (@zero/agent-web)        — Vite + React: single Telegram-id form
+│   ├── agent-api/       (@zero/agent-api)        — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
+│   └── agent-web/       (@zero/agent-web)        — Vite + React: single Telegram-id form
 ├── packages/
-│   ├── core/            (@zero/agent-core)       — Reserved for future shared types (currently empty)
+│   ├── agent-core/      (@zero/agent-core)       — Reserved for future shared types (currently empty)
 │   ├── eslint-config/                            — Shared ESLint config
 │   └── typescript-config/                        — Shared TypeScript config
 └── docs/                                         — Design + ops docs
@@ -92,10 +92,10 @@ zero/
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-The agents and the turn orchestrator (`apps/api/src/agents/*`) depend on the
-`Store` port (`apps/api/src/store/types.ts`), a model factory
-(`agents/model.ts`), a `WebSearch` port (`apps/api/src/websearch/types.ts`), and a
-`GoogleWorkspace` port (`apps/api/src/google/types.ts`), not on the DO or do-orm.
+The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on the
+`Store` port (`apps/agent-api/src/store/types.ts`), a model factory
+(`agents/model.ts`), a `WebSearch` port (`apps/agent-api/src/websearch/types.ts`), and a
+`GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`), not on the DO or do-orm.
 They are unit-tested with an in-memory store, a scripted mock model, and
 in-memory search/Google adapters; `UserDO` supplies the production `DbStore`,
 `createBraveSearch`, and `createGoogleWorkspace` (with a memoized Clerk token
@@ -182,7 +182,7 @@ GET    /api/admin/github/status          — A user's GitHub install/token check
 ```
 
 Admin routes are gated by the `ADMIN_USER_ID` env var. The user list is sourced
-from Clerk (`apps/api/src/admin-users.ts`) so every signed-up user appears; it
+from Clerk (`apps/agent-api/src/admin-users.ts`) so every signed-up user appears; it
 does no per-user UserDO or GitHub calls. The detail route is the only admin path
 that pays for a per-user Clerk `getUser` plus one UserDO read (Telegram link,
 Google/onboarding status). Per-request cost tracking was removed with the
@@ -196,7 +196,7 @@ alarm, off Telegram, and seeds the pinned `User` topic. See
 [`onboarding.md`](onboarding.md).
 
 The link route accepts the Login Widget callback payload and verifies its HMAC
-against `TELEGRAM_BOT_TOKEN` (`apps/api/src/telegram-auth.ts`). See
+against `TELEGRAM_BOT_TOKEN` (`apps/agent-api/src/telegram-auth.ts`). See
 [`telegram-login.md`](telegram-login.md) for the algorithm, BotFather setup, and
 the required `VITE_TELEGRAM_BOT_USERNAME` env var.
 
@@ -243,7 +243,7 @@ re-flattened turn). Instead:
    reference re-fetches by id. Images are billed only on turns where they are
    viewed.
 
-The `AttachmentStore` port (`apps/api/src/attachments/types.ts`) abstracts the
+The `AttachmentStore` port (`apps/agent-api/src/attachments/types.ts`) abstracts the
 bytes: `createR2Attachments` in prod, an in-memory adapter in tests.
 `deleteAllForUser` (wired into Telegram unlink) removes every object under the
 user's prefix. The bot token stays in the download URL and never reaches
@@ -288,7 +288,7 @@ Logs indexer auto-extracts the fields, so the dashboard can filter on e.g.
 
 Conventions:
 
-- Always go through the `log` / `logError` helpers in `apps/api/src/log.ts`.
+- Always go through the `log` / `logError` helpers in `apps/agent-api/src/log.ts`.
 - Every log carries `service` (`"worker"`) and `msg` (a short snake_case event
   name).
 - Failure paths use `logError` (Cloudflare maps `console.error` to

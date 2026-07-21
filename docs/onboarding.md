@@ -19,7 +19,7 @@ Google connected (web)
   → agents/onboarding.ts               Gmail scan → update_topic on "User"
 ```
 
-The web app (`apps/web/src/pages/Onboarding.tsx`) POSTs the route once, guarded
+The web app (`apps/agent-web/src/pages/Onboarding.tsx`) POSTs the route once, guarded
 on `googleOnboardingStatus` being null, when Google connects.
 
 ## State machine (no task table)

@@ -13,10 +13,10 @@ All secrets are managed through [ZeroVault](https://zerovault.juanibiapina.dev),
 
 | ZeroVault Project | Environment | Target | Purpose |
 |-------------------|-------------|--------|---------|
-| `zero-api` | `development` | `apps/api/.dev.vars` | Worker runtime variables for local development |
+| `zero-api` | `development` | `apps/agent-api/.dev.vars` | Worker runtime variables for local development |
 | `zero-api` | `production` | Cloudflare Workers | Worker runtime variables for production (uploaded via wrangler) |
-| `zero-web` | `development` | `apps/web/.env.local` | Vite build-time variables for local development |
-| `zero-web` | `production` | `apps/web/.env.production` | Vite build-time variables for production builds |
+| `zero-web` | `development` | `apps/agent-web/.env.local` | Vite build-time variables for local development |
+| `zero-web` | `production` | `apps/agent-web/.env.production` | Vite build-time variables for production builds |
 
 ### Prerequisites
 
@@ -71,19 +71,19 @@ bin/sync-secrets-to-cloudflare
 
 ## File Structure
 
-### `apps/api/.dev.vars` - Worker Runtime Variables (Local Development)
+### `apps/agent-api/.dev.vars` - Worker Runtime Variables (Local Development)
 
 Contains variables used by the Cloudflare Worker at runtime during local development.
 
 **Source**: Generated from ZeroVault project `zero-api`, environment `development`
 
-### `apps/web/.env.local` - Vite Build-Time Variables (Local Development)
+### `apps/agent-web/.env.local` - Vite Build-Time Variables (Local Development)
 
 Contains variables used by Vite during local development builds.
 
 **Source**: Generated from ZeroVault project `zero-web`, environment `development`
 
-### `apps/web/.env.production` - Vite Build-Time Variables (Production Builds)
+### `apps/agent-web/.env.production` - Vite Build-Time Variables (Production Builds)
 
 Contains variables used by Vite during production builds.
 
@@ -93,7 +93,7 @@ Contains variables used by Vite during production builds.
 
 1. **Worker runtime secrets**: Stored in `zero-api` project (`production` environment), synced to Cloudflare Workers using `bin/sync-secrets-to-cloudflare`
 
-2. **Build-time variables**: Fetched from `zero-web` project → `apps/web/.env.production` (used during build)
+2. **Build-time variables**: Fetched from `zero-web` project → `apps/agent-web/.env.production` (used during build)
 
 3. **Deployment process**:
    ```bash

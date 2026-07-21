@@ -13,8 +13,8 @@ Message format (name and email included, degrading gracefully):
 🎉 New signup: Alice Smith — alice@example.com (user_abc123)
 ```
 
-Code: `apps/api/src/routes/clerk-webhook.ts` (route + `formatSignupMessage` +
-`handleClerkEvent`) and `apps/api/src/discord.ts` (`notifyDiscord`).
+Code: `apps/agent-api/src/routes/clerk-webhook.ts` (route + `formatSignupMessage` +
+`handleClerkEvent`) and `apps/agent-api/src/discord.ts` (`notifyDiscord`).
 
 ## Secrets
 
@@ -34,8 +34,8 @@ $ZV secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zero-api -e producti
 $ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zero-api -e development
 $ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zero-api -e production
 
-bin/fetch-secrets                 # regenerate apps/api/.dev.vars
-pnpm --dir apps/api cf-typegen    # regenerate Env types
+bin/fetch-secrets                 # regenerate apps/agent-api/.dev.vars
+pnpm --dir apps/agent-api cf-typegen    # regenerate Env types
 bin/sync-secrets-to-cloudflare    # push prd secrets to the Worker (on deploy)
 ```
 

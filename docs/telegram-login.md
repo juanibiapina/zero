@@ -48,7 +48,7 @@ for dev is overkill for one developer.
 
 ## Verification algorithm
 
-The worker validates payloads in `apps/api/src/telegram-auth.ts`. The
+The worker validates payloads in `apps/agent-api/src/telegram-auth.ts`. The
 recipe (from [Telegram's docs](https://core.telegram.org/widgets/login#checking-authorization)):
 
 1. `secret_key = SHA-256(TELEGRAM_BOT_TOKEN)`

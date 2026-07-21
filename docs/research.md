@@ -43,7 +43,7 @@ tunable; err toward more triggering and tune down from logs.
 
 ## One runner, three agents
 
-`apps/api/src/agents/run.ts` is the single agent machine:
+`apps/agent-api/src/agents/run.ts` is the single agent machine:
 
 ```
 runAgent({ model, system, prompt, tools, maxSteps }) → { text, finishReason, steps }
@@ -83,7 +83,7 @@ into the tool result. No message content is logged (see `log.ts` conventions).
 
 ## Web search port
 
-`apps/api/src/websearch/types.ts` defines the `WebSearch` port and a normalized
+`apps/agent-api/src/websearch/types.ts` defines the `WebSearch` port and a normalized
 `SearchResult` (`{ title, url, snippet }`). Adapters:
 
 - `brave.ts` — `createBraveSearch(apiKey)`, production. Calls the Brave Web
