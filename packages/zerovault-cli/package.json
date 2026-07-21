@@ -20,11 +20,11 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "tsc"
+    "prepublishOnly": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "commander": "^15.0.0"

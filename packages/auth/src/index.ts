@@ -59,7 +59,7 @@ export async function validateApiKey(
 
   let data: { v?: number; orgId?: string; userId?: string };
   try {
-    data = JSON.parse(raw);
+    data = JSON.parse(raw) as { v?: number; orgId?: string; userId?: string };
   } catch {
     return null;
   }

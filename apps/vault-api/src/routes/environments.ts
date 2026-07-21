@@ -43,7 +43,7 @@ function envHandlers() {
 
   app.delete("/:env", async (c) => {
     const projectName = c.req.param("project")!;
-    const envName = c.req.param("env")!;
+    const envName = c.req.param("env");
     const deleted = await getProjectVault(c, projectName).deleteEnvironment(envName);
 
     if (!deleted) {

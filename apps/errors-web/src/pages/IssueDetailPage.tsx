@@ -30,14 +30,14 @@ export default function IssueDetailPage() {
   }, [tokenFn, id, organization?.id]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const toggleStatus = async () => {
     if (!data) return;
     const next = data.issue.status === "open" ? "resolved" : "open";
     await api.setIssueStatus(tokenFn, id, next);
-    load();
+    void load();
   };
 
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
@@ -67,7 +67,7 @@ export default function IssueDetailPage() {
             <span>last {new Date(issue.lastSeenAt).toLocaleString()}</span>
           </div>
         </div>
-        <Button variant={issue.status === "open" ? "default" : "outline"} size="sm" onClick={toggleStatus}>
+        <Button variant={issue.status === "open" ? "default" : "outline"} size="sm" onClick={() => void toggleStatus()}>
           {issue.status === "open" ? (
             <>
               <Check className="h-4 w-4 mr-1" />

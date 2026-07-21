@@ -47,7 +47,7 @@ export const createIssuesRouter = () => {
   });
 
   app.patch("/api/issues/:id", async (c) => {
-    const raw = await c.req.json().catch(() => null);
+    const raw: unknown = await c.req.json().catch(() => null);
     const parsed = patchSchema.safeParse(raw);
     if (!parsed.success) {
       return c.json({ error: "Invalid status" }, 400);

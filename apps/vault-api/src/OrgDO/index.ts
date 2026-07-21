@@ -24,7 +24,7 @@ export class OrgDO extends DurableObject<Env> {
     super(ctx, env);
     this.db = createDb(ctx.storage);
 
-    ctx.blockConcurrencyWhile(async () => {
+    void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
     });
   }

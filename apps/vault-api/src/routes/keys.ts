@@ -20,7 +20,7 @@ export const createKeysRouter = (_env: Env) => {
   const create = async (c: Ctx) => {
     const body = await c.req
       .json<{ label?: string }>()
-      .catch(() => ({}) as { label?: string });
+      .catch((): { label?: string } => ({}));
     const result = await getOrgVault(c).createApiKey(
       { orgId: c.get("orgId"), userId: c.get("userId") },
       body.label,

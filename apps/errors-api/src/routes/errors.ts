@@ -21,7 +21,7 @@ export const createErrorsRouter = (notifier: Notifier) => {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
   app.post("/v1/errors", async (c) => {
-    const raw = await c.req.json().catch(() => null);
+    const raw: unknown = await c.req.json().catch(() => null);
     const parsed = errorReportSchema.safeParse(raw);
     if (!parsed.success) {
       return c.json({ error: "Invalid error report" }, 400);

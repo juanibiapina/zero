@@ -17,6 +17,13 @@ export default [
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // react-hooks 7 ships newer, still-evolving analyses (compiler-adjacent).
+      // Keep them as warnings: surfaced and actionable, but not build-blocking
+      // during the migration to the React Compiler lint set.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
       "react-refresh/only-export-components": [
         "warn",
         { allowConstantExport: true },
