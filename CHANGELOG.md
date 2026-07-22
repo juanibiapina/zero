@@ -2,7 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
-- 2026-07-21: Vault and Errors now share the Zero brand and a product switcher to move between them without signing in again.
+- 2026-07-21: Vault and Errors now share the Zero brand and a product switcher, and live at vault.juanibiapina.dev and errors.juanibiapina.dev.
 - 2026-07-21: When the assistant is temporarily at its usage limit, it now tells you clearly and asks you to try again shortly, instead of a generic error.
 - 2026-07-21: Faster replies on research and calendar-heavy turns and in longer conversations.
 - 2026-07-21: Starting a new conversation now works even in threads where you had sent a photo or file.

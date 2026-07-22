@@ -10,9 +10,9 @@ export interface ProductLink {
   href: string;
 }
 
-// Current production hosts (Task 3 renames these to vault./errors.).
-const PROD_VAULT_URL = "https://zerovault.juanibiapina.dev";
-const PROD_ERRORS_URL = "https://zeroerrors.juanibiapina.dev";
+// Zero-branded production hosts.
+const PROD_VAULT_URL = "https://vault.juanibiapina.dev";
+const PROD_ERRORS_URL = "https://errors.juanibiapina.dev";
 
 /**
  * The canonical Zero product list, shared by every app so the two consoles
