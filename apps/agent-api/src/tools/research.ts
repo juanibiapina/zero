@@ -14,14 +14,18 @@ import { runAgent, usageLogFields } from "../agents/run";
 import { researchSystemPrompt } from "../agents/prompts";
 import { buildTopicTools } from "./topics";
 import { buildWebSearchTool } from "./web-search";
+import { buildReadPageTool } from "./read-page";
 import { log } from "../log";
 import type { TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
+import type { PageFetcher } from "../pagefetch/types";
 
 export interface ResearchToolDeps {
   model: LanguageModel;
   store: TopicStore;
   search: WebSearch;
+  // Page-fetch port for the read_page tool. Threaded exactly like `search`.
+  fetcher: PageFetcher;
   // The interface agent's accessed set. Topics the research agent writes are
   // merged in so the writer consolidates them like any other accessed topic.
   accessed: Set<string>;
@@ -35,7 +39,7 @@ const fallbackTopicName = (prompt: string): string => {
 };
 
 export const buildResearchTool = (deps: ResearchToolDeps): ToolSet => {
-  const { model, store, search, accessed } = deps;
+  const { model, store, search, fetcher, accessed } = deps;
 
   return {
     research: tool({
@@ -61,6 +65,7 @@ export const buildResearchTool = (deps: ResearchToolDeps): ToolSet => {
         const tools = {
           ...buildTopicTools({ store, accessed: written }),
           ...buildWebSearchTool({ search }),
+          ...buildReadPageTool({ fetcher }),
         };
 
         const agentPrompt = topic

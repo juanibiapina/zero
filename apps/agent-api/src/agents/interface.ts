@@ -10,6 +10,7 @@ import { buildGoogleTools } from "../tools/google";
 import { buildAttachmentTool } from "../tools/attachments";
 import type { Attachment, Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
+import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { AttachmentStore } from "../attachments/types";
 import {
@@ -42,6 +43,9 @@ export interface InterfaceAgentInput {
   history: Message[];
   userMessage: string;
   search: WebSearch;
+  // Page-fetch port for the research agent's read_page tool. Threaded exactly
+  // like `search`; tests inject the memory adapter.
+  fetcher: PageFetcher;
   // Gmail + Calendar access. Threaded exactly like `search`; tests inject the
   // memory adapter.
   google: GoogleWorkspace;
@@ -237,6 +241,7 @@ export const runInterfaceAgent = async (
       model: input.researchModel ?? input.model,
       store: input.store,
       search: input.search,
+      fetcher: input.fetcher,
       accessed,
     }),
     ...buildTimezoneTool({ setTimezone: input.setTimezone }),

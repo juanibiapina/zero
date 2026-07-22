@@ -7,6 +7,7 @@ import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModel } from "ai";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
+import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryGoogle } from "../google/memory";
 
 const collectSink = () => {
@@ -36,6 +37,7 @@ describe("runTurn", () => {
       makeModel: constModel(scriptedModel([])),
       send: sink.send,
       search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
       google: createMemoryGoogle(),
       chatId: 1,
       topicId: 0,
@@ -60,6 +62,7 @@ describe("runTurn", () => {
       ])),
       send: sink.send,
       search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
       google: createMemoryGoogle(),
       chatId: 1,
       topicId: 0,
@@ -94,6 +97,7 @@ describe("runTurn", () => {
         ])),
         send: sink.send,
         search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
         google: createMemoryGoogle(),
         chatId: 1,
         topicId: 0,
@@ -141,6 +145,7 @@ describe("runTurn", () => {
       ])),
       send: sink.send,
       search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
       google: createMemoryGoogle(),
       chatId: 1,
       topicId: 0,
@@ -174,6 +179,7 @@ describe("runTurn", () => {
         ])),
         send,
         search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
         google: createMemoryGoogle(),
         chatId: 1,
         topicId: 0,
@@ -219,6 +225,7 @@ describe("runTurn", () => {
         makeModel: constModel(model),
         send: sink.send,
         search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
         google: createMemoryGoogle(),
         chatId: 1,
         topicId: 0,
@@ -261,6 +268,7 @@ describe("runTurn", () => {
         makeModel: constModel(model),
         send: sink.send,
         search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
         google: createMemoryGoogle(),
         chatId: 1,
         topicId: 0,
@@ -304,6 +312,7 @@ describe("runTurn", () => {
       makeModel: makeModel,
       send: sink.send,
       search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
       google: createMemoryGoogle(),
       chatId: 1,
       topicId: 0,

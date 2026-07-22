@@ -12,6 +12,7 @@ import type { AgentLabel } from "./model";
 import type { LanguageModel } from "ai";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
+import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { AttachmentStore } from "../attachments/types";
 
@@ -25,6 +26,9 @@ export interface TurnInput {
   makeModel: (agent: AgentLabel) => LanguageModel;
   send: (text: string) => Promise<void>;
   search: WebSearch;
+  // Page-fetch port for the research agent's read_page tool (threaded like
+  // `search`).
+  fetcher: PageFetcher;
   // Gmail + Calendar access, built by the DO and forwarded to the interface
   // agent (threaded like `search`).
   google: GoogleWorkspace;
@@ -53,7 +57,8 @@ export interface TurnInput {
 // retry sees the tail is already `assistant` and skips the thread — no
 // duplicate Telegram messages.
 export const runTurn = async (input: TurnInput): Promise<void> => {
-  const { store, makeModel, send, search, google, chatId, topicId } = input;
+  const { store, makeModel, send, search, fetcher, google, chatId, topicId } =
+    input;
   const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
@@ -83,6 +88,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       send,
       persistReply,
       search,
+      fetcher,
       google,
       attachments: input.attachments,
       getAttachment: input.attachments

@@ -12,6 +12,7 @@ import { createR2Attachments } from "../attachments/r2";
 import type { AttachmentStore } from "../attachments/types";
 import { createModel, createModelFactory } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
+import { createTavilyFetcher } from "../pagefetch/tavily";
 import { createGoogleWorkspace } from "../google/rest";
 import { getGoogleAccessToken, memoizeTokenProvider } from "../google-token";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
@@ -229,6 +230,7 @@ export class UserDO extends DurableObject<Env> {
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
     const makeModel = await createModelFactory(this.env, clerkUserId);
     const search = createBraveSearch(this.env.BRAVE_API_KEY);
+    const fetcher = createTavilyFetcher(this.env.TAVILY_API_KEY);
     // Memoized Google token provider: the first Google tool call mints a token
     // via Clerk and caches the promise for the turn; turns that never touch
     // Google make zero Clerk calls. A ~1h token outlives any turn.
@@ -247,7 +249,7 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, makeModel, send, search, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
+      await orchestrateTurn({ store: this.store, makeModel, send, search, fetcher, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
     } finally {
       if (timer) clearTimeout(timer);
     }

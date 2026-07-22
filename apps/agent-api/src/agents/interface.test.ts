@@ -16,6 +16,7 @@ import type { Topic } from "../store/types";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryGoogle } from "../google/memory";
+import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryAttachments } from "../attachments/memory";
 import { attachmentKey } from "../attachments/types";
 
@@ -136,6 +137,7 @@ describe("runInterfaceAgent pinned surfacing", () => {
       send: collectSink().send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
     });
@@ -172,6 +174,7 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
       send: collectSink().send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: opts.history ?? [],
       userMessage: "hi",
       timezone: opts.timezone,
@@ -316,6 +319,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
     });
@@ -350,6 +354,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "plan a trip",
     });
@@ -387,6 +392,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search,
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "how far is Mars",
     });
@@ -433,6 +439,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search,
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "how far is Mars",
     });
@@ -458,6 +465,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       setTimezone,
       history: [],
       userMessage: "I moved to Tokyo",
@@ -504,6 +512,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google,
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "what did a email me?",
     });
@@ -528,6 +537,7 @@ describe("runInterfaceAgent", () => {
       persistReply: (t) => order.push(`persist:${t}`),
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "x",
     });
@@ -547,6 +557,7 @@ describe("runInterfaceAgent", () => {
       persistReply: (t) => order.push(`persist:${t}`),
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "x",
     });
@@ -567,6 +578,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
     });
@@ -586,6 +598,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
     });
@@ -611,6 +624,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
       maxSteps: 1,
@@ -636,6 +650,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
       maxSteps: 2,
@@ -659,6 +674,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
     });
@@ -681,6 +697,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "hi",
     });
@@ -711,6 +728,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search,
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "how far is Mars",
     });
@@ -740,6 +758,7 @@ describe("runInterfaceAgent", () => {
         persistReply: (t) => persisted.push(t),
         search: createMemorySearch(),
         google: createMemoryGoogle(),
+        fetcher: createMemoryFetcher(),
         history: [],
         userMessage: "hi",
       }),
@@ -770,6 +789,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "weather?",
     });
@@ -797,6 +817,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "read big",
     });
@@ -831,6 +852,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       attachments,
       getAttachment: (id) => store.getAttachment(id),
       history: [],
@@ -855,6 +877,7 @@ describe("runInterfaceAgent", () => {
       send: sink.send,
       search: createMemorySearch(),
       google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
       history: [],
       userMessage: "tell me about ghost",
     });

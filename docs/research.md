@@ -63,7 +63,9 @@ runner with different system prompts and toolsets:
   decide the no-silence fallback (deliver prose the model forgot to `reply`, or
   send a generic fallback when the loop hit the cap without a final answer).
 - **Research agent** (spawned by `tools/research.ts`): tools are the topic tools
-  + `web_search` (no `reply`). It writes its findings into a topic and returns
+  + `web_search` + `read_page` (no `reply`). `web_search` returns snippets;
+  `read_page` fetches the full cleaned content of a chosen result's URL on
+  demand. It writes its findings into a topic and returns
   the topic handle + summary as the `research` tool result. The tool guarantees
   a topic is returned (fallback topic when the agent wrote none) and merges
   written topics into the interface's `accessed` set.
@@ -84,7 +86,8 @@ The research tool logs `research_started` (`prompt_len`, `has_topic`) and
 `research_completed` (`steps`, `finish_reason`, `duration_ms`, `result_len`,
 `topics` — the names it wrote, plus token/cache counts); the `web_search` tool
 logs `web_search_failed` (`error`) where search errors are otherwise swallowed
-into the tool result. No message content is logged (see `log.ts` conventions).
+into the tool result; the `read_page` tool logs `read_page_failed` (`error`) the
+same way. No message content is logged (see `log.ts` conventions).
 
 ## Web search port
 
@@ -106,15 +109,37 @@ into the tool result. No message content is logged (see `log.ts` conventions).
 - `memory.ts` — `createMemorySearch(results)`, deterministic canned results for
   tests.
 
+## Page fetch port
+
+`apps/agent-api/src/pagefetch/types.ts` defines the `PageFetcher` port and a
+normalized `PageContent` (`{ url, content }`, cleaned markdown). Search stays
+snippet-only on Brave; depth is a separate, on-demand `read_page` tool the
+research agent calls for results it judges important. Adapters:
+
+- `tavily.ts` — `createTavilyFetcher(apiKey, options?)`, production. `POST`s a
+  single URL to Tavily's Extract endpoint (`Authorization: Bearer
+  TAVILY_API_KEY`) with `extract_depth: "basic"` and `format: "markdown"`,
+  normalizes `results[0].raw_content`, and hard-caps the returned content
+  (`maxContentChars`, default 8000) with a `…[truncated]` marker so one
+  pathological page can't blow the turn's context. An unset key throws
+  immediately (no HTTP call); empty results / `failed_results` / non-2xx throw;
+  transient 429/5xx get a small bounded retry (`sleep`/`maxRetries`/`delayMs`
+  injectable for tests). `read-page.ts` swallows any throw into `{ error }`.
+- `memory.ts` — `createMemoryFetcher(byUrl?)`, deterministic canned content for
+  tests.
+
 ## Upgrade paths
 
-Brave returns snippet descriptions only (no full page text). The `WebSearch`
-port is the swap point:
+Brave returns snippet descriptions only; `read_page` (Tavily Extract) fills the
+gap on demand. The `WebSearch` and `PageFetcher` ports are the swap points:
 
-- Swap to a richer provider (e.g. Tavily) by adding a new adapter; callers
-  depend only on the port.
-- Add a `fetch_url` tool to the research agent so it can read full pages behind
-  the snippets.
+- Swap to a richer search provider (e.g. Tavily Search) by adding a new
+  `WebSearch` adapter; callers depend only on the port.
+- Batch page fetch (a list of URLs behind the same `PageFetcher` port) if
+  reading several results at once becomes worthwhile.
+- `extract_depth: "advanced"` to also pull tables and embedded content, or
+  query-reranked chunks (`query` + `chunks_per_source`) to shrink tokens
+  further.
 
 ## e2e
 
