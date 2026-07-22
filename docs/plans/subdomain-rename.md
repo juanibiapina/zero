@@ -237,6 +237,13 @@ this task (see below).
 
 ### Removing the old custom domains is OUT OF SCOPE (deferred)
 
+> **Update (2026-07-22):** this section conflates the API hosts with the bare web
+> hosts. The bare **web** hosts `vault.juanibiapina.dev` /
+> `errors.juanibiapina.dev` were later dropped by
+> `docs/plans/drop-old-console-hosts.md` (no users yet, no value in preserving old
+> bookmarks). The `zerovault.` / `zeroerrors.` **API** hosts below remain attached
+> — they still have live consumers, as this section explains.
+
 The same worker + custom domain serves **both** the SPA and the API on each
 host: `run_worker_first: ["/ping", "/v1/*", "/api/*"]` in
 `apps/vault-api/wrangler.jsonc` and `apps/errors-api/wrangler.jsonc` routes

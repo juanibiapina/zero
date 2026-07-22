@@ -71,10 +71,6 @@
       "custom_domain": true
     },
     {
-      "pattern": "vault.juanibiapina.dev",
-      "custom_domain": true
-    },
-    {
       "pattern": "vault.apps.juanibiapina.dev",
       "custom_domain": true
     }

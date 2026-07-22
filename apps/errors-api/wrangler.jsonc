@@ -58,10 +58,6 @@
       "custom_domain": true
     },
     {
-      "pattern": "errors.juanibiapina.dev",
-      "custom_domain": true
-    },
-    {
       "pattern": "errors.apps.juanibiapina.dev",
       "custom_domain": true
     }

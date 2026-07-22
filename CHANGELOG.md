@@ -4,6 +4,7 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-22: The old Vault and Errors addresses (vault.juanibiapina.dev, errors.juanibiapina.dev) have been retired; the products now live only at vault.apps.juanibiapina.dev and errors.apps.juanibiapina.dev.
 - 2026-07-22: Vault and Errors now live at vault.apps.juanibiapina.dev and errors.apps.juanibiapina.dev, and signing in returns you to the product you came from.
 - 2026-07-22: Signing in from Vault or Errors now returns you to the product you came from, instead of always landing on Vault.
 - 2026-07-22: The Vault and Errors browser tabs now read "Zero Vault" and "Zero Errors", matching the unified Zero brand.
