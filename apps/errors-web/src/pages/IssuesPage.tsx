@@ -21,6 +21,7 @@ export default function IssuesPage() {
   const { organization } = useOrganization();
   const [issues, setIssues] = useState<IssueSummary[]>([]);
   const [project, setProject] = useState("");
+  const [showResolved, setShowResolved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
@@ -28,10 +29,14 @@ export default function IssuesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { issues } = await api.listIssues(tokenFn, project.trim() || undefined);
+    const { issues } = await api.listIssues(
+      tokenFn,
+      project.trim() || undefined,
+      showResolved ? undefined : "open",
+    );
     setIssues(issues);
     setLoading(false);
-  }, [tokenFn, project, organization?.id]);
+  }, [tokenFn, project, showResolved, organization?.id]);
 
   useEffect(() => {
     void load();
@@ -54,14 +59,23 @@ export default function IssuesPage() {
         <h1 className="text-2xl font-bold">Issues</h1>
       </div>
 
-      <div className="relative max-w-xs">
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          className="pl-8"
-          placeholder="Filter by project"
-          value={project}
-          onChange={(e) => setProject(e.target.value)}
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative max-w-xs">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            placeholder="Filter by project"
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+          />
+        </div>
+        <Button
+          variant={showResolved ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowResolved((v) => !v)}
+        >
+          {showResolved ? "Hide resolved" : "Show resolved"}
+        </Button>
       </div>
 
       {loading ? (

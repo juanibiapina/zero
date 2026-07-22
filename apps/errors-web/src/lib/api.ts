@@ -18,9 +18,16 @@ import type {
 export async function listIssues(
   getToken: GetToken,
   project?: string,
+  status?: IssueStatus,
 ): Promise<IssueListResponse> {
-  const qs = project ? `?project=${encodeURIComponent(project)}` : "";
-  return fetchApi<IssueListResponse>(`/api/issues${qs}`, getToken);
+  const params = new URLSearchParams();
+  if (project) params.set("project", project);
+  if (status) params.set("status", status);
+  const qs = params.toString();
+  return fetchApi<IssueListResponse>(
+    `/api/issues${qs ? `?${qs}` : ""}`,
+    getToken,
+  );
 }
 
 export async function getIssue(
