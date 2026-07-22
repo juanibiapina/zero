@@ -39,8 +39,24 @@ const router = createBrowserRouter([
           { path: "keys", element: <KeysPage /> },
         ],
       },
-      { path: "sign-in/*", element: <SignInPage fallbackRedirectUrl="/projects" /> },
-      { path: "sign-up/*", element: <SignUpPage fallbackRedirectUrl="/projects" /> },
+      {
+        path: "sign-in/*",
+        element: (
+          <SignInPage
+            fallbackRedirectUrl="/projects"
+            forceRedirectUrl={`${window.location.origin}/projects`}
+          />
+        ),
+      },
+      {
+        path: "sign-up/*",
+        element: (
+          <SignUpPage
+            fallbackRedirectUrl="/projects"
+            forceRedirectUrl={`${window.location.origin}/projects`}
+          />
+        ),
+      },
     ],
   },
 ]);
