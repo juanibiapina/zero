@@ -70,6 +70,8 @@ Packages:
 - **ZeroErrors:** `apps/errors-api` (`@zero/errors-api`, worker `zeroerrors-api`, `zeroerrors.juanibiapina.dev`) + `apps/errors-web` (`@zero/errors-web`) — error tracking. Backed by `packages/errors-core` (`@zero/errors-core`).
 - **Shared vault/errors packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
 
+The console (ZeroVault + ZeroErrors) shares one Clerk instance whose primary domain is `apps.juanibiapina.dev`; both web apps must be served on subdomains of it (`vault.apps.`, `errors.apps.`) to hold a session. The agent is a separate Clerk instance. See `docs/console-auth.md`.
+
 All three products (agent, vault, errors) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connector, each worker updated in place.
 
 Expected dev ports:

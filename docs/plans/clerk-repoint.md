@@ -1,3 +1,7 @@
+> Superseded target: the frontend-domain rename shipped to
+> `clerk.apps.juanibiapina.dev`, **not** the `clerk.juanibiapina.dev` proposed
+> below. See `docs/console-auth.md`.
+
 # Plan: Task 4 — Clerk repoint + frontend-domain rename
 
 Repoint the shared SaaS Clerk instance so login stops always landing on vault,
