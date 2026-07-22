@@ -3,7 +3,7 @@
 Outstanding follow-ups for this repo. Context: the unified "Zero" SaaS console effort is largely shipped — quota-reached message, left product selector, Zero-branded subdomains, resolve/hide errors issues, tab titles, agent/console changelog split, Tavily research page-fetch, and the full Clerk frontend-domain rename to `clerk.apps.juanibiapina.dev` + the console sign-in fix (Option 1B: apps at `vault.apps.juanibiapina.dev` / `errors.apps.juanibiapina.dev`, sharing the `.apps` Clerk session, isolated from the agent on `zero.juanibiapina.dev`). Login is verified working. The items below are follow-ups and cleanups.
 
 ## 1. Old console hosts dropped
-Done — the old bare web hosts `vault.juanibiapina.dev` / `errors.juanibiapina.dev` were dropped rather than redirected (no users yet). See `docs/plans/drop-old-console-hosts.md`. Remaining manual step: delete the two Worker Custom Domains in Cloudflare (on `zerovault-api` and `zeroerrors-api`) so the old hosts stop resolving.
+Done — the old bare web hosts `vault.juanibiapina.dev` / `errors.juanibiapina.dev` were dropped rather than redirected (no users yet). See `docs/plans/drop-old-console-hosts.md`. The two Worker Custom Domains and their DNS records have been deleted in Cloudflare (confirmed via the Cloudflare API); both hosts now fail to resolve (HTTP 530). No manual step remaining. A full-repo sweep confirmed zero live references to the dead hosts (`docs/plans/sweep-old-host-refs.md`, `docs/plans/sweep-old-host-refs-verify.md`).
 
 ## 2. Clerk cleanup (cosmetic + hygiene)
 - Rename the Clerk application display name "ZeroVault" -> "Zero" (sign-in card reads "Sign in to Zero"). Clerk dashboard, ZeroVault app.
