@@ -12,5 +12,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     throw new Error("Add your Clerk Publishable Key to the .env file");
   }
 
-  return <ClerkProvider publishableKey={publishableKey}>{children}</ClerkProvider>;
+  return (
+    <ClerkProvider
+      publishableKey={publishableKey}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+      afterSignOutUrl="/sign-in"
+    >
+      {children}
+    </ClerkProvider>
+  );
 }

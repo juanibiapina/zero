@@ -10,9 +10,9 @@ export interface ProductLink {
   href: string;
 }
 
-// Zero-branded production hosts.
-const PROD_VAULT_URL = "https://vault.juanibiapina.dev";
-const PROD_ERRORS_URL = "https://errors.juanibiapina.dev";
+// Production hosts, served as subdomains of the Clerk primary so they share a session.
+const PROD_VAULT_URL = "https://vault.apps.juanibiapina.dev";
+const PROD_ERRORS_URL = "https://errors.apps.juanibiapina.dev";
 
 /**
  * The canonical Zero product list, shared by every app so the two consoles
