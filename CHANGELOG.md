@@ -4,6 +4,7 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-22: Signing in from Vault or Errors now returns you to the product you came from, instead of always landing on Vault.
 - 2026-07-22: The Vault and Errors browser tabs now read "Zero Vault" and "Zero Errors", matching the unified Zero brand.
 - 2026-07-22: The errors issues list now hides resolved issues by default, with a "Show resolved" toggle to reveal them.
 - 2026-07-22: Resolve or reopen an error issue directly from the issues list, without opening it.
