@@ -68,11 +68,11 @@ Some topics are **read-only reference documents bundled with the Worker**, the
 same for every user and versioned with the code. They live in no user's SQLite.
 There are two: `Zero` (the assistant's own identity and how it communicates,
 pinned so it is always in context) and `Changelog` (Zero's user-facing changelog,
-unpinned but discoverable via `list_topics`, its body sourced from the repo-root
-`CHANGELOG.md`). Their definitions are `SYSTEM_TOPICS` in
+unpinned but discoverable via `list_topics`, its body sourced from
+`apps/agent-api/CHANGELOG.md`). Their definitions are `SYSTEM_TOPICS` in
 `store/system-topics.ts`; the `Zero` body is authored inline and the `Changelog`
-body is a text import of `CHANGELOG.md` (bundled via the wrangler `Text` rule for
-`**/*.md`, mirrored for vitest by the `text-imports` plugin in
+body is a text import of `apps/agent-api/CHANGELOG.md` (bundled via the wrangler
+`Text` rule for `**/*.md`, mirrored for vitest by the `text-imports` plugin in
 `vitest.config.ts`).
 
 They are not seeded into the database. `SystemTopicStore` (same file) decorates
@@ -88,7 +88,7 @@ structurally at the store boundary, not by a prompt or a soft tool check; the
 `update_topic`/`delete_topic` tools surface the thrown error as a tool error. The
 writer prompt also tells it not to edit `Zero`/`Changelog`, to avoid a wasted,
 always-rejected call. Updating a system topic is a source edit plus deploy (edit
-the `Zero` body or `CHANGELOG.md`); every user picks up the new content with no
+the `Zero` body or `apps/agent-api/CHANGELOG.md`); every user picks up the new content with no
 migration and no per-user seeding.
 
 ## Two-phase turn

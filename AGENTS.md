@@ -11,8 +11,8 @@ During development, use `gob run bin/ci` to run all necessary checks including b
 ## Changelog
 
 Any change a user can observe (new capability, changed behavior, user-visible
-fix) must add a bullet to the root `CHANGELOG.md` **in the same change**. Include
-the changelog entry in the plan and commit it together with the code, never as a
+fix) must add a bullet to a changelog **in the same change**. Include the
+changelog entry in the plan and commit it together with the code, never as a
 separate follow-up after deployment.
 
 - Format: `- YYYY-MM-DD: <what the user now sees or gets>`, most recent first.
@@ -20,9 +20,19 @@ separate follow-up after deployment.
   mechanics.
 - Purely internal changes (refactors, tests, infra) get no entry.
 
-`CHANGELOG.md` is surfaced in-product as the read-only "Changelog" system topic
-(`apps/agent-api/src/store/system-topics.ts`), so every entry ships to users on the
-next deploy. Keep entries clean and user-facing.
+Route the entry by product:
+
+- **Agent (Zero assistant):** changes to `apps/agent-api`, the Telegram bot, or
+  the `apps/agent-mobile` app go in `apps/agent-api/CHANGELOG.md`.
+- **ZeroVault / ZeroErrors / console:** changes to `apps/vault-*`, `apps/errors-*`,
+  or shared console UI go in the root `CHANGELOG.md`.
+
+`apps/agent-api/CHANGELOG.md` is bundled and surfaced in-product as Zero's
+read-only "Changelog" system topic (`apps/agent-api/src/store/system-topics.ts`),
+so its entries ship to agent users on the next deploy. Keep them clean and
+user-facing. The root `CHANGELOG.md` has no in-product surface today; it is the
+console's human-readable changelog. **Do not mix console entries into the agent
+file** — that is exactly what this split fixed.
 
 ## Deployment
 

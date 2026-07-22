@@ -23,7 +23,11 @@ describe("SystemTopicStore: reads overlay bundled topics", () => {
     const zero = s.getTopic("Zero");
     expect(zero?.system).toBe(true);
     expect(zero?.body).toContain("Zero");
-    expect(s.getTopic("Changelog")?.body).toContain("Changelog");
+    const changelog = s.getTopic("Changelog")?.body ?? "";
+    expect(changelog).toContain("Changelog");
+    // The agent changelog must not carry console (Vault/Errors) entries.
+    expect(changelog).not.toContain("Show resolved");
+    expect(changelog).not.toContain("product switcher");
   });
 
   it("getTopic delegates for unknown and user topics", () => {
