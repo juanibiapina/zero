@@ -12,7 +12,7 @@
  */
 
 import { Hono } from "hono";
-import { clerkMiddleware, getAuth } from "@hono/clerk-auth";
+import { clerkMiddleware, getAuth } from "@clerk/hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { validateApiKey } from "@zero/auth";

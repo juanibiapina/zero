@@ -266,12 +266,9 @@ importers:
 
   apps/errors-api:
     dependencies:
-      '@clerk/backend':
-        specifier: ^3.4.14
-        version: 3.11.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@hono/clerk-auth':
-        specifier: ^3.1.1
-        version: 3.1.1(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@clerk/hono':
+        specifier: ^0.1.53
+        version: 0.1.53(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@zero/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -385,12 +382,9 @@ importers:
 
   apps/vault-api:
     dependencies:
-      '@clerk/backend':
-        specifier: ^3.4.14
-        version: 3.11.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@hono/clerk-auth':
-        specifier: ^3.1.1
-        version: 3.1.1(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@clerk/hono':
+        specifier: ^0.1.53
+        version: 0.1.53(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@zero/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -1199,10 +1193,6 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@clerk/backend@2.33.6':
-    resolution: {integrity: sha512-5foMmTHEQFt4mDv7AN0RDwUHZhGcg/JYe5hnl9SU/LFS8ZHY29Z2HDtIBmzKgjRfOJTMKj1AM81LgK2UFsGm9Q==}
-    engines: {node: '>=18.17.0'}
-
   '@clerk/backend@3.11.7':
     resolution: {integrity: sha512-il2wyzS2I10Gv8v+ECEKQqDfaW7gCD2BWUZp37LOMFBn6/DJ7FhHfe4XwgQLUDBkHyk2LxyTt3Lbg5GnpNJPUQ==}
     engines: {node: '>=20.9.0'}
@@ -1891,12 +1881,6 @@ packages:
 
   '@grammyjs/types@4.0.0':
     resolution: {integrity: sha512-Z8lDLTvOlo12e5Vnly/vQh3JC9ppaitS1dGZ3w068gNitOd/y8tTSiib+Xm38aBGbtYGmUZwOc6afYrLs2CSTg==}
-
-  '@hono/clerk-auth@3.1.1':
-    resolution: {integrity: sha512-wOQaxxaBsVPSNDajUkhpv+9QWwpzLp//Kjr2H3seTgbCmskhPG356GbQjH7/sjQHcgAQKnwCc0cPk4iWCIr24A==}
-    engines: {node: '>=16.x.x'}
-    peerDependencies:
-      hono: '>=3.0.0'
 
   '@hono/node-server@2.0.10':
     resolution: {integrity: sha512-ZcnNVhKTmyDJeg0UlnZjvM73JBsTAuhrH/J4fjwGOw59PwOW51r4J+p6CsKZWXdKSme4MFqU62CZMOsdDrU4CA==}
@@ -8366,16 +8350,6 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@clerk/backend@2.33.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@clerk/shared': 3.47.8(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@clerk/types': 4.101.26(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      standardwebhooks: 1.0.0
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - react
-      - react-dom
-
   '@clerk/backend@3.11.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@clerk/shared': 4.25.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -8543,13 +8517,6 @@ snapshots:
   '@clerk/types@4.101.26(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@clerk/shared': 3.47.8(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-    transitivePeerDependencies:
-      - react
-      - react-dom
-
-  '@clerk/types@4.101.26(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@clerk/shared': 3.47.8(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
     transitivePeerDependencies:
       - react
       - react-dom
@@ -9295,15 +9262,6 @@ snapshots:
   '@formkit/auto-animate@0.8.4': {}
 
   '@grammyjs/types@4.0.0': {}
-
-  '@hono/clerk-auth@3.1.1(hono@4.12.31)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@clerk/backend': 2.33.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@clerk/shared': 3.47.8(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      hono: 4.12.31
-    transitivePeerDependencies:
-      - react
-      - react-dom
 
   '@hono/node-server@2.0.10(hono@4.12.31)':
     dependencies:

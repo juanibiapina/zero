@@ -13,8 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/backend": "^3.4.14",
-    "@hono/clerk-auth": "^3.1.1",
+    "@clerk/hono": "^0.1.53",
     "@zero/auth": "workspace:*",
     "@zero/vault-core": "workspace:*",
     "do-orm": "github:juanibiapina/do-orm",
