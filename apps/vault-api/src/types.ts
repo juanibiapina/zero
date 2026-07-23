@@ -10,5 +10,5 @@ export interface Env {
   ORGDO: DurableObjectNamespace<OrgDO>;
   PROJECTVAULTDO: DurableObjectNamespace<ProjectVaultDO>;
   APIKEYS: KVNamespace;
-  RATE_LIMITER: RateLimit;
+  VAULT_RATE_LIMITER: RateLimit;
 }

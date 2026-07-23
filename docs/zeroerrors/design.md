@@ -37,7 +37,7 @@ The ZeroErrors worker binds the **same** `APIKEYS` KV namespace as ZeroVault
 (id `7c218b0980404d559204b24f9e0f1a47`). It reads keys, never writes them.
 
 - `/v1/*` (public API): `zv_` key auth via `@zero/auth`, plus a per-org rate
-  limit (`RATE_LIMITER`, `namespace_id: 3001` — a distinct account-global slot so
+  limit (`ERRORS_RATE_LIMITER`, `namespace_id: 3001` — a distinct account-global slot so
   products do not share a budget).
 - `/api/*` (dashboard): Clerk JWT; org comes from the active session, 403 if none.
 

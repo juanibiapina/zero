@@ -78,7 +78,7 @@ export const createApp = (env: Env, options: CreateAppOptions = {}) => {
     c.set("orgId", auth.orgId);
 
     // Rate limit per org (orgs must not share a budget).
-    const { success } = await env.RATE_LIMITER.limit({ key: auth.orgId });
+    const { success } = await env.ERRORS_RATE_LIMITER.limit({ key: auth.orgId });
     if (!success) {
       return c.json({ error: "Rate limit exceeded. Try again later." }, 429, {
         "Retry-After": "60",

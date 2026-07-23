@@ -6,5 +6,5 @@ export interface Env {
   CLERK_PUBLISHABLE_KEY: string;
   ERRORSDO: DurableObjectNamespace<ErrorsDO>;
   APIKEYS: KVNamespace;
-  RATE_LIMITER: RateLimit;
+  ERRORS_RATE_LIMITER: RateLimit;
 }
