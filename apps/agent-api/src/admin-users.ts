@@ -7,8 +7,8 @@
 // Kept in its own module (like google-token.ts / github-token.ts) so the
 // admin route can be tested without standing up the Clerk SDK.
 
-import { createClerkClient } from "@clerk/backend";
 import type { User } from "@clerk/backend";
+import { clerkClient } from "./clerk";
 import type { Env } from "./types";
 
 export interface AdminUserIdentity {
@@ -31,12 +31,6 @@ const toIdentity = (u: User): AdminUserIdentity => {
     createdAt: new Date(u.createdAt).toISOString(),
   };
 };
-
-const clerkClient = (env: Env) =>
-  createClerkClient({
-    secretKey: env.CLERK_SECRET_KEY,
-    publishableKey: env.CLERK_PUBLISHABLE_KEY,
-  });
 
 // Every signed-up Clerk user. Pages past the 500 cap so the list is never
 // silently truncated, but does no per-user enrichment (no UserDO reads).

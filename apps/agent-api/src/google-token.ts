@@ -5,7 +5,7 @@
 // null so the Google CLIs (gmcli/gccli/gdcli) exit with a clean auth
 // error.
 
-import { createClerkClient } from "@clerk/backend";
+import { clerkClient, externalAccount } from "./clerk";
 import { fmtErr, log } from "./log";
 import type { Env } from "./types";
 
@@ -26,10 +26,7 @@ export const getGoogleAccessToken = async (
   clerkUserId: string,
 ): Promise<string | null> => {
   try {
-    const clerk = createClerkClient({
-      secretKey: env.CLERK_SECRET_KEY,
-      publishableKey: env.CLERK_PUBLISHABLE_KEY,
-    });
+    const clerk = clerkClient(env);
     const tokens = await clerk.users.getUserOauthAccessToken(
       clerkUserId,
       "google",
@@ -54,15 +51,8 @@ export const getGoogleAccountEmail = async (
   clerkUserId: string,
 ): Promise<string | null> => {
   try {
-    const clerk = createClerkClient({
-      secretKey: env.CLERK_SECRET_KEY,
-      publishableKey: env.CLERK_PUBLISHABLE_KEY,
-    });
-    const user = await clerk.users.getUser(clerkUserId);
-    const account = user.externalAccounts.find((a) =>
-      a.provider.includes("google"),
-    );
-    return account?.emailAddress ?? null;
+    const account = await externalAccount(env, clerkUserId, "google");
+    return account?.email ?? null;
   } catch (err) {
     log("google_email_unavailable", {
       clerk_user_id: clerkUserId,

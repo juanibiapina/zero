@@ -11,7 +11,7 @@
 // never throws, mirroring google-token.ts: a GitHub outage or an
 // un-installed user must not block a turn.
 
-import { createClerkClient } from "@clerk/backend";
+import { externalAccount } from "./clerk";
 import { importPKCS8, SignJWT } from "jose";
 import { fmtErr, log } from "./log";
 import type { Env } from "./types";
@@ -52,14 +52,7 @@ const getGithubUsername = async (
   env: Env,
   clerkUserId: string,
 ): Promise<string | null> => {
-  const clerk = createClerkClient({
-    secretKey: env.CLERK_SECRET_KEY,
-    publishableKey: env.CLERK_PUBLISHABLE_KEY,
-  });
-  const user = await clerk.users.getUser(clerkUserId);
-  const account = user.externalAccounts.find((a) =>
-    a.provider.includes("github"),
-  );
+  const account = await externalAccount(env, clerkUserId, "github");
   return account?.username ?? null;
 };
 
