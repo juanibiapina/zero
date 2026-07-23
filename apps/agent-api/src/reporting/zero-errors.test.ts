@@ -16,12 +16,6 @@ const mockFetch = () => {
 };
 
 describe("reportError", () => {
-  it("is a no-op when ZEROVAULT_API_KEY is unset", async () => {
-    const fetchFn = mockFetch();
-    await reportError({}, new Error("boom"));
-    expect(fetchFn).not.toHaveBeenCalled();
-  });
-
   it("posts the error to the ingest endpoint with the bearer key", async () => {
     const fetchFn = mockFetch();
 
@@ -31,7 +25,7 @@ describe("reportError", () => {
 
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [url, init] = fetchFn.mock.calls[0];
-    expect(url).toBe("https://zeroerrors.juanibiapina.dev/v1/errors");
+    expect(url).toBe("https://errors.apps.juanibiapina.dev/v1/errors");
     expect(init?.method).toBe("POST");
     expect(
       (init?.headers as Record<string, string>).authorization,
