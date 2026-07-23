@@ -318,3 +318,127 @@ describe("Store contract: attachments", () => {
     expect(makeStore().getAttachment("nope")).toBeNull();
   });
 });
+
+describe("Store contract: settings", () => {
+  it("getSettings seeds the row and reports isNewUser true with defaults", () => {
+    const s = makeStore();
+    const settings = s.getSettings();
+    expect(settings).toEqual({
+      onboardingSeen: false,
+      googleOnboardingStatus: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      timezone: null,
+      isNewUser: true,
+    });
+  });
+
+  it("getSettings on a seeded row reports isNewUser false and same createdAt", () => {
+    const s = makeStore();
+    const first = s.getSettings();
+    const second = s.getSettings();
+    expect(second.isNewUser).toBe(false);
+    expect(second.createdAt).toBe(first.createdAt);
+  });
+
+  it("updateSettings sets and resets onboardingSeen", () => {
+    const s = makeStore();
+    s.updateSettings({ onboardingSeen: true });
+    expect(s.getSettings().onboardingSeen).toBe(true);
+    s.updateSettings({ onboardingSeen: false });
+    expect(s.getSettings().onboardingSeen).toBe(false);
+  });
+
+  it("updateSettings with an empty patch is a no-op", () => {
+    const s = makeStore();
+    s.updateSettings({ onboardingSeen: true });
+    s.updateSettings({});
+    expect(s.getSettings().onboardingSeen).toBe(true);
+  });
+
+  it("updateSettings sets timezone", () => {
+    const s = makeStore();
+    s.updateSettings({ timezone: "Europe/Berlin" });
+    expect(s.getSettings().timezone).toBe("Europe/Berlin");
+  });
+
+  it("updateSettings on a missing row inserts (upsert), then updates in place", () => {
+    // First writer runs before any getSettings seed: exercises the insert
+    // branch. A later writer exercises the update branch on the same row.
+    const s = makeStore();
+    s.updateSettings({ timezone: "Europe/Berlin" });
+    expect(s.getSettings()).toMatchObject({
+      timezone: "Europe/Berlin",
+      onboardingSeen: false,
+      isNewUser: false,
+    });
+    s.updateSettings({ onboardingSeen: true });
+    expect(s.getSettings()).toMatchObject({
+      timezone: "Europe/Berlin",
+      onboardingSeen: true,
+    });
+  });
+
+  it("setGoogleOnboardingStatus transitions visible via getSettings", () => {
+    const s = makeStore();
+    s.setGoogleOnboardingStatus("queued");
+    expect(s.getSettings().googleOnboardingStatus).toBe("queued");
+    s.setGoogleOnboardingStatus("running");
+    expect(s.getSettings().googleOnboardingStatus).toBe("running");
+    s.setGoogleOnboardingStatus("done");
+    expect(s.getSettings().googleOnboardingStatus).toBe("done");
+  });
+
+  it("setGoogleOnboardingStatus inserts the row when missing", () => {
+    // Runs as the very first settings access: exercises the insert branch.
+    const s = makeStore();
+    s.setGoogleOnboardingStatus("queued");
+    const settings = s.getSettings();
+    expect(settings.googleOnboardingStatus).toBe("queued");
+    expect(settings.onboardingSeen).toBe(false);
+  });
+});
+
+describe("Store contract: telegram link", () => {
+  it("getTelegramId returns null when nothing is linked", () => {
+    expect(makeStore().getTelegramId()).toBeNull();
+  });
+
+  it("linkTelegram stores the id and returns no previous", () => {
+    const s = makeStore();
+    expect(s.linkTelegram("12345")).toEqual({ previous: null });
+    expect(s.getTelegramId()).toBe("12345");
+  });
+
+  it("linkTelegram returns the previous id when re-linking", () => {
+    const s = makeStore();
+    s.linkTelegram("111");
+    expect(s.linkTelegram("222")).toEqual({ previous: "111" });
+    expect(s.getTelegramId()).toBe("222");
+  });
+
+  it("unlinkTelegram clears the id and returns the removed value", () => {
+    const s = makeStore();
+    s.linkTelegram("12345");
+    expect(s.unlinkTelegram()).toEqual({ removed: "12345" });
+    expect(s.getTelegramId()).toBeNull();
+  });
+
+  it("unlinkTelegram returns removed null when nothing is linked", () => {
+    expect(makeStore().unlinkTelegram()).toEqual({ removed: null });
+  });
+});
+
+describe("Store contract: webhook idempotency", () => {
+  it("markProcessed returns true the first time and false on a duplicate", () => {
+    const s = makeStore();
+    expect(s.markProcessed("u1")).toBe(true);
+    expect(s.markProcessed("u1")).toBe(false);
+  });
+
+  it("markProcessed tracks distinct update ids independently", () => {
+    const s = makeStore();
+    expect(s.markProcessed("u1")).toBe(true);
+    expect(s.markProcessed("u2")).toBe(true);
+    expect(s.markProcessed("u2")).toBe(false);
+  });
+});

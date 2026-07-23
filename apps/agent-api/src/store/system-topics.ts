@@ -19,6 +19,7 @@ import type {
   Thread,
   Topic,
   TopicMeta,
+  UserSettings,
 } from "./types";
 
 // A bundled system topic. `pinned` topics are always rendered into the
@@ -215,6 +216,36 @@ export class SystemTopicStore implements Store {
 
   getAttachment(id: string): Attachment | null {
     return this.inner.getAttachment(id);
+  }
+
+  // --- settings / link / idempotency (delegate verbatim) ---
+
+  getSettings(): UserSettings {
+    return this.inner.getSettings();
+  }
+
+  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
+    this.inner.updateSettings(patch);
+  }
+
+  setGoogleOnboardingStatus(status: string): void {
+    this.inner.setGoogleOnboardingStatus(status);
+  }
+
+  getTelegramId(): string | null {
+    return this.inner.getTelegramId();
+  }
+
+  linkTelegram(telegramId: string): { previous: string | null } {
+    return this.inner.linkTelegram(telegramId);
+  }
+
+  unlinkTelegram(): { removed: string | null } {
+    return this.inner.unlinkTelegram();
+  }
+
+  markProcessed(updateId: string): boolean {
+    return this.inner.markProcessed(updateId);
   }
 }
 

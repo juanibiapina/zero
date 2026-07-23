@@ -102,4 +102,35 @@ export interface AttachmentRecordStore {
   getAttachment(id: string): Attachment | null;
 }
 
-export type Store = TopicStore & ConversationStore & AttachmentRecordStore;
+// The per-user settings row, as reported to callers. Nullable columns come
+// through as null; `isNewUser` marks the access that seeded the row.
+export interface UserSettings {
+  onboardingSeen: boolean;
+  googleOnboardingStatus: string | null;
+  createdAt: string | null;
+  timezone: string | null;
+  // True only on the access that seeded the row (first-ever getSettings).
+  isNewUser: boolean;
+}
+
+// Per-user identity, settings, and webhook idempotency. Single-row tables
+// (telegram_link, user_settings) plus the processed_updates dedupe log.
+export interface SettingsStore {
+  // Seeds the settings row on first access; isNewUser is true only then.
+  getSettings(): UserSettings;
+  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void;
+  setGoogleOnboardingStatus(status: string): void;
+
+  getTelegramId(): string | null;
+  linkTelegram(telegramId: string): { previous: string | null };
+  // Removes the link row only; R2 attachment purge is the DO's job.
+  unlinkTelegram(): { removed: string | null };
+
+  // Record an update id; true if newly seen, false if already processed.
+  markProcessed(updateId: string): boolean;
+}
+
+export type Store = TopicStore &
+  ConversationStore &
+  AttachmentRecordStore &
+  SettingsStore;

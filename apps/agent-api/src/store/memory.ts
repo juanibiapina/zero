@@ -11,8 +11,17 @@ import type {
   Thread,
   Topic,
   TopicMeta,
+  UserSettings,
 } from "./types";
 import { extractLinks, rewriteLinks } from "./links";
+
+// The persisted settings row, mirroring DbStore's user_settings columns.
+interface SettingsRow {
+  onboardingSeen: number;
+  googleOnboardingStatus: string | null;
+  createdAt: string;
+  timezone: string | null;
+}
 
 interface ConvRow {
   id: string;
@@ -37,6 +46,9 @@ export class MemoryStore implements Store {
   private convs: ConvRow[] = [];
   private msgs: MsgRow[] = [];
   private attachments = new Map<string, Attachment>();
+  private settingsRow: SettingsRow | null = null;
+  private telegramId: string | null = null;
+  private processed = new Set<string>();
   private nextMsgId = 1;
   private now: () => string;
 
@@ -264,6 +276,98 @@ export class MemoryStore implements Store {
   getAttachment(id: string): Attachment | null {
     const a = this.attachments.get(id);
     return a ? { ...a } : null;
+  }
+
+  // --- settings ---
+
+  // Update the given columns on the settings row, seeding it with defaults if
+  // absent. Returns the persisted row so getSettings reports the stored
+  // createdAt (byte-aligned with DbStore's re-read-after-write).
+  private upsertSettings(
+    columns: Partial<{
+      onboardingSeen: number;
+      googleOnboardingStatus: string;
+      timezone: string;
+    }>,
+  ): SettingsRow {
+    if (this.settingsRow) {
+      if (columns.onboardingSeen !== undefined) {
+        this.settingsRow.onboardingSeen = columns.onboardingSeen;
+      }
+      if (columns.googleOnboardingStatus !== undefined) {
+        this.settingsRow.googleOnboardingStatus = columns.googleOnboardingStatus;
+      }
+      if (columns.timezone !== undefined) {
+        this.settingsRow.timezone = columns.timezone;
+      }
+      return this.settingsRow;
+    }
+    this.settingsRow = {
+      onboardingSeen: columns.onboardingSeen ?? 0,
+      googleOnboardingStatus: columns.googleOnboardingStatus ?? null,
+      createdAt: this.now(),
+      timezone: columns.timezone ?? null,
+    };
+    return this.settingsRow;
+  }
+
+  getSettings(): UserSettings {
+    if (!this.settingsRow) {
+      const seeded = this.upsertSettings({});
+      return {
+        onboardingSeen: !!seeded.onboardingSeen,
+        googleOnboardingStatus: seeded.googleOnboardingStatus ?? null,
+        createdAt: seeded.createdAt ?? null,
+        timezone: seeded.timezone ?? null,
+        isNewUser: true,
+      };
+    }
+    return {
+      onboardingSeen: !!this.settingsRow.onboardingSeen,
+      googleOnboardingStatus: this.settingsRow.googleOnboardingStatus ?? null,
+      createdAt: this.settingsRow.createdAt ?? null,
+      timezone: this.settingsRow.timezone ?? null,
+      isNewUser: false,
+    };
+  }
+
+  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
+    const columns: Partial<{ onboardingSeen: number; timezone: string }> = {};
+    if (patch.onboardingSeen !== undefined) {
+      columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
+    }
+    if (patch.timezone !== undefined) columns.timezone = patch.timezone;
+    this.upsertSettings(columns);
+  }
+
+  setGoogleOnboardingStatus(status: string): void {
+    this.upsertSettings({ googleOnboardingStatus: status });
+  }
+
+  // --- telegram link ---
+
+  getTelegramId(): string | null {
+    return this.telegramId;
+  }
+
+  linkTelegram(telegramId: string): { previous: string | null } {
+    const previous = this.telegramId;
+    this.telegramId = telegramId;
+    return { previous };
+  }
+
+  unlinkTelegram(): { removed: string | null } {
+    const removed = this.telegramId;
+    this.telegramId = null;
+    return { removed };
+  }
+
+  // --- webhook idempotency ---
+
+  markProcessed(updateId: string): boolean {
+    if (this.processed.has(updateId)) return false;
+    this.processed.add(updateId);
+    return true;
   }
 }
 

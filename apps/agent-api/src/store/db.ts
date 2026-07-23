@@ -7,8 +7,11 @@ import {
   attachments,
   conversations,
   messages,
+  processedUpdates,
+  telegramLink,
   topics,
   topicLinks,
+  userSettings,
 } from "../UserDO/db/schema";
 import { extractLinks, rewriteLinks } from "./links";
 import type {
@@ -19,7 +22,17 @@ import type {
   Thread,
   Topic,
   TopicMeta,
+  UserSettings,
 } from "./types";
+
+// The persisted user_settings row shape (do-orm schema keys).
+interface SettingsRow {
+  id: number;
+  onboardingSeen: number;
+  googleOnboardingStatus: string | null;
+  createdAt: string | null;
+  timezone: string | null;
+}
 
 export class DbStore implements Store {
   constructor(private db: Database) {}
@@ -331,6 +344,114 @@ export class DbStore implements Store {
           createdAt: a.createdAt,
         }
       : null;
+  }
+
+  // --- settings ---
+
+  // Get the single settings row, updating the given columns if it exists or
+  // inserting it with defaults + those columns if it does not. Returns the
+  // persisted row so callers report the value actually stored (never a second
+  // clock read). Shared by getSettings/updateSettings/setGoogleOnboardingStatus.
+  private upsertSettings(
+    columns: Partial<{
+      onboardingSeen: number;
+      googleOnboardingStatus: string;
+      timezone: string;
+    }>,
+  ): SettingsRow {
+    const existing = this.db.get(userSettings);
+    if (existing) {
+      if (Object.keys(columns).length > 0) {
+        this.db.update(userSettings, columns, { where: eq("id", existing.id) });
+      }
+      // Re-read so callers see the persisted post-update state.
+      return this.db.get(userSettings)! as SettingsRow;
+    }
+    this.db.insert(userSettings, {
+      onboardingSeen: 0,
+      createdAt: this.nowIso(),
+      ...columns,
+    });
+    return this.db.get(userSettings)! as SettingsRow;
+  }
+
+  getSettings(): UserSettings {
+    const row = this.db.get(userSettings);
+    if (!row) {
+      // Seed the row and report the persisted values (createdAt is the one the
+      // insert wrote, not a fresh clock read).
+      const seeded = this.upsertSettings({});
+      return {
+        onboardingSeen: !!seeded.onboardingSeen,
+        googleOnboardingStatus: seeded.googleOnboardingStatus ?? null,
+        createdAt: seeded.createdAt ?? null,
+        timezone: seeded.timezone ?? null,
+        isNewUser: true,
+      };
+    }
+    return {
+      onboardingSeen: !!row.onboardingSeen,
+      googleOnboardingStatus: row.googleOnboardingStatus ?? null,
+      createdAt: row.createdAt ?? null,
+      timezone: row.timezone ?? null,
+      isNewUser: false,
+    };
+  }
+
+  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
+    const columns: Partial<{ onboardingSeen: number; timezone: string }> = {};
+    if (patch.onboardingSeen !== undefined) {
+      columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
+    }
+    if (patch.timezone !== undefined) columns.timezone = patch.timezone;
+    this.upsertSettings(columns);
+  }
+
+  setGoogleOnboardingStatus(status: string): void {
+    this.upsertSettings({ googleOnboardingStatus: status });
+  }
+
+  // --- telegram link ---
+
+  getTelegramId(): string | null {
+    const row = this.db.get(telegramLink);
+    return row?.telegramId ?? null;
+  }
+
+  linkTelegram(telegramId: string): { previous: string | null } {
+    const existing = this.db.get(telegramLink);
+    const previous = existing?.telegramId ?? null;
+    if (existing) {
+      this.db.update(
+        telegramLink,
+        { telegramId },
+        { where: eq("id", existing.id) },
+      );
+    } else {
+      this.db.insert(telegramLink, { telegramId });
+    }
+    return { previous };
+  }
+
+  unlinkTelegram(): { removed: string | null } {
+    const existing = this.db.get(telegramLink);
+    if (!existing) return { removed: null };
+    this.db.delete(telegramLink, { where: eq("id", existing.id) });
+    return { removed: existing.telegramId };
+  }
+
+  // --- webhook idempotency ---
+
+  markProcessed(updateId: string): boolean {
+    const existing = this.db.get(processedUpdates, {
+      where: eq("updateId", updateId),
+    });
+    if (existing) return false;
+    this.db.insert(processedUpdates, {
+      updateId,
+      createdAt: this.nowIso(),
+    });
+    return true;
   }
 }
 

@@ -91,3 +91,28 @@ describe("SystemTopicStore: writes to system topics are rejected", () => {
     expect(s.getTopic("weather")).toBeNull();
   });
 });
+
+describe("SystemTopicStore: settings / link / idempotency pass through", () => {
+  it("settings reads and writes reach the inner store", () => {
+    const s = makeStore();
+    expect(s.getSettings().isNewUser).toBe(true);
+    s.updateSettings({ onboardingSeen: true });
+    expect(s.getSettings().onboardingSeen).toBe(true);
+    s.setGoogleOnboardingStatus("done");
+    expect(s.getSettings().googleOnboardingStatus).toBe("done");
+  });
+
+  it("telegram link and unlink reach the inner store", () => {
+    const s = makeStore();
+    expect(s.getTelegramId()).toBeNull();
+    expect(s.linkTelegram("999")).toEqual({ previous: null });
+    expect(s.getTelegramId()).toBe("999");
+    expect(s.unlinkTelegram()).toEqual({ removed: "999" });
+  });
+
+  it("markProcessed reaches the inner store", () => {
+    const s = makeStore();
+    expect(s.markProcessed("u1")).toBe(true);
+    expect(s.markProcessed("u1")).toBe(false);
+  });
+});
