@@ -20,7 +20,6 @@ import { runOnboardingAgent } from "../agents/onboarding";
 import { runAlarmTurns } from "../do/alarm";
 import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
-import type { Message, Role, Thread, Topic, TopicMeta } from "../store/types";
 import type { Env } from "../types";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
@@ -53,70 +52,16 @@ export class UserDO extends DurableObject<Env> {
     });
   }
 
-  // --- Topic model (delegated to the Store) ---
-
-  listTopics(): TopicMeta[] {
-    return this.store.listTopics();
-  }
-
-  getTopic(name: string): Topic | null {
-    return this.store.getTopic(name);
-  }
-
-  createTopic(name: string, description: string): void {
-    this.store.createTopic(name, description);
-  }
-
-  updateTopicBody(name: string, body: string): void {
-    this.store.updateTopicBody(name, body);
-  }
-
-  getTopicsWithBodies(names: string[]): Topic[] {
-    return this.store.getTopicsWithBodies(names);
-  }
-
-  saveTopic(
-    name: string,
-    patch: { body: string; description: string; summary: string },
-    newName?: string,
-  ): void {
-    this.store.saveTopic(name, patch, newName);
-  }
-
-  getOutboundLinks(name: string): string[] {
-    return this.store.getOutboundLinks(name);
-  }
-
-  getBacklinks(name: string): TopicMeta[] {
-    return this.store.getBacklinks(name);
-  }
-
   // --- Conversations and messages ---
-
-  getOrCreateConversation(chatId: number, topicId: number): string {
-    return this.store.getOrCreateConversation(chatId, topicId);
-  }
-
-  storeMessage(conversationId: string, role: Role, content: string): void {
-    this.store.storeMessage(conversationId, role, content);
-  }
-
-  getConversationHistory(conversationId: string, limit: number): Message[] {
-    return this.store.getConversationHistory(conversationId, limit);
-  }
 
   resetConversation(chatId: number, topicId: number): void {
     this.store.resetConversation(chatId, topicId);
   }
 
-  findThreadsAwaitingReply(): Thread[] {
-    return this.store.findThreadsAwaitingReply();
-  }
-
   // --- Webhook idempotency ---
 
   // Record an update id; returns true if newly seen, false if already processed.
-  markProcessed(updateId: string): boolean {
+  private markProcessed(updateId: string): boolean {
     const existing = this.db.get(processedUpdates, {
       where: eq("updateId", updateId),
     });
@@ -202,7 +147,7 @@ export class UserDO extends DurableObject<Env> {
   // Run the one-shot Gmail onboarding scan. Builds the per-user model and
   // memoized Google token, then delegates the topic-seeding + status state
   // machine to do/onboarding.ts (kept there so it is testable without a DO).
-  async runOnboarding(): Promise<void> {
+  private async runOnboarding(): Promise<void> {
     const clerkUserId =
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
     const model = await createModel(this.env, clerkUserId, "onboarding");
@@ -225,7 +170,7 @@ export class UserDO extends DurableObject<Env> {
   // (per-user gateway tagging), then the runtime-agnostic orchestrator. The
   // typing loop is a self-rescheduling setTimeout, not the DO alarm timer, so
   // the alarm stays dedicated to turn scheduling.
-  async runTurn(chatId: number, topicId: number): Promise<void> {
+  private async runTurn(chatId: number, topicId: number): Promise<void> {
     const clerkUserId =
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
     const makeModel = await createModelFactory(this.env, clerkUserId);
