@@ -23,6 +23,7 @@ import { createKeysRouter } from "./routes/keys";
 import { createProjectsRouter } from "./routes/projects";
 import { createEnvironmentsRouter } from "./routes/environments";
 import { createSecretsRouter } from "./routes/secrets";
+import { reportError } from "./reporting/zero-errors";
 
 type Variables = {
   userId: string;
@@ -41,6 +42,15 @@ export const createApp = (env: Env, options: CreateAppOptions = {}) => {
 
     if (err instanceof HTTPException) {
       return err.getResponse();
+    }
+
+    // Genuine 500 (not a deliberate HTTPException): report fire-and-forget.
+    try {
+      c.executionCtx.waitUntil(
+        reportError(c.env, err, { site: "http", path: c.req.path }),
+      );
+    } catch {
+      // No execution context (unit tests): skip async reporting.
     }
 
     return c.json({ error: "Internal server error" }, 500);

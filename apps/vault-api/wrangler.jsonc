@@ -15,7 +15,8 @@
       "CLERK_PUBLISHABLE_KEY",
       "CLERK_SECRET_KEY",
       "ENVIRONMENT",
-      "MASTER_KEY"
+      "MASTER_KEY",
+      "ZEROVAULT_API_KEY"
     ]
   },
   "observability": {
