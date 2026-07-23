@@ -11,6 +11,7 @@ import {
   bindContext,
   unbindContext,
   resolveAuth,
+  DEFAULT_BASE_URL,
 } from "./config.js";
 
 let dir: string;
@@ -180,5 +181,16 @@ describe("resolveAuth precedence", () => {
 
   it("returns null when no source supplies an api key", () => {
     expect(resolveAuth({ flags: {}, env: {}, context: null, defaultBaseUrl: DEFAULT })).toBeNull();
+  });
+
+  it("defaults to the canonical console host when nothing overrides it", () => {
+    expect(DEFAULT_BASE_URL).toBe("https://vault.apps.juanibiapina.dev");
+    const auth = resolveAuth({
+      flags: {},
+      env: { apiKey: "env_key" },
+      context: null,
+      defaultBaseUrl: DEFAULT_BASE_URL,
+    });
+    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://vault.apps.juanibiapina.dev" });
   });
 });

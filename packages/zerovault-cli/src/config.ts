@@ -149,6 +149,12 @@ export function unbindContext(config: Config, dir: string): boolean {
 // Auth resolution
 // ----------------------------------------------------------------------------
 
+/**
+ * Canonical console host the CLI targets when no flag/context/env overrides it.
+ * A subdomain of the Clerk primary domain `apps.juanibiapina.dev`.
+ */
+export const DEFAULT_BASE_URL = "https://vault.apps.juanibiapina.dev";
+
 export interface ResolvedAuth {
   apiKey: string;
   baseUrl: string;

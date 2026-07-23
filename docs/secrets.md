@@ -22,13 +22,13 @@ All secrets are managed through [ZeroVault](https://zerovault.juanibiapina.dev),
 
 Set these in your shell environment:
 
-- `ZEROVAULT_API_KEY` — your ZeroVault API key
-- `ZEROVAULT_API_URL` — `https://zerovault.juanibiapina.dev`
+- `ZEROVAULT_API_KEY` — your ZeroVault API key (required)
+- `ZEROVAULT_API_URL` — optional; defaults to `https://vault.apps.juanibiapina.dev`. Set it only to target another instance.
 
-The CLI is run on demand via `pnpm dlx zerovault-cli@0.1.0` (no install needed). Optionally alias it:
+The CLI is run on demand via `pnpm dlx zerovault-cli@0.2.1` (no install needed). Optionally alias it:
 
 ```bash
-alias zv='pnpm dlx zerovault-cli@0.1.0'
+alias zv='pnpm dlx zerovault-cli@0.2.1'
 ```
 
 ### Fetching Secrets Locally
@@ -43,17 +43,17 @@ This downloads all development and build-time secrets from ZeroVault and generat
 
 **To view secrets** in a project/environment (values masked):
 ```bash
-pnpm dlx zerovault-cli@0.1.0 secrets list -p zero-api -e development
+pnpm dlx zerovault-cli@0.2.1 secrets list -p zero-api -e development
 ```
 
 **To get a single value**:
 ```bash
-pnpm dlx zerovault-cli@0.1.0 secrets get CLERK_SECRET_KEY -p zero-api -e development
+pnpm dlx zerovault-cli@0.2.1 secrets get CLERK_SECRET_KEY -p zero-api -e development
 ```
 
 **To update a secret**:
 ```bash
-pnpm dlx zerovault-cli@0.1.0 secrets set VARIABLE_NAME=value -p zero-api -e development
+pnpm dlx zerovault-cli@0.2.1 secrets set VARIABLE_NAME=value -p zero-api -e development
 ```
 
 Or use the web portal at https://zerovault.juanibiapina.dev.

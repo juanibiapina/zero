@@ -103,7 +103,7 @@ Then start the dev server again with `pnpm turbo dev`.
 
 ## Secrets
 
-When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx zerovault-cli@0.1.0` and needs `ZEROVAULT_API_KEY` and `ZEROVAULT_API_URL` env vars.
+When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx zerovault-cli@0.2.1` and needs only the `ZEROVAULT_API_KEY` env var; `ZEROVAULT_API_URL` is optional and defaults to `https://vault.apps.juanibiapina.dev` (set it only to target another instance).
 
 ZeroVault projects (each with `development` and `production` environments):
 - `zero-api` — Worker backend secrets (also used by `bin/e2e-test`)

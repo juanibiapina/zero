@@ -25,9 +25,8 @@ import {
   bindContext,
   unbindContext,
   configPath,
+  DEFAULT_BASE_URL,
 } from "./config.js";
-
-const DEFAULT_BASE_URL = "https://zerovault.juanibiapina.dev";
 
 /**
  * Single place that reads flags / env / config and applies the auth
@@ -56,7 +55,7 @@ const program = new Command();
 program
   .name("zv")
   .description("ZeroVault secrets manager CLI")
-  .version("0.1.0")
+  .version("0.2.1")
   .option("--api-key <key>", "API key (overrides env and context)")
   .option("--base-url <url>", "API base URL (overrides env and context)");
 

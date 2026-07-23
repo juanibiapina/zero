@@ -4,6 +4,7 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-23: The ZeroVault CLI now defaults to the canonical host vault.apps.juanibiapina.dev, so you only need ZEROVAULT_API_KEY set; ZEROVAULT_API_URL is optional and only needed to target another instance.
 - 2026-07-22: The console sign-in card now reads "Sign in to Zero" (was "ZeroVault"), matching the unified Zero brand.
 - 2026-07-22: The old Vault and Errors addresses (vault.juanibiapina.dev, errors.juanibiapina.dev) have been retired; the products now live only at vault.apps.juanibiapina.dev and errors.apps.juanibiapina.dev.
 - 2026-07-22: Vault and Errors now live at vault.apps.juanibiapina.dev and errors.apps.juanibiapina.dev, and signing in returns you to the product you came from.
