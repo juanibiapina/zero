@@ -55,6 +55,10 @@ Builds / git connector) so only a slice of DOs reset per step, and **space out
 rapid successive pushes** — back-to-back deploys are the worst case for mid-turn
 resets.
 
+See `docs/workers-ops.md` for deploy-time Workers ops facts (forcing a deploy to
+fail on a missing secret via `secrets.required`, and `custom_domain` route
+teardown behavior on deploy).
+
 ## Architecture
 
 Zero receives Telegram bot webhooks and routes each update to the right user via KV. Messages are handled by a two-phase meta-agent that runs inside the per-user `UserDO` Durable Object: an **interface agent** reads the conversation and a topic-based knowledge model (stored in DO SQLite) and replies to the user, then a **writer agent** consolidates what was learned back into the accessed topics. The interface agent and a **research agent** are the same runner (`agents/run.ts`) with different prompts and tools; the interface agent can call a `research` tool that spawns the research agent with web search (`WebSearch` port, Brave adapter) and returns its final message. The webhook enqueues each turn and returns 200 immediately; the turn (including any research loop) runs inline on a DO alarm. LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic) with per-user `cf-aig-metadata` attribution. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`). See `docs/topics.md` for the topic model and writer policy, and `docs/research.md` for the research agent.

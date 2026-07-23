@@ -1,0 +1,43 @@
+# Workers deploy ops
+
+Deploy-time Cloudflare Workers operational facts for this repo. Two behaviors
+that are easy to get wrong.
+
+## Force a deploy to fail on a missing secret (`secrets.required`)
+
+Add the secret name to `secrets: { required: [...] }` in the worker's
+`wrangler.jsonc`. The deploy then aborts if that secret is unset (wrangler runs
+`validateSecrets`), and `wrangler dev` warns "The following required secrets have
+not been set: ...". Without this entry a missing secret ships and the Worker
+degrades silently with `env.X` undefined.
+
+**Trap:** the `secrets` field is absent from wrangler's bundled
+`config-schema.json` (the `$schema` the `wrangler.jsonc` files point at) and does
+not appear in `wrangler deploy --dry-run`. Schema and dry-run inspection falsely
+imply the field is unsupported. It is enforced at real deploy. Trust the runtime
+deploy, not the schema.
+
+Live examples in this repo:
+
+- `apps/vault-api/wrangler.jsonc` lists `secrets.required` including
+  `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `ENVIRONMENT`, `MASTER_KEY`, and
+  `ZEROVAULT_API_KEY`.
+- `apps/agent-api/wrangler.jsonc` lists `secrets.required: ["ZEROVAULT_API_KEY"]`.
+
+## Removing a `custom_domain` route tears down the domain + DNS on deploy
+
+Removing a `custom_domain` entry from `routes[]` and deploying auto-deletes that
+Worker custom domain and its auto-created proxied DNS record. The host goes
+NXDOMAIN; other hosts attached to the same worker are unaffected. No manual
+Cloudflare delete is needed.
+
+Evidence: the `retire-zerovault-domain` task removed
+`zerovault.juanibiapina.dev` and deployed (version `05a896d0`, 2026-07-23,
+commit `34716c4`). The old host went NXDOMAIN, `vault.apps.juanibiapina.dev`
+stayed healthy, and no manual delete was issued.
+
+The config edit is still the source of truth: it stops a future Workers Build
+deploy from re-provisioning the domain.
+
+This corrects the earlier "additive / manual delete" claim in
+`docs/plans/drop-old-console-hosts.md`.

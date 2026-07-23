@@ -46,6 +46,12 @@ Dropping the bare hosts breaks no in-repo consumer. Confirmed.
 
 ### Automatic-vs-manual DNS claim (plan check #2) — CORRECT
 
+> **DISPROVEN (2026-07-23):** this verdict was later disproven. Removing a
+> `custom_domain` route and deploying auto-deletes the domain and its DNS record;
+> no manual delete is needed. See the correction in `drop-old-console-hosts.md`
+> and `docs/workers-ops.md`.
+
+
 The plan claims: removing a `custom_domain` entry from `routes[]` and redeploying
 does **not** auto-detach the custom domain or delete its DNS; the detach is a
 manual dashboard action; deleting the Worker Custom Domain also deletes the

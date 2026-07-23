@@ -79,6 +79,15 @@ So dropping the bare web hosts breaks no in-repo consumer.
 
 ### What wrangler does — and does NOT do — on `custom_domain` removal
 
+> **CORRECTION (2026-07-23) — the claim below is DISPROVEN and superseded.**
+> The `retire-zerovault-domain` task removed the `zerovault.juanibiapina.dev`
+> `custom_domain` route and deployed (version `05a896d0`, 2026-07-23, commit
+> `34716c4`). Removing a `custom_domain` route and deploying **auto-deletes** the
+> Worker custom domain **and** its auto-created proxied DNS record; the old host
+> went NXDOMAIN with no manual delete. So the additive / manual-Cloudflare-delete
+> model described below is wrong. The original text is kept for history but must
+> not be followed. Durable source: `docs/workers-ops.md`.
+
 Removing a `custom_domain` entry from `routes[]` and redeploying does **not**
 automatically detach the custom domain or delete its DNS record. Wrangler
 provisions custom domains it finds in config but does **not** tear down a custom
