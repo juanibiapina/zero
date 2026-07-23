@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FALLBACK_MESSAGE,
   buildConversationMessages,
+  decideFinalDelivery,
   formatTimestamp,
   runInterfaceAgent,
 } from "./interface";
@@ -38,6 +39,163 @@ describe("formatTimestamp", () => {
     expect(formatTimestamp(NOW.toISOString(), "America/Sao_Paulo")).toBe(
       "2026-07-17 09:00",
     );
+  });
+});
+
+describe("decideFinalDelivery", () => {
+  // Row 1: clean finish, non-empty text, no prior replies -> send.
+  it("sends the final text on a clean finish with no prior replies", () => {
+    expect(
+      decideFinalDelivery({ finishReason: "stop", text: "answer", replies: [] }),
+    ).toEqual({ action: "send", text: "answer" });
+  });
+
+  // Row 2: the ack-then-answer regression — an earlier non-echo reply must not
+  // suppress the final text.
+  it("sends the final text even after a prior non-echo reply", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "stop",
+        text: "the answer",
+        replies: ["Searching now..."],
+      }),
+    ).toEqual({ action: "send", text: "the answer" });
+  });
+
+  // Row 3: final text exactly echoes the last reply -> suppress.
+  it("suppresses the final text when it exactly echoes the last reply", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "stop",
+        text: "done",
+        replies: ["done"],
+      }),
+    ).toEqual({ action: "none" });
+  });
+
+  // Echo compares both sides trimmed.
+  it("suppresses the final text when it echoes the last reply modulo whitespace", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "stop",
+        text: "  done  ",
+        replies: ["done"],
+      }),
+    ).toEqual({ action: "none" });
+  });
+
+  // Row 4: clean finish, empty text, prior reply -> suppress.
+  it("suppresses an empty final text when a reply already went out", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "stop",
+        text: "",
+        replies: ["the reply"],
+      }),
+    ).toEqual({ action: "none" });
+  });
+
+  // Whitespace-only text is treated as empty.
+  it("treats whitespace-only final text as empty (suppress with a prior reply)", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "stop",
+        text: "   ",
+        replies: ["the reply"],
+      }),
+    ).toEqual({ action: "none" });
+  });
+
+  // Row 5: clean finish, empty text, no replies -> fallback.
+  it("falls back on a clean finish that said nothing and sent no reply", () => {
+    expect(
+      decideFinalDelivery({ finishReason: "stop", text: "", replies: [] }),
+    ).toEqual({ action: "fallback" });
+  });
+
+  // Row 6a: cap cut-off with empty text and no replies -> fallback.
+  it("falls back on a cap cut-off with no reply", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "tool-calls",
+        text: "",
+        replies: [],
+      }),
+    ).toEqual({ action: "fallback" });
+  });
+
+  // Row 6b: cap cut-off after an ack reply -> still fallback.
+  it("falls back on a cap cut-off after an ack reply", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "tool-calls",
+        text: "",
+        replies: ["Searching now..."],
+      }),
+    ).toEqual({ action: "fallback" });
+  });
+
+  // Concern 1: cap cut-off discards produced final text (no replies variant).
+  it("discards non-empty final text on a cap cut-off with no reply", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "tool-calls",
+        text: "some answer",
+        replies: [],
+      }),
+    ).toEqual({ action: "fallback" });
+  });
+
+  // Concern 1: cap cut-off discards produced final text (ack variant).
+  it("discards non-empty final text on a cap cut-off after an ack reply", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "tool-calls",
+        text: "some answer",
+        replies: ["Searching now..."],
+      }),
+    ).toEqual({ action: "fallback" });
+  });
+
+  // Raw-vs-trimmed: guards compare trimmed, delivery carries the raw text.
+  it("carries the raw untrimmed text on the send action", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "stop",
+        text: "answer\n",
+        replies: [],
+      }),
+    ).toEqual({ action: "send", text: "answer\n" });
+  });
+
+  // Concern 2: the echo guard compares only the last reply, so echoing an
+  // earlier, non-last reply must still send.
+  it("sends when the final text echoes an earlier, non-last reply", () => {
+    expect(
+      decideFinalDelivery({
+        finishReason: "stop",
+        text: "hi",
+        replies: ["hi", "different"],
+      }),
+    ).toEqual({ action: "send", text: "hi" });
+  });
+
+  // Nit 1: fallback and none carry no text field (runner owns FALLBACK_MESSAGE).
+  it("returns fallback and none with no stray text field", () => {
+    const fallback = decideFinalDelivery({
+      finishReason: "tool-calls",
+      text: "",
+      replies: [],
+    });
+    const none = decideFinalDelivery({
+      finishReason: "stop",
+      text: "",
+      replies: ["reply"],
+    });
+    expect(fallback).toEqual({ action: "fallback" });
+    expect(fallback).not.toHaveProperty("text");
+    expect(none).toEqual({ action: "none" });
+    expect(none).not.toHaveProperty("text");
   });
 });
 

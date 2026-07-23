@@ -28,6 +28,48 @@ import { log } from "../log";
 export const FALLBACK_MESSAGE =
   "Sorry, I couldn't finish that one. Could you try again?";
 
+export interface FinalDeliveryInput {
+  finishReason: string;
+  text: string;
+  replies: string[];
+}
+
+export type FinalDelivery =
+  | { action: "send"; text: string } // deliver the model's final prose (raw text)
+  | { action: "fallback" } // deliver FALLBACK_MESSAGE + log turn_incomplete
+  | { action: "none" }; // suppress: nothing to deliver
+
+// Pure decision for the interface agent's final delivery. Given the run's
+// finish reason, the model's final prose, and the replies already sent this
+// turn, decide what final message (if any) reaches the user. No I/O, no
+// store/bot/DO access, no logging, no mutation — the runner executes the
+// returned decision (see runInterfaceAgent). The `send` action carries the RAW
+// (untrimmed) text so delivered bytes match; the guards below compare trimmed.
+export const decideFinalDelivery = (
+  input: FinalDeliveryInput,
+): FinalDelivery => {
+  const lastReply = input.replies[input.replies.length - 1]?.trim();
+  const trimmed = input.text.trim();
+  // Clean finish: the model's final message is the substantive answer, so
+  // deliver it — unless it is empty or an exact echo of the reply we already
+  // sent. The model routinely puts the answer in its final text rather than a
+  // reply() call, notably after a research tool call that followed an
+  // acknowledgement reply. The echo guard (last reply only) prevents re-sending
+  // text the model already delivered; an earlier ack reply must not suppress it.
+  if (input.finishReason === "stop" && trimmed && trimmed !== lastReply) {
+    return { action: "send", text: input.text };
+  }
+  // Cap cut-off (finishReason !== "stop"), or a clean finish that produced no
+  // final message and never sent a reply: the model never produced its intended
+  // answer. Fall back so the user is never left in silence. (A clean finish that
+  // already sent a reply and ended with empty/echo text needs no fallback — the
+  // reply was the answer.)
+  if (input.finishReason !== "stop" || input.replies.length === 0) {
+    return { action: "fallback" };
+  }
+  return { action: "none" };
+};
+
 export interface InterfaceAgentInput {
   model: LanguageModel;
   // Model for the nested research agent, tagged "research" for gateway
@@ -327,29 +369,15 @@ export const runInterfaceAgent = async (
   // tradeoff as a mid-run eviction (see docs/topics.md), now visible not silent.
   if (firstSendError !== null) throw firstSendError as Error;
 
-  const lastReply = replies[replies.length - 1]?.trim();
-
-  // Clean finish: the model's final message is the substantive answer, so
-  // deliver it — unless it is empty or an exact echo of the reply we already
-  // sent. The model routinely puts the answer in its final text rather than a
-  // reply() call, notably after a research tool call that followed an
-  // acknowledgement reply. Earlier logic suppressed this whenever ANY reply had
-  // gone out (even a bare "Searching now..." ack), which silently dropped the
-  // real answer. Always sending the final message keeps ack-then-answer intact;
-  // the echo guard prevents re-sending text the model already delivered.
-  if (finishReason === "stop" && text.trim() && text.trim() !== lastReply) {
-    persistReply(text);
-    await input.send(text);
-    replies.push(text);
-    return { replies, accessed: [...accessed], transcript };
-  }
-
-  // Cap cut-off (finishReason !== "stop"), or a clean finish that produced no
-  // final message and never sent a reply: the model never produced its intended
-  // answer. Send a fallback so the user is never left in silence. (A clean
-  // finish that already sent a reply and ended with empty/echo text needs no
-  // fallback — the reply was the answer.)
-  if (finishReason !== "stop" || replies.length === 0) {
+  // Decide the final delivery (pure), then execute it. All side effects
+  // (persist-before-send, Telegram send, replies.push, the turn_incomplete log)
+  // stay here in the runner.
+  const decision = decideFinalDelivery({ finishReason, text, replies });
+  if (decision.action === "send") {
+    persistReply(decision.text);
+    await input.send(decision.text);
+    replies.push(decision.text);
+  } else if (decision.action === "fallback") {
     log("turn_incomplete", { finish_reason: finishReason, steps });
     persistReply(FALLBACK_MESSAGE);
     await input.send(FALLBACK_MESSAGE);
