@@ -6,7 +6,7 @@ This document explains how environment variables and secrets are organized in th
 
 ## Secret Management with ZeroVault
 
-All secrets are managed through [ZeroVault](https://zerovault.juanibiapina.dev), a self-hosted secrets manager. Secrets are organized across two ZeroVault projects, each with `development` and `production` environments:
+All secrets are managed through [ZeroVault](https://vault.apps.juanibiapina.dev), a self-hosted secrets manager. Secrets are organized across two ZeroVault projects, each with `development` and `production` environments:
 
 - **`zero-api`**: Zero Cloudflare Worker secrets (also loaded by `bin/e2e-test`)
 - **`zero-web`**: Zero React app build-time secrets
@@ -56,7 +56,7 @@ pnpm dlx zerovault-cli@0.2.1 secrets get CLERK_SECRET_KEY -p zero-api -e develop
 pnpm dlx zerovault-cli@0.2.1 secrets set VARIABLE_NAME=value -p zero-api -e development
 ```
 
-Or use the web portal at https://zerovault.juanibiapina.dev.
+Or use the web portal at https://vault.apps.juanibiapina.dev.
 
 After updating secrets in ZeroVault, run `bin/fetch-secrets` to regenerate local files.
 

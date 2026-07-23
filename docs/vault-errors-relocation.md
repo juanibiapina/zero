@@ -8,7 +8,7 @@ trippycards so the live production state is untouched.
 
 ## Ops context
 
-- Workers: `zerovault-api` (`zerovault.juanibiapina.dev`), `zeroerrors-api`
+- Workers: `zerovault-api` (`vault.apps.juanibiapina.dev`), `zeroerrors-api`
   (`zeroerrors.juanibiapina.dev`).
 - Shared KV `APIKEYS` id `7c218b09...` (same id on both workers, intentional).
 - DOs: vault `OrgDO` + `ProjectVaultDO` (migrations v1/v2/v3, v3 deletes the old

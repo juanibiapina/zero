@@ -26,7 +26,7 @@ This is a **secrets/infra task, not a code change**. The key lives only in ZeroV
 ### ZeroVault project / env
 - Project **`zero-api`**, environments **`development`** and **`production`**. `development` generates `apps/agent-api/.dev.vars`; `production` is uploaded to Cloudflare Workers.
 - CLI: run on demand via `pnpm dlx`. Note the version drift — `docs/secrets.md` shows `zerovault-cli@0.1.0`, but the bin scripts pin **`zerovault-cli@0.2.0`**. Use the version the scripts use (`0.2.0`) for consistency. The drift is harmless: `0.2.0` is verified to support every subcommand/flag this plan uses. Fixing `docs/secrets.md` to `0.2.0` is out of scope here.
-- Requires env vars **`ZEROVAULT_API_KEY`** and **`ZEROVAULT_API_URL`** (`https://zerovault.juanibiapina.dev`). Both are already present in this box's shell environment (verified), so ZeroVault operations are automatable here.
+- Requires env vars **`ZEROVAULT_API_KEY`** and **`ZEROVAULT_API_URL`** (`https://vault.apps.juanibiapina.dev`). Both are already present in this box's shell environment (verified), so ZeroVault operations are automatable here.
 
 ### The two propagation scripts
 - `bin/fetch-secrets` — downloads all dev + web secrets from ZeroVault as JSON and serializes them to dotenv via `bin/json-to-dotenv.mjs`. For `zero-api`/`development` it regenerates `apps/agent-api/.dev.vars`, which is how the local worker picks up `TAVILY_API_KEY`. Requires `ZEROVAULT_API_KEY`/`ZEROVAULT_API_URL`.
