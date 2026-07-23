@@ -1,5 +1,4 @@
-import { Bot } from "grammy";
-import type { UserFromGetMe } from "grammy/types";
+import { createBot } from "./bot";
 import type { Env } from "../types";
 
 // Send a one-shot Telegram "typing" chat action. The action auto-expires
@@ -9,8 +8,7 @@ export const sendChatAction = async (
   chatId: number,
   topicId: number,
 ): Promise<void> => {
-  const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
-  const bot = new Bot(env.TELEGRAM_BOT_TOKEN, { botInfo });
+  const bot = createBot(env);
   await bot.api.sendChatAction(chatId, "typing", {
     ...(topicId && { message_thread_id: topicId }),
   });

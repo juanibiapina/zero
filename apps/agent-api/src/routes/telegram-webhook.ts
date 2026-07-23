@@ -15,8 +15,8 @@
 // See docs/design.md § Routes for the full pipeline.
 
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { Bot, webhookCallback } from "grammy";
-import type { UserFromGetMe } from "grammy/types";
+import { webhookCallback } from "grammy";
+import { createBot } from "../telegram/bot";
 import { log, logError, fmtErr } from "../log";
 import { processNewCommand } from "../commands/new";
 import type { TopicContext } from "../telegram/context";
@@ -323,11 +323,7 @@ export const createTelegramWebhookRoute = () => {
   const router = new OpenAPIHono<{ Bindings: Env }>();
 
   router.post("/api/webhooks/telegram", async (c) => {
-    const botInfo = JSON.parse(c.env.TELEGRAM_BOT_INFO) as UserFromGetMe;
-    const bot = new Bot(c.env.TELEGRAM_BOT_TOKEN, {
-      botInfo,
-      client: { apiRoot: c.env.TELEGRAM_API_ROOT },
-    });
+    const bot = createBot(c.env);
 
     const sendReply = async (
       chatId: number,

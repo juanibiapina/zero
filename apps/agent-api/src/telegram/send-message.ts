@@ -2,8 +2,7 @@
 // chat-action.ts) and sends through the transport-agnostic formatAndSend, which
 // handles markdown conversion, chunking, and the plain-text fallback.
 
-import { Bot } from "grammy";
-import type { UserFromGetMe } from "grammy/types";
+import { createBot } from "./bot";
 import { formatAndSend } from "./send";
 import { logError, fmtErr } from "../log";
 import type { Env } from "../types";
@@ -14,11 +13,7 @@ export const sendMessage = async (
   topicId: number,
   text: string,
 ): Promise<void> => {
-  const botInfo = JSON.parse(env.TELEGRAM_BOT_INFO) as UserFromGetMe;
-  const bot = new Bot(env.TELEGRAM_BOT_TOKEN, {
-    botInfo,
-    client: { apiRoot: env.TELEGRAM_API_ROOT },
-  });
+  const bot = createBot(env);
   try {
     await formatAndSend(text, (formatted, parseMode) =>
       bot.api.sendMessage(chatId, formatted, {
