@@ -11,7 +11,22 @@
     "nodejs_compat"
   ],
   "secrets": {
-    "required": ["ZEROVAULT_API_KEY"]
+    "required": [
+      "ADMIN_USER_ID",
+      "BRAVE_API_KEY",
+      "CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY",
+      "CLERK_WEBHOOK_SIGNING_SECRET",
+      "CLOUDFLARE_API_KEY",
+      "DISCORD_SIGNUP_WEBHOOK_URL",
+      "GITHUB_APP_ID",
+      "GITHUB_APP_PRIVATE_KEY",
+      "TAVILY_API_KEY",
+      "TELEGRAM_BOT_INFO",
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_WEBHOOK_SECRET",
+      "ZEROVAULT_API_KEY"
+    ]
   },
   "assets": {
     "directory": "../agent-web/dist",
