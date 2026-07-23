@@ -1,7 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { createDb, eq, type Database } from "do-orm";
+import { createDb, type Database } from "do-orm";
 import { migrate } from "do-orm";
-import { telegramLink, userSettings, processedUpdates } from "./db/schema";
 import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
@@ -58,21 +57,6 @@ export class UserDO extends DurableObject<Env> {
     this.store.resetConversation(chatId, topicId);
   }
 
-  // --- Webhook idempotency ---
-
-  // Record an update id; returns true if newly seen, false if already processed.
-  private markProcessed(updateId: string): boolean {
-    const existing = this.db.get(processedUpdates, {
-      where: eq("updateId", updateId),
-    });
-    if (existing) return false;
-    this.db.insert(processedUpdates, {
-      updateId,
-      createdAt: new Date().toISOString(),
-    });
-    return true;
-  }
-
   // --- Turn execution (DO alarm) ---
 
   // Cheap, synchronous-ish enqueue: dedupe the webhook update, store the user
@@ -93,7 +77,7 @@ export class UserDO extends DurableObject<Env> {
       mimeType: string;
     }>;
   }): Promise<void> {
-    if (!this.markProcessed(input.updateId)) return;
+    if (!this.store.markProcessed(input.updateId)) return;
     await this.ctx.storage.put("clerkUserId", input.clerkUserId);
     const conversationId = this.store.getOrCreateConversation(
       input.chatId,
@@ -125,7 +109,7 @@ export class UserDO extends DurableObject<Env> {
       runTurn: (chatId, topicId) => this.runTurn(chatId, topicId),
       reportError: (err) => reportError(this.env, err, { site: "alarm_turn" }),
     });
-    if (this.getSettings().googleOnboardingStatus === "queued") {
+    if (this.store.getSettings().googleOnboardingStatus === "queued") {
       await this.runOnboarding();
     }
   }
@@ -137,8 +121,9 @@ export class UserDO extends DurableObject<Env> {
   // (re-running is idempotent: it re-authors the same pinned topic). Called by
   // POST /api/onboarding/google.
   async queueOnboarding(force = false): Promise<void> {
-    if (!force && this.getSettings().googleOnboardingStatus !== null) return;
-    this.setGoogleOnboardingStatus("queued");
+    if (!force && this.store.getSettings().googleOnboardingStatus !== null)
+      return;
+    this.store.setGoogleOnboardingStatus("queued");
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(Date.now());
     }
@@ -162,7 +147,7 @@ export class UserDO extends DurableObject<Env> {
       description: USER_TOPIC_DESCRIPTION,
       runAgent: (topicName) =>
         runOnboardingAgent({ model, store: this.store, google, topicName }),
-      setStatus: (status) => this.setGoogleOnboardingStatus(status),
+      setStatus: (status) => this.store.setGoogleOnboardingStatus(status),
     });
   }
 
@@ -183,8 +168,9 @@ export class UserDO extends DurableObject<Env> {
       getGoogleAccessToken(this.env, clerkUserId),
     );
     const google = createGoogleWorkspace(getToken);
-    const timezone = this.getSettings().timezone ?? undefined;
-    const setTimezone = (tz: string) => this.updateSettings({ timezone: tz });
+    const timezone = this.store.getSettings().timezone ?? undefined;
+    const setTimezone = (tz: string) =>
+      this.store.updateSettings({ timezone: tz });
     const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -200,70 +186,44 @@ export class UserDO extends DurableObject<Env> {
     }
   }
 
+  // --- Telegram link / settings RPC (delegate to the Store) ---
+  // These stay public: routes/user-settings.ts and routes/admin.ts call them.
+
   getTelegramId(): string | null {
-    const row = this.db.get(telegramLink);
-    return row?.telegramId ?? null;
+    return this.store.getTelegramId();
   }
 
   linkTelegram(telegramId: string): { previous: string | null } {
-    const existing = this.db.get(telegramLink);
-    const previous = existing?.telegramId ?? null;
-
-    if (existing) {
-      this.db.update(telegramLink, { telegramId }, { where: eq("id", existing.id) });
-    } else {
-      this.db.insert(telegramLink, { telegramId });
-    }
-
-    return { previous };
+    return this.store.linkTelegram(telegramId);
   }
 
   async unlinkTelegram(): Promise<{ removed: string | null }> {
-    const existing = this.db.get(telegramLink);
-    if (!existing) return { removed: null };
-
-    this.db.delete(telegramLink, { where: eq("id", existing.id) });
+    const { removed } = this.store.unlinkTelegram();
+    if (!removed) return { removed: null };
     // Purge the user's stored images: unlinking is an account teardown path, so
     // their photos leave with their data. clerkUserId is set on first enqueue,
     // which is also the only path that creates attachments, so a null here means
     // nothing to purge.
     const clerkUserId = await this.ctx.storage.get<string>("clerkUserId");
     if (clerkUserId) await this.attachments.deleteAllForUser(clerkUserId);
-    return { removed: existing.telegramId };
+    return { removed };
   }
 
-  getSettings(): { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; timezone: string | null; isNewUser: boolean } {
-    const row = this.db.get(userSettings);
-    if (!row) {
-      const createdAt = new Date().toISOString();
-      this.db.insert(userSettings, { onboardingSeen: 0, createdAt });
-      return { onboardingSeen: false, googleOnboardingStatus: null, createdAt, timezone: null, isNewUser: true };
-    }
-    return { onboardingSeen: !!row.onboardingSeen, googleOnboardingStatus: row.googleOnboardingStatus ?? null, createdAt: row.createdAt ?? null, timezone: row.timezone ?? null, isNewUser: false };
+  getSettings(): {
+    onboardingSeen: boolean;
+    googleOnboardingStatus: string | null;
+    createdAt: string | null;
+    timezone: string | null;
+    isNewUser: boolean;
+  } {
+    return this.store.getSettings();
   }
 
   updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
-    const existing = this.db.get(userSettings);
-    if (existing) {
-      const updates: Record<string, number | string> = {};
-      if (patch.onboardingSeen !== undefined) updates.onboardingSeen = patch.onboardingSeen ? 1 : 0;
-      if (patch.timezone !== undefined) updates.timezone = patch.timezone;
-      this.db.update(userSettings, updates, { where: eq("id", existing.id) });
-    } else {
-      this.db.insert(userSettings, {
-        onboardingSeen: patch.onboardingSeen ? 1 : 0,
-        timezone: patch.timezone,
-        createdAt: new Date().toISOString(),
-      });
-    }
+    this.store.updateSettings(patch);
   }
 
   setGoogleOnboardingStatus(status: string): void {
-    const existing = this.db.get(userSettings);
-    if (existing) {
-      this.db.update(userSettings, { googleOnboardingStatus: status }, { where: eq("id", existing.id) });
-    } else {
-      this.db.insert(userSettings, { onboardingSeen: 0, googleOnboardingStatus: status, createdAt: new Date().toISOString() });
-    }
+    this.store.setGoogleOnboardingStatus(status);
   }
 }
