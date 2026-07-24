@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { OpenAPIHono } from "@hono/zod-openapi";
 
-import { createAdminRoutes } from "./admin";
+import {
+  createAdminRoutes,
+  MAX_ADMIN_TASK_PROMPT_CHARS,
+} from "./admin";
 import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
 import { listClerkUsers, getClerkUser } from "../admin-users";
@@ -182,18 +185,40 @@ describe("admin task", () => {
     expect(res.status).toBe(403);
   });
 
-  it.each([{}, { prompt: "" }, { prompt: "   " }, { prompt: "x".repeat(20_001) }])(
-    "rejects an invalid task prompt",
-    async (body) => {
-      const app = buildApp(fakeEnv("admin_1"), "admin_1");
-      const res = await app.request(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      expect(res.status).toBe(400);
-    },
-  );
+  it.each([
+    {},
+    { prompt: "" },
+    { prompt: "   " },
+    { prompt: "x".repeat(MAX_ADMIN_TASK_PROMPT_CHARS + 1) },
+  ])("rejects an invalid task prompt", async (body) => {
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+    const res = await app.request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts a prompt at the maximum length", async () => {
+    vi.mocked(getClerkUser).mockResolvedValue(identity);
+    const queueAdminTask = vi.fn(async () => true);
+    getUserDO.mockReturnValue({ queueAdminTask });
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+    const prompt = "x".repeat(MAX_ADMIN_TASK_PROMPT_CHARS);
+
+    const res = await app.request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(queueAdminTask).toHaveBeenCalledWith({
+      clerkUserId: "user_a",
+      prompt,
+    });
+  });
 
   it("checks Clerk before queueing", async () => {
     vi.mocked(getClerkUser).mockResolvedValue(null);

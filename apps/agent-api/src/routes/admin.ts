@@ -35,6 +35,8 @@ const AdminUserDetailSchema = z.object({
   onboardingSeen: z.boolean(),
 });
 
+export const MAX_ADMIN_TASK_PROMPT_CHARS = 65_536;
+
 export const createAdminRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
@@ -121,7 +123,7 @@ export const createAdminRoutes = () => {
   const AdminTaskRequestSchema = z.object({
     prompt: z
       .string()
-      .max(20_000)
+      .max(MAX_ADMIN_TASK_PROMPT_CHARS)
       .refine((prompt) => prompt.trim().length > 0, "prompt cannot be blank"),
   });
   const AdminTaskStatusSchema = z.discriminatedUnion("status", [

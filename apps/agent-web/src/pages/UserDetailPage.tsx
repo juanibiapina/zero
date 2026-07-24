@@ -91,6 +91,8 @@ function StatusCard({ detail }: { detail: AdminUserDetail }) {
 
 // ─── Admin task ───────────────────────────────────────────────────
 
+const MAX_ADMIN_TASK_PROMPT_CHARS = 65_536;
+
 type AdminTaskStatus =
   | { clerkUserId: string; status: "queued" }
   | { clerkUserId: string; status: "done"; summary: string }
@@ -176,7 +178,7 @@ function AdminTaskCard({ userId }: { userId: string }) {
               id="admin-task"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              maxLength={20_000}
+              maxLength={MAX_ADMIN_TASK_PROMPT_CHARS}
               rows={8}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm"
               disabled={submitting || task?.status === "queued"}
