@@ -72,7 +72,7 @@ Packages:
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 - **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
 - **Dashboard frontend:** `apps/dashboard-web` (`@zero/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
-- **Landing site:** `apps/landing` (`@zero/landing`) is the asset-only Worker for `zeroapps.com`. It has no runtime secrets, API, or Worker script.
+- **Landing site:** `apps/landing` (`@zero/landing`) is the asset-only Worker for `zeroapps.dev`. It has no runtime secrets, API, or Worker script.
 - **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.

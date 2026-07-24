@@ -1,6 +1,6 @@
 # Zero landing site
 
-`https://zeroapps.com/` is Zero's public landing page. It introduces Vault and Errors and sends visitors to the authenticated dashboard at `https://dash.zeroapps.dev`.
+`https://zeroapps.dev/` is Zero's public landing page. It introduces Vault and Errors and sends visitors to the authenticated dashboard at `https://dash.zeroapps.dev`.
 
 The site lives in `apps/landing` (`@zero/landing`). It is an asset-only Cloudflare Worker: it has no Worker script, API, storage, Clerk setup, or runtime secrets.
 

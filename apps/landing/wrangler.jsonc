@@ -6,5 +6,5 @@
     "directory": "./dist",
     "not_found_handling": "single-page-application"
   },
-  "routes": [{ "pattern": "zeroapps.com", "custom_domain": true }]
+  "routes": [{ "pattern": "zeroapps.dev", "custom_domain": true }]
 }
