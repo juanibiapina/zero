@@ -5,51 +5,15 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        ".env",
-        ".env.local",
-        ".env.production",
-        ".env.production.local",
-        ".dev.vars"
-      ]
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.local", ".env.production", ".env.production.local", ".dev.vars"]
     },
-    "lint": {
-      "outputs": []
-    },
-    "typecheck": {
-      "dependsOn": ["^typecheck"]
-    },
-    "dev": {
-      "persistent": true,
-      "cache": false
-    },
-    "test": {
-      "outputs": []
-    },
-    "deploy": {
-      "dependsOn": ["build"],
-      "cache": false
-    },
-    "@zero/agent-api#deploy": {
-      "dependsOn": ["@zero/agent-web#build"],
-      "cache": false
-    },
-    "@zero/vault-api#test": {
-      "dependsOn": ["@zero/vault-web#build"],
-      "outputs": []
-    },
-    "@zero/errors-api#test": {
-      "dependsOn": ["@zero/errors-web#build"],
-      "outputs": []
-    },
-    "@zero/vault-api#deploy": {
-      "dependsOn": ["@zero/vault-web#build"],
-      "cache": false
-    },
-    "@zero/errors-api#deploy": {
-      "dependsOn": ["@zero/errors-web#build"],
-      "cache": false
-    }
+    "lint": { "outputs": [] },
+    "typecheck": { "dependsOn": ["^typecheck"] },
+    "dev": { "persistent": true, "cache": false },
+    "test": { "outputs": [] },
+    "deploy": { "dependsOn": ["build"], "cache": false },
+    "@zero/agent-api#deploy": { "dependsOn": ["@zero/agent-web#build"], "cache": false },
+    "@zero/dashboard-api#test": { "dependsOn": ["@zero/dashboard-web#build"], "outputs": [] },
+    "@zero/dashboard-api#deploy": { "dependsOn": ["@zero/dashboard-web#build"], "cache": false }
   }
 }

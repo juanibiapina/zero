@@ -70,21 +70,20 @@ Packages:
 - **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Built and distributed via EAS (no local Android SDK). See `apps/agent-mobile/README.md`.
 - **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
-- **ZeroVault:** `apps/vault-api` (`@zero/vault-api`, worker `zerovault-api`, `vault.apps.juanibiapina.dev`) + `apps/vault-web` (`@zero/vault-web`) — secrets manager this repo bootstraps from. Backed by `packages/vault-core` (`@zero/vault-core`).
-- **ZeroErrors:** `apps/errors-api` (`@zero/errors-api`, worker `zeroerrors-api`, `zeroerrors.juanibiapina.dev`) + `apps/errors-web` (`@zero/errors-web`) — error tracking. Backed by `packages/errors-core` (`@zero/errors-core`).
-- **Shared vault/errors packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
+- **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
+- **Dashboard frontend:** `apps/dashboard-web` (`@zero/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
+- **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
 
-The console (ZeroVault + ZeroErrors) shares one Clerk instance whose primary domain is `apps.juanibiapina.dev`; both web apps must be served on subdomains of it (`vault.apps.`, `errors.apps.`) to hold a session. The agent is a separate Clerk instance. See `docs/console-auth.md`.
+The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
 
-All three products (agent, vault, errors) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connector, each worker updated in place.
+Both products auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connector, each Worker updated in place.
 
 Expected dev ports:
 
 | app | api port | inspector | web (Vite) |
 |---|---|---|---|
 | agent | 8790 | 9232 | 5176 |
-| errors | 8791 | 9234 | 5177 |
-| vault | 8792 | 9233 | 5178 |
+| dashboard | 8792 | 9233 | 5178 |
 
 The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`.
 
@@ -96,18 +95,18 @@ gob add pnpm --dir apps/agent-api exec wrangler tail
 
 ## Dev Server
 
-Start the dev server manually with `pnpm turbo dev` from the repo root. This launches every app's dev server (agent, vault, errors: 3 apis + 3 webs).
+Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs.
 
 If ports are unavailable or an app doesn't load, there may be lingering processes that need to be killed:
 ```bash
-for p in 5176 5177 5178 8790 8791 8792; do lsof -ti :$p | xargs -r kill -9; done
+for p in 5176 5178 8790 8792; do lsof -ti :$p | xargs -r kill -9; done
 ```
 
 Then start the dev server again with `pnpm turbo dev`.
 
 ## Secrets
 
-When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx zerovault-cli@0.2.1` and needs only the `ZEROVAULT_API_KEY` env var; `ZEROVAULT_API_URL` is optional and defaults to `https://vault.apps.juanibiapina.dev` (set it only to target another instance).
+When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx zerovault-cli@0.2.2` and needs only the `ZEROVAULT_API_KEY` env var; `ZEROVAULT_API_URL` is optional and defaults to `https://api.zeroapps.dev/vault` (set it only to target another instance).
 
 ZeroVault projects (each with `development` and `production` environments):
 - `zero-api` — Worker backend secrets (also used by `bin/e2e-test`)

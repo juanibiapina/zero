@@ -184,13 +184,13 @@ describe("resolveAuth precedence", () => {
   });
 
   it("defaults to the canonical console host when nothing overrides it", () => {
-    expect(DEFAULT_BASE_URL).toBe("https://vault.apps.juanibiapina.dev");
+    expect(DEFAULT_BASE_URL).toBe("https://api.zeroapps.dev/vault");
     const auth = resolveAuth({
       flags: {},
       env: { apiKey: "env_key" },
       context: null,
       defaultBaseUrl: DEFAULT_BASE_URL,
     });
-    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://vault.apps.juanibiapina.dev" });
+    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://api.zeroapps.dev/vault" });
   });
 });

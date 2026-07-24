@@ -1,0 +1,10 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "zeroerrors-api",
+  "main": "./src/index.ts",
+  "compatibility_date": "2025-07-09",
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ErrorsDO"] },
+    { "tag": "v2", "deleted_classes": ["ErrorsDO"] }
+  ]
+}

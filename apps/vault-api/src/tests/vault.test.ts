@@ -46,19 +46,19 @@ describe("Health check", () => {
 
 describe("API key auth", () => {
   it("returns 401 without API key", async () => {
-    const res = await SELF.default.fetch("https://localhost/v1/projects");
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/projects");
     expect(res.status).toBe(401);
   });
 
   it("returns 401 with invalid API key", async () => {
-    const res = await SELF.default.fetch("https://localhost/v1/projects", {
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/projects", {
       headers: { Authorization: "Bearer zv_invalid" },
     });
     expect(res.status).toBe(401);
   });
 
   it("returns 401 with wrong prefix", async () => {
-    const res = await SELF.default.fetch("https://localhost/v1/projects", {
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/projects", {
       headers: { Authorization: "Bearer td_wrongprefix" },
     });
     expect(res.status).toBe(401);
@@ -70,7 +70,7 @@ describe("API key auth", () => {
     const keyHash = await hashApiKey(key);
     await typedEnv.APIKEYS.put(keyHash, JSON.stringify({ v: 1, userId: "legacy_user" }));
 
-    const res = await SELF.default.fetch("https://localhost/v1/whoami", authed(key));
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(key));
     expect(res.status).toBe(401);
   });
 });
@@ -92,7 +92,7 @@ describe("validateApiKey parsing", () => {
     const key = "zv_garbage00000000000000000000000000000000000000000000000000000000";
     await typedEnv.APIKEYS.put(await hashApiKey(key), "not json");
     expect(await validateApiKey(typedEnv.APIKEYS, `Bearer ${key}`)).toBeNull();
-    const res = await SELF.default.fetch("https://localhost/v1/whoami", authed(key));
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(key));
     expect(res.status).toBe(401);
   });
 });
@@ -100,7 +100,7 @@ describe("validateApiKey parsing", () => {
 describe("whoami", () => {
   it("returns userId and orgId matching the key's org", async () => {
     const key = await mintKey("org_whoami", "user_whoami");
-    const res = await SELF.default.fetch("https://localhost/v1/whoami", authed(key));
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(key));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { userId: string; orgId: string };
     expect(body).toEqual({ userId: "user_whoami", orgId: "org_whoami" });
@@ -116,7 +116,7 @@ describe("Project lifecycle", () => {
 
   it("creates a project with default environments", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects",
+      "https://api.zeroapps.dev/vault/v1/projects",
       authed(apiKey, { method: "POST", body: JSON.stringify({ name: "myapp" }) }),
     );
     expect(res.status).toBe(201);
@@ -129,14 +129,14 @@ describe("Project lifecycle", () => {
   });
 
   it("lists the project", async () => {
-    const res = await SELF.default.fetch("https://localhost/v1/projects", authed(apiKey));
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/projects", authed(apiKey));
     const body = (await res.json()) as { projects: { name: string }[] };
     expect(body.projects.map((p) => p.name)).toContain("myapp");
   });
 
   it("rejects duplicate project names (409)", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects",
+      "https://api.zeroapps.dev/vault/v1/projects",
       authed(apiKey, { method: "POST", body: JSON.stringify({ name: "myapp" }) }),
     );
     expect(res.status).toBe(409);
@@ -144,7 +144,7 @@ describe("Project lifecycle", () => {
 
   it("lists default environments", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments",
       authed(apiKey),
     );
     expect(res.status).toBe(200);
@@ -154,7 +154,7 @@ describe("Project lifecycle", () => {
 
   it("creates a custom environment", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments",
       authed(apiKey, { method: "POST", body: JSON.stringify({ name: "staging" }) }),
     );
     expect(res.status).toBe(201);
@@ -164,7 +164,7 @@ describe("Project lifecycle", () => {
 
   it("sets and retrieves secrets", async () => {
     const putRes = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments/development/secrets",
       authed(apiKey, {
         method: "PUT",
         body: JSON.stringify({
@@ -178,7 +178,7 @@ describe("Project lifecycle", () => {
     expect(putRes.status).toBe(200);
 
     const getRes = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments/development/secrets",
       authed(apiKey),
     );
     const body = (await getRes.json()) as { secrets: { key: string; value: string }[] };
@@ -191,7 +191,7 @@ describe("Project lifecycle", () => {
 
   it("patches secrets (add, update, delete)", async () => {
     const patchRes = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments/development/secrets",
       authed(apiKey, {
         method: "PATCH",
         body: JSON.stringify({
@@ -206,7 +206,7 @@ describe("Project lifecycle", () => {
     expect(patchRes.status).toBe(200);
 
     const getRes = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments/development/secrets",
       authed(apiKey),
     );
     const body = (await getRes.json()) as { secrets: { key: string; value: string }[] };
@@ -219,7 +219,7 @@ describe("Project lifecycle", () => {
 
   it("returns 404 for nonexistent project secrets", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects/nope/environments/dev/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/nope/environments/dev/secrets",
       authed(apiKey),
     );
     expect(res.status).toBe(404);
@@ -227,13 +227,13 @@ describe("Project lifecycle", () => {
 
   it("deletes an environment and cascades secrets", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments/staging",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments/staging",
       authed(apiKey, { method: "DELETE" }),
     );
     expect(res.status).toBe(204);
 
     const listRes = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments",
       authed(apiKey),
     );
     const body = (await listRes.json()) as { environments: { name: string }[] };
@@ -242,17 +242,17 @@ describe("Project lifecycle", () => {
 
   it("deletes the project (gone from listing, secrets 404)", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp",
       authed(apiKey, { method: "DELETE" }),
     );
     expect(res.status).toBe(204);
 
-    const listRes = await SELF.default.fetch("https://localhost/v1/projects", authed(apiKey));
+    const listRes = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/projects", authed(apiKey));
     const body = (await listRes.json()) as { projects: { name: string }[] };
     expect(body.projects.find((p) => p.name === "myapp")).toBeUndefined();
 
     const secretsRes = await SELF.default.fetch(
-      "https://localhost/v1/projects/myapp/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/myapp/environments/development/secrets",
       authed(apiKey),
     );
     expect(secretsRes.status).toBe(404);
@@ -260,7 +260,7 @@ describe("Project lifecycle", () => {
 
   it("deleting a nonexistent project returns 404", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/projects/ghost",
+      "https://api.zeroapps.dev/vault/v1/projects/ghost",
       authed(apiKey, { method: "DELETE" }),
     );
     expect(res.status).toBe(404);
@@ -272,11 +272,11 @@ describe("Crypto shred on delete", () => {
     const apiKey = await mintKey("org_shred", "user_shred");
 
     await SELF.default.fetch(
-      "https://localhost/v1/projects",
+      "https://api.zeroapps.dev/vault/v1/projects",
       authed(apiKey, { method: "POST", body: JSON.stringify({ name: "shredme" }) }),
     );
     await SELF.default.fetch(
-      "https://localhost/v1/projects/shredme/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/shredme/environments/development/secrets",
       authed(apiKey, {
         method: "PUT",
         body: JSON.stringify({ secrets: [{ key: "TOKEN", value: "topsecret" }] }),
@@ -284,18 +284,18 @@ describe("Crypto shred on delete", () => {
     );
 
     await SELF.default.fetch(
-      "https://localhost/v1/projects/shredme",
+      "https://api.zeroapps.dev/vault/v1/projects/shredme",
       authed(apiKey, { method: "DELETE" }),
     );
 
     // Recreate the same name — fresh DEK, default envs, no old secrets.
     await SELF.default.fetch(
-      "https://localhost/v1/projects",
+      "https://api.zeroapps.dev/vault/v1/projects",
       authed(apiKey, { method: "POST", body: JSON.stringify({ name: "shredme" }) }),
     );
 
     const getRes = await SELF.default.fetch(
-      "https://localhost/v1/projects/shredme/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/shredme/environments/development/secrets",
       authed(apiKey),
     );
     expect(getRes.status).toBe(200);
@@ -311,20 +311,20 @@ describe("Cross-org isolation", () => {
 
     for (const key of [keyA, keyB]) {
       await SELF.default.fetch(
-        "https://localhost/v1/projects",
+        "https://api.zeroapps.dev/vault/v1/projects",
         authed(key, { method: "POST", body: JSON.stringify({ name: "shared" }) }),
       );
     }
 
     await SELF.default.fetch(
-      "https://localhost/v1/projects/shared/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/shared/environments/development/secrets",
       authed(keyA, {
         method: "PUT",
         body: JSON.stringify({ secrets: [{ key: "WHO", value: "orgA" }] }),
       }),
     );
     await SELF.default.fetch(
-      "https://localhost/v1/projects/shared/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/shared/environments/development/secrets",
       authed(keyB, {
         method: "PUT",
         body: JSON.stringify({ secrets: [{ key: "WHO", value: "orgB" }] }),
@@ -332,7 +332,7 @@ describe("Cross-org isolation", () => {
     );
 
     const resA = await SELF.default.fetch(
-      "https://localhost/v1/projects/shared/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/shared/environments/development/secrets",
       authed(keyA),
     );
     const bodyA = (await resA.json()) as { secrets: { key: string; value: string }[] };
@@ -344,11 +344,11 @@ describe("Cross-org isolation", () => {
     const keyB = await mintKey("org_B2", "user_b2");
 
     await SELF.default.fetch(
-      "https://localhost/v1/projects",
+      "https://api.zeroapps.dev/vault/v1/projects",
       authed(keyB, { method: "POST", body: JSON.stringify({ name: "onlyB" }) }),
     );
 
-    const res = await SELF.default.fetch("https://localhost/v1/projects", authed(keyA));
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/projects", authed(keyA));
     const body = (await res.json()) as { projects: { name: string }[] };
     expect(body.projects.find((p) => p.name === "onlyB")).toBeUndefined();
   });
@@ -360,20 +360,20 @@ describe("Per-project isolation", () => {
 
     for (const name of ["projx", "projy"]) {
       await SELF.default.fetch(
-        "https://localhost/v1/projects",
+        "https://api.zeroapps.dev/vault/v1/projects",
         authed(key, { method: "POST", body: JSON.stringify({ name }) }),
       );
     }
 
     await SELF.default.fetch(
-      "https://localhost/v1/projects/projx/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/projx/environments/development/secrets",
       authed(key, {
         method: "PUT",
         body: JSON.stringify({ secrets: [{ key: "K", value: "x-value" }] }),
       }),
     );
     await SELF.default.fetch(
-      "https://localhost/v1/projects/projy/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/projy/environments/development/secrets",
       authed(key, {
         method: "PUT",
         body: JSON.stringify({ secrets: [{ key: "K", value: "y-value" }] }),
@@ -381,7 +381,7 @@ describe("Per-project isolation", () => {
     );
 
     const resX = await SELF.default.fetch(
-      "https://localhost/v1/projects/projx/environments/development/secrets",
+      "https://api.zeroapps.dev/vault/v1/projects/projx/environments/development/secrets",
       authed(key),
     );
     const bodyX = (await resX.json()) as { secrets: { key: string; value: string }[] };
@@ -395,11 +395,11 @@ describe("Org-scoped key reaches all projects", () => {
 
     for (const name of ["alpha", "beta"]) {
       await SELF.default.fetch(
-        "https://localhost/v1/projects",
+        "https://api.zeroapps.dev/vault/v1/projects",
         authed(key, { method: "POST", body: JSON.stringify({ name }) }),
       );
       const putRes = await SELF.default.fetch(
-        `https://localhost/v1/projects/${name}/environments/production/secrets`,
+        `https://api.zeroapps.dev/vault/v1/projects/${name}/environments/production/secrets`,
         authed(key, {
           method: "PUT",
           body: JSON.stringify({ secrets: [{ key: "NAME", value: name }] }),
@@ -410,7 +410,7 @@ describe("Org-scoped key reaches all projects", () => {
 
     for (const name of ["alpha", "beta"]) {
       const res = await SELF.default.fetch(
-        `https://localhost/v1/projects/${name}/environments/production/secrets`,
+        `https://api.zeroapps.dev/vault/v1/projects/${name}/environments/production/secrets`,
         authed(key),
       );
       const body = (await res.json()) as { secrets: { key: string; value: string }[] };
@@ -428,7 +428,7 @@ describe("API keys management (org-scoped)", () => {
 
   it("creates a new API key", async () => {
     const res = await SELF.default.fetch(
-      "https://localhost/v1/keys",
+      "https://api.zeroapps.dev/vault/v1/keys",
       authed(apiKey, { method: "POST", body: JSON.stringify({ label: "CI Key" }) }),
     );
     expect(res.status).toBe(201);
@@ -439,12 +439,12 @@ describe("API keys management (org-scoped)", () => {
 
   it("a key created in org_keys works and is org-scoped", async () => {
     const createRes = await SELF.default.fetch(
-      "https://localhost/v1/keys",
+      "https://api.zeroapps.dev/vault/v1/keys",
       authed(apiKey, { method: "POST", body: JSON.stringify({ label: "Scoped" }) }),
     );
     const created = (await createRes.json()) as { key: string };
 
-    const who = await SELF.default.fetch("https://localhost/v1/whoami", authed(created.key));
+    const who = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(created.key));
     const body = (await who.json()) as { orgId: string };
     expect(body.orgId).toBe("org_keys");
   });
@@ -453,11 +453,11 @@ describe("API keys management (org-scoped)", () => {
     const otherKey = await mintKey("org_keys_other", "user_other", "Other Bootstrap");
     // Create an extra key in the other org.
     await SELF.default.fetch(
-      "https://localhost/v1/keys",
+      "https://api.zeroapps.dev/vault/v1/keys",
       authed(otherKey, { method: "POST", body: JSON.stringify({ label: "Other Only" }) }),
     );
 
-    const res = await SELF.default.fetch("https://localhost/v1/keys", authed(otherKey));
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/keys", authed(otherKey));
     const body = (await res.json()) as { keys: { label?: string }[] };
     expect(body.keys.every((k) => k.label !== "CI Key")).toBe(true);
     expect(body.keys.some((k) => k.label === "Other Only")).toBe(true);
@@ -465,21 +465,21 @@ describe("API keys management (org-scoped)", () => {
 
   it("revokes a key (no longer valid)", async () => {
     const createRes = await SELF.default.fetch(
-      "https://localhost/v1/keys",
+      "https://api.zeroapps.dev/vault/v1/keys",
       authed(apiKey, { method: "POST", body: JSON.stringify({ label: "To Revoke" }) }),
     );
     const created = (await createRes.json()) as { key: string; id: number };
 
-    const check = await SELF.default.fetch("https://localhost/v1/whoami", authed(created.key));
+    const check = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(created.key));
     expect(check.status).toBe(200);
 
     const revoke = await SELF.default.fetch(
-      `https://localhost/v1/keys/${created.id}`,
+      `https://api.zeroapps.dev/vault/v1/keys/${created.id}`,
       authed(apiKey, { method: "DELETE" }),
     );
     expect(revoke.status).toBe(204);
 
-    const after = await SELF.default.fetch("https://localhost/v1/whoami", authed(created.key));
+    const after = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(created.key));
     expect(after.status).toBe(401);
   });
 });
@@ -489,8 +489,8 @@ describe("Rate limit bucketing", () => {
     const keyA = await mintKey("org_rl_a", "user_rl_a");
     const keyB = await mintKey("org_rl_b", "user_rl_b");
 
-    const resA = await SELF.default.fetch("https://localhost/v1/whoami", authed(keyA));
-    const resB = await SELF.default.fetch("https://localhost/v1/whoami", authed(keyB));
+    const resA = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(keyA));
+    const resB = await SELF.default.fetch("https://api.zeroapps.dev/vault/v1/whoami", authed(keyB));
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
   });

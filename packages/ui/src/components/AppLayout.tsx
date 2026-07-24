@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
   SignedIn,
   SignedOut,
@@ -47,6 +47,7 @@ export function AppLayout({
   currentProductId,
 }: AppLayoutProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const BrandIcon = brand.icon;
 
   const showSelector = products !== undefined && currentProductId !== undefined;
@@ -54,7 +55,7 @@ export function AppLayout({
   const onMobileProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const next = products?.find((p) => p.id === e.target.value);
     if (next && next.id !== currentProductId) {
-      window.location.assign(next.href);
+      void navigate(next.href);
     }
   };
 
@@ -92,10 +93,10 @@ export function AppLayout({
                     );
                   }
                   return (
-                    <a key={product.id} href={product.href} className={className}>
+                    <Link key={product.id} to={product.href} className={className}>
                       <ProductIcon className="h-4 w-4" />
                       {product.label}
-                    </a>
+                    </Link>
                   );
                 })}
               </div>

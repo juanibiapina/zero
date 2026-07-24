@@ -39,15 +39,15 @@ export const createKeysRouter = (_env: Env) => {
     return new Response(null, { status: 204 });
   };
 
-  // API key auth (/v1/)
-  app.post("/v1/keys", create);
-  app.get("/v1/keys", list);
-  app.delete("/v1/keys/:id", revoke);
+  // API key auth (/vault/v1/)
+  app.post("/vault/v1/keys", create);
+  app.get("/vault/v1/keys", list);
+  app.delete("/vault/v1/keys/:id", revoke);
 
-  // Clerk JWT auth (/api/)
-  app.post("/api/keys", create);
-  app.get("/api/keys", list);
-  app.delete("/api/keys/:id", revoke);
+  // Clerk JWT auth (/api/vault/)
+  app.post("/api/vault/keys", create);
+  app.get("/api/vault/keys", list);
+  app.delete("/api/vault/keys/:id", revoke);
 
   return app;
 };

@@ -15,7 +15,7 @@
 
 import { fmtErr } from "../log";
 
-const ENDPOINT = "https://errors.apps.juanibiapina.dev/v1/errors";
+const ENDPOINT = "https://api.zeroapps.dev/errors/v1/errors";
 const PROJECT = "zero-agent";
 
 export async function reportError(

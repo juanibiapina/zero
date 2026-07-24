@@ -1,6 +1,0 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "@zero/ui/styles.css";
-
-/* Scan the shared shell so Tailwind emits classes used inside @zero/ui. */
-@source "../../../packages/ui/src";

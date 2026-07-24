@@ -56,7 +56,7 @@ function projectHandlers() {
 export const createProjectsRouter = (_env: Env) => {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
   const handlers = projectHandlers();
-  app.route("/v1/projects", handlers);
-  app.route("/api/projects", handlers);
+  app.route("/vault/v1/projects", handlers);
+  app.route("/api/vault/projects", handlers);
   return app;
 };

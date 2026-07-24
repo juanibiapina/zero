@@ -63,7 +63,7 @@ function secretsHandlers() {
 export const createSecretsRouter = (_env: Env) => {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
   const handlers = secretsHandlers();
-  app.route("/v1/projects/:project/environments/:env/secrets", handlers);
-  app.route("/api/projects/:project/environments/:env/secrets", handlers);
+  app.route("/vault/v1/projects/:project/environments/:env/secrets", handlers);
+  app.route("/api/vault/projects/:project/environments/:env/secrets", handlers);
   return app;
 };

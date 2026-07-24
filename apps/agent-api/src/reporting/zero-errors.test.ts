@@ -25,7 +25,7 @@ describe("reportError", () => {
 
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [url, init] = fetchFn.mock.calls[0];
-    expect(url).toBe("https://errors.apps.juanibiapina.dev/v1/errors");
+    expect(url).toBe("https://api.zeroapps.dev/errors/v1/errors");
     expect(init?.method).toBe("POST");
     expect(
       (init?.headers as Record<string, string>).authorization,

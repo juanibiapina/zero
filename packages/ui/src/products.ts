@@ -1,29 +1,20 @@
-import { Shield, Bug, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Shield, Bug, type LucideIcon } from "lucide-react";
 
-export type ProductId = "vault" | "errors";
+export type ProductId = "dashboard" | "vault" | "errors";
 
 export interface ProductLink {
   id: ProductId;
   label: string;
   icon: LucideIcon;
-  /** Absolute, cross-subdomain URL. */
+  /** Same-origin dashboard path. */
   href: string;
 }
 
-// Production hosts, served as subdomains of the Clerk primary so they share a session.
-const PROD_VAULT_URL = "https://vault.apps.juanibiapina.dev";
-const PROD_ERRORS_URL = "https://errors.apps.juanibiapina.dev";
-
-/**
- * The canonical Zero product list, shared by every app so the two consoles
- * cannot drift. Hosts default to the current production subdomains and can be
- * overridden per app via `VITE_VAULT_URL` / `VITE_ERRORS_URL` for localhost dev.
- */
+/** The canonical product list for the unified Zero dashboard. */
 export function getProducts(): ProductLink[] {
-  const vaultUrl = import.meta.env.VITE_VAULT_URL ?? PROD_VAULT_URL;
-  const errorsUrl = import.meta.env.VITE_ERRORS_URL ?? PROD_ERRORS_URL;
   return [
-    { id: "vault", label: "Vault", icon: Shield, href: vaultUrl },
-    { id: "errors", label: "Errors", icon: Bug, href: errorsUrl },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/" },
+    { id: "vault", label: "Vault", icon: Shield, href: "/vault" },
+    { id: "errors", label: "Errors", icon: Bug, href: "/errors" },
   ];
 }

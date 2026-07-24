@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { Context, Next } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "../app";
+import { createDashboardApp } from "../dashboard-app";
 import type { Env } from "../types";
 
 vi.mock("@clerk/hono", () => ({
@@ -21,8 +21,8 @@ vi.mock("@clerk/hono", () => ({
 const typedEnv = env as Env;
 
 function request(headers: Record<string, string> = {}) {
-  return createApp(typedEnv).fetch(
-    new Request("https://localhost/api/projects", { headers }),
+  return createDashboardApp(typedEnv).fetch(
+    new Request("https://localhost/api/vault/projects", { headers }),
     typedEnv,
   );
 }

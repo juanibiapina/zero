@@ -7,8 +7,7 @@ echo "=== Running Local CI Pipeline ==="
 pnpm install
 bin/fetch-secrets
 pnpm --filter @zero/agent-api run cf-typegen
-pnpm --filter @zero/vault-api run cf-typegen
-pnpm --filter @zero/errors-api run cf-typegen
+pnpm --filter @zero/dashboard-api run cf-typegen
 # Order matches .github/workflows/ci.yml: lint first, then typecheck.
 pnpm run lint -- --fix
 pnpm run typecheck

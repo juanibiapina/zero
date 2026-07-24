@@ -150,10 +150,9 @@ export function unbindContext(config: Config, dir: string): boolean {
 // ----------------------------------------------------------------------------
 
 /**
- * Canonical console host the CLI targets when no flag/context/env overrides it.
- * A subdomain of the Clerk primary domain `apps.juanibiapina.dev`.
+ * Canonical public Vault API base URL when no flag/context/env overrides it.
  */
-export const DEFAULT_BASE_URL = "https://vault.apps.juanibiapina.dev";
+export const DEFAULT_BASE_URL = "https://api.zeroapps.dev/vault";
 
 export interface ResolvedAuth {
   apiKey: string;

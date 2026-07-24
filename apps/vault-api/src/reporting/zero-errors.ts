@@ -12,7 +12,7 @@
 // runtime state. The try/catch below is runtime resilience against a ZeroErrors
 // outage, not an opt-out.
 
-const ENDPOINT = "https://errors.apps.juanibiapina.dev/v1/errors";
+const ENDPOINT = "https://api.zeroapps.dev/errors/v1/errors";
 const PROJECT = "zerovault";
 
 function extract(err: unknown): { message: string; stack?: string } {
