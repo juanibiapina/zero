@@ -7,6 +7,8 @@ export interface Env {
   MASTER_KEY: string;
   CLERK_SECRET_KEY: string;
   CLERK_PUBLISHABLE_KEY: string;
+  CLERK_WEBHOOK_SIGNING_SECRET: string;
+  DISCORD_SIGNUP_WEBHOOK_URL: string;
   ZEROVAULT_API_KEY: string;
   ORGDO: DurableObjectNamespace<OrgDO>;
   PROJECTVAULTDO: DurableObjectNamespace<ProjectVaultDO>;

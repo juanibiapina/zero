@@ -9,6 +9,8 @@
   "vars": {
     "CLERK_PUBLISHABLE_KEY": "pk_test_Y2xlcmsudGVzdCQ=",
     "CLERK_SECRET_KEY": "sk_test_host_dispatch",
+    "CLERK_WEBHOOK_SIGNING_SECRET": "whsec_test",
+    "DISCORD_SIGNUP_WEBHOOK_URL": "https://discord.test/webhook",
     "MASTER_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
   },
   "kv_namespaces": [{ "binding": "APIKEYS", "id": "test-apikeys" }],

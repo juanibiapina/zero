@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clerk/backend": "^3.11.7",
     "@clerk/hono": "^0.1.53",
     "@zero/auth": "workspace:*",
     "@zero/errors-core": "workspace:*",

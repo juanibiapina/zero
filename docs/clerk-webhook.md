@@ -1,49 +1,66 @@
-# Clerk webhook → Discord signup notice
+# Clerk webhook to Discord signup notice
 
-`POST /api/webhooks/clerk` is a public route (no Clerk JWT) authenticated by the
-Svix signature Clerk attaches to every webhook. On `user.created` it posts a
-signup line to a Discord channel via an incoming webhook URL. The Discord call
-runs in the background (`executionCtx.waitUntil`); the route returns `200`
-immediately and never 5xxes on a Discord outage, so Clerk does not retry. A
-bad or missing signature returns `401`.
+`POST /api/webhooks/clerk` is a public route authenticated by the Svix signature
+Clerk attaches to each webhook. On `user.created`, it posts a signup line to a
+Discord incoming webhook. The Discord request runs in the background through
+`executionCtx.waitUntil`; the route responds with `200` without waiting. A bad
+or missing signature returns `401`. Discord failures are logged and swallowed,
+so Clerk does not retry them.
 
-Message format (name and email included, degrading gracefully):
+## Agent
 
-```
-🎉 New signup: Alice Smith — alice@example.com (user_abc123)
-```
+The Agent uses its own Clerk instance and Worker configuration.
 
-Code: `apps/agent-api/src/routes/clerk-webhook.ts` (route + `formatSignupMessage` +
-`handleClerkEvent`) and `apps/agent-api/src/discord.ts` (`notifyDiscord`).
+- Endpoint: `https://zero.juanibiapina.dev/api/webhooks/clerk`
+- Code: `apps/agent-api/src/routes/clerk-webhook.ts` and
+  `apps/agent-api/src/discord.ts`
+- ZeroVault project: `zero-api`
+- Discord message: the existing Agent signup format with the user's name, email, and Clerk ID.
+
+## Dashboard
+
+The dashboard covers Vault and Errors. It has a separate Clerk instance and
+Worker configuration from the Agent.
+
+- Endpoint: `https://dash.zeroapps.dev/api/webhooks/clerk`
+- Code: `apps/vault-api/src/routes/clerk-webhook.ts` and
+  `apps/vault-api/src/discord.ts`
+- ZeroVault project: `zerovault`
+- Discord message: `🎉 New Zero dashboard signup: Alice Smith - alice@example.com (user_abc123)`
+
+The dashboard endpoint is available only on `dash.zeroapps.dev`.
+`api.zeroapps.dev/api/webhooks/clerk` returns `404`.
 
 ## Secrets
 
-Both live in ZeroVault project `zero-api` (environments `development` and
-`production`); never hand-edit `.dev.vars` (see `docs/secrets.md`).
+Each Worker needs these secrets in its own ZeroVault project, for both
+`development` and `production` environments:
 
-- `CLERK_WEBHOOK_SIGNING_SECRET` — `whsec_…`, from the Clerk Dashboard webhook
-  endpoint.
-- `DISCORD_SIGNUP_WEBHOOK_URL` — the Discord channel's incoming webhook URL.
+- `CLERK_WEBHOOK_SIGNING_SECRET`: the endpoint's `whsec_...` secret from Clerk.
+- `DISCORD_SIGNUP_WEBHOOK_URL`: the Discord channel's incoming webhook URL.
 
-Set them:
+For the dashboard:
 
 ```bash
-ZV="pnpm dlx zerovault-cli@0.1.0"
-$ZV secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zero-api -e development
-$ZV secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zero-api -e production
-$ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zero-api -e development
-$ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zero-api -e production
+ZV="pnpm dlx zerovault-cli@0.2.2"
+$ZV secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zerovault -e development
+$ZV secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zerovault -e production
+$ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zerovault -e development
+$ZV secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zerovault -e production
 
-bin/fetch-secrets                 # regenerate apps/agent-api/.dev.vars
-pnpm --dir apps/agent-api cf-typegen    # regenerate Env types
-bin/sync-secrets-to-cloudflare    # push prd secrets to the Worker (on deploy)
+bin/fetch-secrets
+pnpm --dir apps/vault-api cf-typegen
+bin/sync-secrets-to-cloudflare
 ```
 
-## Clerk Dashboard (one-time)
+Do not edit generated local environment files. See `docs/secrets.md`.
 
-Dashboard → Webhooks → Add endpoint:
+## Clerk setup
 
-- URL: `https://zero.juanibiapina.dev/api/webhooks/clerk`
+In the matching Clerk Dashboard, add an endpoint with:
+
+- URL: the Agent or dashboard endpoint above
 - Events: `user.created`
 
-Copy the endpoint's signing secret into `CLERK_WEBHOOK_SIGNING_SECRET`.
+Copy the endpoint signing secret into that product's
+`CLERK_WEBHOOK_SIGNING_SECRET`.

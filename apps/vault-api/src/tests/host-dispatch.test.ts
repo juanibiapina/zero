@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 describe("host dispatch", () => {
   it("keeps dashboard assets and cookie-authenticated routes off the public API host", async () => {
-    for (const path of ["/", "/assets/app.js", "/api/vault/projects", "/api/errors/issues"]) {
+    for (const path of ["/", "/assets/app.js", "/api/vault/projects", "/api/errors/issues", "/api/webhooks/clerk"]) {
       const response = await SELF.default.fetch(`https://api.zeroapps.dev${path}`);
       expect(response.status).toBe(404);
     }

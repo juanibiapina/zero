@@ -58,6 +58,21 @@ describe("Clerk authentication", () => {
     expect(body.projects).toEqual([expect.objectContaining({ name: projectName })]);
   });
 
+  it("rejects invalid webhook signatures before dashboard session authentication", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await createDashboardApp(typedEnv).fetch(
+      new Request("https://localhost/api/webhooks/clerk", {
+        method: "POST",
+        headers: { "X-Test-Clerk-User-Id": "user_clerk" },
+      }),
+      typedEnv,
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.text()).toBe("invalid signature");
+    error.mockRestore();
+  });
+
   it("preserves Clerk middleware redirects", async () => {
     const location = "https://accounts.example.test/sign-in";
     const response = await request({ "X-Test-Clerk-Redirect": location });

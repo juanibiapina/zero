@@ -8,6 +8,7 @@ import type { Notifier } from "./errors/notify/notifier";
 import { createErrorsRouter } from "./errors/routes/errors";
 import { createIssuesRouter } from "./errors/routes/issues";
 import { reportError } from "./reporting/zero-errors";
+import { createClerkWebhookRoute } from "./routes/clerk-webhook";
 import { createEnvironmentsRouter } from "./routes/environments";
 import { createKeysRouter } from "./routes/keys";
 import { createProjectsRouter } from "./routes/projects";
@@ -77,6 +78,8 @@ export const createDashboardApp = (env: Env, options: CreateDashboardAppOptions 
 
   app.get("/vault/v1/whoami", (c) => c.json({ userId: c.get("userId"), orgId: c.get("orgId") }));
   app.get("/errors/v1/whoami", (c) => c.json({ userId: c.get("userId"), orgId: c.get("orgId") }));
+
+  app.route("/", createClerkWebhookRoute());
 
   if (!options.testUserId) app.use("/api/*", clerkMiddleware());
   app.use("/api/*", async (c, next) => {

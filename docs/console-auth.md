@@ -16,6 +16,19 @@ origin, Clerk session, and sign-in flow.
 `/vault/projects` by default, while dashboard product links stay on the same
 origin and preserve the session.
 
+## Signup webhook
+
+In the dashboard Clerk instance, add a webhook endpoint for dashboard account
+creation:
+
+- URL: `https://dash.zeroapps.dev/api/webhooks/clerk`
+- Event: `user.created`
+
+Store the endpoint's signing secret as `CLERK_WEBHOOK_SIGNING_SECRET` in the
+`zerovault` ZeroVault project. Set `DISCORD_SIGNUP_WEBHOOK_URL` there for the
+Discord notification channel. Both secrets are required in `development` and
+`production`. See `docs/clerk-webhook.md` for the full setup.
+
 ## Domain changes
 
 Changing the Clerk frontend domain reissues the publishable key. Before a
