@@ -54,7 +54,6 @@ jobs:
         run: bin/fetch-secrets
         env:
           ZEROVAULT_API_KEY: ${{ secrets.ZEROVAULT_API_KEY }}
-          ZEROVAULT_API_URL: ${{ secrets.ZEROVAULT_API_URL }}
 
       - name: Build application
         run: pnpm run build
