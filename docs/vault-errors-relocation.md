@@ -25,17 +25,10 @@ The dashboard build needs `VITE_CLERK_PUBLISHABLE_KEY` configured as a Workers
 Build variable. Runtime dashboard secrets come from the `zerovault` ZeroVault
 project and are synced with `bin/sync-secrets-to-cloudflare`.
 
-## Retirement sequence
+## Retired infrastructure
 
-After dashboard sign-in, public API, CLI, and error ingest are verified, deploy
-the checked-in retirement revision and inspect Wrangler's migration result:
-
-```bash
-pnpm --dir apps/vault-api exec wrangler deploy --config ../../ops/zeroerrors-retirement/wrangler.jsonc
-```
-
-It appends the required `v2` migration that deletes the old `ErrorsDO` class.
-Then remove the old Worker Build connection and delete the old Errors domain.
+The old `zeroerrors-api` Worker, its `ErrorsDO` class, and its custom domains
+are retired. The unified dashboard Worker owns the active Errors Durable Object.
 
 `vault.apps.juanibiapina.dev` is retired. Use `zerovault-cli@0.2.2` or later,
 which defaults to `api.zeroapps.dev/vault`.
