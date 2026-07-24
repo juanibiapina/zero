@@ -101,36 +101,73 @@ function StatusCard({ detail }: { detail: AdminUserDetail }) {
   );
 }
 
-// ─── Import notes ───────────────────────────────────────────────────
+// ─── Admin task ───────────────────────────────────────────────────
 
-function ImportNotesCard({ userId }: { userId: string }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+type AdminTaskStatus =
+  | { clerkUserId: string; status: "queued" }
+  | { clerkUserId: string; status: "done"; summary: string }
+  | { clerkUserId: string; status: "failed" };
+
+function AdminTaskCard({ userId }: { userId: string }) {
+  const [prompt, setPrompt] = useState("");
+  const [task, setTask] = useState<AdminTaskStatus | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [requestFailed, setRequestFailed] = useState(false);
+
+  const path = `/api/admin/users/${encodeURIComponent(userId)}/task`;
+
+  // Read any prior task on entry. A missing task is the normal empty state.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch(path);
+      if (cancelled || res.status === 404) return;
+      if (res.ok) setTask((await res.json()) as AdminTaskStatus);
+    })();
+    return () => { cancelled = true; };
+  }, [path]);
+
+  // Poll only while the asynchronous DO task is running.
+  useEffect(() => {
+    if (task?.status !== "queued") return;
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const res = await fetch(path);
+      if (!cancelled && res.ok) {
+        const next = (await res.json()) as AdminTaskStatus;
+        setTask(next);
+        if (next.status === "queued") timeout = setTimeout(() => void poll(), 2_000);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [path, task?.status]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
-    setUploading(true);
-    setResult(null);
+    if (!prompt.trim()) return;
+    setSubmitting(true);
+    setRequestFailed(false);
     try {
-      const res = await fetch(`/api/admin/import-notes/${encodeURIComponent(userId)}`, {
+      const res = await fetch(path, {
         method: "POST",
-        headers: { "Content-Type": "application/zip" },
-        body: file,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
       });
-      if (res.ok) {
-        const data = (await res.json()) as { filesExtracted: number };
-        setResult({ success: true, message: `Imported ${data.filesExtracted} files` });
-        setFile(null);
+      if (res.status === 202 || res.status === 409) {
+        setTask({ clerkUserId: userId, status: "queued" });
+        if (res.status === 202) setPrompt("");
       } else {
-        const data = (await res.json()) as { error: string };
-        setResult({ success: false, message: data.error || "Import failed" });
+        setRequestFailed(true);
       }
-    } catch (err) {
-      setResult({ success: false, message: String(err) });
+    } catch {
+      setRequestFailed(true);
     } finally {
-      setUploading(false);
+      setSubmitting(false);
     }
   };
 
@@ -138,29 +175,41 @@ function ImportNotesCard({ userId }: { userId: string }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
-          Import Notes
+          Run Task
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4 sm:flex-row sm:items-end">
-          <div className="flex-1 space-y-2">
-            <label className="text-sm font-medium">Archive (zip or tar.gz)</label>
-            <input
-              type="file"
-              accept=".zip,.tar.gz,.tgz,application/zip,application/gzip,application/x-gzip"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm file:mr-4 file:rounded file:border-0 file:bg-primary file:px-4 file:py-1 file:text-sm file:font-semibold file:text-primary-foreground"
+      <CardContent className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
+          <div className="space-y-2">
+            <label htmlFor="admin-task" className="text-sm font-medium">
+              Agent prompt
+            </label>
+            <textarea
+              id="admin-task"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              maxLength={20_000}
+              rows={8}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              disabled={submitting || task?.status === "queued"}
               required
             />
           </div>
-          <Button type="submit" disabled={uploading || !file}>
-            {uploading ? "Importing..." : "Import"}
+          <Button
+            type="submit"
+            disabled={submitting || task?.status === "queued" || !prompt.trim()}
+          >
+            Run task
           </Button>
         </form>
-        {result && (
-          <p className={`mt-4 text-sm ${result.success ? "text-green-600" : "text-destructive"}`}>
-            {result.message}
-          </p>
+        {task?.status === "queued" && (
+          <p className="text-sm text-muted-foreground">Running task…</p>
+        )}
+        {task?.status === "done" && (
+          <p className="text-sm text-green-600">{task.summary || "Task completed."}</p>
+        )}
+        {(task?.status === "failed" || requestFailed) && (
+          <p className="text-sm text-destructive">Task failed.</p>
         )}
       </CardContent>
     </Card>
@@ -360,7 +409,7 @@ export function UserDetailPage() {
               </div>
             )}
             <StatusCard detail={detail} />
-            <ImportNotesCard userId={detail.clerkUserId} />
+            <AdminTaskCard userId={detail.clerkUserId} />
             <SessionsTable userId={detail.clerkUserId} />
           </>
         )}

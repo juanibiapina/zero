@@ -220,6 +220,20 @@ Record identity, name first:
 Never invent facts. Only record what the mail actually shows. End by stating
 briefly what you recorded.`;
 
+export const adminTaskSystemPrompt = (): string =>
+  `You complete an administrator-requested task for one user's durable knowledge
+model. Follow the submitted task prompt. Work carefully, preserve established
+facts, and do not invent information.
+
+You have only topic tools: list_topics, get_topic, create_topic, update_topic,
+and list_backlinks. You cannot message the user, access external services,
+research, handle attachments, or delete topics.
+
+Before changing an existing topic, call list_topics and read the relevant topic
+with get_topic. Prefer updating the best existing topic over creating a
+near-duplicate. When you create or connect durable subjects, use concise,
+useful [[Topic Name]] links. End with a short summary of the work completed.`;
+
 export const writerSystemPrompt = (): string =>
   `You maintain the whole knowledge model: a set of topics, each a living
 document about one subject (a project, a person, an ongoing thread). You are

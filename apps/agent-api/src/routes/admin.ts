@@ -12,6 +12,7 @@ import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
 import { listClerkUsers, getClerkUser } from "../admin-users";
 import { getUserDO } from "../UserDO/stub";
+import { log } from "../log";
 
 type Variables = {
   userId: string;
@@ -114,6 +115,112 @@ export const createAdminRoutes = () => {
       googleOnboardingStatus: settings.googleOnboardingStatus,
       onboardingSeen: settings.onboardingSeen,
     }, 200);
+  });
+
+  const ErrorSchema = z.object({ error: z.string() });
+  const AdminTaskRequestSchema = z.object({
+    prompt: z
+      .string()
+      .max(20_000)
+      .refine((prompt) => prompt.trim().length > 0, "prompt cannot be blank"),
+  });
+  const AdminTaskStatusSchema = z.discriminatedUnion("status", [
+    z.object({ clerkUserId: z.string(), status: z.literal("queued") }),
+    z.object({
+      clerkUserId: z.string(),
+      status: z.literal("done"),
+      summary: z.string().max(1_000),
+    }),
+    z.object({ clerkUserId: z.string(), status: z.literal("failed") }),
+  ]);
+
+  // POST /api/admin/users/{userId}/task — queue one off-Telegram task.
+  // Clerk remains the authority for the target.
+  const postAdminTaskRoute = createRoute({
+    method: "post",
+    path: "/api/admin/users/{userId}/task",
+    tags: ["Admin"],
+    summary: "Queue a one-off admin task for a user",
+    request: {
+      params: z.object({ userId: z.string().min(1) }),
+      body: { content: { "application/json": { schema: AdminTaskRequestSchema } } },
+    },
+    responses: {
+      202: { description: "Admin task queued" },
+      400: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Invalid task prompt",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Unknown user",
+      },
+      409: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Admin task already queued",
+      },
+    },
+  });
+
+  router.openapi(postAdminTaskRoute, async (c) => {
+    const { userId } = c.req.valid("param");
+    const { prompt } = c.req.valid("json");
+    if (!(await getClerkUser(c.env, userId))) {
+      log("admin_task_rejected", {
+        clerk_user_id: userId,
+        prompt_length: prompt.length,
+        status: "unknown_user",
+      });
+      return c.json({ error: "Unknown user" }, 404);
+    }
+
+    const queued = await getUserDO(c.env, userId).queueAdminTask({
+      clerkUserId: userId,
+      prompt,
+    });
+    log(queued ? "admin_task_queued" : "admin_task_rejected", {
+      clerk_user_id: userId,
+      prompt_length: prompt.length,
+      status: queued ? "queued" : "queued_conflict",
+    });
+    if (!queued) return c.json({ error: "Admin task already queued" }, 409);
+    return c.body(null, 202);
+  });
+
+  // GET /api/admin/users/{userId}/task — task status only. The prompt
+  // is intentionally absent even for the authenticated administrator.
+  const getAdminTaskRoute = createRoute({
+    method: "get",
+    path: "/api/admin/users/{userId}/task",
+    tags: ["Admin"],
+    summary: "Get a user's one-off admin task status",
+    request: { params: z.object({ userId: z.string().min(1) }) },
+    responses: {
+      200: {
+        content: { "application/json": { schema: AdminTaskStatusSchema } },
+        description: "Non-sensitive task status",
+      },
+      404: {
+        content: { "application/json": { schema: ErrorSchema } },
+        description: "Unknown user or no admin task",
+      },
+    },
+  });
+
+  router.openapi(getAdminTaskRoute, async (c) => {
+    const { userId } = c.req.valid("param");
+    if (!(await getClerkUser(c.env, userId))) {
+      log("admin_task_status", { clerk_user_id: userId, status: "unknown_user" });
+      return c.json({ error: "Unknown user" }, 404);
+    }
+
+    const status = await getUserDO(c.env, userId).getAdminTaskStatus();
+    log("admin_task_status", {
+      clerk_user_id: userId,
+      status: status?.status ?? "absent",
+    });
+    if (!status) return c.json({ error: "No admin task" }, 404);
+    return c.json(status, 200);
   });
 
   // GET /api/admin/github/status — per-user GitHub App install/token check.

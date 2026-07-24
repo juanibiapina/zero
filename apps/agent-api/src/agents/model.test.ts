@@ -76,5 +76,8 @@ describe("gatewayMetadata", () => {
     expect(JSON.parse(gatewayMetadata("u", "onboarding"))).toMatchObject({
       agent: "onboarding",
     });
+    expect(JSON.parse(gatewayMetadata("u", "admin_task"))).toMatchObject({
+      agent: "admin_task",
+    });
   });
 });

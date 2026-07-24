@@ -16,7 +16,16 @@ import { createGoogleWorkspace } from "../google/rest";
 import { getGoogleAccessToken, memoizeTokenProvider } from "../google-token";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
 import { runOnboardingAgent } from "../agents/onboarding";
+import { runAdminTaskAgent } from "../agents/admin-task";
 import { runAlarmTurns } from "../do/alarm";
+import {
+  ADMIN_TASK_KEY,
+  queueAdminTask,
+  runAdminTask,
+  toAdminTaskStatus,
+  type AdminTask,
+  type AdminTaskStatus,
+} from "../do/admin-task";
 import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
 import type { Env } from "../types";
@@ -92,6 +101,21 @@ export class UserDO extends DurableObject<Env> {
     }
   }
 
+  // Queue one admin-authored task. A queued task is a conflict; a terminal
+  // task is intentionally replaceable for manual retries after a partial run.
+  async queueAdminTask(input: {
+    clerkUserId: string;
+    prompt: string;
+  }): Promise<boolean> {
+    return queueAdminTask(this.ctx.storage, { ...input, status: "queued" });
+  }
+
+  // Never expose the queued prompt through an RPC response.
+  async getAdminTaskStatus(): Promise<AdminTaskStatus | null> {
+    const task = await this.ctx.storage.get<AdminTask>(ADMIN_TASK_KEY);
+    return task ? toAdminTaskStatus(task) : null;
+  }
+
   // The turn runner. Drains every thread whose tail is a user message. A
   // concurrent enqueueTurn arms a fresh alarm (this handler cleared the old
   // one on entry), so messages that arrive mid-run are picked up on the next
@@ -103,6 +127,23 @@ export class UserDO extends DurableObject<Env> {
   // if it is queued. Onboarding is best-effort and off Telegram, so it waits
   // behind turn draining.
   override async alarm(): Promise<void> {
+    const task = await this.ctx.storage.get<AdminTask>(ADMIN_TASK_KEY);
+    if (task?.status === "queued") {
+      await runAdminTask({
+        task,
+        runAgent: async (prompt) => {
+          const model = await createModel(this.env, task.clerkUserId, "admin_task");
+          return runAdminTaskAgent({ model, store: this.store, prompt });
+        },
+        setTask: (terminalTask) =>
+          this.ctx.storage.put(ADMIN_TASK_KEY, terminalTask),
+      });
+      // An admin task replaces the DO's sole alarm. A separate invocation
+      // resumes displaced turn retry or onboarding work without delaying it.
+      await this.ctx.storage.setAlarm(Date.now());
+      return;
+    }
+
     await runAlarmTurns({
       storage: this.ctx.storage,
       findThreadsAwaitingReply: () => this.store.findThreadsAwaitingReply(),

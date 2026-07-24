@@ -16,9 +16,14 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModel } from "ai";
 import type { Env } from "../types";
 
-// The four agents that issue LLM calls. Each turn runs the interface agent
-// (which may spawn research) then the writer; onboarding runs on its own path.
-export type AgentLabel = "interface" | "research" | "writer" | "onboarding";
+// The agents that issue LLM calls. Each turn runs the interface agent (which
+// may spawn research) then the writer; onboarding and admin tasks run alone.
+export type AgentLabel =
+  | "interface"
+  | "research"
+  | "writer"
+  | "onboarding"
+  | "admin_task";
 
 // The `cf-aig-metadata` value. Pure and exported so the exact tag shape is unit
 // testable without reaching into an opaque provider instance.
