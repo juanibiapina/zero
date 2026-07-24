@@ -6,7 +6,11 @@
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "compatibility_flags": ["nodejs_als", "nodejs_compat"],
   "observability": { "enabled": true },
-  "vars": { "MASTER_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" },
+  "vars": {
+    "CLERK_PUBLISHABLE_KEY": "pk_test_Y2xlcmsudGVzdCQ=",
+    "CLERK_SECRET_KEY": "sk_test_host_dispatch",
+    "MASTER_KEY": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+  },
   "kv_namespaces": [{ "binding": "APIKEYS", "id": "test-apikeys" }],
   "durable_objects": {
     "bindings": [
