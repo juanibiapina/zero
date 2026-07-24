@@ -1,6 +1,6 @@
-import { LayoutDashboard, Shield, Bug, type LucideIcon } from "lucide-react";
+import { Shield, Bug, type LucideIcon } from "lucide-react";
 
-export type ProductId = "dashboard" | "vault" | "errors";
+export type ProductId = "vault" | "errors";
 
 export interface ProductLink {
   id: ProductId;
@@ -13,7 +13,6 @@ export interface ProductLink {
 /** The canonical product list for the unified Zero dashboard. */
 export function getProducts(): ProductLink[] {
   return [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/" },
     { id: "vault", label: "Vault", icon: Shield, href: "/vault" },
     { id: "errors", label: "Errors", icon: Bug, href: "/errors" },
   ];
