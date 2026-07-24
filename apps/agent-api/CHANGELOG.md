@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-24: Admin user list opens again after retired cost data stopped loading.
 - 2026-07-23: Assistant errors now report reliably to the error tracker, so problems get spotted and fixed faster.
 - 2026-07-22: Research now opens and reads full web pages when a result matters, not just short snippets, for deeper and better-sourced answers.
 - 2026-07-21: When the assistant is temporarily at its usage limit, it now tells you clearly and asks you to try again shortly, instead of a generic error.

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { UserButton } from "@clerk/react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -10,47 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCost, formatTokens, truncateId, type AdminUser } from "./admin-shared";
-
-// ─── Types ──────────────────────────────────────────────────────────
-
-interface CostSummary {
-  totalCostUsd: number;
-  totalSessions: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-}
-
-// ─── Stat Cards ─────────────────────────────────────────────────────
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SummaryCards({ data }: { data: CostSummary | null }) {
-  if (!data) return null;
-  return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <StatCard label="Total Cost" value={formatCost(data.totalCostUsd)} />
-      <StatCard label="Sessions" value={String(data.totalSessions)} />
-      <StatCard label="Input Tokens" value={formatTokens(data.totalInputTokens)} />
-      <StatCard label="Output Tokens" value={formatTokens(data.totalOutputTokens)} />
-    </div>
-  );
-}
-
-// ─── Users ──────────────────────────────────────────────────────────
+import { truncateId, type AdminUser } from "./admin-shared";
 
 function userLabel(u: AdminUser): string {
   return u.email ?? u.username ?? truncateId(u.clerkUserId);
@@ -68,33 +27,18 @@ function UsersTable({ users }: { users: AdminUser[] }) {
         <TableHeader>
           <TableRow>
             <TableHead>User</TableHead>
-            <TableHead className="text-right">Cost</TableHead>
-            <TableHead className="text-right">Sessions</TableHead>
-            <TableHead className="text-right">Input</TableHead>
-            <TableHead className="text-right">Output</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {users.map((u) => (
-            <TableRow key={u.clerkUserId} className="cursor-pointer">
+            <TableRow key={u.clerkUserId}>
               <TableCell>
                 <Link
                   to={`/admin/users/${encodeURIComponent(u.clerkUserId)}`}
-                  state={{ user: u }}
                   className="block text-foreground hover:underline"
                 >
                   {userLabel(u)}
                 </Link>
-              </TableCell>
-              <TableCell className="text-right font-mono">
-                {formatCost(u.costUsd)}
-              </TableCell>
-              <TableCell className="text-right">{u.sessions}</TableCell>
-              <TableCell className="text-right">
-                {formatTokens(u.inputTokens)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(u.outputTokens)}
               </TableCell>
             </TableRow>
           ))}
@@ -104,10 +48,7 @@ function UsersTable({ users }: { users: AdminUser[] }) {
   );
 }
 
-// ─── Page ───────────────────────────────────────────────────────────
-
 export function AdminPage() {
-  const [summary, setSummary] = useState<CostSummary | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,22 +56,17 @@ export function AdminPage() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [costsRes, usersRes] = await Promise.all([
-        fetch("/api/admin/costs"),
-        fetch("/api/admin/users"),
-      ]);
-      if (!costsRes.ok || !usersRes.ok) {
+      const res = await fetch("/api/admin/users");
+      if (!res.ok) {
         if (!cancelled) {
           setError("Failed to load admin data.");
           setLoading(false);
         }
         return;
       }
-      const costsData = (await costsRes.json()) as CostSummary;
-      const usersData = (await usersRes.json()) as AdminUser[];
+      const data = (await res.json()) as AdminUser[];
       if (!cancelled) {
-        setSummary(costsData);
-        setUsers(usersData);
+        setUsers(data);
         setLoading(false);
       }
     })();
@@ -175,7 +111,6 @@ export function AdminPage() {
       </header>
 
       <main className="container mx-auto space-y-8 px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-        <SummaryCards data={summary} />
         <UsersTable users={users} />
       </main>
     </div>

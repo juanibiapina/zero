@@ -1,25 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { UserButton } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  formatCost,
   formatDate,
-  formatTokens,
   truncateId,
-  type AdminUser,
   type AdminUserDetail,
   type GithubStatus,
-  type SessionCost,
 } from "./admin-shared";
 
 // ─── GitHub status ──────────────────────────────────────────────────
@@ -216,122 +204,10 @@ function AdminTaskCard({ userId }: { userId: string }) {
   );
 }
 
-// ─── Sessions ───────────────────────────────────────────────────────
-
-const PAGE_SIZE = 50;
-
-function SessionsTable({ userId }: { userId: string }) {
-  const [sessions, setSessions] = useState<SessionCost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-
-  const fetchPage = async (nextOffset: number): Promise<SessionCost[] | null> => {
-    const params = new URLSearchParams({
-      userId,
-      limit: String(PAGE_SIZE),
-      offset: String(nextOffset),
-    });
-    const res = await fetch(`/api/admin/costs/sessions?${params}`);
-    if (!res.ok) return null;
-    return (await res.json()) as SessionCost[];
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const data = await fetchPage(0);
-      if (cancelled || !data) {
-        if (!cancelled) setLoading(false);
-        return;
-      }
-      setSessions(data);
-      setHasMore(data.length === PAGE_SIZE);
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps -- fetchPage is stable per userId
-
-  const loadMore = () => {
-    const next = offset + PAGE_SIZE;
-    setOffset(next);
-    void (async () => {
-      setLoading(true);
-      const data = await fetchPage(next);
-      if (!data) {
-        setLoading(false);
-        return;
-      }
-      setSessions((prev) => [...prev, ...data]);
-      setHasMore(data.length === PAGE_SIZE);
-      setLoading(false);
-    })();
-  };
-
-  return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Sessions</h2>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Session</TableHead>
-            <TableHead>Model</TableHead>
-            <TableHead className="text-right">Cost</TableHead>
-            <TableHead className="text-right">In</TableHead>
-            <TableHead className="text-right">Out</TableHead>
-            <TableHead className="text-right">Cache R</TableHead>
-            <TableHead className="text-right">Cache W</TableHead>
-            <TableHead>Updated</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sessions.map((s) => (
-            <TableRow key={s.sessionId}>
-              <TableCell className="font-mono text-sm">
-                {truncateId(s.sessionId)}
-              </TableCell>
-              <TableCell className="text-sm">{s.model}</TableCell>
-              <TableCell className="text-right font-mono">
-                {formatCost(s.costUsd)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.inputTokens)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.outputTokens)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.cacheReadTokens)}
-              </TableCell>
-              <TableCell className="text-right">
-                {formatTokens(s.cacheWriteTokens)}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {formatDate(s.updatedAt)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {!loading && sessions.length === 0 && (
-        <p className="text-sm text-muted-foreground">No sessions found.</p>
-      )}
-      {hasMore && !loading && (
-        <Button variant="outline" size="sm" onClick={loadMore}>
-          Load more
-        </Button>
-      )}
-    </section>
-  );
-}
-
 // ─── Page ───────────────────────────────────────────────────────────
 
 export function UserDetailPage() {
   const { userId = "" } = useParams();
-  const location = useLocation();
-  const listRow = (location.state as { user?: AdminUser } | null)?.user ?? null;
 
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -353,7 +229,7 @@ export function UserDetailPage() {
     return () => { cancelled = true; };
   }, [userId]);
 
-  const title = detail?.email ?? detail?.username ?? listRow?.email ?? truncateId(userId);
+  const title = detail?.email ?? detail?.username ?? truncateId(userId);
 
   return (
     <div className="min-h-screen bg-background">
@@ -380,37 +256,8 @@ export function UserDetailPage() {
             <p className="font-mono text-sm text-muted-foreground">
               {detail.clerkUserId}
             </p>
-            {listRow && (
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Cost</CardTitle>
-                  </CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{formatCost(listRow.costUsd)}</p></CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Sessions</CardTitle>
-                  </CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{listRow.sessions}</p></CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Input</CardTitle>
-                  </CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{formatTokens(listRow.inputTokens)}</p></CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Output</CardTitle>
-                  </CardHeader>
-                  <CardContent><p className="text-2xl font-bold">{formatTokens(listRow.outputTokens)}</p></CardContent>
-                </Card>
-              </div>
-            )}
             <StatusCard detail={detail} />
             <AdminTaskCard userId={detail.clerkUserId} />
-            <SessionsTable userId={detail.clerkUserId} />
           </>
         )}
       </main>
