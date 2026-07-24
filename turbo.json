@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["GITHUB_TOKEN", "CLOUDFLARE_API_TOKEN", "CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"],
+  "globalEnv": ["GITHUB_TOKEN", "CLOUDFLARE_API_TOKEN", "CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY", "VITE_CLERK_PUBLISHABLE_KEY"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
