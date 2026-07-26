@@ -41,6 +41,19 @@ connector (Workers Builds). No manual step is needed; after pushing,
 wait for the Cloudflare build to finish. GitHub Actions CI only lints,
 typechecks, tests, and runs a deploy dry-run; it does not deploy.
 
+Each of the three deployable Workers has its own Workers Builds git
+connector on `juanibiapina/zero` (branch `main`, root dir `/`, build
+`pnpm run build`):
+
+- `zero-api` (agent) — deploy `pnpm -F @zero/agent-api run deploy`
+- `zerovault-api` (vault + errors dashboard) — deploy `pnpm -F @zero/dashboard-api run deploy`
+- `zero-landing` (landing site, `zeroapps.dev`) — deploy `pnpm -F @zero/landing run deploy`
+
+The `zero-landing` connector was attached 2026-07-26; before that, landing was
+deploy-on-push for the first time only after this change (it had been bootstrapped
+and updated via manual `wrangler deploy`). See
+`docs/plans/workers-builds-investigation.md`.
+
 To deploy manually (e.g. from a branch, without pushing):
 ```bash
 gob run bin/deploy
@@ -72,12 +85,12 @@ Packages:
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 - **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
 - **Dashboard frontend:** `apps/dashboard-web` (`@zero/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
-- **Landing site:** `apps/landing` (`@zero/landing`) is the asset-only Worker for `zeroapps.dev`. It has no runtime secrets, API, or Worker script.
+- **Landing site:** `apps/landing` (`@zero/landing`) is the asset-only Worker `zero-landing` for `zeroapps.dev`. It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
 - **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
 
-Both products auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connector, each Worker updated in place.
+All three deployable Workers (`zero-api`, `zerovault-api`, `zero-landing`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place.
 
 Expected dev ports:
 
