@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-26: The Zero landing site now ships a robots.txt, sitemap, and social preview cards, so search engines can crawl and index it and shared links show a rich preview.
+
 - 2026-07-24: Zero now has a public home at zeroapps.com, with links to Vault and Errors.
 
 - 2026-07-24: The previous Vault API address is retired. Use zerovault-cli@0.2.2 or later for the new public API.
