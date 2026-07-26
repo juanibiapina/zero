@@ -43,15 +43,28 @@ fallback):
 `index.html` also carries Open Graph / Twitter card meta tags and a JSON-LD
 `Organization` + `WebSite` block for rich search and social previews.
 
-### Google Search Console verification (seam, not yet configured)
+### Google Search Console verification (configured)
 
-The site is not yet registered in Google Search Console. Two seams when it is:
+`zeroapps.dev` is registered in Google Search Console as a **Domain property**
+(`sc-domain:zeroapps.dev`), owned by the `juanibiapina@gmail.com` Google account.
+Ownership is verified by the DNS TXT method (domain-wide, covers all subdomains
+and both protocols).
 
-- **DNS TXT** on the `zeroapps.dev` Cloudflare zone
-  (`google-site-verification=…`). Zone-level, no code change, verifies the whole
-  domain. Preferred.
-- **Meta tag**: `<meta name="google-site-verification" content="…">` in the
-  `index.html` head. Requires a deploy per token.
+The verification TXT record lives on the `zeroapps.dev` Cloudflare zone:
+
+- name `zeroapps.dev` (zone root)
+- content `google-site-verification=hQox-dN1Py2KhUxpTk5wHPL3OJ8hADpeovBUoO-cLck`
+
+**Do not delete this TXT record.** Removing it drops Search Console verification
+and the property loses access to indexing, sitemaps, and performance data.
+
+The `https://zeroapps.dev/sitemap.xml` sitemap is submitted in the property
+(status Success). The homepage `https://zeroapps.dev/` was submitted for
+indexing (priority crawl queue).
+
+Alternative seam if the DNS record ever needs replacing with an in-code token:
+a `<meta name="google-site-verification" content="…">` in the `index.html`
+head. Requires a deploy per token, so DNS TXT is preferred.
 
 ## Build and deploy
 
