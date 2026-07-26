@@ -42,17 +42,20 @@ wait for the Cloudflare build to finish. GitHub Actions CI only lints,
 typechecks, tests, and runs a deploy dry-run; it does not deploy.
 
 Each of the three deployable Workers has its own Workers Builds git
-connector on `juanibiapina/zero` (branch `main`, root dir `/`, build
-`pnpm run build`):
+connector on `juanibiapina/zero` (branch `main`, root dir `/`):
 
-- `zero-api` (agent) — deploy `pnpm -F @zero/agent-api run deploy`
-- `zerovault-api` (vault + errors dashboard) — deploy `pnpm -F @zero/dashboard-api run deploy`
-- `zero-landing` (landing site, `zeroapps.dev`) — deploy `pnpm -F @zero/landing run deploy`
+- `zero-api` (agent) — build `pnpm run build`, deploy `pnpm -F @zero/agent-api run deploy`
+- `zerovault-api` (vault + errors dashboard) — build `pnpm run build`, deploy `pnpm -F @zero/dashboard-api run deploy`
+- `zero-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zero/landing run build`, deploy `pnpm -F @zero/landing run deploy`
+
+`zero-api` and `zerovault-api` build the whole monorepo (`pnpm run build`) and set
+`VITE_CLERK_PUBLISHABLE_KEY` as a build variable, which the dashboard build needs.
+`zero-landing` has no Clerk build var, so its build is scoped to the landing package
+(`pnpm -F @zero/landing run build`) to avoid pulling in the dashboard build.
 
 The `zero-landing` connector was attached 2026-07-26; before that, landing was
-deploy-on-push for the first time only after this change (it had been bootstrapped
-and updated via manual `wrangler deploy`). See
-`docs/plans/workers-builds-investigation.md`.
+deployed only via manual `wrangler deploy` (it had been bootstrapped that way and
+never wired into Workers Builds). See `docs/plans/workers-builds-investigation.md`.
 
 To deploy manually (e.g. from a branch, without pushing):
 ```bash

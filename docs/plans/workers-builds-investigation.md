@@ -1,11 +1,15 @@
 # Workers Builds auto-deploy investigation
 
 > **Status (2026-07-26): resolved.** A Workers Builds git connector was attached to
-> `zero-landing` (repo `juanibiapina/zero`, branch `main`, root dir `/`, build
-> `pnpm run build`, deploy `pnpm -F @zero/landing run deploy`), mirroring the
-> `zero-api` and `zerovault-api` connectors. Pushing a landing change to `main` now
-> auto-deploys `zero-landing`. AGENTS.md updated accordingly. This file is kept as
-> the evidence record for why the connector was missing.
+> `zero-landing` (repo `juanibiapina/zero`, branch `main`, root dir `/`, deploy
+> `pnpm -F @zero/landing run deploy`), mirroring the `zero-api` and `zerovault-api`
+> connectors. The build command is scoped to the landing package
+> (`pnpm -F @zero/landing run build`) rather than the whole-repo `pnpm run build` the
+> other two use: whole-repo build pulls in `@zero/dashboard-web`, which fails without
+> `VITE_CLERK_PUBLISHABLE_KEY` (a build var the API connectors set but landing has no
+> reason to). Pushing a landing change to `main` now auto-deploys `zero-landing`.
+> AGENTS.md updated accordingly. This file is kept as the evidence record for why the
+> connector was missing.
 
 Date: 2026-07-26
 Question: why did pushing landing-only commit `e9f27fb` to `main` not auto-deploy
