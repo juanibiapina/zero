@@ -15,8 +15,12 @@ The current published version is `0.2.2`. Run it without installing:
 pnpm dlx zerovault-cli@0.2.2 --help
 ```
 
-The command is `zv`. If you install it globally you can drop the `pnpm dlx`
-prefix and just run `zv …`.
+The command is `zv`. Install it globally to drop the `pnpm dlx` prefix and run
+`zv …` directly:
+
+```bash
+npm i -g zerovault-cli@0.2.2
+```
 
 :::note
 `zv --version` prints `0.2.1` even on the `0.2.2` package. It is a stale version
@@ -26,7 +30,9 @@ install or run it.
 
 ## Authenticate
 
-The CLI needs your API key. The simplest way is an environment variable:
+The CLI needs an API key. Create one in the dashboard under **ZeroVault → API
+Keys** (see [Getting started](/vault/getting-started/#4-create-an-api-key)) and
+copy it. The simplest way to pass it is an environment variable:
 
 ```bash
 export ZEROVAULT_API_KEY=zv_your_key_here
@@ -102,6 +108,21 @@ DB_URL=postgres://localhost
 
 `-f json` emits a flat `{ "KEY": "VALUE" }` object, which is what
 [wrangler secret bulk](/vault/workers/) expects.
+
+## Manage API keys
+
+Once authenticated, the CLI creates and revokes the same organization-scoped keys
+as the dashboard. Your first key still has to come from the dashboard, since
+`zv keys` needs a key to authenticate with.
+
+```bash
+zv keys create -l ci            # prints the new key once; save it
+zv keys list                    # id, prefix, label, created date
+zv keys revoke <id>             # revoke by id from the list
+```
+
+A created key is shown once, same as in the dashboard. Save it immediately; if you
+lose it, revoke it and create another.
 
 ## Back up the whole vault
 

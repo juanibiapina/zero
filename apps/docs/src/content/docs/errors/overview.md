@@ -12,17 +12,20 @@ You POST individual **reports** (one per occurrence). ZeroErrors groups reports
 that look like the same problem into a single **issue**, so a thousand
 occurrences of one bug show up as one issue with a count, not a thousand rows.
 
-Grouping is by project, a normalized version of the message, and the first line of
-the stack trace. Normalization masks the parts that change between occurrences (
-UUIDs, long hex strings, and plain numbers), so repeats of the same error collapse
-together even when they carry different IDs.
+Grouping is by project, a normalized version of the message, and the first stack
+frame. The frame is the first line of the stack that begins with `at ` (the error
+type and message line above it is skipped); if the report has no stack, that part
+is empty and grouping falls back to project and message alone. Two reports group
+together when all three parts match. Normalization masks the parts that change
+between occurrences (UUIDs, long hex strings, and plain numbers), so repeats of
+the same error collapse together even when they carry different IDs.
 
 An issue tracks:
 
 - `count`, `firstSeenAt`, `lastSeenAt`
-- `level` — `error`, `warning`, or `info` (defaults to `error`)
-- `status` — `open` or `resolved`
-- `title` — the first line of the message
+- `level`: `error`, `warning`, or `info` (defaults to `error`)
+- `status`: `open` or `resolved`
+- `title`: the first line of the message
 
 ## The console
 

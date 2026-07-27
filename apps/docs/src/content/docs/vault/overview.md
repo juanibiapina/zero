@@ -27,14 +27,14 @@ Organization
 
 ## Where things live
 
-- **Dashboard:** [dash.zeroapps.dev/vault](https://dash.zeroapps.dev/vault) —
+- **Dashboard:** [dash.zeroapps.dev/vault](https://dash.zeroapps.dev/vault):
   projects, environments, secrets, and API keys.
-- **Public API:** `https://api.zeroapps.dev/vault/v1` — Bearer-authenticated with
+- **Public API:** `https://api.zeroapps.dev/vault/v1`, Bearer-authenticated with
   a `zv_…` key.
 - **CLI:** `zv`, published as `zerovault-cli` on npm.
 
 ## Next
 
-- [Getting started](/vault/getting-started/) — the dashboard walkthrough.
-- [CLI](/vault/cli/) — install `zv` and script your secrets.
-- [Cloudflare Workers](/vault/workers/) — pull secrets into a Worker deploy.
+- [Getting started](/vault/getting-started/): the dashboard walkthrough.
+- [CLI](/vault/cli/): install `zv` and script your secrets.
+- [Cloudflare Workers](/vault/workers/): pull secrets into a Worker deploy.

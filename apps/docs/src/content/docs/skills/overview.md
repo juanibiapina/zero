@@ -8,6 +8,5 @@ head:
       content: noindex, nofollow
 ---
 
-Installable agent skills for ZeroVault and ZeroErrors will be listed here.
-This section will later be generated from the repository's top-level
-`skills/` directory.
+ZeroVault and ZeroErrors will ship installable agent skills. None are published
+yet.

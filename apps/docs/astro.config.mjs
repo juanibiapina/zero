@@ -28,10 +28,6 @@ export default defineConfig({
             { label: "Worker integration", slug: "errors/worker-integration" },
           ],
         },
-        {
-          label: "Skills",
-          items: [{ label: "Overview", slug: "skills/overview" }],
-        },
       ],
     }),
   ],

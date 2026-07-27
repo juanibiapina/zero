@@ -8,9 +8,12 @@ dashboard.
 
 ## 1. Get an API key
 
-ZeroErrors uses the same key as ZeroVault. Create one under **ZeroVault → API
-Keys** and copy it (it is shown once). See
-[ZeroVault getting started](/vault/getting-started/) for the walkthrough.
+ZeroErrors uses the same key as ZeroVault, so you only need the sign-in and API
+Keys steps: sign in at [dash.zeroapps.dev](https://dash.zeroapps.dev), open
+**API Keys** in the sidebar, and click **Create**. Copy the key when it is shown
+(it is shown once). The full walkthrough is in
+[ZeroVault getting started](/vault/getting-started/#4-create-an-api-key), but you
+can skip the project and secret steps.
 
 ```bash
 export ZEROVAULT_API_KEY=zv_your_key_here
@@ -52,16 +55,16 @@ The body of a report:
 |---|---|---|
 | `project` | yes | 1–200 characters. Groups and labels the issue. |
 | `message` | yes | 1–10000 characters. Its first line becomes the issue title. |
-| `stack` | no | Up to 50000 characters. Its first line helps group the issue. |
+| `stack` | no | Up to 50000 characters. Its first `at …` frame helps group the issue. |
 | `level` | no | `error`, `warning`, or `info`. Defaults to `error`. |
 | `context` | no | Any JSON object of extra data. |
 
 ## Errors you may see
 
-- **401** `{"error":"Invalid API key"}` — the key is missing or wrong.
-- **400** `{"error":"Invalid error report"}` — the body is malformed or missing a
+- **401** `{"error":"Invalid API key"}`: the key is missing or wrong.
+- **400** `{"error":"Invalid error report"}`: the body is malformed or missing a
   required field (checked only once the key is valid).
-- **429** with a `Retry-After` header — you are being rate-limited; wait and
+- **429** with a `Retry-After` header: you are being rate-limited; wait and
   retry.
 
 ## Next
