@@ -5,9 +5,10 @@
 // hides the wire placement behind named intent so run.ts and interface.ts
 // express *what* to cache, not where the field goes. See docs/caching.md.
 //
-// Four is the API maximum, and Zero spends all four: tools, system, the last
-// stable history message, and the current user message. The tool loop must not
-// add more as it appends steps.
+// Four is the API maximum, and Zero spends all four: tools, system, a caller
+// anchor (the interface agent's last stable history message), and the loop's
+// sliding breakpoint on the growing tail. The tool loop advances the sliding
+// breakpoint to the new tail each step instead of accumulating more.
 
 import type {
   AgentMessage,
@@ -67,4 +68,29 @@ export const markCacheBreakpoint = (
       { ...last, cache_control: cacheControl(ttl) },
     ],
   };
+};
+
+// The loop-owned sliding message-region breakpoint. Called on a per-request
+// snapshot of the messages array before every step: it marks the LAST message
+// so a cache write always sits within Anthropic's 20-block lookback of the
+// growing tail (see docs/caching.md). Because it advances to the new tail each
+// step, step N reads everything through step N-1 and writes only step N-1's
+// delta — the write-then-read pattern that caches a growing conversation.
+//
+// Pure: returns a new array and marks a clone of the last message, so the
+// runner's persisted `messages` and the model's verbatim round-tripped blocks
+// stay clean. Exactly one sliding breakpoint is added, at the tail; any caller
+// anchor breakpoint earlier in the array is preserved untouched. This keeps the
+// per-request budget within the 4-breakpoint API max (tools + system + anchor +
+// sliding). An empty array is returned unchanged (nothing to mark).
+export const slideMessageBreakpoint = (
+  messages: AgentMessage[],
+  ttl?: CacheTtl,
+): AgentMessage[] => {
+  if (messages.length === 0) return messages;
+  const lastIdx = messages.length - 1;
+  return [
+    ...messages.slice(0, lastIdx),
+    markCacheBreakpoint(messages[lastIdx], ttl),
+  ];
 };

@@ -4,8 +4,9 @@ import {
   cachedSystem,
   markCacheBreakpoint,
   markLastTool,
+  slideMessageBreakpoint,
 } from "./cache";
-import type { AgentToolDefinition } from "./protocol";
+import type { AgentMessage, AgentToolDefinition } from "./protocol";
 
 const definition = (name: string): AgentToolDefinition => ({
   name,
@@ -70,5 +71,81 @@ describe("markCacheBreakpoint", () => {
     const blocks = marked.content as Array<{ cache_control?: unknown }>;
     expect(blocks[0].cache_control).toBeUndefined();
     expect(blocks[1].cache_control).toEqual({ type: "ephemeral" });
+  });
+});
+
+describe("slideMessageBreakpoint", () => {
+  // The last content block of a message carries the breakpoint, so a message is
+  // "marked" iff its last block has cache_control.
+  const isMarked = (m: AgentMessage): boolean => {
+    if (typeof m.content === "string") return false;
+    const last = m.content[m.content.length - 1];
+    return !!(last && "cache_control" in last && last.cache_control);
+  };
+  const markedIndexes = (ms: AgentMessage[]): number[] =>
+    ms.flatMap((m, i) => (isMarked(m) ? [i] : []));
+
+  const convo = (n: number): AgentMessage[] =>
+    Array.from({ length: n }, (_, i) => ({
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: `m${i}`,
+    }));
+
+  it("marks the last message and no other", () => {
+    const marked = slideMessageBreakpoint(convo(3));
+    expect(markedIndexes(marked)).toEqual([2]);
+  });
+
+  it("lands on index N-1 for a list of N messages", () => {
+    for (const n of [1, 2, 5, 21]) {
+      expect(markedIndexes(slideMessageBreakpoint(convo(n)))).toEqual([n - 1]);
+    }
+  });
+
+  it("advances the breakpoint to the new tail as the list grows", () => {
+    // Simulate the tool loop appending an assistant + tool_result each step.
+    let messages = convo(1);
+    const marks: number[] = [];
+    for (let step = 0; step < 4; step++) {
+      marks.push(markedIndexes(slideMessageBreakpoint(messages))[0]);
+      messages = [
+        ...messages,
+        { role: "assistant", content: `a${step}` },
+        { role: "user", content: `t${step}` },
+      ];
+    }
+    // Each step's breakpoint sits on the current tail and strictly advances.
+    expect(marks).toEqual([0, 2, 4, 6]);
+  });
+
+  it("preserves a caller anchor and never exceeds the 4-breakpoint budget", () => {
+    // Interface shape: an anchor on the second-to-last message. tools + system
+    // spend 2 breakpoints, so the messages region may spend at most 2 more.
+    const withAnchor: AgentMessage[] = [
+      { role: "user", content: "old" },
+      markCacheBreakpoint({ role: "assistant", content: "stable" }),
+      { role: "user", content: "current" },
+    ];
+    const marked = slideMessageBreakpoint(withAnchor);
+    // Anchor (index 1) preserved, sliding added on the tail (index 2).
+    expect(markedIndexes(marked)).toEqual([1, 2]);
+    const messageBreakpoints = marked
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .filter((b) => "cache_control" in b && b.cache_control).length;
+    expect(2 + messageBreakpoints).toBeLessThanOrEqual(4);
+  });
+
+  it("returns an empty list unchanged and does not mutate the input", () => {
+    expect(slideMessageBreakpoint([])).toEqual([]);
+    const input = convo(2);
+    const snapshot = JSON.stringify(input);
+    slideMessageBreakpoint(input);
+    expect(JSON.stringify(input)).toBe(snapshot);
+  });
+
+  it("passes a ttl through to the marked block", () => {
+    const marked = slideMessageBreakpoint(convo(1), "1h");
+    const block = (marked[0].content as Array<{ cache_control?: unknown }>)[0];
+    expect(block.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
   });
 });

@@ -164,14 +164,19 @@ export const createModelFactory = async (
         // Content-free: state and token counts only, never prompts, responses,
         // or response ids. The cache read/write counts ride along because a
         // divergence state is chain-relative and can coexist with a full cache
-        // hit (docs/caching.md).
+        // hit (docs/caching.md). `input_tokens` (uncached, full-price) and the
+        // loop `step` make the write-then-read pattern readable per agent per
+        // call: on a working message-region cache, read grows step-over-step
+        // while input stays small.
         log("cache_diagnostic", {
           agent,
+          ...(request.step !== undefined ? { step: request.step } : {}),
           state: diagnostic.state,
           ...("missedInputTokens" in diagnostic &&
           diagnostic.missedInputTokens !== undefined
             ? { cache_missed_input_tokens: diagnostic.missedInputTokens }
             : {}),
+          input_tokens: usage.inputTokens,
           cache_read_tokens: usage.cacheReadTokens,
           cache_write_tokens: usage.cacheWriteTokens,
         });

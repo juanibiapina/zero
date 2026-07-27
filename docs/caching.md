@@ -85,20 +85,25 @@ In cache order:
    Instructions shared across users; pinned tail makes the block per-user,
    cross-turn while unchanged. Injected by `cachedSystem` in `runAgent`, which
    sends `system` as a text block carrying `cache_control`.
-3. **Last stable history message** — default 5m. The previous turn's final
-   block; byte-identical next turn, so this is the write that produces the
-   cross-turn history read. Omitted when history is empty.
-4. **Current user message** (carries the volatile context) — default 5m. Extends
-   the write to cover the new turn for the within-run loop; **not** relied on for
-   cross-turn reuse.
+3. **Cross-turn anchor: last stable history message** — default 5m. The previous
+   turn's final block; byte-identical next turn, so this is the write that
+   produces the cross-turn history read. Set by `interface.ts`; omitted when
+   history is empty.
+4. **Loop-owned sliding tail** — default 5m. Owned by `runAgent`, not the
+   caller: before every step it marks the **last message of a per-request
+   snapshot** (`slideMessageBreakpoint` in `cache.ts`), advancing the breakpoint
+   to the new tail as the tool loop appends steps. This keeps a cache write
+   within Anthropic's 20-block lookback of the growing tail, so step N reads
+   everything through step N-1 and writes only the delta. The persisted messages
+   are never mutated, so no breakpoints accumulate.
 
-Breakpoints 3 and 4 form a **sliding window** (`interface.ts`). The cross-turn
-win requires a write at a byte-stable end-of-history boundary. A single
-breakpoint on the current message does not do this: that block carries the
-volatile context and mutates every turn (the anchor is stripped when the message
-becomes history), so it is never re-read. The stable-message breakpoint is what
-yields the cross-turn read; the current-message breakpoint keeps the newest turn
-warm for the loop.
+Breakpoints 3 and 4 form a **sliding window**. The cross-turn win requires a
+write at a byte-stable end-of-history boundary. A single breakpoint on the
+current message does not do this: that block carries the volatile context and
+mutates every turn (the anchor is stripped when the message becomes history), so
+it is never re-read. The stable-message anchor is what yields the cross-turn
+read; the loop's sliding tail keeps the newest turn (and every appended tool
+step) warm for the within-run loop.
 
 Empirically verified (live, BYOK key, `claude-sonnet-4-6`, two-turn
 conversation):
@@ -115,7 +120,13 @@ on prefixes that often won't be reused.
 
 The research, writer, and onboarding agents run the same `runAgent` machine, so
 they get tiers 1-2 (cached system + tools) for free. They use the single-`prompt`
-path, so they have no messages-region breakpoints.
+path with no caller anchor, but the loop's sliding tail breakpoint (tier 4) now
+caches their growing message region too: on a multi-step research turn each step
+reads the accumulated context from cache and writes only its delta, instead of
+re-billing the whole conversation at full price every step (the pre-fix defect
+was `cache_read` pinned at the ~1.7k head with `cache_write = 0` across the loop).
+A prompt-only agent thus spends tools + system + one sliding breakpoint (3 of 4);
+the interface agent spends all 4 (tools + system + anchor + sliding).
 
 ## Cache diagnostics
 
@@ -123,9 +134,12 @@ Every request carries the `cache-diagnosis-2026-04-07` beta, and every request
 after the first in a run names the previous response with
 `diagnostics.previous_message_id`. The response reports how this request's
 prefix diverged from that one. `agents/model.ts` logs a content-free
-`cache_diagnostic` line per response: `agent`, `state`,
-`cache_missed_input_tokens` (when the state carries one), plus this response's
-own `cache_read_tokens` / `cache_write_tokens`.
+`cache_diagnostic` line per response: `agent`, `step` (the zero-based loop
+index), `state`, `cache_missed_input_tokens` (when the state carries one), plus
+this response's own `input_tokens` (uncached, full-price), `cache_read_tokens`,
+and `cache_write_tokens`. On a working message-region cache, `cache_read_tokens`
+grows step-over-step while `input_tokens` stays small; the broken case shows a
+large constant `input_tokens` and a tiny constant read.
 
 **A miss reason is chain-relative, not a cache miss.** It answers "how does this
 request's prefix differ from the request I named", never "was the cache used".

@@ -22,7 +22,7 @@ import {
   type ToolResultContent,
   type ToolUseBlock,
 } from "./protocol";
-import { cachedSystem, markLastTool } from "./cache";
+import { cachedSystem, markLastTool, slideMessageBreakpoint } from "./cache";
 
 // Shared step cap for every agent (interface and research). The cap is a
 // runaway-loop guard, not an expected stopping point: the model normally
@@ -208,8 +208,9 @@ export const runAgent = async (
 
   // Cache order is tools -> system -> messages. Mark the last tool (which covers
   // every schema before it) and the system block; both use a 1h TTL because they
-  // are shared across users and stay permanently warm. Any messages-region
-  // breakpoints are set by the caller and preserved here.
+  // are shared across users and stay permanently warm. The messages region gets
+  // a loop-owned sliding breakpoint per step (below); any caller anchor
+  // breakpoint set on an earlier message is preserved.
   const definitions = toToolDefinitions(tools);
   const wireTools = cache ? markLastTool(definitions, "1h") : definitions;
   const system: TextBlock[] = cache
@@ -227,13 +228,21 @@ export const runAgent = async (
   let previousMessageId: string | null = null;
 
   for (let step = 0; step < maxSteps; step++) {
+    // Snapshot: the loop keeps appending to `messages`, and the request must not
+    // mutate under the adapter after it is handed over. When caching is on, the
+    // snapshot also carries the sliding message-region breakpoint on its tail
+    // (5m TTL, the default), advancing to the new last message every step so a
+    // cache write stays within the 20-block lookback of the growing tail. The
+    // persisted `messages` array is never mutated, so no breakpoints accumulate.
+    const requestMessages = cache
+      ? slideMessageBreakpoint(messages)
+      : [...messages];
     const response = await input.model.generate({
       system,
-      // Snapshot: the loop keeps appending to `messages`, and the request must
-      // not mutate under the adapter after it is handed over.
-      messages: [...messages],
+      messages: requestMessages,
       tools: wireTools,
       previousMessageId,
+      step,
     });
     previousMessageId = response.id;
     stepUsages.push(response.usage);

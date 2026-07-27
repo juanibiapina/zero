@@ -48,7 +48,13 @@ describe("runAdminTaskAgent", () => {
   it("passes the submitted prompt verbatim to the model", async () => {
     let prompt = "";
     const model = capturingModel((request) => {
-      prompt = request.messages.at(-1)?.content as string;
+      // The loop wraps the prompt into a text block carrying the sliding cache
+      // breakpoint, so read the text out of the block rather than as a string.
+      const content = request.messages.at(-1)?.content;
+      prompt =
+        typeof content === "string"
+          ? content
+          : ((content?.[0] as { text?: string })?.text ?? "");
       return { content: [{ type: "text", text: "Done." }] };
     });
 

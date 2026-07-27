@@ -127,6 +127,10 @@ export interface AgentModelRequest {
   // divergence reporting. `null` opts in with nothing to compare against;
   // `undefined` opts out entirely.
   previousMessageId?: string | null;
+  // Zero-based index of this call within the run's tool loop, for per-step cache
+  // diagnostics. Lets the adapter's cache_diagnostic line carry the step so the
+  // write-then-read pattern is readable per agent per call.
+  step?: number;
 }
 
 export interface AgentModelResponse {

@@ -331,13 +331,14 @@ export const runInterfaceAgent = async (
     role: "user",
     content: `${interfaceContext(now, timezone)}\n\n${convo[lastIdx].content as string}`,
   };
-  // Sliding-window breakpoints in the messages region. The last stable message
+  // Cross-turn anchor breakpoint in the messages region. The last stable message
   // (previous turn's final block) is byte-identical next turn, so it is the
-  // write that yields the cross-turn history read; the current message (carrying
-  // the volatile context) only keeps the new turn warm for the within-run loop.
-  // Empty history collapses to a single current message -> one breakpoint.
+  // write that yields the cross-turn history read. The current message's tail is
+  // marked by the runner's loop-owned sliding breakpoint (see run.ts), so it is
+  // not marked here — that keeps the per-request budget at 4 (tools + system +
+  // anchor + sliding). Empty history has no stable message to anchor, and the
+  // loop's sliding breakpoint covers the single current message.
   if (lastIdx >= 1) convo[lastIdx - 1] = markCacheBreakpoint(convo[lastIdx - 1]);
-  convo[lastIdx] = markCacheBreakpoint(convo[lastIdx]);
 
   const { text, finishReason, steps, messages, usage, stepUsages } =
     await runAgent({
