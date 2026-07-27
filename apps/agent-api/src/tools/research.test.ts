@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildResearchTool } from "./research";
+import { buildResearchTool, RESEARCH_MAX_STEPS } from "./research";
 import { scriptedModel } from "../agents/mock-model";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
@@ -19,7 +19,7 @@ const runResearch = (
 };
 
 describe("buildResearchTool", () => {
-  it("searches, writes findings to a new topic, and returns a handle naming it", async () => {
+  it("returns the sourced findings report as the tool result and writes no topic", async () => {
     const store = new MemoryStore();
     const accessed = new Set<string>();
     const search = createMemorySearch([
@@ -28,22 +28,9 @@ describe("buildResearchTool", () => {
     const model = scriptedModel([
       { tools: [{ name: "web_search", input: { query: "Mars distance" } }] },
       {
-        tools: [
-          { name: "create_topic", input: { name: "Mars", description: "the planet" } },
-        ],
+        text:
+          "- Mars is far. Source: https://ex.com/mars\n\nSummary: Mars is distant.",
       },
-      {
-        tools: [
-          {
-            name: "update_topic",
-            input: {
-              name: "Mars",
-              body: "Mars is far. Source: https://ex.com/mars",
-            },
-          },
-        ],
-      },
-      { text: "Wrote topic 'Mars'. Mars is far. Source: https://ex.com/mars" },
     ]);
 
     const tools = buildResearchTool({
@@ -55,62 +42,28 @@ describe("buildResearchTool", () => {
     });
     const result = await runResearch(tools, { prompt: "how far is Mars" });
 
-    expect(store.getTopic("Mars")?.body).toBe(
-      "Mars is far. Source: https://ex.com/mars",
-    );
-    expect([...accessed]).toEqual(["Mars"]);
-    expect(result).toContain("Saved to topic 'Mars'.");
+    // Research authors nothing; the writer persists findings afterward.
+    expect(store.listTopics()).toHaveLength(0);
+    // The tool result IS the findings text, with sources inline.
     expect(result).toContain("Source: https://ex.com/mars");
+    expect(result).toBe(
+      "- Mars is far. Source: https://ex.com/mars\n\nSummary: Mars is distant.",
+    );
   });
 
-  it("updates the existing topic in place on repeat research, preserving prior findings", async () => {
+  it("has no write tools: a create_topic/update_topic call is rejected and writes nothing", async () => {
     const store = new MemoryStore();
-    store.createTopic("Mars", "the planet");
-    store.updateTopicBody("Mars", "Mars is far. Source: https://ex.com/mars");
     const accessed = new Set<string>();
-    const search = createMemorySearch([
-      { title: "Mars moons", url: "https://ex.com/moons", snippet: "two" },
-    ]);
+    // The scripted model tries to write; the runner should return an unknown-tool
+    // error for each, then finish on the text step, having stored nothing.
     const model = scriptedModel([
-      { tools: [{ name: "get_topic", input: { name: "Mars" } }] },
-      { tools: [{ name: "web_search", input: { query: "Mars moons" } }] },
       {
-        tools: [
-          {
-            name: "update_topic",
-            input: {
-              name: "Mars",
-              body:
-                "Mars is far. Source: https://ex.com/mars\n\n" +
-                "Mars has two moons. Source: https://ex.com/moons",
-            },
-          },
-        ],
+        tools: [{ name: "create_topic", input: { name: "Mars", description: "x" } }],
       },
-      { text: "Updated topic 'Mars'." },
-    ]);
-
-    const tools = buildResearchTool({
-      model,
-      store,
-      search,
-      fetcher: createMemoryFetcher(),
-      accessed,
-    });
-    await runResearch(tools, { prompt: "Mars moons", topic: "Mars" });
-
-    expect(store.listTopics()).toHaveLength(1);
-    const body = store.getTopic("Mars")?.body ?? "";
-    expect(body).toContain("https://ex.com/mars");
-    expect(body).toContain("https://ex.com/moons");
-    expect([...accessed]).toEqual(["Mars"]);
-  });
-
-  it("creates a fallback topic when the agent writes none", async () => {
-    const store = new MemoryStore();
-    const accessed = new Set<string>();
-    const model = scriptedModel([
-      { text: "Mars is far. Source: https://ex.com/mars" },
+      {
+        tools: [{ name: "update_topic", input: { name: "Mars", body: "x" } }],
+      },
+      { text: "- Mars is far. Source: https://ex.com/mars" },
     ]);
 
     const tools = buildResearchTool({
@@ -122,14 +75,39 @@ describe("buildResearchTool", () => {
     });
     const result = await runResearch(tools, { prompt: "how far is Mars" });
 
-    expect(store.listTopics()).toHaveLength(1);
-    const topic = store.getTopic("how far is Mars");
-    expect(topic?.body).toBe("Mars is far. Source: https://ex.com/mars");
-    expect([...accessed]).toEqual(["how far is Mars"]);
-    expect(result).toContain("Saved to topic 'how far is Mars'.");
+    expect(store.listTopics()).toHaveLength(0);
+    expect(result).toContain("Source: https://ex.com/mars");
   });
 
-  it("reads a full page with read_page and records its content", async () => {
+  it("records topics it read via get_topic in the accessed set without modifying them", async () => {
+    const store = new MemoryStore();
+    store.createTopic("Mars", "the planet");
+    store.updateTopicBody("Mars", "Mars is far. Source: https://ex.com/mars");
+    const accessed = new Set<string>();
+    const model = scriptedModel([
+      { tools: [{ name: "get_topic", input: { name: "Mars" } }] },
+      { text: "- Mars has two moons. Source: https://ex.com/moons" },
+    ]);
+
+    const tools = buildResearchTool({
+      model,
+      store,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      accessed,
+    });
+    const result = await runResearch(tools, { prompt: "Mars moons", topic: "Mars" });
+
+    // The read topic is surfaced to the writer via accessed.
+    expect([...accessed]).toEqual(["Mars"]);
+    // Research did not touch the stored body.
+    expect(store.getTopic("Mars")?.body).toBe(
+      "Mars is far. Source: https://ex.com/mars",
+    );
+    expect(result).toContain("Source: https://ex.com/moons");
+  });
+
+  it("reads a full page with read_page and can rely on its content", async () => {
     const store = new MemoryStore();
     const accessed = new Set<string>();
     const search = createMemorySearch([
@@ -141,32 +119,14 @@ describe("buildResearchTool", () => {
     const model = scriptedModel([
       { tools: [{ name: "web_search", input: { query: "Mars distance" } }] },
       { tools: [{ name: "read_page", input: { url: "https://ex.com/mars" } }] },
-      {
-        tools: [
-          {
-            name: "create_topic",
-            input: { name: "Mars", description: "the planet" },
-          },
-        ],
-      },
-      {
-        tools: [
-          {
-            name: "update_topic",
-            input: {
-              name: "Mars",
-              body: "Mars is 225 million km away. Source: https://ex.com/mars",
-            },
-          },
-        ],
-      },
-      { text: "Wrote topic 'Mars'." },
+      { text: "- Mars is 225 million km away. Source: https://ex.com/mars" },
     ]);
 
     const tools = buildResearchTool({ model, store, search, fetcher, accessed });
-    await runResearch(tools, { prompt: "how far is Mars" });
+    const result = await runResearch(tools, { prompt: "how far is Mars" });
 
-    expect(store.getTopic("Mars")?.body).toContain("225 million km");
+    expect(result).toContain("225 million km");
+    expect(store.listTopics()).toHaveLength(0);
   });
 
   it("surfaces a read_page fetch error as data and keeps looping", async () => {
@@ -179,20 +139,7 @@ describe("buildResearchTool", () => {
     };
     const model = scriptedModel([
       { tools: [{ name: "read_page", input: { url: "https://ex.com/x" } }] },
-      {
-        tools: [
-          {
-            name: "create_topic",
-            input: { name: "X", description: "x" },
-          },
-        ],
-      },
-      {
-        tools: [
-          { name: "update_topic", input: { name: "X", body: "No content." } },
-        ],
-      },
-      { text: "Wrote topic 'X'." },
+      { text: "- No content found. Source: https://ex.com/x" },
     ]);
 
     const tools = buildResearchTool({
@@ -204,8 +151,14 @@ describe("buildResearchTool", () => {
     });
     const result = await runResearch(tools, { prompt: "read x" });
 
-    // The loop recovered from the fetch error and still wrote a topic.
-    expect(store.getTopic("X")?.body).toBe("No content.");
-    expect(result).toContain("Saved to topic 'X'.");
+    // The loop recovered from the fetch error and still produced a report.
+    expect(result).toContain("Source: https://ex.com/x");
+    expect(store.listTopics()).toHaveLength(0);
+  });
+
+  it("uses a generous research step bound, not a tight one", () => {
+    // The incident loop ran 20+ steps; step exhaustion returns an empty report,
+    // so the bound must sit well above that.
+    expect(RESEARCH_MAX_STEPS).toBeGreaterThanOrEqual(30);
   });
 });

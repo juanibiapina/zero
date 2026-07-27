@@ -144,18 +144,18 @@ migration and no per-user seeding.
    genuinely trivial turns (pure chit-chat or acks with no durable fact) get no
    tool call.
 
-A third agent also writes topics: the **research agent** (spawned by the
-interface agent's `research` tool; see `docs/research.md`). It has the topic
-tools + `web_search` and writes its findings directly into a topic (new or
-updated), which is what keeps source references verbatim — the producer stores
-them, with no lossy interface/writer hop between production and persistence. The
-topics it writes are merged into the interface agent's `accessed` set, so the
-writer consolidates them like any other accessed topic. The writer is prompted
-to **preserve research findings and their reference URLs verbatim** (refresh the
-summary rather than rewriting the body, and fold near-duplicate research topics
-together). Preservation is prompt-enforced; if it degrades in practice, the
-stronger fix is a mechanically protected body region or excluding research
-topics from the writer.
+A third agent gathers material for topics: the **research agent** (spawned by
+the interface agent's `research` tool; see `docs/research.md`). It has read-only
+topic tools + `web_search` + `read_page` and **no write tools**; it returns a
+compact sourced findings report as its tool result rather than writing topics
+itself. The writer then persists those findings — it sees the research report in
+the turn transcript, and any topic research **read** for context is merged into
+the interface agent's `accessed` set so the writer consolidates it like any
+other accessed topic. The writer is prompted to **preserve research findings and
+their reference URLs verbatim** (refresh the summary rather than rewriting the
+body, and fold near-duplicate research topics together). Preservation is
+prompt-enforced; if it degrades in practice, the stronger fix is a mechanically
+protected body region.
 
 The topic tools are shared: `update_topic` is a partial patch — provide only the
 fields to change (`body`, `description`, `summary`, `newName`); omitted fields

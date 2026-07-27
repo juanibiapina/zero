@@ -543,8 +543,10 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
-  it("keeps research findings in a topic even when the model never replies them", async () => {
+  it("surfaces a topic the research agent read via accessed, without research writing it", async () => {
     const store = new MemoryStore();
+    store.createTopic("Mars", "the planet");
+    store.updateTopicBody("Mars", "Mars is far. Source: https://ex.com/mars");
     const sink = collectSink();
     const search = createMemorySearch([
       { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
@@ -552,23 +554,14 @@ describe("runInterfaceAgent", () => {
     const model = scriptedModel([
       // interface acks then researches
       { tools: [{ name: "reply", input: { text: "Let me check." } }] },
-      { tools: [{ name: "research", input: { prompt: "distance to Mars" } }] },
-      // research agent: search, create + fill a topic, then final text
-      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
       {
         tools: [
-          { name: "create_topic", input: { name: "Mars", description: "the planet" } },
+          { name: "research", input: { prompt: "distance to Mars", topic: "Mars" } },
         ],
       },
-      {
-        tools: [
-          {
-            name: "update_topic",
-            input: { name: "Mars", body: "Mars is far. Source: https://ex.com/mars" },
-          },
-        ],
-      },
-      { text: "Wrote topic 'Mars'." },
+      // research agent: read the topic for context, then report findings back
+      { tools: [{ name: "get_topic", input: { name: "Mars" } }] },
+      { text: "- Mars is far. Source: https://ex.com/mars" },
       // interface finishes without replying the finding
       { text: "" },
     ]);
@@ -584,9 +577,11 @@ describe("runInterfaceAgent", () => {
       userMessage: "how far is Mars",
     });
 
+    // Research writes nothing; the stored body is unchanged.
     expect(store.getTopic("Mars")?.body).toBe(
       "Mars is far. Source: https://ex.com/mars",
     );
+    // The topic research read still reaches the writer via accessed.
     expect(result.accessed).toContain("Mars");
   });
 

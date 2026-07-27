@@ -1,19 +1,21 @@
 # Research agent
 
 The interface agent has a `research` tool. Calling it instantiates a second
-agent (research-prompted, with the topic tools + a `web_search` tool), runs its
-own tool loop, and returns the topic it wrote plus a sourced summary as the tool
+agent (research-prompted, with read-only topic tools + a `web_search` tool),
+runs its own tool loop, and returns a short sourced findings report as the tool
 result.
 
-The research agent is topic-capable: it reads related topics for context,
-investigates with web search, and writes its findings **directly to a topic**
-(new or updated) rather than only returning prose. Writing findings at the
-source keeps references verbatim — the producer stores them, so there is no
-lossy hop (interface reply, writer consolidation) between production and
-persistence. Repeated research on a subject updates one topic instead of
-spawning duplicates: the agent reads the existing topic (passed in by the
-interface as `topic`, or found via `list_topics`) and merges into it, following
-the same read-before-write dedup policy as the writer.
+The research agent **gathers and reports**: it reads related topics for context,
+investigates with web search, and returns a compact sourced report as its final
+message. It has **no write tools** — the writer agent that runs after every turn
+persists the findings into topics. Authoring full topic bodies inside the
+research loop was the dominant cost (5-8k output tokens per write, minutes of
+wall clock), so removing the write tools is what makes research fast. The prompt
+asks for a compact report (~1,200 characters) so it survives the interface
+transcript's per-tool-result truncation (1,500 chars) intact and its sources
+reach the writer. When the interface passes an existing `topic`, the agent reads
+it for context; that topic is merged into the interface's `accessed` set so the
+writer knows it is relevant.
 
 ## Proactive triggering
 
@@ -31,15 +33,14 @@ tunable; err toward more triggering and tune down from logs.
 
 - **Input:** `{ prompt, topic? }`. `prompt` is what to research; `topic`
   (optional) names an existing topic the interface already knows is relevant, so
-  the agent reads and updates it instead of starting cold.
-- **Output — always a topic.** The tool returns a handle naming the topic it
-  wrote plus the agent's final sourced summary. If the agent finished without
-  writing a topic, the tool deterministically creates a fallback topic from
-  `prompt` with the agent's final text as the body (a safety net mirroring the
-  interface's no-silence fallback).
-- **Accessed.** Topics the research agent writes are merged into the interface
-  agent's `accessed` set, so the writer consolidates them like any other
-  accessed topic (see `docs/topics.md`).
+  the agent reads it for context instead of starting cold.
+- **Output — a findings report.** The tool returns the agent's final sourced
+  report (claims with inline `Source: <url>` first, a brief summary last) as the
+  tool result. Research writes nothing; the writer persists the findings after
+  the turn.
+- **Accessed.** Topics the research agent **reads** (via `get_topic`) are merged
+  into the interface agent's `accessed` set, so the writer still knows which
+  topics are relevant to the turn (see `docs/topics.md`).
 
 ## One runner, three agents
 
@@ -62,13 +63,13 @@ runner with different system prompts and toolsets:
   the tool closures; the runner's `text` and `finishReason` are used only to
   decide the no-silence fallback (deliver prose the model forgot to `reply`, or
   send a generic fallback when the loop hit the cap without a final answer).
-- **Research agent** (spawned by `tools/research.ts`): tools are the topic tools
-  + `web_search` + `read_page` (no `reply`). `web_search` returns snippets;
+- **Research agent** (spawned by `tools/research.ts`): tools are the read-only
+  topic tools (`list_topics`, `get_topic`) + `web_search` + `read_page` (no
+  `reply`, no `create_topic`/`update_topic`). `web_search` returns snippets;
   `read_page` fetches the full cleaned content of a chosen result's URL on
-  demand. It writes its findings into a topic and returns
-  the topic handle + summary as the `research` tool result. The tool guarantees
-  a topic is returned (fallback topic when the agent wrote none) and merges
-  written topics into the interface's `accessed` set.
+  demand. It returns a compact sourced findings report as the `research` tool
+  result; the tool merges the topics research read into the interface's
+  `accessed` set.
 - **Writer agent** (`agents/writer.ts`): the topic tools only. See
   `docs/topics.md`.
 
@@ -76,15 +77,17 @@ The research agent gets its own model from the per-turn factory, tagged
 `agent: "research"` in `cf-aig-metadata` (alongside `user_id`), so the AI Gateway
 attributes its cost/tokens separately from the interface and writer agents while
 keeping per-user attribution. The research loop runs inline in
-the turn's DO alarm (no separate alarm). Both agents share one step cap,
-`AGENT_MAX_STEPS = 200` (`agents/run.ts`). The cap is a runaway-loop guard, not
-an expected stopping point: a normal loop finishes in a handful of steps. 200
-gives headroom while bounding pathological loops; if `finish_reason != "stop"`
-with a high step count shows up in logs, lower it.
+the turn's DO alarm (no separate alarm). The interface agent uses the shared
+step cap `AGENT_MAX_STEPS = 200`; the research agent has its own generous bound
+`RESEARCH_MAX_STEPS = 40` (`tools/research.ts`). Both caps are runaway-loop
+guards, not expected stopping points: a normal loop finishes in a handful of
+steps. Research's bound sits well above the observed 20+ steps of a heavy loop
+because hitting the cap returns an empty report; if `finish_reason != "stop"`
+with a high step count shows up in logs, revisit it.
 
 The research tool logs `research_started` (`prompt_len`, `has_topic`) and
-`research_completed` (`steps`, `finish_reason`, `duration_ms`, `result_len`,
-`topics` — the names it wrote, plus token/cache counts); the `web_search` tool
+`research_completed` (`steps`, `finish_reason`, `duration_ms`, `report_len`,
+`accessed` — the topics it read, plus token/cache counts); the `web_search` tool
 logs `web_search_failed` (`error`) where search errors are otherwise swallowed
 into the tool result; the `read_page` tool logs `read_page_failed` (`error`) the
 same way. No message content is logged (see `log.ts` conventions).
