@@ -117,6 +117,48 @@ The research, writer, and onboarding agents run the same `runAgent` machine, so
 they get tiers 1-2 (cached system + tools) for free. They use the single-`prompt`
 path, so they have no messages-region breakpoints.
 
+## Cache diagnostics
+
+Every request carries the `cache-diagnosis-2026-04-07` beta, and every request
+after the first in a run names the previous response with
+`diagnostics.previous_message_id`. The response reports how this request's
+prefix diverged from that one. `agents/model.ts` logs a content-free
+`cache_diagnostic` line per response: `agent`, `state`,
+`cache_missed_input_tokens` (when the state carries one), plus this response's
+own `cache_read_tokens` / `cache_write_tokens`.
+
+**A miss reason is chain-relative, not a cache miss.** It answers "how does this
+request's prefix differ from the request I named", never "was the cache used".
+A live probe reported `system_changed` with `cache_missed_input_tokens: 940`
+while reading 1466 tokens from cache and writing none. That is why the log line
+carries the read/write counts: they are the cache signal, the state is the
+divergence signal.
+
+States (`state` in the log line):
+
+- `initial`: Zero passed `previous_message_id: null` (first request of a run).
+  The wire returns `diagnostics: null` here, exactly as it does for "no
+  divergence"; the two are told apart locally by what Zero sent.
+- `no_divergence`: a previous id was sent and the prefix matched it.
+- `pending`: the response was serialized before the background comparison
+  finished (`cache_miss_reason: null`).
+- `model_changed`, `system_changed`, `tools_changed`, `messages_changed`: each
+  carries `cache_missed_input_tokens`.
+- `previous_message_not_found`, `unavailable`: no token count.
+
+Small requests still get a miss reason: a tiny request with no system block
+reported `system_changed` with a count of 0. Do not read `initial` as "small
+request".
+
+**In-run only.** The chain starts fresh for every `runAgent` call, so interface,
+research, and writer each get their own sequence and nothing crosses a turn.
+Cross-turn threading is deliberately skipped: fingerprints expire well inside
+the gap between most turns (`previous_message_not_found`), and Zero prepends
+volatile context to the current user message, so any comparison that did land
+would report `messages_changed` by construction. Expect late-step
+`messages_changed` within a run too. That is the loop appending tool results,
+which is normal.
+
 ## Cross-user sharing invariant
 
 Nothing per-user may appear in `tools` or the static `system`, or tier 2 breaks

@@ -28,6 +28,7 @@ import type {
   ContentBlock,
   TokenUsage,
 } from "./protocol";
+import { log } from "../log";
 import type { Env } from "../types";
 
 // The agents that issue LLM calls. Each turn runs the interface agent (which
@@ -160,6 +161,20 @@ export const createModelFactory = async (
           response.diagnostics,
           request.previousMessageId,
         );
+        // Content-free: state and token counts only, never prompts, responses,
+        // or response ids. The cache read/write counts ride along because a
+        // divergence state is chain-relative and can coexist with a full cache
+        // hit (docs/caching.md).
+        log("cache_diagnostic", {
+          agent,
+          state: diagnostic.state,
+          ...("missedInputTokens" in diagnostic &&
+          diagnostic.missedInputTokens !== undefined
+            ? { cache_missed_input_tokens: diagnostic.missedInputTokens }
+            : {}),
+          cache_read_tokens: usage.cacheReadTokens,
+          cache_write_tokens: usage.cacheWriteTokens,
+        });
         return {
           id: response.id,
           content: response.content as unknown as ContentBlock[],

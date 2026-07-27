@@ -220,6 +220,11 @@ export const runAgent = async (
   const generated: AgentMessage[] = [];
   const stepUsages: RunAgentUsage[] = [];
   const maxSteps = input.maxSteps ?? AGENT_MAX_STEPS;
+  // Cache-diagnostic chain for this run: the first request opts in with null
+  // (nothing to compare against), every later one names the previous response.
+  // Within a run the comparison is meaningful because each step only appends.
+  // The chain never crosses runs (see docs/caching.md).
+  let previousMessageId: string | null = null;
 
   for (let step = 0; step < maxSteps; step++) {
     const response = await input.model.generate({
@@ -228,7 +233,9 @@ export const runAgent = async (
       // not mutate under the adapter after it is handed over.
       messages: [...messages],
       tools: wireTools,
+      previousMessageId,
     });
+    previousMessageId = response.id;
     stepUsages.push(response.usage);
 
     // Round-trip the response content verbatim: tool ids, inputs, and block

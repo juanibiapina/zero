@@ -319,4 +319,48 @@ describe("runTurn", () => {
     expect(requested).toContain("writer");
   });
 
+  it("gives each agent its own in-run cache-diagnostic chain", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+
+    // Record, per agent, the previousMessageId each request carried.
+    const chains: Record<string, Array<string | null | undefined>> = {};
+    let counter = 0;
+    const makeModel = (agent: string): AgentModel => ({
+      modelId: "mock-model",
+      generate: async (request) => {
+        (chains[agent] ??= []).push(request.previousMessageId);
+        return {
+          id: `msg_${agent}_${counter++}`,
+          content: [{ type: "text", text: "" }],
+          stopReason: "end_turn",
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+          diagnostic: { state: "initial" },
+        };
+      },
+    });
+
+    await runTurn({
+      store,
+      makeModel,
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    // Each agent opts in with null on its own first request; no chain leaks
+    // across the interface -> writer boundary.
+    expect(chains.interface).toEqual([null]);
+    expect(chains.writer).toEqual([null]);
+  });
 });

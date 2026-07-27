@@ -393,6 +393,28 @@ describe("runAgent", () => {
     });
   });
 
+  it("threads the diagnostic chain within the run: null first, then the previous id", async () => {
+    const { model, requests } = recordingModel([
+      {
+        content: [{ type: "tool_use", id: "x", name: "ping", input: {} }],
+        stopReason: "tool_use",
+      },
+      { content: [{ type: "text", text: "done" }], stopReason: "end_turn" },
+    ]);
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: pingTool(async () => "pong"),
+    });
+
+    expect(requests.map((r) => r.previousMessageId)).toEqual([
+      null,
+      "msg_capture",
+    ]);
+  });
+
   it("sums token counts across steps and reports them per step", async () => {
     const model = scriptedModel([
       { tools: [{ name: "ping", input: {} }] },
