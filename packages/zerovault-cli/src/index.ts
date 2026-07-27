@@ -12,6 +12,7 @@
  * same way (--base-url > context.baseUrl > ZEROVAULT_API_URL > default).
  */
 
+import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { ZeroVaultClient } from "./client.js";
 import { exportVault, importVault, type VaultExport } from "./vault-transfer.js";
@@ -51,12 +52,19 @@ function getClient(): ZeroVaultClient {
   return new ZeroVaultClient(auth.baseUrl, auth.apiKey);
 }
 
+// Version is read at runtime from package.json so it can never drift from the
+// published version. package.json sits one directory above this module in both
+// the repo (src/index.ts) and the published tarball (dist/index.js).
+const { version } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
+
 const program = new Command();
 
 program
   .name("zv")
   .description("ZeroVault secrets manager CLI")
-  .version("0.2.1")
+  .version(version)
   .option("--api-key <key>", "API key (overrides env and context)")
   .option("--base-url <url>", "API base URL (overrides env and context)");
 
