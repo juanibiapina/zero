@@ -8,6 +8,7 @@ import {
   CreateOrganization,
   useOrganization,
 } from "@clerk/clerk-react";
+import { ExternalLink } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProductId, ProductLink } from "../products";
 import { Button } from "./ui/button";
@@ -141,6 +142,16 @@ export function AppLayout({
                 </Button>
               ))}
             </nav>
+
+            <a
+              href="https://docs.zeroapps.dev/"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-auto flex items-center gap-2 border-t px-4 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Docs
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
           </aside>
 
           {/* Content column */}
