@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-28: The landing site, dashboard, and CLI now link straight to docs.zeroapps.dev — a Docs link in the landing header and footer, a "Setup guide" on each product card, a Docs link in the dashboard sidebar, contextual getting-started pointers on the empty project, key, and issue screens, and docs URLs in `zv --help` and its no-API-key error.
+
 - 2026-07-28: The ZeroVault and ZeroErrors docs now lead with a platform-neutral path: a new "Loading secrets" guide covers pulling secrets into any process or CI job, and a new "Reporter" guide shows a framework-free error reporter for any runtime. Cloudflare Workers is now one optional platform guide rather than the only documented target.
 
 - 2026-07-27: Dashboard pages that fail to load now show what went wrong with a Retry button instead of spinning forever, and a rare account with no active organization is prompted to create one instead of getting stuck.
