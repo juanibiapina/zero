@@ -10,12 +10,23 @@ investigates with web search, and returns a compact sourced report as its final
 message. It has **no write tools** — the writer agent that runs after every turn
 persists the findings into topics. Authoring full topic bodies inside the
 research loop was the dominant cost (5-8k output tokens per write, minutes of
-wall clock), so removing the write tools is what makes research fast. The prompt
-asks for a compact report (~1,200 characters) so it survives the interface
-transcript's per-tool-result truncation (1,500 chars) intact and its sources
-reach the writer. When the interface passes an existing `topic`, the agent reads
-it for context; that topic is merged into the interface's `accessed` set so the
-writer knows it is relevant.
+wall clock), so removing the write tools is what makes research fast. Measured
+on the 2026-07-27 17:51:20Z production research turn, the no-write design ran the
+research loop in ~48s over 6 steps (largest single generation 1,115 tokens) and
+the whole turn (interface + research + writer) in ~88s for $0.217, against a
+pre-fix baseline of ~10+ minutes and $3–4 for the one turn when research authored
+bodies in-loop (see `docs/plans/agent-latency-investigation.md` for the sourced
+per-call breakdown). The prompt asks for a compact report (roughly 2,500
+characters of prose, with an explicit exception that lets a sourced enumeration
+run longer rather than drop an item), and the writer transcript gives research
+results a generous 8,000-char ceiling (vs 1,500 chars for every other tool), so a
+normal sourced report and its per-claim `Source:` URLs reach the writer whole.
+The ceiling was raised to fit the report, not the report shrunk to fit the
+ceiling. (The 8,000-char ceiling is code-verified in `interface.ts`; it has not
+yet been observed on a real turn, since the measured report above was only 1,115
+tokens.) When the interface passes an existing `topic`, the agent reads it for
+context; that topic is merged into the interface's `accessed` set so the writer
+knows it is relevant.
 
 ## Proactive triggering
 
@@ -52,8 +63,11 @@ runAgent({ model, system, prompt, tools, maxSteps }) →
 ```
 
 `runAgent` also applies prompt caching: it sends `system` as a text block with a
-cache breakpoint and marks the last tool with another, and returns token counts
-(`usage`, `stepUsages`). See [caching.md](./caching.md).
+cache breakpoint and marks the last tool with another, and advances a sliding
+breakpoint over the growing message tail before every step, so even the
+prompt-only research and writer agents cache their message region within a run
+(research previously had none). It returns token counts (`usage`, `stepUsages`).
+See [caching.md](./caching.md).
 
 The interface agent, the research agent, and the writer agent are the same
 runner with different system prompts and toolsets:

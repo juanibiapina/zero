@@ -24,9 +24,10 @@ stores the real key and bills us directly) authenticated with
 `MODEL_ID` (`claude-sonnet-4-6`). Durable state is the DO SQLite (topics,
 conversations, messages, attachment metadata); image bytes live in the
 `ATTACHMENTS` R2 bucket. There is no container and no per-user filesystem. A
-self-rescheduling `setTimeout` drives the Telegram typing action
-while a turn runs. See [`topics.md`](topics.md) for the full design of the topic
-model and the two agents.
+self-rescheduling `setTimeout` drives the Telegram typing action across the
+interface phase and stops when the reply is sent, before the writer runs. See
+[`topics.md`](topics.md) for the full design of the topic model and the two
+agents.
 
 ## Package Structure
 

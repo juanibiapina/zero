@@ -127,7 +127,8 @@ message, arm a DO alarm) and returns 200. The `alarm()` handler is the turn
 runner: it drains every thread whose tail is a user message and runs the
 meta-agent turn inside the DO, where the topic tools hit local SQLite and
 replies go straight to Telegram via grammY. A self-rescheduling `setTimeout`
-drives the Telegram typing action while a turn runs; the alarm stays dedicated
+drives the Telegram typing action across the interface phase and stops when the
+reply is sent, before the writer's consolidation runs; the alarm stays dedicated
 to turn scheduling.
 
 The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on the

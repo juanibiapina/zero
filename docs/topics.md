@@ -131,8 +131,14 @@ migration and no per-user seeding.
    often live in tool results (calendar events, email bodies, research), not in
    the user-facing replies, which are lossy. The interface agent builds it from
    the run's generated messages (`renderTranscript`), capping each tool result
-   (~1.5 KB) so a large payload cannot blow up the writer's input; the tradeoff
-   is higher writer token cost and latency, bounded by that cap. For each
+   so a large payload cannot blow up the writer's input. The cap is per-tool:
+   non-research tools are clipped at ~1.5 KB (1,500 chars), but a `research`
+   result gets a generous 8,000-char ceiling because a research report is the
+   payload the writer must persist verbatim (every claim and its `Source:` URL),
+   not context it samples from. The tradeoff is higher writer token cost and
+   latency, bounded by those caps. (The 8,000-char research ceiling is
+   code-verified in `interface.ts`; it has not yet been exercised on a real turn
+   (see `docs/research.md`).) For each
    accessed topic that gained durable information it reads the body
    (`get_topic`), merges new facts under sensible sections, appends one `## Log`
    line, and writes back via `update_topic`, refreshing summary and description.
@@ -211,7 +217,11 @@ The webhook resolves the user, calls `UserDO.enqueueTurn` (dedupe on
 alarm handler drains every thread whose tail is a user message and runs the
 orchestrator for each. A concurrent enqueue arms a fresh alarm, so messages that
 arrive mid-run are picked up on the next fire. A self-rescheduling `setTimeout`
-re-sends the Telegram typing action every 4s while a turn runs; the DO alarm
+re-sends the Telegram typing action every 4s across the interface phase
+(including any research the user genuinely waits on) and stops the moment the
+reply (or fallback) is sent, before the writer's consolidation runs, since the
+writer is internal topic bookkeeping the user is not waiting on
+(`orchestrator.ts` calls `stopTyping` after the interface phase). The DO alarm
 stays dedicated to turn scheduling.
 
 If draining throws a **catchable** error (LLM gateway error, network abort),

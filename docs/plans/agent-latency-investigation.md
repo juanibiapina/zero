@@ -473,3 +473,69 @@ probability and cost of this error (Part 2).
   pushes (Round 1 finding).
 - Make research asynchronous from the reply and bounded (Part 1), so a 10-min
   loop is neither on the critical path nor a 10-min reset target.
+
+---
+
+# Post-fix measurement: the 2026-07-27 17:51:20Z research turn
+
+Added 2026-07-27, after the four pipeline commits shipped (131a7f0 strip write
+tools from research; c9b443a loop-owned sliding message-region cache breakpoint;
+69452b1 typing stops when the reply is sent; 00759b8 the 8,000-char research
+transcript ceiling). This is the ground-truth speedup number for the no-write
+research design, so it has a home in the repo instead of living only in a plan.
+
+**Source.** Cloudflare AI Gateway `zero`, Logs tab, read live at ~20:43Z the
+same day (well inside the 24h log window). The turn is 13 gateway calls, all
+`claude-sonnet-4-6`, `status=success`, spanning 19:51:24–19:52:49 GMT+2
+(= 17:51:24–17:52:49 UTC), bracketed by large idle gaps on both sides (prior
+call 16:37:58 GMT+2, next 19:58:03 GMT+2), so the 13 are one turn. Each call's
+agent was read from the gateway's `Metadata Value` filter on the
+`cf-aig-metadata` agent tag (`interface` = 3, `research` = 6, `writer` = 4); the
+research call at 17:52:15 shows the research prompt in its request body ("Where
+is 'The Odyssey' (2026 Christopher Nolan film) playing in Berlin…").
+
+The gateway's row timestamp is the call **completion** time, not its start: the
+first call (17:51:24, 3,103 ms) then started at ~17:51:20.9Z, which matches the
+webhook's 17:51:20Z turn start exactly, and the last call (17:52:49) completes
+at 17:52:49Z. Phase spans below are computed on that basis (first call start →
+last call completion).
+
+Per-call (times UTC; `in`/`out` = uncached input / generated output tokens;
+`cost`/`duration` are the gateway's own figures, cost including cache-write and
+cached-read, so it is not proportional to `out`):
+
+| UTC | agent | in | out | cost (USD) | duration |
+|---|---|---|---|---|---|
+| 17:51:24 | interface | 3 | 68 | 0.03468525 | 3,103 ms |
+| 17:51:27 | interface | 1 | 93 | 0.00367365 | 2,469 ms |
+| 17:51:30 | research | 3 | 121 | 0.01055700 | 2,639 ms |
+| 17:51:34 | research | 1 | 140 | 0.02360685 | 2,716 ms |
+| 17:51:41 | research | 1 | 106 | 0.01866645 | 3,468 ms |
+| 17:51:48 | research | 1 | 123 | 0.02030205 | 4,830 ms |
+| 17:51:53 | research | 1 | 110 | 0.00905640 | 3,944 ms |
+| 17:52:15 | research | 1 | **1,115** | 0.02490630 | 21,691 ms |
+| 17:52:21 | interface | 1 | 302 | 0.01108230 | 6,122 ms |
+| 17:52:23 | writer | 3 | 37 | 0.01544250 | 1,494 ms |
+| 17:52:30 | writer | 1 | 140 | 0.02075880 | 6,721 ms |
+| 17:52:47 | writer | 1 | 946 | 0.01712835 | 16,798 ms |
+| 17:52:49 | writer | 1 | 92 | 0.00739035 | 2,556 ms |
+
+Confirmed figures (all re-pulled from the gateway; none are inferred):
+
+- **Research loop: ~48s over 6 steps.** The 6 `research` calls run 17:51:27.4Z
+  (first call start) → 17:52:15.0Z (last call completion) = 47.6s. The final
+  step is the report generation (1,115 out, 21.7s).
+- **Largest single generation: 1,115 tokens** (the research report, 17:52:15).
+  Next largest is the writer's 946-token consolidation.
+- **Whole turn: ~88s** (interface + research + writer), 17:51:20.9Z →
+  17:52:49.0Z = 88.1s.
+- **Turn cost: $0.217** (sum of the 13 rows = $0.21726).
+
+Against the pre-fix baseline from the incident above (research authoring full
+topic bodies in-loop: ~10+ min research loop, ~$3–4 for the one turn), the
+no-write design cut this research turn to ~88s end to end and ~$0.22.
+
+Not measured here: the 8,000-char research transcript ceiling (00759b8) was
+**not** exercised: this report is 1,115 tokens, well under the ceiling, so no
+post-fix turn has yet sent a >1,500-char report through it whole. The ceiling is
+code-verified only (see `docs/research.md`, `docs/topics.md`).
