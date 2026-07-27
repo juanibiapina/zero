@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-27: The Zero landing page loads faster (no more render-blocking scripts or third-party font requests), and unknown URLs now return a proper "Page not found" page instead of the home page.
+
 - 2026-07-26: The Zero landing site now ships a robots.txt, sitemap, and social preview cards, so search engines can crawl and index it and shared links show a rich preview.
 
 - 2026-07-24: Zero now has a public home at zeroapps.com, with links to Vault and Errors.

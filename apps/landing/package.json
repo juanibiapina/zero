@@ -4,30 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "astro dev --port 5180",
     "dev:worker": "wrangler dev --port 8794",
-    "build": "tsc && vite build",
+    "build": "astro build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "astro check",
     "deploy": "wrangler deploy"
   },
-  "dependencies": {
-    "lucide-react": "^1.24.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
-  },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.2",
-    "@types/node": "^26.1.1",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@astrojs/check": "^0.9.9",
+    "@tailwindcss/vite": "^4.3.3",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
+    "astro": "^7.1.3",
+    "astro-eslint-parser": "^3.0.0",
     "eslint": "10.7.0",
-    "tailwindcss": "^4.3.2",
+    "eslint-plugin-astro": "^3.0.1",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "tailwindcss": "^4.3.3",
     "typescript": "6.0.3",
-    "vite": "8.1.5",
     "wrangler": "4.103.0"
   }
 }

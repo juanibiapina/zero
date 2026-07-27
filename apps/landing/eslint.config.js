@@ -1,3 +1,4 @@
-import react from "@zero/eslint-config/react";
+import base from "@zero/eslint-config";
+import astro from "eslint-plugin-astro";
 
-export default react;
+export default [{ ignores: [".astro"] }, ...base, ...astro.configs.recommended];
