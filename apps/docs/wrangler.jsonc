@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zero-docs",
+  "compatibility_date": "2026-06-24",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "docs.zeroapps.dev", "custom_domain": true }]
+}

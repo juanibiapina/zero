@@ -89,6 +89,7 @@ Packages:
 - **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
 - **Dashboard frontend:** `apps/dashboard-web` (`@zero/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
 - **Landing site:** `apps/landing` (`@zero/landing`) is a static Astro site served by the asset-only Worker `zero-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
+- **Docs site:** `apps/docs` (`@zero/docs`) is a static Astro + Starlight site served by the asset-only Worker `zero-docs` for `docs.zeroapps.dev`. It documents ZeroVault and ZeroErrors and ships per-page raw-markdown twins (bare `<page>.md`, e.g. `/vault/overview.md`) with a Copy Markdown button, plus `/llms.txt`, `/llms-full.txt`, `/llms-small.txt`. Unknown paths get a real 404 (`not_found_handling: 404-page`). Unlike landing it ships Starlight's own theme JS and a Pagefind search index (the zero-JS invariant is landing-only). It is currently placeholder content and globally `noindex, nofollow` via Starlight `head` until real docs land; `robots.txt` keeps `Allow: /` so crawlers can reach the noindex directive. No runtime secrets or API. Build/deploy are package-scoped (`pnpm -F @zero/docs ...`), never the whole-repo build. Auto-deploys on push to `main` via its own Workers Builds connector.
 - **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
@@ -102,6 +103,7 @@ Expected dev ports:
 | agent | 8790 | 9232 | 5176 |
 | dashboard | 8792 | 9233 | 5178 |
 | landing | 8794 (Workers Assets) | n/a | 5180 |
+| docs | 8796 (Workers Assets) | n/a | 5182 |
 
 `pnpm --filter @zero/landing run dev:worker` serves the landing site's built `apps/landing/dist` directory through Workers Assets.
 
@@ -115,11 +117,11 @@ gob add pnpm --dir apps/agent-api exec wrangler tail
 
 ## Dev Server
 
-Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs and the landing Astro app.
+Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs and the landing and docs Astro apps.
 
 If ports are unavailable or an app doesn't load, there may be lingering processes that need to be killed:
 ```bash
-for p in 5176 5178 5180 8790 8792 8794; do lsof -ti :$p | xargs -r kill -9; done
+for p in 5176 5178 5180 5182 8790 8792 8794 8796; do lsof -ti :$p | xargs -r kill -9; done
 ```
 
 Then start the dev server again with `pnpm turbo dev`.
