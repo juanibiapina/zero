@@ -34,6 +34,16 @@ user-facing. The root `CHANGELOG.md` has no in-product surface today; it is the
 console's human-readable changelog. **Do not mix console entries into the agent
 file** — that is exactly what this split fixed.
 
+## Agent Skills
+
+User-facing agent skills for ZeroVault and ZeroErrors live in the public repo
+[`juanibiapina/zero-skills`](https://github.com/juanibiapina/zero-skills), which
+is their **source of truth** (installable via `npx skills add
+juanibiapina/zero-skills`). Those skills promise live product behavior, so any
+change to a documented CLI command, API endpoint, payload schema, or user flow
+must update `juanibiapina/zero-skills` **in the same change**, the same shape as
+the Changelog rule above. Do not fork or mirror the skills into this repo.
+
 ## Deployment
 
 Pushing to `main` auto-deploys to production via the Cloudflare Git
