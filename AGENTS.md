@@ -88,7 +88,7 @@ Packages:
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and Anthropic servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 - **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
 - **Dashboard frontend:** `apps/dashboard-web` (`@zero/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
-- **Landing site:** `apps/landing` (`@zero/landing`) is the asset-only Worker `zero-landing` for `zeroapps.dev`. It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
+- **Landing site:** `apps/landing` (`@zero/landing`) is a static Astro site served by the asset-only Worker `zero-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
 - **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
@@ -115,7 +115,7 @@ gob add pnpm --dir apps/agent-api exec wrangler tail
 
 ## Dev Server
 
-Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs and the landing Vite app.
+Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs and the landing Astro app.
 
 If ports are unavailable or an app doesn't load, there may be lingering processes that need to be killed:
 ```bash

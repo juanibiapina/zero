@@ -2,17 +2,17 @@
 
 `https://zeroapps.dev/` is Zero's public landing page. It introduces Vault and Errors and sends visitors to the authenticated dashboard at `https://dash.zeroapps.dev`.
 
-The site lives in `apps/landing` (`@zero/landing`). It is an asset-only Cloudflare Worker: it has no Worker script, API, storage, Clerk setup, or runtime secrets.
+The site lives in `apps/landing` (`@zero/landing`). It is a static Astro site served by an asset-only Cloudflare Worker: it has no Worker script, API, storage, Clerk setup, or runtime secrets. `astro build` emits static HTML with the CSS inlined into `<head>` and ships zero client JavaScript.
 
 ## Local development
 
-Start the Vite server:
+Start the Astro dev server:
 
 ```bash
 pnpm --filter @zero/landing run dev
 ```
 
-Vite serves the source site at `http://localhost:5180`.
+Astro serves the source site at `http://localhost:5180`.
 
 Build the site, then serve its generated `dist` assets through Workers Assets:
 
@@ -26,22 +26,22 @@ The Worker listens on `http://localhost:8794` and serves only the built `dist` d
 ## SEO and social assets
 
 Static files in `apps/landing/public/` are copied to the `dist/` root at build and
-served verbatim by Workers Assets (exact paths take precedence over the SPA
-fallback):
+served verbatim by Workers Assets (exact paths are served directly, before
+`not_found_handling` is ever consulted):
 
 - `robots.txt` — allows all crawlers and points at the sitemap. Required for the
-  Lighthouse `robots-txt` audit to pass (without it the SPA fallback returns the
-  HTML shell for `/robots.txt`, which Lighthouse parses as invalid).
+  Lighthouse `robots-txt` audit to pass. It is served as a real asset, so it is
+  never affected by `not_found_handling`.
 - `sitemap.xml` — lists the single public URL `https://zeroapps.dev/`. Served as
   `text/xml` (extension-based content type from Workers Assets); Google accepts
   that for sitemaps.
 - `og-image.png` — 1200x630 social preview card (Zero wordmark on the brand dark
   background). Referenced by the Open Graph and Twitter card tags in
-  `index.html`. Regenerate by screenshotting a 1200x630 HTML with headless
-  Chromium if the brand or copy changes.
+  `src/pages/index.astro`. Regenerate by screenshotting a 1200x630 HTML with
+  headless Chromium if the brand or copy changes.
 
-`index.html` also carries Open Graph / Twitter card meta tags and a JSON-LD
-`Organization` + `WebSite` block for rich search and social previews.
+`src/pages/index.astro` also carries Open Graph / Twitter card meta tags and a
+JSON-LD `Organization` + `WebSite` block for rich search and social previews.
 
 ### Google Search Console verification (configured)
 
@@ -63,8 +63,9 @@ The `https://zeroapps.dev/sitemap.xml` sitemap is submitted in the property
 indexing (priority crawl queue).
 
 Alternative seam if the DNS record ever needs replacing with an in-code token:
-a `<meta name="google-site-verification" content="…">` in the `index.html`
-head. Requires a deploy per token, so DNS TXT is preferred.
+a `<meta name="google-site-verification" content="…">` in the
+`src/pages/index.astro` head. Requires a deploy per token, so DNS TXT is
+preferred.
 
 ## Build and deploy
 
