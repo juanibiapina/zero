@@ -11,8 +11,8 @@ import {
   interfaceSystemPrompt,
   renderPinnedTopics,
 } from "./prompts";
-import { scriptedModel } from "./mock-model";
-import { MockLanguageModelV3 } from "ai/test";
+import { capturingModel, scriptedModel } from "./mock-model";
+import type { AgentMessage, TextBlock } from "./protocol";
 import type { Topic } from "../store/types";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
@@ -271,22 +271,9 @@ describe("runInterfaceAgent pinned surfacing", () => {
     store.setPinned("User", true);
 
     const captured: { system?: string } = {};
-    const model = new MockLanguageModelV3({
-      doGenerate: async (options: {
-        prompt: Array<{ role: string; content: unknown }>;
-      }) => {
-        const sys = options.prompt.find((m) => m.role === "system");
-        captured.system =
-          typeof sys?.content === "string"
-            ? sys.content
-            : JSON.stringify(sys?.content);
-        return {
-          content: [{ type: "text", text: "" }],
-          finishReason: { unified: "stop", raw: "stop" },
-          usage: { inputTokens: {}, outputTokens: {} },
-          warnings: [],
-        } as never;
-      },
+    const model = capturingModel((request) => {
+      captured.system = request.system.map((b) => b.text).join("\n");
+      return {};
     });
 
     await runInterfaceAgent({
@@ -310,21 +297,11 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
     timezone?: string;
   }) => {
     const store = new MemoryStore();
-    const captured: {
-      prompt?: Array<{ role: string; content: unknown; providerOptions?: unknown }>;
-    } = {};
-    const model = new MockLanguageModelV3({
-      doGenerate: async (options: {
-        prompt: Array<{ role: string; content: unknown; providerOptions?: unknown }>;
-      }) => {
-        captured.prompt = options.prompt;
-        return {
-          content: [{ type: "text", text: "" }],
-          finishReason: { unified: "stop", raw: "stop" },
-          usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } },
-          warnings: [],
-        } as never;
-      },
+    const captured: { system?: TextBlock[]; messages?: AgentMessage[] } = {};
+    const model = capturingModel((request) => {
+      captured.system = request.system;
+      captured.messages = request.messages;
+      return {};
     });
     await runInterfaceAgent({
       model,
@@ -338,48 +315,53 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
       timezone: opts.timezone,
       now: NOW,
     });
-    return captured.prompt ?? [];
+    return captured;
   };
 
-  const cc = (m: { providerOptions?: unknown }) =>
-    (m.providerOptions as { anthropic?: { cacheControl?: unknown } })?.anthropic
-      ?.cacheControl;
+  // A message is marked when its last content block carries a breakpoint.
+  const cc = (m: AgentMessage | undefined) => {
+    if (!m || typeof m.content === "string") return undefined;
+    return m.content[m.content.length - 1]?.cache_control;
+  };
 
   it("puts the current time and timezone on the latest user message, not the system prompt", async () => {
-    const prompt = await capturePrompt({ timezone: "America/Sao_Paulo" });
-    const system = prompt.find((m) => m.role === "system");
-    const sysText =
-      typeof system?.content === "string"
-        ? system.content
-        : JSON.stringify(system?.content);
-    expect(sysText).not.toContain("Current time:");
+    const { system, messages } = await capturePrompt({
+      timezone: "America/Sao_Paulo",
+    });
+    expect(JSON.stringify(system)).not.toContain("Current time:");
 
-    const users = prompt.filter((m) => m.role === "user");
+    const users = (messages ?? []).filter((m) => m.role === "user");
     const lastUser = JSON.stringify(users[users.length - 1]?.content);
     expect(lastUser).toContain("Current time: Friday, 2026-07-17 09:00");
     expect(lastUser).toContain("Your timezone is America/Sao_Paulo");
   });
 
+  it("caches the system prompt with a 1h ttl", async () => {
+    const { system } = await capturePrompt({});
+    expect(system?.[system.length - 1].cache_control).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
+  });
+
   it("marks the last stable message and the current message (sliding window)", async () => {
-    const prompt = await capturePrompt({
+    const { messages = [] } = await capturePrompt({
       history: [
         { role: "user", content: "q", createdAt: iso(5 * 60_000) },
         { role: "assistant", content: "a", createdAt: iso(4 * 60_000) },
       ],
     });
-    const convo = prompt.filter((m) => m.role !== "system");
     // Last two conversation messages (stable assistant + current user) carry a
     // breakpoint; earlier messages do not.
-    expect(cc(convo[convo.length - 1])).toBeTruthy();
-    expect(cc(convo[convo.length - 2])).toBeTruthy();
-    expect(cc(convo[0])).toBeFalsy();
+    expect(cc(messages[messages.length - 1])).toBeTruthy();
+    expect(cc(messages[messages.length - 2])).toBeTruthy();
+    expect(cc(messages[0])).toBeFalsy();
   });
 
   it("collapses to one breakpoint on the current message when history is empty", async () => {
-    const prompt = await capturePrompt({});
-    const convo = prompt.filter((m) => m.role !== "system");
-    expect(convo).toHaveLength(1);
-    expect(cc(convo[0])).toBeTruthy();
+    const { messages = [] } = await capturePrompt({});
+    expect(messages).toHaveLength(1);
+    expect(cc(messages[0])).toBeTruthy();
   });
 });
 

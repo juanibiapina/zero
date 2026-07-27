@@ -14,9 +14,9 @@ const makeInterfaceTools = (store: TopicStore) =>
   });
 
 const call = <T = unknown>(
-  tool: { execute: (a: unknown) => Promise<unknown> },
+  tool: { execute: (a: never) => Promise<unknown> },
   input: unknown,
-): Promise<T> => tool.execute(input) as Promise<T>;
+): Promise<T> => tool.execute(input as never) as Promise<T>;
 
 describe("topic link tools", () => {
   it("get_topic returns outboundLinks and backlinks", async () => {
@@ -26,12 +26,12 @@ describe("topic link tools", () => {
     store.saveTopic("trip", { body: "book [[flights]]", description: "", summary: "" });
     const tools = buildTopicTools({ store });
     const trip = await call<{ outboundLinks: string[]; backlinks: string[] }>(
-      tools.get_topic as never,
+      tools.get_topic,
       { name: "trip" },
     );
     expect(trip.outboundLinks).toEqual(["flights"]);
     const flights = await call<{ backlinks: string[] }>(
-      tools.get_topic as never,
+      tools.get_topic,
       { name: "flights" },
     );
     expect(flights.backlinks).toEqual(["trip"]);
@@ -43,7 +43,8 @@ describe("topic link tools", () => {
     store.saveTopic("trip", { body: "[[flights]]", description: "", summary: "" });
     const accessed = new Set<string>();
     const tools = buildTopicTools({ store, accessed });
-    const rows = await call<{ name: string }[]>(tools.list_backlinks as never, {
+    const rows = await call<{ name: string }[]>(
+      tools.list_backlinks, {
       name: "flights",
     });
     expect(rows.map((t) => t.name)).toEqual(["trip"]);
@@ -54,7 +55,8 @@ describe("topic link tools", () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
     store.createTopic("lonely", "");
     const tools = buildTopicTools({ store });
-    const rows = await call<unknown[]>(tools.list_backlinks as never, {
+    const rows = await call<unknown[]>(
+      tools.list_backlinks, {
       name: "lonely",
     });
     expect(rows).toEqual([]);
@@ -66,7 +68,8 @@ describe("delete_topic tool", () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
     store.createTopic("stale", "");
     const tools = makeInterfaceTools(store);
-    const res = await call<{ deleted: string }>(tools.delete_topic as never, {
+    const res = await call<{ deleted: string }>(
+      tools.delete_topic, {
       name: "stale",
     });
     expect(res).toEqual({ deleted: "stale" });
@@ -76,7 +79,8 @@ describe("delete_topic tool", () => {
   it("returns an error for an unknown topic", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
     const tools = makeInterfaceTools(store);
-    const res = await call<{ error: string }>(tools.delete_topic as never, {
+    const res = await call<{ error: string }>(
+      tools.delete_topic, {
       name: "nope",
     });
     expect(res.error).toContain("topic not found");
@@ -87,7 +91,8 @@ describe("delete_topic tool", () => {
       new MemoryStore(() => "2026-01-01T00:00:00.000Z"),
     );
     const tools = makeInterfaceTools(store);
-    const res = await call<{ error: string }>(tools.delete_topic as never, {
+    const res = await call<{ error: string }>(
+      tools.delete_topic, {
       name: "Zero",
     });
     expect(res.error).toContain("read-only");
@@ -100,7 +105,8 @@ describe("update_topic tool on system topics", () => {
       new MemoryStore(() => "2026-01-01T00:00:00.000Z"),
     );
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(tools.update_topic as never, {
+    const res = await call<{ error: string }>(
+      tools.update_topic, {
       name: "Zero",
       body: "hacked",
     });

@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { describe, expect, it } from "vitest";
 import { buildAttachmentTool } from "./attachments";
 import { runAgent } from "../agents/run";
+import { renderTranscript } from "../agents/interface";
+import { capturingModel } from "../agents/mock-model";
+import type {
+  AgentModelRequest,
+  ToolResultBlock,
+} from "../agents/protocol";
 import { MemoryStore } from "../store/memory";
 import { createMemoryAttachments } from "../attachments/memory";
 import { attachmentKey } from "../attachments/types";
@@ -25,11 +30,11 @@ const seed = async () => {
   return { store, attachments };
 };
 
-// The tool object exposes execute + toModelOutput; call them directly to test
+// The tool object exposes execute + toContent; call them directly to test
 // behavior without a model in the loop.
 type ViewTool = {
-  execute: (args: { id: string }, opts: unknown) => Promise<unknown>;
-  toModelOutput: (arg: { output: unknown }) => unknown;
+  execute: (args: { id: string }) => Promise<unknown>;
+  toContent: (output: unknown) => unknown;
 };
 
 describe("view_attachment", () => {
@@ -40,15 +45,13 @@ describe("view_attachment", () => {
       getAttachment: (id) => store.getAttachment(id),
     }).view_attachment as unknown as ViewTool;
 
-    const output = await tool.execute({ id: "att_1" }, {});
+    const output = await tool.execute({ id: "att_1" });
     expect(output).toEqual({ data: PNG_B64, mediaType: "image/png" });
-    expect(tool.toModelOutput({ output })).toEqual({
-      type: "content",
-      value: [
+    expect(tool.toContent(output)).toEqual({
+      content: [
         {
-          type: "file",
-          data: { type: "data", data: PNG_B64 },
-          mediaType: "image/png",
+          type: "image",
+          source: { type: "base64", media_type: "image/png", data: PNG_B64 },
         },
       ],
     });
@@ -61,11 +64,11 @@ describe("view_attachment", () => {
       getAttachment: (id) => store.getAttachment(id),
     }).view_attachment as unknown as ViewTool;
 
-    const output = await tool.execute({ id: "ghost" }, {});
+    const output = await tool.execute({ id: "ghost" });
     expect(output).toEqual({ error: "No attachment found for id ghost." });
-    expect(tool.toModelOutput({ output })).toEqual({
-      type: "error-text",
-      value: "No attachment found for id ghost.",
+    expect(tool.toContent(output)).toEqual({
+      content: "No attachment found for id ghost.",
+      isError: true,
     });
   });
 
@@ -78,30 +81,22 @@ describe("view_attachment", () => {
       getAttachment: () => null,
     }).view_attachment as unknown as ViewTool;
 
-    expect(await tool.execute({ id: "att_1" }, {})).toEqual({
+    expect(await tool.execute({ id: "att_1" })).toEqual({
       error: "No attachment found for id att_1.",
     });
   });
 
-  // Regression spike: the AI SDK must serialize the tool's `file` output into a
-  // real Anthropic `tool_result` image block (base64 image source), not a
-  // stringified blob. Intercept the provider's fetch to inspect the second
-  // request body. Guards against an AI SDK / provider upgrade breaking it.
+  // Regression spike: the loop must put the tool's image output into a real
+  // Anthropic `tool_result` image block (base64 image source), not a
+  // stringified blob, and the writer's transcript must never carry the base64.
   it("serializes the image into an Anthropic tool_result image block", async () => {
     const { store, attachments } = await seed();
-    const bodies: unknown[] = [];
+    const requests: AgentModelRequest[] = [];
     let call = 0;
-    const fakeFetch = vi.fn(async (_url: string, init?: { body?: string }) => {
-      bodies.push(JSON.parse(init?.body ?? "{}"));
-      call++;
-      if (call === 1) {
-        // First response: the model calls view_attachment.
-        return new Response(
-          JSON.stringify({
-            id: "msg_1",
-            type: "message",
-            role: "assistant",
-            model: "claude",
+    const model = capturingModel((request) => {
+      requests.push(structuredClone(request));
+      return call++ === 0
+        ? {
             content: [
               {
                 type: "tool_use",
@@ -110,34 +105,16 @@ describe("view_attachment", () => {
                 input: { id: "att_1" },
               },
             ],
-            stop_reason: "tool_use",
-            usage: { input_tokens: 1, output_tokens: 1 },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      // Second response: the model answers from the image.
-      return new Response(
-        JSON.stringify({
-          id: "msg_2",
-          type: "message",
-          role: "assistant",
-          model: "claude",
-          content: [{ type: "text", text: "It's a cat." }],
-          stop_reason: "end_turn",
-          usage: { input_tokens: 1, output_tokens: 1 },
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    });
-
-    const anthropic = createAnthropic({
-      apiKey: "test",
-      fetch: fakeFetch as unknown as typeof fetch,
+            stopReason: "tool_use",
+          }
+        : {
+            content: [{ type: "text", text: "It's a cat." }],
+            stopReason: "end_turn",
+          };
     });
 
     const result = await runAgent({
-      model: anthropic("claude-sonnet-4-6"),
+      model,
       system: "sys",
       prompt: "what is in the image att_1",
       tools: buildAttachmentTool({
@@ -148,24 +125,19 @@ describe("view_attachment", () => {
 
     expect(result.text).toBe("It's a cat.");
     // The second request carries the tool_result with an image block.
-    const second = bodies[1] as {
-      messages: Array<{ role: string; content: Array<{ type: string }> }>;
-    };
-    const parts = second.messages.flatMap((m) =>
-      Array.isArray(m.content) ? m.content : [],
-    );
-    const toolResult = parts.find((p) => p.type === "tool_result") as unknown as {
-      content: Array<{
-        type: string;
-        source?: { type: string; media_type: string; data: string };
-      }>;
-    };
-    expect(toolResult).toBeTruthy();
-    const image = toolResult.content.find((c) => c.type === "image");
-    expect(image?.source).toEqual({
-      type: "base64",
-      media_type: "image/png",
-      data: PNG_B64,
-    });
+    const toolResult = requests[1].messages
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .find((b): b is ToolResultBlock => b.type === "tool_result");
+    expect(toolResult?.content).toEqual([
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/png", data: PNG_B64 },
+      },
+    ]);
+
+    // The transcript redacts the payload the writer must never see.
+    const transcript = renderTranscript("show me att_1", result.messages);
+    expect(transcript).toContain("Tool result view_attachment: [image image/png]");
+    expect(transcript).not.toContain(PNG_B64);
   });
 });

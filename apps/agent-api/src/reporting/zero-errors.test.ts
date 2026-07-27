@@ -46,8 +46,8 @@ describe("reportError", () => {
   it("folds API-error detail (status, headers) into the event context", async () => {
     const fetchFn = mockFetch();
     const apiErr = Object.assign(new Error("rate limited"), {
-      statusCode: 429,
-      responseHeaders: { "retry-after": "30", "cf-ray": "abc" },
+      status: 429,
+      headers: new Headers({ "retry-after": "30", "cf-ray": "abc" }),
     });
 
     await reportError({ ZEROVAULT_API_KEY: "zv_test" }, apiErr);

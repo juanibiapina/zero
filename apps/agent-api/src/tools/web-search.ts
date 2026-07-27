@@ -2,7 +2,7 @@
 // can query the web and recover from failures (errors are returned as data, not
 // thrown, so the loop can retry with a different query).
 
-import { tool, type ToolSet } from "ai";
+import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
 import type { WebSearch } from "../websearch/types";
@@ -11,11 +11,11 @@ export interface WebSearchToolDeps {
   search: WebSearch;
 }
 
-export const buildWebSearchTool = (deps: WebSearchToolDeps): ToolSet => {
+export const buildWebSearchTool = (deps: WebSearchToolDeps): AgentToolSet => {
   const { search } = deps;
 
   return {
-    web_search: tool({
+    web_search: defineTool({
       description:
         "Search the web for current or external information. Call repeatedly with refined queries as needed. Returns a list of results, each with title, url, and snippet.",
       inputSchema: z.object({ query: z.string() }),

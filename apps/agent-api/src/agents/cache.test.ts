@@ -1,56 +1,74 @@
 import { describe, expect, it } from "vitest";
-import { tool, type ToolSet } from "ai";
-import { z } from "zod";
 import {
   cacheControl,
-  cachedSystemMessage,
+  cachedSystem,
   markCacheBreakpoint,
   markLastTool,
 } from "./cache";
+import type { AgentToolDefinition } from "./protocol";
 
-const cc = (opts: unknown) =>
-  (opts as { anthropic?: { cacheControl?: unknown } })?.anthropic?.cacheControl;
+const definition = (name: string): AgentToolDefinition => ({
+  name,
+  description: name,
+  input_schema: { type: "object" },
+});
 
 describe("cacheControl", () => {
   it("omits ttl by default and includes it when given", () => {
-    expect(cc(cacheControl())).toEqual({ type: "ephemeral" });
-    expect(cc(cacheControl("1h"))).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(cacheControl()).toEqual({ type: "ephemeral" });
+    expect(cacheControl("1h")).toEqual({ type: "ephemeral", ttl: "1h" });
   });
 });
 
-describe("cachedSystemMessage", () => {
-  it("builds a system-role message with a cache breakpoint", () => {
-    const msg = cachedSystemMessage("instructions", "1h");
-    expect(msg.role).toBe("system");
-    expect(msg.content).toBe("instructions");
-    expect(cc(msg.providerOptions)).toEqual({ type: "ephemeral", ttl: "1h" });
+describe("cachedSystem", () => {
+  it("builds a system text block with a cache breakpoint", () => {
+    expect(cachedSystem("instructions", "1h")).toEqual([
+      {
+        type: "text",
+        text: "instructions",
+        cache_control: { type: "ephemeral", ttl: "1h" },
+      },
+    ]);
   });
 });
 
 describe("markLastTool", () => {
-  const tools: ToolSet = {
-    a: tool({ description: "a", inputSchema: z.object({}) }),
-    b: tool({ description: "b", inputSchema: z.object({}) }),
-  };
+  const tools = [definition("a"), definition("b")];
 
   it("marks only the last tool and preserves order", () => {
     const marked = markLastTool(tools, "1h");
-    expect(Object.keys(marked)).toEqual(["a", "b"]);
-    expect(cc(marked.a.providerOptions)).toBeUndefined();
-    expect(cc(marked.b.providerOptions)).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(marked.map((t) => t.name)).toEqual(["a", "b"]);
+    expect(marked[0].cache_control).toBeUndefined();
+    expect(marked[1].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
     // Original untouched.
-    expect(tools.b.providerOptions).toBeUndefined();
+    expect(tools[1].cache_control).toBeUndefined();
   });
 
-  it("no-ops on an empty tool set", () => {
-    expect(markLastTool({})).toEqual({});
+  it("no-ops on an empty tool list", () => {
+    expect(markLastTool([])).toEqual([]);
   });
 });
 
 describe("markCacheBreakpoint", () => {
-  it("adds a breakpoint while preserving content", () => {
-    const marked = markCacheBreakpoint({ role: "user", content: "hello" });
-    expect(marked.content).toBe("hello");
-    expect(cc(marked.providerOptions)).toEqual({ type: "ephemeral" });
+  it("promotes string content to a text block carrying the breakpoint", () => {
+    expect(markCacheBreakpoint({ role: "user", content: "hello" })).toEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "hello", cache_control: { type: "ephemeral" } },
+      ],
+    });
+  });
+
+  it("marks only the last block of a multi-block message", () => {
+    const marked = markCacheBreakpoint({
+      role: "user",
+      content: [
+        { type: "text", text: "one" },
+        { type: "text", text: "two" },
+      ],
+    });
+    const blocks = marked.content as Array<{ cache_control?: unknown }>;
+    expect(blocks[0].cache_control).toBeUndefined();
+    expect(blocks[1].cache_control).toEqual({ type: "ephemeral" });
   });
 });

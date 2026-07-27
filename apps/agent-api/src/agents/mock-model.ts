@@ -1,10 +1,15 @@
-// Test helper: build a MockLanguageModelV3 from a script of steps. Each step is
-// either a set of tool calls (the loop will execute them and continue) or a
-// final text answer (which stops the loop). Not a test file itself.
+// Test helpers: models that satisfy the AgentModel seam without a network.
+// `scriptedModel` plays a fixed script of steps. Each step is either a set of
+// tool calls (the loop executes them and continues) or a final text answer
+// (which stops the loop). `capturingModel` hands the request to a callback so a
+// test can assert on the exact request shape. Not a test file itself.
 
-import { MockLanguageModelV3 } from "ai/test";
-import type { LanguageModelV3GenerateResult } from "@ai-sdk/provider";
-import type { LanguageModel } from "ai";
+import type {
+  AgentModel,
+  AgentModelRequest,
+  AgentModelResponse,
+  ContentBlock,
+} from "./protocol";
 
 export type ScriptStep =
   | { tools: Array<{ name: string; input: unknown }> }
@@ -12,43 +17,75 @@ export type ScriptStep =
 
 let callCounter = 0;
 
-// The V3 language-model spec models finishReason as { unified, raw }, not a
-// bare string; downstream code reads `.unified`, so the mock must match.
-const finishReason = (unified: string) => ({ unified, raw: unified });
-
-// Emit non-empty usage (with cache details) so tests can assert the token
+// Canned non-zero usage (with cache details) so tests can assert the token
 // counts flow through runAgent's result. No real caching happens here — the
-// mock ignores cache_control on the request; these are canned numbers.
-const usage = () => ({
-  inputTokens: { total: 20, noCache: 12, cacheRead: 8, cacheWrite: 4 },
-  outputTokens: { total: 5, text: 5, reasoning: 0 },
-});
+// mock ignores cache_control on the request.
+export const MOCK_USAGE = {
+  inputTokens: 20,
+  outputTokens: 5,
+  cacheReadTokens: 8,
+  cacheWriteTokens: 4,
+};
 
-const toResult = (step: ScriptStep): LanguageModelV3GenerateResult => {
+const toResponse = (step: ScriptStep, index: number): AgentModelResponse => {
+  const base = {
+    id: `msg_${index}`,
+    usage: MOCK_USAGE,
+    diagnostic: { state: "initial" as const },
+  };
   if ("text" in step) {
     return {
+      ...base,
       content: [{ type: "text", text: step.text }],
-      finishReason: finishReason("stop"),
-      usage: usage(),
-      warnings: [],
-    } as unknown as LanguageModelV3GenerateResult;
+      stopReason: "end_turn",
+    };
   }
   return {
-    content: step.tools.map((t) => ({
-      type: "tool-call",
-      toolCallId: `call-${callCounter++}`,
-      toolName: t.name,
-      input: JSON.stringify(t.input),
-    })),
-    finishReason: finishReason("tool-calls"),
-    usage: usage(),
-    warnings: [],
-  } as unknown as LanguageModelV3GenerateResult;
+    ...base,
+    content: step.tools.map(
+      (t): ContentBlock => ({
+        type: "tool_use",
+        id: `call-${callCounter++}`,
+        name: t.name,
+        input: t.input,
+      }),
+    ),
+    stopReason: "tool_use",
+  };
 };
 
 // Build a model that plays the script one step per generate call. End the
 // script with a `{ text }` step so the tool loop terminates.
-export const scriptedModel = (steps: ScriptStep[]): LanguageModel =>
-  new MockLanguageModelV3({
-    doGenerate: steps.map(toResult),
-  });
+export const scriptedModel = (steps: ScriptStep[]): AgentModel => {
+  let index = 0;
+  return {
+    modelId: "mock-model",
+    generate: async () => {
+      const step = steps[index];
+      if (!step) throw new Error(`scripted model ran out of steps at ${index}`);
+      return toResponse(step, index++);
+    },
+  };
+};
+
+// Build a model from a handler over the raw request. Use for request-shape
+// assertions (cache breakpoints, system text, tool schemas) and for failure
+// injection.
+export const capturingModel = (
+  handler: (
+    request: AgentModelRequest,
+  ) => Partial<AgentModelResponse> | Promise<Partial<AgentModelResponse>>,
+): AgentModel => ({
+  modelId: "mock-model",
+  generate: async (request) => {
+    const partial = await handler(request);
+    return {
+      id: "msg_capture",
+      content: [{ type: "text", text: "" }],
+      stopReason: "end_turn",
+      usage: MOCK_USAGE,
+      diagnostic: { state: "initial" },
+      ...partial,
+    };
+  },
+});

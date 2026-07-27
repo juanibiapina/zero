@@ -12,11 +12,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.16",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@clerk/backend": "^3.11.7",
     "@clerk/hono": "^0.1.53",
     "@hono/zod-openapi": "^1.5.1",
-    "ai": "^7.0.31",
     "aws4fetch": "^1.0.20",
     "do-orm": "github:juanibiapina/do-orm",
     "grammy": "^1.45.1",
@@ -26,7 +25,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "4.0.3",
     "@cloudflare/workers-types": "^4.20260629.1",
     "@types/node": "^26.1.1",
     "@zero/eslint-config": "workspace:*",

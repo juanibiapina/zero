@@ -8,7 +8,7 @@
 // interface agent) so the model supplies local wall-clock times and the tool
 // stamps the zone. See docs/google-tools.md.
 
-import { tool, type ToolSet } from "ai";
+import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
 import {
@@ -75,11 +75,11 @@ const toRfc3339 = (value: string, timeZone: string, endOfDay: boolean): string =
   return `${local}${zoneOffset(local, timeZone)}`;
 };
 
-export const buildGoogleTools = (deps: GoogleToolsDeps): ToolSet => {
+export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
   const { google, timezone } = deps;
 
   return {
-    gmail_search: tool({
+    gmail_search: defineTool({
       description:
         "Search the user's Gmail with Gmail query syntax (e.g. " +
         '"from:alice newer_than:7d"). Returns matching threads with threadId, ' +
@@ -92,7 +92,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): ToolSet => {
         }),
     }),
 
-    gmail_thread: tool({
+    gmail_thread: defineTool({
       description:
         "Read a full Gmail thread by threadId (from gmail_search). Returns each " +
         "message with its Gmail id, RFC-822 Message-ID header, From/To/Subject/" +
@@ -103,7 +103,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): ToolSet => {
         guard("gmail_thread", () => google.mail.getThread(threadId)),
     }),
 
-    gmail_send: tool({
+    gmail_send: defineTool({
       description:
         "Send an email, or reply in a thread. Only call after the user has " +
         "confirmed the exact recipients, subject, and body. For a reply, pass " +
@@ -123,7 +123,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): ToolSet => {
       execute: (input) => guard("gmail_send", () => google.mail.send(input)),
     }),
 
-    calendar_list_calendars: tool({
+    calendar_list_calendars: defineTool({
       description:
         "List the user's calendars (id, summary, whether primary, accessRole). " +
         "Use to name a calendar or pick a calendarId when the user means a " +
@@ -133,7 +133,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): ToolSet => {
         guard("calendar_list_calendars", () => google.calendar.listCalendars()),
     }),
 
-    calendar_list_events: tool({
+    calendar_list_events: defineTool({
       description:
         "List calendar events in a window across ALL the user's calendars by " +
         "default (each event tagged with its calendar), or a subset via " +
@@ -161,7 +161,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): ToolSet => {
         }),
     }),
 
-    calendar_create_event: tool({
+    calendar_create_event: defineTool({
       description:
         "Create a calendar event on calendarId (default 'primary'). Only call " +
         "after the user confirms the time (restated with its timezone), title, " +

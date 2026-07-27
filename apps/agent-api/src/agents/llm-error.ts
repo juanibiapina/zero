@@ -2,14 +2,14 @@
 // usage/spend cap, or transient overload) so the orchestrator can show a
 // clear message instead of the generic fallback. Pure, no I/O.
 
-// Walk .lastError (AI_RetryError) and .cause (ToolExecutionError, wrapped fetch
-// errors) to find an underlying API error's status code. The depth guard caps
-// recursion so a cyclic or pathologically deep chain can't loop forever.
+// The Anthropic SDK's APIError carries `status`. Walk `.cause` as well, since a
+// gateway or fetch failure can arrive wrapped. The depth guard caps recursion so
+// a cyclic or pathologically deep chain can't loop forever.
 const statusOf = (err: unknown, depth = 0): number | undefined => {
   if (depth > 5 || !err || typeof err !== "object") return undefined;
   const e = err as Record<string, unknown>;
-  if (typeof e.statusCode === "number") return e.statusCode;
-  return statusOf(e.lastError, depth + 1) ?? statusOf(e.cause, depth + 1);
+  if (typeof e.status === "number") return e.status;
+  return statusOf(e.cause, depth + 1);
 };
 
 export const isRateLimitError = (err: unknown): boolean => {

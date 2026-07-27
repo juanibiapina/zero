@@ -5,14 +5,14 @@
 // topic for any durable subject that has none. Skips trivial turns by making no
 // tool call. The store is the observable surface, so it returns nothing.
 
-import type { LanguageModel } from "ai";
+import type { AgentModel } from "./protocol";
 import { buildTopicTools } from "../tools/topics";
 import type { TopicStore } from "../store/types";
 import { writerSystemPrompt } from "./prompts";
 import { runAgent, type RunAgentUsage } from "./run";
 
 export interface WriterAgentInput {
-  model: LanguageModel;
+  model: AgentModel;
   store: TopicStore;
   accessed: string[];
   // The interface agent's turn transcript: user message, tool calls and their

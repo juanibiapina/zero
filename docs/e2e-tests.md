@@ -14,7 +14,10 @@ mock HTTP servers so the test is fast, free, and deterministic:
   `sendMessage`/`sendChatAction` the worker makes and exposes them at
   `GET /test/messages` (cleared with `DELETE /test/messages`).
 - **Mock Anthropic** (`src/mock-anthropic.ts`, port 3502) answers the
-  agent's LLM calls with canned responses. `POST /test/mode {"mode":"rate_limit"}`
+  agent's LLM calls with a canned non-streaming Messages response (the worker
+  posts `stream: false` and parses JSON). Each response carries a fresh
+  `msg_...` id, which the tool loop threads into the next request's
+  `diagnostics.previous_message_id`. `POST /test/mode {"mode":"rate_limit"}`
   switches it to return HTTP 429s (reset with `DELETE /test/mode`).
 
 `TELEGRAM_API_ROOT` and the LLM base URL are pointed at these mocks via
@@ -24,8 +27,15 @@ Telegram or Anthropic traffic leaves the machine.
 Current tests:
 
 - `hello.test.ts` — a plain text message produces a reply.
-- `attachments.test.ts` — a document upload is handled.
+- `attachments.test.ts` covers a document upload. **Currently failing and
+  stale:** it uploads a `text/plain` document and waits for a `getFile`
+  download, but the worker only downloads image attachments and answers anything
+  else with a notice. It needs rewriting around an image upload.
 - `rate-limit.test.ts` — a 429 from the model produces the rate-limit message.
+
+Webhook update ids are deduped durably per user, so `buildWebhookUpdate`
+generates a fresh id per call (seeded from the clock). A test that pins
+`updateId` by hand is a no-op on the second run against the same worker state.
 
 ## Running
 
@@ -50,4 +60,6 @@ and spins up several processes); run it on demand.
 
 ## Testing gotcha: LLM error paths
 
-When unit-testing an LLM error path through the Vercel AI SDK (`generateText`), throw a **non-retryable** error. A plain error carrying `statusCode` works; a default `APICallError` with a retryable status does not. Otherwise the SDK retries with exponential backoff and the test hangs past vitest's 5s timeout. Don't attach a `retry-after` header in these tests either. See the 429 case in `apps/agent-api/src/agents/orchestrator.test.ts`, which throws `Object.assign(new Error("rate limited"), { statusCode: 429 })`.
+Unit tests inject failures at the `AgentModel` seam (`capturingModel` in `apps/agent-api/src/agents/mock-model.ts`), which is above the HTTP client, so nothing retries and a thrown error surfaces immediately. Classification reads `status`: see the 429 case in `apps/agent-api/src/agents/orchestrator.test.ts`, which throws `Object.assign(new Error("rate limited"), { status: 429 })`.
+
+Only the e2e suite exercises the real Anthropic client, where a 429 is retried twice (`maxRetries: 2`) with backoff before it surfaces. That is why `packages/agent-e2e/src/rate-limit.test.ts` polls with a longer timeout.

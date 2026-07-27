@@ -15,7 +15,7 @@
 // mid-run eviction leaves the tail already `assistant` and the retry skips the
 // thread instead of re-sending.
 
-import { tool, type ToolSet } from "ai";
+import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import type { TopicStore } from "../store/types";
 
@@ -26,18 +26,18 @@ export interface TopicToolDeps {
   accessed?: Set<string>;
 }
 
-export const buildTopicTools = (deps: TopicToolDeps): ToolSet => {
+export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
   const { store, accessed } = deps;
 
   return {
-    list_topics: tool({
+    list_topics: defineTool({
       description:
         "List every topic with its metadata (name, description, summary) but no bodies. Use to see what topics exist.",
       inputSchema: z.object({}),
       execute: async () => store.listTopics(),
     }),
 
-    get_topic: tool({
+    get_topic: defineTool({
       description:
         "Get a topic's full content including its body, plus its links: " +
         "`outboundLinks` (topics its body links to via [[Name]]) and `backlinks` " +
@@ -55,7 +55,7 @@ export const buildTopicTools = (deps: TopicToolDeps): ToolSet => {
       },
     }),
 
-    list_backlinks: tool({
+    list_backlinks: defineTool({
       description:
         "List the topics whose body links to the named topic via [[Name]] " +
         "(its back-references). Use to find what references a topic before " +
@@ -67,7 +67,7 @@ export const buildTopicTools = (deps: TopicToolDeps): ToolSet => {
       },
     }),
 
-    create_topic: tool({
+    create_topic: defineTool({
       description:
         "Create a new topic for a subject worth remembering (a project, a person, an ongoing thread). Starts empty; fill it via update_topic.",
       inputSchema: z.object({ name: z.string(), description: z.string() }),
@@ -79,7 +79,7 @@ export const buildTopicTools = (deps: TopicToolDeps): ToolSet => {
       },
     }),
 
-    update_topic: tool({
+    update_topic: defineTool({
       description:
         "Patch a topic. Provide only the fields to change: body (full markdown), " +
         "description (routing blurb), summary (state-of-the-topic), or newName to " +
@@ -125,13 +125,13 @@ export interface InterfaceToolDeps {
   replies: string[];
 }
 
-export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
+export const buildInterfaceTools = (deps: InterfaceToolDeps): AgentToolSet => {
   const { store, send, persistReply, accessed, replies } = deps;
 
   return {
     ...buildTopicTools({ store, accessed }),
 
-    delete_topic: tool({
+    delete_topic: defineTool({
       description:
         "Permanently delete a topic. Irreversible: only call after the user has " +
         "explicitly confirmed. Other topics that link to it keep their [[Name]] " +
@@ -149,7 +149,7 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): ToolSet => {
       },
     }),
 
-    reply: tool({
+    reply: defineTool({
       description:
         "Send a message to the user, shown immediately. Call once per message you want the user to see; text not sent via reply is never shown.",
       inputSchema: z.object({ text: z.string() }),

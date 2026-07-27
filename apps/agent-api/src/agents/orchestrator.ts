@@ -9,7 +9,7 @@ import { runWriterAgent } from "./writer";
 import { usageLogFields } from "./run";
 import { log, logError, fmtErr } from "../log";
 import type { AgentLabel } from "./model";
-import type { LanguageModel } from "ai";
+import type { AgentModel } from "./protocol";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
@@ -23,7 +23,7 @@ export interface TurnInput {
   // Per-agent model factory. The orchestrator asks it for a tagged model at
   // each agent boundary (interface, research, writer) so gateway logs attribute
   // cost per agent. Tests inject a stub that records the labels requested.
-  makeModel: (agent: AgentLabel) => LanguageModel;
+  makeModel: (agent: AgentLabel) => AgentModel;
   send: (text: string) => Promise<void>;
   search: WebSearch;
   // Page-fetch port for the research agent's read_page tool (threaded like

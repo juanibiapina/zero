@@ -5,7 +5,7 @@
 // now"). The model supplies the IANA name; the tool validates it and offers
 // near matches on a miss so the model can correct itself.
 
-import { tool, type ToolSet } from "ai";
+import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
 import { isValidTimezone, suggestTimezones } from "../timezone";
@@ -16,11 +16,11 @@ export interface TimezoneToolDeps {
   setTimezone?: (tz: string) => void;
 }
 
-export const buildTimezoneTool = (deps: TimezoneToolDeps): ToolSet => {
+export const buildTimezoneTool = (deps: TimezoneToolDeps): AgentToolSet => {
   const { setTimezone } = deps;
 
   return {
-    set_timezone: tool({
+    set_timezone: defineTool({
       description:
         "Update the user's timezone when they tell you where they are or that " +
         "their timezone changed. Pass a canonical IANA zone name (e.g. " +

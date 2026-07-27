@@ -1,22 +1,21 @@
 import { describe, expect, it } from "vitest";
-import type { ToolExecutionOptions } from "ai";
 import { buildResearchTool } from "./research";
 import { scriptedModel } from "../agents/mock-model";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
 
-type ResearchExecute = (
-  input: { prompt: string; topic?: string },
-  options: ToolExecutionOptions<never>,
-) => Promise<string>;
+type ResearchExecute = (input: {
+  prompt: string;
+  topic?: string;
+}) => Promise<string>;
 
 const runResearch = (
   tools: ReturnType<typeof buildResearchTool>,
   input: { prompt: string; topic?: string },
 ): Promise<string> => {
   const execute = tools.research.execute as unknown as ResearchExecute;
-  return execute(input, {} as ToolExecutionOptions<never>);
+  return execute(input);
 };
 
 describe("buildResearchTool", () => {

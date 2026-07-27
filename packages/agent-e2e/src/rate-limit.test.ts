@@ -54,8 +54,9 @@ describe("rate limit", () => {
     });
     expect(res.status).toBe(200);
 
-    // 3. Poll for the reply. The worker's AI SDK retries the 429 twice with
-    // backoff before surfacing, so allow extra time over hello.test.ts.
+    // 3. Poll for the reply. The worker's Anthropic client retries the 429
+    // twice (maxRetries: 2) with backoff before surfacing, so allow extra time
+    // over hello.test.ts.
     const message = await pollForMessage(MOCK_TELEGRAM_URL, {
       timeoutMs: 30_000,
       intervalMs: 1_000,

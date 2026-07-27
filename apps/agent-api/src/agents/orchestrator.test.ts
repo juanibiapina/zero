@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runTurn } from "./orchestrator";
 import { FALLBACK_MESSAGE } from "./interface";
 import { RATE_LIMIT_MESSAGE } from "./llm-error";
-import { scriptedModel } from "./mock-model";
-import { MockLanguageModelV3 } from "ai/test";
-import type { LanguageModel } from "ai";
+import { capturingModel, scriptedModel } from "./mock-model";
+import type { AgentModel } from "./protocol";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
@@ -18,7 +17,7 @@ const collectSink = () => {
 // A makeModel factory that hands the same model to every agent, so a single
 // scripted sequence is shared across interface + writer exactly as one model
 // was before per-agent tagging.
-const constModel = (model: LanguageModel) => () => model;
+const constModel = (model: AgentModel) => () => model;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -213,10 +212,8 @@ describe("runTurn", () => {
 
     // A model whose generate call rejects: the throw propagates out of the
     // interface agent and must be caught by the orchestrator.
-    const model = new MockLanguageModelV3({
-      doGenerate: async () => {
-        throw new Error("gateway down");
-      },
+    const model = capturingModel(() => {
+      throw new Error("gateway down");
     });
 
     await expect(
@@ -254,12 +251,10 @@ describe("runTurn", () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});
 
-    // A 429 that is non-retryable so the AI SDK does not back off and wait,
-    // still carrying statusCode 429 for the classifier to key on.
-    const model = new MockLanguageModelV3({
-      doGenerate: async () => {
-        throw Object.assign(new Error("rate limited"), { statusCode: 429 });
-      },
+    // Thrown at the model seam (above the HTTP client), so nothing retries;
+    // it carries status 429 for the classifier to key on.
+    const model = capturingModel(() => {
+      throw Object.assign(new Error("rate limited"), { status: 429 });
     });
 
     await expect(
@@ -323,4 +318,5 @@ describe("runTurn", () => {
     expect(requested).toContain("research");
     expect(requested).toContain("writer");
   });
+
 });

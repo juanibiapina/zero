@@ -133,8 +133,11 @@ to turn scheduling.
 The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on the
 `Store` port (`apps/agent-api/src/store/types.ts`), not on the DO or do-orm, so they
 are unit-tested with an in-memory store and a scripted mock model. `UserDO`
-supplies the production `DbStore` adapter. LLM access is built in
-`agents/model.ts` (Cloudflare AI Gateway, per-user + per-agent `cf-aig-metadata`).
+supplies the production `DbStore` adapter. LLM access sits behind the
+`AgentModel` port (`agents/protocol.ts`), whose only production adapter is
+`agents/model.ts` (official `@anthropic-ai/sdk` client, Cloudflare AI Gateway,
+per-user + per-agent `cf-aig-metadata`). The tool loop itself is Zero's
+(`agents/run.ts`), so no SDK type reaches the agents or tools.
 
 ## State
 

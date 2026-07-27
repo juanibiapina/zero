@@ -2,21 +2,32 @@
 // assistant text. The interface agent and the research agent are the same
 // runner instantiated with different system prompts and toolsets. It has no
 // opinion about the output (no fallback); callers decide what the text means.
+//
+// The loop is Zero's own: send a request, append the assistant response
+// verbatim, run every tool_use block, append one user turn of tool_result
+// blocks, repeat until the model stops calling tools. Round-tripping the
+// response content untouched keeps tool ids, inputs, and any block type we
+// don't model intact.
 
 import {
-  generateText,
-  stepCountIs,
-  type LanguageModel,
-  type LanguageModelUsage,
-  type ModelMessage,
-  type ToolSet,
-} from "ai";
-import { cachedSystemMessage, markLastTool } from "./cache";
+  toToolDefinitions,
+  type AgentMessage,
+  type AgentModel,
+  type AgentToolSet,
+  type ContentBlock,
+  type StopReason,
+  type TextBlock,
+  type TokenUsage,
+  type ToolResultBlock,
+  type ToolResultContent,
+  type ToolUseBlock,
+} from "./protocol";
+import { cachedSystem, markLastTool } from "./cache";
 
 // Shared step cap for every agent (interface and research). The cap is a
 // runaway-loop guard, not an expected stopping point: the model normally
-// finishes in a handful of steps. 200 gives generous headroom (AI SDK's own
-// default is 20) while still bounding pathological loops.
+// finishes in a handful of steps. 200 gives generous headroom while still
+// bounding pathological loops.
 //
 // Tradeoff of a high cap: (a) the Cloudflare subrequest ceiling — 1000
 // subrequests per invocation; each step is >=1 LLM call, research adds search
@@ -27,31 +38,24 @@ import { cachedSystemMessage, markLastTool } from "./cache";
 export const AGENT_MAX_STEPS = 200;
 
 export interface RunAgentInput {
-  model: LanguageModel;
+  model: AgentModel;
   system: string;
   // Either a single user `prompt` string (wrapped into one user message) or a
   // full `messages` array. The interface agent passes structured `messages`
   // (native user/assistant turns); research, writer, and onboarding pass a
   // `prompt`. When both are present, `messages` wins.
   prompt?: string;
-  messages?: ModelMessage[];
-  tools?: ToolSet;
+  messages?: AgentMessage[];
+  tools?: AgentToolSet;
   maxSteps?: number;
-  // Prompt caching on by default: the system string becomes a cached leading
-  // system message and the last tool is marked with a cache breakpoint. Set
-  // false to opt out (tests/mocks that assert the plain shape).
+  // Prompt caching on by default: the system text gets a 1h cache breakpoint
+  // and so does the last tool. Set false to opt out (tests that assert the
+  // plain shape).
   cache?: boolean;
 }
 
-// Token counts for one run (aggregate) or one step. `inputTokens` is the
-// uncached, full-price input; cache read/write are billed separately by
-// Anthropic. See docs/caching.md for how these validate each caching tier.
-export interface RunAgentUsage {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-}
+// Token counts for one run (aggregate) or one step.
+export type RunAgentUsage = TokenUsage;
 
 export interface RunAgentResult {
   text: string;
@@ -60,13 +64,11 @@ export interface RunAgentResult {
   // use this to detect cap exhaustion and deliver a fallback.
   finishReason: string;
   steps: number;
-  // The assistant + tool messages generated across every step this run (tool
-  // calls, tool results, assistant text). Callers serialize these into a turn
-  // transcript so a downstream agent sees what tools returned, not only the
-  // final text. `response.messages` alone holds only the last step, so this
-  // flattens all steps.
-  messages: ModelMessage[];
-  // Whole-run token totals, summed across every tool-loop step by the AI SDK.
+  // The assistant + tool-result messages generated across every step this run.
+  // Callers serialize these into a turn transcript so a downstream agent sees
+  // what tools returned, not only the final text.
+  messages: AgentMessage[];
+  // Whole-run token totals, summed across every tool-loop step.
   usage: RunAgentUsage;
   // Per-step token counts. The tier-1 write-then-read pattern (step 1 writes the
   // prefix, later steps read it) is invisible in the aggregate, so callers read
@@ -74,12 +76,23 @@ export interface RunAgentResult {
   stepUsages: RunAgentUsage[];
 }
 
-const extractUsage = (usage: LanguageModelUsage): RunAgentUsage => ({
-  inputTokens: usage.inputTokens ?? 0,
-  outputTokens: usage.outputTokens ?? 0,
-  cacheReadTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
-  cacheWriteTokens: usage.inputTokenDetails?.cacheWriteTokens ?? 0,
-});
+const ZERO_USAGE: RunAgentUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
+
+const sumUsage = (usages: RunAgentUsage[]): RunAgentUsage =>
+  usages.reduce(
+    (acc, u) => ({
+      inputTokens: acc.inputTokens + u.inputTokens,
+      outputTokens: acc.outputTokens + u.outputTokens,
+      cacheReadTokens: acc.cacheReadTokens + u.cacheReadTokens,
+      cacheWriteTokens: acc.cacheWriteTokens + u.cacheWriteTokens,
+    }),
+    ZERO_USAGE,
+  );
 
 // Compact log fields for a completion line: token totals plus a single
 // cache-hit signal. `cache_hit_ratio` = reads / (reads + writes + uncached
@@ -99,36 +112,167 @@ export const usageLogFields = (usage: RunAgentUsage) => {
   };
 };
 
+// Anthropic stop reason -> the runner's finish reason. Only `end_turn` and
+// `stop_sequence` are a real final answer; everything else (including a null
+// stop reason and cap exhaustion) must be distinguishable so the interface
+// agent falls back instead of delivering empty text.
+export const FINISH_REASON: Record<StopReason, string> = {
+  end_turn: "stop",
+  stop_sequence: "stop",
+  tool_use: "tool-calls",
+  max_tokens: "length",
+  refusal: "refusal",
+  pause_turn: "pause",
+  compaction: "compaction",
+  model_context_window_exceeded: "context-window-exceeded",
+};
+
+const finishReasonFor = (stop: StopReason | null): string =>
+  stop === null ? "unknown" : (FINISH_REASON[stop] ?? "unknown");
+
+const isToolUse = (block: ContentBlock): block is ToolUseBlock =>
+  block.type === "tool_use";
+
+const isText = (block: ContentBlock): block is TextBlock =>
+  block.type === "text";
+
+// Deterministic text for an ordinary tool output. Strings pass through; other
+// values become JSON so the model sees the structure the tool returned.
+const serializeOutput = (output: unknown): string => {
+  if (typeof output === "string") return output;
+  try {
+    return JSON.stringify(output) ?? String(output);
+  } catch {
+    return String(output);
+  }
+};
+
+const errorResult = (
+  toolUseId: string,
+  message: string,
+): ToolResultBlock => ({
+  type: "tool_result",
+  tool_use_id: toolUseId,
+  content: message,
+  is_error: true,
+});
+
+// Run one tool call. Unknown tool names, inputs that fail schema validation, and
+// exceptions thrown by `execute` all come back as error tool results fed to the
+// model, never as a rejected run: the interface agent relies on a failed `reply`
+// send surfacing after the loop, not as a mid-loop throw.
+const runTool = async (
+  tools: AgentToolSet,
+  call: ToolUseBlock,
+): Promise<ToolResultBlock> => {
+  const tool = tools[call.name];
+  if (!tool) {
+    return errorResult(call.id, `Unknown tool: ${call.name}`);
+  }
+  const parsed = tool.inputSchema.safeParse(call.input);
+  if (!parsed.success) {
+    return errorResult(
+      call.id,
+      `Invalid input for tool ${call.name}: ${parsed.error.message}`,
+    );
+  }
+  try {
+    const output = await tool.execute(parsed.data);
+    if (tool.toContent) {
+      const { content, isError } = tool.toContent(output);
+      return {
+        type: "tool_result",
+        tool_use_id: call.id,
+        content,
+        ...(isError ? { is_error: true } : {}),
+      };
+    }
+    const content: ToolResultContent = serializeOutput(output);
+    return { type: "tool_result", tool_use_id: call.id, content };
+  } catch (err) {
+    return errorResult(
+      call.id,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+};
+
 export const runAgent = async (
   input: RunAgentInput,
 ): Promise<RunAgentResult> => {
   const cache = input.cache ?? true;
-  const callerMessages = input.messages ?? [
-    { role: "user" as const, content: input.prompt ?? "" },
+  const tools = input.tools ?? {};
+  const callerMessages: AgentMessage[] = input.messages ?? [
+    { role: "user", content: input.prompt ?? "" },
   ];
-  // Cache order is tools -> system -> messages. Mark the last tool (all schemas)
-  // and hoist the system string into a cached leading system message; both use
-  // a 1h TTL because they are shared across users and stay permanently warm.
-  // Any messages-region breakpoints are set by the caller and preserved here.
-  const tools =
-    cache && input.tools ? markLastTool(input.tools, "1h") : input.tools;
-  const messages = cache
-    ? [cachedSystemMessage(input.system, "1h"), ...callerMessages]
-    : callerMessages;
-  const result = await generateText({
-    model: input.model,
-    ...(cache ? {} : { system: input.system }),
-    messages,
-    allowSystemInMessages: cache,
-    tools,
-    stopWhen: stepCountIs(input.maxSteps ?? AGENT_MAX_STEPS),
-  });
+
+  // Cache order is tools -> system -> messages. Mark the last tool (which covers
+  // every schema before it) and the system block; both use a 1h TTL because they
+  // are shared across users and stay permanently warm. Any messages-region
+  // breakpoints are set by the caller and preserved here.
+  const definitions = toToolDefinitions(tools);
+  const wireTools = cache ? markLastTool(definitions, "1h") : definitions;
+  const system: TextBlock[] = cache
+    ? cachedSystem(input.system, "1h")
+    : [{ type: "text", text: input.system }];
+
+  const messages: AgentMessage[] = [...callerMessages];
+  const generated: AgentMessage[] = [];
+  const stepUsages: RunAgentUsage[] = [];
+  const maxSteps = input.maxSteps ?? AGENT_MAX_STEPS;
+
+  for (let step = 0; step < maxSteps; step++) {
+    const response = await input.model.generate({
+      system,
+      // Snapshot: the loop keeps appending to `messages`, and the request must
+      // not mutate under the adapter after it is handed over.
+      messages: [...messages],
+      tools: wireTools,
+    });
+    stepUsages.push(response.usage);
+
+    // Round-trip the response content verbatim: tool ids, inputs, and block
+    // types the protocol does not model must survive into the next request.
+    const assistant: AgentMessage = {
+      role: "assistant",
+      content: response.content,
+    };
+    messages.push(assistant);
+    generated.push(assistant);
+
+    const calls = response.content.filter(isToolUse);
+    if (calls.length > 0) {
+      // Parallel execution, results kept in call order (the API requires one
+      // tool_result per tool_use, and pairs them by id).
+      const results = await Promise.all(
+        calls.map((call) => runTool(tools, call)),
+      );
+      const toolTurn: AgentMessage = { role: "user", content: results };
+      messages.push(toolTurn);
+      generated.push(toolTurn);
+      continue;
+    }
+
+    return {
+      text: response.content
+        .filter(isText)
+        .map((b) => b.text)
+        .join("\n"),
+      finishReason: finishReasonFor(response.stopReason),
+      steps: stepUsages.length,
+      messages: generated,
+      usage: sumUsage(stepUsages),
+      stepUsages,
+    };
+  }
+
+  // Cap exhausted mid-tool-call: no final answer was produced.
   return {
-    text: result.text,
-    finishReason: result.finishReason,
-    steps: result.steps.length,
-    messages: result.steps.flatMap((s) => s.response.messages),
-    usage: extractUsage(result.usage),
-    stepUsages: result.steps.map((s) => extractUsage(s.usage)),
+    text: "",
+    finishReason: "tool-calls",
+    steps: stepUsages.length,
+    messages: generated,
+    usage: sumUsage(stepUsages),
+    stepUsages,
   };
 };

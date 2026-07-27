@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { ToolExecutionOptions } from "ai";
 import { buildGoogleTools } from "./google";
 import { createMemoryGoogle } from "../google/memory";
 
@@ -9,11 +8,7 @@ const run = (
   name: keyof ReturnType<typeof buildGoogleTools>,
   input: unknown,
 ): Promise<unknown> => {
-  const execute = tools[name].execute as unknown as (
-    i: unknown,
-    o: ToolExecutionOptions<never>,
-  ) => Promise<unknown>;
-  return execute(input, {} as ToolExecutionOptions<never>);
+  return tools[name].execute(input);
 };
 
 describe("buildGoogleTools gmail", () => {

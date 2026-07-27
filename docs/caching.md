@@ -19,7 +19,14 @@ reads for each tier (see [Production validation](#production-validation)).
   that serialized prefix, so volatile content early (e.g. in `system`) kills
   caching of everything after it.
 - **TTL:** 5 minutes default, 1 hour optional (`ttl: '1h'`, higher write
-  premium). Refreshed on every hit.
+  premium; no beta header needed). Refreshed on every hit. The response splits
+  writes by tier in `cache_creation.ephemeral_5m/1h_input_tokens`, so a TTL-tier
+  check does not need separate requests.
+- **Placement.** Zero sets `cache_control` on the exact block it means: the last
+  tool definition, the system text block, and a message's last content block.
+  The API also accepts a top-level `cache_control` request param that
+  auto-marks the last cacheable block; that is one breakpoint at the end of the
+  prompt, not a substitute for Zero's four.
 - **Min cacheable length:** 1024 tokens for Sonnet 4.x. Our system+tools exceed
   this comfortably; shorter prefixes silently no-op.
 - **Scope:** keyed on the Anthropic org/key. We run BYOK through one gateway key,
@@ -72,10 +79,12 @@ blocked cross-user sharing. So we split stable from volatile:
 In cache order:
 
 1. **Last tool** — `ttl: '1h'`. Caches all tool schemas; shared across users.
-   Marked by `markLastTool` in `runAgent`.
+   Marked by `markLastTool` in `runAgent`, which sets `cache_control` directly
+   on the last tool definition.
 2. **Static system head (pinned folded onto its tail)** — `ttl: '1h'`.
    Instructions shared across users; pinned tail makes the block per-user,
-   cross-turn while unchanged. Injected by `cachedSystemMessage` in `runAgent`.
+   cross-turn while unchanged. Injected by `cachedSystem` in `runAgent`, which
+   sends `system` as a text block carrying `cache_control`.
 3. **Last stable history message** — default 5m. The previous turn's final
    block; byte-identical next turn, so this is the write that produces the
    cross-turn history read. Omitted when history is empty.

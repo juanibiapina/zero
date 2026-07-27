@@ -1,7 +1,7 @@
 // Generic agent for administrator-invoked work. It receives the task prompt
 // verbatim and can operate only on the user's durable knowledge model.
 
-import type { LanguageModel } from "ai";
+import type { AgentModel } from "./protocol";
 import { log } from "../log";
 import type { TopicStore } from "../store/types";
 import { buildTopicTools } from "../tools/topics";
@@ -9,7 +9,7 @@ import { adminTaskSystemPrompt } from "./prompts";
 import { runAgent, usageLogFields } from "./run";
 
 export interface AdminTaskAgentInput {
-  model: LanguageModel;
+  model: AgentModel;
   store: TopicStore;
   prompt: string;
   maxSteps?: number;

@@ -3,7 +3,7 @@
 // (web_search returns only snippets). Errors are returned as data, not thrown,
 // so the loop continues (mirrors web-search.ts).
 
-import { tool, type ToolSet } from "ai";
+import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
 import type { PageFetcher } from "../pagefetch/types";
@@ -12,11 +12,11 @@ export interface ReadPageToolDeps {
   fetcher: PageFetcher;
 }
 
-export const buildReadPageTool = (deps: ReadPageToolDeps): ToolSet => {
+export const buildReadPageTool = (deps: ReadPageToolDeps): AgentToolSet => {
   const { fetcher } = deps;
 
   return {
-    read_page: tool({
+    read_page: defineTool({
       description:
         "Fetch and read the full cleaned content of a web page by URL. " +
         "web_search returns only short snippets; call read_page on a result's " +

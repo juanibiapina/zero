@@ -2,55 +2,69 @@
 // order tools -> system -> messages; we place up to 4 `cache_control`
 // breakpoints over that prefix so a later request that shares the byte-identical
 // prefix reads it from cache (~0.1x price) instead of re-billing it. This module
-// hides the provider-option wire shape behind named intent so run.ts and
-// interface.ts express *what* to cache, not the format. See docs/caching.md.
+// hides the wire placement behind named intent so run.ts and interface.ts
+// express *what* to cache, not where the field goes. See docs/caching.md.
+//
+// Four is the API maximum, and Zero spends all four: tools, system, the last
+// stable history message, and the current user message. The tool loop must not
+// add more as it appends steps.
 
-import type { ModelMessage, ToolSet } from "ai";
+import type {
+  AgentMessage,
+  AgentToolDefinition,
+  CacheControl,
+  CacheTtl,
+  ContentBlock,
+  TextBlock,
+} from "./protocol";
 
-export type CacheTtl = "5m" | "1h";
+export type { CacheTtl };
 
-// The providerOptions blob that marks a cache breakpoint for Anthropic. `ttl`
-// defaults to 5m at the provider; pass "1h" for the shared, high-reuse prefixes
-// (tools, static system) where the higher write premium is amortized over huge
-// read volume.
-export const cacheControl = (ttl?: CacheTtl) => ({
-  anthropic: {
-    cacheControl: { type: "ephemeral" as const, ...(ttl ? { ttl } : {}) },
-  },
+// The breakpoint marker itself. `ttl` defaults to 5m at the API; pass "1h" for
+// the shared, high-reuse prefixes (tools, static system) where the higher write
+// premium is amortized over huge read volume.
+export const cacheControl = (ttl?: CacheTtl): CacheControl => ({
+  type: "ephemeral" as const,
+  ...(ttl ? { ttl } : {}),
 });
 
-// A leading system message carrying a cache breakpoint. Passed as the first
-// entry of the messages array (with allowSystemInMessages) so the SDK hoists it
-// to the top-level `system` field and honors its cache_control. The string
-// `system` param cannot carry cache_control, hence the conversion to a message.
-export const cachedSystemMessage = (
-  text: string,
+// The top-level `system` field as a single text block carrying a breakpoint.
+// A bare system string cannot carry cache_control, hence the block form.
+export const cachedSystem = (text: string, ttl?: CacheTtl): TextBlock[] => [
+  { type: "text", text, cache_control: cacheControl(ttl) },
+];
+
+// Mark the last tool definition with a breakpoint. Anthropic caches the whole
+// serialized tool block up to this marker, so one breakpoint on the final tool
+// covers every tool schema. Order-preserving; returns a new array so callers
+// keep their originals untouched.
+export const markLastTool = (
+  tools: AgentToolDefinition[],
   ttl?: CacheTtl,
-): ModelMessage => ({
-  role: "system",
-  content: text,
-  providerOptions: cacheControl(ttl),
-});
-
-// Mark the last tool in the set with a cache breakpoint. Anthropic caches over
-// the whole serialized tool block up to this marker, so one breakpoint on the
-// final tool covers every tool schema. Order-preserving; returns a new set so
-// callers keep their original tools untouched.
-export const markLastTool = (tools: ToolSet, ttl?: CacheTtl): ToolSet => {
-  const keys = Object.keys(tools);
-  if (keys.length === 0) return tools;
-  const lastKey = keys[keys.length - 1];
-  return {
-    ...tools,
-    [lastKey]: { ...tools[lastKey], providerOptions: cacheControl(ttl) },
-  };
+): AgentToolDefinition[] => {
+  if (tools.length === 0) return tools;
+  const last = tools[tools.length - 1];
+  return [...tools.slice(0, -1), { ...last, cache_control: cacheControl(ttl) }];
 };
 
-// Add a cache breakpoint to a message, preserving its content. The provider
-// applies message-level cache_control to the message's last content block. Used
-// for the messages-region sliding window (last stable message + current
-// message).
+// Add a breakpoint to a message. The marker goes on the message's last content
+// block (a string content is promoted to a single text block). Used for the
+// messages-region sliding window (last stable message + current message).
 export const markCacheBreakpoint = (
-  message: ModelMessage,
+  message: AgentMessage,
   ttl?: CacheTtl,
-): ModelMessage => ({ ...message, providerOptions: cacheControl(ttl) });
+): AgentMessage => {
+  const blocks: ContentBlock[] =
+    typeof message.content === "string"
+      ? [{ type: "text", text: message.content }]
+      : message.content;
+  if (blocks.length === 0) return message;
+  const last = blocks[blocks.length - 1];
+  return {
+    ...message,
+    content: [
+      ...blocks.slice(0, -1),
+      { ...last, cache_control: cacheControl(ttl) },
+    ],
+  };
+};

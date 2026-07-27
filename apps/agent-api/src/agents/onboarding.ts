@@ -5,7 +5,7 @@
 // It authors the pinned topic directly (like the research agent authors its
 // topic), so there is no writer pass. Runs off Telegram on the DO alarm.
 
-import type { LanguageModel } from "ai";
+import type { AgentModel } from "./protocol";
 import { buildTopicTools } from "../tools/topics";
 import { buildGoogleTools } from "../tools/google";
 import type { TopicStore } from "../store/types";
@@ -15,7 +15,7 @@ import { runAgent, usageLogFields } from "./run";
 import { log } from "../log";
 
 export interface OnboardingAgentInput {
-  model: LanguageModel;
+  model: AgentModel;
   store: TopicStore;
   google: GoogleWorkspace;
   // The pre-created, pinned topic the agent fills (e.g. "User").

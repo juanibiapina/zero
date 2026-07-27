@@ -50,9 +50,9 @@ runAgent({ model, system, prompt, tools, maxSteps }) →
   { text, finishReason, steps, messages, usage, stepUsages }
 ```
 
-`runAgent` also applies prompt caching: it turns `system` into a cached leading
-system message and marks the last tool with a cache breakpoint, and returns token
-counts (`usage`, `stepUsages`). See [caching.md](./caching.md).
+`runAgent` also applies prompt caching: it sends `system` as a text block with a
+cache breakpoint and marks the last tool with another, and returns token counts
+(`usage`, `stepUsages`). See [caching.md](./caching.md).
 
 The interface agent, the research agent, and the writer agent are the same
 runner with different system prompts and toolsets:

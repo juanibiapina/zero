@@ -95,7 +95,7 @@ migration and no per-user seeding.
 
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new
    user message plus recent history, it runs a tool loop and sends replies as it
-   works. The history is assembled as a real `ModelMessage[]` conversation
+   works. The history is assembled as a real multi-turn conversation
    (`buildConversationMessages`), not a single flattened prompt: each stored
    user/assistant message becomes a native turn (user turns prefixed with an
    absolute `[YYYY-MM-DD HH:MM]` timestamp, assistant turns verbatim), leading
@@ -130,7 +130,7 @@ migration and no per-user seeding.
    (truncated) result, and assistant replies. This matters because durable facts
    often live in tool results (calendar events, email bodies, research), not in
    the user-facing replies, which are lossy. The interface agent builds it from
-   the AI SDK step messages (`renderTranscript`), capping each tool result
+   the run's generated messages (`renderTranscript`), capping each tool result
    (~1.5 KB) so a large payload cannot blow up the writer's input; the tradeoff
    is higher writer token cost and latency, bounded by that cap. For each
    accessed topic that gained durable information it reads the body
@@ -184,9 +184,9 @@ a skipped retry the writer consolidation for that turn also does not re-run; liv
 topic create/update calls already persisted the durable facts, only the writer's
 Log-line/summary refresh is lost for that one turn.
 
-A `reply` whose `send()` fails is a related case. The AI SDK swallows a thrown
-tool `execute` (it becomes a tool-error fed back to the model, not a rejected
-`generateText`), so the interface agent captures the first send failure and
+A `reply` whose `send()` fails is a related case. The tool loop swallows a
+thrown tool `execute` (it becomes an error `tool_result` fed back to the model,
+not a rejected run), so the interface agent captures the first send failure and
 re-raises it after the tool loop. That routes to the orchestrator boundary
 below: `turn_failed` is logged and the user gets the fallback. The undelivered
 reply row was already persisted (persist-before-send), so it stays in history
@@ -237,8 +237,9 @@ trustworthy.
 
 ## LLM access
 
-Both agents get their model from `agents/model.ts`, which builds an
-`@ai-sdk/anthropic` provider pointed at the Cloudflare AI Gateway
+Both agents get their model from `agents/model.ts`, the only module that
+touches the official `@anthropic-ai/sdk`. It builds a client pointed at the
+Cloudflare AI Gateway
 (`cf-aig-authorization` for the gateway, `cf-aig-metadata` for per-user
 attribution). BYOK Anthropic billing and per-user spend limits live in the
 gateway; the gateway also logs per-request tokens and USD cost per user.

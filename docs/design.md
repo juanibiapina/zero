@@ -49,7 +49,7 @@ zero/
 | Frontend | React 19, Tailwind v4, shadcn/ui primitives |
 | API    | Hono + OpenAPIHono + Zod on Cloudflare Workers |
 | State  | UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) + Workers KV for identity lookups |
-| Agents | `ai` SDK (`generateText` tool loop) with `@ai-sdk/anthropic` |
+| Agents | Zero-owned tool loop (`agents/run.ts`) over `@anthropic-ai/sdk` |
 | LLM    | Cloudflare AI Gateway → Anthropic (BYOK) — `claude-sonnet-4-6` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
 | Secrets | Doppler (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
@@ -111,15 +111,16 @@ run inline in the turn's DO alarm. See [`topics.md`](topics.md),
 [`research.md`](research.md), and [`framework.md`](framework.md).
 
 **Structured message history (interface agent).** The interface agent builds a
-real `ModelMessage[]` conversation (`buildConversationMessages` in
+real multi-turn conversation (`buildConversationMessages` in
 `agents/interface.ts`), not a single flattened blob. The split is deliberate:
 
 - **System prompt** carries everything that is instruction or stable reference,
   not a turn: agent instructions, the datetime anchor, and the pinned-topics
   block.
 - **`messages`** carries only the Telegram dialogue: each stored user/assistant
-  message as a native turn, ending with the current user message. The AI SDK
-  appends live tool-call/result/assistant messages to this array during the run.
+  message as a native turn, ending with the current user message. The tool loop
+  appends the assistant response and one `tool_result` turn per step during the
+  run.
 
 Each user message is prefixed with an absolute timestamp `[YYYY-MM-DD HH:MM]` in
 the user's timezone (stable turn-to-turn, cache-friendly); assistant messages
@@ -308,8 +309,8 @@ documented in [caching.md](./caching.md).
 
 - Support non-image attachments (PDF, audio, video) through the same
   `view_attachment` path once their `tool_result` serialization is verified.
-- Consider structured `ModelMessage[]` history for the research and writer
-  agents (they currently use the single-`prompt` path).
+- Consider structured multi-turn history for the research and writer agents
+  (they currently use the single-`prompt` path).
 - An R2 lifecycle expiry rule for attachment objects.
 - Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
   shapes are known; Google onboarding is the first, deliberately minimal, one

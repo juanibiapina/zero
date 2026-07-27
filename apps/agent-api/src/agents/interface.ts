@@ -2,7 +2,7 @@
 // goes, and reports which topics it touched so the writer can consolidate them.
 // The returned { replies, accessed } is the test surface for the whole system.
 
-import { type LanguageModel, type ModelMessage } from "ai";
+import type { AgentMessage, AgentModel, ToolResultBlock } from "./protocol";
 import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
 import { buildTimezoneTool } from "../tools/timezone";
@@ -71,11 +71,11 @@ export const decideFinalDelivery = (
 };
 
 export interface InterfaceAgentInput {
-  model: LanguageModel;
+  model: AgentModel;
   // Model for the nested research agent, tagged "research" for gateway
   // attribution. Falls back to `model` when omitted (tests that don't exercise
   // research need not distinguish the two).
-  researchModel?: LanguageModel;
+  researchModel?: AgentModel;
   store: TopicStore;
   send: (text: string) => Promise<void>;
   // Persist an assistant message durably before it is sent. Wired by the
@@ -138,36 +138,44 @@ const truncate = (text: string): string =>
     ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}…[truncated]`
     : text;
 
-// Serialize the run's model messages into a compact transcript. Generic over
-// tools: any tool call and result is captured without per-tool code.
+// Render a tool result's content for the transcript. Image blocks are redacted
+// to a marker: their base64 payload is worth thousands of tokens and nothing to
+// the writer.
+const renderToolResult = (content: ToolResultBlock["content"]): string => {
+  if (typeof content === "string") return content;
+  return content
+    .map((block) =>
+      block.type === "text" ? block.text : `[image ${block.source.media_type}]`,
+    )
+    .join("\n");
+};
+
+// Serialize the run's generated messages into a compact transcript. Generic
+// over tools: any tool call and result is captured without per-tool code. Tool
+// results carry only the call id, so names are resolved from the tool_use
+// blocks seen earlier in the run.
 export const renderTranscript = (
   userMessage: string,
-  messages: ModelMessage[],
+  messages: AgentMessage[],
 ): string => {
   const lines: string[] = [`User: ${userMessage}`];
+  const toolNames = new Map<string, string>();
   for (const message of messages) {
     const content = message.content;
     if (typeof content === "string") {
       if (content.trim()) lines.push(`Assistant: ${content}`);
       continue;
     }
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      if (part.type === "text") {
-        if (part.text.trim()) lines.push(`Assistant: ${part.text}`);
-      } else if (part.type === "tool-call") {
-        lines.push(`Tool call ${part.toolName}: ${stringify(part.input)}`);
-      } else if (part.type === "tool-result") {
-        // Tool-result output is wrapped: { type: "text"|"json"|..., value }.
-        // Unwrap to the value so the transcript shows the payload, not the
-        // wrapper.
-        const raw = (part as { output?: unknown }).output;
-        const output =
-          raw && typeof raw === "object" && "value" in raw
-            ? (raw).value
-            : raw;
+    for (const block of content) {
+      if (block.type === "text") {
+        if (block.text.trim()) lines.push(`Assistant: ${block.text}`);
+      } else if (block.type === "tool_use") {
+        toolNames.set(block.id, block.name);
+        lines.push(`Tool call ${block.name}: ${stringify(block.input)}`);
+      } else if (block.type === "tool_result") {
+        const name = toolNames.get(block.tool_use_id) ?? "unknown";
         lines.push(
-          `Tool result ${part.toolName}: ${truncate(stringify(output))}`,
+          `Tool result ${name}: ${truncate(renderToolResult(block.content))}`,
         );
       }
     }
@@ -218,7 +226,7 @@ export const buildConversationMessages = (
   userMessage: string,
   now: Date = new Date(),
   timezone = "UTC",
-): ModelMessage[] => {
+): AgentMessage[] => {
   const turns: Message[] = [
     ...history,
     { role: "user", content: userMessage, createdAt: now.toISOString() },
@@ -228,7 +236,7 @@ export const buildConversationMessages = (
   let start = 0;
   while (start < turns.length && turns[start].role === "assistant") start++;
 
-  const messages: ModelMessage[] = [];
+  const messages: AgentMessage[] = [];
   for (const turn of turns.slice(start)) {
     const text =
       turn.role === "user"
@@ -254,9 +262,9 @@ export const runInterfaceAgent = async (
   const replies: string[] = [];
   const persistReply = input.persistReply ?? (() => {});
 
-  // A send failure inside the `reply` tool is swallowed by the AI SDK (a thrown
-  // tool execute becomes a tool-error fed back to the model, not a rejected
-  // generateText). Capture the first failure here and re-raise it after the
+  // A send failure inside the `reply` tool is swallowed by the runner (a thrown
+  // tool execute becomes an error tool_result fed back to the model, not a
+  // rejected run). Capture the first failure here and re-raise it after the
   // loop so it reaches the orchestrator's error boundary (turn_failed +
   // fallback). Short-circuit after the first failure so a fully-broken
   // transport is not hammered by repeated model retries within the step cap.
@@ -362,7 +370,7 @@ export const runInterfaceAgent = async (
     });
   }
 
-  // A `reply` send failed and the AI SDK swallowed it. Re-raise so the
+  // A `reply` send failed and the tool loop swallowed it. Re-raise so the
   // orchestrator's error boundary logs turn_failed and delivers the fallback.
   // The undelivered reply row was already persisted (persist-before-send), so
   // it stays in history alongside the fallback — the same "partial turn"

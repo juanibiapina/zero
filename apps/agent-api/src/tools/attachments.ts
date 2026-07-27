@@ -4,12 +4,11 @@
 // in context); instead the agent calls this tool with the id when it needs to
 // see the image, and the bytes come back inside an intra-turn tool_result.
 //
-// toModelOutput returns a `file` content part so the AI SDK serializes it as a
-// real Anthropic image block in the tool_result (verified against the pinned
-// versions), not a stringified blob. Across turns only the marker persists, so
-// a later reference re-fetches by id.
+// `toContent` turns the tool's output into a native Anthropic image block
+// inside the tool_result, not a stringified blob. Across turns only the marker
+// persists, so a later reference re-fetches by id.
 
-import { tool, type ToolSet } from "ai";
+import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
 import type { AttachmentStore } from "../attachments/types";
@@ -31,17 +30,16 @@ const toBase64 = (bytes: Uint8Array): string => {
   return btoa(binary);
 };
 
-// Explicit output type: annotating execute keeps tool() inference from falling
-// through to its no-input overload when a union result meets toModelOutput.
+// Explicit output type so toContent can narrow the union it is handed.
 type ViewOutput =
   | { data: string; mediaType: string }
   | { error: string };
 
-export const buildAttachmentTool = (deps: AttachmentToolDeps): ToolSet => {
+export const buildAttachmentTool = (deps: AttachmentToolDeps): AgentToolSet => {
   const { attachments, getAttachment } = deps;
 
   return {
-    view_attachment: tool({
+    view_attachment: defineTool({
       description:
         "Fetch an image the user sent so you can see it. Messages reference " +
         'images by id with a marker like [image "cat.jpg" id=att_abc]; pass ' +
@@ -62,19 +60,23 @@ export const buildAttachmentTool = (deps: AttachmentToolDeps): ToolSet => {
         log("view_attachment", { id, mime: record.mimeType });
         return { data: toBase64(bytes), mediaType: record.mimeType };
       },
-      toModelOutput: ({ output }: { output: ViewOutput }) =>
-        "error" in output
-          ? { type: "error-text", value: output.error }
+      toContent: (raw: unknown) => {
+        const output = raw as ViewOutput;
+        return "error" in output
+          ? { content: output.error, isError: true }
           : {
-              type: "content",
-              value: [
+              content: [
                 {
-                  type: "file",
-                  data: { type: "data", data: output.data },
-                  mediaType: output.mediaType,
+                  type: "image" as const,
+                  source: {
+                    type: "base64" as const,
+                    media_type: output.mediaType,
+                    data: output.data,
+                  },
                 },
               ],
-            },
+            };
+      },
     }),
   };
 };

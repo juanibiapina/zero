@@ -8,7 +8,11 @@
 // Reuses the interface agent's model instance so per-user gateway attribution is
 // preserved.
 
-import { tool, type LanguageModel, type ToolSet } from "ai";
+import {
+  defineTool,
+  type AgentModel,
+  type AgentToolSet,
+} from "../agents/protocol";
 import { z } from "zod";
 import { runAgent, usageLogFields } from "../agents/run";
 import { researchSystemPrompt } from "../agents/prompts";
@@ -21,7 +25,7 @@ import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
 
 export interface ResearchToolDeps {
-  model: LanguageModel;
+  model: AgentModel;
   store: TopicStore;
   search: WebSearch;
   // Page-fetch port for the read_page tool. Threaded exactly like `search`.
@@ -38,11 +42,11 @@ const fallbackTopicName = (prompt: string): string => {
   return trimmed.length > 60 ? `${trimmed.slice(0, 57)}...` : trimmed;
 };
 
-export const buildResearchTool = (deps: ResearchToolDeps): ToolSet => {
+export const buildResearchTool = (deps: ResearchToolDeps): AgentToolSet => {
   const { model, store, search, fetcher, accessed } = deps;
 
   return {
-    research: tool({
+    research: defineTool({
       description:
         "Research a subject using web search and record the findings in a topic. " +
         "Use proactively whenever the user mentions a researchable subject (a " +
