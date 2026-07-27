@@ -80,6 +80,18 @@ export default function KeysPage() {
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </Button>
           </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Use it from the CLI or your app — see{" "}
+            <a
+              href="https://docs.zeroapps.dev/vault/loading-secrets/"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+            >
+              loading secrets
+            </a>
+            .
+          </p>
           <Button
             variant="ghost"
             size="sm"
@@ -94,7 +106,18 @@ export default function KeysPage() {
       <AsyncState state={state} onRetry={reload}>
         {({ keys }) =>
           keys.length === 0 ? (
-            <p className="text-muted-foreground">No API keys yet.</p>
+            <p className="text-muted-foreground">
+              No API keys yet. Keys authorize the CLI and your apps — see{" "}
+              <a
+                href="https://docs.zeroapps.dev/vault/loading-secrets/"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+              >
+                loading secrets
+              </a>
+              .
+            </p>
           ) : (
             <Table>
               <TableHeader>

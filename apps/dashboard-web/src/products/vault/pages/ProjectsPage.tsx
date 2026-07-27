@@ -62,7 +62,18 @@ export default function ProjectsPage() {
       <AsyncState state={state} onRetry={reload}>
         {({ projects }) =>
           projects.length === 0 ? (
-            <p className="text-muted-foreground">No projects yet. Create one to get started.</p>
+            <p className="text-muted-foreground">
+              No projects yet. Create one to get started. New to ZeroVault?{" "}
+              <a
+                href="https://docs.zeroapps.dev/vault/getting-started/"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+              >
+                Read the getting-started guide
+              </a>
+              .
+            </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {projects.map((p) => (

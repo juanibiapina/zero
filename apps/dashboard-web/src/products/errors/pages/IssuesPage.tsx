@@ -77,7 +77,18 @@ export default function IssuesPage() {
       <AsyncState state={state} onRetry={reload}>
         {({ issues }) =>
           issues.length === 0 ? (
-            <p className="text-muted-foreground">No issues yet.</p>
+            <p className="text-muted-foreground">
+              No issues yet. Send your first error report — see the{" "}
+              <a
+                href="https://docs.zeroapps.dev/errors/getting-started/"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+              >
+                getting-started guide
+              </a>
+              .
+            </p>
           ) : (
             <div className="rounded-lg border">
               <Table>
