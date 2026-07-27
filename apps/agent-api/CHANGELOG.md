@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-27: The "typing" indicator now stops as soon as Zero's reply arrives, instead of lingering while it tidies up behind the scenes.
 - 2026-07-27: Research answers arrive far faster — Zero now gathers and reports its findings instead of writing them up at length mid-answer.
 - 2026-07-24: Admin user list opens again after retired cost data stopped loading.
 - 2026-07-23: Assistant errors now report reliably to the error tracker, so problems get spotted and fixed faster.

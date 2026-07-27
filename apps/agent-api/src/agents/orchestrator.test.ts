@@ -111,6 +111,85 @@ describe("runTurn", () => {
     expect(sink.sent).toEqual(["hello there"]);
   });
 
+  it("stops the typing indicator when the reply is sent, before the writer runs", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+
+    // Record the order of key events: when the reply reaches the user, when
+    // typing stops, and when the writer model is pulled. The indicator must
+    // stop between the reply and the writer.
+    const events: string[] = [];
+    const origSend = sink.send;
+    const send = async (t: string) => {
+      events.push("reply");
+      await origSend(t);
+    };
+    const stopTyping = () => events.push("stopTyping");
+    const makeModel = (agent: string) => {
+      if (agent === "writer") events.push("writer");
+      return scriptedModel([
+        { tools: [{ name: "reply", input: { text: "hello there" } }] },
+        { text: "" },
+        { text: "nothing to consolidate" },
+      ]);
+    };
+
+    await runTurn({
+      store,
+      makeModel,
+      send,
+      stopTyping,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    // stopTyping fires after the reply and before the writer is ever built.
+    expect(events).toEqual(["reply", "stopTyping", "writer"]);
+    // And it is not left running past the turn: exactly one stop.
+    expect(events.filter((e) => e === "stopTyping")).toHaveLength(1);
+  });
+
+  it("stops the typing indicator on the failure path, after the fallback is sent", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const events: string[] = [];
+    const send = async (t: string) => {
+      events.push(`send:${t === FALLBACK_MESSAGE ? "fallback" : "other"}`);
+      sink.sent.push(t);
+    };
+    const stopTyping = () => events.push("stopTyping");
+
+    // Interface agent throws before any reply, so the orchestrator sends the
+    // fallback; typing must still stop.
+    const model = capturingModel(() => {
+      throw new Error("gateway down");
+    });
+
+    await runTurn({
+      store,
+      makeModel: constModel(model),
+      send,
+      stopTyping,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    expect(events).toEqual(["send:fallback", "stopTyping"]);
+  });
+
   it("consolidates accessed topics via the writer", async () => {
     const store = new MemoryStore();
     store.createTopic("travel", "trips");

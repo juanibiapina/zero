@@ -195,7 +195,9 @@ export class UserDO extends DurableObject<Env> {
   // Run one thread end to end inside the DO: local typing loop, model creation
   // (per-user gateway tagging), then the runtime-agnostic orchestrator. The
   // typing loop is a self-rescheduling setTimeout, not the DO alarm timer, so
-  // the alarm stays dedicated to turn scheduling.
+  // the alarm stays dedicated to turn scheduling. The orchestrator stops the
+  // loop the moment the reply is sent (before the writer phase), so "typing"
+  // never lingers through internal topic consolidation.
   private async runTurn(chatId: number, topicId: number): Promise<void> {
     const clerkUserId =
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
@@ -215,15 +217,25 @@ export class UserDO extends DurableObject<Env> {
     const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
 
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // stopTyping cancels the pending refresh so no tick reschedules. Idempotent:
+    // the orchestrator calls it the moment the reply is sent (before the writer
+    // runs and on the failure path), and the finally calls it again as a safety
+    // net so a refresh never outlives the turn even on an early return.
+    const stopTyping = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
     const tick = () => {
       void sendChatAction(this.env, chatId, topicId).catch(() => {});
       timer = setTimeout(tick, TYPING_INTERVAL_MS);
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, makeModel, send, search, fetcher, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
+      await orchestrateTurn({ store: this.store, makeModel, send, stopTyping, search, fetcher, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
     } finally {
-      if (timer) clearTimeout(timer);
+      stopTyping();
     }
   }
 

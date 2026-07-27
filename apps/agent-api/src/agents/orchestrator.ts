@@ -25,6 +25,13 @@ export interface TurnInput {
   // cost per agent. Tests inject a stub that records the labels requested.
   makeModel: (agent: AgentLabel) => AgentModel;
   send: (text: string) => Promise<void>;
+  // Stop the Telegram "typing" chat action. Called the moment the user's reply
+  // has been sent — after the interface phase (including any research it
+  // triggered, which the user genuinely waits on) and before the writer runs,
+  // and on the failure path right after the fallback is sent. The writer is
+  // internal topic consolidation the user is not waiting on, so typing must not
+  // span it. Idempotent; optional so direct callers and tests can omit it.
+  stopTyping?: () => void;
   search: WebSearch;
   // Page-fetch port for the research agent's read_page tool (threaded like
   // `search`).
@@ -59,6 +66,7 @@ export interface TurnInput {
 export const runTurn = async (input: TurnInput): Promise<void> => {
   const { store, makeModel, send, search, fetcher, google, chatId, topicId } =
     input;
+  const stopTyping = input.stopTyping ?? (() => {});
   const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
@@ -101,6 +109,11 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       now: input.now,
     });
 
+    // The reply is out (the interface agent persists-then-sends before
+    // returning). Stop typing here, before the writer runs — the writer only
+    // consolidates topics internally and the user is no longer waiting.
+    stopTyping();
+
     // Run the writer every turn, even when nothing was accessed: proactive
     // topic creation must be possible on turns that introduce a brand-new
     // subject. The prompt keeps trivial turns to a single no-tool step.
@@ -138,6 +151,9 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     });
     const reply = rateLimited ? RATE_LIMIT_MESSAGE : FALLBACK_MESSAGE;
     await send(reply);
+    // The failure reply is out; stop typing on this path too (it is idempotent
+    // if the interface phase already stopped it before a writer-phase throw).
+    stopTyping();
     store.storeMessage(conversationId, "assistant", reply);
   } finally {
     store.clearBusy(conversationId);
