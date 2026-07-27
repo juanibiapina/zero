@@ -5,6 +5,8 @@ import {
   RedirectToSignIn,
   UserButton,
   OrganizationSwitcher,
+  CreateOrganization,
+  useOrganization,
 } from "@clerk/clerk-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProductId, ProductLink } from "../products";
@@ -48,6 +50,7 @@ export function AppLayout({
 }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isLoaded, organization } = useOrganization();
   const BrandIcon = brand.icon;
 
   const showSelector = products !== undefined && currentProductId !== undefined;
@@ -62,7 +65,24 @@ export function AppLayout({
   return (
     <>
       <SignedIn>
-        <div className="flex min-h-screen bg-background">
+        {!isLoaded ? (
+          <div className="flex min-h-screen items-center justify-center bg-background">
+            <p className="text-muted-foreground">Loading…</p>
+          </div>
+        ) : !organization ? (
+          <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background p-4">
+            <div className="text-center">
+              <h1 className="text-xl font-semibold">
+                Create your organization to get started
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your projects, keys, and secrets live under an organization.
+              </p>
+            </div>
+            <CreateOrganization afterCreateOrganizationUrl={afterOrgUrl} />
+          </div>
+        ) : (
+          <div className="flex min-h-screen bg-background">
           {/* Desktop left rail */}
           <aside className="hidden md:flex md:w-60 md:flex-col md:border-r bg-background">
             <Link
@@ -194,8 +214,9 @@ export function AppLayout({
             </main>
           </div>
 
-          <Toaster position="bottom-right" />
-        </div>
+            <Toaster position="bottom-right" />
+          </div>
+        )}
       </SignedIn>
       <SignedOut>
         <RedirectToSignIn />
