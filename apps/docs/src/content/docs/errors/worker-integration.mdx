@@ -1,0 +1,71 @@
+---
+title: ZeroErrors in a Cloudflare Worker
+description: A drop-in reporter that sends errors to ZeroErrors from a Worker.
+---
+
+This is a small, self-contained reporter for a Cloudflare Worker. It is
+fire-and-forget and never throws, so reporting can never break the request it is
+reporting on.
+
+## The reporter
+
+```ts
+const ENDPOINT = "https://api.zeroapps.dev/errors/v1/errors";
+
+export async function reportError(
+  apiKey: string,
+  project: string,
+  err: unknown,
+  context: Record<string, unknown> = {},
+): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  try {
+    await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ project, message, stack, context }),
+    });
+  } catch {
+    // Reporting must never disturb the caller. Swallow transport failures.
+  }
+}
+```
+
+## Wire it to your handler
+
+With [Hono](https://hono.dev), report from `onError` and let the response go out
+immediately while the report finishes in the background:
+
+```ts
+app.onError((err, c) => {
+  c.executionCtx.waitUntil(
+    reportError(c.env.ZEROVAULT_API_KEY, "my-app", err, { path: c.req.path }),
+  );
+  return c.json({ error: "Internal error" }, 500);
+});
+```
+
+`waitUntil` lets the report outlive the response without delaying it, and the
+reporter swallows its own failures, so a slow or down ingest never affects your
+users.
+
+## Store the key as a secret
+
+The reporter reads its key from `c.env.ZEROVAULT_API_KEY`. Store it as a Worker
+secret rather than committing it, and gate the deploy so a missing key fails
+loudly:
+
+```jsonc
+{
+  "secrets": {
+    "required": ["ZEROVAULT_API_KEY"]
+  }
+}
+```
+
+See [ZeroVault with Cloudflare Workers](/vault/workers/) for pushing secrets and
+the `secrets.required` gate.

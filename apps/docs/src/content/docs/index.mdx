@@ -1,8 +1,28 @@
 ---
 title: Zero Docs
-description: Documentation for ZeroVault and ZeroErrors.
-template: splash
+description: Getting started with ZeroVault (secrets) and ZeroErrors (error tracking).
 ---
 
-Documentation for ZeroVault (secrets for your Workers) and ZeroErrors (error
-tracking for your apps). Use the navigation to get started.
+Zero is two products that share one account and one API key.
+
+- **ZeroVault** stores secrets for your apps and Workers, organized by project and
+  environment, and serves them over an API and a CLI.
+- **ZeroErrors** collects error reports from your apps and groups them into issues
+  you can browse and resolve.
+
+## One account, one key
+
+Sign in at [dash.zeroapps.dev](https://dash.zeroapps.dev). A single API key
+(`zv_…`) authorizes both products: the same key reads and writes secrets under
+`/vault/v1/*` and reports errors under `/errors/v1/*` on the public API at
+`api.zeroapps.dev`.
+
+Keys are managed in one place, under **ZeroVault → API Keys**, and work for
+ZeroErrors too.
+
+## Start here
+
+- **[Start with ZeroVault](/vault/getting-started/)** — create a project, store a
+  secret, and get an API key.
+- **[Start with ZeroErrors](/errors/getting-started/)** — send your first error
+  and see it grouped into an issue.

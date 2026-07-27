@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-27: Zero now has public documentation at docs.zeroapps.dev, with getting-started guides for ZeroVault (storing secrets, the zv CLI, pulling secrets into a Cloudflare Worker) and ZeroErrors (sending your first error and reporting from a Worker).
+
 - 2026-07-27: The Zero landing page loads faster, and unknown URLs now show a proper "Page not found" page instead of the home page.
 
 - 2026-07-26: The Zero landing site now ships a robots.txt, sitemap, and social preview cards, so search engines can crawl and index it and shared links show a rich preview.

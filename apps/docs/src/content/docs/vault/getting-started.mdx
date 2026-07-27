@@ -1,0 +1,48 @@
+---
+title: Getting started with ZeroVault
+description: Sign in, create a project, store a secret, and get an API key.
+---
+
+This walks through the dashboard. By the end you have a project with a secret and
+an API key you can use from the CLI or a Worker.
+
+## 1. Sign in
+
+Go to [dash.zeroapps.dev](https://dash.zeroapps.dev) and sign in (or sign up).
+
+On sign-up an organization is created for you and is already active, shown in the
+switcher in the top-right corner. There is no separate "create an organization"
+step. If you belong to more than one organization, use that switcher to pick the
+one you want to work in.
+
+## 2. Create a project
+
+Open **Projects** in the sidebar, type a name (for example `my-app`) in the
+**New project name** field, and click **Create**.
+
+The new project starts with two environments, `development` and `production`. Open
+the project to see them; you can add or remove environments here.
+
+## 3. Add a secret
+
+Open the project, then open an environment (for example `development`). Add a
+secret as a key and value (for example `API_TOKEN` / your token) and save. Secret
+values are stored for that one environment.
+
+## 4. Create an API key
+
+Open **API Keys** in the sidebar, optionally give the key a label, and click
+**Create**.
+
+The full key (`zv_…`) is shown once, right after you create it, with a copy
+button. Copy it now; it is not shown again. If you lose it, revoke it and create a
+new one.
+
+Keep the key secret. It is organization-scoped, so it reaches every project and
+environment in your organization, and it also authorizes ZeroErrors.
+
+## Next
+
+- [Use the CLI](/vault/cli/) to script secrets from your terminal.
+- [Pull secrets into a Cloudflare Worker](/vault/workers/) at deploy time.
+- [Send your first error](/errors/getting-started/) with the same key.

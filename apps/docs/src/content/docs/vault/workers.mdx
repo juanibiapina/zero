@@ -1,0 +1,45 @@
+---
+title: ZeroVault with Cloudflare Workers
+description: Pull secrets from ZeroVault into a Cloudflare Worker at deploy time.
+---
+
+A common workflow is to keep a Worker's secrets in ZeroVault and push them to
+Cloudflare when you deploy. You pull them with the [CLI](/vault/cli/) and hand the
+result to `wrangler`.
+
+## Push secrets at deploy time
+
+Download the environment as JSON and pipe it into `wrangler secret bulk`:
+
+```bash
+zv secrets download -p demo -e production -f json -o secrets.json
+npx wrangler secret bulk secrets.json
+rm secrets.json
+```
+
+`zv secrets download -f json` emits a flat `{ "KEY": "VALUE" }` object, which is
+exactly the shape `wrangler secret bulk` reads. Delete the file afterward; it
+holds plaintext secrets.
+
+## Fail the deploy when a secret is missing
+
+Wrangler can refuse to deploy a Worker if a required secret is not set. Add the
+names to `secrets.required` in `wrangler.jsonc`:
+
+```jsonc
+{
+  "name": "my-worker",
+  "secrets": {
+    "required": ["API_TOKEN"]
+  }
+}
+```
+
+With this in place, `wrangler deploy` aborts if `API_TOKEN` is unset, and
+`wrangler dev` warns.
+
+:::caution
+`secrets.required` is enforced only at a real `wrangler deploy`. It is not part of
+wrangler's config schema and does not show up in `wrangler deploy --dry-run`, so a
+dry run will not catch a missing secret. Rely on the real deploy for the gate.
+:::

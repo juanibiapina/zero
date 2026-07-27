@@ -1,0 +1,69 @@
+---
+title: Getting started with ZeroErrors
+description: Get a key, send your first error, and see it grouped into an issue.
+---
+
+By the end you have sent an error report and watched it show up as an issue in the
+dashboard.
+
+## 1. Get an API key
+
+ZeroErrors uses the same key as ZeroVault. Create one under **ZeroVault → API
+Keys** and copy it (it is shown once). See
+[ZeroVault getting started](/vault/getting-started/) for the walkthrough.
+
+```bash
+export ZEROVAULT_API_KEY=zv_your_key_here
+```
+
+## 2. Send your first error
+
+POST a report to the ingest endpoint:
+
+```bash
+curl -sS -X POST https://api.zeroapps.dev/errors/v1/errors \
+  -H "authorization: Bearer $ZEROVAULT_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"project":"docs-demo","message":"Hello from getting-started","level":"info"}'
+```
+
+You get back `202` and the issue it landed in:
+
+```json
+{"issueId":"f0dc012e-0b66-4dd2-a4af-2eee08198f1f","isNew":true}
+```
+
+`isNew` is `true` the first time and `false` for later reports that group into the
+same issue. Send the same command a few more times and you will see the same
+`issueId` come back with `isNew: false`.
+
+## 3. See the issue
+
+Open [dash.zeroapps.dev/errors](https://dash.zeroapps.dev/errors), filter by
+`docs-demo`, and you will see one issue titled **Hello from getting-started** with
+the count of reports you sent. Open it to see the individual events, and click
+**Resolve** when you are done.
+
+## Report fields
+
+The body of a report:
+
+| Field | Required | Notes |
+|---|---|---|
+| `project` | yes | 1–200 characters. Groups and labels the issue. |
+| `message` | yes | 1–10000 characters. Its first line becomes the issue title. |
+| `stack` | no | Up to 50000 characters. Its first line helps group the issue. |
+| `level` | no | `error`, `warning`, or `info`. Defaults to `error`. |
+| `context` | no | Any JSON object of extra data. |
+
+## Errors you may see
+
+- **401** `{"error":"Invalid API key"}` — the key is missing or wrong.
+- **400** `{"error":"Invalid error report"}` — the body is malformed or missing a
+  required field (checked only once the key is valid).
+- **429** with a `Retry-After` header — you are being rate-limited; wait and
+  retry.
+
+## Next
+
+- [Drop a reporter into a Cloudflare Worker](/errors/worker-integration/).

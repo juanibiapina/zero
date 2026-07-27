@@ -9,21 +9,24 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Zero Docs",
-      head: [
-        {
-          tag: "meta",
-          attrs: { name: "robots", content: "noindex, nofollow" },
-        },
-      ],
       plugins: [starlightLlmsTxt(), starlightPageActions()],
       sidebar: [
         {
           label: "ZeroVault",
-          items: [{ label: "Overview", slug: "vault/overview" }],
+          items: [
+            { label: "Overview", slug: "vault/overview" },
+            { label: "Getting started", slug: "vault/getting-started" },
+            { label: "CLI", slug: "vault/cli" },
+            { label: "Cloudflare Workers", slug: "vault/workers" },
+          ],
         },
         {
           label: "ZeroErrors",
-          items: [{ label: "Overview", slug: "errors/overview" }],
+          items: [
+            { label: "Overview", slug: "errors/overview" },
+            { label: "Getting started", slug: "errors/getting-started" },
+            { label: "Worker integration", slug: "errors/worker-integration" },
+          ],
         },
         {
           label: "Skills",

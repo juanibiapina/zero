@@ -1,0 +1,118 @@
+---
+title: ZeroVault CLI
+description: Install and use the zv CLI to manage secrets from your terminal.
+---
+
+`zv` is the ZeroVault command-line tool, published as `zerovault-cli` on npm. It
+manages projects, environments, secrets, and API keys. It talks to ZeroVault
+only; ZeroErrors has no CLI.
+
+## Run it
+
+The current published version is `0.2.2`. Run it without installing:
+
+```bash
+pnpm dlx zerovault-cli@0.2.2 --help
+```
+
+The command is `zv`. If you install it globally you can drop the `pnpm dlx`
+prefix and just run `zv …`.
+
+:::note
+`zv --version` prints `0.2.1` even on the `0.2.2` package. It is a stale version
+string in the tool, not a different build. Pin `zerovault-cli@0.2.2` when you
+install or run it.
+:::
+
+## Authenticate
+
+The CLI needs your API key. The simplest way is an environment variable:
+
+```bash
+export ZEROVAULT_API_KEY=zv_your_key_here
+zv whoami
+```
+
+`whoami` prints your user and organization IDs, which confirms the key works:
+
+```
+User ID: user_…
+Org ID: org_…
+```
+
+The key is resolved in this order, first match wins:
+
+1. `--api-key` flag
+2. a directory-bound context (see below)
+3. the `ZEROVAULT_API_KEY` environment variable
+
+The API base URL defaults to `https://api.zeroapps.dev/vault`. Override it with
+`--base-url` or `ZEROVAULT_API_URL` only if you target a different instance.
+
+### Contexts (optional)
+
+If you juggle several keys or organizations, save them as named contexts instead
+of exporting the variable. Contexts live in `~/.config/zerovault/config.json`
+(mode 0600, since it holds plaintext keys).
+
+```bash
+zv context add work --api-key zv_your_key_here
+zv context use work        # binds the current directory to this context
+zv context current         # prints the active context name
+zv context list
+```
+
+`zv context use` binds the directory you run it in (and its subdirectories) to
+that context, so `zv` there uses that key without the environment variable.
+
+## Manage secrets
+
+Projects start with `development` and `production` environments.
+
+```bash
+zv projects create demo
+zv projects list
+
+zv secrets set API_TOKEN=abc123 -p demo -e development
+zv secrets list  -p demo -e development     # values shown masked
+zv secrets get   API_TOKEN -p demo -e development   # prints the value
+```
+
+`zv secrets set` is create-or-update; run it again with the same key to change
+the value. Set several at once by passing more `KEY=VALUE` pairs. Delete a secret
+with:
+
+```bash
+zv secrets delete API_TOKEN -p demo -e development
+```
+
+## Download secrets
+
+`zv secrets download` writes an environment's secrets in the format you ask for
+(`env`, `json`, `yaml`, or `shell`), to stdout or a file with `-o`.
+
+```bash
+zv secrets download -p demo -e development -f env
+```
+
+```
+API_TOKEN=abc123
+DB_URL=postgres://localhost
+```
+
+`-f json` emits a flat `{ "KEY": "VALUE" }` object, which is what
+[wrangler secret bulk](/vault/workers/) expects.
+
+## Back up the whole vault
+
+`zv export` dumps every project and secret across your organization as plaintext
+JSON, and `zv import <file>` restores it. Because the file is plaintext, delete
+it as soon as you are done.
+
+```bash
+zv export -o vault-backup.json
+```
+
+## Next
+
+- [Pull secrets into a Cloudflare Worker](/vault/workers/) at deploy time.

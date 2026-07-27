@@ -1,7 +1,40 @@
 ---
 title: ZeroVault Overview
-description: What ZeroVault is and what it does.
+description: The ZeroVault object model and where things live.
 ---
 
-ZeroVault stores secrets for your applications and serves them to your
-Workers at deploy and runtime. Full guides are coming soon.
+ZeroVault stores secrets for your applications and serves them to your Workers at
+deploy and runtime. You read and write them from the dashboard, the API, or the
+`zv` CLI.
+
+## Object model
+
+```
+Organization
+└── Project
+    └── Environment   (development and production by default)
+        └── Secret    (key / value)
+```
+
+- Your **organization** is your workspace. It is created for you when you sign up,
+  and it owns everything below. You do not create one by hand.
+- A **project** groups the secrets for one app or service. Creating a project
+  automatically gives it two environments, `development` and `production`. You can
+  add or delete more.
+- An **environment** holds a flat set of key/value secrets.
+- **API keys are organization-scoped.** One key reaches every project and
+  environment in your organization, and the same key also authorizes ZeroErrors.
+
+## Where things live
+
+- **Dashboard:** [dash.zeroapps.dev/vault](https://dash.zeroapps.dev/vault) —
+  projects, environments, secrets, and API keys.
+- **Public API:** `https://api.zeroapps.dev/vault/v1` — Bearer-authenticated with
+  a `zv_…` key.
+- **CLI:** `zv`, published as `zerovault-cli` on npm.
+
+## Next
+
+- [Getting started](/vault/getting-started/) — the dashboard walkthrough.
+- [CLI](/vault/cli/) — install `zv` and script your secrets.
+- [Cloudflare Workers](/vault/workers/) — pull secrets into a Worker deploy.
