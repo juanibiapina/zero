@@ -77,7 +77,8 @@ a { color: inherit; }
 
 .site-header { min-height: 5.5rem; }
 
-.site-header nav {
+.site-header nav,
+.footer-nav {
   display: flex;
   align-items: center;
   gap: clamp(1.2rem, 3vw, 2.5rem);
@@ -243,14 +244,27 @@ h1 {
   text-wrap: pretty;
 }
 
-.product-body a {
+.product-actions {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.product-body a {
   display: inline-flex;
   align-items: baseline;
   gap: 0.35rem;
   color: var(--signal);
   font-weight: 800;
   text-decoration: none;
+}
+
+.product-body a.product-doc {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.92rem;
 }
 
 .closing {

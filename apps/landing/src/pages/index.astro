@@ -4,6 +4,9 @@ import "../styles/global.css";
 const vaultUrl = "https://dash.zeroapps.dev/vault/projects";
 const errorsUrl = "https://dash.zeroapps.dev/errors/issues";
 const keysUrl = "https://dash.zeroapps.dev/vault/keys";
+const docsUrl = "https://docs.zeroapps.dev/";
+const vaultDocsUrl = "https://docs.zeroapps.dev/vault/getting-started/";
+const errorsDocsUrl = "https://docs.zeroapps.dev/errors/getting-started/";
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -49,6 +52,7 @@ const jsonLd = {
       <a class="wordmark" href="/" aria-label="Zero home">Zero<span>.</span></a>
       <nav aria-label="Primary navigation">
         <a href="#products">Products</a>
+        <a class="header-link" href={docsUrl}>Docs <span aria-hidden="true">↗</span></a>
         <a class="header-link" href={vaultUrl}>Dashboard <span aria-hidden="true">↗</span></a>
       </nav>
     </header>
@@ -76,7 +80,10 @@ const jsonLd = {
                 <p class="product-statement">Secrets by product and environment</p>
                 <p class="product-description">Store and update values from the dashboard or CLI.</p>
               </div>
-              <a href={vaultUrl}>Open Vault <span aria-hidden="true">↗</span></a>
+              <div class="product-actions">
+                <a href={vaultUrl}>Open Vault <span aria-hidden="true">↗</span></a>
+                <a class="product-doc" href={vaultDocsUrl}>Setup guide <span aria-hidden="true">↗</span></a>
+              </div>
             </div>
           </article>
 
@@ -90,7 +97,10 @@ const jsonLd = {
                 <p class="product-statement">See which failures keep happening.</p>
                 <p class="product-description">Send an HTTP report with a project name and message. Include a stack trace or context when available. Zero groups repeated failures into issues and creates the project view from the reports you send.</p>
               </div>
-              <a href={errorsUrl}>Open Errors <span aria-hidden="true">↗</span></a>
+              <div class="product-actions">
+                <a href={errorsUrl}>Open Errors <span aria-hidden="true">↗</span></a>
+                <a class="product-doc" href={errorsDocsUrl}>Setup guide <span aria-hidden="true">↗</span></a>
+              </div>
             </div>
           </article>
         </div>
@@ -104,7 +114,10 @@ const jsonLd = {
 
     <footer class="site-footer">
       <a class="wordmark" href="/" aria-label="Zero home">Zero<span>.</span></a>
-      <a class="footer-link" href={vaultUrl}>Dashboard <span aria-hidden="true">↗</span></a>
+      <nav class="footer-nav" aria-label="Footer">
+        <a class="footer-link" href={docsUrl}>Docs <span aria-hidden="true">↗</span></a>
+        <a class="footer-link" href={vaultUrl}>Dashboard <span aria-hidden="true">↗</span></a>
+      </nav>
     </footer>
   </body>
 </html>
