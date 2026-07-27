@@ -1,13 +1,16 @@
 ---
-title: ZeroErrors in a Cloudflare Worker
-description: A drop-in reporter that sends errors to ZeroErrors from a Worker.
+title: Cloudflare Workers
+description: Report errors to ZeroErrors from a Cloudflare Worker with Hono and waitUntil.
 ---
 
-This is a small, self-contained reporter for a Cloudflare Worker. It is
-fire-and-forget and never throws, so reporting can never break the request it is
-reporting on.
+Cloudflare Workers are one platform among others. The [Reporter](/errors/reporter/)
+is the same on every runtime; this page adds the Worker-specific wiring: reporting
+from a Hono `onError` handler and handing the report to `waitUntil`.
 
 ## The reporter
+
+The reporter is fire-and-forget and never throws, so reporting can never break the
+request it is reporting on.
 
 ```ts
 const ENDPOINT = "https://api.zeroapps.dev/errors/v1/errors";

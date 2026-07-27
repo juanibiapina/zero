@@ -6,9 +6,9 @@ description: Installable agent skills for ZeroVault and ZeroErrors.
 Zero ships two installable agent skills that teach a coding agent the verified
 commands and endpoints for ZeroVault and ZeroErrors:
 
-- **zerovault** — manage secrets and environment variables, and push them into a
-  Cloudflare Worker deploy.
-- **zeroerrors** — add error tracking and reporting to an app or Worker.
+- **zerovault**: manage secrets and environment variables for a project, and load
+  them into a process, a .env file, or a CI job.
+- **zeroerrors**: add error tracking and reporting to any app or service.
 
 They live in the public repo
 [`juanibiapina/zero-skills`](https://github.com/juanibiapina/zero-skills), the

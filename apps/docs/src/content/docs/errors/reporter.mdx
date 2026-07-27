@@ -1,0 +1,61 @@
+---
+title: Reporter
+description: A framework-free fetch reporter that sends errors to ZeroErrors from any runtime.
+---
+
+Ingest is a plain HTTPS POST, so any language or runtime that can make an HTTP
+request can report. This is a small, self-contained reporter with no framework. It
+is fire-and-forget and never rejects, so a transport failure or a ZeroErrors
+outage cannot break the request it reports on. It runs in any runtime with
+`fetch` (Node 18+, Deno, Bun, browsers, Workers).
+
+## The reporter
+
+```ts
+const ENDPOINT = "https://api.zeroapps.dev/errors/v1/errors";
+
+export async function reportError(
+  apiKey: string,
+  project: string,
+  err: unknown,
+  context: Record<string, unknown> = {},
+): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  try {
+    await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ project, message, stack, context }),
+    });
+  } catch {
+    // Reporting must never disturb the caller. Swallow transport failures.
+  }
+}
+```
+
+## Call it from where you catch
+
+```ts
+try {
+  await handleRequest(req);
+} catch (err) {
+  await reportError(process.env.ZEROVAULT_API_KEY!, "my-app", err, { path: req.url });
+  throw err;
+}
+```
+
+Read the key from the environment. In a long-running server you can leave the
+report detached; before a process exits, await it so the report goes out first.
+
+Load the key with the [ZeroVault CLI](/vault/loading-secrets/).
+
+## Next
+
+- [Cloudflare Workers](/errors/worker-integration/): report from a Hono `onError`
+  handler with `waitUntil`.
+- [Getting started](/errors/getting-started/): send a test report and see it
+  grouped into an issue.

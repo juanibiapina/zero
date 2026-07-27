@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-28: The ZeroVault and ZeroErrors docs now lead with a platform-neutral path: a new "Loading secrets" guide covers pulling secrets into any process or CI job, and a new "Reporter" guide shows a framework-free error reporter for any runtime. Cloudflare Workers is now one optional platform guide rather than the only documented target.
+
 - 2026-07-27: Dashboard pages that fail to load now show what went wrong with a Retry button instead of spinning forever, and a rare account with no active organization is prompted to create one instead of getting stuck.
 
 - 2026-07-27: ZeroVault and ZeroErrors now ship installable agent skills for coding assistants. Add them with `npx skills add juanibiapina/zero-skills`; see docs.zeroapps.dev/skills/overview.

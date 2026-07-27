@@ -106,8 +106,10 @@ API_TOKEN=abc123
 DB_URL=postgres://localhost
 ```
 
-`-f json` emits a flat `{ "KEY": "VALUE" }` object, which is what
-[wrangler secret bulk](/vault/workers/) expects.
+`-f shell` emits `export KEY="VALUE"` lines for sourcing into a shell, `-f json` a
+flat `{ "KEY": "VALUE" }` object, and `-f yaml` a `KEY: "VALUE"` list. See
+[Loading secrets](/vault/loading-secrets/) for pulling an environment into a
+process or CI job.
 
 ## Manage API keys
 
@@ -136,4 +138,5 @@ zv export -o vault-backup.json
 
 ## Next
 
+- [Load secrets into a process or CI job](/vault/loading-secrets/).
 - [Pull secrets into a Cloudflare Worker](/vault/workers/) at deploy time.

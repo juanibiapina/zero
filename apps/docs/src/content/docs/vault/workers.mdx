@@ -3,8 +3,10 @@ title: ZeroVault with Cloudflare Workers
 description: Pull secrets from ZeroVault into a Cloudflare Worker at deploy time.
 ---
 
-Keep a Worker's secrets in ZeroVault and push them to Cloudflare at deploy time.
-You pull them with the [CLI](/vault/cli/) and hand the result to `wrangler`.
+Cloudflare Workers are one platform among others. To load secrets into a plain
+process or a CI job, see [Loading secrets](/vault/loading-secrets/). This page
+covers pushing an environment to a Worker at deploy time: you pull the secrets
+with the [CLI](/vault/cli/) and hand the result to `wrangler`.
 
 ## Push secrets at deploy time
 
