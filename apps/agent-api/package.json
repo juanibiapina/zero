@@ -12,17 +12,17 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.16",
-    "@clerk/backend": "^3.11.7",
-    "@clerk/hono": "^0.1.53",
+    "@ai-sdk/anthropic": "^4.0.21",
+    "@clerk/backend": "^3.13.1",
+    "@clerk/hono": "^0.1.56",
     "@hono/zod-openapi": "^1.5.1",
-    "ai": "^7.0.31",
+    "ai": "^7.0.37",
     "aws4fetch": "^1.0.20",
     "do-orm": "github:juanibiapina/do-orm",
     "grammy": "^1.45.1",
-    "hono": "^4.12.31",
-    "jose": "^6.2.3",
-    "marked": "^18.0.6",
+    "hono": "^4.12.32",
+    "jose": "^6.2.4",
+    "marked": "^18.0.7",
     "zod": "^4.4.3"
   },
   "devDependencies": {
