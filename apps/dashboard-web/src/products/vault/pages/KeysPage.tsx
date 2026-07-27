@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
 import { Plus, Trash2, Copy, Check } from "lucide-react";
 import {
@@ -10,35 +10,32 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useAsyncData,
+  AsyncState,
 } from "@zero/ui";
 import * as api from "@/products/vault/lib/api";
-import type { ApiKeyInfo } from "@zero/vault-core";
 
 export default function KeysPage() {
   const { getToken } = useAuth();
   const { organization } = useOrganization();
-  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
   const [newLabel, setNewLabel] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
-  const load = useCallback(async () => {
-    const { keys } = await api.listApiKeys(tokenFn);
-    setKeys(keys);
-    setLoading(false);
-  }, [tokenFn, organization?.id]);
-
-  useEffect(() => { void load(); }, [load]);
+  const state = useAsyncData(
+    () => api.listApiKeys(tokenFn),
+    [tokenFn, organization?.id],
+  );
+  const { reload } = state;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const result = await api.createApiKey(tokenFn, newLabel.trim() || undefined);
     setNewKey(result.key);
     setNewLabel("");
-    void load();
+    reload();
   };
 
   const handleCopy = async () => {
@@ -51,7 +48,7 @@ export default function KeysPage() {
   const handleRevoke = async (id: number) => {
     if (!confirm("Revoke this API key? This cannot be undone.")) return;
     await api.revokeApiKey(tokenFn, id);
-    void load();
+    reload();
   };
 
   return (
@@ -94,44 +91,46 @@ export default function KeysPage() {
         </div>
       )}
 
-      {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : keys.length === 0 ? (
-        <p className="text-muted-foreground">No API keys yet.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Key</TableHead>
-              <TableHead>Label</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-24">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {keys.map((k) => (
-              <TableRow key={k.id}>
-                <TableCell className="font-mono">
-                  {k.prefix}{k.suffix}
-                </TableCell>
-                <TableCell>{k.label || "—"}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(k.createdAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleRevoke(k.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <AsyncState state={state} onRetry={reload}>
+        {({ keys }) =>
+          keys.length === 0 ? (
+            <p className="text-muted-foreground">No API keys yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Key</TableHead>
+                  <TableHead>Label</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-24">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {keys.map((k) => (
+                  <TableRow key={k.id}>
+                    <TableCell className="font-mono">
+                      {k.prefix}{k.suffix}
+                    </TableCell>
+                    <TableCell>{k.label || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(k.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void handleRevoke(k.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )
+        }
+      </AsyncState>
     </div>
   );
 }

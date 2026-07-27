@@ -11,6 +11,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useAsyncData,
+  AsyncState,
 } from "@zero/ui";
 import * as api from "@/products/vault/lib/api";
 import type { SecretEntry } from "@zero/vault-core";
@@ -23,20 +25,28 @@ export default function SecretsPage() {
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
-  const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
-  const load = useCallback(async () => {
-    if (!project || !env) return;
-    const { secrets } = await api.getSecrets(tokenFn, project, env);
-    setSecrets(secrets.sort((a, b) => a.key.localeCompare(b.key)));
-    setLoading(false);
-    setDirty(false);
-  }, [tokenFn, project, env, organization?.id]);
+  const state = useAsyncData(
+    () =>
+      project && env
+        ? api.getSecrets(tokenFn, project, env)
+        : Promise.resolve({ secrets: [] }),
+    [tokenFn, project, env, organization?.id],
+  );
 
-  useEffect(() => { void load(); }, [load]);
+  // Seed the editable local state from each successful fetch. Save stays local
+  // (no reload), so this is the only place fetched secrets enter the form.
+  useEffect(() => {
+    if (state.data) {
+      setSecrets(
+        [...state.data.secrets].sort((a, b) => a.key.localeCompare(b.key)),
+      );
+      setDirty(false);
+    }
+  }, [state.data]);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,61 +124,63 @@ export default function SecretsPage() {
         </Button>
       </form>
 
-      {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : secrets.length === 0 ? (
-        <p className="text-muted-foreground">No secrets yet.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Key</TableHead>
-              <TableHead>Value</TableHead>
-              <TableHead className="w-24">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {secrets.map((s) => (
-              <TableRow key={s.key}>
-                <TableCell className="font-mono font-medium">{s.key}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {revealed.has(s.key) ? (
-                      <Input
-                        value={s.value}
-                        onChange={(e) => handleValueChange(s.key, e.target.value)}
-                        className="font-mono h-8"
-                      />
-                    ) : (
-                      <span className="font-mono text-muted-foreground">••••••••</span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleReveal(s.key)}
-                    >
-                      {revealed.has(s.key) ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(s.key)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <AsyncState state={state} onRetry={state.reload}>
+        {() =>
+          secrets.length === 0 ? (
+            <p className="text-muted-foreground">No secrets yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Key</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead className="w-24">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {secrets.map((s) => (
+                  <TableRow key={s.key}>
+                    <TableCell className="font-mono font-medium">{s.key}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {revealed.has(s.key) ? (
+                          <Input
+                            value={s.value}
+                            onChange={(e) => handleValueChange(s.key, e.target.value)}
+                            className="font-mono h-8"
+                          />
+                        ) : (
+                          <span className="font-mono text-muted-foreground">••••••••</span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleReveal(s.key)}
+                        >
+                          {revealed.has(s.key) ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(s.key)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )
+        }
+      </AsyncState>
     </div>
   );
 }

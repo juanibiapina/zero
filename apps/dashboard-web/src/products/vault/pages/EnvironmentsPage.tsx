@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Link, useParams } from "react-router";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
 import { Plus, Trash2, ArrowLeft } from "lucide-react";
@@ -11,42 +11,41 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useAsyncData,
+  AsyncState,
 } from "@zero/ui";
 import * as api from "@/products/vault/lib/api";
-import type { Environment } from "@zero/vault-core";
 
 export default function EnvironmentsPage() {
   const { project } = useParams<{ project: string }>();
   const { getToken } = useAuth();
   const { organization } = useOrganization();
-  const [environments, setEnvironments] = useState<Environment[]>([]);
   const [newName, setNewName] = useState("");
-  const [loading, setLoading] = useState(true);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
-  const load = useCallback(async () => {
-    if (!project) return;
-    const { environments } = await api.listEnvironments(tokenFn, project);
-    setEnvironments(environments);
-    setLoading(false);
-  }, [tokenFn, project, organization?.id]);
-
-  useEffect(() => { void load(); }, [load]);
+  const state = useAsyncData(
+    () =>
+      project
+        ? api.listEnvironments(tokenFn, project)
+        : Promise.resolve({ environments: [] }),
+    [tokenFn, project, organization?.id],
+  );
+  const { reload } = state;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !project) return;
     await api.createEnvironment(tokenFn, project, newName.trim());
     setNewName("");
-    void load();
+    reload();
   };
 
   const handleDelete = async (envName: string) => {
     if (!project) return;
     if (!confirm(`Delete environment "${envName}" and all its secrets?`)) return;
     await api.deleteEnvironment(tokenFn, project, envName);
-    void load();
+    reload();
   };
 
   return (
@@ -72,45 +71,45 @@ export default function EnvironmentsPage() {
         </Button>
       </form>
 
-      {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Environment</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-24">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {environments.map((env) => (
-              <TableRow key={env.id}>
-                <TableCell>
-                  <Link
-                    to={`/vault/projects/${project}/${env.name}`}
-                    className="font-medium hover:underline"
-                  >
-                    {env.name}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(env.createdAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleDelete(env.name)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </TableCell>
+      <AsyncState state={state} onRetry={reload}>
+        {({ environments }) => (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Environment</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="w-24">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+            </TableHeader>
+            <TableBody>
+              {environments.map((env) => (
+                <TableRow key={env.id}>
+                  <TableCell>
+                    <Link
+                      to={`/vault/projects/${project}/${env.name}`}
+                      className="font-medium hover:underline"
+                    >
+                      {env.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(env.createdAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void handleDelete(env.name)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </AsyncState>
     </div>
   );
 }
