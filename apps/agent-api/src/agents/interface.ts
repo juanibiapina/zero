@@ -124,6 +124,14 @@ export interface InterfaceAgentResult {
 // enough to extract durable facts.
 const MAX_TOOL_RESULT_CHARS = 1500;
 
+// Research results get a much higher ceiling. Unlike calendar/email dumps, which
+// are context the writer samples from, a research report is the payload the
+// writer must persist verbatim with every Source: URL. Clipping it drops
+// enumerated items and their provenance before storage. The ceiling is generous
+// enough that a normal report is never touched but still bounds a pathological
+// runaway. See docs/plans/research-writer-handoff.md.
+const MAX_RESEARCH_RESULT_CHARS = 8000;
+
 const stringify = (value: unknown): string => {
   if (typeof value === "string") return value;
   try {
@@ -133,10 +141,8 @@ const stringify = (value: unknown): string => {
   }
 };
 
-const truncate = (text: string): string =>
-  text.length > MAX_TOOL_RESULT_CHARS
-    ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}…[truncated]`
-    : text;
+const truncate = (text: string, max: number): string =>
+  text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
 
 // Render a tool result's content for the transcript. Image blocks are redacted
 // to a marker: their base64 payload is worth thousands of tokens and nothing to
@@ -174,8 +180,10 @@ export const renderTranscript = (
         lines.push(`Tool call ${block.name}: ${stringify(block.input)}`);
       } else if (block.type === "tool_result") {
         const name = toolNames.get(block.tool_use_id) ?? "unknown";
+        const max =
+          name === "research" ? MAX_RESEARCH_RESULT_CHARS : MAX_TOOL_RESULT_CHARS;
         lines.push(
-          `Tool result ${name}: ${truncate(renderToolResult(block.content))}`,
+          `Tool result ${name}: ${truncate(renderToolResult(block.content), max)}`,
         );
       }
     }

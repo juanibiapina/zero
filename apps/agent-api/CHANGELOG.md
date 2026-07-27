@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-27: Zero now keeps the full sourced list from a research answer when it saves it, so long lists and their source links no longer get cut off in your topics.
 - 2026-07-27: The "typing" indicator now stops as soon as Zero's reply arrives, instead of lingering while it tidies up behind the scenes.
 - 2026-07-27: Research answers arrive far faster — Zero now gathers and reports its findings instead of writing them up at length mid-answer.
 - 2026-07-24: Admin user list opens again after retired cost data stopped loading.

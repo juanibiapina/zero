@@ -139,13 +139,13 @@ confirmation.${pinned}`;
 
 // Research gathers and REPORTS: its final message IS the findings, returned to
 // the interface agent as the research tool result. It has no write tools; the
-// writer agent that runs after every turn persists the findings into topics. The
-// prompt asks for a COMPACT report (~1,200 chars) on purpose: the writer reads
-// the interface transcript, where each tool result is truncated to
-// MAX_TOOL_RESULT_CHARS (1,500), so a compact report survives that truncation
-// intact and its sources reach the writer. The truncation itself is owned
-// elsewhere and intentionally not changed here; keep the report short so it is
-// not clipped there.
+// writer agent that runs after every turn reads the report from the turn
+// transcript and persists the findings into topics. The prompt asks for a
+// compact report (~2,500 chars) to keep the research loop fast, with an explicit
+// exception for sourced enumerations so no item is dropped for length. Research
+// tool results carry a generous transcript ceiling (see
+// MAX_RESEARCH_RESULT_CHARS in interface.ts), so a normal report reaches the
+// writer whole.
 export const researchSystemPrompt = (): string =>
   `You are a research agent. You are given a subject to research. You investigate
 it with web search and RETURN a short, sourced findings report as your final
@@ -175,16 +175,18 @@ Investigate:
   clearly thin. Do not keep searching for its own sake.
 
 Report your findings — this is the whole job:
-- Return a COMPACT markdown report: aim for roughly 1,200 characters or less. Be
-  ruthless. A downstream agent expands it into durable notes, and an overlong
-  report is truncated before it reaches that agent, so a few tight sourced
-  bullets beat a long essay.
+- Return a compact markdown report: aim for roughly 2,500 characters or less for
+  prose findings. Be tight; a few sourced bullets beat a long essay, and a short
+  report keeps the research fast.
+- Exception for enumerations: when the answer is a list where each item carries
+  its own distinct source (for example every venue with its website), let the
+  report run longer rather than dropping items. Never cut items to hit the length
+  target; every item and its source must survive.
 - Attach a source to EVERY claim, inline, right after it: "…claim. Source: <url>"
   (or "Sources: <url>, <url>" when corroborated). No claim may appear without a
   source URL. Never collect the sources into a separate list at the end — each
   source stays with its claim.
-- Put the sourced claims FIRST; put a one- or two-sentence summary LAST, so
-  nothing load-bearing is lost if the report is trimmed.
+- Put the sourced claims FIRST; put a one- or two-sentence summary LAST.
 - Distinguish what is well-established from what is uncertain, contested, or
   time-sensitive. Surface open questions rather than papering over gaps.
 - If the searches did not answer the question, say so plainly with what you did
@@ -282,11 +284,13 @@ Proactively create topics:
 - Prefer merging into an existing topic when one fits; never create a
   near-duplicate.
 
-Preserve research topics. Some accessed topics were written by the research
-agent and hold findings with source URLs. Keep those findings and their
-reference URLs verbatim — refresh the summary rather than rewriting the body. If
-two research topics cover the same subject, fold them together, preserving every
-source URL.
+Persist research findings. When the turn transcript carries a research tool
+result, it is a sourced findings report: every claim is followed by its Source:
+URL. Record those findings into topics verbatim, keeping each claim with its
+source URL intact. Never drop an enumerated item or its URL, and never compact
+the sources into a separate list. A turn that carried a research finding is never
+trivial. If two topics cover the same researched subject, fold them together,
+preserving every source URL.
 
 Rules:
 - Skip only genuinely trivial turns (pure chit-chat or acknowledgements that

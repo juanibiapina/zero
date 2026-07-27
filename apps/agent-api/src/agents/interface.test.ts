@@ -4,6 +4,7 @@ import {
   buildConversationMessages,
   decideFinalDelivery,
   formatTimestamp,
+  renderTranscript,
   runInterfaceAgent,
 } from "./interface";
 import {
@@ -260,6 +261,76 @@ describe("renderPinnedTopics", () => {
     const block = renderPinnedTopics([topic("User", "x".repeat(2000))]);
     expect(block).toContain("…[truncated]");
     expect(block.length).toBeLessThan(2000);
+  });
+});
+
+describe("renderTranscript tool-result truncation", () => {
+  // Build the assistant tool_use + tool_result message pair renderTranscript
+  // walks. The tool name is resolved from the earlier tool_use block, so the
+  // pair must share a call id.
+  const withToolResult = (
+    toolName: string,
+    resultText: string,
+  ): AgentMessage[] => [
+    {
+      role: "assistant",
+      content: [
+        { type: "tool_use", id: "call_1", name: toolName, input: {} },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: "call_1", content: resultText },
+      ],
+    },
+  ];
+
+  it("passes a research result under the 8,000-char ceiling through whole", () => {
+    const report =
+      "The Rex cinema screens arthouse films. Source: https://rex.example\n".repeat(
+        30,
+      ) + "Summary: two dozen cinemas listed. Source: https://guide.example";
+    expect(report.length).toBeGreaterThan(1500);
+    expect(report.length).toBeLessThan(8000);
+    const transcript = renderTranscript("cinemas?", withToolResult("research", report));
+    expect(transcript).toContain(report);
+    expect(transcript).toContain("Source: https://guide.example");
+    expect(transcript).not.toContain("…[truncated]");
+  });
+
+  it("clips a research result over the 8,000-char ceiling at the research bound", () => {
+    const report = "y".repeat(9000);
+    const transcript = renderTranscript("q", withToolResult("research", report));
+    expect(transcript).toContain("…[truncated]");
+    expect(transcript).toContain(`Tool result research: ${"y".repeat(8000)}…[truncated]`);
+    expect(transcript).not.toContain("y".repeat(8001));
+  });
+
+  it("keeps a research result just under the ceiling intact", () => {
+    const report = "z".repeat(7999);
+    const transcript = renderTranscript("q", withToolResult("research", report));
+    expect(transcript).toContain(report);
+    expect(transcript).not.toContain("…[truncated]");
+  });
+
+  it("still clips a non-research result at 1,500 chars", () => {
+    const body = "w".repeat(5000);
+    const transcript = renderTranscript("q", withToolResult("gmail_search", body));
+    expect(transcript).toContain("…[truncated]");
+    expect(transcript).toContain(`Tool result gmail_search: ${"w".repeat(1500)}…[truncated]`);
+    expect(transcript).not.toContain("w".repeat(1501));
+  });
+
+  it("uses the tool name to choose the ceiling: same-length payload, different fate", () => {
+    const body = "a".repeat(3000);
+    const asResearch = renderTranscript("q", withToolResult("research", body));
+    const asOther = renderTranscript("q", withToolResult("calendar_list_events", body));
+    // Same 3,000-char payload: research survives whole, the other is clipped.
+    expect(asResearch).toContain(body);
+    expect(asResearch).not.toContain("…[truncated]");
+    expect(asOther).toContain("…[truncated]");
+    expect(asOther).not.toContain("a".repeat(1501));
   });
 });
 
