@@ -50,13 +50,17 @@ Pushing to `main` auto-deploys to production via the Cloudflare Git
 connector (Workers Builds). No manual step is needed; after pushing,
 wait for the Cloudflare build to finish. GitHub Actions CI only lints,
 typechecks, tests, and runs a deploy dry-run; it does not deploy.
+Each connector's **build watch paths** are scoped to that Worker's real
+dependencies, so a push only redeploys the Workers it affects (see
+[Build watch paths](#build-watch-paths-deploy-scoping) below).
 
-Each of the three deployable Workers has its own Workers Builds git
+Each of the four deployable Workers has its own Workers Builds git
 connector on `juanibiapina/zero` (branch `main`, root dir `/`):
 
 - `zero-api` (agent) — build `pnpm run build`, deploy `pnpm -F @zero/agent-api run deploy`
 - `zerovault-api` (vault + errors dashboard) — build `pnpm run build`, deploy `pnpm -F @zero/dashboard-api run deploy`
 - `zero-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zero/landing run build`, deploy `pnpm -F @zero/landing run deploy`
+- `zero-docs` (docs site, `docs.zeroapps.dev`) — build `pnpm -F @zero/docs run build`, deploy `pnpm -F @zero/docs run deploy`
 
 `zero-api` and `zerovault-api` build the whole monorepo (`pnpm run build`) and set
 `VITE_CLERK_PUBLISHABLE_KEY` as a build variable, which the dashboard build needs.
@@ -66,6 +70,39 @@ connector on `juanibiapina/zero` (branch `main`, root dir `/`):
 The `zero-landing` connector was attached 2026-07-26; before that, landing was
 deployed only via manual `wrangler deploy` (it had been bootstrapped that way and
 never wired into Workers Builds). See `docs/plans/workers-builds-investigation.md`.
+
+### Build watch paths (deploy scoping)
+
+Each connector's Workers Builds **build watch paths** are scoped so a push only
+rebuilds the Workers it actually affects. Before 2026-07-27 all four connectors
+used the default include `*`, so any commit (CLI, docs, landing, dashboard UI)
+forced a `zero-api` rebuild and reset in-flight agent turns ("Durable Object
+reset because its code was updated"). The include lists now name only each
+Worker's real dependency set; the exclude list is empty for all four.
+
+Cloudflare evaluates excludes first, then includes: a build fires if any changed
+path matches an include, otherwise it is skipped. A wildcard `*` matches zero or
+more characters (including `/`) and may sit only at the start or end of a rule;
+static entries like `turbo.json` are exact repo-root paths. A push with 0 changed
+files, 3000+ changed files, or 20+ commits bypasses matching and always builds.
+(Source: Cloudflare docs, "Build watch paths".)
+
+Per-Worker **include** paths (exclude list is empty for every Worker):
+
+- **zero-api:** `apps/agent-api/*`, `apps/agent-web/*`
+- **zerovault-api:** `apps/vault-api/*`, `apps/dashboard-web/*`, `packages/auth/*`, `packages/vault-core/*`, `packages/errors-core/*`, `packages/ui/*`
+- **zero-landing:** `apps/landing/*`
+- **zero-docs:** `apps/docs/*`
+- **all four also include the shared build roots:** `packages/typescript-config/*`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`, `patches/*`
+
+`zero-api` bundles `apps/agent-web` as its static assets, so an `agent-web`
+change must redeploy the agent Worker (hence it is in `zero-api`'s includes).
+Repo-root `docs/` (plans, notes) is documentation only and is intentionally in no
+Worker's watch paths — it is **not** the `apps/docs` site, which is what
+`zero-docs` watches. When you add a new cross-package dependency to a Worker,
+extend that Worker's include list too, or it will silently stop redeploying on
+changes to that dependency (a missed include is worse than an over-broad one, so
+prefer slightly broader paths).
 
 To deploy manually (e.g. from a branch, without pushing):
 ```bash
@@ -104,7 +141,7 @@ Packages:
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
 
-All three deployable Workers (`zero-api`, `zerovault-api`, `zero-landing`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place.
+All four deployable Workers (`zero-api`, `zerovault-api`, `zero-landing`, `zero-docs`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place. Each connector's build watch paths are scoped to that Worker's dependencies (see Deployment → Build watch paths), so a push only redeploys the Workers it affects.
 
 Expected dev ports:
 
