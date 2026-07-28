@@ -28,7 +28,10 @@ Organization
 ## Where things live
 
 - **Dashboard:** [dash.zeroapps.dev/vault](https://dash.zeroapps.dev/vault):
-  projects, environments, secrets, and API keys.
+  projects, environments, and secrets.
+- **API keys:** [dash.zeroapps.dev/keys](https://dash.zeroapps.dev/keys), outside
+  either product, since one key authorizes both. See
+  [API keys](/account/api-keys/).
 - **Public API:** `https://api.zeroapps.dev/vault/v1`, Bearer-authenticated with
   a `zv_…` key.
 - **CLI:** `zv`, published as `zerovault-cli` on npm.

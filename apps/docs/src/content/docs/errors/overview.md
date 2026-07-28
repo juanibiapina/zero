@@ -37,8 +37,9 @@ sets the status; it does not delete the issue.
 An error "project" is created implicitly by the first report that carries its
 name. There is no separate step to create one.
 
-## Keys come from ZeroVault
+## API keys
 
-ZeroErrors uses the same organization-scoped `zv_…` API key as ZeroVault. There
-is no separate key page for ZeroErrors, so you create your key under
-**ZeroVault → API Keys**. See [Getting started](/errors/getting-started/).
+ZeroErrors uses an organization-scoped `zv_…` API key, created under **API keys**
+in the dashboard sidebar. The same key authorizes ZeroVault. See
+[API keys](/account/api-keys/), or
+[Getting started](/errors/getting-started/) to send your first report.

@@ -31,6 +31,10 @@ export default defineConfig({
           ],
         },
         {
+          label: "Account",
+          items: [{ label: "API keys", slug: "account/api-keys" }],
+        },
+        {
           label: "Skills",
           items: [{ label: "Overview", slug: "skills/overview" }],
         },
