@@ -21,30 +21,47 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
+export interface AccountNav {
+  /** Section heading above the items. Defaults to "Account". */
+  label?: string;
+  items: NavItem[];
+}
+
 export interface AppLayoutProps {
-  /** Brand shown top-left: product name, icon, and the link target. */
-  brand: { name: string; icon: LucideIcon; to: string };
+  /** Brand shown top-left: product name, the link target, and an optional icon. */
+  brand: { name: string; icon?: LucideIcon; to: string };
   /** Primary nav links. */
   navItems: NavItem[];
+  /**
+   * Links that belong to the account rather than to a product. The shell owns
+   * the region, its divider, its label, and where it goes on narrow widths, so
+   * every app gets the same one.
+   */
+  accountNav?: AccountNav;
   /** Where Clerk sends the user after switching/creating an org. */
   afterOrgUrl?: string;
   /** Full Zero product list (same on every app). Omit to hide the switcher. */
   products?: ProductLink[];
-  /** Which product this app is, so its row is highlighted and inert. */
+  /** Which product this app is, so its row is highlighted. Omit outside a product. */
   currentProductId?: ProductId;
 }
 
 /**
  * The shared authenticated app shell: a Cloudflare-style left rail (brand +
- * product switcher + nav) on desktop with a trimmed top bar, collapsing to a
- * top bar with a native product `<select>` and a horizontal nav strip on
- * mobile. Product-specific bits (brand, nav, current product) are props so
- * every Zero console is one visual family. Unauthenticated users are
+ * product switcher + product nav + account nav) on desktop with a trimmed top
+ * bar, collapsing to a top bar with a native product `<select>` and a
+ * horizontal nav strip on mobile. Product-specific bits (brand, nav, current
+ * product) are props so every Zero console is one visual family. The account
+ * region sits below the product nav and outside the products, which is what
+ * tells a user its pages are not owned by either product. A shell can render
+ * with no current product (the account pages do): the switcher still lists
+ * both products, with neither row marked current. Unauthenticated users are
  * redirected to sign-in.
  */
 export function AppLayout({
   brand,
   navItems,
+  accountNav,
   afterOrgUrl = "/",
   products,
   currentProductId,
@@ -54,7 +71,14 @@ export function AppLayout({
   const { isLoaded, organization } = useOrganization();
   const BrandIcon = brand.icon;
 
-  const showSelector = products !== undefined && currentProductId !== undefined;
+  const showSelector = products !== undefined;
+  const accountLabel = accountNav?.label ?? "Account";
+  const accountItems = accountNav?.items ?? [];
+
+  // A route is active when the current path starts with it, so nested pages
+  // keep their section lit. Every rail path is a unique prefix today; a future
+  // sibling like /keys-something would light up /keys too.
+  const isActive = (to: string) => location.pathname.startsWith(to);
 
   const onMobileProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const next = products?.find((p) => p.id === e.target.value);
@@ -90,7 +114,7 @@ export function AppLayout({
               to={brand.to}
               className="flex h-14 items-center gap-2 border-b px-4"
             >
-              <BrandIcon className="h-5 w-5" />
+              {BrandIcon && <BrandIcon className="h-5 w-5" />}
               <span className="text-xl font-bold tracking-tight">{brand.name}</span>
             </Link>
 
@@ -123,7 +147,7 @@ export function AppLayout({
               </div>
             )}
 
-            <nav className="flex flex-1 flex-col gap-1 p-2">
+            <nav aria-label="Product" className="flex flex-1 flex-col gap-1 p-2">
               {navItems.map((item) => (
                 <Button
                   key={item.to}
@@ -132,7 +156,7 @@ export function AppLayout({
                   asChild
                   className={cn(
                     "justify-start",
-                    location.pathname.startsWith(item.to) && "bg-accent text-accent-foreground",
+                    isActive(item.to) && "bg-accent text-accent-foreground",
                   )}
                 >
                   <Link to={item.to}>
@@ -142,6 +166,31 @@ export function AppLayout({
                 </Button>
               ))}
             </nav>
+
+            {accountItems.length > 0 && (
+              <nav aria-label={accountLabel} className="flex flex-col gap-1 border-t p-2">
+                <span className="px-3 py-1 text-xs font-medium text-muted-foreground">
+                  {accountLabel}
+                </span>
+                {accountItems.map((item) => (
+                  <Button
+                    key={item.to}
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className={cn(
+                      "justify-start",
+                      isActive(item.to) && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <Link to={item.to} aria-current={isActive(item.to) ? "page" : undefined}>
+                      <item.icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  </Button>
+                ))}
+              </nav>
+            )}
 
             <a
               href="https://docs.zeroapps.dev/"
@@ -160,16 +209,21 @@ export function AppLayout({
               {/* Mobile brand + product switcher */}
               <div className="flex items-center gap-2 md:hidden">
                 <Link to={brand.to} className="flex items-center gap-2">
-                  <BrandIcon className="h-5 w-5" />
+                  {BrandIcon && <BrandIcon className="h-5 w-5" />}
                   <span className="text-lg font-bold tracking-tight">{brand.name}</span>
                 </Link>
                 {showSelector && (
                   <select
                     aria-label="Switch product"
-                    value={currentProductId}
+                    value={currentProductId ?? ""}
                     onChange={onMobileProductChange}
                     className="h-9 rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
+                    {currentProductId === undefined && (
+                      <option value="" disabled>
+                        {accountLabel}
+                      </option>
+                    )}
                     {products.map((product) => (
                       <option key={product.id} value={product.id}>
                         {product.label}
@@ -199,26 +253,53 @@ export function AppLayout({
               </div>
             </header>
 
-            {/* Mobile nav strip */}
-            <nav className="md:hidden border-b bg-background px-4 py-2 flex gap-1 overflow-x-auto">
-              {navItems.map((item) => (
-                <Button
-                  key={item.to}
-                  variant="ghost"
-                  size="sm"
-                  asChild
-                  className={cn(
-                    "flex-shrink-0",
-                    location.pathname.startsWith(item.to) && "bg-accent text-accent-foreground",
-                  )}
-                >
-                  <Link to={item.to}>
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                </Button>
-              ))}
-            </nav>
+            {/* Mobile nav strip: product links, then the account links */}
+            {(navItems.length > 0 || accountItems.length > 0) && (
+              <nav
+                aria-label={`Product and ${accountLabel.toLowerCase()}`}
+                className="md:hidden border-b bg-background px-4 py-2 flex gap-1 overflow-x-auto"
+              >
+                {navItems.map((item) => (
+                  <Button
+                    key={item.to}
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className={cn(
+                      "flex-shrink-0",
+                      isActive(item.to) && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <Link to={item.to}>
+                      <item.icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  </Button>
+                ))}
+
+                {navItems.length > 0 && accountItems.length > 0 && (
+                  <span aria-hidden className="mx-1 h-5 w-px shrink-0 self-center bg-border" />
+                )}
+
+                {accountItems.map((item) => (
+                  <Button
+                    key={item.to}
+                    variant="ghost"
+                    size="sm"
+                    asChild
+                    className={cn(
+                      "flex-shrink-0",
+                      isActive(item.to) && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <Link to={item.to} aria-current={isActive(item.to) ? "page" : undefined}>
+                      <item.icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  </Button>
+                ))}
+              </nav>
+            )}
 
             <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
               <Outlet />

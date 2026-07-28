@@ -14,7 +14,12 @@ export { useAsyncData, type AsyncData } from "./hooks/useAsyncData";
 export { AsyncState, type AsyncStateProps } from "./components/AsyncState";
 
 export { AuthProvider } from "./auth/AuthProvider";
-export { AppLayout, type AppLayoutProps, type NavItem } from "./components/AppLayout";
+export {
+  AppLayout,
+  type AppLayoutProps,
+  type NavItem,
+  type AccountNav,
+} from "./components/AppLayout";
 export { getProducts, type ProductLink, type ProductId } from "./products";
 export { SignInPage, type SignInPageProps } from "./pages/SignInPage";
 export { SignUpPage, type SignUpPageProps } from "./pages/SignUpPage";
