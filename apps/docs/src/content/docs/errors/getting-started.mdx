@@ -47,6 +47,27 @@ Open [dash.zeroapps.dev/errors](https://dash.zeroapps.dev/errors), filter by
 the count of reports you sent. Open it to see the individual events, and click
 **Resolve** when you are done.
 
+## 4. Clean up the demo issue
+
+Resolving only sets the status, so the demo issue stays in your list. Delete it
+when you no longer want it there. In the console, use the delete button on the
+issue row or on the issue detail page and confirm.
+
+Over the API, list the project to get the id, then delete it:
+
+```bash
+curl -sS "https://api.zeroapps.dev/errors/v1/issues?project=docs-demo" \
+  -H "authorization: Bearer $ZEROVAULT_API_KEY"
+
+curl -sS -X DELETE https://api.zeroapps.dev/errors/v1/issues/$ISSUE_ID \
+  -H "authorization: Bearer $ZEROVAULT_API_KEY"
+```
+
+The delete returns `204` with an empty body. Since `docs-demo` had only this one
+issue, the project disappears from the console too. Run the report from step 2
+again and you get a brand new issue with a new id and `isNew: true`. See
+[Deleting an issue](/errors/overview/#deleting-an-issue).
+
 ## Report fields
 
 The body of a report:
