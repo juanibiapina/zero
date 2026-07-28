@@ -1,11 +1,11 @@
 /**
  * ============================================================================
- * Issue Routes (read + resolve)
+ * Issue Routes (read + resolve + delete)
  * ============================================================================
  *
- * List is exposed on both /v1 (API key) and /api (Clerk session). Detail and
- * status changes are dashboard-only (/api). The org is resolved by the app
- * middleware; handlers only touch the org's ErrorsDO.
+ * List and delete are exposed on both /v1 (API key) and /api (Clerk session).
+ * Detail and status changes are dashboard-only (/api). The org is resolved by
+ * the app middleware; handlers only touch the org's ErrorsDO.
  */
 
 import { Hono, type Context } from "hono";
@@ -32,8 +32,22 @@ export const createIssuesRouter = () => {
     return c.json({ issues }, 200);
   };
 
+  const remove = async (
+    c: Context<{ Bindings: Env; Variables: Variables }>,
+    id: string,
+  ) => {
+    const deleted = await getErrorsDO(c).deleteIssue(id);
+    if (!deleted) {
+      return c.json({ error: "Issue not found" }, 404);
+    }
+    return new Response(null, { status: 204 });
+  };
+
   app.get("/errors/v1/issues", list);
   app.get("/api/errors/issues", list);
+
+  app.delete("/errors/v1/issues/:id", (c) => remove(c, c.req.param("id")));
+  app.delete("/api/errors/issues/:id", (c) => remove(c, c.req.param("id")));
 
   app.get("/api/errors/issues/:id", async (c) => {
     const result = await getErrorsDO(c).getIssue(c.req.param("id"));

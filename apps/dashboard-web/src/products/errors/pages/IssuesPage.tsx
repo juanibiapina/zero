@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { Link } from "react-router";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
-import { Search, Check, RotateCcw } from "lucide-react";
+import { Search, Check, RotateCcw, Trash2 } from "lucide-react";
 import {
   Button,
+  ConfirmDialog,
   Input,
   Table,
   TableBody,
@@ -13,6 +14,7 @@ import {
   TableRow,
   useAsyncData,
   AsyncState,
+  toast,
 } from "@zero/ui";
 import type { IssueSummary } from "@zero/errors-core";
 import * as api from "@/products/errors/lib/api";
@@ -24,6 +26,7 @@ export default function IssuesPage() {
   const [project, setProject] = useState("");
   const [showResolved, setShowResolved] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<IssueSummary | null>(null);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
@@ -47,6 +50,13 @@ export default function IssuesPage() {
     } finally {
       setPendingId(null);
     }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    await api.deleteIssue(tokenFn, deleting.id);
+    reload();
+    toast.success("Issue deleted");
   };
 
   return (
@@ -123,24 +133,34 @@ export default function IssuesPage() {
                         <StatusBadge status={issue.status} />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant={issue.status === "open" ? "default" : "outline"}
-                          disabled={pendingId === issue.id}
-                          onClick={() => void toggleStatus(issue)}
-                        >
-                          {issue.status === "open" ? (
-                            <>
-                              <Check className="h-4 w-4 mr-1" />
-                              Resolve
-                            </>
-                          ) : (
-                            <>
-                              <RotateCcw className="h-4 w-4 mr-1" />
-                              Reopen
-                            </>
-                          )}
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant={issue.status === "open" ? "default" : "outline"}
+                            disabled={pendingId === issue.id}
+                            onClick={() => void toggleStatus(issue)}
+                          >
+                            {issue.status === "open" ? (
+                              <>
+                                <Check className="h-4 w-4 mr-1" />
+                                Resolve
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw className="h-4 w-4 mr-1" />
+                                Reopen
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Delete issue ${issue.title}`}
+                            onClick={() => setDeleting(issue)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -150,6 +170,24 @@ export default function IssuesPage() {
           )
         }
       </AsyncState>
+
+      {deleting && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeleting(null);
+          }}
+          title="Delete this issue?"
+          description={`"${deleting.title}" and its stored events will be removed from ZeroErrors. This cannot be undone here. If the same error is reported again it comes back as a new issue.`}
+          confirmLabel="Delete issue"
+          onConfirm={confirmDelete}
+          onError={(error) =>
+            toast.error(
+              error instanceof Error ? error.message : "Could not delete the issue",
+            )
+          }
+        />
+      )}
     </div>
   );
 }

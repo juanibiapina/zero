@@ -20,9 +20,13 @@ vi.mock("@clerk/hono", () => ({
 
 const typedEnv = env as Env;
 
-function request(headers: Record<string, string> = {}) {
+function request(
+  headers: Record<string, string> = {},
+  path = "/api/errors/issues",
+  init: RequestInit = {},
+) {
   return createDashboardApp(typedEnv).fetch(
-    new Request("https://localhost/api/errors/issues", { headers }),
+    new Request(`https://localhost${path}`, { ...init, headers }),
     typedEnv,
   );
 }
@@ -66,6 +70,29 @@ describe("Clerk authentication", () => {
     expect(body.issues).toEqual([
       expect.objectContaining({ id: seeded.issue.id, title: issueTitle }),
     ]);
+  });
+
+  it("deletes an issue of the active organization", async () => {
+    const orgId = `org_clerk_${crypto.randomUUID()}`;
+    const errors = typedEnv.ERRORSDO.get(typedEnv.ERRORSDO.idFromName(orgId));
+    const seeded = await errors.record({
+      fingerprint: crypto.randomUUID(),
+      project: "clerk-auth",
+      title: "delete me",
+      level: "error",
+      message: "delete me",
+      userId: "user_clerk",
+      now: new Date().toISOString(),
+    });
+
+    const response = await request(
+      { "X-Test-Clerk-User-Id": "user_clerk", "X-Test-Clerk-Org-Id": orgId },
+      `/api/errors/issues/${seeded.issue.id}`,
+      { method: "DELETE" },
+    );
+
+    expect(response.status).toBe(204);
+    expect(await errors.getIssue(seeded.issue.id)).toBeNull();
   });
 
   it("preserves Clerk middleware redirects", async () => {

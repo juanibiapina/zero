@@ -1,15 +1,17 @@
-import { useCallback } from "react";
-import { Link, useParams } from "react-router";
+import { useCallback, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
-import { ArrowLeft, Check, RotateCcw } from "lucide-react";
+import { ArrowLeft, Check, RotateCcw, Trash2 } from "lucide-react";
 import {
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  ConfirmDialog,
   useAsyncData,
   AsyncState,
+  toast,
 } from "@zero/ui";
 import * as api from "@/products/errors/lib/api";
 import { LevelBadge, StatusBadge } from "@/products/errors/components/badges";
@@ -18,6 +20,8 @@ export default function IssueDetailPage() {
   const { id = "" } = useParams();
   const { getToken } = useAuth();
   const { organization } = useOrganization();
+  const navigate = useNavigate();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
@@ -31,6 +35,12 @@ export default function IssueDetailPage() {
     const next = status === "open" ? "resolved" : "open";
     await api.setIssueStatus(tokenFn, id, next);
     reload();
+  };
+
+  const confirmDelete = async () => {
+    await api.deleteIssue(tokenFn, id);
+    toast.success("Issue deleted");
+    void navigate("/errors/issues");
   };
 
   return (
@@ -57,19 +67,25 @@ export default function IssueDetailPage() {
                 <span>last {new Date(issue.lastSeenAt).toLocaleString()}</span>
               </div>
             </div>
-            <Button variant={issue.status === "open" ? "default" : "outline"} size="sm" onClick={() => void toggleStatus(issue.status)}>
-              {issue.status === "open" ? (
-                <>
-                  <Check className="h-4 w-4 mr-1" />
-                  Resolve
-                </>
-              ) : (
-                <>
-                  <RotateCcw className="h-4 w-4 mr-1" />
-                  Reopen
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant={issue.status === "open" ? "default" : "outline"} size="sm" onClick={() => void toggleStatus(issue.status)}>
+                {issue.status === "open" ? (
+                  <>
+                    <Check className="h-4 w-4 mr-1" />
+                    Resolve
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Reopen
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setConfirmingDelete(true)}>
+                <Trash2 className="h-4 w-4 mr-1 text-destructive" />
+                Delete
+              </Button>
+            </div>
           </div>
 
           <h2 className="text-lg font-semibold">Recent events</h2>
@@ -102,6 +118,22 @@ export default function IssueDetailPage() {
                 </Card>
               ))}
             </div>
+          )}
+
+          {confirmingDelete && (
+            <ConfirmDialog
+              open
+              onOpenChange={setConfirmingDelete}
+              title="Delete this issue?"
+              description={`"${issue.title}" and its stored events will be removed from ZeroErrors. This cannot be undone here. If the same error is reported again it comes back as a new issue.`}
+              confirmLabel="Delete issue"
+              onConfirm={confirmDelete}
+              onError={(error) =>
+                toast.error(
+                  error instanceof Error ? error.message : "Could not delete the issue",
+                )
+              }
+            />
           )}
         </div>
       )}

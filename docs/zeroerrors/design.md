@@ -12,7 +12,8 @@ package `@zero/dashboard-api`), alongside Vault. The dashboard SPA is
 
 - Public ingest: `POST https://api.zeroapps.dev/errors/v1/errors`
 - Public issue list: `GET https://api.zeroapps.dev/errors/v1/issues`
-- Dashboard list/detail/status: `/api/errors/issues/*` on `dash.zeroapps.dev`
+- Public issue delete: `DELETE https://api.zeroapps.dev/errors/v1/issues/{id}`
+- Dashboard list/detail/status/delete: `/api/errors/issues/*` on `dash.zeroapps.dev`
 - Shared types and fingerprinting: `packages/errors-core`
 
 The Worker uses the shared `APIKEYS` KV namespace to validate `zv_` keys and its
@@ -45,3 +46,26 @@ regression. `LogNotifier` is the shipped notifier.
 
 Ingest returns `202` with `{ "issueId", "isNew" }`. A new event for a resolved
 issue automatically reopens it.
+
+## Deleting an issue
+
+`DELETE /errors/v1/issues/{id}` (API key) and `DELETE /api/errors/issues/{id}`
+(Clerk session) share one handler and return `204` with an empty body, or
+`404 {"error":"Issue not found"}` when the id is unknown in the caller's org.
+Both surfaces reach only `ERRORSDO.idFromName(orgId)`, so an id from another org
+resolves to a different store and 404s.
+
+The delete is hard: `ErrorsDO.deleteIssue` removes the event rows and then the
+issue row inside one `db.transaction`, so the store can never hold an issue whose
+event tail was dropped, and the result does not depend on whether DO SQLite
+enforces the declared `ON DELETE CASCADE`. There is no tombstone: the
+fingerprint is freed, so the next report of the same error takes the insert
+branch in `record()` and produces a new issue id with `count` 1 and a fresh "new
+issue" notification. Deleting the last issue carrying a project label also
+removes that project from the console, since `project` is only a column value.
+
+Retention caveat, which the product copy and docs must not overstate: the delete
+clears the active tables, not every trace of the issue. `LogNotifier` writes the
+issue id, project, title, level, and count to Workers Logs on a new or regressed
+issue (retained up to 7 days), and the Durable Object's point-in-time recovery
+can restore the store to any moment in the past 30 days.

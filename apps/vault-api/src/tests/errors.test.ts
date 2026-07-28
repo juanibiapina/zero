@@ -9,6 +9,7 @@
  */
 
 import { env, exports as SELF } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
 import { hashApiKey } from "@zero/auth";
 import { describe, it, expect } from "vitest";
 import type { Env } from "../types";
@@ -45,6 +46,55 @@ function authed(key: string, init: RequestInit = {}): RequestInit {
 
 function errorsDO(orgId: string): DurableObjectStub<ErrorsDO> {
   return typedEnv.ERRORSDO.get(typedEnv.ERRORSDO.idFromName(orgId));
+}
+
+/**
+ * Count the event rows stored under an issue, straight from the DO's SQLite.
+ * `getIssue` returns null once the issue row is gone, so it can never see
+ * orphaned events; only a direct count can.
+ */
+async function storedEventCount(orgId: string, issueId: string): Promise<number> {
+  return runInDurableObject(errorsDO(orgId), (_instance, state) => {
+    const [row] = state.storage.sql
+      .exec<{ c: number }>("SELECT COUNT(*) AS c FROM events WHERE issue_id = ?", issueId)
+      .toArray();
+    return row.c;
+  });
+}
+
+class MockNotifier implements Notifier {
+  calls: { id: string; kind: NotifyKind }[] = [];
+  async notify(issue: IssueSummary, kind: NotifyKind): Promise<void> {
+    this.calls.push({ id: issue.id, kind });
+  }
+}
+
+/**
+ * POST one report through `app` with a fake ExecutionContext that collects
+ * waitUntil promises, so a test can await the fire-and-forget notification.
+ */
+async function postWith(
+  app: ReturnType<typeof createDashboardApp>,
+  key: string,
+  message: string,
+) {
+  const pending: Promise<unknown>[] = [];
+  const ctx = {
+    waitUntil: (p: Promise<unknown>) => pending.push(p),
+    passThroughOnException: () => {},
+    props: {},
+  } as unknown as ExecutionContext;
+  const res = await app.fetch(
+    new Request("https://api.zeroapps.dev/errors/v1/errors", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ project: "p", message, stack: "Error\n    at n (/n.ts:1:1)" }),
+    }),
+    typedEnv,
+    ctx,
+  );
+  await Promise.all(pending);
+  return res;
 }
 
 describe("Health check", () => {
@@ -360,36 +410,112 @@ describe("Read and resolve API", () => {
   });
 });
 
-describe("Notification trigger", () => {
-  class MockNotifier implements Notifier {
-    calls: { id: string; kind: NotifyKind }[] = [];
-    async notify(issue: IssueSummary, kind: NotifyKind): Promise<void> {
-      this.calls.push({ id: issue.id, kind });
-    }
+describe("Delete API", () => {
+  /** Ingest one report and return the issue id. */
+  async function seed(key: string, message: string, stack: string): Promise<string> {
+    const res = await SELF.default.fetch(
+      "https://api.zeroapps.dev/errors/v1/errors",
+      authed(key, {
+        method: "POST",
+        body: JSON.stringify({ project: "web", message, stack }),
+      }),
+    );
+    return ((await res.json()) as { issueId: string }).issueId;
   }
 
-  async function postWith(app: ReturnType<typeof createDashboardApp>, key: string, message: string) {
-    // Fake ExecutionContext that collects waitUntil promises so the test can
-    // await the fire-and-forget notification before asserting.
-    const pending: Promise<unknown>[] = [];
-    const ctx = {
-      waitUntil: (p: Promise<unknown>) => pending.push(p),
-      passThroughOnException: () => {},
-      props: {},
-    } as unknown as ExecutionContext;
+  function del(key: string, id: string) {
+    return SELF.default.fetch(
+      `https://api.zeroapps.dev/errors/v1/issues/${id}`,
+      authed(key, { method: "DELETE" }),
+    );
+  }
+
+  it("deletes the issue and every event stored under it", async () => {
+    const key = await putKey("org_del", "u");
+    const stack = "Error\n    at d (/d.ts:1:1)";
+    const id = await seed(key, "delete me 1", stack);
+    await seed(key, "delete me 2", stack);
+    await seed(key, "delete me 3", stack);
+    expect(await storedEventCount("org_del", id)).toBe(3);
+
+    const res = await del(key, id);
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+
+    expect(await errorsDO("org_del").getIssue(id)).toBeNull();
+    expect(await errorsDO("org_del").listIssues()).toHaveLength(0);
+    expect(await storedEventCount("org_del", id)).toBe(0);
+  });
+
+  it("404s for an unknown id, and for a second delete of the same id", async () => {
+    const key = await putKey("org_del_twice", "u");
+    const id = await seed(key, "gone soon", "Error\n    at g (/g.ts:1:1)");
+
+    expect((await del(key, "no-such-issue")).status).toBe(404);
+    expect((await del(key, id)).status).toBe(204);
+
+    const repeat = await del(key, id);
+    expect(repeat.status).toBe(404);
+    expect(await repeat.json()).toEqual({ error: "Issue not found" });
+  });
+
+  it("cannot delete another org's issue", async () => {
+    const keyA = await putKey("org_del_a", "ua");
+    const keyB = await putKey("org_del_b", "ub");
+    const id = await seed(keyA, "A only", "Error\n    at a (/a.ts:1:1)");
+
+    expect((await del(keyB, id)).status).toBe(404);
+    expect(await errorsDO("org_del_a").getIssue(id)).not.toBeNull();
+  });
+
+  it("deletes over the /api surface too", async () => {
+    const key = await putKey("org_del_api", "u");
+    const id = await seed(key, "console delete", "Error\n    at c (/c.ts:1:1)");
+
+    const app = createDashboardApp(typedEnv, { testUserId: "u" });
     const res = await app.fetch(
-      new Request("https://api.zeroapps.dev/errors/v1/errors", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ project: "p", message, stack: "Error\n    at n (/n.ts:1:1)" }),
+      new Request(`https://localhost/api/errors/issues/${id}`, {
+        method: "DELETE",
+        headers: { "X-Org-Id": "org_del_api" },
       }),
       typedEnv,
-      ctx,
     );
-    await Promise.all(pending);
-    return res;
-  }
 
+    expect(res.status).toBe(204);
+    expect(await errorsDO("org_del_api").getIssue(id)).toBeNull();
+  });
+
+  it("recreates the issue, and notifies again, when the same error recurs", async () => {
+    const key = await putKey("org_del_recreate", "u");
+    const mock = new MockNotifier();
+    const app = createDashboardApp(typedEnv, { notifier: mock });
+
+    const firstBody = (await (await postWith(app, key, "boom 1")).json()) as {
+      issueId: string;
+      isNew: boolean;
+    };
+    expect(firstBody.isNew).toBe(true);
+    expect(mock.calls).toHaveLength(1);
+
+    expect((await del(key, firstBody.issueId)).status).toBe(204);
+
+    const again = (await (await postWith(app, key, "boom 2")).json()) as {
+      issueId: string;
+      isNew: boolean;
+    };
+    expect(again.isNew).toBe(true);
+    expect(again.issueId).not.toBe(firstBody.issueId);
+
+    expect(mock.calls).toHaveLength(2);
+    expect(mock.calls[1]).toEqual({ id: again.issueId, kind: "new" });
+
+    const issues = await errorsDO("org_del_recreate").listIssues();
+    expect(issues).toHaveLength(1);
+    expect(issues[0].count).toBe(1);
+  });
+});
+
+describe("Notification trigger", () => {
   it("fires once on the first occurrence and not on a repeat", async () => {
     const key = await putKey("org_notify", "un");
     const mock = new MockNotifier();

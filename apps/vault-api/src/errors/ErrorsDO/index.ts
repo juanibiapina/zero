@@ -212,6 +212,27 @@ export class ErrorsDO extends DurableObject<Env> {
     this.db.update(issuesTable, { status }, { where: eq("id", id) });
     return toIssueSummary({ ...row, status });
   }
+
+  // ============================================================================
+  // Delete
+  // ============================================================================
+
+  /**
+   * Hard-delete an issue and every event stored under it. Returns false if the
+   * issue does not exist. Events go first inside one transaction, so the store
+   * can never hold an issue whose event tail was dropped, and the result does
+   * not depend on whether SQLite enforces the declared cascade.
+   */
+  deleteIssue(id: string): boolean {
+    return this.db.transaction(() => {
+      const row = this.db.get(issuesTable, { where: eq("id", id) });
+      if (!row) return false;
+
+      this.db.delete(eventsTable, { where: eq("issue_id", id) });
+      this.db.delete(issuesTable, { where: eq("id", id) });
+      return true;
+    });
+  }
 }
 
 // ============================================================================

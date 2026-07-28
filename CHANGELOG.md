@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-28: You can now delete an error issue in ZeroErrors, from the issues list, the issue page, or the API. Deleting removes the issue and the events shown with it, and there is no undo. If the same error is reported again it comes back as a new issue with a fresh count. Deleting the last issue in a project also clears that project from the console.
+
 - 2026-07-28: API keys now live in their own place in the dashboard sidebar, below the product list, instead of inside ZeroVault. One key still works for both Vault and Errors, and the page now says so. Old links to /vault/keys redirect to /keys.
 
 - 2026-07-28: `zv --version` now prints the CLI's real version instead of the stale `0.2.1` string, and running `zv` with no API key now points at docs.zeroapps.dev/account/api-keys/ instead of the ZeroVault getting-started guide. Both ship in zerovault-cli 0.2.3.

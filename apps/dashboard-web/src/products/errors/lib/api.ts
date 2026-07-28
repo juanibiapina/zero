@@ -37,6 +37,15 @@ export async function getIssue(
   return fetchApi<IssueDetailResponse>(`/api/errors/issues/${id}`, getToken);
 }
 
+export async function deleteIssue(
+  getToken: GetToken,
+  id: string,
+): Promise<void> {
+  return fetchApi<void>(`/api/errors/issues/${id}`, getToken, {
+    method: "DELETE",
+  });
+}
+
 export async function setIssueStatus(
   getToken: GetToken,
   id: string,

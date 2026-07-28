@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-label": "^2.1.11",
     "@radix-ui/react-slot": "^1.3.0",
     "class-variance-authority": "^0.7.1",
@@ -28,10 +29,10 @@
   },
   "devDependencies": {
     "@clerk/clerk-react": "^5.61.3",
-    "@zero/eslint-config": "workspace:*",
-    "@zero/typescript-config": "workspace:*",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@zero/eslint-config": "workspace:*",
+    "@zero/typescript-config": "workspace:*",
     "eslint": "10.7.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
