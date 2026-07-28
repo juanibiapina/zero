@@ -322,6 +322,89 @@ describe("runTurn", () => {
     expect(events.some((e) => e.msg === "turn_failed")).toBe(true);
   });
 
+  it("rethrows a DO reset (property set), sending and persisting nothing", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    // The isolate reset surfaces at a storage syscall (persistReply). Model it
+    // as a throw carrying the workerd reset markers.
+    const model = capturingModel(() => {
+      throw Object.assign(
+        new Error("Durable Object reset because its code was updated."),
+        { durableObjectReset: true, retryable: true },
+      );
+    });
+
+    await expect(
+      runTurn({
+        store,
+        makeModel: constModel(model),
+        send: sink.send,
+        search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
+        google: createMemoryGoogle(),
+        chatId: 1,
+        topicId: 0,
+      }),
+    ).rejects.toThrow(/reset/);
+
+    // Nothing sent, nothing persisted: the tail stays `user` so the platform
+    // alarm retry re-runs the turn cleanly.
+    expect(sink.sent).toEqual([]);
+    expect(
+      store
+        .getConversationHistory(id, 10)
+        .map(({ role, content }) => ({ role, content })),
+    ).toEqual([{ role: "user", content: "hi" }]);
+    expect(store.findThreadsAwaitingReply()).toHaveLength(1);
+    // The defer is logged; the failure event is not.
+    const infoEvents = logSpy.mock.calls.map((c) => c[0] as { msg: string });
+    expect(infoEvents.some((e) => e.msg === "turn_reset_retrying")).toBe(true);
+    const errEvents = errSpy.mock.calls.map((c) => c[0] as { msg: string });
+    expect(errEvents.some((e) => e.msg === "turn_failed")).toBe(false);
+  });
+
+  it("rethrows a DO reset detected by message string alone", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    // No durableObjectReset property: only the canonical message string.
+    const model = capturingModel(() => {
+      throw new Error(
+        "Durable Object reset because its code was updated.",
+      );
+    });
+
+    await expect(
+      runTurn({
+        store,
+        makeModel: constModel(model),
+        send: sink.send,
+        search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
+        google: createMemoryGoogle(),
+        chatId: 1,
+        topicId: 0,
+      }),
+    ).rejects.toThrow(/reset/);
+
+    expect(sink.sent).toEqual([]);
+    expect(
+      store
+        .getConversationHistory(id, 10)
+        .map(({ role, content }) => ({ role, content })),
+    ).toEqual([{ role: "user", content: "hi" }]);
+    expect(store.findThreadsAwaitingReply()).toHaveLength(1);
+  });
+
   it("delivers the rate-limit message and logs turn_rate_limited on a 429", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);

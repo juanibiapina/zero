@@ -9,10 +9,34 @@
 export interface DOError {
   retryable?: boolean;
   overloaded?: boolean;
+  // Stamped only on a DO isolate reset (workerd setDurableObjectResetError,
+  // src/workerd/jsg/util.c++). Distinct from `retryable`, which workerd sets on
+  // *every* DISCONNECTED exception including plain network drops.
+  durableObjectReset?: boolean;
 }
 
 export const isDOError = (err: unknown): err is Error & DOError =>
   err instanceof Error;
+
+const RESET_MESSAGE = "Durable Object reset because its code was updated";
+
+// True when a caught error is a DO isolate reset (the platform tore down the
+// isolate mid-turn because a new Worker version deployed). The alarm's
+// at-least-once retry re-runs such a turn, so the orchestrator defers to it
+// instead of sending a fallback.
+//
+// The message-string branch is the evidence-backed path: it is what was
+// actually observed reaching our catch in the 2026-07-27 incident. The
+// `durableObjectReset` property is confirmed in workerd source but not observed
+// in our own logs; we OR both so either signal triggers the deferral.
+//
+// Keys on `durableObjectReset`, NOT bare `retryable`: `retryable` is set on
+// every DISCONNECTED (plain network drops included), which the alarm does not
+// necessarily retry cleanly.
+export const isDurableObjectReset = (err: unknown): boolean =>
+  err instanceof Error &&
+  ((err as Error & DOError).durableObjectReset === true ||
+    err.message.includes(RESET_MESSAGE));
 
 export const MAX_ATTEMPTS = 3;
 export const BASE_BACKOFF_MS = 100;

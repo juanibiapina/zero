@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { withDORetry, isDOError } from "./retry";
+import { withDORetry, isDOError, isDurableObjectReset } from "./retry";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,6 +43,40 @@ describe("isDOError", () => {
     expect(isDOError("string")).toBe(false);
     expect(isDOError(null)).toBe(false);
     expect(isDOError(42)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isDurableObjectReset
+// ---------------------------------------------------------------------------
+
+const RESET_STRING = "Durable Object reset because its code was updated";
+
+describe("isDurableObjectReset", () => {
+  it("returns true when durableObjectReset === true", () => {
+    const err = Object.assign(new Error("boom"), {
+      durableObjectReset: true,
+      retryable: true,
+    });
+    expect(isDurableObjectReset(err)).toBe(true);
+  });
+
+  it("returns true when the message contains the reset string", () => {
+    expect(isDurableObjectReset(new Error(`${RESET_STRING}.`))).toBe(true);
+  });
+
+  it("returns false for a plain Error", () => {
+    expect(isDurableObjectReset(new Error("gateway down"))).toBe(false);
+  });
+
+  it("returns false for a bare retryable error without the reset marker", () => {
+    expect(isDurableObjectReset(retryableError("network drop"))).toBe(false);
+  });
+
+  it("returns false for non-Error values", () => {
+    expect(isDurableObjectReset("string")).toBe(false);
+    expect(isDurableObjectReset(undefined)).toBe(false);
+    expect(isDurableObjectReset(null)).toBe(false);
   });
 });
 

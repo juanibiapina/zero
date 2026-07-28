@@ -200,15 +200,24 @@ alongside the fallback — the same "partial turn" tradeoff, now visible instead
 of silent. Every Telegram failure is also logged at the transport
 (`telegram_send_failed`) before it propagates.
 
-The orchestrator is the turn's error boundary. If the agent path throws, it logs
-`turn_failed`, sends the user a fallback message, and persists that fallback as
-an assistant message so the thread stops awaiting reply, then returns without
-rethrowing. This trades the DO alarm's blanket auto-retry for guaranteed user
-feedback plus a logged error: a poison turn that would loop on retry instead
-tells the user once and can be resent. The interface agent applies the same
-no-silence rule when the model's tool loop hits the step cap without a final
-answer (`finishReason !== "stop"`): it sends the fallback and logs
-`turn_incomplete`.
+The orchestrator is the turn's error boundary. If the agent path throws a genuine
+agent failure, it logs `turn_failed`, sends the user a fallback message, and
+persists that fallback as an assistant message so the thread stops awaiting
+reply, then returns without rethrowing. This trades the DO alarm's blanket
+auto-retry for guaranteed user feedback plus a logged error: a poison turn that
+would loop on retry instead tells the user once and can be resent. The interface
+agent applies the same no-silence rule when the model's tool loop hits the step
+cap without a final answer (`finishReason !== "stop"`): it sends the fallback and
+logs `turn_incomplete`.
+
+One error class is exempt: a **DO isolate reset** (`isDurableObjectReset`, a new
+Worker version deployed mid-turn). It is not an agent failure — the platform's
+at-least-once alarm retry re-runs the turn on a fresh isolate. On a reset the
+orchestrator sends nothing, persists nothing, logs `turn_reset_retrying`, and
+rethrows so the uncaught throw leaves `alarm()` and triggers that retry. Since
+the reply path is persist-before-send, the tail stays `user` and the retry
+delivers the real answer exactly once — no premature fallback. After this,
+`turn_failed` means only a genuine agent failure.
 
 ## Execution (DO alarm)
 

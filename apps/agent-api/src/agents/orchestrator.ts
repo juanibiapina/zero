@@ -8,6 +8,7 @@ import { isRateLimitError, RATE_LIMIT_MESSAGE } from "./llm-error";
 import { runWriterAgent } from "./writer";
 import { usageLogFields } from "./run";
 import { log, logError, fmtErr } from "../log";
+import { isDurableObjectReset } from "../do/retry";
 import type { AgentLabel } from "./model";
 import type { AgentModel } from "./protocol";
 import type { Store } from "../store/types";
@@ -130,6 +131,24 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       ...usageLogFields(writerUsage),
     });
   } catch (err) {
+    // A DO isolate reset (a new Worker version deployed mid-turn) is not an
+    // agent failure: the platform's at-least-once alarm retry re-runs this turn
+    // on a fresh isolate. The reply path is persist-before-send, so nothing was
+    // committed or sent for this turn — the tail stays `user` and the retry
+    // delivers exactly once. Send nothing, persist nothing, rethrow so the
+    // uncaught throw leaves alarm() and triggers that retry. Sending the
+    // fallback here would just be a premature, now-redundant "try again" the
+    // user does not need. (The finally clearBusy still runs; with MemoryStore
+    // it does not throw, so the rethrown reset propagates cleanly in tests.)
+    if (isDurableObjectReset(err)) {
+      log("turn_reset_retrying", {
+        chat_id: chatId,
+        topic_id: topicId,
+        clerk_user_id: input.clerkUserId,
+        error: fmtErr(err),
+      });
+      throw err;
+    }
     // The agent path threw (LLM gateway error, malformed tool loop, etc.).
     // Tell the user and persist the fallback as an assistant message so the
     // thread stops awaiting reply — this prevents the next alarm from
