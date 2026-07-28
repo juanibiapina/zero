@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/juanibiapina/trippycards",
+    "url": "https://github.com/juanibiapina/zero",
     "directory": "packages/zerovault-cli"
   },
   "bin": {

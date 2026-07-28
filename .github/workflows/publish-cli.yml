@@ -1,0 +1,41 @@
+name: Publish CLI
+
+# The filename is load-bearing: npm's trusted publisher entry for
+# zerovault-cli names `publish-cli.yml`. Renaming this file breaks publishing.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    name: Publish zerovault-cli
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish
+        working-directory: packages/zerovault-cli
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          [ "$pkg" = "${GITHUB_REF_NAME#v}" ] \
+            || { echo "tag $GITHUB_REF_NAME != package version $pkg"; exit 1; }
+          npm publish
