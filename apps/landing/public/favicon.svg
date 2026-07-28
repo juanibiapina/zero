@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" fill="oklch(0.13 0 0)"/>
-  <circle cx="32" cy="32" r="17" fill="none" stroke="oklch(0.64 0.22 33)" stroke-width="10"/>
-  <circle cx="44" cy="20" r="4" fill="oklch(0.975 0 0)"/>
+  <rect width="64" height="64" fill="oklch(0.145 0 0)"/>
+  <circle cx="32" cy="32" r="17" fill="none" stroke="oklch(1 0 0)" stroke-width="10"/>
+  <circle cx="44" cy="20" r="4" fill="oklch(0.145 0 0)"/>
 </svg>

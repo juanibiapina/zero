@@ -4,6 +4,34 @@
 
 The site lives in `apps/landing` (`@zero/landing`). It is a static Astro site served by an asset-only Cloudflare Worker: it has no Worker script, API, storage, Clerk setup, or runtime secrets. `astro build` emits static HTML with the CSS inlined into `<head>` and ships zero client JavaScript.
 
+## Design
+
+The page is black on white with no accent color. Its palette comes from the
+console's own tokens in `packages/ui/src/styles.css`: `--background`,
+`--foreground`, `--primary`, and `--primary-foreground` are copied byte for byte,
+and four landing-only departures (`--muted-foreground`, `--border`,
+`--primary-hover`, and a `--foreground` focus ring) are darker or lighter steps on
+the same neutral ramp, each commented in `src/styles/global.css`.
+
+Invariants:
+
+- **Chroma 0.** Every color literal that ships from `apps/landing` is written
+  `oklch(L 0 0)` — no hex, no `rgb()`/`hsl()`/`color-mix()`, no named color, no
+  `currentColor`, no `transparent` — and every shipped PNG is grayscale. The
+  landing page has no destructive, success, or warning state, so it needs no
+  chromatic value.
+- **No Tailwind CSS in the output.** `global.css` is hand-written; the built
+  stylesheet contains nothing else. `astro.config.mjs` still registers
+  `@tailwindcss/vite` and `package.json` still lists the two Tailwind
+  devDependencies, but with no `@import "tailwindcss"` they emit zero bytes.
+  Both are a known leftover, to be dropped by the next change that already
+  touches `pnpm-lock.yaml`.
+- **Light only.** The console ships light-only, so the landing page keeps
+  `color-scheme: light` and defines no `prefers-color-scheme` block.
+- Structure is one surface, a 68rem centered column, 1px rules, and varied
+  vertical space. The hero button is the only filled surface and the only
+  border-radius on the page.
+
 ## Local development
 
 Start the Astro dev server:
@@ -35,8 +63,8 @@ served verbatim by Workers Assets (exact paths are served directly, before
 - `sitemap.xml` — lists the single public URL `https://zeroapps.dev/`. Served as
   `text/xml` (extension-based content type from Workers Assets); Google accepts
   that for sitemaps.
-- `og-image.png` — 1200x630 social preview card (Zero wordmark on the brand dark
-  background). Referenced by the Open Graph and Twitter card tags in
+- `og-image.png` — 1200x630 social preview card (black Zero mark, wordmark, and
+  headline on white, grayscale only). Referenced by the Open Graph and Twitter card tags in
   `src/pages/index.astro`. Regenerate by screenshotting a 1200x630 HTML with
   headless Chromium if the brand or copy changes.
 

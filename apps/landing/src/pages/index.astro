@@ -49,74 +49,54 @@ const jsonLd = {
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header">
-      <a class="wordmark" href="/" aria-label="Zero home">Zero<span>.</span></a>
+      <a class="wordmark" href="/" aria-label="Zero home">Zero.</a>
       <nav aria-label="Primary navigation">
-        <a href="#products">Products</a>
-        <a class="header-link" href={docsUrl}>Docs <span aria-hidden="true">↗</span></a>
-        <a class="header-link" href={vaultUrl}>Dashboard <span aria-hidden="true">↗</span></a>
+        <a href={docsUrl}>Docs</a>
+        <a href={vaultUrl}>Dashboard</a>
       </nav>
     </header>
 
     <main id="main">
       <section class="hero" aria-labelledby="page-title">
-        <div class="hero-copy">
-          <p class="intro">For indie developers and small teams</p>
-          <h1 id="page-title">One API key.<br /><span>Every Zero product.</span></h1>
-          <div class="hero-actions">
-            <a class="button" href={keysUrl}>Create an API key <span aria-hidden="true">↗</span></a>
+        <h1 id="page-title">One API key.<br />Every Zero product.</h1>
+        <p class="lede">For indie developers and small teams.</p>
+        <div class="hero-actions">
+          <a class="button" href={keysUrl}>Create an API key</a>
+        </div>
+      </section>
+
+      <section class="products" aria-label="Products">
+        <article class="product">
+          <h2>Vault</h2>
+          <div class="product-copy">
+            <p class="product-statement">Secrets by product and environment.</p>
+            <p class="product-description">Store and update values from the dashboard or CLI.</p>
+            <div class="product-links">
+              <a href={vaultUrl}>Open Vault</a>
+              <a class="product-doc" href={vaultDocsUrl}>Setup guide</a>
+            </div>
           </div>
-        </div>
-      </section>
+        </article>
 
-      <section class="products" id="products" aria-label="Products">
-        <div class="product-list">
-          <article class="product">
-            <div class="product-title">
-              <p>Secrets management</p>
-              <h2><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg>Vault</h2>
+        <article class="product">
+          <h2>Errors</h2>
+          <div class="product-copy">
+            <p class="product-statement">See which failures keep happening.</p>
+            <p class="product-description">Send an HTTP report with a project name and message. Include a stack trace or context when available. Zero groups repeated failures into issues and creates the project view from the reports you send.</p>
+            <div class="product-links">
+              <a href={errorsUrl}>Open Errors</a>
+              <a class="product-doc" href={errorsDocsUrl}>Setup guide</a>
             </div>
-            <div class="product-body">
-              <div class="product-copy">
-                <p class="product-statement">Secrets by product and environment</p>
-                <p class="product-description">Store and update values from the dashboard or CLI.</p>
-              </div>
-              <div class="product-actions">
-                <a href={vaultUrl}>Open Vault <span aria-hidden="true">↗</span></a>
-                <a class="product-doc" href={vaultDocsUrl}>Setup guide <span aria-hidden="true">↗</span></a>
-              </div>
-            </div>
-          </article>
-
-          <article class="product">
-            <div class="product-title">
-              <p>Error reporting</p>
-              <h2><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bug" aria-hidden="true"><path d="M12 20v-9"></path><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z"></path><path d="M14.12 3.88 16 2"></path><path d="M21 21a4 4 0 0 0-3.81-4"></path><path d="M21 5a4 4 0 0 1-3.55 3.97"></path><path d="M22 13h-4"></path><path d="M3 21a4 4 0 0 1 3.81-4"></path><path d="M3 5a4 4 0 0 0 3.55 3.97"></path><path d="M6 13H2"></path><path d="m8 2 1.88 1.88"></path><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"></path></svg>Errors</h2>
-            </div>
-            <div class="product-body">
-              <div class="product-copy">
-                <p class="product-statement">See which failures keep happening.</p>
-                <p class="product-description">Send an HTTP report with a project name and message. Include a stack trace or context when available. Zero groups repeated failures into issues and creates the project view from the reports you send.</p>
-              </div>
-              <div class="product-actions">
-                <a href={errorsUrl}>Open Errors <span aria-hidden="true">↗</span></a>
-                <a class="product-doc" href={errorsDocsUrl}>Setup guide <span aria-hidden="true">↗</span></a>
-              </div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section class="closing" aria-labelledby="closing-title">
-        <h2 id="closing-title">Add Zero to your projects.</h2>
-        <a class="button" href={keysUrl}>Create an API key <span aria-hidden="true">↗</span></a>
+          </div>
+        </article>
       </section>
     </main>
 
     <footer class="site-footer">
-      <a class="wordmark" href="/" aria-label="Zero home">Zero<span>.</span></a>
+      <a class="wordmark" href="/" aria-label="Zero home">Zero.</a>
       <nav class="footer-nav" aria-label="Footer">
-        <a class="footer-link" href={docsUrl}>Docs <span aria-hidden="true">↗</span></a>
-        <a class="footer-link" href={vaultUrl}>Dashboard <span aria-hidden="true">↗</span></a>
+        <a href={docsUrl}>Docs</a>
+        <a href={vaultUrl}>Dashboard</a>
       </nav>
     </footer>
   </body>
