@@ -45,7 +45,7 @@ function getClient(): ZeroVaultClient {
     console.error(
       "Error: no API key. Set ZEROVAULT_API_KEY, pass --api-key, or bind this " +
         "directory to a context with `zv context use`. " +
-        "See https://docs.zeroapps.dev/vault/getting-started/ to create one.",
+        "See https://docs.zeroapps.dev/account/api-keys/ to create one.",
     );
     process.exit(1);
   }
