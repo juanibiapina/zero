@@ -1,9 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth, useOrganization } from "@clerk/clerk-react";
 import { Plus, Trash2, Copy, Check } from "lucide-react";
 import {
   Button,
   Input,
+  Label,
   Table,
   TableBody,
   TableCell,
@@ -13,14 +14,26 @@ import {
   useAsyncData,
   AsyncState,
 } from "@zero/ui";
-import * as api from "@/products/vault/lib/api";
+import * as api from "@/account/lib/api";
 
+const loadingSecretsUrl = "https://docs.zeroapps.dev/vault/loading-secrets/";
+const sendingErrorsUrl = "https://docs.zeroapps.dev/errors/getting-started/";
+
+const linkClass =
+  "font-medium text-foreground underline underline-offset-2 hover:text-primary";
+
+/**
+ * The one place a key is created, copied, and revoked. Keys are
+ * organization-scoped and authorize every Zero product, so nothing here names
+ * a single product as their owner.
+ */
 export default function KeysPage() {
   const { getToken } = useAuth();
   const { organization } = useOrganization();
   const [newLabel, setNewLabel] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyRef = useRef<HTMLButtonElement>(null);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
@@ -29,6 +42,11 @@ export default function KeysPage() {
     [tokenFn, organization?.id],
   );
   const { reload } = state;
+
+  // The key is shown once, so land the keyboard user on the copy button.
+  useEffect(() => {
+    if (newKey) copyRef.current?.focus();
+  }, [newKey]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,10 +71,19 @@ export default function KeysPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">API Keys</h1>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold">API keys</h1>
+        <p className="text-muted-foreground">
+          Keys belong to your organization. One key authorizes both Vault and Errors.
+        </p>
+      </div>
 
       <form onSubmit={(e) => void handleCreate(e)} className="flex gap-2 max-w-md">
+        <Label htmlFor="key-label" className="sr-only">
+          Key label
+        </Label>
         <Input
+          id="key-label"
           placeholder="Label (optional)"
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
@@ -68,27 +95,35 @@ export default function KeysPage() {
       </form>
 
       {newKey && (
-        <div className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+        <div
+          role="status"
+          className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950"
+        >
           <p className="text-sm font-medium mb-2">
-            New API key created. Copy it now — it won't be shown again.
+            New API key created. Copy it now. It is not shown again.
           </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 text-sm font-mono bg-background px-3 py-2 rounded border break-all">
               {newKey}
             </code>
-            <Button size="sm" variant="outline" onClick={() => void handleCopy()}>
+            <Button
+              ref={copyRef}
+              size="sm"
+              variant="outline"
+              aria-label="Copy API key"
+              onClick={() => void handleCopy()}
+            >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </Button>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Use it from the CLI or your app — see{" "}
-            <a
-              href="https://docs.zeroapps.dev/vault/loading-secrets/"
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
-            >
-              loading secrets
+            Use it with the CLI to{" "}
+            <a href={loadingSecretsUrl} target="_blank" rel="noreferrer" className={linkClass}>
+              load secrets
+            </a>
+            , or to{" "}
+            <a href={sendingErrorsUrl} target="_blank" rel="noreferrer" className={linkClass}>
+              send error reports
             </a>
             .
           </p>
@@ -107,14 +142,14 @@ export default function KeysPage() {
         {({ keys }) =>
           keys.length === 0 ? (
             <p className="text-muted-foreground">
-              No API keys yet. Keys authorize the CLI and your apps — see{" "}
-              <a
-                href="https://docs.zeroapps.dev/vault/loading-secrets/"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
-              >
+              No API keys yet. A key authorizes the <code>zv</code> CLI, your apps, and
+              error reporting. See{" "}
+              <a href={loadingSecretsUrl} target="_blank" rel="noreferrer" className={linkClass}>
                 loading secrets
+              </a>{" "}
+              or{" "}
+              <a href={sendingErrorsUrl} target="_blank" rel="noreferrer" className={linkClass}>
+                sending errors
               </a>
               .
             </p>
@@ -134,7 +169,7 @@ export default function KeysPage() {
                     <TableCell className="font-mono">
                       {k.prefix}{k.suffix}
                     </TableCell>
-                    <TableCell>{k.label || "—"}</TableCell>
+                    <TableCell>{k.label || "None"}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(k.createdAt).toLocaleDateString()}
                     </TableCell>
@@ -142,6 +177,7 @@ export default function KeysPage() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        aria-label={`Revoke key ${k.prefix}${k.suffix}`}
                         onClick={() => void handleRevoke(k.id)}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />

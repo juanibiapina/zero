@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-07-28: API keys now live in their own place in the dashboard sidebar, below the product list, instead of inside ZeroVault. One key still works for both Vault and Errors, and the page now says so. Old links to /vault/keys redirect to /keys.
+
 - 2026-07-28: `zv --version` now prints the CLI's real version instead of the stale `0.2.1` string; ships in zerovault-cli 0.2.3.
 
 - 2026-07-28: The landing site, dashboard, and CLI now link straight to docs.zeroapps.dev — a Docs link in the landing header and footer, a "Setup guide" on each product card, a Docs link in the dashboard sidebar, contextual getting-started pointers on the empty project, key, and issue screens, and docs URLs in `zv --help` and its no-API-key error.

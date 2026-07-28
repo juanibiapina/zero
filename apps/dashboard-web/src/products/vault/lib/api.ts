@@ -8,40 +8,7 @@
  */
 
 import { fetchApi } from "@zero/ui";
-import type {
-  ApiKeyInfo,
-  ApiKeyCreated,
-  Project,
-  Environment,
-  SecretEntry,
-} from "@zero/vault-core";
-
-// ============================================================================
-// API Keys
-// ============================================================================
-
-export async function createApiKey(
-  getToken: () => Promise<string | null>,
-  label?: string,
-): Promise<ApiKeyCreated> {
-  return fetchApi<ApiKeyCreated>("/api/vault/keys", getToken, {
-    method: "POST",
-    body: JSON.stringify({ label }),
-  });
-}
-
-export async function listApiKeys(
-  getToken: () => Promise<string | null>,
-): Promise<{ keys: ApiKeyInfo[] }> {
-  return fetchApi<{ keys: ApiKeyInfo[] }>("/api/vault/keys", getToken);
-}
-
-export async function revokeApiKey(
-  getToken: () => Promise<string | null>,
-  id: number,
-): Promise<void> {
-  return fetchApi<void>(`/api/vault/keys/${id}`, getToken, { method: "DELETE" });
-}
+import type { Project, Environment, SecretEntry } from "@zero/vault-core";
 
 // ============================================================================
 // Projects
