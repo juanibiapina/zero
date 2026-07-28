@@ -4,6 +4,7 @@ import { useAuth, useOrganization } from "@clerk/clerk-react";
 import { Plus, Trash2, FolderOpen } from "lucide-react";
 import {
   Button,
+  ConfirmDialog,
   Input,
   Card,
   CardContent,
@@ -11,13 +12,16 @@ import {
   CardTitle,
   useAsyncData,
   AsyncState,
+  toast,
 } from "@zero/ui";
+import type { Project } from "@zero/vault-core";
 import * as api from "@/products/vault/lib/api";
 
 export default function ProjectsPage() {
   const { getToken } = useAuth();
   const { organization } = useOrganization();
   const [newName, setNewName] = useState("");
+  const [deleting, setDeleting] = useState<Project | null>(null);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
@@ -35,10 +39,11 @@ export default function ProjectsPage() {
     reload();
   };
 
-  const handleDelete = async (name: string) => {
-    if (!confirm(`Delete project "${name}" and all its environments and secrets?`)) return;
-    await api.deleteProject(tokenFn, name);
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    await api.deleteProject(tokenFn, deleting.name);
     reload();
+    toast.success("Project deleted");
   };
 
   return (
@@ -91,7 +96,8 @@ export default function ProjectsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => void handleDelete(p.name)}
+                      aria-label={`Delete project ${p.name}`}
+                      onClick={() => setDeleting(p)}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -107,6 +113,24 @@ export default function ProjectsPage() {
           )
         }
       </AsyncState>
+
+      {deleting && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeleting(null);
+          }}
+          title="Delete this project?"
+          description={`"${deleting.name}" and all its environments and secrets will be removed from ZeroVault. This cannot be undone here. Anything still loading these secrets, such as an app or a CI job, stops getting them.`}
+          confirmLabel="Delete project"
+          onConfirm={confirmDelete}
+          onError={(error) =>
+            toast.error(
+              error instanceof Error ? error.message : "Could not delete the project",
+            )
+          }
+        />
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useAuth, useOrganization } from "@clerk/clerk-react";
 import { Plus, Trash2, Copy, Check } from "lucide-react";
 import {
   Button,
+  ConfirmDialog,
   Input,
   Label,
   Table,
@@ -13,7 +14,9 @@ import {
   TableRow,
   useAsyncData,
   AsyncState,
+  toast,
 } from "@zero/ui";
+import type { ApiKeyInfo } from "@zero/vault-core";
 import * as api from "@/account/lib/api";
 
 const loadingSecretsUrl = "https://docs.zeroapps.dev/vault/loading-secrets/";
@@ -33,6 +36,7 @@ export default function KeysPage() {
   const [newLabel, setNewLabel] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [revoking, setRevoking] = useState<ApiKeyInfo | null>(null);
   const copyRef = useRef<HTMLButtonElement>(null);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
@@ -63,10 +67,11 @@ export default function KeysPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleRevoke = async (id: number) => {
-    if (!confirm("Revoke this API key? This cannot be undone.")) return;
-    await api.revokeApiKey(tokenFn, id);
+  const confirmRevoke = async () => {
+    if (!revoking) return;
+    await api.revokeApiKey(tokenFn, revoking.id);
     reload();
+    toast.success("API key revoked");
   };
 
   return (
@@ -178,7 +183,7 @@ export default function KeysPage() {
                         variant="ghost"
                         size="sm"
                         aria-label={`Revoke key ${k.prefix}${k.suffix}`}
-                        onClick={() => void handleRevoke(k.id)}
+                        onClick={() => setRevoking(k)}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -190,6 +195,24 @@ export default function KeysPage() {
           )
         }
       </AsyncState>
+
+      {revoking && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setRevoking(null);
+          }}
+          title="Revoke this API key?"
+          description={`Key ${revoking.prefix}${revoking.suffix} stops working immediately. This cannot be undone here. Anything using it, including the zv CLI, your apps, and error reporting, needs a new key.`}
+          confirmLabel="Revoke key"
+          onConfirm={confirmRevoke}
+          onError={(error) =>
+            toast.error(
+              error instanceof Error ? error.message : "Could not revoke the key",
+            )
+          }
+        />
+      )}
     </div>
   );
 }

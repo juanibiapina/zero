@@ -4,6 +4,7 @@ import { useAuth, useOrganization } from "@clerk/clerk-react";
 import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import {
   Button,
+  ConfirmDialog,
   Input,
   Table,
   TableBody,
@@ -13,7 +14,9 @@ import {
   TableRow,
   useAsyncData,
   AsyncState,
+  toast,
 } from "@zero/ui";
+import type { Environment } from "@zero/vault-core";
 import * as api from "@/products/vault/lib/api";
 
 export default function EnvironmentsPage() {
@@ -21,6 +24,7 @@ export default function EnvironmentsPage() {
   const { getToken } = useAuth();
   const { organization } = useOrganization();
   const [newName, setNewName] = useState("");
+  const [deleting, setDeleting] = useState<Environment | null>(null);
 
   const tokenFn = useCallback(() => getToken(), [getToken]);
 
@@ -41,11 +45,11 @@ export default function EnvironmentsPage() {
     reload();
   };
 
-  const handleDelete = async (envName: string) => {
-    if (!project) return;
-    if (!confirm(`Delete environment "${envName}" and all its secrets?`)) return;
-    await api.deleteEnvironment(tokenFn, project, envName);
+  const confirmDelete = async () => {
+    if (!project || !deleting) return;
+    await api.deleteEnvironment(tokenFn, project, deleting.name);
     reload();
+    toast.success("Environment deleted");
   };
 
   return (
@@ -99,7 +103,8 @@ export default function EnvironmentsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => void handleDelete(env.name)}
+                      aria-label={`Delete environment ${env.name}`}
+                      onClick={() => setDeleting(env)}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -110,6 +115,26 @@ export default function EnvironmentsPage() {
           </Table>
         )}
       </AsyncState>
+
+      {deleting && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDeleting(null);
+          }}
+          title="Delete this environment?"
+          description={`"${deleting.name}" and all its secrets in "${project}" will be removed from ZeroVault. This cannot be undone here. Anything still loading these secrets, such as an app or a CI job, stops getting them.`}
+          confirmLabel="Delete environment"
+          onConfirm={confirmDelete}
+          onError={(error) =>
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Could not delete the environment",
+            )
+          }
+        />
+      )}
     </div>
   );
 }
