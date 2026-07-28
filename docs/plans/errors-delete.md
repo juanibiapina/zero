@@ -649,6 +649,21 @@ user's perspective with no internal mechanics:
     the same verified route, and push it. Record both `zero` commits, the
     `zero-skills` commit, and the production check in the verification note.
 
+### Verification note
+
+- Code commit: `ecb6948`.
+- Plan-docs commit: `04f7bc7`.
+- Public docs commit: `05e8964`.
+- `zero-skills` commit: `3c73a01`.
+- Production verification ran against org `org_3G8Bj2obf5XlZEdUv7jxCsyuRy1`
+  with scratch project `delete-verify-1785241025`. All 12 steps passed. The
+  `docs-demo` issue `f0dc012e-0b66-4dd2-a4af-2eee08198f1f` was deleted, and the
+  project now lists empty.
+- One open gap remains: GitHub Actions CI run `30358116643` failed before any
+  step ran because of an account billing/spending-limit block. The six new
+  vault-api tests, five in `errors.test.ts` and one in
+  `errors-clerk-auth.test.ts`, have NEVER executed anywhere.
+
 `zerovault-api`'s Workers Builds watch paths already include `apps/vault-api/*`,
 `apps/dashboard-web/*`, and `packages/ui/*`, so the code push redeploys it with
 no connector change. `apps/docs` changes redeploy `zero-docs` separately. The
