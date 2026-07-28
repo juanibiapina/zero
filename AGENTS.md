@@ -71,6 +71,45 @@ The `zero-landing` connector was attached 2026-07-26; before that, landing was
 deployed only via manual `wrangler deploy` (it had been bootstrapped that way and
 never wired into Workers Builds). See `docs/plans/workers-builds-investigation.md`.
 
+### Per-trigger deploy commands
+
+Each connector has up to two triggers, and they must not run the same deploy
+command. The default-branch trigger deploys to production; the non-production
+trigger only uploads a version for branch pushes.
+
+| Worker | default branch (`main`) | non-production branches |
+|---|---|---|
+| `zero-api` | `pnpm -F @zero/agent-api run deploy` | `pnpm -F @zero/agent-api exec wrangler versions upload` |
+| `zerovault-api` | `pnpm -F @zero/dashboard-api run deploy` | none (no preview trigger) |
+| `zero-landing` | `pnpm -F @zero/landing run deploy` | `pnpm -F @zero/landing exec wrangler versions upload` |
+| `zero-docs` | `pnpm -F @zero/docs run deploy` | `pnpm -F @zero/docs exec wrangler versions upload` |
+
+Rules, each learned from a real breakage (2026-07-28):
+
+- A preview trigger runs `pnpm -F <pkg> exec wrangler versions upload`, never
+  `run deploy`. The `deploy` script is `wrangler deploy`, which creates a
+  version **and** routes 100% of traffic to it, so a branch push would land on
+  production. `versions upload` creates a version that no deployment routes.
+- Always scope the command to the package with `pnpm -F <pkg>`. A bare
+  `npx wrangler versions upload` runs at the repo root, where there is no
+  `wrangler.jsonc`, and fails with `Missing entry-point to Worker script or to
+  assets directory`. That is what broke every `zero-docs` branch build between
+  2026-07-27 and 2026-07-28. `pnpm -F` also runs the repo-pinned wrangler
+  instead of letting `npx` fetch the latest.
+- Check the package name. `pnpm -F` exits 0 when the filter matches nothing, so
+  a typo is a silent no-op that reports a green build: `zero-api`'s preview
+  trigger ran `pnpm -F @zero/api run deploy` (no such package) for months and
+  logged `No projects matched the filters` under a `success` outcome.
+- `zerovault-api` has no preview trigger on purpose. Its build command is the
+  whole-repo `pnpm run build`, which needs `VITE_CLERK_PUBLISHABLE_KEY` set as a
+  build variable on each trigger, so adding one is a separate decision.
+
+These commands live in Cloudflare, not in the repo, so a dashboard edit can
+silently undo them. Read them back with
+`GET /accounts/{account_id}/builds/workers/{script_tag}/triggers` after any
+connector change (see `docs/plans/workers-builds-investigation.md` for the
+endpoint list).
+
 ### Build watch paths (deploy scoping)
 
 Each connector's Workers Builds **build watch paths** are scoped so a push only

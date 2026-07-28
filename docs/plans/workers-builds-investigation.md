@@ -89,9 +89,35 @@ Builds connector.
 
 ### API limitations
 
-- `GET /accounts/{id}/builds/repos` and `/builds/triggers` return `12000 Not found`
-  (token lacks the Workers CI/CD scope), so the connector list could not be read
-  directly from the API.
+- `GET /accounts/{id}/builds/repos` and `GET /accounts/{id}/builds/triggers`
+  return `12000 Not found`, but not for the reason recorded here originally
+  (a missing token scope) — the token has Workers CI Read. **Those two GET
+  operations do not exist.** `/accounts/{account_id}/builds/triggers` is a real
+  path with a `POST` (`createTrigger`) and no `GET`; there is no
+  `/builds/repos` collection at all, repo connections live at
+  `/accounts/{account_id}/builds/repos/connections` with `PUT`
+  (`upsertRepoConnection`) and `DELETE .../{repo_connection_uuid}`, again no
+  `GET`. Corrected 2026-07-28 against the Cloudflare OpenAPI schema
+  (`cloudflare/api-schemas` commit `c92b9b0`). The operations that do exist and
+  cover connector inspection and repair:
+
+  ```
+  GET   /accounts/{account_id}/workers/services/{worker_name}
+  GET   /accounts/{account_id}/builds/workers/{external_script_id}/triggers
+  GET   /accounts/{account_id}/builds/workers/{external_script_id}/builds?per_page=N
+  GET   /accounts/{account_id}/builds/builds/{build_uuid}
+  GET   /accounts/{account_id}/builds/builds/{build_uuid}/logs
+  PATCH /accounts/{account_id}/builds/triggers/{trigger_uuid}
+  POST  /accounts/{account_id}/builds/triggers/{trigger_uuid}/builds
+  GET   /accounts/{account_id}/workers/scripts/{script_name}/deployments
+  GET   /accounts/{account_id}/workers/scripts/{script_name}/versions?per_page=N
+  ```
+
+  `external_script_id` is the script tag, read from
+  `GET /workers/services/{worker_name}` at
+  `result.default_environment.script_tag`. The reads need **Workers CI Read**;
+  `PATCH` and the manual-build `POST` need **Workers CI Write**. The manual-build
+  `POST` requires a body carrying `branch` or `commit_hash`.
 - Worker version annotations show `workers/triggered_by: version_upload` for all
   three Workers, because Workers Builds deploys via `wrangler` under the hood; this
   field does **not** distinguish connector deploys from manual ones.
