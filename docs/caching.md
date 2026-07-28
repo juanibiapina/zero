@@ -288,9 +288,13 @@ every turn, so it never caches cross-turn), but its static system+tools head
 | 2 | 1626 | 0 | 2064 |
 | 3 | 1626 | 0 | 2051 |
 
-The head is 1626 tokens; turns 2-3 read all 1626 with **write=0** — reused from an
+The head was measured at 1626 tokens; turns 2-3 read all 1626 with **write=0** — reused from an
 earlier turn's write, not rewritten. This also demonstrates the shared-head reuse
 mechanism that tier 2 relies on.
+
+**2026-07-28 correction:** 1,626 is a pre-SDK-wire baseline, not the current
+writer-head size. A version-matched probe measured 1,952 tokens; see
+`docs/plans/writer-cache-prefix-verify.md`.
 
 ### Tier 2 — across users — _tbd_
 
