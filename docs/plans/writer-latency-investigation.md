@@ -174,6 +174,40 @@ cache. Incremental writes shrink that line too. Reads are 6%, so optimising
 `get_topic` (an outline instead of the whole body) would be optimising the
 cheapest line — deliberately left alone.
 
+## Follow-up 2026-07-29 ~15:30Z: a second, unrelated cause
+
+After the writer fix deployed (14:59:29Z), Maria reported the slowness again. The
+Workers Logs `invocations` view named it immediately:
+
+```
+13:34:34 outcome=ok                wall=411462ms  cpu=102ms
+13:41:26 outcome=exceededWallTime  wall=899994ms  cpu=77ms
+13:56:38 outcome=exceededWallTime  wall=900092ms  cpu=64ms
+14:12:03 outcome=exceededWallTime  wall=900158ms  cpu=91ms
+14:28:52 outcome=exceededWallTime  wall=899993ms  cpu=43ms
+14:56:08 outcome=exceededWallTime  wall=899993ms  cpu=31ms
+15:11:38 outcome=ok                wall=40745ms   cpu=65ms   (post-deploy)
+```
+
+Five consecutive alarm invocations hit a **900s wall-time ceiling** with ~50ms of
+CPU — idle on a promise that never settles, after their logged work finished. A
+DO runs one alarm at a time, so the user's next message waited out the full 900s:
+the alarm armed at 14:56:13.267Z fired at 15:11:38, seconds after the hung
+invocation was killed. Alarm delivery was never at fault, and `enqueueTurn`'s
+`getAlarm() === null` check is correct per Cloudflare's documented semantics.
+
+`exceededWallTime` is not an exception: `turn_failed`, `alarm_turn_failed`,
+`turn_reset_retrying` and `turn_rate_limited` all returned **0 events over 6
+hours**, and ZeroErrors had nothing. That invisibility is why this hid behind the
+writer problem for days.
+
+Which promise hangs is **not yet known**. The last log before each stall is a
+writer step. Suspects are outbound calls without timeouts (`sendChatAction` in
+the typing loop is a floating `void ...catch(() => {})`, plus Telegram sends,
+Brave, Tavily); LLM calls are less likely, since `REQUEST_TIMEOUT_MS` is 300s,
+well under 900s. `writer_started` / `turn_completed` / `alarm_finished` markers
+were added to localize the next occurrence.
+
 ## Candidate levers (for `plan`, not decided here)
 
 Move the writer off the reply/queue path (own alarm, or skip when a message is

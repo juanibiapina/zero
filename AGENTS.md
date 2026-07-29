@@ -212,6 +212,45 @@ The worker follows a layered architecture: Entry Point → App → Routes → Du
 gob add pnpm --dir apps/agent-api exec wrangler tail
 ```
 
+`wrangler tail` streams live only, so it cannot see a past incident, and on this
+box it has produced no output even for a request that returned 200 — always run a
+positive control (hit the Worker yourself) before reading silence as "no traffic".
+
+For anything already over, query **Workers Logs** (`observability.enabled` is on
+for `zero-api`):
+
+```
+POST /accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/query
+{"queryId":"q","timeframe":{"from":<ms>,"to":<ms>},
+ "parameters":{"datasets":["cloudflare-workers"],
+   "filters":[{"key":"$metadata.message","operation":"eq","value":"turn_started","type":"string"}]},
+ "limit":100,"view":"events"}
+```
+
+- `view: "events"` returns log lines; `view: "invocations"` groups them by
+  invocation and adds **`outcome`, `wallTimeMs`, `cpuTimeMs`** — the only way to
+  see an `exceededWallTime` kill, which throws nothing and reaches no error sink.
+- Group by `$workers.requestId` to read one invocation. Do **not** trust
+  `eventType`: a turn's later logs can be attributed to a concurrent `rpc`
+  invocation running in the same Durable Object.
+- `$workers.event.scheduledTime` on an alarm is the time it was *scheduled*, not
+  when it ran. The gap between the two is how alarm delay is measured.
+
+Per-LLM-call cost, tokens, cache counts and a `metadata.agent` tag live in the
+**AI Gateway** logs instead:
+
+```
+GET /accounts/4e04b64af4013414441c59014392bea0/ai-gateway/gateways/zero/logs?per_page=50&order_by=created_at&order_by_direction=desc
+```
+
+- `per_page` maxes at 50; a larger value returns `success: false` with an error,
+  which looks exactly like an empty page if you only read `result`. Check
+  `success`.
+- `created_at` is the request **end** time, so a call's start is
+  `created_at - duration`.
+- These logs **lag** by minutes. Never read recency from them; use Workers Logs
+  for "what is happening now".
+
 ## Dev Server
 
 Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs and the landing and docs Astro apps.
