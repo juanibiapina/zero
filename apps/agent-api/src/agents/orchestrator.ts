@@ -118,7 +118,17 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     // Run the writer every turn, even when nothing was accessed: proactive
     // topic creation must be possible on turns that introduce a brand-new
     // subject. The prompt keeps trivial turns to a single no-tool step.
+    // Phase markers. Their value is in their ABSENCE: a DO alarm invocation is
+    // killed at a 900s wall-time ceiling with `outcome: exceededWallTime`,
+    // which is not an exception and which no catch here will ever see, so a
+    // stalled turn leaves no error behind — only a missing log. writer_started
+    // without writer_completed pins the stall inside the writer's tool loop;
+    // turn_completed without alarm_finished pins it in the drain loop. Observed
+    // 2026-07-29: five consecutive alarm invocations at ~900,000ms wall and
+    // ~50ms CPU (idle on an unsettled promise), each stranding the user's next
+    // message for a quarter of an hour. See docs/plans/writer-latency-investigation.md.
     const writerStart = Date.now();
+    log("writer_started", { chat_id: chatId, topic_id: topicId });
     const writerUsage = await runWriterAgent({
       model: makeModel("writer"),
       store,
@@ -177,4 +187,9 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   } finally {
     store.clearBusy(conversationId);
   }
+  // "Returned", not "succeeded": a handled agent failure reaches here too (it
+  // sent the fallback), and only the DO-reset path rethrows past it. That is
+  // exactly the signal wanted — it separates a failed turn from a stalled
+  // invocation, which produces no log and no exception at all.
+  log("turn_completed", { chat_id: chatId, topic_id: topicId });
 };

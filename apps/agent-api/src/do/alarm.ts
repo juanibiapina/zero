@@ -20,7 +20,7 @@
 // relies on CF's built-in at-least-once retry plus the next user message
 // re-arming the alarm.
 
-import { logError, fmtErr } from "../log";
+import { log, logError, fmtErr } from "../log";
 import type { Thread } from "../store/types";
 
 export const ATTEMPTS_KEY = "alarmAttempts";
@@ -53,12 +53,23 @@ export const runAlarmTurns = async (deps: AlarmTurnsDeps): Promise<void> => {
   const { storage, findThreadsAwaitingReply, runTurn } = deps;
   const now = deps.now ?? Date.now;
 
+  const startedAt = now();
+  let turns = 0;
+
   try {
     for (const thread of findThreadsAwaitingReply()) {
       await runTurn(thread.chatId, thread.topicId);
+      turns++;
     }
     // Drained cleanly: reset the backoff counter.
     await storage.delete(ATTEMPTS_KEY);
+    // The handler returned. Cloudflare kills an alarm invocation at a 900s
+    // wall-time ceiling with `outcome: exceededWallTime`, which is not an
+    // exception and so never reaches the catch below — a stalled drain is
+    // visible only as this line never being written. Pair it with the Workers
+    // Logs `invocations` view (outcome / wallTimeMs / cpuTimeMs) when
+    // investigating.
+    log("alarm_finished", { turns, duration_ms: now() - startedAt });
   } catch (err) {
     logError("alarm_turn_failed", { error: fmtErr(err) });
     await deps.reportError?.(err);

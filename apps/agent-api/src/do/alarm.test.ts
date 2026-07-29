@@ -138,3 +138,63 @@ describe("runAlarmTurns", () => {
     expect(storage.map.has(ATTEMPTS_KEY)).toBe(false);
   });
 });
+
+// The stall signal. A DO alarm invocation killed at the 900s wall-time ceiling
+// reports `outcome: exceededWallTime` to Cloudflare but throws nothing, so the
+// only in-app evidence that the drain finished is this line existing.
+describe("runAlarmTurns completion marker", () => {
+  it("logs alarm_finished with the turn count and duration", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    let clock = 1000;
+    const storage = fakeStorage();
+
+    await runAlarmTurns({
+      storage,
+      findThreadsAwaitingReply: () => [thread("c1", 1, 2), thread("c2", 3, 4)],
+      runTurn: async () => {
+        clock += 500;
+      },
+      now: () => clock,
+    });
+
+    expect(logSpy.mock.calls.map((c) => c[0] as Record<string, unknown>)).toContainEqual(
+      expect.objectContaining({
+        msg: "alarm_finished",
+        turns: 2,
+        duration_ms: 1000,
+      }),
+    );
+  });
+
+  it("logs alarm_finished with zero turns when nothing awaits reply", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await runAlarmTurns({
+      storage: fakeStorage(),
+      findThreadsAwaitingReply: () => [],
+      runTurn: async () => {},
+    });
+
+    expect(logSpy.mock.calls.map((c) => c[0] as Record<string, unknown>)).toContainEqual(
+      expect.objectContaining({ msg: "alarm_finished", turns: 0 }),
+    );
+  });
+
+  it("does not log alarm_finished when a turn throws", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await runAlarmTurns({
+      storage: fakeStorage(),
+      findThreadsAwaitingReply: () => [thread("c1", 1, 2)],
+      runTurn: async () => {
+        throw new Error("boom");
+      },
+      now: () => 1000,
+    });
+
+    expect(logSpy.mock.calls.map((c) => c[0] as Record<string, unknown>)).not.toContainEqual(
+      expect.objectContaining({ msg: "alarm_finished" }),
+    );
+  });
+});

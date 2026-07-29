@@ -526,3 +526,77 @@ describe("runTurn", () => {
     expect(chains.writer).toEqual([null]);
   });
 });
+
+// Phase markers for stall diagnosis. A DO alarm invocation killed at the 900s
+// wall-time ceiling throws nothing, so a stalled turn is identifiable only by
+// which of these lines is missing. Their absence on the failure path is
+// therefore as load-bearing as their presence on the happy path.
+describe("runTurn phase markers", () => {
+  it("logs writer_started then turn_completed on a normal turn", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await runTurn({
+      store,
+      makeModel: () =>
+        scriptedModel([
+          { tools: [{ name: "reply", input: { text: "hello there" } }] },
+          { text: "" },
+          { text: "nothing to consolidate" },
+        ]),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    const msgs = logSpy.mock.calls
+      .map((c) => (c[0] as { msg?: string }).msg)
+      .filter((m): m is string => typeof m === "string");
+    expect(msgs).toContain("writer_started");
+    expect(msgs).toContain("turn_completed");
+    expect(msgs.indexOf("writer_started")).toBeLessThan(
+      msgs.indexOf("writer_completed"),
+    );
+    expect(msgs.indexOf("writer_completed")).toBeLessThan(
+      msgs.indexOf("turn_completed"),
+    );
+  });
+
+  // turn_completed means "runTurn returned", not "the turn succeeded". A handled
+  // agent failure still returns (it sends the fallback), and saying so is the
+  // point: it distinguishes a failed turn from a stalled invocation. The phase
+  // it never reached — the writer — is what the missing marker reports.
+  it("logs turn_completed but not writer_started when the turn fails", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await runTurn({
+      store,
+      makeModel: constModel(
+        capturingModel(() => {
+          throw new Error("gateway down");
+        }),
+      ),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    const msgs = logSpy.mock.calls.map((c) => (c[0] as { msg?: string }).msg);
+    expect(msgs).toContain("turn_completed");
+    expect(msgs).not.toContain("writer_started");
+  });
+});

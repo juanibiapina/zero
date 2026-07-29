@@ -260,6 +260,26 @@ writer is internal topic bookkeeping the user is not waiting on
 (`orchestrator.ts` calls `stopTyping` after the interface phase). The DO alarm
 stays dedicated to turn scheduling.
 
+**An alarm invocation is killed at a 900-second wall-time ceiling**, reported by
+Cloudflare as `outcome: exceededWallTime`. It is not an exception: no `catch` in
+`runAlarmTurns` or `runTurn` ever sees it, nothing reaches ZeroErrors, and the
+handler's own logs simply stop mid-turn. Because a DO runs one alarm at a time, a
+stalled invocation also blocks the next one, so a message that arrives during it
+waits out the full 900s before its own alarm is delivered. Observed 2026-07-29:
+five consecutive invocations at ~900,000 ms wall against ~50 ms CPU (idle on an
+unsettled promise, not computing), each stranding the user's next message for a
+quarter of an hour.
+
+Three phase markers exist to localize such a stall, and are useful mainly by
+their **absence**: `writer_started` (orchestrator, before the writer runs),
+`turn_completed` (orchestrator, once `runTurn` returns — including the handled
+failure path, since it means "did not stall", not "succeeded"), and
+`alarm_finished` (`do/alarm.ts`, with the turn count and duration). A
+`writer_started` with no `writer_completed` puts the stall in the writer's tool
+loop; a `turn_completed` with no `alarm_finished` puts it in the drain loop.
+Read them alongside the Workers Logs `invocations` view, which carries the
+authoritative `outcome`, `wallTimeMs` and `cpuTimeMs`.
+
 If draining throws a **catchable** error (LLM gateway error, network abort),
 `do/alarm.ts` self-reschedules the alarm with exponential backoff — but only
 while `findThreadsAwaitingReply()` still returns work. Once every thread's tail
