@@ -1,5 +1,5 @@
 // Topic tools shared by both agents. `buildTopicTools` gives the read/write
-// surface over the knowledge model (list/get/create/update/list_backlinks);
+// surface over the knowledge model (list/get/create/update/edit/append/list_backlinks);
 // `buildInterfaceTools` adds `reply` on top for the interface agent. Topics link
 // to each other with Obsidian-style `[[Name]]` tokens in their bodies; the store
 // keeps outbound/backlink rows in sync, and get_topic/list_backlinks expose them. Every topic read or write records
@@ -8,6 +8,20 @@
 // any field left out keeps its current value, so a body-only revision (the
 // interface agent's usual call) leaves description/summary untouched, while the
 // writer can also refresh those and rename in one call.
+//
+// `edit_topic` and `append_topic` are the incremental body writes, and the
+// default path for revising an existing document. `update_topic`'s `body` is the
+// WHOLE markdown document, so preserving a body while adding one line to it
+// costs the model the entire document in generated tokens — a cost that grows
+// with the topic forever (measured: 13,856 output tokens and 298s on a single
+// turn; see docs/plans/writer-latency-investigation.md). Anchored edits make the
+// cost proportional to the change, not to the document. `update_topic` stays for
+// description/summary/rename and for filling a freshly created empty topic.
+//
+// Both incremental tools check `getTopic` themselves rather than relying on the
+// store to reject an unknown name: `DbStore.updateTopicBody` silently no-ops on
+// a missing topic while `MemoryStore.updateTopicBody` throws, so leaning on the
+// store would pass tests and lose writes in production.
 //
 // `reply` persists the assistant message then sends it to the user immediately
 // (live progress). Persist-before-send makes retries idempotent: the durable
@@ -83,7 +97,9 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
       description:
         "Patch a topic. Provide only the fields to change: body (full markdown), " +
         "description (routing blurb), summary (state-of-the-topic), or newName to " +
-        "rename. Omitted fields keep their current value.",
+        "rename. Omitted fields keep their current value. `body` replaces the " +
+        "whole document, so use it only to fill a topic that is still empty; to " +
+        "revise an existing body use edit_topic or append_topic.",
       inputSchema: z.object({
         name: z.string(),
         body: z.string().optional(),
@@ -107,6 +123,75 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
           accessed?.add(name);
           if (newName) accessed?.add(newName);
           return { updated: newName ?? name };
+        } catch (err) {
+          return { error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+    }),
+
+    edit_topic: defineTool({
+      description:
+        "Revise part of a topic's body by replacing an exact snippet of it. " +
+        "`oldText` must appear exactly once in the current body; everything else " +
+        "is left byte-for-byte untouched. Use this instead of update_topic to " +
+        "change an existing document: quote only the lines you are changing " +
+        "(a heading plus the lines under it is a good anchor), never the whole " +
+        "body. Read the body with get_topic first so the anchor matches exactly.",
+      inputSchema: z.object({
+        name: z.string(),
+        oldText: z.string(),
+        newText: z.string(),
+      }),
+      execute: async ({ name, oldText, newText }) => {
+        const current = store.getTopic(name);
+        if (!current) return { error: `topic not found: ${name}` };
+        if (oldText === "")
+          return {
+            error:
+              "oldText must not be empty: use append_topic to add to the end of a body",
+          };
+        const first = current.body.indexOf(oldText);
+        if (first === -1)
+          return {
+            error: `oldText not found in ${name}: it must match the body exactly, including whitespace. Call get_topic to read the current body.`,
+          };
+        if (current.body.indexOf(oldText, first + 1) !== -1)
+          return {
+            error: `oldText appears more than once in ${name}: extend it with surrounding lines until it is unique.`,
+          };
+        try {
+          store.updateTopicBody(
+            name,
+            current.body.slice(0, first) +
+              newText +
+              current.body.slice(first + oldText.length),
+          );
+          accessed?.add(name);
+          return { updated: name };
+        } catch (err) {
+          return { error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+    }),
+
+    append_topic: defineTool({
+      description:
+        "Append text to the end of a topic's body, separated by a blank line. " +
+        "Use for a new section or a log line; nothing already in the body is " +
+        "regenerated. To change text that is already there, use edit_topic.",
+      inputSchema: z.object({ name: z.string(), text: z.string() }),
+      execute: async ({ name, text }) => {
+        const current = store.getTopic(name);
+        if (!current) return { error: `topic not found: ${name}` };
+        const existing = current.body.replace(/\s+$/, "");
+        const addition = text.replace(/^\s+|\s+$/g, "");
+        try {
+          store.updateTopicBody(
+            name,
+            existing === "" ? addition : `${existing}\n\n${addition}`,
+          );
+          accessed?.add(name);
+          return { updated: name };
         } catch (err) {
           return { error: err instanceof Error ? err.message : String(err) };
         }

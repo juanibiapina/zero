@@ -112,9 +112,9 @@ migration and no per-user seeding.
      (even a bare "Searching now..." ack) had gone out silently dropped the real
      answer. Delivering the final message keeps ack-then-answer intact; the echo
      guard prevents re-sending text already delivered.
-   - `list_topics`, `get_topic`, `create_topic`, `update_topic`,
-     `list_backlinks` — read/write the knowledge model and its `[[Name]]` link
-     graph. Every topic touched is added to an `accessed` set.
+   - `list_topics`, `get_topic`, `create_topic`, `update_topic`, `edit_topic`,
+     `append_topic`, `list_backlinks` — read/write the knowledge model and its
+     `[[Name]]` link graph. Every topic touched is added to an `accessed` set.
    - `delete_topic` — permanently remove a topic. Interface-agent only (not in
      the shared `buildTopicTools`, so the writer/research agents cannot delete),
      and the prompt gates it on explicit user confirmation. Deleting a topic
@@ -123,7 +123,7 @@ migration and no per-user seeding.
      name is recreated. Bodies of other topics are left untouched.
 2. **Writer agent** (`agents/writer.ts`, stateless per turn). The interface
    agent's twin: the same `runAgent` machine with the same topic tools
-   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`/`list_backlinks`),
+   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`/`edit_topic`/`append_topic`/`list_backlinks`),
    minus `reply`/`research`. Its inputs are the **turn transcript** and the list
    of topic names the interface agent accessed this turn. The transcript is a
    serialization of the interface run: the user message, every tool call and its
@@ -140,9 +140,12 @@ migration and no per-user seeding.
    code-verified in `interface.ts`; it has not yet been exercised on a real turn
    (see `docs/research.md`).) For each
    accessed topic that gained durable information it reads the body
-   (`get_topic`), merges new facts under sensible sections, appends one `## Log`
-   line, and writes back via `update_topic`, refreshing summary and description.
-   It never rewrites or compacts a body. Because it has `list_topics` +
+   (`get_topic`), merges new facts under sensible sections with `edit_topic`,
+   appends one `## Log` line with `append_topic`, and uses `update_topic` only to
+   refresh summary and description (or to rename, or to fill a topic it just
+   created empty). It never rewrites or compacts a body — and since 2026-07-29
+   the tools enforce that rather than only the prompt asking for it. Because it
+   has `list_topics` +
    `create_topic`, it is also proactive: it creates a topic for any durable
    subject in the turn with no existing topic. The prompt biases it toward
    recording generously (people, projects, events, trips, gear, house/utilities,
@@ -165,9 +168,33 @@ protected body region.
 
 The topic tools are shared: `update_topic` is a partial patch — provide only the
 fields to change (`body`, `description`, `summary`, `newName`); omitted fields
-keep their current value. The interface agent's usual body-only revision leaves
-summary/description untouched; the writer uses the full patch and rename. All
-writes go through `store.saveTopic`.
+keep their current value. Its `body` is the **whole** markdown document, so it is
+now reserved for filling a topic that is still empty, plus
+description/summary/rename. It writes through `store.saveTopic`.
+
+Revising an existing body goes through the incremental writes instead:
+
+- `edit_topic(name, oldText, newText)` — replace an exact snippet of the body.
+  `oldText` must match exactly once; zero matches and multiple matches are tool
+  errors that tell the model which case it hit, so it can re-anchor.
+- `append_topic(name, text)` — add to the end of the body, separated by a blank
+  line.
+
+Both write through `store.updateTopicBody`, which re-derives the `[[Name]]` link
+rows, and both check `getTopic` themselves before writing: `DbStore.updateTopicBody`
+silently no-ops on an unknown topic while `MemoryStore.updateTopicBody` throws, so
+a store-level check would pass tests and lose writes in production.
+
+This exists for cost, not ergonomics. `update_topic`'s full-document `body` meant
+that preserving a topic while adding one line to it cost the model the entire
+document in generated tokens, growing with the topic without bound: on
+2026-07-29 the writer reached 13,856 output tokens in a single 298s generation,
+took 76% of the day's LLM time and 69% of its spend, and the wall time landed on
+the *next* message, since turns drain serially per DO. Anchored edits make a
+write cost the change. See `docs/plans/writer-latency-investigation.md` for the
+measurements. The writer prompt also asks it to split a subject into a new linked
+topic once a body passes roughly 8,000 characters, so bodies stop growing without
+limit in the first place.
 
 The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
 load history, run the interface agent, then run the writer. It knows nothing

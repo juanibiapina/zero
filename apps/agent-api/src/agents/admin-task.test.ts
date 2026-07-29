@@ -75,7 +75,9 @@ describe("runAdminTaskAgent", () => {
 
     await runAdminTaskAgent({ model, store: new MemoryStore(), prompt: "notes" });
     expect(tools.sort()).toEqual([
+      "append_topic",
       "create_topic",
+      "edit_topic",
       "get_topic",
       "list_backlinks",
       "list_topics",

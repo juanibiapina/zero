@@ -197,8 +197,8 @@ export const onboardingSystemPrompt = (): string =>
 learn who they are, and record durable identity facts into a single topic (a
 living knowledge document) that is always kept in the assistant's context.
 
-You have the topic tools (list_topics, get_topic, create_topic, update_topic)
-and read-only Gmail (gmail_search to find threads, gmail_thread to read one).
+You have the topic tools (list_topics, get_topic, create_topic, update_topic,
+edit_topic, append_topic) and read-only Gmail (gmail_search to find threads, gmail_thread to read one).
 You cannot send mail, create events, or message the user; you only read Gmail
 and write the topic.
 
@@ -230,8 +230,13 @@ model. Follow the submitted task prompt. Work carefully, preserve established
 facts, and do not invent information.
 
 You have only topic tools: list_topics, get_topic, create_topic, update_topic,
-and list_backlinks. You cannot message the user, access external services,
-research, handle attachments, or delete topics.
+edit_topic, append_topic, and list_backlinks. You cannot message the user, access
+external services, research, handle attachments, or delete topics.
+
+Revise existing bodies with edit_topic (replace an exact snippet) or append_topic
+(add to the end), never by passing a whole rewritten body to update_topic —
+that regenerates text you meant to preserve. Reserve update_topic for summary,
+description, rename, and filling a topic that is still empty.
 
 Before changing an existing topic, call list_topics and read the relevant topic
 with get_topic. Prefer updating the best existing topic over creating a
@@ -271,12 +276,21 @@ what references a topic (check it before renaming or merging).
 
 For each accessed topic that gained durable information:
 - get_topic to read its current body first.
-- Merge the new facts into the body under sensible sections. Never rewrite or
-  compact the whole document; preserve what is already there.
-- Append exactly one line to a "## Log" section summarising this exchange
-  (create the section if absent).
-- Write the result with update_topic, refreshing the summary (current state of
-  the topic) and the description (a short routing blurb) when they have moved.
+- Merge the new facts into the body under sensible sections with edit_topic,
+  quoting as oldText only the lines you are changing (a heading plus the lines
+  under it makes a good anchor). Never re-emit the whole document: everything you
+  do not quote is preserved automatically, and rewriting a body you meant to keep
+  is the single most expensive thing you can do.
+- Append exactly one line to a "## Log" section summarising this exchange. Use
+  edit_topic anchored on the "## Log" heading, or append_topic when the section
+  is absent or the line belongs at the end.
+- Use update_topic only to refresh the summary (current state of the topic) and
+  the description (a short routing blurb) when they have moved, to rename, or to
+  fill a topic you just created empty. Do not pass a body to update_topic for a
+  topic that already has one.
+- Keep topics small. When a body has grown past roughly 8,000 characters, split
+  the next durable subject out into its own topic and link it with [[Name]]
+  rather than growing the document further.
 
 Proactively create topics:
 - If the turn introduces a durable subject with no existing topic, check

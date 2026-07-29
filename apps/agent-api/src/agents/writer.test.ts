@@ -44,6 +44,71 @@ describe("runWriterAgent", () => {
     expect(saved?.description).toBe("trips");
   });
 
+  // The consolidation shape we want: an anchored edit plus an appended Log line,
+  // with no whole-body rewrite. The point is cost — a one-line change must not
+  // cost the model the whole document — so the assertion is that untouched text
+  // survives verbatim while the writer only ever generated the delta.
+  it("consolidates with an anchored edit and an appended log line", async () => {
+    const store = new MemoryStore();
+    store.createTopic("travel", "trips");
+    const longBody =
+      "## Notes\nExisting note.\n\n## History\n" +
+      Array.from({ length: 40 }, (_, i) => `- old fact ${i}`).join("\n");
+    store.saveTopic("travel", {
+      body: longBody,
+      description: "trips",
+      summary: "old",
+    });
+    const model = scriptedModel([
+      { tools: [{ name: "get_topic", input: { name: "travel" } }] },
+      {
+        tools: [
+          {
+            name: "edit_topic",
+            input: {
+              name: "travel",
+              oldText: "## Notes\nExisting note.",
+              newText: "## Notes\nExisting note.\nGoing to Rome.",
+            },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            name: "append_topic",
+            input: { name: "travel", text: "## Log\n- 2026 Rome trip" },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            name: "update_topic",
+            input: { name: "travel", summary: "Planning a Rome trip" },
+          },
+        ],
+      },
+      { text: "done" },
+    ]);
+
+    await runWriterAgent({
+      model,
+      store,
+      accessed: ["travel"],
+      transcript: "User: I'm going to Rome\n\nAssistant: Nice!",
+    });
+
+    const saved = store.getTopic("travel");
+    expect(saved?.body).toContain("Going to Rome.");
+    expect(saved?.body).toContain("- 2026 Rome trip");
+    // Every pre-existing line survives untouched, and none of it was regenerated.
+    expect(saved?.body).toContain("- old fact 0");
+    expect(saved?.body).toContain("- old fact 39");
+    expect(saved?.summary).toBe("Planning a Rome trip");
+    expect(saved?.description).toBe("trips");
+  });
+
   it("proactively creates a topic for a new durable subject", async () => {
     const store = new MemoryStore();
     const model = scriptedModel([
