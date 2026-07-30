@@ -20,7 +20,8 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 0.5a observe photo variants | done | `feat(agent): record the photo variants Telegram offers before changing selection` |
 | 0.5b select by cost | **blocked on production data** (todo #17) | — |
 | 1.1 message protocol schema, queue, delivery records | done | `feat(agent): store conversations as a protocol log with a durable message queue` |
-| Phase 1.2-1.4, 2, 3 | not started | — |
+| 1.2 compaction boundary, summary, staleness filter | done | `feat(agent): render conversations from a compaction boundary instead of a fixed window` |
+| Phase 1.3-1.4, 2, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
 (492 tests). Nothing is deployed, so none of the Phase 0 log lines have produced
@@ -99,16 +100,50 @@ production data yet; the acceptance criteria that read them are still open.
 - Rendering is unchanged in bytes: every row is still a single text block, and
   `buildConversationMessages` flattens content with `messageText`.
 
+### What Phase 1.2 shipped
+
+- Migration `0025`: `conversations.compactedThroughMessageId` and
+  `conversations.summary`, both NULL until a conversation is compacted, which
+  renders as "show the whole log".
+- Port: `getConversationContext(conversationId, limit) -> {summary, messages}`
+  returns only rows after the boundary; `compactConversation(id,
+  {throughMessageId, summary})` moves it and deletes nothing.
+  `getConversationHistory` stays as the raw pager (learning will use it).
+- `store/messages.ts` gained the pure render rules: `CONTEXT_BACKSTOP_MESSAGES`
+  (60), `CONTEXT_BACKSTOP_CHARS` (150,000), `applyContextBackstop`,
+  `applyStalenessFilter` + `STALE_TOPIC_STUB`, `contentChars`, `estimateTokens`.
+  The backstop is the ceiling 3.4 must delete; nothing moves the boundary yet.
+- The staleness filter is live already even though tool results are not persisted
+  until 1.3: it maps `tool_use.id -> name` across the rendered messages and
+  stubs a `list_topics`/`get_topic`/`list_backlinks` result whose payload
+  `version` is missing or not the current knowledge version, keeping the
+  `tool_use`/`tool_result` pair intact.
+- The compacted summary is rendered as the leading user message
+  (`[summary of earlier conversation]`); with a summary present the
+  drop-leading-assistants rule is skipped, so a first reply after the boundary is
+  not thrown away.
+- `context_rendered` logs `total_tokens`, `summary_tokens`,
+  `messages_after_boundary` and `stale_stubs`. This is the line the compaction
+  threshold must be derived from; it is an estimate from characters (chars / 4),
+  the authoritative figure is the gateway's.
+- `DEFAULT_HISTORY_LIMIT` is gone. `TurnInput.historyLimit` survives only as a
+  test override of the backstop.
+- Docs: `docs/topics.md` "Conversation context", `docs/design.md` schema table.
+  Changelog entry for the longer memory.
+
 ### Picking this up in a new session
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 522 passing
+pnpm --filter @zero/agent-api run test    # 537 passing
 ```
 
-Next action is **Phase 1.2**: the per-conversation compaction boundary and
-summary, with the backstop ceiling that must not be dropped before 3.4. Read
-Phase 1 in full first — 1.3's resume rules are part of the same design.
+Next action is **Phase 1.3**: persist the loop as it runs (assistant response
+before its tools, ordered tool results before the next call), the resume classes
+keyed by `tool_use.id`, per-block delivery claims read back on resume, and
+mid-loop follow-up injection at terminal stop. The staleness filter and the
+delivery-claim store method already exist and should not be rebuilt; 1.3 is what
+finally produces the persisted tool results the filter is written for.
 
 Two Phase 0 outcomes Phase 1 depends on and should not re-derive: the knowledge
 counter and `KnowledgeConflictError` already exist (so the staleness filter has
@@ -673,7 +708,7 @@ Persist stop reason with every assistant response so this is data, not an
 inference from text or role. `runTurn` must move from string/tail assumptions to
 this state machine.
 
-**1.2 (next)** Add a per-conversation compaction boundary and summary.
+**1.2 DONE.** Add a per-conversation compaction boundary and summary.
 `getConversationHistory` returns `AgentMessage[]` rendered as
 `summary + messages after boundary`, with the staleness filter applied. Delete
 the 20-message window (`DEFAULT_HISTORY_LIMIT`).
