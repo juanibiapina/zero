@@ -85,8 +85,6 @@ export interface ConversationStore {
   storeMessage(conversationId: string, role: Role, content: string): void;
   getConversationHistory(conversationId: string, limit: number): Message[];
   resetConversation(chatId: number, topicId: number): void;
-  markBusy(conversationId: string): void;
-  clearBusy(conversationId: string): void;
   findThreadsAwaitingReply(): Thread[];
 }
 

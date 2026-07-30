@@ -190,14 +190,6 @@ export class SystemTopicStore implements Store {
     this.inner.resetConversation(chatId, topicId);
   }
 
-  markBusy(conversationId: string): void {
-    this.inner.markBusy(conversationId);
-  }
-
-  clearBusy(conversationId: string): void {
-    this.inner.clearBusy(conversationId);
-  }
-
   findThreadsAwaitingReply(): Thread[] {
     return this.inner.findThreadsAwaitingReply();
   }

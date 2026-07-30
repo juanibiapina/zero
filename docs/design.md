@@ -154,7 +154,7 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `telegram_link`     | `id`, `telegramId`                                            | The user's linked Telegram account (≤1 row)    |
 | `user_settings`     | `id`, `onboardingSeen`, `googleOnboardingStatus`, `createdAt`| Web onboarding + settings                      |
 | `topics`            | `id`, `name`, `description`, `summary`, `body`, timestamps, `messageCount` | The knowledge model (see [`topics.md`](topics.md)) |
-| `conversations`     | `id`, `chatId`, `topicId`, `createdAt`, `busySince`          | One thread per Telegram (chatId, topicId)      |
+| `conversations`     | `id`, `chatId`, `topicId`, `createdAt`                       | One thread per Telegram (chatId, topicId)      |
 | `messages`          | `id`, `conversationId`, `role`, `content`, `createdAt`       | User/assistant exchanges                       |
 | `attachments`       | `id`, `conversationId`, `r2Key`, `filename`, `mimeType`, `createdAt` | Image lookup-by-id (bytes live in R2)  |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |

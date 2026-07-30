@@ -27,7 +27,6 @@ interface ConvRow {
   id: string;
   chatId: number;
   topicId: number;
-  busySince: string | null;
 }
 
 interface MsgRow {
@@ -206,7 +205,7 @@ export class MemoryStore implements Store {
     );
     if (existing) return existing.id;
     const id = crypto.randomUUID();
-    this.convs.push({ id, chatId, topicId, busySince: null });
+    this.convs.push({ id, chatId, topicId });
     return id;
   }
 
@@ -237,16 +236,6 @@ export class MemoryStore implements Store {
       if (a.conversationId === conv.id) this.attachments.delete(id);
     }
     this.convs = this.convs.filter((c) => c.id !== conv.id);
-  }
-
-  markBusy(conversationId: string): void {
-    const c = this.convs.find((x) => x.id === conversationId);
-    if (c) c.busySince = this.now();
-  }
-
-  clearBusy(conversationId: string): void {
-    const c = this.convs.find((x) => x.id === conversationId);
-    if (c) c.busySince = null;
   }
 
   findThreadsAwaitingReply(): Thread[] {
