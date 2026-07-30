@@ -151,6 +151,17 @@ Object, exactly like `do/alarm.ts`. `LearningDO`'s executor is not enabled yet
 (Phase 3): today it records and coalesces requests and logs `learn_skipped`,
 while the per-turn writer still consolidates topics.
 
+LearningDO reaches the user's data through the **learning port**
+(`learning/types.ts`), because one Durable Object cannot read another's SQLite.
+Two adapters implement it — `store-port.ts` over a local `Store` (tests) and
+`remote-port.ts` over a UserDO stub (production) — and a shared test suite runs
+both, so the boundary is invisible to the learner. Topic reads and writes go
+through the same versioned tool module as a turn (`tools/topics.ts` is written
+against `TopicToolStore`, whose methods may be sync or async), so there is no
+unchecked write path for learning. A stale write crosses the RPC boundary as
+data and is rebuilt into a `KnowledgeConflictError` on the far side; thrown, it
+would arrive as a plain error and lose which versions collided.
+
 `ctx.waitUntil` is not an option for this work: Cloudflare documents that
 `DurableObjectState.waitUntil` does not extend the object's lifetime, so leaving a
 multi-minute promise behind after an RPC returns can lose the job.

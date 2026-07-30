@@ -9,7 +9,14 @@ import {
   SystemTopicStore,
   systemTopicsFingerprint,
 } from "../store/system-topics";
-import type { Store } from "../store/types";
+import { KnowledgeConflictError } from "../store/types";
+import type {
+  LearningMessage,
+  Store,
+  Topic,
+  TopicMeta,
+} from "../store/types";
+import type { TopicWriteResult } from "../learning/types";
 import { createR2Attachments } from "../attachments/r2";
 import type { AttachmentStore } from "../attachments/types";
 import { createModel, createModelFactory } from "../agents/model";
@@ -47,6 +54,17 @@ const USER_TOPIC = "User";
 const USER_TOPIC_DESCRIPTION =
   "Durable facts about the user: name, location, role, languages, key relationships.";
 
+
+// Turn a versioned topic write into data that survives an RPC hop.
+const toWriteResult = (apply: () => number): TopicWriteResult => {
+  try {
+    return { version: apply() };
+  } catch (err) {
+    if (err instanceof KnowledgeConflictError)
+      return { conflict: { expected: err.expected, current: err.current } };
+    return { failed: err instanceof Error ? err.message : String(err) };
+  }
+};
 
 export class UserDO extends DurableObject<Env> {
   private db: Database;
@@ -312,6 +330,91 @@ export class UserDO extends DurableObject<Env> {
     } finally {
       stopTyping();
     }
+  }
+
+  // --- Learning RPC (the remote half of the learning port) ---
+  //
+  // A Durable Object cannot read another's SQLite, so LearningDO reaches this
+  // data over RPC. These methods are a flat mirror of learning/types.ts, since
+  // an RPC boundary carries data and not objects with methods. Topic writes
+  // return a result instead of throwing, because a thrown
+  // KnowledgeConflictError would arrive as a plain Error and lose which versions
+  // collided; learning/remote-port.ts rebuilds it on the far side.
+
+  learnBeginJob(jobId: string): number {
+    return this.store.beginLearningJob(jobId);
+  }
+
+  learnListMessages(input: {
+    throughMessageId: number;
+    afterId?: number;
+    limit: number;
+  }): LearningMessage[] {
+    return this.store.listUnconsolidatedMessages(input);
+  }
+
+  learnCompleteJob(jobId: string): void {
+    this.store.completeLearningJob(jobId);
+  }
+
+  learnCompactConversation(
+    conversationId: string,
+    input: { throughMessageId: number; summary: string },
+  ): void {
+    this.store.compactConversation(conversationId, input);
+  }
+
+  learnKnowledgeVersion(): number {
+    return this.store.getKnowledgeVersion();
+  }
+
+  learnListTopics(): TopicMeta[] {
+    return this.store.listTopics();
+  }
+
+  learnGetTopic(name: string): Topic | null {
+    return this.store.getTopic(name);
+  }
+
+  learnGetOutboundLinks(name: string): string[] {
+    return this.store.getOutboundLinks(name);
+  }
+
+  learnGetBacklinks(name: string): TopicMeta[] {
+    return this.store.getBacklinks(name);
+  }
+
+  learnCreateTopic(input: {
+    expectedVersion: number;
+    name: string;
+    description: string;
+    body: string;
+  }): TopicWriteResult {
+    return toWriteResult(() => this.store.createTopic(input));
+  }
+
+  learnUpdateTopicBody(input: {
+    expectedVersion: number;
+    name: string;
+    body: string;
+  }): TopicWriteResult {
+    return toWriteResult(() => this.store.updateTopicBody(input));
+  }
+
+  learnUpdateTopicMetadata(input: {
+    expectedVersion: number;
+    name: string;
+    description?: string;
+    newName?: string;
+  }): TopicWriteResult {
+    return toWriteResult(() => this.store.updateTopicMetadata(input));
+  }
+
+  learnDeleteTopic(input: {
+    expectedVersion: number;
+    name: string;
+  }): TopicWriteResult {
+    return toWriteResult(() => this.store.deleteTopic(input));
   }
 
   // --- Telegram link / settings RPC (delegate to the Store) ---

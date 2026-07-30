@@ -537,6 +537,80 @@ describe("Store contract: delivery claims", () => {
   });
 });
 
+describe("Store contract: learning jobs", () => {
+  it("freezes the high-water mark at job start and keeps it on re-attach", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(id, "user", "one");
+    const second = s.storeMessage(id, "assistant", "two");
+
+    expect(s.beginLearningJob("job_1")).toBe(second);
+    // Messages that arrive after the job started belong to the next job.
+    s.storeMessage(id, "user", "three");
+    expect(s.beginLearningJob("job_1")).toBe(second);
+  });
+
+  it("pages unconsolidated messages in order up to the mark", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const ids = [
+      s.storeMessage(id, "user", "one"),
+      s.storeMessage(id, "assistant", "two"),
+      s.storeMessage(id, "user", "three"),
+    ];
+    const high = s.beginLearningJob("job_1");
+    s.storeMessage(id, "user", "after the mark");
+
+    const first = s.listUnconsolidatedMessages({
+      throughMessageId: high,
+      limit: 2,
+    });
+    expect(first.map((m) => m.id)).toEqual([ids[0], ids[1]]);
+    expect(first[0].conversationId).toBe(id);
+
+    const next = s.listUnconsolidatedMessages({
+      throughMessageId: high,
+      afterId: first[first.length - 1].id,
+      limit: 2,
+    });
+    expect(next.map((m) => m.id)).toEqual([ids[2]]);
+  });
+
+  it("completion stamps only the covered range and repeats as a no-op", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(id, "user", "one");
+    s.storeMessage(id, "assistant", "two");
+    const high = s.beginLearningJob("job_1");
+    const later = s.storeMessage(id, "user", "three");
+
+    s.completeLearningJob("job_1");
+    expect(
+      s.listUnconsolidatedMessages({ throughMessageId: high, limit: 10 }),
+    ).toEqual([]);
+    // The message above the mark is still waiting for the next job.
+    expect(
+      s.listUnconsolidatedMessages({ throughMessageId: later, limit: 10 }).map((m) => m.id),
+    ).toEqual([later]);
+
+    // Repeated completion (a lost acknowledgement) changes nothing.
+    s.completeLearningJob("job_1");
+    expect(
+      s.listUnconsolidatedMessages({ throughMessageId: later, limit: 10 }).map((m) => m.id),
+    ).toEqual([later]);
+  });
+
+  it("completing an unknown job does nothing", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const only = s.storeMessage(id, "user", "one");
+    s.completeLearningJob("never_started");
+    expect(
+      s.listUnconsolidatedMessages({ throughMessageId: only, limit: 10 }).map((m) => m.id),
+    ).toEqual([only]);
+  });
+});
+
 describe("Store contract: external call claims", () => {
   it("claims a call once, then reports it in flight until it completes", () => {
     const s = makeStore();

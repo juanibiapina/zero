@@ -129,6 +129,16 @@ export const externalCalls = table("external_calls", {
   completedAt: column.text(),
 });
 
+// Learning jobs: the frozen input range of one consolidation run. A job covers
+// messages up to `highWaterMessageId` and nothing that arrived after it started,
+// and its completion (stamping those messages consolidated) is idempotent.
+export const learningJobs = table("learning_jobs", {
+  jobId: column.text().notNull().primaryKey(),
+  highWaterMessageId: column.integer().notNull(),
+  startedAt: column.text().notNull(),
+  completedAt: column.text(),
+});
+
 // Webhook idempotency: dedupe fully re-delivered Telegram updates.
 export const processedUpdates = table("processed_updates", {
   updateId: column.text().notNull().primaryKey(),
