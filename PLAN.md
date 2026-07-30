@@ -1,9 +1,103 @@
 # Plan: normal-agent interface, scheduled learning, compaction
 
-Status: plan only, nothing implemented. Written 2026-07-30, revised the same day
-after two adversarial verification passes against the source and Cloudflare's
-Durable Object documentation. The findings and their fixes are folded into the
-phases below; `file:line` refs are from those passes.
+Written 2026-07-30, revised the same day after two adversarial verification
+passes against the source and Cloudflare's Durable Object documentation. The
+findings and their fixes are folded into the phases below; `file:line` refs are
+from those passes and predate the Phase 0 commits, so re-locate them before
+trusting a line number.
+
+## Status (2026-07-30)
+
+Branch `agent-normal-interface`, one commit per numbered item, not yet merged or
+deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
+
+| Item | State | Commit |
+|---|---|---|
+| 0.1 delete `busySince` | done | `refactor(agent): delete the write-only busySince conversation flag` |
+| 0.2 delete summaries, shrink `list_topics` | done | `refactor(agent): drop topic summaries and shrink list_topics to routing fields` |
+| 0.3 knowledge version + four narrow write tools | done | `feat(agent): version topic knowledge and replace topic writes with four narrow tools` |
+| 0.4 one delivery path | done | `feat(agent): deliver the model's own text blocks instead of a reply tool` + `feat(agent): log how many messages a turn sent` |
+| 0.5a observe photo variants | done | `feat(agent): record the photo variants Telegram offers before changing selection` |
+| 0.5b select by cost | **blocked on production data** (todo #17) | — |
+| Phase 1, 2, 3 | not started | — |
+
+`pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
+(492 tests). Nothing is deployed, so none of the Phase 0 log lines have produced
+production data yet; the acceptance criteria that read them are still open.
+
+### What Phase 0 actually shipped, for a fresh reader
+
+- Migrations `0021` (drop `conversations.busySince`), `0022` (fold every legacy
+  topic summary into the body, then drop the column), `0023` (new `knowledge`
+  table: single row, `version` starting at 1, `systemFingerprint`).
+- Migration 0022 cannot parse `[[Name]]` tokens in SQL, so the one-time link
+  re-derivation runs in `UserDO`'s constructor after `migrate`, guarded by the
+  storage key `topicLinksRebuiltV22`, calling `DbStore.rebuildAllLinks()`.
+- `TopicStore` writes are all versioned and take an input object:
+  `createTopic({expectedVersion,name,description,body})`,
+  `updateTopicBody`, `updateTopicMetadata`, `deleteTopic`, `setPinned`, each
+  returning the new version and throwing `KnowledgeConflictError` on a stale
+  one. `saveTopic` is gone. There is no unchecked write path.
+- `syncSystemTopicsFingerprint(fingerprint)` bumps the version once when the
+  bundled system-topic text changes; the fingerprint is derived from the content
+  by `systemTopicsFingerprint()` in `store/system-topics.ts` and applied in the
+  `UserDO` constructor.
+- Tools: `create_topic` (non-empty body required), `edit_topic`, `append_topic`,
+  `update_topic_metadata`, `delete_topic`. `update_topic` is deleted. Reads wrap
+  their payload: `list_topics -> {version, topics}`, `get_topic -> {version,
+  topic}`, `list_backlinks -> {version, topics}`.
+- Tests write topics through `src/store/test-support.ts` (`seedTopic`, `setBody`,
+  `setDescription`, `renameTopic`, `removeTopic`, `pinTopic`), which read the
+  current version. Tests that are about versioning call the store directly.
+- The `reply` tool, `decideFinalDelivery`, the echo guard and the
+  `firstSendError` plumbing are deleted. `runAgent` takes `onText(text)`, called
+  per non-empty text block per step **before** that step's tools run;
+  `runInterfaceAgent.deliver` persists then sends inside it. The no-silence rule
+  is now the pure `needsFallback({finishReason, sentCount})`.
+- `scriptedModel` steps accept `{ tools, text? }`, so a test can express "say
+  something, then keep working" without a tool.
+- Log lines added: `topic_list_rendered`, `topic_reads_per_turn`,
+  `topic_write_conflict`, `turn_messages_sent`, `telegram_photo_variants`.
+- Docs updated: `docs/topics.md` (knowledge versions, new tool surface, the
+  single delivery path), `docs/design.md` (schema tables). Changelog entry added
+  for the delivery change.
+
+### Deviations from the plan as written
+
+- 0.2 keeps `messageCount`, `lastActiveAt`, `pinned` and `system` on `TopicMeta`;
+  only the `list_topics` **tool** projects down to `{name, description}`.
+  Backlink results still carry the fuller meta.
+- 0.3 stores the counter in a dedicated `knowledge` table rather than "per-user
+  storage" generally, and `setPinned` is versioned like the other writes.
+  Onboarding only writes the pin when it is not already set, so a re-run does
+  not invalidate every persisted read.
+- 0.5b is unshipped on purpose: it is gated on a production sample and an
+  image-quality probe, neither of which exists yet.
+
+### Picking this up in a new session
+
+```bash
+git checkout agent-normal-interface   # 6 commits ahead of main, unmerged
+pnpm --filter @zero/agent-api run test    # 492 passing
+```
+
+Next action is **Phase 1.1**: the schema migration that turns `messages.content`
+into a `ContentBlock[]` JSON column, adds `kind`, `consolidatedAt`, the
+`pending_messages` queue and the delivery records. Read Phase 1 in full first —
+1.2's backstop ceiling and 1.3's resume rules are part of the same design and
+1.2 must not ship without a ceiling.
+
+Two Phase 0 outcomes Phase 1 depends on and should not re-derive: the knowledge
+counter and `KnowledgeConflictError` already exist (so the staleness filter has
+its signal), and delivery is already persist-before-send in one place
+(`deliver` in `agents/interface.ts`), so the delivery records in 1.1 have a
+single call site to claim against.
+
+Before merging Phase 0, note the acceptance criteria for it are log-based and
+nothing is deployed yet: `topic_list_rendered.chars`, `topic_reads_per_turn`
+and `turn_messages_sent` have no production data, and the plan's own rule is to
+capture the pre-Phase-1 baseline (topic reads and AI Gateway cost) **before**
+starting Phase 1.
 
 ## Goal
 
@@ -59,19 +153,25 @@ in `docs/plans/agent-latency-investigation.md` and
 
 ## Current shape, for a fresh reader
 
+As of the branch head (Phase 0 applied):
+
 - `runTurn` (`src/agents/orchestrator.ts`) reads the last 20 messages, requires
   the tail to be a `user` row, runs the interface agent, then runs the writer.
-- `runAgent` (`src/agents/run.ts`) is the shared tool loop. It returns the final
-  text only after the loop ends; intermediate text blocks live in `generated`
-  and never reach the user.
-- The interface agent sends user-visible messages through the `reply` tool
-  (`src/tools/topics.ts:237`) and, at the end, through `decideFinalDelivery`
-  (`src/agents/interface.ts:49`), which also covers the no-silence fallback.
-- History is stored as one TEXT `content` per row (`0015_messages.sql`), so tool
-  calls and results are lost between turns and re-rendered for the writer by
-  `renderTranscript`.
+  Unchanged by Phase 0 except that the busy flag and its `try/finally` are gone.
+- `runAgent` (`src/agents/run.ts`) is the shared tool loop. It now calls
+  `onText` per text block per step, so the interface agent delivers messages as
+  the model writes them; it still returns the final text for other callers.
+- The interface agent has no `reply` tool. Delivery is persist-then-send inside
+  `deliver`, and `needsFallback` covers the no-silence case.
+- History is still stored as one TEXT `content` per row (`0015_messages.sql`),
+  so tool calls and results are still lost between turns and re-rendered for the
+  writer by `renderTranscript`. **This is what Phase 1 changes.**
 - `getConversationHistory` has exactly one caller, the orchestrator.
   `listTopics()` has exactly one caller, the `list_topics` tool.
+- Topic knowledge is versioned; every write states `expectedVersion` (Phase 0.3).
+  Phase 1's staleness filter builds directly on that counter, which already
+  exists and is already bumped by every write and by a system-topic content
+  change.
 
 ## Design decision: one knowledge version
 
@@ -325,12 +425,12 @@ instrumentation first.
   learner that is quiet because it is broken is distinguishable from one that is
   quiet because there is no work.
 
-## Phase 0 — Cleanups
+## Phase 0 — Cleanups (done except 0.5b)
 
 Each is its own commit. Delete obsolete paths before adding replacement logic;
 0.3, 0.4 and 0.5 include behavior changes and their regression tests.
 
-**0.1 Delete `busySince`.** Removes a column, two `Store` methods, three adapter
+**0.1 Delete `busySince`. DONE.** Removes a column, two `Store` methods, three adapter
 implementations (`DbStore`, `MemoryStore`, `SystemTopicStore`) and the
 `try/finally` in `runTurn`. It is also the call that appeared in every DO-reset
 stack. The column exists in `0014_conversations.sql`: either add a migration
@@ -340,7 +440,7 @@ that drops it or leave the column dead and remove only the code. Do not assume
 Note it is *not* a substitute for the awaiting-reply flag added in 1.1 — it is
 write-only and carries no state anyone reads.
 
-**0.2 Delete topic summaries and shrink `list_topics`.** Keep one compact,
+**0.2 Delete topic summaries and shrink `list_topics`. DONE.** Keep one compact,
 stable routing field (`description`) and one authoritative knowledge field
 (`body`). Once `list_topics` returns only `name` and `description`, `summary` has
 no distinct consumer: pinned topics render their bodies, and `get_topic` already
@@ -371,7 +471,7 @@ averages ~36 chars per topic for the reference user. Ship with
 `topic_reads_per_turn`; if routing degrades, permit a somewhat richer
 description rather than recreating a second summary field.
 
-**0.3 Replace topic writes with four narrow tools.** Delete `update_topic`; no
+**0.3 Replace topic writes with four narrow tools. DONE.** Delete `update_topic`; no
 tool may replace a complete non-empty body. The write interface becomes:
 
 - `create_topic({ expectedVersion, name, description, body })`: require
@@ -419,7 +519,7 @@ unique anchored edit, append into both empty and non-empty bodies, metadata-only
 updates, rename collision, and onboarding into an existing empty pinned topic.
 Do not call 0.3 complete merely because the schemas compile.
 
-**0.4 One delivery path.** Delete the `reply` tool, the echo guard, the
+**0.4 One delivery path. DONE.** Delete the `reply` tool, the echo guard, the
 `replies[]` bookkeeping and the `firstSendError` plumbing. In a normal agent the
 assistant's text blocks *are* the messages: emit each text block as a Telegram
 message as it is produced. Multi-message turns (acknowledge, then answer after
@@ -451,7 +551,7 @@ tail as an assistant message and the retry skips the thread instead of
 re-sending. Needs a test that fails if the order flips.
 
 **0.5 Select Telegram image variants from measured payloads and a visual-token
-budget.** `extractAttachment` currently takes the last `PhotoSize`
+budget. 0.5a DONE, 0.5b BLOCKED on production data (todo #17).** `extractAttachment` currently takes the last `PhotoSize`
 (`src/routes/telegram-webhook.ts:147-148`) while the local type drops `width`,
 `height` and `file_size` (`:56-59`). Telegram's official Bot API guarantees only
 that `Message.photo` is an array of available `PhotoSize` values and that each
@@ -486,7 +586,7 @@ visual appearance. Log selected dimensions, estimated tokens and bytes after
 0.5b so the saving is observable. This is independently useful today and a
 precondition for persisting image blocks in Phase 1.
 
-## Phase 1 — Persist the real message log
+## Phase 1 — Persist the real message log (not started)
 
 **1.1 Migrate conversation history and delivery state in one migration**, so
 the schema moves once:
@@ -593,7 +693,7 @@ Constraint this phase does not remove: the messages-region cache TTL is 5m
 hit however well shaped the log is. The win is "do not re-fetch" across sessions
 and "cheap prefix" within one.
 
-## Phase 2 — ScheduleDO and LearningDO shell
+## Phase 2 — ScheduleDO and LearningDO shell (not started)
 
 **2.1** Add two Durable Object classes, both one instance per user:
 
@@ -635,7 +735,7 @@ folding them back.
 Both new alarm handlers need start and completion markers. The markers added on
 2026-07-29 live in `runAlarmTurns` and cover neither class.
 
-## Phase 3 — Durable learning
+## Phase 3 — Durable learning (not started)
 
 **3.1** Implement the remote learning port on UserDO: begin a job at a frozen
 high-water message ID, page raw unconsolidated messages, perform versioned topic
