@@ -1,7 +1,7 @@
 // Topic tools shared by both agents. `buildTopicTools` gives the read/write
 // surface over the knowledge model (list/get/create/edit/append/metadata/
-// list_backlinks); `buildInterfaceTools` adds `reply` and `delete_topic` on top
-// for the interface agent. Topics link to each other with Obsidian-style
+// list_backlinks); `buildInterfaceTools` adds `delete_topic` on top for the
+// interface agent. Topics link to each other with Obsidian-style
 // `[[Name]]` tokens in their bodies; the store keeps outbound/backlink rows in
 // sync, and get_topic/list_backlinks expose them. Every topic read or write
 // records the topic name in the optional `accessed` set so the interface agent
@@ -31,12 +31,6 @@
 // The write tools check `getTopic` themselves rather than relying on the store
 // to reject an unknown name, so a missing topic is a normal tool error rather
 // than a thrown adapter difference.
-//
-// `reply` persists the assistant message then sends it to the user immediately
-// (live progress). Persist-before-send makes retries idempotent: the durable
-// row commits behind the DO output gate before the Telegram fetch leaves, so a
-// mid-run eviction leaves the tail already `assistant` and the retry skips the
-// thread instead of re-sending.
 
 import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
@@ -282,17 +276,16 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
 
 export interface InterfaceToolDeps {
   store: TopicStore;
-  send: (text: string) => Promise<void>;
-  // Persist the assistant message durably before it is sent. Called by `reply`
-  // for every message the user sees.
-  persistReply: (text: string) => void;
   accessed: Set<string>;
-  replies: string[];
   reads?: { count: number };
 }
 
+// The interface agent's toolset: the shared topic tools plus delete_topic.
+// There is no `reply` tool — the assistant's own text blocks are the messages
+// the user sees, delivered by the runner as they are produced (see
+// agents/run.ts `onText` and agents/interface.ts).
 export const buildInterfaceTools = (deps: InterfaceToolDeps): AgentToolSet => {
-  const { store, send, persistReply, accessed, replies, reads } = deps;
+  const { store, accessed, reads } = deps;
 
   return {
     ...buildTopicTools({ store, accessed, reads }),
@@ -313,22 +306,6 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): AgentToolSet => {
           deleted: name,
           version: store.deleteTopic({ expectedVersion, name }),
         }));
-      },
-    }),
-
-    reply: defineTool({
-      description:
-        "Send a message to the user, shown immediately. Call once per message you want the user to see.",
-      inputSchema: z.object({ text: z.string() }),
-      execute: async ({ text }) => {
-        // Persist before send (idempotency across DO eviction; see file header
-        // and docs/topics.md). Push to `replies` only after the send resolves,
-        // so a failed send is not counted as delivered — the interface agent's
-        // no-silence fallback keys off replies.length.
-        persistReply(text);
-        await send(text);
-        replies.push(text);
-        return "sent";
       },
     }),
   };

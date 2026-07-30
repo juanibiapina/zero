@@ -48,6 +48,13 @@ export interface RunAgentInput {
   messages?: AgentMessage[];
   tools?: AgentToolSet;
   maxSteps?: number;
+  // Called once per text block the model produces, in order, as each step
+  // completes and before that step's tools run. The interface agent uses it to
+  // deliver messages as the model writes them: in a normal agent the assistant's
+  // text blocks ARE the messages. It is awaited, so a persist-before-send hook
+  // completes before the loop continues, and a throw propagates out of the run
+  // (it is not a tool error the model can retry).
+  onText?: (text: string) => Promise<void>;
   // Prompt caching on by default: the system text gets a 1h cache breakpoint
   // and so does the last tool. Set false to opt out (tests that assert the
   // plain shape).
@@ -255,6 +262,10 @@ export const runAgent = async (
     };
     messages.push(assistant);
     generated.push(assistant);
+
+    for (const block of response.content.filter(isText)) {
+      if (block.text.trim() !== "") await input.onText?.(block.text);
+    }
 
     const calls = response.content.filter(isToolUse);
     if (calls.length > 0) {

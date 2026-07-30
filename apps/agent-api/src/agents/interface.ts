@@ -1,6 +1,13 @@
-// Interface agent: stateless per turn. Runs the tool loop, sends replies as it
-// goes, and reports which topics it touched so the writer can consolidate them.
-// The returned { replies, accessed } is the test surface for the whole system.
+// Interface agent: stateless per turn. Runs the tool loop, sends each of the
+// model's text blocks to the user as it is produced, and reports which topics it
+// touched so the writer can consolidate them. The returned { replies, accessed }
+// is the test surface for the whole system.
+//
+// There is one delivery path: the assistant's text blocks are the messages. A
+// block is persisted before the Telegram fetch leaves (persist-before-send), so
+// a mid-run eviction leaves the tail already `assistant` and the retry skips the
+// thread instead of re-sending. Multi-message turns (acknowledge, then answer
+// after research) come from the model producing text on more than one step.
 
 import type { AgentMessage, AgentModel, ToolResultBlock } from "./protocol";
 import { buildInterfaceTools } from "../tools/topics";
@@ -29,47 +36,14 @@ import { log } from "../log";
 export const FALLBACK_MESSAGE =
   "Sorry, I couldn't finish that one. Could you try again?";
 
-export interface FinalDeliveryInput {
+// A run that never delivered anything the user can read must not end in
+// silence: cap exhaustion returns finishReason "tool-calls" with empty text, and
+// a clean finish can produce no text at all. Pure decision, executed by the
+// runner below.
+export const needsFallback = (input: {
   finishReason: string;
-  text: string;
-  replies: string[];
-}
-
-export type FinalDelivery =
-  | { action: "send"; text: string } // deliver the model's final prose (raw text)
-  | { action: "fallback" } // deliver FALLBACK_MESSAGE + log turn_incomplete
-  | { action: "none" }; // suppress: nothing to deliver
-
-// Pure decision for the interface agent's final delivery. Given the run's
-// finish reason, the model's final prose, and the replies already sent this
-// turn, decide what final message (if any) reaches the user. No I/O, no
-// store/bot/DO access, no logging, no mutation — the runner executes the
-// returned decision (see runInterfaceAgent). The `send` action carries the RAW
-// (untrimmed) text so delivered bytes match; the guards below compare trimmed.
-export const decideFinalDelivery = (
-  input: FinalDeliveryInput,
-): FinalDelivery => {
-  const lastReply = input.replies[input.replies.length - 1]?.trim();
-  const trimmed = input.text.trim();
-  // Clean finish: the model's final message is the substantive answer, so
-  // deliver it — unless it is empty or an exact echo of the reply we already
-  // sent. The model routinely puts the answer in its final text rather than a
-  // reply() call, notably after a research tool call that followed an
-  // acknowledgement reply. The echo guard (last reply only) prevents re-sending
-  // text the model already delivered; an earlier ack reply must not suppress it.
-  if (input.finishReason === "stop" && trimmed && trimmed !== lastReply) {
-    return { action: "send", text: input.text };
-  }
-  // Cap cut-off (finishReason !== "stop"), or a clean finish that produced no
-  // final message and never sent a reply: the model never produced its intended
-  // answer. Fall back so the user is never left in silence. (A clean finish that
-  // already sent a reply and ended with empty/echo text needs no fallback — the
-  // reply was the answer.)
-  if (input.finishReason !== "stop" || input.replies.length === 0) {
-    return { action: "fallback" };
-  }
-  return { action: "none" };
-};
+  sentCount: number;
+}): boolean => input.finishReason !== "stop" || input.sentCount === 0;
 
 export interface InterfaceAgentInput {
   model: AgentModel;
@@ -276,30 +250,20 @@ export const runInterfaceAgent = async (
   const reads = { count: 0 };
   const persistReply = input.persistReply ?? (() => {});
 
-  // A send failure inside the `reply` tool is swallowed by the runner (a thrown
-  // tool execute becomes an error tool_result fed back to the model, not a
-  // rejected run). Capture the first failure here and re-raise it after the
-  // loop so it reaches the orchestrator's error boundary (turn_failed +
-  // fallback). Short-circuit after the first failure so a fully-broken
-  // transport is not hammered by repeated model retries within the step cap.
-  let firstSendError: Error | null = null;
-  const recordingSend = async (text: string): Promise<void> => {
-    if (firstSendError !== null) throw firstSendError;
-    try {
-      await input.send(text);
-    } catch (err) {
-      firstSendError = err instanceof Error ? err : new Error(String(err));
-      throw firstSendError;
-    }
+  // Deliver one text block: persist it, then send it. Persist-before-send is
+  // load-bearing (see the file header), so the order must not flip. A send
+  // failure propagates out of runAgent to the orchestrator's error boundary
+  // rather than becoming a tool error the model would retry.
+  const deliver = async (text: string): Promise<void> => {
+    persistReply(text);
+    await input.send(text);
+    replies.push(text);
   };
 
   const tools = {
     ...buildInterfaceTools({
       store: input.store,
-      send: recordingSend,
-      persistReply,
       accessed,
-      replies,
       reads,
     }),
     ...buildResearchTool({
@@ -359,14 +323,14 @@ export const runInterfaceAgent = async (
   // loop's sliding breakpoint covers the single current message.
   if (lastIdx >= 1) convo[lastIdx - 1] = markCacheBreakpoint(convo[lastIdx - 1]);
 
-  const { text, finishReason, steps, messages, usage, stepUsages } =
-    await runAgent({
-      model: input.model,
-      system: interfaceSystemPrompt(pinned),
-      messages: convo,
-      tools,
-      maxSteps: input.maxSteps,
-    });
+  const { finishReason, steps, messages, usage, stepUsages } = await runAgent({
+    model: input.model,
+    system: interfaceSystemPrompt(pinned),
+    messages: convo,
+    tools,
+    maxSteps: input.maxSteps,
+    onText: deliver,
+  });
 
   const transcript = renderTranscript(input.userMessage, messages);
 
@@ -392,26 +356,9 @@ export const runInterfaceAgent = async (
     });
   }
 
-  // A `reply` send failed and the tool loop swallowed it. Re-raise so the
-  // orchestrator's error boundary logs turn_failed and delivers the fallback.
-  // The undelivered reply row was already persisted (persist-before-send), so
-  // it stays in history alongside the fallback — the same "partial turn"
-  // tradeoff as a mid-run eviction (see docs/topics.md), now visible not silent.
-  if (firstSendError !== null) throw firstSendError as Error;
-
-  // Decide the final delivery (pure), then execute it. All side effects
-  // (persist-before-send, Telegram send, replies.push, the turn_incomplete log)
-  // stay here in the runner.
-  const decision = decideFinalDelivery({ finishReason, text, replies });
-  if (decision.action === "send") {
-    persistReply(decision.text);
-    await input.send(decision.text);
-    replies.push(decision.text);
-  } else if (decision.action === "fallback") {
+  if (needsFallback({ finishReason, sentCount: replies.length })) {
     log("turn_incomplete", { finish_reason: finishReason, steps });
-    persistReply(FALLBACK_MESSAGE);
-    await input.send(FALLBACK_MESSAGE);
-    replies.push(FALLBACK_MESSAGE);
+    await deliver(FALLBACK_MESSAGE);
   }
 
   return { replies, accessed: [...accessed], transcript };
