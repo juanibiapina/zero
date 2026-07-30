@@ -61,7 +61,6 @@ export class MemoryStore implements Store {
     return [...this.topics.values()].map((t) => ({
       name: t.name,
       description: t.description,
-      summary: t.summary,
       lastActiveAt: t.lastActiveAt,
       messageCount: t.messageCount,
       pinned: t.pinned,
@@ -96,7 +95,6 @@ export class MemoryStore implements Store {
         out.push({
           name: t.name,
           description: t.description,
-          summary: t.summary,
           lastActiveAt: t.lastActiveAt,
           messageCount: t.messageCount,
           pinned: t.pinned,
@@ -113,7 +111,6 @@ export class MemoryStore implements Store {
     this.topics.set(name, {
       name,
       description,
-      summary: "",
       body: "",
       createdAt: now,
       lastActiveAt: now,
@@ -163,7 +160,7 @@ export class MemoryStore implements Store {
 
   saveTopic(
     name: string,
-    patch: { body: string; description: string; summary: string },
+    patch: { body: string; description: string },
     newName?: string,
   ): void {
     const t = this.topics.get(name);
@@ -173,7 +170,6 @@ export class MemoryStore implements Store {
     }
     t.body = patch.body;
     t.description = patch.description;
-    t.summary = patch.summary;
     t.lastActiveAt = this.now();
     t.messageCount += 1;
     const rename = Boolean(newName && newName !== name);

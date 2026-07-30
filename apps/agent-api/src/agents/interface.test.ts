@@ -270,7 +270,6 @@ describe("interfaceContext", () => {
 const topic = (name: string, body: string, pinned = true): Topic => ({
   name,
   description: "",
-  summary: "",
   system: false,
   body,
   createdAt: NOW.toISOString(),
@@ -1072,7 +1071,6 @@ describe("runInterfaceAgent", () => {
     store.saveTopic("weather", {
       body: "Sunny today.",
       description: "climate",
-      summary: "sunny",
     });
     const sink = collectSink();
     const model = scriptedModel([
@@ -1102,7 +1100,7 @@ describe("runInterfaceAgent", () => {
     const store = new MemoryStore();
     const big = "x".repeat(5000);
     store.createTopic("big", "");
-    store.saveTopic("big", { body: big, description: "", summary: "" });
+    store.saveTopic("big", { body: big, description: "" });
     const sink = collectSink();
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "big" } }] },

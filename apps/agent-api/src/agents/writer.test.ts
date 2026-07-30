@@ -10,7 +10,6 @@ describe("runWriterAgent", () => {
     store.saveTopic("travel", {
       body: "## Notes\nExisting note.",
       description: "trips",
-      summary: "old",
     });
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "travel" } }] },
@@ -21,7 +20,7 @@ describe("runWriterAgent", () => {
             input: {
               name: "travel",
               body: "## Notes\nExisting note.\nGoing to Rome.\n\n## Log\n- 2026 Rome trip",
-              summary: "Planning a Rome trip",
+              description: "Rome trip planning",
             },
           },
         ],
@@ -39,9 +38,7 @@ describe("runWriterAgent", () => {
     const saved = store.getTopic("travel");
     expect(saved?.body).toContain("Existing note.");
     expect(saved?.body).toContain("Going to Rome");
-    expect(saved?.summary).toBe("Planning a Rome trip");
-    // description untouched (not in the patch)
-    expect(saved?.description).toBe("trips");
+    expect(saved?.description).toBe("Rome trip planning");
   });
 
   // The consolidation shape we want: an anchored edit plus an appended Log line,
@@ -57,7 +54,6 @@ describe("runWriterAgent", () => {
     store.saveTopic("travel", {
       body: longBody,
       description: "trips",
-      summary: "old",
     });
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "travel" } }] },
@@ -85,7 +81,7 @@ describe("runWriterAgent", () => {
         tools: [
           {
             name: "update_topic",
-            input: { name: "travel", summary: "Planning a Rome trip" },
+            input: { name: "travel", description: "Rome trip planning" },
           },
         ],
       },
@@ -105,8 +101,7 @@ describe("runWriterAgent", () => {
     // Every pre-existing line survives untouched, and none of it was regenerated.
     expect(saved?.body).toContain("- old fact 0");
     expect(saved?.body).toContain("- old fact 39");
-    expect(saved?.summary).toBe("Planning a Rome trip");
-    expect(saved?.description).toBe("trips");
+    expect(saved?.description).toBe("Rome trip planning");
   });
 
   it("proactively creates a topic for a new durable subject", async () => {
@@ -128,7 +123,7 @@ describe("runWriterAgent", () => {
             input: {
               name: "rome-trip",
               body: "## Notes\nGoing to Rome in May.",
-              summary: "Rome trip in May",
+              description: "Rome trip in May",
             },
           },
         ],
@@ -146,7 +141,7 @@ describe("runWriterAgent", () => {
     const created = store.getTopic("rome-trip");
     expect(created).not.toBeNull();
     expect(created?.body).toContain("Going to Rome in May");
-    expect(created?.summary).toBe("Rome trip in May");
+    expect(created?.description).toBe("Rome trip in May");
   });
 
   it("renames a topic via update_topic newName", async () => {
@@ -217,7 +212,7 @@ describe("runWriterAgent", () => {
             input: {
               name: "anna-tom-wedding",
               body: "## Details\nAnna & Tom wedding, 2026-08-15 15:00, Tuscany.",
-              summary: "Wedding on 2026-08-15 in Tuscany",
+              description: "Wedding on 2026-08-15 in Tuscany",
             },
           },
         ],

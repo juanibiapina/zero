@@ -49,7 +49,6 @@ export class DbStore implements Store {
       .map((t) => ({
         name: t.name,
         description: t.description,
-        summary: t.summary,
         lastActiveAt: t.lastActiveAt,
         messageCount: t.messageCount,
         pinned: !!t.pinned,
@@ -77,6 +76,14 @@ export class DbStore implements Store {
     }
   }
 
+  // Re-derive every topic's outbound link rows from its current body. Used once
+  // after migration 0022, which folded legacy summaries into bodies: the folded
+  // text can carry [[Name]] tokens that no link row covers. Idempotent, so a
+  // repeated run is harmless.
+  rebuildAllLinks(): void {
+    for (const t of this.db.all(topics)) this.syncOutboundLinks(t.id, t.body);
+  }
+
   getOutboundLinks(name: string): string[] {
     const t = this.db.get(topics, { where: eq("name", name) });
     if (!t) return [];
@@ -97,7 +104,6 @@ export class DbStore implements Store {
         out.push({
           name: t.name,
           description: t.description,
-          summary: t.summary,
           lastActiveAt: t.lastActiveAt,
           messageCount: t.messageCount,
           pinned: !!t.pinned,
@@ -127,7 +133,6 @@ export class DbStore implements Store {
     this.db.insert(topics, {
       name,
       description,
-      summary: "",
       body: "",
       createdAt: now,
       lastActiveAt: now,
@@ -181,7 +186,7 @@ export class DbStore implements Store {
 
   saveTopic(
     name: string,
-    patch: { body: string; description: string; summary: string },
+    patch: { body: string; description: string },
     newName?: string,
   ): void {
     const existing = this.db.get(topics, { where: eq("name", name) });
@@ -196,7 +201,6 @@ export class DbStore implements Store {
       {
         body: patch.body,
         description: patch.description,
-        summary: patch.summary,
         lastActiveAt: this.nowIso(),
         messageCount: existing.messageCount + 1,
         ...(rename ? { name: newName } : {}),
@@ -442,7 +446,6 @@ export class DbStore implements Store {
 function toTopic(t: {
   name: string;
   description: string;
-  summary: string;
   body: string;
   createdAt: string;
   lastActiveAt: string;
@@ -452,7 +455,6 @@ function toTopic(t: {
   return {
     name: t.name,
     description: t.description,
-    summary: t.summary,
     body: t.body,
     createdAt: t.createdAt,
     lastActiveAt: t.lastActiveAt,

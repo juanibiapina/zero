@@ -35,6 +35,9 @@ const TYPING_INTERVAL_MS = 4000;
 
 // The stable pinned topic seeded by Google onboarding. The name never changes;
 // the user's actual name is a fact recorded in the body (see docs/onboarding.md).
+// Marks the one-time link reconciliation that follows migration 0022.
+const LINKS_REBUILT_KEY = "topicLinksRebuiltV22";
+
 const USER_TOPIC = "User";
 const USER_TOPIC_DESCRIPTION =
   "Durable facts about the user: name, location, role, languages, key relationships.";
@@ -52,11 +55,19 @@ export class UserDO extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = createDb(ctx.storage);
-    this.store = new SystemTopicStore(new DbStore(this.db));
+    const dbStore = new DbStore(this.db);
+    this.store = new SystemTopicStore(dbStore);
     this.attachments = createR2Attachments(env.ATTACHMENTS);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
+      // Migration 0022 folded legacy topic summaries into bodies, so link rows
+      // derived from those bodies can be missing a [[Name]] the folded text
+      // introduced. SQL cannot parse the tokens; re-derive them once here.
+      if (!(await ctx.storage.get(LINKS_REBUILT_KEY))) {
+        dbStore.rebuildAllLinks();
+        await ctx.storage.put(LINKS_REBUILT_KEY, true);
+      }
     });
   }
 

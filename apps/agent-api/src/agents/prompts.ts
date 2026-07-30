@@ -177,7 +177,7 @@ external services, research, handle attachments, or delete topics.
 
 Revise existing bodies with edit_topic (replace an exact snippet) or append_topic
 (add to the end), never by passing a whole rewritten body to update_topic —
-that regenerates text you meant to preserve. Reserve update_topic for summary,
+that regenerates text you meant to preserve. Reserve update_topic for the
 description, rename, and filling a topic that is still empty.
 
 Before changing an existing topic, call list_topics and read the relevant topic
@@ -226,10 +226,11 @@ For each accessed topic that gained durable information:
 - Append exactly one line to a "## Log" section summarising this exchange. Use
   edit_topic anchored on the "## Log" heading, or append_topic when the section
   is absent or the line belongs at the end.
-- Use update_topic only to refresh the summary (current state of the topic) and
-  the description (a short routing blurb) when they have moved, to rename, or to
-  fill a topic you just created empty. Do not pass a body to update_topic for a
-  topic that already has one.
+- Use update_topic only to refresh the description (a short routing blurb, one
+  line, so another agent can tell from list_topics whether this topic is worth
+  opening), to rename, or to fill a topic you just created empty. Do not pass a
+  body to update_topic for a topic that already has one, and never keep a second
+  copy of the topic's state in the description: the body is the only record.
 - Keep topics small. When a body has grown past roughly 8,000 characters, split
   the next durable subject out into its own topic and link it with [[Name]]
   rather than growing the document further.

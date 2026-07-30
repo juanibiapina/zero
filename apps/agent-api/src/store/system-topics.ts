@@ -28,7 +28,6 @@ import type {
 export interface SystemTopicDef {
   name: string;
   description: string;
-  summary: string;
   body: string;
   pinned: boolean;
 }
@@ -50,14 +49,12 @@ export const SYSTEM_TOPICS: SystemTopicDef[] = [
   {
     name: "Zero",
     description: "Your own identity: who you, the assistant, are.",
-    summary: "Zero's identity.",
     body: ZERO_BODY,
     pinned: true,
   },
   {
     name: "Changelog",
     description: "Zero's changelog and newly shipped features.",
-    summary: "Recent user-facing changes and new features in Zero.",
     body: changelogMarkdown,
     pinned: false,
   },
@@ -71,7 +68,6 @@ const SYSTEM_TIME = "1970-01-01T00:00:00.000Z";
 const toTopic = (def: SystemTopicDef): Topic => ({
   name: def.name,
   description: def.description,
-  summary: def.summary,
   body: def.body,
   createdAt: SYSTEM_TIME,
   lastActiveAt: SYSTEM_TIME,
@@ -164,7 +160,7 @@ export class SystemTopicStore implements Store {
 
   saveTopic(
     name: string,
-    patch: { body: string; description: string; summary: string },
+    patch: { body: string; description: string },
     newName?: string,
   ): void {
     if (this.isSystem(name)) readOnly(name);
