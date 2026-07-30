@@ -16,7 +16,6 @@ export interface Message {
 export interface TopicMeta {
   name: string;
   description: string;
-  summary: string;
   lastActiveAt: string;
   messageCount: number;
   // Pinned topics are always surfaced in the interface agent's prompt.
@@ -70,7 +69,7 @@ export interface TopicStore {
   getPinnedTopics(): Topic[];
   saveTopic(
     name: string,
-    patch: { body: string; description: string; summary: string },
+    patch: { body: string; description: string },
     newName?: string,
   ): void;
   // Target names this topic links to via `[[Name]]` (distinct, includes

@@ -18,12 +18,36 @@ const call = <T = unknown>(
   input: unknown,
 ): Promise<T> => tool.execute(input as never) as Promise<T>;
 
+describe("list_topics", () => {
+  it("returns only the routing fields, never a body or extra metadata", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    store.createTopic("trip", "an upcoming trip");
+    store.saveTopic("trip", { body: "long body text", description: "an upcoming trip" });
+    const tools = buildTopicTools({ store });
+    const listed = await call<Array<Record<string, unknown>>>(
+      tools.list_topics,
+      {},
+    );
+    expect(listed).toEqual([{ name: "trip", description: "an upcoming trip" }]);
+  });
+
+  it("counts get_topic calls for the caller", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    store.createTopic("trip", "");
+    const reads = { count: 0 };
+    const tools = buildTopicTools({ store, reads });
+    await call(tools.get_topic, { name: "trip" });
+    await call(tools.get_topic, { name: "missing" });
+    expect(reads.count).toBe(1);
+  });
+});
+
 describe("topic link tools", () => {
   it("get_topic returns outboundLinks and backlinks", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
     store.createTopic("trip", "");
     store.createTopic("flights", "");
-    store.saveTopic("trip", { body: "book [[flights]]", description: "", summary: "" });
+    store.saveTopic("trip", { body: "book [[flights]]", description: "" });
     const tools = buildTopicTools({ store });
     const trip = await call<{ outboundLinks: string[]; backlinks: string[] }>(
       tools.get_topic,
@@ -40,7 +64,7 @@ describe("topic link tools", () => {
   it("list_backlinks returns linking topics and records access", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
     store.createTopic("trip", "");
-    store.saveTopic("trip", { body: "[[flights]]", description: "", summary: "" });
+    store.saveTopic("trip", { body: "[[flights]]", description: "" });
     const accessed = new Set<string>();
     const tools = buildTopicTools({ store, accessed });
     const rows = await call<{ name: string }[]>(
@@ -125,7 +149,6 @@ describe("edit_topic tool", () => {
     store.saveTopic("trip", {
       body: "## Plans\nFly to Rome.\n\n## Log\n- booked flights",
       description: "travel",
-      summary: "",
     });
     return store;
   };
@@ -246,7 +269,6 @@ describe("append_topic tool", () => {
     store.saveTopic("trip", {
       body: "## Plans\nFly to Rome.\n",
       description: "",
-      summary: "",
     });
     const tools = buildTopicTools({ store });
     await call(tools.append_topic, {

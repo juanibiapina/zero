@@ -12,8 +12,9 @@ an ongoing thread). Columns (see `apps/agent-api/src/UserDO/db/schema.ts`):
 
 - `name` — human label the agent addresses (unique). A surrogate integer `id` is
   the internal key, so a rename is a one-field `name` update.
-- `description` — short routing blurb: what belongs in this topic.
-- `summary` — running state-of-the-topic.
+- `description` — short routing blurb: what belongs in this topic. It is the
+  only field `list_topics` returns besides the name, so it is routing text, not
+  a second knowledge document.
 - `body` — the knowledge document (markdown).
 - `createdAt`, `lastActiveAt`, `messageCount` — activity tracking.
 
@@ -146,7 +147,7 @@ migration and no per-user seeding.
    accessed topic that gained durable information it reads the body
    (`get_topic`), merges new facts under sensible sections with `edit_topic`,
    appends one `## Log` line with `append_topic`, and uses `update_topic` only to
-   refresh summary and description (or to rename, or to fill a topic it just
+   refresh the description (or to rename, or to fill a topic it just
    created empty). It never rewrites or compacts a body — and since 2026-07-29
    the tools enforce that rather than only the prompt asking for it. Because it
    has `list_topics` +
@@ -165,16 +166,16 @@ itself. The writer then persists those findings — it sees the research report 
 the turn transcript, and any topic research **read** for context is merged into
 the interface agent's `accessed` set so the writer consolidates it like any
 other accessed topic. The writer is prompted to **preserve research findings and
-their reference URLs verbatim** (refresh the summary rather than rewriting the
-body, and fold near-duplicate research topics together). Preservation is
+their reference URLs verbatim** (fold near-duplicate research topics together
+rather than rewriting a body). Preservation is
 prompt-enforced; if it degrades in practice, the stronger fix is a mechanically
 protected body region.
 
 The topic tools are shared: `update_topic` is a partial patch — provide only the
-fields to change (`body`, `description`, `summary`, `newName`); omitted fields
+fields to change (`body`, `description`, `newName`); omitted fields
 keep their current value. Its `body` is the **whole** markdown document, so it is
 now reserved for filling a topic that is still empty, plus
-description/summary/rename. It writes through `store.saveTopic`.
+description/rename. It writes through `store.saveTopic`.
 
 Revising an existing body goes through the incremental writes instead:
 
@@ -219,7 +220,7 @@ not yet sent), the retry skips the thread and reply 2 is lost. This converts a
 rare "duplicate message" into a rare "partial turn," which is preferred. On such
 a skipped retry the writer consolidation for that turn also does not re-run; live
 topic create/update calls already persisted the durable facts, only the writer's
-Log-line/summary refresh is lost for that one turn.
+Log-line refresh is lost for that one turn.
 
 A `reply` whose `send()` fails is a related case. The tool loop swallows a
 thrown tool `execute` (it becomes an error `tool_result` fed back to the model,

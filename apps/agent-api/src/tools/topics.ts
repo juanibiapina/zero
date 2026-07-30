@@ -6,8 +6,13 @@
 // the topic name in the optional `accessed` set so the interface agent can hand
 // the writer exactly the topics it touched. `update_topic` is a partial patch:
 // any field left out keeps its current value, so a body-only revision (the
-// interface agent's usual call) leaves description/summary untouched, while the
-// writer can also refresh those and rename in one call.
+// interface agent's usual call) leaves the description untouched, while the
+// writer can also refresh it and rename in one call.
+//
+// A topic holds exactly two model-written fields: `description`, a short
+// routing blurb rendered by list_topics, and `body`, the one authoritative
+// knowledge document. There is deliberately no second summary of the same
+// state to keep in sync.
 //
 // `edit_topic` and `append_topic` are the incremental body writes, and the
 // default path for revising an existing document. `update_topic`'s `body` is the
@@ -16,7 +21,7 @@
 // with the topic forever (measured: 13,856 output tokens and 298s on a single
 // turn; see docs/plans/writer-latency-investigation.md). Anchored edits make the
 // cost proportional to the change, not to the document. `update_topic` stays for
-// description/summary/rename and for filling a freshly created empty topic.
+// description/rename and for filling a freshly created empty topic.
 //
 // Both incremental tools check `getTopic` themselves rather than relying on the
 // store to reject an unknown name: `DbStore.updateTopicBody` silently no-ops on
@@ -31,6 +36,7 @@
 
 import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
+import { log } from "../log";
 import type { TopicStore } from "../store/types";
 
 export interface TopicToolDeps {
@@ -38,17 +44,31 @@ export interface TopicToolDeps {
   // Optional: the interface agent passes a set to record which topics it read or
   // wrote. The writer omits it — it has no downstream consumer of `accessed`.
   accessed?: Set<string>;
+  // Optional get_topic counter. Dropping `summary` from list_topics is only a
+  // saving if the model does not answer it with extra full-body reads, so the
+  // caller logs this count per run next to topic_list_rendered.
+  reads?: { count: number };
 }
 
 export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
-  const { store, accessed } = deps;
+  const { store, accessed, reads } = deps;
 
   return {
     list_topics: defineTool({
       description:
-        "List every topic with its metadata (name, description, summary) but no bodies. Use to see what topics exist.",
+        "List every topic by name with a short routing description. Bodies are " +
+        "not included; read one with get_topic.",
       inputSchema: z.object({}),
-      execute: async () => store.listTopics(),
+      execute: async () => {
+        const listed = store
+          .listTopics()
+          .map((t) => ({ name: t.name, description: t.description }));
+        log("topic_list_rendered", {
+          topic_count: listed.length,
+          chars: JSON.stringify(listed).length,
+        });
+        return listed;
+      },
     }),
 
     get_topic: defineTool({
@@ -61,6 +81,7 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
         const topic = store.getTopic(name);
         if (!topic) return { error: `topic not found: ${name}` };
         accessed?.add(name);
+        if (reads) reads.count += 1;
         return {
           ...topic,
           outboundLinks: store.getOutboundLinks(name),
@@ -96,18 +117,17 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
     update_topic: defineTool({
       description:
         "Patch a topic. Provide only the fields to change: body (full markdown), " +
-        "description (routing blurb), summary (state-of-the-topic), or newName to " +
-        "rename. Omitted fields keep their current value. `body` replaces the " +
-        "whole document, so use it only to fill a topic that is still empty; to " +
-        "revise an existing body use edit_topic or append_topic.",
+        "description (short routing blurb), or newName to rename. Omitted fields " +
+        "keep their current value. `body` replaces the whole document, so use it " +
+        "only to fill a topic that is still empty; to revise an existing body use " +
+        "edit_topic or append_topic.",
       inputSchema: z.object({
         name: z.string(),
         body: z.string().optional(),
         description: z.string().optional(),
-        summary: z.string().optional(),
         newName: z.string().optional(),
       }),
-      execute: async ({ name, body, description, summary, newName }) => {
+      execute: async ({ name, body, description, newName }) => {
         const current = store.getTopic(name);
         if (!current) return { error: `topic not found: ${name}` };
         try {
@@ -116,7 +136,6 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
             {
               body: body ?? current.body,
               description: description ?? current.description,
-              summary: summary ?? current.summary,
             },
             newName,
           );
@@ -208,13 +227,14 @@ export interface InterfaceToolDeps {
   persistReply: (text: string) => void;
   accessed: Set<string>;
   replies: string[];
+  reads?: { count: number };
 }
 
 export const buildInterfaceTools = (deps: InterfaceToolDeps): AgentToolSet => {
-  const { store, send, persistReply, accessed, replies } = deps;
+  const { store, send, persistReply, accessed, replies, reads } = deps;
 
   return {
-    ...buildTopicTools({ store, accessed }),
+    ...buildTopicTools({ store, accessed, reads }),
 
     delete_topic: defineTool({
       description:

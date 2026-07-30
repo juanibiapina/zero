@@ -16,7 +16,6 @@ describe("Store contract: topics", () => {
     expect(s.getTopic("weather")).toMatchObject({
       name: "weather",
       description: "climate notes",
-      summary: "",
       body: "",
       messageCount: 0,
     });
@@ -48,7 +47,7 @@ describe("Store contract: topics", () => {
     const s = makeStore();
     s.createTopic("trip", "");
     s.createTopic("flights", "");
-    s.saveTopic("trip", { body: "book [[flights]]", description: "", summary: "" });
+    s.saveTopic("trip", { body: "book [[flights]]", description: "" });
     s.deleteTopic("flights");
     // The source body keeps its [[flights]] token.
     expect(s.getTopic("trip")?.body).toBe("book [[flights]]");
@@ -63,7 +62,7 @@ describe("Store contract: topics", () => {
     const s = makeStore();
     s.createTopic("trip", "");
     s.createTopic("flights", "");
-    s.saveTopic("trip", { body: "book [[flights]]", description: "", summary: "" });
+    s.saveTopic("trip", { body: "book [[flights]]", description: "" });
     s.deleteTopic("trip");
     expect(s.getBacklinks("flights")).toEqual([]);
   });
@@ -92,14 +91,13 @@ describe("Store contract: topics", () => {
     expect(got[0].body).toBe("body-a");
   });
 
-  it("saveTopic updates body/description/summary and bumps messageCount", () => {
+  it("saveTopic updates body/description and bumps messageCount", () => {
     const s = makeStore();
     s.createTopic("a", "old");
-    s.saveTopic("a", { body: "B", description: "new", summary: "S" });
+    s.saveTopic("a", { body: "B", description: "new" });
     expect(s.getTopic("a")).toMatchObject({
       body: "B",
       description: "new",
-      summary: "S",
       messageCount: 1,
     });
   });
@@ -107,7 +105,7 @@ describe("Store contract: topics", () => {
   it("saveTopic renames when newName is given", () => {
     const s = makeStore();
     s.createTopic("a", "");
-    s.saveTopic("a", { body: "", description: "", summary: "" }, "b");
+    s.saveTopic("a", { body: "", description: "" }, "b");
     expect(s.getTopic("a")).toBeNull();
     expect(s.getTopic("b")).not.toBeNull();
   });
@@ -117,7 +115,7 @@ describe("Store contract: topics", () => {
     s.createTopic("a", "");
     s.createTopic("b", "");
     expect(() =>
-      s.saveTopic("a", { body: "", description: "", summary: "" }, "b"),
+      s.saveTopic("a", { body: "", description: "" }, "b"),
     ).toThrow();
   });
 });
@@ -164,14 +162,14 @@ describe("Store contract: pinned topics", () => {
     const s = makeStore();
     s.createTopic("a", "");
     s.setPinned("a", true);
-    s.saveTopic("a", { body: "x", description: "", summary: "" }, "b");
+    s.saveTopic("a", { body: "x", description: "" }, "b");
     expect(s.getPinnedTopics().map((t) => t.name)).toEqual(["b"]);
   });
 });
 
 describe("Store contract: topic links", () => {
   const save = (s: Store, name: string, body: string) =>
-    s.saveTopic(name, { body, description: "", summary: "" });
+    s.saveTopic(name, { body, description: "" });
 
   it("derives outbound links from the body", () => {
     const s = makeStore();
@@ -203,7 +201,7 @@ describe("Store contract: topic links", () => {
     s.createTopic("a", "");
     s.createTopic("japan", "");
     save(s, "a", "trip: [[japan]] near [[japan bar]]");
-    s.saveTopic("japan", { body: "", description: "", summary: "" }, "japan 2026");
+    s.saveTopic("japan", { body: "", description: "" }, "japan 2026");
     expect(s.getTopic("a")?.body).toBe("trip: [[japan 2026]] near [[japan bar]]");
     expect(s.getBacklinks("japan 2026").map((t) => t.name)).toEqual(["a"]);
     expect(s.getBacklinks("japan")).toEqual([]);

@@ -21,7 +21,6 @@ export const topics = table("topics", {
   id: column.integer().notNull().primaryKey().autoIncrement(),
   name: column.text().notNull().unique(),
   description: column.text().notNull().default(""),
-  summary: column.text().notNull().default(""),
   body: column.text().notNull().default(""),
   createdAt: column.text().notNull(),
   lastActiveAt: column.text().notNull(),

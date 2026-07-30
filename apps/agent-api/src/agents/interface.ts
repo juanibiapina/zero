@@ -270,6 +270,10 @@ export const runInterfaceAgent = async (
 ): Promise<InterfaceAgentResult> => {
   const accessed = new Set<string>();
   const replies: string[] = [];
+  // get_topic calls this turn. Logged next to topic_list_rendered: dropping
+  // `summary` from the listing only saves input if the model does not replace
+  // it with extra full-body reads.
+  const reads = { count: 0 };
   const persistReply = input.persistReply ?? (() => {});
 
   // A send failure inside the `reply` tool is swallowed by the runner (a thrown
@@ -296,6 +300,7 @@ export const runInterfaceAgent = async (
       persistReply,
       accessed,
       replies,
+      reads,
     }),
     ...buildResearchTool({
       model: input.researchModel ?? input.model,
@@ -373,6 +378,8 @@ export const runInterfaceAgent = async (
     duration_ms: Date.now() - start,
     ...usageLogFields(usage),
   });
+
+  log("topic_reads_per_turn", { count: reads.count });
 
   // Per-step token line for multi-step turns: exposes the tier-1 write-then-read
   // pattern (step 1 writes the prefix, later steps read it) that the aggregate

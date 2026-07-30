@@ -54,7 +54,7 @@ describe("SystemTopicStore: reads overlay bundled topics", () => {
   it("getBacklinks resolves a user topic linking a system topic", () => {
     const s = makeStore();
     s.createTopic("notes", "");
-    s.saveTopic("notes", { body: "see [[Zero]]", description: "", summary: "" });
+    s.saveTopic("notes", { body: "see [[Zero]]", description: "" });
     expect(s.getBacklinks("Zero").map((t) => t.name)).toEqual(["notes"]);
   });
 });
@@ -68,7 +68,7 @@ describe("SystemTopicStore: writes to system topics are rejected", () => {
     const s = makeStore();
     expect(() => s.updateTopicBody("Zero", "x")).toThrow(/read-only/);
     expect(() =>
-      s.saveTopic("Zero", { body: "x", description: "", summary: "" }),
+      s.saveTopic("Zero", { body: "x", description: "" }),
     ).toThrow(/read-only/);
     expect(() => s.deleteTopic("Changelog")).toThrow(/read-only/);
     expect(() => s.setPinned("Zero", false)).toThrow(/read-only/);
@@ -78,14 +78,14 @@ describe("SystemTopicStore: writes to system topics are rejected", () => {
     const s = makeStore();
     s.createTopic("draft", "");
     expect(() =>
-      s.saveTopic("draft", { body: "", description: "", summary: "" }, "Zero"),
+      s.saveTopic("draft", { body: "", description: "" }, "Zero"),
     ).toThrow(/read-only/);
   });
 
   it("user-topic writes are unaffected", () => {
     const s = makeStore();
     s.createTopic("weather", "notes");
-    s.saveTopic("weather", { body: "sunny", description: "", summary: "" });
+    s.saveTopic("weather", { body: "sunny", description: "" });
     expect(s.getTopic("weather")?.body).toBe("sunny");
     s.deleteTopic("weather");
     expect(s.getTopic("weather")).toBeNull();
