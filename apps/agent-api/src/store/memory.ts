@@ -11,6 +11,7 @@ import {
 import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
+  ConversationContext,
   ConversationStore,
   Message,
   MessageContent,
@@ -36,6 +37,8 @@ interface ConvRow {
   id: string;
   chatId: number;
   topicId: number;
+  compactedThroughMessageId: number | null;
+  summary: string | null;
 }
 
 interface MsgRow {
@@ -283,7 +286,13 @@ export class MemoryStore implements Store {
     );
     if (existing) return existing.id;
     const id = crypto.randomUUID();
-    this.convs.push({ id, chatId, topicId });
+    this.convs.push({
+      id,
+      chatId,
+      topicId,
+      compactedThroughMessageId: null,
+      summary: null,
+    });
     return id;
   }
 
@@ -318,6 +327,35 @@ export class MemoryStore implements Store {
       .filter((m) => m.conversationId === conversationId)
       .slice(-limit)
       .map(toMessage);
+  }
+
+  getConversationContext(
+    conversationId: string,
+    limit: number,
+  ): ConversationContext {
+    const conv = this.convs.find((c) => c.id === conversationId);
+    const boundary = conv?.compactedThroughMessageId ?? null;
+    return {
+      summary: conv?.summary ?? null,
+      messages: this.msgs
+        .filter(
+          (m) =>
+            m.conversationId === conversationId &&
+            (boundary === null || m.id > boundary),
+        )
+        .slice(-limit)
+        .map(toMessage),
+    };
+  }
+
+  compactConversation(
+    conversationId: string,
+    input: { throughMessageId: number; summary: string },
+  ): void {
+    const conv = this.convs.find((c) => c.id === conversationId);
+    if (!conv) return;
+    conv.compactedThroughMessageId = input.throughMessageId;
+    conv.summary = input.summary;
   }
 
   resetConversation(chatId: number, topicId: number): void {

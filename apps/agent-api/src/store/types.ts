@@ -53,6 +53,15 @@ export interface Topic extends TopicMeta {
   createdAt: string;
 }
 
+// A conversation as the model should see it: the compacted prefix as prose,
+// then the messages that survive the boundary.
+export interface ConversationContext {
+  // Summary of everything up to the compaction boundary, or null when the
+  // conversation has never been compacted.
+  summary: string | null;
+  messages: Message[];
+}
+
 // A conversation thread awaiting processing.
 export interface Thread {
   id: string;
@@ -151,6 +160,20 @@ export interface ConversationStore {
     options?: { kind?: MessageKind; stopReason?: string | null },
   ): number;
   getConversationHistory(conversationId: string, limit: number): Message[];
+  // What the model should see: the summary of the compacted prefix (null until
+  // this conversation has been compacted) plus up to `limit` of the newest
+  // messages after the boundary. The raw rows before the boundary stay in
+  // storage for learning; only the rendered context skips them.
+  getConversationContext(
+    conversationId: string,
+    limit: number,
+  ): ConversationContext;
+  // Move the compaction boundary and store the summary covering everything up
+  // to and including `throughMessageId`. Deletes nothing.
+  compactConversation(
+    conversationId: string,
+    input: { throughMessageId: number; summary: string },
+  ): void;
   resetConversation(chatId: number, topicId: number): void;
   // Queue a Telegram message for this conversation. It enters the transcript
   // only when a turn drains the queue, so a message arriving mid-run is never

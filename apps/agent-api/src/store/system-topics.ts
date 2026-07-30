@@ -12,6 +12,7 @@ import changelogMarkdown from "../../CHANGELOG.md";
 import { extractLinks } from "./links";
 import type {
   Attachment,
+  ConversationContext,
   ConversationStore,
   Message,
   MessageContent,
@@ -229,6 +230,20 @@ export class SystemTopicStore implements Store {
 
   getConversationHistory(conversationId: string, limit: number): Message[] {
     return this.inner.getConversationHistory(conversationId, limit);
+  }
+
+  getConversationContext(
+    conversationId: string,
+    limit: number,
+  ): ConversationContext {
+    return this.inner.getConversationContext(conversationId, limit);
+  }
+
+  compactConversation(
+    conversationId: string,
+    input: { throughMessageId: number; summary: string },
+  ): void {
+    this.inner.compactConversation(conversationId, input);
   }
 
   resetConversation(chatId: number, topicId: number): void {

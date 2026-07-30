@@ -11,14 +11,24 @@ import { log, logError, fmtErr } from "../log";
 import { isDurableObjectReset } from "../do/retry";
 import type { AgentLabel } from "./model";
 import type { AgentModel } from "./protocol";
-import { messageText } from "../store/messages";
+import {
+  applyContextBackstop,
+  applyStalenessFilter,
+  contentChars,
+  CONTEXT_BACKSTOP_MESSAGES,
+  estimateTokens,
+  messageText,
+} from "../store/messages";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { AttachmentStore } from "../attachments/types";
 
-const DEFAULT_HISTORY_LIMIT = 20;
+// No fixed history window any more: the conversation is rendered as
+// `summary + messages after the compaction boundary`. The message ceiling below
+// is the backstop that keeps context bounded until size-triggered compaction is
+// activated (Phase 3.4), not a window.
 
 export interface TurnInput {
   store: Store;
@@ -47,6 +57,8 @@ export interface TurnInput {
   attachments?: AttachmentStore;
   chatId: number;
   topicId: number;
+  // Test override for the backstop message ceiling; production uses
+  // CONTEXT_BACKSTOP_MESSAGES.
   historyLimit?: number;
   clerkUserId?: string;
   // The user's IANA timezone for the datetime anchor; undefined falls back to
@@ -69,7 +81,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   const { store, makeModel, send, search, fetcher, google, chatId, topicId } =
     input;
   const stopTyping = input.stopTyping ?? (() => {});
-  const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
+  const limit = input.historyLimit ?? CONTEXT_BACKSTOP_MESSAGES;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
   // Telegram messages wait in the durable queue until a turn takes them. One
@@ -77,18 +89,41 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   // transcript tail in arrival order, so a burst becomes one turn and a reset
   // can neither lose a message nor inject it twice.
   store.drainPendingMessages(conversationId);
-  const all = store.getConversationHistory(conversationId, limit);
+  // What the model sees: the summary of the compacted prefix plus the messages
+  // after the boundary, capped by the backstop, with topic reads taken at an
+  // older knowledge version replaced by a stub.
+  const context = store.getConversationContext(conversationId, limit);
+  const all = applyContextBackstop(context.messages);
   const last = all[all.length - 1];
   if (!last || last.kind !== "user_message") return;
 
   const userMessage = messageText(last.content);
-  const history = all.slice(0, -1);
+  const { messages: filtered, stubbed } = applyStalenessFilter(
+    all.slice(0, -1),
+    store.getKnowledgeVersion(),
+  );
+  const history = filtered;
 
   log("turn_started", {
     chat_id: chatId,
     topic_id: topicId,
     clerk_user_id: input.clerkUserId,
     history_len: history.length,
+  });
+
+  // The line the compaction threshold is derived from. `total_tokens` is an
+  // estimate from characters; the authoritative number is in the gateway logs,
+  // but this one is per conversation and available before the call.
+  const summaryChars = context.summary?.length ?? 0;
+  const messageChars =
+    all.reduce((sum, m) => sum + contentChars(m.content), 0) + summaryChars;
+  log("context_rendered", {
+    chat_id: chatId,
+    topic_id: topicId,
+    total_tokens: estimateTokens(messageChars),
+    summary_tokens: estimateTokens(summaryChars),
+    messages_after_boundary: all.length,
+    stale_stubs: stubbed,
   });
 
   const persistReply = (text: string) =>
@@ -109,6 +144,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
         ? (id) => store.getAttachment(id)
         : undefined,
       history,
+      summary: context.summary ?? undefined,
       userMessage,
       timezone: input.timezone,
       setTimezone: input.setTimezone,

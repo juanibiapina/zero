@@ -51,11 +51,16 @@ export const topicLinks = table("topic_links", {
 });
 
 // Conversations: one thread per Telegram (chatId, topicId).
+// `compactedThroughMessageId` and `summary` are the compaction boundary: the
+// model sees the summary plus the messages after the boundary, while the raw
+// rows stay in place for learning. Both NULL means nothing has been compacted.
 export const conversations = table("conversations", {
   id: column.text().notNull().primaryKey(),
   chatId: column.integer().notNull(),
   topicId: column.integer().notNull(),
   createdAt: column.text().notNull(),
+  compactedThroughMessageId: column.integer(),
+  summary: column.text(),
 });
 
 // Messages: the conversation's append-only protocol log. `content` is a JSON

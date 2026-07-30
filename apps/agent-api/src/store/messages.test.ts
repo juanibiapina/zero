@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyContextBackstop,
+  applyStalenessFilter,
   conversationHasWork,
   decodeContent,
   defaultKind,
   encodeContent,
   isTerminalStopReason,
   messageText,
+  STALE_TOPIC_STUB,
 } from "./messages";
+import type { Message, Role } from "./types";
 
 describe("content encoding", () => {
   it("round-trips a string as one text block", () => {
@@ -119,5 +123,90 @@ describe("conversationHasWork", () => {
         tail: { kind: "assistant_message", stopReason: "tool_use" },
       }),
     ).toBe(true);
+  });
+});
+
+const msg = (id: number, content: Message["content"], role: Role = "user"): Message => ({
+  id,
+  role,
+  kind: role === "assistant" ? "assistant_message" : "user_message",
+  content,
+  stopReason: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+});
+
+describe("context backstop", () => {
+  it("keeps everything under the ceiling", () => {
+    const messages = [msg(1, "a"), msg(2, "b")];
+    expect(applyContextBackstop(messages, 100)).toBe(messages);
+  });
+
+  it("drops the oldest messages until the context fits", () => {
+    const messages = [msg(1, "aaaa"), msg(2, "bbbb"), msg(3, "cc")];
+    expect(
+      applyContextBackstop(messages, 8).map((m) => messageText(m.content)),
+    ).toEqual(["bbbb", "cc"]);
+  });
+
+  it("never drops the newest message, however large it is", () => {
+    const messages = [msg(1, "aaaa"), msg(2, "b".repeat(100))];
+    expect(applyContextBackstop(messages, 10).map((m) => m.id)).toEqual([2]);
+  });
+});
+
+describe("staleness filter", () => {
+  const readCall = msg(
+    1,
+    [{ type: "tool_use", id: "tu_1", name: "get_topic", input: { name: "a" } }],
+    "assistant",
+  );
+  const readResult = (version: number) =>
+    msg(2, [
+      {
+        type: "tool_result",
+        tool_use_id: "tu_1",
+        content: JSON.stringify({ version, topic: { name: "a", body: "old" } }),
+      },
+    ]);
+
+  it("keeps a topic read taken at the current version", () => {
+    const input = [readCall, readResult(7)];
+    const { messages, stubbed } = applyStalenessFilter(input, 7);
+    expect(stubbed).toBe(0);
+    expect(messages).toEqual(input);
+  });
+
+  it("replaces a stale topic read with a stub, keeping the tool pair", () => {
+    const { messages, stubbed } = applyStalenessFilter(
+      [readCall, readResult(6)],
+      7,
+    );
+    expect(stubbed).toBe(1);
+    expect(messages[0]).toEqual(readCall);
+    expect(messages[1].content).toEqual([
+      { type: "tool_result", tool_use_id: "tu_1", content: STALE_TOPIC_STUB },
+    ]);
+  });
+
+  it("stubs a result that carries no version at all", () => {
+    const noVersion = msg(2, [
+      { type: "tool_result", tool_use_id: "tu_1", content: "topic a" },
+    ]);
+    const { stubbed } = applyStalenessFilter([readCall, noVersion], 7);
+    expect(stubbed).toBe(1);
+  });
+
+  it("leaves results of tools that are not topic reads alone", () => {
+    const call = msg(
+      1,
+      [{ type: "tool_use", id: "tu_2", name: "research", input: {} }],
+      "assistant",
+    );
+    const result = msg(2, [
+      { type: "tool_result", tool_use_id: "tu_2", content: "findings" },
+    ]);
+    const { messages, stubbed } = applyStalenessFilter([call, result], 7);
+    expect(stubbed).toBe(0);
+    expect(messages[1]).toEqual(result);
   });
 });
