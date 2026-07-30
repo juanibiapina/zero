@@ -115,6 +115,10 @@ migration and no per-user seeding.
    - `list_topics`, `get_topic`, `create_topic`, `update_topic`, `edit_topic`,
      `append_topic`, `list_backlinks` — read/write the knowledge model and its
      `[[Name]]` link graph. Every topic touched is added to an `accessed` set.
+   - `read_page(url)` — open a web address and return its cleaned markdown.
+     Registered here as well as on the research agent, so a link the user hands
+     over is read directly instead of spawning a research run. Full URLs and
+     shorthand (`thing.com/path`) both work; the adapter normalizes them.
    - `delete_topic` — permanently remove a topic. Interface-agent only (not in
      the shared `buildTopicTools`, so the writer/research agents cannot delete),
      and the prompt gates it on explicit user confirmation. Deleting a topic

@@ -236,7 +236,7 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): AgentToolSet => {
 
     reply: defineTool({
       description:
-        "Send a message to the user, shown immediately. Call once per message you want the user to see; text not sent via reply is never shown.",
+        "Send a message to the user, shown immediately. Call once per message you want the user to see.",
       inputSchema: z.object({ text: z.string() }),
       execute: async ({ text }) => {
         // Persist before send (idempotency across DO eviction; see file header

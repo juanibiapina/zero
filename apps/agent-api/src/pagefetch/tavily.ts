@@ -2,6 +2,10 @@
 // endpoint for a single URL and normalizes the cleaned markdown to PageContent.
 // Uses the global Workers fetch. See docs/research.md.
 //
+// Addresses are normalized first (see normalizeWebAddress), so shorthand like
+// `thing.com/path` reaches Tavily as a full HTTPS URL and non-HTTP(S) schemes
+// or embedded credentials never leave the Worker.
+//
 // Depth is `basic` (cheaper, enough to read article text) and `query` is
 // omitted so the full page comes back rather than query-reranked chunks. The
 // returned content is hard-capped so a pathological page can't blow the turn's
@@ -35,6 +39,44 @@ export interface TavilyFetcherOptions {
 const realSleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
 
+// Errors never echo the submitted address: it reaches logs and prompts, and a
+// user-supplied string is not something to reflect back.
+const INVALID_ADDRESS = "page fetch failed: invalid web address";
+
+const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+
+// Accept both complete URLs ("https://thing.com/path") and the shorthand people
+// actually type ("thing.com/path", "//thing.com/path"). Syntax and protocol
+// validation only: Tavily still owns remote-fetch policy.
+export const normalizeWebAddress = (address: string): string => {
+  const trimmed = address.trim();
+  if (!trimmed) throw new Error(INVALID_ADDRESS);
+
+  let candidate: string;
+  if (trimmed.startsWith("//")) {
+    candidate = `https:${trimmed}`;
+  } else if (/^https?:\/\//i.test(trimmed)) {
+    candidate = trimmed;
+  } else if (SCHEME.test(trimmed) && trimmed.slice(trimmed.indexOf(":") + 1).startsWith("//")) {
+    // Some other scheme (ftp://, file://): rejected outright.
+    throw new Error(INVALID_ADDRESS);
+  } else {
+    candidate = `https://${trimmed}`;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    throw new Error(INVALID_ADDRESS);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(INVALID_ADDRESS);
+  }
+  if (url.username || url.password) throw new Error(INVALID_ADDRESS);
+  return url.toString();
+};
+
 // Matches the truncateBody convention in prompts.ts so truncated pages read the
 // same everywhere.
 const truncate = (text: string, cap: number): string =>
@@ -50,12 +92,14 @@ export const createTavilyFetcher = (
   const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
 
   return {
-    async fetch(url: string): Promise<PageContent> {
+    async fetch(address: string): Promise<PageContent> {
       if (!apiKey) {
         throw new Error(
           "page fetch unavailable: TAVILY_API_KEY not configured",
         );
       }
+
+      const url = normalizeWebAddress(address);
 
       for (let attempt = 0; ; attempt++) {
         const res = await fetch(ENDPOINT, {
@@ -75,7 +119,7 @@ export const createTavilyFetcher = (
           const data: TavilyPayload = await res.json();
           const raw = data.results?.[0]?.raw_content;
           if (typeof raw !== "string" || raw.length === 0) {
-            throw new Error(`page fetch failed: no content for ${url}`);
+            throw new Error("page fetch failed: no content returned");
           }
           return { url, content: truncate(raw, maxContentChars) };
         }

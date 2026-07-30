@@ -5,6 +5,10 @@ agent (research-prompted, with read-only topic tools + a `web_search` tool),
 runs its own tool loop, and returns a short sourced findings report as the tool
 result.
 
+Research is for wider investigation across sources. When the user simply hands
+over a web address, the interface agent opens it with its own `read_page` tool
+instead of spawning research.
+
 The research agent **gathers and reports**: it reads related topics for context,
 investigates with web search, and returns a compact sourced report as its final
 message. It has **no write tools** — the writer agent that runs after every turn
@@ -73,7 +77,8 @@ The interface agent, the research agent, and the writer agent are the same
 runner with different system prompts and toolsets:
 
 - **Interface agent** (`agents/interface.ts`): tools are the topic tools +
-  `reply` + `research`. Its output is the `{ replies, accessed }` collected by
+  `reply` + `research` + `read_page`. `read_page` is registered here too, so a
+  web address the user hands over is opened directly, with no research run. Its output is the `{ replies, accessed }` collected by
   the tool closures; the runner's `text` and `finishReason` are used only to
   decide the no-silence fallback (deliver prose the model forgot to `reply`, or
   send a generic fallback when the loop hit the cap without a final answer).
@@ -103,8 +108,11 @@ The research tool logs `research_started` (`prompt_len`, `has_topic`) and
 `research_completed` (`steps`, `finish_reason`, `duration_ms`, `report_len`,
 `accessed` — the topics it read, plus token/cache counts); the `web_search` tool
 logs `web_search_failed` (`error`) where search errors are otherwise swallowed
-into the tool result; the `read_page` tool logs `read_page_failed` (`error`) the
-same way. No message content is logged (see `log.ts` conventions).
+into the tool result; the `read_page` tool logs `read_page_completed`
+(`caller`, `duration_ms`, `content_len`) and `read_page_failed` (`caller`,
+`duration_ms`, `error`) the same way. `caller` is `interface` or `research`, so
+direct reads and research reads are distinguishable; the address itself is never
+logged. No message content is logged (see `log.ts` conventions).
 
 ## Web search port
 
@@ -130,11 +138,16 @@ same way. No message content is logged (see `log.ts` conventions).
 
 `apps/agent-api/src/pagefetch/types.ts` defines the `PageFetcher` port and a
 normalized `PageContent` (`{ url, content }`, cleaned markdown). Search stays
-snippet-only on Brave; depth is a separate, on-demand `read_page` tool the
-research agent calls for results it judges important. Adapters:
+snippet-only on Brave; depth is a separate, on-demand `read_page` tool. The
+interface agent calls it on an address the user gives; the research agent calls
+it for search results it judges important. Adapters:
 
-- `tavily.ts` — `createTavilyFetcher(apiKey, options?)`, production. `POST`s a
-  single URL to Tavily's Extract endpoint (`Authorization: Bearer
+- `tavily.ts` — `createTavilyFetcher(apiKey, options?)`, production. Normalizes
+  the address first (`normalizeWebAddress`): trims it, adds `https://` to
+  shorthand like `thing.com/path` and `https:` to `//thing.com/path`, and
+  rejects any other scheme or embedded credentials before any HTTP call. Errors
+  are generic and never echo the submitted address, which reaches logs. Then
+  `POST`s the normalized URL to Tavily's Extract endpoint (`Authorization: Bearer
   TAVILY_API_KEY`) with `extract_depth: "basic"` and `format: "markdown"`,
   normalizes `results[0].raw_content`, and hard-caps the returned content
   (`maxContentChars`, default 8000) with a `…[truncated]` marker so one

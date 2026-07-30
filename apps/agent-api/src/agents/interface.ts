@@ -5,6 +5,7 @@
 import type { AgentMessage, AgentModel, ToolResultBlock } from "./protocol";
 import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
+import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
 import { buildGoogleTools } from "../tools/google";
 import { buildAttachmentTool } from "../tools/attachments";
@@ -85,8 +86,9 @@ export interface InterfaceAgentInput {
   history: Message[];
   userMessage: string;
   search: WebSearch;
-  // Page-fetch port for the research agent's read_page tool. Threaded exactly
-  // like `search`; tests inject the memory adapter.
+  // Page-fetch port for the read_page tool, registered on this agent and on the
+  // nested research agent. Threaded exactly like `search`; tests inject the
+  // memory adapter.
   fetcher: PageFetcher;
   // Gmail + Calendar access. Threaded exactly like `search`; tests inject the
   // memory adapter.
@@ -302,6 +304,10 @@ export const runInterfaceAgent = async (
       fetcher: input.fetcher,
       accessed,
     }),
+    // Registered unconditionally (like the attachment tool) so the tool schema
+    // stays byte-identical across users and turns. Lets the interface open a
+    // link the user handed over without spawning a research run.
+    ...buildReadPageTool({ fetcher: input.fetcher, caller: "interface" }),
     ...buildTimezoneTool({ setTimezone: input.setTimezone }),
     ...buildGoogleTools({
       google: input.google,

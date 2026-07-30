@@ -34,8 +34,8 @@ export interface TurnInput {
   // span it. Idempotent; optional so direct callers and tests can omit it.
   stopTyping?: () => void;
   search: WebSearch;
-  // Page-fetch port for the research agent's read_page tool (threaded like
-  // `search`).
+  // Page-fetch port for the read_page tool on the interface and research agents
+  // (threaded like `search`).
   fetcher: PageFetcher;
   // Gmail + Calendar access, built by the DO and forwarded to the interface
   // agent (threaded like `search`).

@@ -11,6 +11,7 @@ import {
   interfaceContext,
   interfaceSystemPrompt,
   renderPinnedTopics,
+  researchSystemPrompt,
 } from "./prompts";
 import { capturingModel, scriptedModel } from "./mock-model";
 import type { AgentMessage, TextBlock } from "./protocol";
@@ -213,6 +214,39 @@ describe("interfaceSystemPrompt", () => {
     const withPinned = interfaceSystemPrompt("\n\n## Pinned topics\n\nbody");
     expect(withPinned).toContain("Pinned topics");
     expect(withPinned.endsWith("body")).toBe(true);
+  });
+
+  it("routes a given web address to read_page and wider questions to research", () => {
+    const prompt = interfaceSystemPrompt();
+    expect(prompt).toContain("read_page");
+    expect(prompt).toContain("research");
+  });
+
+  it("describes research as read-only context gathering that returns findings", () => {
+    const prompt = interfaceSystemPrompt();
+    expect(prompt).toContain("Research reads topics");
+    expect(prompt).toContain("another agent saves them");
+    expect(prompt).not.toContain("reads and writes topics");
+  });
+});
+
+describe("researchSystemPrompt", () => {
+  it("requires an inline source URL after each claim, never a list at the end", () => {
+    const prompt = researchSystemPrompt();
+    expect(prompt).toContain("Source: <url>");
+    expect(prompt).toContain("Never collect sources into a list at the end");
+  });
+
+  it("preserves every item of a sourced enumeration", () => {
+    expect(researchSystemPrompt()).toContain(
+      "rather than dropping any item or its source",
+    );
+  });
+
+  it("states that it writes no topics and reports back instead", () => {
+    const prompt = researchSystemPrompt();
+    expect(prompt).toContain("Another agent persists it afterward");
+    expect(prompt).toContain("Read the relevant topics for context");
   });
 });
 
@@ -654,6 +688,64 @@ describe("runInterfaceAgent", () => {
     );
     // The topic research read still reaches the writer via accessed.
     expect(result.accessed).toContain("Mars");
+  });
+
+  it("reads a page directly and answers from it, without research", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "reply", input: { text: "Let me look." } }] },
+      { tools: [{ name: "read_page", input: { url: "thing.com/post" } }] },
+      { text: "The post announces a new release." },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher({
+        "thing.com/post": "# Release\n\nWe shipped a new version.",
+      }),
+      history: [],
+      userMessage: "check thing.com/post",
+    });
+
+    expect(result.replies).toEqual([
+      "Let me look.",
+      "The post announces a new release.",
+    ]);
+    expect(result.transcript).toContain("Tool call read_page");
+    expect(result.transcript).toContain("We shipped a new version.");
+    expect(result.transcript).not.toContain("research");
+  });
+
+  it("answers clearly after a failed direct read", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const model = scriptedModel([
+      { tools: [{ name: "read_page", input: { url: "ftp://thing.com" } }] },
+      { text: "I couldn't open that address." },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      fetcher: {
+        fetch: async () => {
+          throw new Error("page fetch failed: invalid web address");
+        },
+      },
+      history: [],
+      userMessage: "read ftp://thing.com",
+    });
+
+    expect(result.replies).toEqual(["I couldn't open that address."]);
+    expect(result.transcript).toContain("page fetch failed: invalid web address");
   });
 
   it("routes set_timezone through to the setter", async () => {

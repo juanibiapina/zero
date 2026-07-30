@@ -34,12 +34,12 @@ describe("createTavilyFetcher", () => {
       "Content-Type": "application/json",
     });
     expect(JSON.parse(init?.body as string)).toEqual({
-      urls: "https://example.com",
+      urls: "https://example.com/",
       extract_depth: "basic",
       format: "markdown",
     });
     expect(result).toEqual({
-      url: "https://example.com",
+      url: "https://example.com/",
       content: "# Title\n\nBody text.",
     });
   });
@@ -127,6 +127,17 @@ describe("createTavilyFetcher", () => {
     expect(result.content).toBe("# Title\n\nBody text.");
   });
 
+  it("does not echo the address in the empty-result error", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ results: [] }), { status: 200 }),
+    );
+
+    const fetcher = createTavilyFetcher("k");
+    await expect(
+      fetcher.fetch("https://secret.example.com/private"),
+    ).rejects.toThrow(/^page fetch failed: no content returned$/);
+  });
+
   it("retries a 5xx then throws when retries are exhausted", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -138,5 +149,63 @@ describe("createTavilyFetcher", () => {
     await expect(fetcher.fetch("https://example.com")).rejects.toThrow(/503/);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("web address normalization", () => {
+  const sentUrl = async (address: string): Promise<string> => {
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse());
+    globalThis.fetch = fetchMock;
+    const result = await createTavilyFetcher("k").fetch(address);
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as {
+      urls: string;
+    };
+    expect(result.url).toBe(body.urls);
+    return body.urls;
+  };
+
+  const rejected = async (address: string): Promise<void> => {
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse());
+    globalThis.fetch = fetchMock;
+    await expect(createTavilyFetcher("k").fetch(address)).rejects.toThrow(
+      /^page fetch failed: invalid web address$/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  };
+
+  it("keeps a full https url", async () => {
+    expect(await sentUrl("https://thing.com/path")).toBe("https://thing.com/path");
+  });
+
+  it("keeps a full http url", async () => {
+    expect(await sentUrl("http://thing.com")).toBe("http://thing.com/");
+  });
+
+  it("adds https to a bare host", async () => {
+    expect(await sentUrl("thing.com")).toBe("https://thing.com/");
+  });
+
+  it("adds https to a host with a path and keeps the path", async () => {
+    expect(await sentUrl(" thing.com/path ")).toBe("https://thing.com/path");
+  });
+
+  it("adds https to a protocol-relative address", async () => {
+    expect(await sentUrl("//thing.com/path")).toBe("https://thing.com/path");
+  });
+
+  it("rejects an unsupported scheme without fetching", async () => {
+    await rejected("ftp://thing.com");
+  });
+
+  it("rejects embedded credentials without fetching", async () => {
+    await rejected("user@thing.com");
+    await rejected("https://user:pass@thing.com/path");
+  });
+
+  it("does not echo the address in the validation error", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => okResponse());
+    await expect(
+      createTavilyFetcher("k").fetch("ftp://secret.example.com/private"),
+    ).rejects.toThrow(/^page fetch failed: invalid web address$/);
   });
 });

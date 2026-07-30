@@ -51,14 +51,14 @@ export const buildResearchTool = (deps: ResearchToolDeps): AgentToolSet => {
   return {
     research: defineTool({
       description:
-        "Research a subject using web search and report back a short sourced " +
-        "summary. Use proactively whenever the user mentions a researchable " +
-        "subject (a company, product, technology, person, place, or event) or " +
-        "makes a claim worth checking — not only for explicit questions. It " +
+        "Investigate a subject with web search across several sources and " +
+        "report back sourced findings. Use it when a question needs wider " +
+        "external investigation than reading one known page, or when the user " +
+        "mentions a researchable subject or makes a claim worth checking. It " +
         "reads existing topics for context, so if the subject already has a " +
         "topic, pass its name as `topic`. Adds latency, so acknowledge the user " +
         "with reply first. Returns a sourced findings report; another agent " +
-        "saves it into a topic afterward.",
+        "saves it into topics afterward.",
       inputSchema: z.object({
         prompt: z.string(),
         topic: z.string().optional(),
@@ -81,7 +81,7 @@ export const buildResearchTool = (deps: ResearchToolDeps): AgentToolSet => {
           list_topics,
           get_topic,
           ...buildWebSearchTool({ search }),
-          ...buildReadPageTool({ fetcher }),
+          ...buildReadPageTool({ fetcher, caller: "research" }),
         };
 
         const agentPrompt = topic

@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-30: Give Zero a web link and it can open and read the page directly, without starting a broader web search.
 - 2026-07-29: Follow-up messages get answered right away instead of waiting minutes while Zero files away what it learned, and your topics keep growing without replies getting slower.
 - 2026-07-28: If Zero is interrupted while answering (for example during an update), it now quietly finishes your answer instead of sending a spurious "couldn't finish that one" message.
 - 2026-07-27: Zero now keeps the full sourced list from a research answer when it saves it, so long lists and their source links no longer get cut off in your topics.
