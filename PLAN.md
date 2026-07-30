@@ -24,7 +24,8 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | Phase 1.3-1.4, 2, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
-(492 tests). Nothing is deployed, so none of the Phase 0 log lines have produced
+(537 tests). The branch is pushed to `origin` but not merged; a branch push only
+uploads a Worker version, so nothing is deployed, so none of the Phase 0 log lines have produced
 production data yet; the acceptance criteria that read them are still open.
 
 ### What Phase 0 actually shipped, for a fresh reader
