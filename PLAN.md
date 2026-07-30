@@ -29,10 +29,11 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 2.3 touch the idle deadline per message | done | `feat(agent): push a conversation's idle learning deadline on every message` |
 | 2.4 size trigger | done | `feat(agent): ask for learning when a conversation's context grows too large` |
 | 3.1 learning port on UserDO | done | `feat(agent): give learning a versioned port into the user's data` |
-| Phase 3.2-3.4 | not started | — |
+| 3.2-3.3 learner slices, checkpoints, compaction | done | `feat(agent): run learning as checkpointed slices in its own durable object` |
+| Phase 3.4 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
-(587 tests). The branch is pushed to `origin` but not merged; a branch push only
+(598 tests). The branch is pushed to `origin` but not merged; a branch push only
 uploads a Worker version, so nothing is deployed, so none of the Phase 0 log lines have produced
 production data yet; the acceptance criteria that read them are still open.
 
@@ -184,15 +185,13 @@ production data yet; the acceptance criteria that read them are still open.
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 587 passing
+pnpm --filter @zero/agent-api run test    # 598 passing
 ```
 
-Next action is **Phase 3.2**: LearningDO's checkpoint machine — job state and
-the learner's wire log in LearningDO SQLite, a bounded number of model steps per
-alarm slice, persist before every external mutation, re-arm while unfinished, no
-`ctx.waitUntil`. Phases 0-2 and 3.1 are shipped apart from 0.5b; do not rebuild
-the loop hooks, the resume path, the delivery claims, the external-call guard,
-the diagnostic chain, the DO classes, the triggers or the learning port.
+Next action is **Phase 3.4**, the activation commit: delete the per-turn writer
+call and the `writer.ts` module with its `renderTranscript` handoff and
+truncation constants, and remove the Phase 1.2 context backstop now that size
+compaction is live. Everything else in the plan is shipped apart from 0.5b.
 
 Note before Phase 2: Phase 1's acceptance criteria are log-based and nothing is
 deployed yet. `topic_reads_avoided`, `stale_stubs`, `followups_injected`,
@@ -908,7 +907,7 @@ folding them back.
 Both new alarm handlers need start and completion markers. The markers added on
 2026-07-29 live in `runAlarmTurns` and cover neither class.
 
-## Phase 3 — Durable learning (3.1 done)
+## Phase 3 — Durable learning (3.1-3.3 done)
 
 **3.1 DONE.** Migration `0028` adds `learning_jobs`; the Store gained
 `beginLearningJob` (frozen high-water mark, stable on re-attach),
@@ -928,7 +927,21 @@ contains data and invariants, not do-orm types. It uses the same
 `knowledgeVersion` contract as the interactive tools; LearningDO gets no
 unchecked write interface.
 
-**3.2** Implement LearningDO's checkpoint machine described under “Durable
+**3.2-3.3 DONE.** `agents/learner.ts` holds the DO-free half: `renderLearningLog`
+(raw messages grouped per conversation, tool results kept but capped),
+`runLearnerSlice` (the shared `runAgent` over the port's topic tools, bounded by
+`LEARN_STEPS_PER_SLICE` = 12, returning `finished` from the finish reason) and
+`summarizeConversation` (one tool-free call). `LearningDO` drives them: freeze the
+mark, page up to `MAX_JOB_MESSAGES` (400), append each response and each result to
+a per-key wire log (`do/learning-log.ts`, one message per key because a DO storage
+value is capped at 128 KiB), re-arm while unfinished, compact on a `size` job, then
+`completeJob` and promote any successor. Prompts: `learnerSystemPrompt` shares one
+`KNOWLEDGE_MAINTAINER_RULES` body with the writer, and `compactionSystemPrompt`
+forbids copying topic knowledge into an unversioned summary. Not yet activated:
+ScheduleDO dispatch reaches `LearningDO.request`, but the per-turn writer still
+runs (3.4). The original text:
+
+Implement LearningDO's checkpoint machine described under “Durable
 learning protocol”. Store job state and the learner's append-only wire log in
 LearningDO SQLite. Each alarm invocation runs a configured small number of model
 steps, persists before every external mutation, and re-arms when unfinished.
@@ -940,7 +953,11 @@ unfinished slice gets an explicit new alarm. Coalesced requests run after the
 active frozen range, so messages are never silently added to a job whose prompt
 was already built.
 
-**3.3** Complete and test the end-to-end learner path while production learning
+**3.3 DONE** (same commit as 3.2; covered by `agents/learner.test.ts`, including a
+slice cut off by its bound and a kill after an applied write, which conflicts
+instead of appending twice). The original text:
+
+Complete and test the end-to-end learner path while production learning
 triggers remain disabled. The learner consolidates raw unconsolidated messages
 up to its frozen high-water mark. On a size reason it also compacts the named
 conversation up to a frozen boundary. A clean idempotent completion stamps the

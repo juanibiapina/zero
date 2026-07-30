@@ -357,6 +357,17 @@ export class UserDO extends DurableObject<Env> {
     this.store.completeLearningJob(jobId);
   }
 
+  learnGetContext(
+    conversationId: string,
+    limit: number,
+  ): { summary: string | null; messages: LearningMessage[] } {
+    const context = this.store.getConversationContext(conversationId, limit);
+    return {
+      summary: context.summary,
+      messages: context.messages.map((m) => ({ ...m, conversationId })),
+    };
+  }
+
   learnCompactConversation(
     conversationId: string,
     input: { throughMessageId: number; summary: string },

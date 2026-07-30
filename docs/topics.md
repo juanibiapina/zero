@@ -233,9 +233,42 @@ Learning is asked for in two ways, and both are events rather than polls:
 
 Both requests are best-effort from the turn's point of view: a schedule that
 cannot be reached is logged and ignored, never allowed to fail a message or a
-reply. LearningDO's executor is not enabled yet (Phase 3), so today a request is
-recorded, coalesced and logged as `learn_skipped`, while the per-turn writer
-still does the consolidating.
+reply.
+
+## How a learning job runs
+
+A job is one active run per user with at most one successor queued behind it. A
+request that arrives while a job is running is coalesced into that successor,
+because the active job froze its input range when it started: messages that
+arrive later belong to the next job, never to a prompt that was already built.
+
+At the first slice the job asks UserDO for a high-water message id and pages the
+unconsolidated messages up to it. That id is frozen and idempotent by job id, so
+a restart never widens the range. Then, per alarm:
+
+- a bounded number of model steps run (`LEARN_STEPS_PER_SLICE`);
+- each response is appended to the learner's durable wire log before its tools
+  run, and the tool results before the next model call;
+- an unfinished slice arms an immediate alarm and returns normally;
+- an unexpected failure is left uncaught, so Cloudflare's at-least-once alarm
+  retry runs.
+
+The bound is not belt-and-braces: a DO alarm invocation is killed at 900s wall
+time with no exception and no log, so a job that cannot make progress in slices
+would simply vanish. A slice that dies mid-flight replays its last response, and
+a topic write that had already been applied conflicts on its expected version
+instead of appending twice — which is why the version contract, not an operation
+marker, is what makes learning safe to retry.
+
+When the learner stops cleanly, a `size` job also compacts the named
+conversation, then UserDO stamps the covered messages consolidated (idempotent by
+job id, and it does not touch the knowledge version — the topic writes already
+did). Only then is a queued successor started.
+
+Compaction summarizes the conversation up to a boundary, keeping the newest
+exchanges raw. The summary must never carry topic knowledge: it is unversioned,
+so anything copied into it could never be detected as stale. The prompt says to
+name topics as `[[Topic Name]]` and reread them instead.
 
 ## Knowledge versions
 

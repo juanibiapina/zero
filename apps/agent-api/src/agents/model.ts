@@ -37,6 +37,8 @@ export type AgentLabel =
   | "interface"
   | "research"
   | "writer"
+  | "learner"
+  | "compaction"
   | "onboarding"
   | "admin_task";
 

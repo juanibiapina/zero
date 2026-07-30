@@ -27,6 +27,13 @@ const rpcOver = (store: MemoryStore): LearningRpc => {
     learnBeginJob: (jobId) => store.beginLearningJob(jobId),
     learnListMessages: (input) => store.listUnconsolidatedMessages(input),
     learnCompleteJob: (jobId) => store.completeLearningJob(jobId),
+    learnGetContext: (conversationId, limit) => {
+      const context = store.getConversationContext(conversationId, limit);
+      return {
+        summary: context.summary,
+        messages: context.messages.map((m) => ({ ...m, conversationId })),
+      };
+    },
     learnCompactConversation: (conversationId, input) =>
       store.compactConversation(conversationId, input),
     learnKnowledgeVersion: () => store.getKnowledgeVersion(),
@@ -130,9 +137,10 @@ describe.each(adapters)("learning port (%s)", (_name, build) => {
       summary: "they said one",
     });
 
-    const context = store.getConversationContext(conv, 10);
+    const context = await port.getContext(conv, 10);
     expect(context.summary).toBe("they said one");
     expect(context.messages).toHaveLength(1);
+    expect(context.messages[0].conversationId).toBe(conv);
     // The raw rows are still there: learning reads them, rendering skips them.
     const high = await port.beginJob("job_1");
     expect(

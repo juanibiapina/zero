@@ -23,6 +23,12 @@ export interface LearningRpc {
     limit: number;
   }): Promise<LearningMessage[]> | LearningMessage[];
   learnCompleteJob(jobId: string): Promise<void> | void;
+  learnGetContext(
+    conversationId: string,
+    limit: number,
+  ):
+    | Promise<{ summary: string | null; messages: LearningMessage[] }>
+    | { summary: string | null; messages: LearningMessage[] };
   learnCompactConversation(
     conversationId: string,
     input: { throughMessageId: number; summary: string },
@@ -88,6 +94,8 @@ export const createRemoteLearningPort = (rpc: LearningRpc): LearningPort => {
     beginJob: async (jobId) => rpc.learnBeginJob(jobId),
     listMessages: async (input) => rpc.learnListMessages(input),
     completeJob: async (jobId) => void (await rpc.learnCompleteJob(jobId)),
+    getContext: async (conversationId, limit) =>
+      rpc.learnGetContext(conversationId, limit),
     compactConversation: async (conversationId, input) =>
       void (await rpc.learnCompactConversation(conversationId, input)),
   };

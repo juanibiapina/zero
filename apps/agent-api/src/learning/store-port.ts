@@ -16,6 +16,16 @@ export const createStoreLearningPort = (store: Store): LearningPort => ({
   }): Promise<LearningMessage[]> => store.listUnconsolidatedMessages(input),
   completeJob: async (jobId: string): Promise<void> =>
     store.completeLearningJob(jobId),
+  getContext: async (
+    conversationId: string,
+    limit: number,
+  ): Promise<{ summary: string | null; messages: LearningMessage[] }> => {
+    const context = store.getConversationContext(conversationId, limit);
+    return {
+      summary: context.summary,
+      messages: context.messages.map((m) => ({ ...m, conversationId })),
+    };
+  },
   compactConversation: async (
     conversationId: string,
     input: { throughMessageId: number; summary: string },

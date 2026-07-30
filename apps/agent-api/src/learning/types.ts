@@ -30,6 +30,12 @@ export interface LearningPort {
   // Stamp the job's range consolidated. Idempotent by job id, and it never
   // changes the knowledge version: the topic writes already did that.
   completeJob(jobId: string): Promise<void>;
+  // One conversation as the model currently sees it, which is what compaction
+  // summarizes: the previous summary plus the messages after the boundary.
+  getContext(
+    conversationId: string,
+    limit: number,
+  ): Promise<{ summary: string | null; messages: LearningMessage[] }>;
   // Move one conversation's compaction boundary and store its summary. Deletes
   // nothing: the raw log is what learning reads.
   compactConversation(
