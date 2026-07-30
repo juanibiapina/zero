@@ -345,6 +345,11 @@ export const runInterfaceAgent = async (
 
   log("topic_reads_per_turn", { count: reads.count });
 
+  // Message boundaries moved when the reply tool went away: they are now the
+  // model's own text blocks. This is how that shift is observed in production
+  // rather than inferred from transcripts.
+  log("turn_messages_sent", { count: replies.length });
+
   // Per-step token line for multi-step turns: exposes the tier-1 write-then-read
   // pattern (step 1 writes the prefix, later steps read it) that the aggregate
   // hides. See docs/caching.md.
