@@ -11,3 +11,8 @@ export default {
 };
 
 export { UserDO } from "./UserDO/index";
+// One instance of each per user, all three keyed by the Clerk user id. ScheduleDO
+// owns deadlines, LearningDO owns durable learning execution, UserDO owns user
+// data and interactive turns (see docs/topics.md).
+export { ScheduleDO } from "./ScheduleDO/index";
+export { LearningDO } from "./LearningDO/index";

@@ -77,6 +77,14 @@
       {
         "name": "USER_DO",
         "class_name": "UserDO"
+      },
+      {
+        "name": "SCHEDULE_DO",
+        "class_name": "ScheduleDO"
+      },
+      {
+        "name": "LEARNING_DO",
+        "class_name": "LearningDO"
       }
     ]
   },
@@ -104,6 +112,10 @@
     {
       "tag": "v6",
       "deleted_classes": ["AgentContainer"]
+    },
+    {
+      "tag": "v7",
+      "new_sqlite_classes": ["ScheduleDO", "LearningDO"]
     }
   ]
 }
