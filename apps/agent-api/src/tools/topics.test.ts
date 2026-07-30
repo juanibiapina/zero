@@ -6,13 +6,7 @@ import type { TopicStore } from "../store/types";
 import { seedTopic, setBody } from "../store/test-support";
 
 const makeInterfaceTools = (store: TopicStore) =>
-  buildInterfaceTools({
-    store,
-    send: async () => {},
-    persistReply: () => {},
-    accessed: new Set<string>(),
-    replies: [],
-  });
+  buildInterfaceTools({ store, accessed: new Set<string>() });
 
 const call = <T = unknown>(
   tool: { execute: (a: never) => Promise<unknown> },

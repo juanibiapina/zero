@@ -12,7 +12,10 @@ import type {
 } from "./protocol";
 
 export type ScriptStep =
-  | { tools: Array<{ name: string; input: unknown }> }
+  // A step that calls tools, optionally saying something first (the model's own
+  // text blocks are what the user sees, so a mid-run message is expressed here
+  // rather than through a tool).
+  | { tools: Array<{ name: string; input: unknown }>; text?: string }
   | { text: string };
 
 let callCounter = 0;
@@ -33,7 +36,7 @@ const toResponse = (step: ScriptStep, index: number): AgentModelResponse => {
     usage: MOCK_USAGE,
     diagnostic: { state: "initial" as const },
   };
-  if ("text" in step) {
+  if (!("tools" in step)) {
     return {
       ...base,
       content: [{ type: "text", text: step.text }],
@@ -42,14 +45,18 @@ const toResponse = (step: ScriptStep, index: number): AgentModelResponse => {
   }
   return {
     ...base,
-    content: step.tools.map(
+    content: [
+      ...(step.text !== undefined
+        ? [{ type: "text" as const, text: step.text }]
+        : []),
+      ...step.tools.map(
       (t): ContentBlock => ({
         type: "tool_use",
         id: `call-${callCounter++}`,
         name: t.name,
         input: t.input,
-      }),
-    ),
+      })),
+    ],
     stopReason: "tool_use",
   };
 };

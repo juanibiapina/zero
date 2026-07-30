@@ -46,7 +46,7 @@ describe("runTurn", () => {
     expect(sink.sent).toEqual([]);
   });
 
-  it("runs the interface agent, persists replies, and clears busy", async () => {
+  it("runs the interface agent and persists what it sent", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "hi");
@@ -55,8 +55,7 @@ describe("runTurn", () => {
     await runTurn({
       store,
       makeModel: constModel(scriptedModel([
-        { tools: [{ name: "reply", input: { text: "hello there" } }] },
-        { text: "" },
+        { text: "hello there" },
         // writer runs every turn; trivial exchange → no tool call.
         { text: "nothing to consolidate" },
       ])),
@@ -90,8 +89,7 @@ describe("runTurn", () => {
       runTurn({
         store,
         makeModel: constModel(scriptedModel([
-          { tools: [{ name: "reply", input: { text: "hello there" } }] },
-          { text: "" },
+          { text: "hello there" },
           // writer runs every turn; trivial exchange → no tool call.
           { text: "nothing to consolidate" },
         ])),
@@ -131,8 +129,7 @@ describe("runTurn", () => {
     const makeModel = (agent: string) => {
       if (agent === "writer") events.push("writer");
       return scriptedModel([
-        { tools: [{ name: "reply", input: { text: "hello there" } }] },
-        { text: "" },
+        { text: "hello there" },
         { text: "nothing to consolidate" },
       ]);
     };
@@ -203,8 +200,7 @@ describe("runTurn", () => {
       makeModel: constModel(scriptedModel([
         // interface: read topic, then reply
         { tools: [{ name: "get_topic", input: { name: "travel" } }] },
-        { tools: [{ name: "reply", input: { text: "Have fun!" } }] },
-        { text: "" },
+        { text: "Have fun!" },
         // writer: read then revise the topic
         { tools: [{ name: "get_topic", input: { name: "travel" } }] },
         {
@@ -252,7 +248,7 @@ describe("runTurn", () => {
       runTurn({
         store,
         makeModel: constModel(scriptedModel([
-          { tools: [{ name: "reply", input: { text: "undelivered" } }] },
+          { text: "undelivered" },
           { text: "done" },
         ])),
         send,
@@ -455,8 +451,7 @@ describe("runTurn", () => {
 
     const requested: string[] = [];
     const shared = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "hi back" } }] },
-      { text: "" },
+      { text: "hi back" },
       { text: "nothing to consolidate" },
     ]);
     const makeModel = (agent: string) => {
@@ -543,8 +538,7 @@ describe("runTurn phase markers", () => {
       store,
       makeModel: () =>
         scriptedModel([
-          { tools: [{ name: "reply", input: { text: "hello there" } }] },
-          { text: "" },
+          { text: "hello there" },
           { text: "nothing to consolidate" },
         ]),
       send: sink.send,

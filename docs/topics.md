@@ -103,18 +103,14 @@ migration and no per-user seeding.
    assistant messages are dropped, and consecutive same-role turns are coalesced.
    Instructions, the datetime anchor, and pinned topics stay in the system
    prompt; only the dialogue is in the messages array. Tools (`tools/topics.ts`):
-   - `reply(text)` — send a message to the user immediately. The agent is
-     prompted to acknowledge first, then answer, so the user sees live progress.
-     As a safety net, on a clean finish the model's final message is always
-     delivered (unless empty, or an exact echo of the reply just sent). The
-     model routinely puts the substantive answer in its final text rather than a
-     `reply()` call — notably after a `research` tool call that followed an
-     acknowledgement reply — so suppressing that text whenever any earlier reply
-     (even a bare "Searching now..." ack) had gone out silently dropped the real
-     answer. Delivering the final message keeps ack-then-answer intact; the echo
-     guard prevents re-sending text already delivered.
-   - `list_topics`, `get_topic`, `create_topic`, `update_topic`, `edit_topic`,
-     `append_topic`, `list_backlinks` — read/write the knowledge model and its
+   There is **no `reply` tool**. The assistant's own text blocks are the
+   messages: the runner delivers each one (persist, then send) as the model
+   produces it, before that step's tools run, so a turn that acknowledges and
+   then answers is just a model that wrote text on two steps. A run that ends
+   without a terminal stop reason, or that never sent anything, gets the
+   no-silence fallback. Tools (`tools/topics.ts`):
+   - `list_topics`, `get_topic`, `create_topic`, `edit_topic`, `append_topic`,
+     `update_topic_metadata`, `list_backlinks` — read/write the knowledge model and its
      `[[Name]]` link graph. Every topic touched is added to an `accessed` set.
    - `read_page(url)` — open a web address and return its cleaned markdown.
      Registered here as well as on the research agent, so a link the user hands
@@ -128,8 +124,8 @@ migration and no per-user seeding.
      name is recreated. Bodies of other topics are left untouched.
 2. **Writer agent** (`agents/writer.ts`, stateless per turn). The interface
    agent's twin: the same `runAgent` machine with the same topic tools
-   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`update_topic`/`edit_topic`/`append_topic`/`list_backlinks`),
-   minus `reply`/`research`. Its inputs are the **turn transcript** and the list
+   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`edit_topic`/`append_topic`/`update_topic_metadata`/`list_backlinks`),
+   minus `research`. Its inputs are the **turn transcript** and the list
    of topic names the interface agent accessed this turn. The transcript is a
    serialization of the interface run: the user message, every tool call and its
    (truncated) result, and assistant replies. This matters because durable facts
@@ -228,12 +224,11 @@ about alarms, DOs, or Telegram. The writer runs **every** turn (not only when a
 topic was accessed) so proactive creation is possible on turns that introduce a
 brand-new subject; it is given the turn transcript and the accessed-topic names,
 not pre-loaded bodies, and fetches bodies itself via `get_topic`. There is no longer a mechanical
-log-append fallback: the `## Log` line is a prompt-driven `update_topic` write,
+log-append fallback: the `## Log` line is a prompt-driven `append_topic` write,
 so a turn the writer judges trivial leaves the model untouched.
 
-Replies are persisted **as they are sent**, not after the turn. The `reply` tool
-(and both no-silence fallbacks) persist the assistant message before calling
-`send()`. Behind the DO output gate the durable row commits before the Telegram
+Messages are persisted **as they are sent**, not after the turn. Every text
+block (and the no-silence fallback) is persisted before `send()` is called. Behind the DO output gate the durable row commits before the Telegram
 fetch leaves, so a mid-run eviction leaves the thread tail already `assistant`
 and the retry skips it — no duplicate Telegram messages. Trade-off: if an
 eviction lands between two replies within one turn (reply 1 persisted, reply 2
@@ -243,14 +238,13 @@ a skipped retry the writer consolidation for that turn also does not re-run; liv
 topic create/update calls already persisted the durable facts, only the writer's
 Log-line refresh is lost for that one turn.
 
-A `reply` whose `send()` fails is a related case. The tool loop swallows a
-thrown tool `execute` (it becomes an error `tool_result` fed back to the model,
-not a rejected run), so the interface agent captures the first send failure and
-re-raises it after the tool loop. That routes to the orchestrator boundary
-below: `turn_failed` is logged and the user gets the fallback. The undelivered
-reply row was already persisted (persist-before-send), so it stays in history
-alongside the fallback — the same "partial turn" tradeoff, now visible instead
-of silent. Every Telegram failure is also logged at the transport
+A failed `send()` is a related case. It happens inside the runner's delivery
+hook, not inside a tool, so it is not swallowed into a `tool_result` the model
+would retry: it propagates out of the run to the orchestrator boundary below,
+where `turn_failed` is logged and the user gets the fallback. The undelivered
+message was already persisted (persist-before-send), so it stays in history
+alongside the fallback — the same "partial turn" tradeoff, visible instead of
+silent. Every Telegram failure is also logged at the transport
 (`telegram_send_failed`) before it propagates.
 
 The orchestrator is the turn's error boundary. If the agent path throws a genuine

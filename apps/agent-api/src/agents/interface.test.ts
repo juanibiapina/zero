@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FALLBACK_MESSAGE,
   buildConversationMessages,
-  decideFinalDelivery,
+  needsFallback,
   formatTimestamp,
   renderTranscript,
   runInterfaceAgent,
@@ -45,160 +45,22 @@ describe("formatTimestamp", () => {
   });
 });
 
-describe("decideFinalDelivery", () => {
-  // Row 1: clean finish, non-empty text, no prior replies -> send.
-  it("sends the final text on a clean finish with no prior replies", () => {
-    expect(
-      decideFinalDelivery({ finishReason: "stop", text: "answer", replies: [] }),
-    ).toEqual({ action: "send", text: "answer" });
+describe("needsFallback", () => {
+  it("is false on a clean finish that sent something", () => {
+    expect(needsFallback({ finishReason: "stop", sentCount: 1 })).toBe(false);
   });
 
-  // Row 2: the ack-then-answer regression — an earlier non-echo reply must not
-  // suppress the final text.
-  it("sends the final text even after a prior non-echo reply", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "stop",
-        text: "the answer",
-        replies: ["Searching now..."],
-      }),
-    ).toEqual({ action: "send", text: "the answer" });
+  it("is true on a clean finish that said nothing all turn", () => {
+    expect(needsFallback({ finishReason: "stop", sentCount: 0 })).toBe(true);
   });
 
-  // Row 3: final text exactly echoes the last reply -> suppress.
-  it("suppresses the final text when it exactly echoes the last reply", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "stop",
-        text: "done",
-        replies: ["done"],
-      }),
-    ).toEqual({ action: "none" });
-  });
-
-  // Echo compares both sides trimmed.
-  it("suppresses the final text when it echoes the last reply modulo whitespace", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "stop",
-        text: "  done  ",
-        replies: ["done"],
-      }),
-    ).toEqual({ action: "none" });
-  });
-
-  // Row 4: clean finish, empty text, prior reply -> suppress.
-  it("suppresses an empty final text when a reply already went out", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "stop",
-        text: "",
-        replies: ["the reply"],
-      }),
-    ).toEqual({ action: "none" });
-  });
-
-  // Whitespace-only text is treated as empty.
-  it("treats whitespace-only final text as empty (suppress with a prior reply)", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "stop",
-        text: "   ",
-        replies: ["the reply"],
-      }),
-    ).toEqual({ action: "none" });
-  });
-
-  // Row 5: clean finish, empty text, no replies -> fallback.
-  it("falls back on a clean finish that said nothing and sent no reply", () => {
-    expect(
-      decideFinalDelivery({ finishReason: "stop", text: "", replies: [] }),
-    ).toEqual({ action: "fallback" });
-  });
-
-  // Row 6a: cap cut-off with empty text and no replies -> fallback.
-  it("falls back on a cap cut-off with no reply", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "tool-calls",
-        text: "",
-        replies: [],
-      }),
-    ).toEqual({ action: "fallback" });
-  });
-
-  // Row 6b: cap cut-off after an ack reply -> still fallback.
-  it("falls back on a cap cut-off after an ack reply", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "tool-calls",
-        text: "",
-        replies: ["Searching now..."],
-      }),
-    ).toEqual({ action: "fallback" });
-  });
-
-  // Concern 1: cap cut-off discards produced final text (no replies variant).
-  it("discards non-empty final text on a cap cut-off with no reply", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "tool-calls",
-        text: "some answer",
-        replies: [],
-      }),
-    ).toEqual({ action: "fallback" });
-  });
-
-  // Concern 1: cap cut-off discards produced final text (ack variant).
-  it("discards non-empty final text on a cap cut-off after an ack reply", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "tool-calls",
-        text: "some answer",
-        replies: ["Searching now..."],
-      }),
-    ).toEqual({ action: "fallback" });
-  });
-
-  // Raw-vs-trimmed: guards compare trimmed, delivery carries the raw text.
-  it("carries the raw untrimmed text on the send action", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "stop",
-        text: "answer\n",
-        replies: [],
-      }),
-    ).toEqual({ action: "send", text: "answer\n" });
-  });
-
-  // Concern 2: the echo guard compares only the last reply, so echoing an
-  // earlier, non-last reply must still send.
-  it("sends when the final text echoes an earlier, non-last reply", () => {
-    expect(
-      decideFinalDelivery({
-        finishReason: "stop",
-        text: "hi",
-        replies: ["hi", "different"],
-      }),
-    ).toEqual({ action: "send", text: "hi" });
-  });
-
-  // Nit 1: fallback and none carry no text field (runner owns FALLBACK_MESSAGE).
-  it("returns fallback and none with no stray text field", () => {
-    const fallback = decideFinalDelivery({
-      finishReason: "tool-calls",
-      text: "",
-      replies: [],
-    });
-    const none = decideFinalDelivery({
-      finishReason: "stop",
-      text: "",
-      replies: ["reply"],
-    });
-    expect(fallback).toEqual({ action: "fallback" });
-    expect(fallback).not.toHaveProperty("text");
-    expect(none).toEqual({ action: "none" });
-    expect(none).not.toHaveProperty("text");
+  it("is true on a cap cut-off, even after an earlier message", () => {
+    expect(needsFallback({ finishReason: "tool-calls", sentCount: 0 })).toBe(
+      true,
+    );
+    expect(needsFallback({ finishReason: "tool-calls", sentCount: 2 })).toBe(
+      true,
+    );
   });
 });
 
@@ -549,13 +411,15 @@ describe("buildConversationMessages", () => {
 });
 
 describe("runInterfaceAgent", () => {
-  it("sends each reply immediately and collects them", async () => {
+  it("sends each text block immediately and collects them", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "Got it, let me check." } }] },
-      { tools: [{ name: "reply", input: { text: "Here is the answer." } }] },
-      { text: "" },
+      {
+        text: "Got it, let me check.",
+        tools: [{ name: "list_topics", input: {} }],
+      },
+      { text: "Here is the answer." },
     ]);
 
     const result = await runInterfaceAgent({
@@ -596,8 +460,7 @@ describe("runInterfaceAgent", () => {
           },
         ],
       },
-      { tools: [{ name: "reply", input: { text: "ok" } }] },
-      { text: "" },
+      { text: "ok" },
     ]);
 
     const result = await runInterfaceAgent({
@@ -624,18 +487,15 @@ describe("runInterfaceAgent", () => {
     ]);
     const model = scriptedModel([
       // interface acknowledges, then researches
-      { tools: [{ name: "reply", input: { text: "Let me check." } }] },
-      { tools: [{ name: "research", input: { prompt: "distance to Mars" } }] },
+      {
+        text: "Let me check.",
+        tools: [{ name: "research", input: { prompt: "distance to Mars" } }],
+      },
       // research agent: search then summarise
       { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
       { text: "Mars is far. Source: https://ex.com/mars" },
       // interface relays the finding
-      {
-        tools: [
-          { name: "reply", input: { text: "Mars is far. Source: https://ex.com/mars" } },
-        ],
-      },
-      { text: "" },
+      { text: "Mars is far. Source: https://ex.com/mars" },
     ]);
 
     const result = await runInterfaceAgent({
@@ -665,8 +525,8 @@ describe("runInterfaceAgent", () => {
     ]);
     const model = scriptedModel([
       // interface acks then researches
-      { tools: [{ name: "reply", input: { text: "Let me check." } }] },
       {
+        text: "Let me check.",
         tools: [
           { name: "research", input: { prompt: "distance to Mars", topic: "Mars" } },
         ],
@@ -701,8 +561,10 @@ describe("runInterfaceAgent", () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "Let me look." } }] },
-      { tools: [{ name: "read_page", input: { url: "thing.com/post" } }] },
+      {
+        text: "Let me look.",
+        tools: [{ name: "read_page", input: { url: "thing.com/post" } }],
+      },
       { text: "The post announces a new release." },
     ]);
 
@@ -807,8 +669,7 @@ describe("runInterfaceAgent", () => {
     const model = scriptedModel([
       { tools: [{ name: "gmail_search", input: { query: "from:a" } }] },
       { tools: [{ name: "gmail_thread", input: { threadId: "T1" } }] },
-      { tools: [{ name: "reply", input: { text: "Your last mail from a@x.com asks about lunch." } }] },
-      { text: "" },
+      { text: "Your last mail from a@x.com asks about lunch." },
     ]);
 
     const result = await runInterfaceAgent({
@@ -827,13 +688,10 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
-  it("persists each reply before sending it", async () => {
+  it("persists each message before sending it", async () => {
     const store = new MemoryStore();
     const order: string[] = [];
-    const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "hi" } }] },
-      { text: "" },
-    ]);
+    const model = scriptedModel([{ text: "hi" }]);
 
     await runInterfaceAgent({
       model,
@@ -941,11 +799,14 @@ describe("runInterfaceAgent", () => {
     expect(events.some((e) => e.msg === "turn_incomplete")).toBe(true);
   });
 
-  it("sends the fallback after an ack reply when the loop hits the step cap", async () => {
+  it("sends the fallback after an ack message when the loop hits the step cap", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "Let me check." } }] },
+      {
+        text: "Let me check.",
+        tools: [{ name: "get_topic", input: { name: "y" } }],
+      },
       { tools: [{ name: "get_topic", input: { name: "y" } }] },
     ]);
 
@@ -965,11 +826,11 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(["Let me check.", FALLBACK_MESSAGE]);
   });
 
-  it("delivers the final message even after an earlier reply", async () => {
+  it("delivers the final message even after an earlier one", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "the answer" } }] },
+      { text: "the answer", tools: [{ name: "list_topics", input: {} }] },
       { text: "done" },
     ]);
 
@@ -988,40 +849,19 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(["the answer", "done"]);
   });
 
-  it("does not re-send the final text when it echoes the last reply", async () => {
-    const store = new MemoryStore();
-    const sink = collectSink();
-    const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "the answer" } }] },
-      { text: "the answer" },
-    ]);
-
-    const result = await runInterfaceAgent({
-      model,
-      store,
-      send: sink.send,
-      search: createMemorySearch(),
-      google: createMemoryGoogle(),
-      fetcher: createMemoryFetcher(),
-      history: [],
-      userMessage: "hi",
-    });
-
-    expect(sink.sent).toEqual(["the answer"]);
-    expect(result.replies).toEqual(["the answer"]);
-  });
-
   it("delivers the post-research answer sent as final prose after an ack reply", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const search = createMemorySearch([
       { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
     ]);
-    // The real failure: model acks, researches, then puts the answer in its
-    // final text instead of another reply(). The ack must not suppress it.
+    // Model acks, researches, then answers in its final text. Both are
+    // messages, in order.
     const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "Searching now..." } }] },
-      { tools: [{ name: "research", input: { prompt: "distance to Mars" } }] },
+      {
+        text: "Searching now...",
+        tools: [{ name: "research", input: { prompt: "distance to Mars" } }],
+      },
       { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
       { text: "Mars is far. Source: https://ex.com/mars" },
       { text: "Mars averages 225M km away. Source: https://ex.com/mars" },
@@ -1045,13 +885,10 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(sink.sent);
   });
 
-  it("re-raises when a reply send fails and still persists before sending", async () => {
+  it("re-raises when a send fails and still persists before sending", async () => {
     const store = new MemoryStore();
     const persisted: string[] = [];
-    const model = scriptedModel([
-      { tools: [{ name: "reply", input: { text: "undelivered" } }] },
-      { text: "done" },
-    ]);
+    const model = scriptedModel([{ text: "undelivered" }, { text: "done" }]);
 
     await expect(
       runInterfaceAgent({
@@ -1080,8 +917,7 @@ describe("runInterfaceAgent", () => {
     const sink = collectSink();
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "weather" } }] },
-      { tools: [{ name: "reply", input: { text: "It's sunny." } }] },
-      { text: "" },
+      { text: "It's sunny." },
     ]);
 
     const result = await runInterfaceAgent({
@@ -1143,8 +979,7 @@ describe("runInterfaceAgent", () => {
     const sink = collectSink();
     const model = scriptedModel([
       { tools: [{ name: "view_attachment", input: { id: "att_1" } }] },
-      { tools: [{ name: "reply", input: { text: "It's a cat." } }] },
-      { text: "" },
+      { text: "It's a cat." },
     ]);
 
     const result = await runInterfaceAgent({
