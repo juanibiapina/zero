@@ -2,24 +2,36 @@ import { describe, expect, it } from "vitest";
 import { runWriterAgent } from "./writer";
 import { scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
+import { seedTopic, setBody } from "../store/test-support";
 
 describe("runWriterAgent", () => {
   it("updates an accessed topic the model revises", async () => {
     const store = new MemoryStore();
-    store.createTopic("travel", "trips");
-    store.saveTopic("travel", {
-      body: "## Notes\nExisting note.",
-      description: "trips",
-    });
+    seedTopic(store, "travel", "trips");
+    setBody(store, "travel", "## Notes\nExisting note.");
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "travel" } }] },
       {
         tools: [
           {
-            name: "update_topic",
+            name: "edit_topic",
             input: {
+              expectedVersion: store.getKnowledgeVersion(),
               name: "travel",
-              body: "## Notes\nExisting note.\nGoing to Rome.\n\n## Log\n- 2026 Rome trip",
+              oldText: "## Notes\nExisting note.",
+              newText:
+                "## Notes\nExisting note.\nGoing to Rome.\n\n## Log\n- 2026 Rome trip",
+            },
+          },
+        ],
+      },
+      {
+        tools: [
+          {
+            name: "update_topic_metadata",
+            input: {
+              expectedVersion: store.getKnowledgeVersion() + 1,
+              name: "travel",
               description: "Rome trip planning",
             },
           },
@@ -47,14 +59,11 @@ describe("runWriterAgent", () => {
   // survives verbatim while the writer only ever generated the delta.
   it("consolidates with an anchored edit and an appended log line", async () => {
     const store = new MemoryStore();
-    store.createTopic("travel", "trips");
+    seedTopic(store, "travel", "trips");
     const longBody =
       "## Notes\nExisting note.\n\n## History\n" +
       Array.from({ length: 40 }, (_, i) => `- old fact ${i}`).join("\n");
-    store.saveTopic("travel", {
-      body: longBody,
-      description: "trips",
-    });
+    setBody(store, "travel", longBody);
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "travel" } }] },
       {
@@ -62,6 +71,7 @@ describe("runWriterAgent", () => {
           {
             name: "edit_topic",
             input: {
+              expectedVersion: store.getKnowledgeVersion(),
               name: "travel",
               oldText: "## Notes\nExisting note.",
               newText: "## Notes\nExisting note.\nGoing to Rome.",
@@ -73,15 +83,23 @@ describe("runWriterAgent", () => {
         tools: [
           {
             name: "append_topic",
-            input: { name: "travel", text: "## Log\n- 2026 Rome trip" },
+            input: {
+              expectedVersion: store.getKnowledgeVersion() + 1,
+              name: "travel",
+              text: "## Log\n- 2026 Rome trip",
+            },
           },
         ],
       },
       {
         tools: [
           {
-            name: "update_topic",
-            input: { name: "travel", description: "Rome trip planning" },
+            name: "update_topic_metadata",
+            input: {
+              expectedVersion: store.getKnowledgeVersion() + 2,
+              name: "travel",
+              description: "Rome trip planning",
+            },
           },
         ],
       },
@@ -112,18 +130,11 @@ describe("runWriterAgent", () => {
         tools: [
           {
             name: "create_topic",
-            input: { name: "rome-trip", description: "trip planning" },
-          },
-        ],
-      },
-      {
-        tools: [
-          {
-            name: "update_topic",
             input: {
+              expectedVersion: store.getKnowledgeVersion(),
               name: "rome-trip",
-              body: "## Notes\nGoing to Rome in May.",
               description: "Rome trip in May",
+              body: "## Notes\nGoing to Rome in May.",
             },
           },
         ],
@@ -144,15 +155,19 @@ describe("runWriterAgent", () => {
     expect(created?.description).toBe("Rome trip in May");
   });
 
-  it("renames a topic via update_topic newName", async () => {
+  it("renames a topic via update_topic_metadata newName", async () => {
     const store = new MemoryStore();
-    store.createTopic("trip", "");
+    seedTopic(store, "trip", "", "b");
     const model = scriptedModel([
       {
         tools: [
           {
-            name: "update_topic",
-            input: { name: "trip", body: "b", newName: "rome-trip" },
+            name: "update_topic_metadata",
+            input: {
+              expectedVersion: store.getKnowledgeVersion(),
+              name: "trip",
+              newName: "rome-trip",
+            },
           },
         ],
       },
@@ -201,18 +216,11 @@ describe("runWriterAgent", () => {
         tools: [
           {
             name: "create_topic",
-            input: { name: "anna-tom-wedding", description: "wedding event" },
-          },
-        ],
-      },
-      {
-        tools: [
-          {
-            name: "update_topic",
             input: {
+              expectedVersion: store.getKnowledgeVersion(),
               name: "anna-tom-wedding",
-              body: "## Details\nAnna & Tom wedding, 2026-08-15 15:00, Tuscany.",
               description: "Wedding on 2026-08-15 in Tuscany",
+              body: "## Details\nAnna & Tom wedding, 2026-08-15 15:00, Tuscany.",
             },
           },
         ],

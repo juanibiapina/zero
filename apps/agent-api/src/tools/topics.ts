@@ -1,32 +1,36 @@
 // Topic tools shared by both agents. `buildTopicTools` gives the read/write
-// surface over the knowledge model (list/get/create/update/edit/append/list_backlinks);
-// `buildInterfaceTools` adds `reply` on top for the interface agent. Topics link
-// to each other with Obsidian-style `[[Name]]` tokens in their bodies; the store
-// keeps outbound/backlink rows in sync, and get_topic/list_backlinks expose them. Every topic read or write records
-// the topic name in the optional `accessed` set so the interface agent can hand
-// the writer exactly the topics it touched. `update_topic` is a partial patch:
-// any field left out keeps its current value, so a body-only revision (the
-// interface agent's usual call) leaves the description untouched, while the
-// writer can also refresh it and rename in one call.
+// surface over the knowledge model (list/get/create/edit/append/metadata/
+// list_backlinks); `buildInterfaceTools` adds `reply` and `delete_topic` on top
+// for the interface agent. Topics link to each other with Obsidian-style
+// `[[Name]]` tokens in their bodies; the store keeps outbound/backlink rows in
+// sync, and get_topic/list_backlinks expose them. Every topic read or write
+// records the topic name in the optional `accessed` set so the interface agent
+// can hand the writer exactly the topics it touched.
 //
 // A topic holds exactly two model-written fields: `description`, a short
 // routing blurb rendered by list_topics, and `body`, the one authoritative
 // knowledge document. There is deliberately no second summary of the same
 // state to keep in sync.
 //
-// `edit_topic` and `append_topic` are the incremental body writes, and the
-// default path for revising an existing document. `update_topic`'s `body` is the
-// WHOLE markdown document, so preserving a body while adding one line to it
-// costs the model the entire document in generated tokens — a cost that grows
-// with the topic forever (measured: 13,856 output tokens and 298s on a single
-// turn; see docs/plans/writer-latency-investigation.md). Anchored edits make the
-// cost proportional to the change, not to the document. `update_topic` stays for
-// description/rename and for filling a freshly created empty topic.
+// Every read returns the user's `version`; every write states the
+// `expectedVersion` it was based on. A write on a stale version changes nothing
+// and returns a recoverable error telling the model to reread. That is what
+// makes a persisted tool result safe to keep in a conversation: knowledge it
+// captured can be detected as out of date, and two conversations writing at
+// once cannot clobber each other. A successful write returns the new version,
+// so a chain of edits can use each result as the next expectedVersion.
 //
-// Both incremental tools check `getTopic` themselves rather than relying on the
-// store to reject an unknown name: `DbStore.updateTopicBody` silently no-ops on
-// a missing topic while `MemoryStore.updateTopicBody` throws, so leaning on the
-// store would pass tests and lose writes in production.
+// No tool replaces a complete non-empty body. `create_topic` writes a topic
+// whole, `edit_topic` replaces an exact anchor inside a body, `append_topic`
+// adds to the end, and `update_topic_metadata` never accepts body text.
+// Re-emitting a whole document costs the model the entire body in generated
+// tokens on every small change, a cost that grows with the topic forever
+// (measured: 13,856 output tokens and 298s on one turn; see
+// docs/plans/writer-latency-investigation.md).
+//
+// The write tools check `getTopic` themselves rather than relying on the store
+// to reject an unknown name, so a missing topic is a normal tool error rather
+// than a thrown adapter difference.
 //
 // `reply` persists the assistant message then sends it to the user immediately
 // (live progress). Persist-before-send makes retries idempotent: the durable
@@ -37,7 +41,7 @@
 import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
-import type { TopicStore } from "../store/types";
+import { KnowledgeConflictError, type TopicStore } from "../store/types";
 
 export interface TopicToolDeps {
   store: TopicStore;
@@ -49,6 +53,30 @@ export interface TopicToolDeps {
   // caller logs this count per run next to topic_list_rendered.
   reads?: { count: number };
 }
+
+// Run a topic write, turning both a stale-version conflict and an ordinary
+// store rejection (unknown name, name collision, read-only system topic) into a
+// tool error the model can act on. A conflict is logged so the cost of the
+// single global counter is measurable in production; the topic name and any
+// content stay out of the log.
+const write = <T>(
+  tool: string,
+  apply: () => T,
+): T | { error: string } => {
+  try {
+    return apply();
+  } catch (err) {
+    if (err instanceof KnowledgeConflictError) {
+      log("topic_write_conflict", {
+        tool,
+        expected_version: err.expected,
+        current_version: err.current,
+      });
+      return { error: err.message };
+    }
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+};
 
 export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
   const { store, accessed, reads } = deps;
@@ -67,7 +95,7 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
           topic_count: listed.length,
           chars: JSON.stringify(listed).length,
         });
-        return listed;
+        return { version: store.getKnowledgeVersion(), topics: listed };
       },
     }),
 
@@ -83,9 +111,12 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
         accessed?.add(name);
         if (reads) reads.count += 1;
         return {
-          ...topic,
-          outboundLinks: store.getOutboundLinks(name),
-          backlinks: store.getBacklinks(name).map((t) => t.name),
+          version: store.getKnowledgeVersion(),
+          topic: {
+            ...topic,
+            outboundLinks: store.getOutboundLinks(name),
+            backlinks: store.getBacklinks(name).map((t) => t.name),
+          },
         };
       },
     }),
@@ -98,53 +129,41 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
         accessed?.add(name);
-        return store.getBacklinks(name);
+        return {
+          version: store.getKnowledgeVersion(),
+          topics: store.getBacklinks(name),
+        };
       },
     }),
 
     create_topic: defineTool({
       description:
-        "Create a new topic for a subject worth remembering (a project, a person, an ongoing thread). Starts empty; fill it via update_topic.",
-      inputSchema: z.object({ name: z.string(), description: z.string() }),
-      execute: async ({ name, description }) => {
-        if (store.getTopic(name)) return { error: `topic exists: ${name}` };
-        store.createTopic(name, description);
-        accessed?.add(name);
-        return { created: name };
-      },
-    }),
-
-    update_topic: defineTool({
-      description:
-        "Patch a topic. Provide only the fields to change: body (full markdown), " +
-        "description (short routing blurb), or newName to rename. Omitted fields " +
-        "keep their current value. `body` replaces the whole document, so use it " +
-        "only to fill a topic that is still empty; to revise an existing body use " +
-        "edit_topic or append_topic.",
+        "Create a new topic for a subject worth remembering (a project, a " +
+        "person, an ongoing thread), complete with its body. `expectedVersion` " +
+        "is the version from your latest topic read. Fails if the name is taken.",
       inputSchema: z.object({
+        expectedVersion: z.number(),
         name: z.string(),
-        body: z.string().optional(),
-        description: z.string().optional(),
-        newName: z.string().optional(),
+        description: z.string(),
+        body: z.string(),
       }),
-      execute: async ({ name, body, description, newName }) => {
-        const current = store.getTopic(name);
-        if (!current) return { error: `topic not found: ${name}` };
-        try {
-          store.saveTopic(
+      execute: async ({ expectedVersion, name, description, body }) => {
+        if (body.trim() === "")
+          return {
+            error:
+              "body must not be empty: create a topic with its content, not as an empty shell",
+          };
+        if (store.getTopic(name)) return { error: `topic exists: ${name}` };
+        return write("create_topic", () => {
+          const version = store.createTopic({
+            expectedVersion,
             name,
-            {
-              body: body ?? current.body,
-              description: description ?? current.description,
-            },
-            newName,
-          );
+            description,
+            body,
+          });
           accessed?.add(name);
-          if (newName) accessed?.add(newName);
-          return { updated: newName ?? name };
-        } catch (err) {
-          return { error: err instanceof Error ? err.message : String(err) };
-        }
+          return { created: name, version };
+        });
       },
     }),
 
@@ -152,16 +171,17 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
       description:
         "Revise part of a topic's body by replacing an exact snippet of it. " +
         "`oldText` must appear exactly once in the current body; everything else " +
-        "is left byte-for-byte untouched. Use this instead of update_topic to " +
-        "change an existing document: quote only the lines you are changing " +
+        "is left byte-for-byte untouched. Quote only the lines you are changing " +
         "(a heading plus the lines under it is a good anchor), never the whole " +
-        "body. Read the body with get_topic first so the anchor matches exactly.",
+        "body. Read the body with get_topic first so the anchor matches exactly " +
+        "and you have the current `expectedVersion`.",
       inputSchema: z.object({
+        expectedVersion: z.number(),
         name: z.string(),
         oldText: z.string(),
         newText: z.string(),
       }),
-      execute: async ({ name, oldText, newText }) => {
+      execute: async ({ expectedVersion, name, oldText, newText }) => {
         const current = store.getTopic(name);
         if (!current) return { error: `topic not found: ${name}` };
         if (oldText === "")
@@ -178,42 +198,83 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
           return {
             error: `oldText appears more than once in ${name}: extend it with surrounding lines until it is unique.`,
           };
-        try {
-          store.updateTopicBody(
+        return write("edit_topic", () => {
+          const version = store.updateTopicBody({
+            expectedVersion,
             name,
-            current.body.slice(0, first) +
+            body:
+              current.body.slice(0, first) +
               newText +
               current.body.slice(first + oldText.length),
-          );
+          });
           accessed?.add(name);
-          return { updated: name };
-        } catch (err) {
-          return { error: err instanceof Error ? err.message : String(err) };
-        }
+          return { updated: name, version };
+        });
       },
     }),
 
     append_topic: defineTool({
       description:
         "Append text to the end of a topic's body, separated by a blank line. " +
-        "Use for a new section or a log line; nothing already in the body is " +
-        "regenerated. To change text that is already there, use edit_topic.",
-      inputSchema: z.object({ name: z.string(), text: z.string() }),
-      execute: async ({ name, text }) => {
+        "Use for a new section or a log line, or to fill a topic whose body is " +
+        "still empty; nothing already in the body is regenerated. To change text " +
+        "that is already there, use edit_topic.",
+      inputSchema: z.object({
+        expectedVersion: z.number(),
+        name: z.string(),
+        text: z.string(),
+      }),
+      execute: async ({ expectedVersion, name, text }) => {
         const current = store.getTopic(name);
         if (!current) return { error: `topic not found: ${name}` };
-        const existing = current.body.replace(/\s+$/, "");
         const addition = text.replace(/^\s+|\s+$/g, "");
-        try {
-          store.updateTopicBody(
+        if (addition === "") return { error: "text must not be empty" };
+        const existing = current.body.replace(/\s+$/, "");
+        return write("append_topic", () => {
+          const version = store.updateTopicBody({
+            expectedVersion,
             name,
-            existing === "" ? addition : `${existing}\n\n${addition}`,
-          );
+            body: existing === "" ? addition : `${existing}\n\n${addition}`,
+          });
           accessed?.add(name);
-          return { updated: name };
-        } catch (err) {
-          return { error: err instanceof Error ? err.message : String(err) };
-        }
+          return { updated: name, version };
+        });
+      },
+    }),
+
+    update_topic_metadata: defineTool({
+      description:
+        "Change a topic's routing description and/or its name. Never touches " +
+        "the body: use edit_topic or append_topic for content. Provide at least " +
+        "one of `description` or `newName`.",
+      inputSchema: z.object({
+        expectedVersion: z.number(),
+        name: z.string(),
+        description: z.string().optional(),
+        newName: z.string().optional(),
+      }),
+      execute: async ({ expectedVersion, name, description, newName }) => {
+        const current = store.getTopic(name);
+        if (!current) return { error: `topic not found: ${name}` };
+        const renaming = newName !== undefined && newName !== name;
+        const redescribing =
+          description !== undefined && description !== current.description;
+        if (!renaming && !redescribing)
+          return {
+            error:
+              "nothing to change: provide a new description or a different newName",
+          };
+        return write("update_topic_metadata", () => {
+          const version = store.updateTopicMetadata({
+            expectedVersion,
+            name,
+            ...(redescribing ? { description } : {}),
+            ...(renaming ? { newName } : {}),
+          });
+          accessed?.add(name);
+          if (renaming && newName) accessed?.add(newName);
+          return { updated: renaming && newName ? newName : name, version };
+        });
       },
     }),
   };
@@ -241,16 +302,17 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): AgentToolSet => {
         "Permanently delete a topic. Irreversible: only call after the user has " +
         "explicitly confirmed. Other topics that link to it keep their [[Name]] " +
         "text as a dangling link.",
-      inputSchema: z.object({ name: z.string() }),
-      execute: async ({ name }) => {
+      inputSchema: z.object({
+        expectedVersion: z.number(),
+        name: z.string(),
+      }),
+      execute: async ({ expectedVersion, name }) => {
         if (!store.getTopic(name)) return { error: `topic not found: ${name}` };
-        try {
-          store.deleteTopic(name);
-          return { deleted: name };
-        } catch (err) {
-          // Rejected system-topic deletes surface as a tool error, not a throw.
-          return { error: err instanceof Error ? err.message : String(err) };
-        }
+        // Rejected system-topic deletes surface as a tool error, not a throw.
+        return write("delete_topic", () => ({
+          deleted: name,
+          version: store.deleteTopic({ expectedVersion, name }),
+        }));
       },
     }),
 

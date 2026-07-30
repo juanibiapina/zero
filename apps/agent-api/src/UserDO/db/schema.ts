@@ -30,6 +30,16 @@ export const topics = table("topics", {
   pinned: column.integer().notNull().default(0),
 });
 
+// The user's knowledge version: one counter covering every topic body, the
+// catalog and the link graph. Single row (id = 1). `systemFingerprint` is the
+// fingerprint of the bundled system topics whose content the counter last
+// accounted for.
+export const knowledge = table("knowledge", {
+  id: column.integer().notNull().primaryKey(),
+  version: column.integer().notNull().default(1),
+  systemFingerprint: column.text(),
+});
+
 // Topic links: the `[[Name]]` wiki-links found in a topic body, one row per
 // (source topic, target name). `targetId` resolves to the target topic when one
 // with that exact `name` exists, else null (a dangling link). Rows are

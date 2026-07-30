@@ -28,8 +28,25 @@ export const runOnboarding = async (deps: OnboardingDeps): Promise<void> => {
 
   // Pre-create and pin the topic before the agent fills it. Idempotent across
   // re-runs: create only when absent, always (re-)assert the pin.
-  if (!store.getTopic(topicName)) store.createTopic(topicName, description);
-  store.setPinned(topicName, true);
+  // The body starts empty: the agent fills it with append_topic. Each write
+  // states the version it read, and only a real change is written, so a re-run
+  // does not invalidate every persisted topic read for nothing.
+  const existing = store.getTopic(topicName);
+  if (!existing) {
+    store.createTopic({
+      expectedVersion: store.getKnowledgeVersion(),
+      name: topicName,
+      description,
+      body: "",
+    });
+  }
+  if (!store.getTopic(topicName)?.pinned) {
+    store.setPinned({
+      expectedVersion: store.getKnowledgeVersion(),
+      name: topicName,
+      pinned: true,
+    });
+  }
 
   try {
     await runAgent(topicName);

@@ -3,12 +3,13 @@ import { runAdminTaskAgent } from "./admin-task";
 import { capturingModel, scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
 import { SystemTopicStore } from "../store/system-topics";
+import { seedTopic, setBody } from "../store/test-support";
 
 describe("runAdminTaskAgent", () => {
   it("executes the submitted task prompt against durable topics", async () => {
     const store = new MemoryStore();
-    store.createTopic("Work", "existing work notes");
-    store.updateTopicBody("Work", "Existing facts.");
+    seedTopic(store, "Work", "existing work notes");
+    setBody(store, "Work", "Existing facts.");
     const model = scriptedModel([
       { tools: [{ name: "list_topics", input: {} }] },
       { tools: [{ name: "get_topic", input: { name: "Work" } }] },
@@ -16,18 +17,11 @@ describe("runAdminTaskAgent", () => {
         tools: [
           {
             name: "create_topic",
-            input: { name: "Launch", description: "Product launch" },
-          },
-        ],
-      },
-      {
-        tools: [
-          {
-            name: "update_topic",
             input: {
+              expectedVersion: store.getKnowledgeVersion(),
               name: "Launch",
+              description: "Product launch",
               body: "Target date is Friday. Related: [[Work]].",
-              summary: "Launch is planned for Friday.",
             },
           },
         ],
@@ -81,7 +75,7 @@ describe("runAdminTaskAgent", () => {
       "get_topic",
       "list_backlinks",
       "list_topics",
-      "update_topic",
+      "update_topic_metadata",
     ]);
   });
 
@@ -90,8 +84,14 @@ describe("runAdminTaskAgent", () => {
     const model = scriptedModel([
       {
         tools: [
-          { name: "update_topic", input: { name: "Zero", body: "changed" } },
-          { name: "update_topic", input: { name: "Changelog", body: "changed" } },
+          {
+            name: "append_topic",
+            input: { expectedVersion: 1, name: "Zero", text: "changed" },
+          },
+          {
+            name: "append_topic",
+            input: { expectedVersion: 1, name: "Changelog", text: "changed" },
+          },
         ],
       },
       { text: "The protected topics were unchanged." },

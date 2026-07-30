@@ -4,6 +4,7 @@ import { scriptedModel } from "../agents/mock-model";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
+import { seedTopic, setBody } from "../store/test-support";
 
 type ResearchExecute = (input: {
   prompt: string;
@@ -81,8 +82,8 @@ describe("buildResearchTool", () => {
 
   it("records topics it read via get_topic in the accessed set without modifying them", async () => {
     const store = new MemoryStore();
-    store.createTopic("Mars", "the planet");
-    store.updateTopicBody("Mars", "Mars is far. Source: https://ex.com/mars");
+    seedTopic(store, "Mars", "the planet");
+    setBody(store, "Mars", "Mars is far. Source: https://ex.com/mars");
     const accessed = new Set<string>();
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "Mars" } }] },

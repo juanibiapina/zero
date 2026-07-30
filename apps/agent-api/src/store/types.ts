@@ -52,26 +52,66 @@ export interface Attachment {
   createdAt: string;
 }
 
+// Raised when a write is based on a knowledge version that is no longer
+// current: something else changed a topic since the caller read one. The caller
+// rereads and retries; nothing is written. Agents see it as a tool error.
+export class KnowledgeConflictError extends Error {
+  constructor(
+    readonly expected: number,
+    readonly current: number,
+  ) {
+    super(
+      `knowledge changed since you read it (you used version ${expected}, current is ${current}): reread the topic and retry`,
+    );
+    this.name = "KnowledgeConflictError";
+  }
+}
+
+// One integer per user covering every topic body, the catalog and the link
+// graph. Reads report it; writes state the version they were based on and fail
+// on a mismatch. Deliberately coarse: one rule for all topic knowledge.
 export interface TopicStore {
+  getKnowledgeVersion(): number;
   listTopics(): TopicMeta[];
   getTopic(name: string): Topic | null;
-  createTopic(name: string, description: string): void;
+  // Create a complete topic (body included) in one step. Throws if the name is
+  // taken.
+  createTopic(input: {
+    expectedVersion: number;
+    name: string;
+    description: string;
+    body: string;
+  }): number;
   // Delete a topic. Its own outbound link rows go; inbound links from other
   // bodies become dangling (their [[Name]] tokens are left untouched). Throws
   // if the topic does not exist.
-  deleteTopic(name: string): void;
-  updateTopicBody(name: string, body: string): void;
+  deleteTopic(input: { expectedVersion: number; name: string }): number;
+  updateTopicBody(input: {
+    expectedVersion: number;
+    name: string;
+    body: string;
+  }): number;
+  // Description and/or rename. Never touches the body.
+  updateTopicMetadata(input: {
+    expectedVersion: number;
+    name: string;
+    description?: string;
+    newName?: string;
+  }): number;
   getTopicsWithBodies(names: string[]): Topic[];
   // Pin or unpin a topic. Pinned topics are always rendered into the interface
-  // agent's prompt. Pinning survives a saveTopic rename.
-  setPinned(name: string, pinned: boolean): void;
+  // agent's prompt. Pinning survives a rename.
+  setPinned(input: {
+    expectedVersion: number;
+    name: string;
+    pinned: boolean;
+  }): number;
   // Full bodies of every pinned topic, for prompt surfacing.
   getPinnedTopics(): Topic[];
-  saveTopic(
-    name: string,
-    patch: { body: string; description: string },
-    newName?: string,
-  ): void;
+  // Bundled system topics live in no user's SQLite, so a Worker build that
+  // changes their text must still invalidate persisted reads of them. Store the
+  // fingerprint of the bundled content; bump the version once when it differs.
+  syncSystemTopicsFingerprint(fingerprint: string): number;
   // Target names this topic links to via `[[Name]]` (distinct, includes
   // dangling links whose target does not exist yet).
   getOutboundLinks(name: string): string[];

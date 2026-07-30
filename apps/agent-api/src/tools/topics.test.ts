@@ -3,6 +3,7 @@ import { buildTopicTools, buildInterfaceTools } from "./topics";
 import { MemoryStore } from "../store/memory";
 import { SystemTopicStore } from "../store/system-topics";
 import type { TopicStore } from "../store/types";
+import { seedTopic, setBody } from "../store/test-support";
 
 const makeInterfaceTools = (store: TopicStore) =>
   buildInterfaceTools({
@@ -18,22 +19,34 @@ const call = <T = unknown>(
   input: unknown,
 ): Promise<T> => tool.execute(input as never) as Promise<T>;
 
+// Write tools take the version the caller last read. Tests that are not about
+// conflicts pass the current one.
+const write = <T = unknown>(
+  store: TopicStore,
+  tool: { execute: (a: never) => Promise<unknown> },
+  input: Record<string, unknown>,
+): Promise<T> =>
+  call<T>(tool, { expectedVersion: store.getKnowledgeVersion(), ...input });
+
 describe("list_topics", () => {
   it("returns only the routing fields, never a body or extra metadata", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("trip", "an upcoming trip");
-    store.saveTopic("trip", { body: "long body text", description: "an upcoming trip" });
+    seedTopic(store, "trip", "an upcoming trip");
+    setBody(store, "trip", "long body text");
     const tools = buildTopicTools({ store });
-    const listed = await call<Array<Record<string, unknown>>>(
-      tools.list_topics,
-      {},
-    );
-    expect(listed).toEqual([{ name: "trip", description: "an upcoming trip" }]);
+    const listed = await call<{
+      version: number;
+      topics: Array<Record<string, unknown>>;
+    }>(tools.list_topics, {});
+    expect(listed).toEqual({
+      version: store.getKnowledgeVersion(),
+      topics: [{ name: "trip", description: "an upcoming trip" }],
+    });
   });
 
   it("counts get_topic calls for the caller", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("trip", "");
+    seedTopic(store, "trip", "");
     const reads = { count: 0 };
     const tools = buildTopicTools({ store, reads });
     await call(tools.get_topic, { name: "trip" });
@@ -45,66 +58,66 @@ describe("list_topics", () => {
 describe("topic link tools", () => {
   it("get_topic returns outboundLinks and backlinks", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("trip", "");
-    store.createTopic("flights", "");
-    store.saveTopic("trip", { body: "book [[flights]]", description: "" });
+    seedTopic(store, "trip", "");
+    seedTopic(store, "flights", "");
+    setBody(store, "trip", "book [[flights]]");
     const tools = buildTopicTools({ store });
-    const trip = await call<{ outboundLinks: string[]; backlinks: string[] }>(
-      tools.get_topic,
-      { name: "trip" },
-    );
-    expect(trip.outboundLinks).toEqual(["flights"]);
-    const flights = await call<{ backlinks: string[] }>(
+    const trip = await call<{
+      version: number;
+      topic: { outboundLinks: string[]; backlinks: string[] };
+    }>(tools.get_topic, { name: "trip" });
+    expect(trip.version).toBe(store.getKnowledgeVersion());
+    expect(trip.topic.outboundLinks).toEqual(["flights"]);
+    const flights = await call<{ topic: { backlinks: string[] } }>(
       tools.get_topic,
       { name: "flights" },
     );
-    expect(flights.backlinks).toEqual(["trip"]);
+    expect(flights.topic.backlinks).toEqual(["trip"]);
   });
 
   it("list_backlinks returns linking topics and records access", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("trip", "");
-    store.saveTopic("trip", { body: "[[flights]]", description: "" });
+    seedTopic(store, "trip", "");
+    setBody(store, "trip", "[[flights]]");
     const accessed = new Set<string>();
     const tools = buildTopicTools({ store, accessed });
-    const rows = await call<{ name: string }[]>(
-      tools.list_backlinks, {
-      name: "flights",
-    });
-    expect(rows.map((t) => t.name)).toEqual(["trip"]);
+    const rows = await call<{ topics: { name: string }[] }>(
+      tools.list_backlinks,
+      { name: "flights" },
+    );
+    expect(rows.topics.map((t) => t.name)).toEqual(["trip"]);
     expect(accessed.has("flights")).toBe(true);
   });
 
   it("list_backlinks returns empty for a topic nothing links to", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("lonely", "");
+    seedTopic(store, "lonely", "");
     const tools = buildTopicTools({ store });
-    const rows = await call<unknown[]>(
-      tools.list_backlinks, {
+    const rows = await call<{ topics: unknown[] }>(tools.list_backlinks, {
       name: "lonely",
     });
-    expect(rows).toEqual([]);
+    expect(rows.topics).toEqual([]);
   });
 });
 
 describe("delete_topic tool", () => {
   it("deletes an existing topic", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("stale", "");
+    seedTopic(store, "stale", "");
     const tools = makeInterfaceTools(store);
-    const res = await call<{ deleted: string }>(
-      tools.delete_topic, {
-      name: "stale",
-    });
-    expect(res).toEqual({ deleted: "stale" });
+    const res = await write<{ deleted: string; version: number }>(
+      store,
+      tools.delete_topic,
+      { name: "stale" },
+    );
+    expect(res.deleted).toBe("stale");
     expect(store.getTopic("stale")).toBeNull();
   });
 
   it("returns an error for an unknown topic", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
     const tools = makeInterfaceTools(store);
-    const res = await call<{ error: string }>(
-      tools.delete_topic, {
+    const res = await write<{ error: string }>(store, tools.delete_topic, {
       name: "nope",
     });
     expect(res.error).toContain("topic not found");
@@ -115,27 +128,178 @@ describe("delete_topic tool", () => {
       new MemoryStore(() => "2026-01-01T00:00:00.000Z"),
     );
     const tools = makeInterfaceTools(store);
-    const res = await call<{ error: string }>(
-      tools.delete_topic, {
+    const res = await write<{ error: string }>(store, tools.delete_topic, {
       name: "Zero",
     });
     expect(res.error).toContain("read-only");
   });
 });
 
-describe("update_topic tool on system topics", () => {
-  it("returns a read-only error", async () => {
+describe("update_topic_metadata tool", () => {
+  it("changes the description without touching the body", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    seedTopic(store, "trip", "old", "## Plans\nFly to Rome.");
+    const tools = buildTopicTools({ store });
+    const res = await write<{ updated: string; version: number }>(
+      store,
+      tools.update_topic_metadata,
+      { name: "trip", description: "the Rome trip" },
+    );
+    expect(res.updated).toBe("trip");
+    expect(store.getTopic("trip")).toMatchObject({
+      description: "the Rome trip",
+      body: "## Plans\nFly to Rome.",
+    });
+  });
+
+  it("renames and rejects a rename onto an existing name", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    seedTopic(store, "trip", "", "body");
+    seedTopic(store, "taken", "", "body");
+    const tools = buildTopicTools({ store });
+    const clash = await write<{ error: string }>(
+      store,
+      tools.update_topic_metadata,
+      { name: "trip", newName: "taken" },
+    );
+    expect(clash.error).toContain("topic exists");
+    const ok = await write<{ updated: string }>(
+      store,
+      tools.update_topic_metadata,
+      { name: "trip", newName: "rome trip" },
+    );
+    expect(ok.updated).toBe("rome trip");
+    expect(store.getTopic("rome trip")?.body).toBe("body");
+  });
+
+  it("rejects a call that changes nothing", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    seedTopic(store, "trip", "same", "body");
+    const tools = buildTopicTools({ store });
+    const res = await write<{ error: string }>(
+      store,
+      tools.update_topic_metadata,
+      { name: "trip", description: "same" },
+    );
+    expect(res.error).toContain("nothing to change");
+  });
+
+  it("returns a read-only error on a system topic", async () => {
     const store = new SystemTopicStore(
       new MemoryStore(() => "2026-01-01T00:00:00.000Z"),
     );
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(
-      tools.update_topic, {
-      name: "Zero",
-      body: "hacked",
-    });
+    const res = await write<{ error: string }>(
+      store,
+      tools.update_topic_metadata,
+      { name: "Zero", description: "hacked" },
+    );
     expect(res.error).toContain("read-only");
-    expect(store.getTopic("Zero")?.body).not.toBe("hacked");
+  });
+});
+
+describe("create_topic tool", () => {
+  it("creates the topic complete with its body and links", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    const tools = buildTopicTools({ store });
+    const res = await write<{ created: string; version: number }>(
+      store,
+      tools.create_topic,
+      { name: "trip", description: "travel", body: "see [[flights]]" },
+    );
+    expect(res.created).toBe("trip");
+    expect(res.version).toBe(store.getKnowledgeVersion());
+    expect(store.getTopic("trip")?.body).toBe("see [[flights]]");
+    expect(store.getOutboundLinks("trip")).toEqual(["flights"]);
+  });
+
+  it("rejects an empty body", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    const tools = buildTopicTools({ store });
+    const res = await write<{ error: string }>(store, tools.create_topic, {
+      name: "trip",
+      description: "travel",
+      body: "  ",
+    });
+    expect(res.error).toContain("body must not be empty");
+    expect(store.getTopic("trip")).toBeNull();
+  });
+
+  it("rejects an existing name", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    seedTopic(store, "trip", "", "kept");
+    const tools = buildTopicTools({ store });
+    const res = await write<{ error: string }>(store, tools.create_topic, {
+      name: "trip",
+      description: "travel",
+      body: "new",
+    });
+    expect(res.error).toContain("topic exists");
+    expect(store.getTopic("trip")?.body).toBe("kept");
+  });
+});
+
+describe("knowledge versions", () => {
+  it("rejects a write based on a stale version and changes nothing", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    seedTopic(store, "trip", "", "## Plans\nFly to Rome.");
+    const stale = store.getKnowledgeVersion();
+    // Another writer moves the knowledge on.
+    setBody(store, "trip", "## Plans\nFly to Lisbon.");
+    const tools = buildTopicTools({ store });
+    const res = await write<{ error: string }>(store, tools.append_topic, {
+      expectedVersion: stale,
+      name: "trip",
+      text: "- booked",
+    });
+    expect(res.error).toContain("reread");
+    expect(store.getTopic("trip")?.body).toBe("## Plans\nFly to Lisbon.");
+  });
+
+  it("returns a version a following write can use", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    const tools = buildTopicTools({ store });
+    const created = await write<{ version: number }>(store, tools.create_topic, {
+      name: "trip",
+      description: "travel",
+      body: "## Plans",
+    });
+    const appended = await write<{ version: number }>(store, tools.append_topic, {
+      expectedVersion: created.version,
+      name: "trip",
+      text: "- booked",
+    });
+    expect(appended.version).toBe(created.version + 1);
+    expect(store.getTopic("trip")?.body).toBe("## Plans\n\n- booked");
+  });
+
+  it("lets only one of two writers on the same version win", async () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    seedTopic(store, "trip", "", "## Plans");
+    const tools = buildTopicTools({ store });
+    const shared = store.getKnowledgeVersion();
+    const first = await write<{ version: number }>(store, tools.append_topic, {
+      expectedVersion: shared,
+      name: "trip",
+      text: "- from A",
+    });
+    const second = await write<{ error: string }>(store, tools.append_topic, {
+      expectedVersion: shared,
+      name: "trip",
+      text: "- from B",
+    });
+    expect(first.version).toBe(shared + 1);
+    expect(second.error).toContain("reread");
+    expect(store.getTopic("trip")?.body).not.toContain("- from B");
+  });
+
+  it("bumps the version once when bundled system topics change", () => {
+    const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
+    const before = store.getKnowledgeVersion();
+    const first = store.syncSystemTopicsFingerprint("fp-1");
+    expect(first).toBe(before + 1);
+    expect(store.syncSystemTopicsFingerprint("fp-1")).toBe(first);
+    expect(store.syncSystemTopicsFingerprint("fp-2")).toBe(first + 1);
   });
 });
 
@@ -145,18 +309,15 @@ describe("update_topic tool on system topics", () => {
 describe("edit_topic tool", () => {
   const seeded = () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("trip", "travel");
-    store.saveTopic("trip", {
-      body: "## Plans\nFly to Rome.\n\n## Log\n- booked flights",
-      description: "travel",
-    });
+    seedTopic(store, "trip", "travel");
+    setBody(store, "trip", "## Plans\nFly to Rome.\n\n## Log\n- booked flights");
     return store;
   };
 
   it("replaces a unique snippet and leaves the rest byte-identical", async () => {
     const store = seeded();
     const tools = buildTopicTools({ store });
-    const res = await call<{ updated: string }>(tools.edit_topic, {
+    const res = await write<{ updated: string }>(store, tools.edit_topic, {
       name: "trip",
       oldText: "Fly to Rome.",
       newText: "Fly to Rome on 3 May.",
@@ -170,7 +331,7 @@ describe("edit_topic tool", () => {
   it("errors when the anchor is not found", async () => {
     const store = seeded();
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(tools.edit_topic, {
+    const res = await write<{ error: string }>(store, tools.edit_topic, {
       name: "trip",
       oldText: "Fly to Paris.",
       newText: "x",
@@ -181,9 +342,9 @@ describe("edit_topic tool", () => {
 
   it("errors when the anchor is ambiguous", async () => {
     const store = seeded();
-    store.updateTopicBody("trip", "note\nnote");
+    setBody(store, "trip", "note\nnote");
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(tools.edit_topic, {
+    const res = await write<{ error: string }>(store, tools.edit_topic, {
       name: "trip",
       oldText: "note",
       newText: "x",
@@ -195,7 +356,7 @@ describe("edit_topic tool", () => {
   it("errors on an empty anchor and points at append_topic", async () => {
     const store = seeded();
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(tools.edit_topic, {
+    const res = await write<{ error: string }>(store, tools.edit_topic, {
       name: "trip",
       oldText: "",
       newText: "x",
@@ -208,7 +369,7 @@ describe("edit_topic tool", () => {
   it("errors on an unknown topic", async () => {
     const store = seeded();
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(tools.edit_topic, {
+    const res = await write<{ error: string }>(store, tools.edit_topic, {
       name: "nope",
       oldText: "a",
       newText: "b",
@@ -218,15 +379,15 @@ describe("edit_topic tool", () => {
 
   it("re-derives outbound links for the edited body", async () => {
     const store = seeded();
-    store.createTopic("flights", "");
+    seedTopic(store, "flights", "");
     const tools = buildTopicTools({ store });
-    await call(tools.edit_topic, {
+    await write(store, tools.edit_topic, {
       name: "trip",
       oldText: "- booked flights",
       newText: "- booked [[flights]]",
     });
     expect(store.getOutboundLinks("trip")).toContain("flights");
-    await call(tools.edit_topic, {
+    await write(store, tools.edit_topic, {
       name: "trip",
       oldText: "- booked [[flights]]",
       newText: "- booked flights",
@@ -238,7 +399,7 @@ describe("edit_topic tool", () => {
     const store = seeded();
     const accessed = new Set<string>();
     const tools = buildTopicTools({ store, accessed });
-    await call(tools.edit_topic, {
+    await write(store, tools.edit_topic, {
       name: "trip",
       oldText: "Fly to Rome.",
       newText: "Fly to Rome soon.",
@@ -252,7 +413,7 @@ describe("edit_topic tool", () => {
     );
     const tools = buildTopicTools({ store });
     const body = store.getTopic("Zero")?.body ?? "";
-    const res = await call<{ error: string }>(tools.edit_topic, {
+    const res = await write<{ error: string }>(store, tools.edit_topic, {
       name: "Zero",
       oldText: body.slice(0, 12),
       newText: "hacked",
@@ -265,13 +426,10 @@ describe("edit_topic tool", () => {
 describe("append_topic tool", () => {
   it("appends a section separated by one blank line", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("trip", "");
-    store.saveTopic("trip", {
-      body: "## Plans\nFly to Rome.\n",
-      description: "",
-    });
+    seedTopic(store, "trip", "");
+    setBody(store, "trip", "## Plans\nFly to Rome.\n");
     const tools = buildTopicTools({ store });
-    await call(tools.append_topic, {
+    await write(store, tools.append_topic, {
       name: "trip",
       text: "## Log\n- booked flights",
     });
@@ -282,16 +440,19 @@ describe("append_topic tool", () => {
 
   it("does not leave a leading blank line on an empty body", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("fresh", "");
+    seedTopic(store, "fresh", "");
     const tools = buildTopicTools({ store });
-    await call(tools.append_topic, { name: "fresh", text: "## Log\n- first" });
+    await write(store, tools.append_topic, {
+      name: "fresh",
+      text: "## Log\n- first",
+    });
     expect(store.getTopic("fresh")?.body).toBe("## Log\n- first");
   });
 
   it("errors on an unknown topic", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(tools.append_topic, {
+    const res = await write<{ error: string }>(store, tools.append_topic, {
       name: "nope",
       text: "x",
     });
@@ -300,10 +461,13 @@ describe("append_topic tool", () => {
 
   it("re-derives outbound links for appended text", async () => {
     const store = new MemoryStore(() => "2026-01-01T00:00:00.000Z");
-    store.createTopic("trip", "");
-    store.createTopic("flights", "");
+    seedTopic(store, "trip", "");
+    seedTopic(store, "flights", "");
     const tools = buildTopicTools({ store });
-    await call(tools.append_topic, { name: "trip", text: "see [[flights]]" });
+    await write(store, tools.append_topic, {
+      name: "trip",
+      text: "see [[flights]]",
+    });
     expect(store.getOutboundLinks("trip")).toContain("flights");
   });
 
@@ -312,7 +476,7 @@ describe("append_topic tool", () => {
       new MemoryStore(() => "2026-01-01T00:00:00.000Z"),
     );
     const tools = buildTopicTools({ store });
-    const res = await call<{ error: string }>(tools.append_topic, {
+    const res = await write<{ error: string }>(store, tools.append_topic, {
       name: "Zero",
       text: "hacked",
     });

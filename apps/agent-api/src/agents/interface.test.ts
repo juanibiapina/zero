@@ -22,6 +22,7 @@ import { createMemoryGoogle } from "../google/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryAttachments } from "../attachments/memory";
 import { attachmentKey } from "../attachments/types";
+import { pinTopic, seedTopic, setBody } from "../store/test-support";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -370,9 +371,9 @@ describe("renderTranscript tool-result truncation", () => {
 describe("runInterfaceAgent pinned surfacing", () => {
   it("includes a pinned topic's body in the system prompt", async () => {
     const store = new MemoryStore();
-    store.createTopic("User", "identity");
-    store.updateTopicBody("User", "name: Alice; city: Berlin");
-    store.setPinned("User", true);
+    seedTopic(store, "User", "identity");
+    setBody(store, "User", "name: Alice; city: Berlin");
+    pinTopic(store, "User", true);
 
     const captured: { system?: string } = {};
     const model = capturingModel((request) => {
@@ -578,16 +579,23 @@ describe("runInterfaceAgent", () => {
 
   it("tracks accessed topics from get/create/update", async () => {
     const store = new MemoryStore();
-    store.createTopic("weather", "climate");
+    seedTopic(store, "weather", "climate");
     const sink = collectSink();
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "weather" } }] },
       {
         tools: [
-          { name: "create_topic", input: { name: "travel", description: "trips" } },
+          {
+            name: "create_topic",
+            input: {
+              expectedVersion: store.getKnowledgeVersion(),
+              name: "travel",
+              description: "trips",
+              body: "notes",
+            },
+          },
         ],
       },
-      { tools: [{ name: "update_topic", input: { name: "travel", body: "notes" } }] },
       { tools: [{ name: "reply", input: { text: "ok" } }] },
       { text: "" },
     ]);
@@ -649,8 +657,8 @@ describe("runInterfaceAgent", () => {
 
   it("surfaces a topic the research agent read via accessed, without research writing it", async () => {
     const store = new MemoryStore();
-    store.createTopic("Mars", "the planet");
-    store.updateTopicBody("Mars", "Mars is far. Source: https://ex.com/mars");
+    seedTopic(store, "Mars", "the planet");
+    setBody(store, "Mars", "Mars is far. Source: https://ex.com/mars");
     const sink = collectSink();
     const search = createMemorySearch([
       { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
@@ -1067,11 +1075,8 @@ describe("runInterfaceAgent", () => {
 
   it("builds a transcript with the user message, tool calls, and results", async () => {
     const store = new MemoryStore();
-    store.createTopic("weather", "climate");
-    store.saveTopic("weather", {
-      body: "Sunny today.",
-      description: "climate",
-    });
+    seedTopic(store, "weather", "climate");
+    setBody(store, "weather", "Sunny today.");
     const sink = collectSink();
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "weather" } }] },
@@ -1099,8 +1104,8 @@ describe("runInterfaceAgent", () => {
   it("truncates a large tool result in the transcript", async () => {
     const store = new MemoryStore();
     const big = "x".repeat(5000);
-    store.createTopic("big", "");
-    store.saveTopic("big", { body: big, description: "" });
+    seedTopic(store, "big", "");
+    setBody(store, "big", big);
     const sink = collectSink();
     const model = scriptedModel([
       { tools: [{ name: "get_topic", input: { name: "big" } }] },

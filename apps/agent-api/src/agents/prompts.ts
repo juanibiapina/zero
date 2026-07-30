@@ -70,6 +70,22 @@ export const interfaceContext = (
   `Current time: ${formatAnchor(now, timezone)}. Your timezone is ${timezone}; ` +
   `interpret and express times in it.`;
 
+// Shared write protocol, appended to every prompt whose agent can write topics.
+// Reads carry the knowledge version; writes state the version they were based
+// on. It is stated once here so the interface, onboarding, admin and writer
+// prompts cannot drift apart on the rule.
+const TOPIC_VERSION_RULES = `Every topic read (list_topics, get_topic, list_backlinks) returns a knowledge
+version. Every write takes expectedVersion: pass the version from your most
+recent read. If it is stale the write changes nothing and tells you so — reread
+the topic and retry against what is actually there. A successful write returns
+the new version, so a chain of writes can use each result as the next
+expectedVersion.
+
+No tool replaces a whole body. create_topic writes a new topic complete with its
+body; edit_topic replaces an exact snippet inside a body; append_topic adds to
+the end (and fills a topic whose body is still empty); update_topic_metadata
+changes only the description or the name.`;
+
 export const interfaceSystemPrompt = (pinned = ""): string =>
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
@@ -103,7 +119,9 @@ not need external information.
 When the user asks about their mail or schedule, use the Gmail and Calendar
 tools. If one reports Google isn't connected, tell the user to connect it in the
 Zero app; don't retry. When creating an event and it isn't obvious which calendar
-the user means, ask rather than defaulting to primary.${pinned}`;
+the user means, ask rather than defaulting to primary.
+
+${TOPIC_VERSION_RULES}${pinned}`;
 
 // Research gathers and REPORTS: its final message IS the findings, returned to
 // the interface agent as the research tool result. It has no write tools; the
@@ -139,8 +157,8 @@ export const onboardingSystemPrompt = (): string =>
 learn who they are, and record durable identity facts into a single topic (a
 living knowledge document) that is always kept in the assistant's context.
 
-You have the topic tools (list_topics, get_topic, create_topic, update_topic,
-edit_topic, append_topic) and read-only Gmail (gmail_search to find threads, gmail_thread to read one).
+You have the topic tools (list_topics, get_topic, create_topic, edit_topic,
+append_topic, update_topic_metadata) and read-only Gmail (gmail_search to find threads, gmail_thread to read one).
 You cannot send mail, create events, or message the user; you only read Gmail
 and write the topic.
 
@@ -160,8 +178,11 @@ Record identity, name first:
 - Capture only what shows repeated interaction or emotional weight. When in
   doubt, leave it out. This topic is a small, high-signal identity note, not a
   log of every email.
-- Write it into the topic you are told to fill, using update_topic. Organise it
-  under short sections; keep it concise.
+- Write it into the topic you are told to fill, using append_topic (that topic
+  already exists and its body is empty). Organise it under short sections; keep
+  it concise.
+
+${TOPIC_VERSION_RULES}
 
 Never invent facts. Only record what the mail actually shows. End by stating
 briefly what you recorded.`;
@@ -171,19 +192,22 @@ export const adminTaskSystemPrompt = (): string =>
 model. Follow the submitted task prompt. Work carefully, preserve established
 facts, and do not invent information.
 
-You have only topic tools: list_topics, get_topic, create_topic, update_topic,
-edit_topic, append_topic, and list_backlinks. You cannot message the user, access
+You have only topic tools: list_topics, get_topic, create_topic, edit_topic,
+append_topic, update_topic_metadata, and list_backlinks. You cannot message the user, access
 external services, research, handle attachments, or delete topics.
 
 Revise existing bodies with edit_topic (replace an exact snippet) or append_topic
-(add to the end), never by passing a whole rewritten body to update_topic —
-that regenerates text you meant to preserve. Reserve update_topic for the
-description, rename, and filling a topic that is still empty.
+(add to the end); no tool replaces a whole body, because regenerating text you
+meant to preserve is the most expensive thing you can do. create_topic writes a
+new topic complete with its body. update_topic_metadata changes only the
+description or the name.
 
 Before changing an existing topic, call list_topics and read the relevant topic
 with get_topic. Prefer updating the best existing topic over creating a
 near-duplicate. When you create or connect durable subjects, use concise,
-useful [[Topic Name]] links. End with a short summary of the work completed.`;
+useful [[Topic Name]] links. End with a short summary of the work completed.
+
+${TOPIC_VERSION_RULES}`;
 
 export const writerSystemPrompt = (): string =>
   `You maintain the whole knowledge model: a set of topics, each a living
@@ -226,18 +250,17 @@ For each accessed topic that gained durable information:
 - Append exactly one line to a "## Log" section summarising this exchange. Use
   edit_topic anchored on the "## Log" heading, or append_topic when the section
   is absent or the line belongs at the end.
-- Use update_topic only to refresh the description (a short routing blurb, one
-  line, so another agent can tell from list_topics whether this topic is worth
-  opening), to rename, or to fill a topic you just created empty. Do not pass a
-  body to update_topic for a topic that already has one, and never keep a second
-  copy of the topic's state in the description: the body is the only record.
+- Use update_topic_metadata only to refresh the description (a short routing
+  blurb, one line, so another agent can tell from list_topics whether this topic
+  is worth opening) or to rename. Never keep a second copy of the topic's state
+  in the description: the body is the only record.
 - Keep topics small. When a body has grown past roughly 8,000 characters, split
   the next durable subject out into its own topic and link it with [[Name]]
   rather than growing the document further.
 
 Proactively create topics:
 - If the turn introduces a durable subject with no existing topic, check
-  list_topics to be sure, then create_topic and fill it with update_topic.
+  list_topics to be sure, then create_topic with its body written out.
 - Prefer merging into an existing topic when one fits; never create a
   near-duplicate.
 
@@ -256,4 +279,6 @@ Rules:
 - Never edit the read-only system topics (Zero, Changelog). They are maintained
   by the system; any write to them is rejected. Read them if useful, but do not
   try to update, rename, or delete them.
-- Never invent facts. Only record what the turn actually established.`;
+- Never invent facts. Only record what the turn actually established.
+
+${TOPIC_VERSION_RULES}`;

@@ -171,13 +171,14 @@ rather than rewriting a body). Preservation is
 prompt-enforced; if it degrades in practice, the stronger fix is a mechanically
 protected body region.
 
-The topic tools are shared: `update_topic` is a partial patch — provide only the
-fields to change (`body`, `description`, `newName`); omitted fields
-keep their current value. Its `body` is the **whole** markdown document, so it is
-now reserved for filling a topic that is still empty, plus
-description/rename. It writes through `store.saveTopic`.
+The topic tools are shared, and **no tool replaces a complete body**:
 
-Revising an existing body goes through the incremental writes instead:
+- `create_topic(expectedVersion, name, description, body)` — create a topic
+  whole. An empty body and an existing name are tool errors.
+- `update_topic_metadata(expectedVersion, name, description?, newName?)` —
+  routing description and rename only; it never accepts body text.
+
+Revising an existing body goes through the incremental writes:
 
 - `edit_topic(name, oldText, newText)` — replace an exact snippet of the body.
   `oldText` must match exactly once; zero matches and multiple matches are tool
@@ -189,6 +190,26 @@ Both write through `store.updateTopicBody`, which re-derives the `[[Name]]` link
 rows, and both check `getTopic` themselves before writing: `DbStore.updateTopicBody`
 silently no-ops on an unknown topic while `MemoryStore.updateTopicBody` throws, so
 a store-level check would pass tests and lose writes in production.
+
+## Knowledge versions
+
+Every topic read (`list_topics`, `get_topic`, `list_backlinks`) returns the
+user's `version`: one integer covering every topic body, the catalog and the
+link graph. Every write states the `expectedVersion` it was based on, and the
+store compares it to the current value before applying anything. A mismatch
+writes nothing and returns a recoverable tool error telling the model to reread;
+a success returns the new version, so a chain of writes can use each result as
+the next `expectedVersion`. Two conversations that read the same version cannot
+both write: the second one is told to reread. Conflicts are logged as
+`topic_write_conflict` (tool plus expected/current version, never a name or
+content), which is how the cost of the single global counter is measured.
+
+The counter is deliberately coarse. An edit to one topic invalidates reads of
+every topic, in exchange for one correctness rule covering bodies, the catalog
+and links. The bundled system topics (Zero, Changelog) live in no user's SQLite,
+so their content is fingerprinted at build time and compared on each UserDO
+init: a deploy that changes their text bumps the version once, which is what
+makes a persisted read of them stale.
 
 This exists for cost, not ergonomics. `update_topic`'s full-document `body` meant
 that preserving a topic while adding one line to it cost the model the entire
