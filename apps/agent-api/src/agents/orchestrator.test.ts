@@ -5,6 +5,7 @@ import { RATE_LIMIT_MESSAGE } from "./llm-error";
 import { capturingModel, scriptedModel } from "./mock-model";
 import type { AgentModel } from "./protocol";
 import { MemoryStore } from "../store/memory";
+import { messageText } from "../store/messages";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryGoogle } from "../google/memory";
@@ -70,13 +71,13 @@ describe("runTurn", () => {
     expect(sink.sent).toEqual(["hello there"]);
     const history = store
       .getConversationHistory(id, 10)
-      .map(({ role, content }) => ({ role, content }));
+      .map(({ role, content }) => ({ role, content: messageText(content) }));
     expect(history).toEqual([
       { role: "user", content: "hi" },
       { role: "assistant", content: "hello there" },
     ]);
     // No topics accessed → thread tail is now assistant, not awaiting reply.
-    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    expect(store.findConversationsWithWork()).toEqual([]);
   });
 
   it("does not resend when the alarm re-fires after a completed turn", async () => {
@@ -104,7 +105,7 @@ describe("runTurn", () => {
     await run();
     // Reply persisted → tail is assistant → the thread no longer awaits reply,
     // so a re-fired alarm re-runs the turn as a no-op (no duplicate send).
-    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    expect(store.findConversationsWithWork()).toEqual([]);
     await run();
 
     expect(sink.sent).toEqual(["hello there"]);
@@ -266,13 +267,13 @@ describe("runTurn", () => {
     expect(
       store
         .getConversationHistory(id, 10)
-        .map(({ role, content }) => ({ role, content })),
+        .map(({ role, content }) => ({ role, content: messageText(content) })),
     ).toEqual([
       { role: "user", content: "hi" },
       { role: "assistant", content: "undelivered" },
       { role: "assistant", content: FALLBACK_MESSAGE },
     ]);
-    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    expect(store.findConversationsWithWork()).toEqual([]);
     const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
     expect(events.some((e) => e.msg === "turn_failed")).toBe(true);
   });
@@ -307,13 +308,13 @@ describe("runTurn", () => {
     expect(sink.sent).toEqual([FALLBACK_MESSAGE]);
     const history = store
       .getConversationHistory(id, 10)
-      .map(({ role, content }) => ({ role, content }));
+      .map(({ role, content }) => ({ role, content: messageText(content) }));
     expect(history).toEqual([
       { role: "user", content: "hi" },
       { role: "assistant", content: FALLBACK_MESSAGE },
     ]);
     // Fallback persisted → thread tail is assistant, no longer awaiting reply.
-    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    expect(store.findConversationsWithWork()).toEqual([]);
     const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
     expect(events.some((e) => e.msg === "turn_failed")).toBe(true);
   });
@@ -354,9 +355,9 @@ describe("runTurn", () => {
     expect(
       store
         .getConversationHistory(id, 10)
-        .map(({ role, content }) => ({ role, content })),
+        .map(({ role, content }) => ({ role, content: messageText(content) })),
     ).toEqual([{ role: "user", content: "hi" }]);
-    expect(store.findThreadsAwaitingReply()).toHaveLength(1);
+    expect(store.findConversationsWithWork()).toHaveLength(1);
     // The defer is logged; the failure event is not.
     const infoEvents = logSpy.mock.calls.map((c) => c[0] as { msg: string });
     expect(infoEvents.some((e) => e.msg === "turn_reset_retrying")).toBe(true);
@@ -396,9 +397,9 @@ describe("runTurn", () => {
     expect(
       store
         .getConversationHistory(id, 10)
-        .map(({ role, content }) => ({ role, content })),
+        .map(({ role, content }) => ({ role, content: messageText(content) })),
     ).toEqual([{ role: "user", content: "hi" }]);
-    expect(store.findThreadsAwaitingReply()).toHaveLength(1);
+    expect(store.findConversationsWithWork()).toHaveLength(1);
   });
 
   it("delivers the rate-limit message and logs turn_rate_limited on a 429", async () => {
@@ -431,13 +432,13 @@ describe("runTurn", () => {
     expect(sink.sent).toEqual([RATE_LIMIT_MESSAGE]);
     const history = store
       .getConversationHistory(id, 10)
-      .map(({ role, content }) => ({ role, content }));
+      .map(({ role, content }) => ({ role, content: messageText(content) }));
     expect(history).toEqual([
       { role: "user", content: "hi" },
       { role: "assistant", content: RATE_LIMIT_MESSAGE },
     ]);
     // Reply persisted → thread tail is assistant, no longer awaiting reply.
-    expect(store.findThreadsAwaitingReply()).toEqual([]);
+    expect(store.findConversationsWithWork()).toEqual([]);
     const events = errSpy.mock.calls.map((c) => c[0] as { msg: string });
     expect(events.some((e) => e.msg === "turn_rate_limited")).toBe(true);
     expect(events.some((e) => e.msg === "turn_failed")).toBe(false);

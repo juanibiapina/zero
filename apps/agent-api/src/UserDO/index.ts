@@ -113,7 +113,10 @@ export class UserDO extends DurableObject<Env> {
     for (const a of input.attachments ?? []) {
       this.store.putAttachment({ ...a, conversationId });
     }
-    this.store.storeMessage(conversationId, "user", input.text);
+    // The message enters the durable queue, not the transcript. A turn injects
+    // it at a safe point, so a message arriving while the agent is mid-run is
+    // never spliced into a request the model is already answering.
+    this.store.enqueuePendingMessage(conversationId, input.text);
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(Date.now());
     }
@@ -164,7 +167,7 @@ export class UserDO extends DurableObject<Env> {
 
     await runAlarmTurns({
       storage: this.ctx.storage,
-      findThreadsAwaitingReply: () => this.store.findThreadsAwaitingReply(),
+      findConversationsWithWork: () => this.store.findConversationsWithWork(),
       runTurn: (chatId, topicId) => this.runTurn(chatId, topicId),
       reportError: (err) => reportError(this.env, err, { site: "alarm_turn" }),
     });

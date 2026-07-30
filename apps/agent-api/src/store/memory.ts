@@ -2,11 +2,19 @@
 // turn orchestrator without a Durable Object. Mirrors DbStore semantics; the
 // shared contract test (store-contract.test.ts) runs against both.
 
+import {
+  conversationHasWork,
+  decodeContent,
+  defaultKind,
+  encodeContent,
+} from "./messages";
 import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
   ConversationStore,
   Message,
+  MessageContent,
+  MessageKind,
   Role,
   Store,
   Thread,
@@ -34,9 +42,29 @@ interface MsgRow {
   id: number;
   conversationId: string;
   role: Role;
+  kind: MessageKind;
+  // Encoded exactly as the SQLite adapter stores it: JSON content blocks.
   content: string;
+  stopReason: string | null;
   createdAt: string;
 }
+
+interface PendingRow {
+  id: number;
+  conversationId: string;
+  content: string;
+  createdAt: string;
+  injectedAt: string | null;
+}
+
+const toMessage = (m: MsgRow): Message => ({
+  id: m.id,
+  role: m.role,
+  kind: m.kind,
+  content: decodeContent(m.content),
+  stopReason: m.stopReason,
+  createdAt: m.createdAt,
+});
 
 export class MemoryStore implements Store {
   private topics = new Map<string, Topic>();
@@ -45,11 +73,15 @@ export class MemoryStore implements Store {
   private links: { source: string; target: string }[] = [];
   private convs: ConvRow[] = [];
   private msgs: MsgRow[] = [];
+  private pending: PendingRow[] = [];
+  // Claimed delivery keys, `${messageId}:${blockIndex}`.
+  private claimed = new Set<string>();
   private attachments = new Map<string, Attachment>();
   private settingsRow: SettingsRow | null = null;
   private telegramId: string | null = null;
   private processed = new Set<string>();
   private nextMsgId = 1;
+  private nextPendingId = 1;
   private version = 1;
   private systemFingerprint: string | null = null;
   private now: () => string;
@@ -255,21 +287,37 @@ export class MemoryStore implements Store {
     return id;
   }
 
-  storeMessage(conversationId: string, role: Role, content: string): void {
+  storeMessage(
+    conversationId: string,
+    role: Role,
+    content: MessageContent,
+    options?: { kind?: MessageKind; stopReason?: string | null },
+  ): number {
+    const id = this.nextMsgId++;
     this.msgs.push({
-      id: this.nextMsgId++,
+      id,
       conversationId,
       role,
-      content,
+      kind: options?.kind ?? defaultKind(role),
+      // Stored encoded, exactly as DbStore does, so a test cannot pass on a
+      // representation production never produces.
+      content: encodeContent(content),
+      stopReason:
+        options?.stopReason !== undefined
+          ? options.stopReason
+          : role === "assistant"
+            ? "end_turn"
+            : null,
       createdAt: this.now(),
     });
+    return id;
   }
 
   getConversationHistory(conversationId: string, limit: number): Message[] {
     return this.msgs
       .filter((m) => m.conversationId === conversationId)
       .slice(-limit)
-      .map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt }));
+      .map(toMessage);
   }
 
   resetConversation(chatId: number, topicId: number): void {
@@ -277,21 +325,73 @@ export class MemoryStore implements Store {
       (c) => c.chatId === chatId && c.topicId === topicId,
     );
     if (!conv) return;
+    const dropped = new Set(
+      this.msgs.filter((m) => m.conversationId === conv.id).map((m) => m.id),
+    );
     this.msgs = this.msgs.filter((m) => m.conversationId !== conv.id);
+    this.pending = this.pending.filter((p) => p.conversationId !== conv.id);
+    this.claimed = new Set(
+      [...this.claimed].filter((k) => !dropped.has(Number(k.split(":")[0]))),
+    );
     for (const [id, a] of this.attachments) {
       if (a.conversationId === conv.id) this.attachments.delete(id);
     }
     this.convs = this.convs.filter((c) => c.id !== conv.id);
   }
 
-  findThreadsAwaitingReply(): Thread[] {
+  // --- pending queue ---
+
+  enqueuePendingMessage(conversationId: string, content: string): void {
+    this.pending.push({
+      id: this.nextPendingId++,
+      conversationId,
+      content,
+      createdAt: this.now(),
+      injectedAt: null,
+    });
+  }
+
+  drainPendingMessages(conversationId: string): Message[] {
+    const out: Message[] = [];
+    for (const row of this.pending) {
+      if (row.conversationId !== conversationId || row.injectedAt !== null)
+        continue;
+      const id = this.storeMessage(conversationId, "user", row.content);
+      row.injectedAt = this.now();
+      out.push({
+        id,
+        role: "user",
+        kind: "user_message",
+        content: [{ type: "text", text: row.content }],
+        stopReason: null,
+        createdAt: row.createdAt,
+      });
+    }
+    return out;
+  }
+
+  // --- delivery claims ---
+
+  claimDelivery(messageId: number, blockIndex: number): boolean {
+    const key = `${messageId}:${blockIndex}`;
+    if (this.claimed.has(key)) return false;
+    this.claimed.add(key);
+    return true;
+  }
+
+  findConversationsWithWork(): Thread[] {
     const out: Thread[] = [];
     for (const c of this.convs) {
       const convMsgs = this.msgs.filter((m) => m.conversationId === c.id);
       const tail = convMsgs[convMsgs.length - 1];
-      if (tail && tail.role === "user") {
-        out.push({ id: c.id, chatId: c.chatId, topicId: c.topicId });
-      }
+      const pendingCount = this.pending.filter(
+        (p) => p.conversationId === c.id && p.injectedAt === null,
+      ).length;
+      const hasWork = conversationHasWork({
+        pendingCount,
+        tail: tail ? { kind: tail.kind, stopReason: tail.stopReason } : undefined,
+      });
+      if (hasWork) out.push({ id: c.id, chatId: c.chatId, topicId: c.topicId });
     }
     return out;
   }

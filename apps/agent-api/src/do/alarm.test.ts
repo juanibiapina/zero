@@ -45,7 +45,7 @@ describe("runAlarmTurns", () => {
 
     await runAlarmTurns({
       storage,
-      findThreadsAwaitingReply: () => [thread("c1", 1, 2), thread("c2", 3, 4)],
+      findConversationsWithWork: () => [thread("c1", 1, 2), thread("c2", 3, 4)],
       runTurn,
     });
 
@@ -67,7 +67,7 @@ describe("runAlarmTurns", () => {
     await expect(
       runAlarmTurns({
         storage,
-        findThreadsAwaitingReply: () => [thread("c1", 1, 2)],
+        findConversationsWithWork: () => [thread("c1", 1, 2)],
         runTurn,
         now: () => 1000,
       }),
@@ -87,7 +87,7 @@ describe("runAlarmTurns", () => {
 
     await runAlarmTurns({
       storage,
-      findThreadsAwaitingReply: () => [thread("c1", 1, 2)],
+      findConversationsWithWork: () => [thread("c1", 1, 2)],
       runTurn,
       now: () => 1000,
     });
@@ -107,7 +107,7 @@ describe("runAlarmTurns", () => {
 
     await runAlarmTurns({
       storage,
-      findThreadsAwaitingReply: () => [thread("c1", 1, 2)],
+      findConversationsWithWork: () => [thread("c1", 1, 2)],
       runTurn,
       reportError,
       now: () => 1000,
@@ -130,7 +130,7 @@ describe("runAlarmTurns", () => {
 
     await runAlarmTurns({
       storage,
-      findThreadsAwaitingReply: () => (calls++ === 0 ? [thread("c1", 1, 2)] : []),
+      findConversationsWithWork: () => (calls++ === 0 ? [thread("c1", 1, 2)] : []),
       runTurn,
     });
 
@@ -150,7 +150,7 @@ describe("runAlarmTurns completion marker", () => {
 
     await runAlarmTurns({
       storage,
-      findThreadsAwaitingReply: () => [thread("c1", 1, 2), thread("c2", 3, 4)],
+      findConversationsWithWork: () => [thread("c1", 1, 2), thread("c2", 3, 4)],
       runTurn: async () => {
         clock += 500;
       },
@@ -171,7 +171,7 @@ describe("runAlarmTurns completion marker", () => {
 
     await runAlarmTurns({
       storage: fakeStorage(),
-      findThreadsAwaitingReply: () => [],
+      findConversationsWithWork: () => [],
       runTurn: async () => {},
     });
 
@@ -186,7 +186,7 @@ describe("runAlarmTurns completion marker", () => {
 
     await runAlarmTurns({
       storage: fakeStorage(),
-      findThreadsAwaitingReply: () => [thread("c1", 1, 2)],
+      findConversationsWithWork: () => [thread("c1", 1, 2)],
       runTurn: async () => {
         throw new Error("boom");
       },

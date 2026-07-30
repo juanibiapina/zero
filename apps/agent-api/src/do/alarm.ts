@@ -1,14 +1,14 @@
 // Alarm turn-draining with safe, unbounded self-reschedule.
 //
-// UserDO.alarm() drains every awaiting-reply thread. A catchable failure
+// UserDO.alarm() drains every conversation that still owes work. A catchable failure
 // (LLM gateway error, network abort) must not permanently drop the reply, but
 // we also must never spin a paid alarm loop. This module encapsulates that
 // trade-off so it can be tested without a Durable Object.
 //
 // Contract (verified against CF docs):
-//   - On failure we self-reschedule ONLY while findThreadsAwaitingReply() still
-//     returns work. That guard is the circuit breaker: once every thread's tail
-//     is `assistant`, nothing reschedules.
+//   - On failure we self-reschedule ONLY while findConversationsWithWork() still
+//     returns work. That guard is the circuit breaker: once every conversation
+//     has an empty queue and a finished assistant response, nothing reschedules.
 //   - We catch and RETURN (never rethrow). Rethrowing breaks the DO output gate
 //     and discards our setAlarm write, falling back to CF's built-in retry
 //     which is capped at 6. Catch+return makes retries effectively unbounded.
@@ -41,7 +41,7 @@ export interface AlarmStorage {
 
 export interface AlarmTurnsDeps {
   storage: AlarmStorage;
-  findThreadsAwaitingReply: () => Thread[];
+  findConversationsWithWork: () => Thread[];
   runTurn: (chatId: number, topicId: number) => Promise<void>;
   now?: () => number;
   // Optional exception sink (ZeroErrors). Best-effort and must never reject;
@@ -50,14 +50,14 @@ export interface AlarmTurnsDeps {
 }
 
 export const runAlarmTurns = async (deps: AlarmTurnsDeps): Promise<void> => {
-  const { storage, findThreadsAwaitingReply, runTurn } = deps;
+  const { storage, findConversationsWithWork, runTurn } = deps;
   const now = deps.now ?? Date.now;
 
   const startedAt = now();
   let turns = 0;
 
   try {
-    for (const thread of findThreadsAwaitingReply()) {
+    for (const thread of findConversationsWithWork()) {
       await runTurn(thread.chatId, thread.topicId);
       turns++;
     }
@@ -76,7 +76,7 @@ export const runAlarmTurns = async (deps: AlarmTurnsDeps): Promise<void> => {
 
     // Circuit breaker: only reschedule while work remains. Prevents a runaway
     // paid alarm loop once every thread has been answered.
-    if (findThreadsAwaitingReply().length === 0) {
+    if (findConversationsWithWork().length === 0) {
       await storage.delete(ATTEMPTS_KEY);
       return;
     }

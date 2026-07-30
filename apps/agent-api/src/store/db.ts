@@ -2,12 +2,14 @@
 // turn orchestrator address it through the Store interface. Column names match
 // the do-orm schema keys (camelCase).
 
-import { and, desc, eq, type Database } from "do-orm";
+import { and, asc, desc, eq, type Database } from "do-orm";
 import {
   attachments,
   conversations,
+  deliveries,
   knowledge,
   messages,
+  pendingMessages,
   processedUpdates,
   telegramLink,
   topics,
@@ -15,10 +17,18 @@ import {
   userSettings,
 } from "../UserDO/db/schema";
 import { extractLinks, rewriteLinks } from "./links";
+import {
+  conversationHasWork,
+  decodeContent,
+  defaultKind,
+  encodeContent,
+} from "./messages";
 import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
   Message,
+  MessageContent,
+  MessageKind,
   Role,
   Store,
   Thread,
@@ -323,13 +333,30 @@ export class DbStore implements Store {
     return id;
   }
 
-  storeMessage(conversationId: string, role: Role, content: string): void {
-    this.db.insert(messages, {
-      conversationId,
-      role,
-      content,
-      createdAt: this.nowIso(),
-    });
+  storeMessage(
+    conversationId: string,
+    role: Role,
+    content: MessageContent,
+    options?: { kind?: MessageKind; stopReason?: string | null },
+  ): number {
+    const row = this.db.insertReturning(
+      messages,
+      {
+        conversationId,
+        role,
+        content: encodeContent(content),
+        kind: options?.kind ?? defaultKind(role),
+        stopReason:
+          options?.stopReason !== undefined
+            ? options.stopReason
+            : role === "assistant"
+              ? "end_turn"
+              : null,
+        createdAt: this.nowIso(),
+      },
+      ["id"],
+    );
+    return row.id;
   }
 
   getConversationHistory(conversationId: string, limit: number): Message[] {
@@ -338,13 +365,7 @@ export class DbStore implements Store {
       orderBy: desc("id"),
       limit,
     });
-    return rows
-      .reverse()
-      .map((m) => ({
-        role: m.role as Role,
-        content: m.content,
-        createdAt: m.createdAt,
-      }));
+    return rows.reverse().map(toMessage);
   }
 
   resetConversation(chatId: number, topicId: number): void {
@@ -352,23 +373,96 @@ export class DbStore implements Store {
       where: and(eq("chatId", chatId), eq("topicId", topicId)),
     });
     if (!conv) return;
-    // Delete FK children (messages, attachments) before the conversation row,
-    // else SQLite rejects the parent delete with a FOREIGN KEY constraint error.
+    // Delete FK children before the conversation row, else SQLite rejects the
+    // parent delete with a FOREIGN KEY constraint error. Deliveries hang off
+    // messages, so they go first of all.
+    for (const m of this.db.all(messages, {
+      where: eq("conversationId", conv.id),
+    })) {
+      this.db.delete(deliveries, { where: eq("messageId", m.id) });
+    }
     this.db.delete(messages, { where: eq("conversationId", conv.id) });
+    this.db.delete(pendingMessages, { where: eq("conversationId", conv.id) });
     this.db.delete(attachments, { where: eq("conversationId", conv.id) });
     this.db.delete(conversations, { where: eq("id", conv.id) });
   }
 
-  findThreadsAwaitingReply(): Thread[] {
+  // --- pending queue ---
+
+  enqueuePendingMessage(conversationId: string, content: string): void {
+    this.db.insert(pendingMessages, {
+      conversationId,
+      content,
+      createdAt: this.nowIso(),
+    });
+  }
+
+  // Queued, not-yet-injected rows in arrival order. The `injectedAt IS NULL`
+  // filter is applied here rather than in SQL: do-orm's `eq` renders `= ?`,
+  // which never matches NULL.
+  private pendingRows(conversationId: string) {
+    return this.db
+      .all(pendingMessages, {
+        where: eq("conversationId", conversationId),
+        orderBy: asc("id"),
+      })
+      .filter((p) => p.injectedAt === null);
+  }
+
+  drainPendingMessages(conversationId: string): Message[] {
+    return this.db.transaction(() => {
+      const out: Message[] = [];
+      for (const row of this.pendingRows(conversationId)) {
+        const id = this.storeMessage(conversationId, "user", row.content);
+        this.db.update(
+          pendingMessages,
+          { injectedAt: this.nowIso() },
+          { where: eq("id", row.id) },
+        );
+        out.push({
+          id,
+          role: "user",
+          kind: "user_message",
+          content: [{ type: "text", text: row.content }],
+          stopReason: null,
+          createdAt: row.createdAt,
+        });
+      }
+      return out;
+    });
+  }
+
+  // --- delivery claims ---
+
+  claimDelivery(messageId: number, blockIndex: number): boolean {
+    return this.db.transaction(() => {
+      const existing = this.db.get(deliveries, {
+        where: and(eq("messageId", messageId), eq("blockIndex", blockIndex)),
+      });
+      if (existing) return false;
+      this.db.insert(deliveries, {
+        messageId,
+        blockIndex,
+        claimedAt: this.nowIso(),
+      });
+      return true;
+    });
+  }
+
+  findConversationsWithWork(): Thread[] {
     const out: Thread[] = [];
     for (const c of this.db.all(conversations)) {
       const tail = this.db.get(messages, {
         where: eq("conversationId", c.id),
         orderBy: desc("id"),
       });
-      if (tail && tail.role === "user") {
-        out.push({ id: c.id, chatId: c.chatId, topicId: c.topicId });
-      }
+      const hasWork = conversationHasWork({
+        pendingCount: this.pendingRows(c.id).length,
+        tail: tail
+          ? { kind: tail.kind as MessageKind, stopReason: tail.stopReason }
+          : undefined,
+      });
+      if (hasWork) out.push({ id: c.id, chatId: c.chatId, topicId: c.topicId });
     }
     return out;
   }
@@ -513,6 +607,24 @@ export class DbStore implements Store {
     });
     return true;
   }
+}
+
+function toMessage(m: {
+  id: number;
+  role: string;
+  kind: string;
+  content: string;
+  stopReason: string | null;
+  createdAt: string;
+}): Message {
+  return {
+    id: m.id,
+    role: m.role as Role,
+    kind: m.kind as MessageKind,
+    content: decodeContent(m.content),
+    stopReason: m.stopReason,
+    createdAt: m.createdAt,
+  };
 }
 
 function toTopic(t: {

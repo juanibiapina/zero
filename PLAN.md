@@ -19,7 +19,8 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 0.4 one delivery path | done | `feat(agent): deliver the model's own text blocks instead of a reply tool` + `feat(agent): log how many messages a turn sent` |
 | 0.5a observe photo variants | done | `feat(agent): record the photo variants Telegram offers before changing selection` |
 | 0.5b select by cost | **blocked on production data** (todo #17) | — |
-| Phase 1, 2, 3 | not started | — |
+| 1.1 message protocol schema, queue, delivery records | done | `feat(agent): store conversations as a protocol log with a durable message queue` |
+| Phase 1.2-1.4, 2, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
 (492 tests). Nothing is deployed, so none of the Phase 0 log lines have produced
@@ -74,18 +75,40 @@ production data yet; the acceptance criteria that read them are still open.
 - 0.5b is unshipped on purpose: it is gated on a production sample and an
   image-quality probe, neither of which exists yet.
 
+### What Phase 1.1 shipped
+
+- Migration `0024`: `messages.content` becomes a JSON `ContentBlock[]` (every
+  existing row rewritten as one text block by `json_array(json_object(...))`),
+  plus `kind`, `stopReason`, `consolidatedAt`, the `pending_messages` queue and
+  the `deliveries` table. Legacy assistant rows are stamped `stopReason
+  'end_turn'`, without which every historical conversation would look unfinished
+  to the new work rule.
+- `store/messages.ts` holds the pure protocol rules both adapters share:
+  `encodeContent`/`decodeContent` (tolerant of a pre-migration plain-text row),
+  `messageText`, `defaultKind`, `isTerminalStopReason`, `conversationHasWork`.
+- `storeMessage(conversationId, role, content, { kind?, stopReason? })` returns
+  the row id and accepts blocks; assistant rows default to `stopReason
+  "end_turn"` so a caller persisting a finished reply keeps today's semantics.
+- New port methods: `enqueuePendingMessage`, `drainPendingMessages` (one
+  transaction, arrival order, idempotent), `claimDelivery(messageId,
+  blockIndex)`, and `findConversationsWithWork` replacing
+  `findThreadsAwaitingReply`.
+- `UserDO.enqueueTurn` queues the Telegram message instead of writing it to the
+  transcript; `runTurn` drains the queue at turn start. Mid-loop follow-up
+  injection is still Phase 1.3.
+- Rendering is unchanged in bytes: every row is still a single text block, and
+  `buildConversationMessages` flattens content with `messageText`.
+
 ### Picking this up in a new session
 
 ```bash
-git checkout agent-normal-interface   # 6 commits ahead of main, unmerged
-pnpm --filter @zero/agent-api run test    # 492 passing
+git checkout agent-normal-interface   # unmerged, ahead of main
+pnpm --filter @zero/agent-api run test    # 522 passing
 ```
 
-Next action is **Phase 1.1**: the schema migration that turns `messages.content`
-into a `ContentBlock[]` JSON column, adds `kind`, `consolidatedAt`, the
-`pending_messages` queue and the delivery records. Read Phase 1 in full first —
-1.2's backstop ceiling and 1.3's resume rules are part of the same design and
-1.2 must not ship without a ceiling.
+Next action is **Phase 1.2**: the per-conversation compaction boundary and
+summary, with the backstop ceiling that must not be dropped before 3.4. Read
+Phase 1 in full first — 1.3's resume rules are part of the same design.
 
 Two Phase 0 outcomes Phase 1 depends on and should not re-derive: the knowledge
 counter and `KnowledgeConflictError` already exist (so the staleness filter has

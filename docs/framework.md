@@ -122,9 +122,9 @@ Routers are mounted in `app.ts` via `app.route("/", createTelegramRoutes())`.
 owns the per-user SQLite (do-orm): the Telegram link, user settings, and the
 topic model (topics, conversations, messages) — see [`topics.md`](topics.md).
 
-The webhook calls `UserDO.enqueueTurn` (dedupe the update, store the user
+The webhook calls `UserDO.enqueueTurn` (dedupe the update, queue the user
 message, arm a DO alarm) and returns 200. The `alarm()` handler is the turn
-runner: it drains every thread whose tail is a user message and runs the
+runner: it drains every conversation that still owes work and runs the
 meta-agent turn inside the DO, where the topic tools hit local SQLite and
 replies go straight to Telegram via grammY. A self-rescheduling `setTimeout`
 drives the Telegram typing action across the interface phase and stops when the

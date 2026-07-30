@@ -11,6 +11,7 @@ import { log, logError, fmtErr } from "../log";
 import { isDurableObjectReset } from "../do/retry";
 import type { AgentLabel } from "./model";
 import type { AgentModel } from "./protocol";
+import { messageText } from "../store/messages";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
@@ -71,11 +72,16 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   const limit = input.historyLimit ?? DEFAULT_HISTORY_LIMIT;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
+  // Telegram messages wait in the durable queue until a turn takes them. One
+  // transaction moves every queued message for this conversation to the
+  // transcript tail in arrival order, so a burst becomes one turn and a reset
+  // can neither lose a message nor inject it twice.
+  store.drainPendingMessages(conversationId);
   const all = store.getConversationHistory(conversationId, limit);
   const last = all[all.length - 1];
-  if (!last || last.role !== "user") return;
+  if (!last || last.kind !== "user_message") return;
 
-  const userMessage = last.content;
+  const userMessage = messageText(last.content);
   const history = all.slice(0, -1);
 
   log("turn_started", {
