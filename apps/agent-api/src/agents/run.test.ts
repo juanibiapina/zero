@@ -479,6 +479,34 @@ describe("runAgent", () => {
       null,
       "msg_capture",
     ]);
+    // Nothing to compare against on the first request, and the second compares
+    // against this same run, not an earlier turn.
+    expect(requests.map((r) => r.crossRun)).toEqual([false, false]);
+  });
+
+  it("opens the chain on the conversation's last response and marks it cross-run", async () => {
+    const { model, requests } = recordingModel([
+      {
+        content: [{ type: "tool_use", id: "x", name: "ping", input: {} }],
+        stopReason: "tool_use",
+      },
+      { content: [{ type: "text", text: "done" }], stopReason: "end_turn" },
+    ]);
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: pingTool(async () => "pong"),
+      previousResponseId: "msg_last_turn",
+    });
+
+    expect(requests.map((r) => r.previousMessageId)).toEqual([
+      "msg_last_turn",
+      "msg_capture",
+    ]);
+    // Only the first request crossed a turn boundary.
+    expect(requests.map((r) => r.crossRun)).toEqual([true, false]);
   });
 
   it("sums token counts across steps and reports them per step", async () => {

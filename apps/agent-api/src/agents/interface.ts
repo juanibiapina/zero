@@ -63,9 +63,12 @@ export interface InterfaceAgentInput {
   // the response's text is sent and before its tools run, so the log always has
   // the response ahead of its side effects. Defaults to a no-op returning null
   // in tests that only assert on send/replies.
+  // `responseId` is the model's own id for the response, absent for Zero's own
+  // fallback text (which is not a model response and starts no chain).
   persistAssistant?: (
     content: ContentBlock[],
     stopReason: string | null,
+    responseId?: string,
   ) => number | null;
   // Persist one step's ordered tool results before the next model call.
   persistToolResults?: (results: ToolResultBlock[]) => void;
@@ -336,6 +339,19 @@ export const buildConversationMessages = (
   return messages;
 };
 
+// The response id this conversation last received, for the cross-turn cache
+// diagnostic chain. Null when the conversation has no persisted response yet (or
+// only pre-1.4 rows, which recorded none).
+const lastResponseId = (
+  history: Message[],
+  trailing: Message[] = [],
+): string | null => {
+  for (const row of [...history, ...trailing].reverse()) {
+    if (row.responseId) return row.responseId;
+  }
+  return null;
+};
+
 export const runInterfaceAgent = async (
   input: InterfaceAgentInput,
 ): Promise<InterfaceAgentResult> => {
@@ -453,8 +469,9 @@ export const runInterfaceAgent = async (
     tools,
     maxSteps: input.maxSteps,
     externalCalls: input.externalCalls,
-    onAssistant: async (content, stopReason) =>
-      persistAssistant(content, stopReason),
+    previousResponseId: lastResponseId(input.history, input.trailing),
+    onAssistant: async (content, stopReason, responseId) =>
+      persistAssistant(content, stopReason, responseId),
     onText: deliver,
     onToolResults: async (results) => persistToolResults(results),
     onIdle: async () => {

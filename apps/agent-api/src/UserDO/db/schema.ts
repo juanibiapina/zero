@@ -76,6 +76,9 @@ export const messages = table("messages", {
   content: column.text().notNull(),
   kind: column.text().notNull().default("user_message"),
   stopReason: column.text(),
+  // The model's own id for this response, chained into the next request's cache
+  // diagnostics so a cross-turn cache break is visible.
+  responseId: column.text(),
   consolidatedAt: column.text(),
   createdAt: column.text().notNull(),
 });

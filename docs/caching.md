@@ -131,11 +131,15 @@ the interface agent spends all 4 (tools + system + anchor + sliding).
 ## Cache diagnostics
 
 Every request carries the `cache-diagnosis-2026-04-07` beta, and every request
-after the first in a run names the previous response with
-`diagnostics.previous_message_id`. The response reports how this request's
+names a previous response with `diagnostics.previous_message_id`: within a run
+the run's own previous response, and on a run's first request the response this
+conversation last received, read from the persisted log
+(`messages.responseId`). The response reports how this request's
 prefix diverged from that one. `agents/model.ts` logs a content-free
 `cache_diagnostic` line per response: `agent`, `step` (the zero-based loop
-index), `state`, `cache_missed_input_tokens` (when the state carries one), plus
+index), `state`, `chain_crossed_turn` (true only on the first request of a run,
+when the comparison reaches back to an earlier turn), `cache_missed_input_tokens`
+(when the state carries one), plus
 this response's own `input_tokens` (uncached, full-price), `cache_read_tokens`,
 and `cache_write_tokens`. On a working message-region cache, `cache_read_tokens`
 grows step-over-step while `input_tokens` stays small; the broken case shows a
@@ -164,14 +168,21 @@ Small requests still get a miss reason: a tiny request with no system block
 reported `system_changed` with a count of 0. Do not read `initial` as "small
 request".
 
-**In-run only.** The chain starts fresh for every `runAgent` call, so interface,
-research, and writer each get their own sequence and nothing crosses a turn.
-Cross-turn threading is deliberately skipped: fingerprints expire well inside
-the gap between most turns (`previous_message_not_found`), and Zero prepends
-volatile context to the current user message, so any comparison that did land
-would report `messages_changed` by construction. Expect late-step
-`messages_changed` within a run too. That is the loop appending tool results,
-which is normal.
+**Across turns, per conversation.** Now that the conversation is an append-only
+log, turn N+1's prefix genuinely extends turn N's, so the interface agent opens
+its chain on the conversation's last persisted response id and the line says so
+with `chain_crossed_turn: true`. Research and the writer pass no previous id of
+their own, so nothing leaks across an agent boundary.
+
+Read a cross-turn line with its known confounders in mind rather than as a fault:
+fingerprints expire well inside the gap between many turns
+(`previous_message_not_found`), and Zero prepends volatile context (the clock) to
+the current user message, so `messages_changed` on a first request is expected by
+construction. What the flag buys is the ability to separate those from an
+in-run divergence, and to notice a conversation whose prefix changes between
+turns for a reason that is **not** the volatile context — a rewritten history row,
+a staleness stub landing, a reordered block. Expect late-step `messages_changed`
+within a run too; that is the loop appending tool results, which is normal.
 
 ## Cross-user sharing invariant
 

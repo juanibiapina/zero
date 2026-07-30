@@ -20,6 +20,7 @@ export const historyMessage = (
   kind: defaultKind(role),
   content,
   stopReason: role === "assistant" ? "end_turn" : null,
+  responseId: null,
   createdAt,
   ...overrides,
 });

@@ -28,6 +28,10 @@ export interface Message {
   // Why the model ended this response (Anthropic's own reason, verbatim). Null
   // for user rows and for rows written before the reason was recorded.
   stopReason: string | null;
+  // The model's own id for this response. Null for user rows and for rows
+  // written before it was recorded; the newest non-null one is what the next
+  // request chains its cache diagnostics to.
+  responseId: string | null;
   // ISO-8601 creation time; used to render each message's relative age.
   createdAt: string;
 }
@@ -157,7 +161,11 @@ export interface ConversationStore {
     conversationId: string,
     role: Role,
     content: MessageContent,
-    options?: { kind?: MessageKind; stopReason?: string | null },
+    options?: {
+      kind?: MessageKind;
+      stopReason?: string | null;
+      responseId?: string | null;
+    },
   ): number;
   getConversationHistory(conversationId: string, limit: number): Message[];
   // What the model should see: the summary of the compacted prefix (null until

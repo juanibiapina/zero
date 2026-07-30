@@ -161,9 +161,10 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       // results before the next call. A reset therefore resumes rather than
       // replaying, and a delivery claim keeps a sent block from being sent
       // twice.
-      persistAssistant: (content, stopReason) =>
+      persistAssistant: (content, stopReason, responseId) =>
         store.storeMessage(conversationId, "assistant", content, {
           stopReason,
+          responseId,
         }),
       persistToolResults: (results) =>
         store.storeMessage(conversationId, "user", results, {

@@ -23,10 +23,11 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 1.2 compaction boundary, summary, staleness filter | done | `feat(agent): render conversations from a compaction boundary instead of a fixed window` |
 | 1.3 persist the loop as it runs, resume, follow-up injection | done | `feat(agent): persist the agent loop as it runs and resume an interrupted turn` |
 | 1.3 external-write claims | done | `feat(agent): claim irreversible tool calls so a resumed turn cannot repeat them` |
-| Phase 1.4, 2, 3 | not started | — |
+| 1.4 cross-turn cache diagnostic chain | done | `feat(agent): chain cache diagnostics across turns of a conversation` |
+| Phase 2, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
-(537 tests). The branch is pushed to `origin` but not merged; a branch push only
+(554 tests). The branch is pushed to `origin` but not merged; a branch push only
 uploads a Worker version, so nothing is deployed, so none of the Phase 0 log lines have produced
 production data yet; the acceptance criteria that read them are still open.
 
@@ -178,25 +179,27 @@ production data yet; the acceptance criteria that read them are still open.
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 552 passing
+pnpm --filter @zero/agent-api run test    # 554 passing
 ```
 
-Next action is **Phase 1.4**: chain the cache diagnostic across model calls and
-alarm resumptions by persisting the last response id per conversation. Phase 1.3
-is fully shipped; do not rebuild the hooks, the resume path, the delivery claims
-or the external-call guard.
+Next action is **Phase 2.1**: add the `ScheduleDO` and `LearningDO` classes,
+their bindings and the single `v7` `new_sqlite_classes` migration tag. Load the
+`cloudflare` skill first. Phase 1 is fully shipped; do not rebuild the loop
+hooks, the resume path, the delivery claims, the external-call guard or the
+diagnostic chain.
 
-Two Phase 0 outcomes Phase 1 depends on and should not re-derive: the knowledge
-counter and `KnowledgeConflictError` already exist (so the staleness filter has
-its signal), and delivery is already persist-before-send in one place
-(`deliver` in `agents/interface.ts`), so the delivery records in 1.1 have a
-single call site to claim against.
+Note before Phase 2: Phase 1's acceptance criteria are log-based and nothing is
+deployed yet. `topic_reads_avoided`, `stale_stubs`, `followups_injected`,
+`conversation_size` and `chain_crossed_turn` have no production data, and the
+plan's rule is to capture the pre-Phase-1 baseline (topic reads and AI Gateway
+cost per turn) before Phase 3 changes it.
 
-Before merging Phase 0, note the acceptance criteria for it are log-based and
-nothing is deployed yet: `topic_list_rendered.chars`, `topic_reads_per_turn`
-and `turn_messages_sent` have no production data, and the plan's own rule is to
-capture the pre-Phase-1 baseline (topic reads and AI Gateway cost) **before**
-starting Phase 1.
+Delivery has a single call site (`deliver` in `agents/interface.ts`), which is
+what makes the per-block claim work; keep it that way.
+
+Before merging, note the Phase 0 acceptance criteria are log-based and nothing is
+deployed yet: `topic_list_rendered.chars`, `topic_reads_per_turn` and
+`turn_messages_sent` have no production data either.
 
 ## Goal
 
@@ -252,12 +255,12 @@ in `docs/plans/agent-latency-investigation.md` and
 
 ## Current shape, for a fresh reader
 
-As of the branch head (Phase 0 and 1.1 applied):
+As of the branch head (Phase 0 and all of Phase 1 applied):
 
-- `runTurn` (`src/agents/orchestrator.ts`) drains the pending queue, reads the
-  last 20 messages, requires the tail to be a `user_message` row, runs the
-  interface agent, then runs the writer. The busy flag and its `try/finally`
-  are gone.
+- `runTurn` (`src/agents/orchestrator.ts`) drains the pending queue, renders the
+  conversation from the compaction boundary, asks `conversationHasWork`, splits at
+  the newest user message, runs the interface agent, then runs the writer. The
+  busy flag and its `try/finally` are gone.
 - `runAgent` (`src/agents/run.ts`) is the shared tool loop. It persists each
   response and its tool results through hooks as it goes, delivers text blocks as
   the model writes them, and injects queued follow-ups where it would otherwise
@@ -505,9 +508,9 @@ instrumentation first.
 - `followups_injected` with count and oldest queue age, plus
   `followup_queue_depth` at enqueue. These prove Telegram messages arriving
   mid-run are drained rather than stranded.
-- Cache diagnostics already log `cache_diagnostic`; extend it to carry whether
-  the chain crossed a turn boundary, so a cross-turn cache break is
-  distinguishable from an in-run one.
+- Cache diagnostics already log `cache_diagnostic`; it now carries
+  `chain_crossed_turn` (1.4), so a cross-turn cache break is distinguishable from
+  an in-run one.
 
 **Phase 2**
 - `schedule_fired` with `reason` (`idle` / `size` / `onboarding` / `admin_task`)
@@ -694,7 +697,7 @@ visual appearance. Log selected dimensions, estimated tokens and bytes after
 0.5b so the saving is observable. This is independently useful today and a
 precondition for persisting image blocks in Phase 1.
 
-## Phase 1 — Persist the real message log (1.1-1.3 done, 1.4 not started)
+## Phase 1 — Persist the real message log (DONE)
 
 **1.1 Migrate conversation history and delivery state in one migration**, so
 the schema moves once. **DONE** (migration `0024`, `store/messages.ts`, the new
@@ -806,7 +809,14 @@ IDs solely for a module deleted in Phase 3. Delete `renderTranscript`,
 `MAX_TOOL_RESULT_CHARS` and `MAX_RESEARCH_RESULT_CHARS` together with the writer
 at the LearningDO cutover.
 
-**1.4** Chain cache diagnostics **across model calls and alarm resumptions**.
+**1.4 DONE.** Migration `0027` adds `messages.responseId`; `runAgent` takes
+`previousResponseId` and opens its chain on the conversation's newest persisted
+response id, marking that first request `crossRun` so `cache_diagnostic` carries
+`chain_crossed_turn`. Research and the writer pass no id, so no chain crosses an
+agent boundary. Zero's own fallback text is persisted with no response id, so it
+never becomes a chain anchor. The original text:
+
+Chain cache diagnostics **across model calls and alarm resumptions**.
 Today `previous_message_id`
 chains only within a run, so a cross-turn cache break is invisible. With an
 append-only log, turn N+1's prefix genuinely extends turn N's: persist the last
