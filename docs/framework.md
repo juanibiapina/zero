@@ -131,6 +131,30 @@ drives the Telegram typing action across the interface phase and stops when the
 reply is sent, before the writer's consolidation runs; the alarm stays dedicated
 to turn scheduling.
 
+### Three Durable Objects per user
+
+All three are keyed by the same Clerk user id, and the split exists for one
+reason: **a Durable Object has exactly one alarm**. On 2026-07-29 UserDO's alarm
+was shared between turn draining, an admin task and Google onboarding, and a
+queued user message waited fifteen minutes behind them.
+
+| Class | Owns | Alarm does |
+|---|---|---|
+| `UserDO` | user data (SQLite) and interactive turns | drain turns, nothing else |
+| `ScheduleDO` | every deadline for the user (idle learning, size learning, later onboarding and admin tasks) | hand due deadlines to `LearningDO` and end |
+| `LearningDO` | durable learning-job state and execution | advance one bounded slice of a job, re-arm while work remains |
+
+`ScheduleDO` never awaits learning work, and `LearningDO` never runs a turn, so
+neither can delay a reply. Both keep their decision logic in DO-free modules
+(`do/schedule.ts`, `do/learning-job.ts`) so it is unit-tested without a Durable
+Object, exactly like `do/alarm.ts`. `LearningDO`'s executor is not enabled yet
+(Phase 3): today it records and coalesces requests and logs `learn_skipped`,
+while the per-turn writer still consolidates topics.
+
+`ctx.waitUntil` is not an option for this work: Cloudflare documents that
+`DurableObjectState.waitUntil` does not extend the object's lifetime, so leaving a
+multi-minute promise behind after an RPC returns can lose the job.
+
 The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on the
 `Store` port (`apps/agent-api/src/store/types.ts`), not on the DO or do-orm, so they
 are unit-tested with an in-memory store and a scripted mock model. `UserDO`

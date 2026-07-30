@@ -24,10 +24,11 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 1.3 persist the loop as it runs, resume, follow-up injection | done | `feat(agent): persist the agent loop as it runs and resume an interrupted turn` |
 | 1.3 external-write claims | done | `feat(agent): claim irreversible tool calls so a resumed turn cannot repeat them` |
 | 1.4 cross-turn cache diagnostic chain | done | `feat(agent): chain cache diagnostics across turns of a conversation` |
-| Phase 2, 3 | not started | — |
+| 2.1 ScheduleDO + LearningDO shells | done | `feat(agent): add per-user schedule and learning durable objects` |
+| Phase 2.2-2.4, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
-(554 tests). The branch is pushed to `origin` but not merged; a branch push only
+(569 tests). The branch is pushed to `origin` but not merged; a branch push only
 uploads a Worker version, so nothing is deployed, so none of the Phase 0 log lines have produced
 production data yet; the acceptance criteria that read them are still open.
 
@@ -179,14 +180,14 @@ production data yet; the acceptance criteria that read them are still open.
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 554 passing
+pnpm --filter @zero/agent-api run test    # 569 passing
 ```
 
-Next action is **Phase 2.1**: add the `ScheduleDO` and `LearningDO` classes,
-their bindings and the single `v7` `new_sqlite_classes` migration tag. Load the
-`cloudflare` skill first. Phase 1 is fully shipped; do not rebuild the loop
-hooks, the resume path, the delivery claims, the external-call guard or the
-diagnostic chain.
+Next action is **Phase 2.2**: strip `UserDO.alarm()` down to `runAlarmTurns` by
+moving the admin-task and onboarding deadlines onto ScheduleDO (which triggers
+their existing UserDO RPC entry points). Phase 1 and 2.1 are shipped; do not
+rebuild the loop hooks, the resume path, the delivery claims, the external-call
+guard, the diagnostic chain or the two new DO classes.
 
 Note before Phase 2: Phase 1's acceptance criteria are log-based and nothing is
 deployed yet. `topic_reads_avoided`, `stale_stubs`, `followups_injected`,
@@ -829,7 +830,19 @@ and "cheap prefix" within one.
 
 ## Phase 2 — ScheduleDO and LearningDO shell (not started)
 
-**2.1** Add two Durable Object classes, both one instance per user:
+**2.1 DONE.** Both classes exist with bindings `SCHEDULE_DO` / `LEARNING_DO` and
+migration tag `v7` (`new_sqlite_classes`), exported from `src/index.ts`, keyed by
+the same Clerk user id, with typed stubs (`ScheduleDO/stub.ts`,
+`LearningDO/stub.ts`). Their decision logic lives in DO-free modules
+`do/schedule.ts` (deadline set, earliest-first alarm arming, `takeDueDeadlines`,
+`touchConversation`, `IDLE_LEARN_MS`) and `do/learning-job.ts` (one active job
+plus at most one successor, a `size` request taking over the successor and keeping
+its conversation id), both unit-tested. `LearningDO.alarm` deliberately has no
+executor yet: it logs `learn_skipped` with `executor_not_enabled` and promotes any
+successor, because the per-turn writer is still what consolidates. Nothing calls
+`touch` or `requestLearn` yet — that is 2.3 and 2.4.
+
+Add two Durable Object classes, both one instance per user:
 
 - `ScheduleDO` owns every deadline: idle learning, Google onboarding, admin
   tasks and anything scheduled later.
