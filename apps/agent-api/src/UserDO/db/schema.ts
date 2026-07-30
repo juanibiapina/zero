@@ -41,14 +41,12 @@ export const topicLinks = table("topic_links", {
   targetId: column.integer().references(ref(topics, "id")),
 });
 
-// Conversations: one thread per Telegram (chatId, topicId). `busySince` marks a
-// thread mid-turn for the typing loop / stale guard.
+// Conversations: one thread per Telegram (chatId, topicId).
 export const conversations = table("conversations", {
   id: column.text().notNull().primaryKey(),
   chatId: column.integer().notNull(),
   topicId: column.integer().notNull(),
   createdAt: column.text().notNull(),
-  busySince: column.text(),
 });
 
 // Messages: explicit user/assistant exchanges within a conversation.

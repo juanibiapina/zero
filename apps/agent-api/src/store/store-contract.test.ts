@@ -283,14 +283,6 @@ describe("Store contract: conversations", () => {
     expect(waiting).toEqual([a]);
   });
 
-  it("markBusy / clearBusy do not throw and leave history intact", () => {
-    const s = makeStore();
-    const id = s.getOrCreateConversation(1, 0);
-    s.storeMessage(id, "user", "hi");
-    s.markBusy(id);
-    s.clearBusy(id);
-    expect(s.getConversationHistory(id, 10)).toHaveLength(1);
-  });
 });
 
 describe("Store contract: attachments", () => {

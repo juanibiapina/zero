@@ -283,22 +283,6 @@ export class DbStore implements Store {
     this.db.delete(conversations, { where: eq("id", conv.id) });
   }
 
-  markBusy(conversationId: string): void {
-    this.db.update(
-      conversations,
-      { busySince: this.nowIso() },
-      { where: eq("id", conversationId) },
-    );
-  }
-
-  clearBusy(conversationId: string): void {
-    this.db.update(
-      conversations,
-      { busySince: null },
-      { where: eq("id", conversationId) },
-    );
-  }
-
   findThreadsAwaitingReply(): Thread[] {
     const out: Thread[] = [];
     for (const c of this.db.all(conversations)) {

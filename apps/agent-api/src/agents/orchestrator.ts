@@ -88,7 +88,6 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   const persistReply = (text: string) =>
     store.storeMessage(conversationId, "assistant", text);
 
-  store.markBusy(conversationId);
   try {
     const { accessed, transcript } = await runInterfaceAgent({
       model: makeModel("interface"),
@@ -148,8 +147,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     // delivers exactly once. Send nothing, persist nothing, rethrow so the
     // uncaught throw leaves alarm() and triggers that retry. Sending the
     // fallback here would just be a premature, now-redundant "try again" the
-    // user does not need. (The finally clearBusy still runs; with MemoryStore
-    // it does not throw, so the rethrown reset propagates cleanly in tests.)
+    // user does not need.
     if (isDurableObjectReset(err)) {
       log("turn_reset_retrying", {
         chat_id: chatId,
@@ -184,8 +182,6 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     // if the interface phase already stopped it before a writer-phase throw).
     stopTyping();
     store.storeMessage(conversationId, "assistant", reply);
-  } finally {
-    store.clearBusy(conversationId);
   }
   // "Returned", not "succeeded": a handled agent failure reaches here too (it
   // sent the fallback), and only the DO-reset path rethrows past it. That is
