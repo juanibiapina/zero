@@ -16,6 +16,7 @@ import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
 import { buildGoogleTools } from "../tools/google";
 import { buildAttachmentTool } from "../tools/attachments";
+import { messageText } from "../store/messages";
 import type { Attachment, Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
@@ -213,7 +214,14 @@ export const buildConversationMessages = (
 ): AgentMessage[] => {
   const turns: Message[] = [
     ...history,
-    { role: "user", content: userMessage, createdAt: now.toISOString() },
+    {
+      id: 0,
+      role: "user",
+      kind: "user_message",
+      content: userMessage,
+      stopReason: null,
+      createdAt: now.toISOString(),
+    },
   ];
 
   // Drop leading assistant messages so the array opens on a user turn.
@@ -222,10 +230,14 @@ export const buildConversationMessages = (
 
   const messages: AgentMessage[] = [];
   for (const turn of turns.slice(start)) {
+    // Phase 1.1 stores every row as content blocks; until the loop persists
+    // tool calls (Phase 1.3) each row is one text block, so flattening to text
+    // here is lossless and the rendered prompt is byte-identical to before.
+    const body = messageText(turn.content);
     const text =
       turn.role === "user"
-        ? `[${formatTimestamp(turn.createdAt, timezone)}] ${turn.content}`
-        : turn.content;
+        ? `[${formatTimestamp(turn.createdAt, timezone)}] ${body}`
+        : body;
     const last = messages[messages.length - 1];
     if (last && last.role === turn.role) {
       // Coalesce consecutive same-role turns into one message.

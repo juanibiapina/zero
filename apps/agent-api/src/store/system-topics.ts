@@ -14,6 +14,8 @@ import type {
   Attachment,
   ConversationStore,
   Message,
+  MessageContent,
+  MessageKind,
   Role,
   Store,
   Thread,
@@ -216,8 +218,13 @@ export class SystemTopicStore implements Store {
     return this.inner.getOrCreateConversation(chatId, topicId);
   }
 
-  storeMessage(conversationId: string, role: Role, content: string): void {
-    this.inner.storeMessage(conversationId, role, content);
+  storeMessage(
+    conversationId: string,
+    role: Role,
+    content: MessageContent,
+    options?: { kind?: MessageKind; stopReason?: string | null },
+  ): number {
+    return this.inner.storeMessage(conversationId, role, content, options);
   }
 
   getConversationHistory(conversationId: string, limit: number): Message[] {
@@ -228,8 +235,20 @@ export class SystemTopicStore implements Store {
     this.inner.resetConversation(chatId, topicId);
   }
 
-  findThreadsAwaitingReply(): Thread[] {
-    return this.inner.findThreadsAwaitingReply();
+  enqueuePendingMessage(conversationId: string, content: string): void {
+    this.inner.enqueuePendingMessage(conversationId, content);
+  }
+
+  drainPendingMessages(conversationId: string): Message[] {
+    return this.inner.drainPendingMessages(conversationId);
+  }
+
+  claimDelivery(messageId: number, blockIndex: number): boolean {
+    return this.inner.claimDelivery(messageId, blockIndex);
+  }
+
+  findConversationsWithWork(): Thread[] {
+    return this.inner.findConversationsWithWork();
   }
 
   // --- attachments (delegate verbatim) ---

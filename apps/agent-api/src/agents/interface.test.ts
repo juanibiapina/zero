@@ -22,7 +22,7 @@ import { createMemoryGoogle } from "../google/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryAttachments } from "../attachments/memory";
 import { attachmentKey } from "../attachments/types";
-import { pinTopic, seedTopic, setBody } from "../store/test-support";
+import { historyMessage, pinTopic, seedTopic, setBody } from "../store/test-support";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -314,8 +314,8 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
   it("marks the last stable message and the current message (sliding window)", async () => {
     const { messages = [] } = await capturePrompt({
       history: [
-        { role: "user", content: "q", createdAt: iso(5 * 60_000) },
-        { role: "assistant", content: "a", createdAt: iso(4 * 60_000) },
+        historyMessage("user", "q", iso(5 * 60_000)),
+        historyMessage("assistant", "a", iso(4 * 60_000)),
       ],
     });
     // Last two conversation messages (stable assistant + current user) carry a
@@ -342,8 +342,8 @@ describe("buildConversationMessages", () => {
   it("maps roles and prefixes user messages with an absolute timestamp", () => {
     const messages = buildConversationMessages(
       [
-        { role: "user", content: "hello", createdAt: iso(2 * 86_400_000) },
-        { role: "assistant", content: "hi there", createdAt: iso(5 * 60_000) },
+        historyMessage("user", "hello", iso(2 * 86_400_000)),
+        historyMessage("assistant", "hi there", iso(5 * 60_000)),
       ],
       "how are you",
       NOW,
@@ -360,8 +360,8 @@ describe("buildConversationMessages", () => {
   it("drops leading assistant messages so the array starts with a user turn", () => {
     const messages = buildConversationMessages(
       [
-        { role: "assistant", content: "earlier reply", createdAt: iso(3 * 60_000) },
-        { role: "user", content: "hi", createdAt: iso(2 * 60_000) },
+        historyMessage("assistant", "earlier reply", iso(3 * 60_000)),
+        historyMessage("user", "hi", iso(2 * 60_000)),
       ],
       "now",
       NOW,
@@ -377,9 +377,9 @@ describe("buildConversationMessages", () => {
   it("coalesces consecutive assistant messages", () => {
     const messages = buildConversationMessages(
       [
-        { role: "user", content: "q", createdAt: iso(4 * 60_000) },
-        { role: "assistant", content: "one", createdAt: iso(3 * 60_000) },
-        { role: "assistant", content: "two", createdAt: iso(2 * 60_000) },
+        historyMessage("user", "q", iso(4 * 60_000)),
+        historyMessage("assistant", "one", iso(3 * 60_000)),
+        historyMessage("assistant", "two", iso(2 * 60_000)),
       ],
       "next",
       NOW,
@@ -395,7 +395,7 @@ describe("buildConversationMessages", () => {
 
   it("coalesces the current message with a trailing user message", () => {
     const messages = buildConversationMessages(
-      [{ role: "user", content: "first", createdAt: iso(2 * 60_000) }],
+      [historyMessage("user", "first", iso(2 * 60_000))],
       "second",
       NOW,
       "UTC",

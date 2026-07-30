@@ -2,12 +2,32 @@
 // orchestrator depend only on these interfaces, never on do-orm or the DO.
 // Two adapters implement them: `DbStore` (do-orm over DO SQLite, prod) and
 // `MemoryStore` (in-memory, tests). See store/store-contract.test.ts.
+//
+// Conversation content is the agent protocol's own wire format: messages are
+// stored as content blocks, verbatim, so tool calls and results survive
+// between turns. protocol.ts is dependency-free, so this stays a port.
+
+import type { ContentBlock } from "../agents/protocol";
 
 export type Role = "user" | "assistant";
 
+// What a stored row is, independent of its wire role. `tool_result` rows carry
+// the `user` role on the wire but are not something the user said.
+export type MessageKind = "user_message" | "assistant_message" | "tool_result";
+
+// Message content: wire-format blocks, or a plain string as a shorthand for a
+// single text block. Storage always persists blocks.
+export type MessageContent = string | ContentBlock[];
+
 export interface Message {
+  // Row id. Delivery records are keyed by it, so callers that send text need it.
+  id: number;
   role: Role;
-  content: string;
+  kind: MessageKind;
+  content: MessageContent;
+  // Why the model ended this response (Anthropic's own reason, verbatim). Null
+  // for user rows and for rows written before the reason was recorded.
+  stopReason: string | null;
   // ISO-8601 creation time; used to render each message's relative age.
   createdAt: string;
 }
@@ -121,10 +141,31 @@ export interface TopicStore {
 
 export interface ConversationStore {
   getOrCreateConversation(chatId: number, topicId: number): string;
-  storeMessage(conversationId: string, role: Role, content: string): void;
+  // Append one row to the transcript and return its id. `kind` defaults from
+  // the role; `stopReason` defaults to "end_turn" for an assistant row, which
+  // is what a caller that persists a finished reply means.
+  storeMessage(
+    conversationId: string,
+    role: Role,
+    content: MessageContent,
+    options?: { kind?: MessageKind; stopReason?: string | null },
+  ): number;
   getConversationHistory(conversationId: string, limit: number): Message[];
   resetConversation(chatId: number, topicId: number): void;
-  findThreadsAwaitingReply(): Thread[];
+  // Queue a Telegram message for this conversation. It enters the transcript
+  // only when a turn drains the queue, so a message arriving mid-run is never
+  // spliced into a request the model is already answering.
+  enqueuePendingMessage(conversationId: string, content: string): void;
+  // Move every queued message for this conversation into the transcript, in
+  // arrival order, in one transaction, and return the rows inserted. Atomic so
+  // a reset can neither lose a message nor inject it twice.
+  drainPendingMessages(conversationId: string): Message[];
+  // Claim one assistant text block for delivery. True the first time, false if
+  // it was already claimed: a resumed run must not send it again.
+  claimDelivery(messageId: number, blockIndex: number): boolean;
+  // Conversations that still owe work: a queued message, a tail awaiting a
+  // model response, or a response that stopped for a non-terminal reason.
+  findConversationsWithWork(): Thread[];
 }
 
 // Attachment metadata rows, keyed by the id embedded in the message marker.

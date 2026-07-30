@@ -3,7 +3,26 @@
 // read the current version and write against it, which is what these do. Tests
 // that ARE about versioning call the store directly with an explicit version.
 
-import type { TopicStore } from "./types";
+import { defaultKind } from "./messages";
+import type { Message, MessageContent, Role, TopicStore } from "./types";
+
+// A history row for tests that only care about role, content and time. The
+// protocol fields (id, kind, stopReason) get the values the store would write
+// for a finished message.
+export const historyMessage = (
+  role: Role,
+  content: MessageContent,
+  createdAt: string,
+  overrides: Partial<Message> = {},
+): Message => ({
+  id: 0,
+  role,
+  kind: defaultKind(role),
+  content,
+  stopReason: role === "assistant" ? "end_turn" : null,
+  createdAt,
+  ...overrides,
+});
 
 export const seedTopic = (
   store: TopicStore,

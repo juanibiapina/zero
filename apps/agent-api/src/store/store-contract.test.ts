@@ -5,6 +5,8 @@
 
 import { describe, expect, it } from "vitest";
 import { MemoryStore } from "./memory";
+import { messageText } from "./messages";
+import type { ContentBlock } from "../agents/protocol";
 import type { Store } from "./types";
 import { pinTopic, removeTopic, renameTopic, seedTopic, setBody, setDescription } from "./test-support";
 
@@ -250,15 +252,69 @@ describe("Store contract: conversations", () => {
     s.storeMessage(id, "user", "m1");
     s.storeMessage(id, "assistant", "m2");
     s.storeMessage(id, "user", "m3");
-    const ts = "2026-01-01T00:00:00.000Z";
-    expect(s.getConversationHistory(id, 10)).toEqual([
-      { role: "user", content: "m1", createdAt: ts },
-      { role: "assistant", content: "m2", createdAt: ts },
-      { role: "user", content: "m3", createdAt: ts },
+    expect(
+      s.getConversationHistory(id, 10).map((m) => messageText(m.content)),
+    ).toEqual(["m1", "m2", "m3"]);
+    expect(
+      s.getConversationHistory(id, 2).map((m) => messageText(m.content)),
+    ).toEqual(["m2", "m3"]);
+    expect(s.getConversationHistory(id, 10)[0]).toMatchObject({
+      role: "user",
+      kind: "user_message",
+      stopReason: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("stores a plain string as a single text block", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(id, "user", "hi");
+    expect(s.getConversationHistory(id, 10)[0].content).toEqual([
+      { type: "text", text: "hi" },
     ]);
-    expect(s.getConversationHistory(id, 2)).toEqual([
-      { role: "assistant", content: "m2", createdAt: ts },
-      { role: "user", content: "m3", createdAt: ts },
+  });
+
+  it("round-trips mixed text and tool_use blocks byte-identically", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const content: ContentBlock[] = [
+      { type: "text", text: "let me look" },
+      { type: "tool_use", id: "tu_1", name: "get_topic", input: { name: "a" } },
+    ];
+    s.storeMessage(id, "assistant", content, { stopReason: "tool_use" });
+    const [row] = s.getConversationHistory(id, 10);
+    expect(row.content).toEqual(content);
+    expect(row).toMatchObject({
+      kind: "assistant_message",
+      stopReason: "tool_use",
+    });
+  });
+
+  it("records tool results as user-role rows of kind tool_result", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(
+      id,
+      "user",
+      [{ type: "tool_result", tool_use_id: "tu_1", content: "ok" }],
+      { kind: "tool_result" },
+    );
+    expect(s.getConversationHistory(id, 10)[0]).toMatchObject({
+      role: "user",
+      kind: "tool_result",
+    });
+  });
+
+  it("storeMessage returns the row id, and ids are distinct", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const first = s.storeMessage(id, "user", "m1");
+    const second = s.storeMessage(id, "assistant", "m2");
+    expect(second).not.toBe(first);
+    expect(s.getConversationHistory(id, 10).map((m) => m.id)).toEqual([
+      first,
+      second,
     ]);
   });
 
@@ -287,17 +343,148 @@ describe("Store contract: conversations", () => {
     expect(s.getAttachment("att_reset")).toBeNull();
   });
 
-  it("findThreadsAwaitingReply returns threads whose tail is a user message", () => {
+});
+
+describe("Store contract: conversations with work", () => {
+  const withWork = (s: Store) => s.findConversationsWithWork().map((t) => t.id);
+
+  it("a user message at the tail needs a model response", () => {
     const s = makeStore();
     const a = s.getOrCreateConversation(1, 0);
     const b = s.getOrCreateConversation(2, 0);
     s.storeMessage(a, "user", "hi");
     s.storeMessage(b, "user", "hi");
     s.storeMessage(b, "assistant", "hello");
-    const waiting = s.findThreadsAwaitingReply().map((t) => t.id);
-    expect(waiting).toEqual([a]);
+    expect(withWork(s)).toEqual([a]);
   });
 
+  it("a tool result at the tail needs a model response", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "assistant", "thinking", { stopReason: "tool_use" });
+    s.storeMessage(
+      a,
+      "user",
+      [{ type: "tool_result", tool_use_id: "tu_1", content: "ok" }],
+      { kind: "tool_result" },
+    );
+    expect(withWork(s)).toEqual([a]);
+  });
+
+  it("an assistant response that stopped for tool_use is unfinished", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "assistant", "calling a tool", { stopReason: "tool_use" });
+    expect(withWork(s)).toEqual([a]);
+  });
+
+  it("an assistant response with no recorded stop reason is unfinished", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "assistant", "half a reply", { stopReason: null });
+    expect(withWork(s)).toEqual([a]);
+  });
+
+  it("a terminal assistant response with an empty queue is idle", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "user", "hi");
+    s.storeMessage(a, "assistant", "hello");
+    expect(withWork(s)).toEqual([]);
+  });
+
+  it("a queued message is work even when the transcript is finished", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "user", "hi");
+    s.storeMessage(a, "assistant", "hello");
+    s.enqueuePendingMessage(a, "one more thing");
+    expect(withWork(s)).toEqual([a]);
+  });
+
+  it("an empty conversation has no work", () => {
+    const s = makeStore();
+    s.getOrCreateConversation(1, 0);
+    expect(withWork(s)).toEqual([]);
+  });
+});
+
+describe("Store contract: pending message queue", () => {
+  it("a queued message stays out of the transcript until drained", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.enqueuePendingMessage(id, "hi");
+    expect(s.getConversationHistory(id, 10)).toEqual([]);
+    s.drainPendingMessages(id);
+    expect(
+      s.getConversationHistory(id, 10).map((m) => messageText(m.content)),
+    ).toEqual(["hi"]);
+  });
+
+  it("drains a burst into the transcript in arrival order", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.enqueuePendingMessage(id, "one");
+    s.enqueuePendingMessage(id, "two");
+    s.enqueuePendingMessage(id, "three");
+    expect(s.drainPendingMessages(id).map((m) => messageText(m.content))).toEqual(
+      ["one", "two", "three"],
+    );
+    expect(
+      s.getConversationHistory(id, 10).map((m) => messageText(m.content)),
+    ).toEqual(["one", "two", "three"]);
+  });
+
+  it("a second drain injects nothing (no duplicates)", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.enqueuePendingMessage(id, "hi");
+    s.drainPendingMessages(id);
+    expect(s.drainPendingMessages(id)).toEqual([]);
+    expect(s.getConversationHistory(id, 10)).toHaveLength(1);
+  });
+
+  it("drains only the requested conversation", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    const b = s.getOrCreateConversation(2, 0);
+    s.enqueuePendingMessage(a, "for a");
+    s.enqueuePendingMessage(b, "for b");
+    s.drainPendingMessages(a);
+    expect(s.getConversationHistory(b, 10)).toEqual([]);
+    expect(s.findConversationsWithWork().map((t) => t.id)).toEqual([a, b]);
+  });
+
+  it("resetConversation discards queued messages", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.enqueuePendingMessage(id, "hi");
+    s.resetConversation(1, 0);
+    const fresh = s.getOrCreateConversation(1, 0);
+    expect(s.drainPendingMessages(fresh)).toEqual([]);
+  });
+});
+
+describe("Store contract: delivery claims", () => {
+  it("claims a block once and refuses the second claim", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const messageId = s.storeMessage(id, "assistant", "hello");
+    expect(s.claimDelivery(messageId, 0)).toBe(true);
+    expect(s.claimDelivery(messageId, 0)).toBe(false);
+  });
+
+  it("claims each block of a message independently", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const messageId = s.storeMessage(id, "assistant", [
+      { type: "text", text: "first" },
+      { type: "text", text: "second" },
+    ]);
+    expect(s.claimDelivery(messageId, 0)).toBe(true);
+    expect(s.claimDelivery(messageId, 1)).toBe(true);
+    expect(s.claimDelivery(messageId, 1)).toBe(false);
+  });
 });
 
 describe("Store contract: attachments", () => {

@@ -269,9 +269,19 @@ delivers the real answer exactly once — no premature fallback. After this,
 ## Execution (DO alarm)
 
 The webhook resolves the user, calls `UserDO.enqueueTurn` (dedupe on
-`processed_updates`, store the user message, arm the alarm), and returns 200. The
-alarm handler drains every thread whose tail is a user message and runs the
-orchestrator for each. A concurrent enqueue arms a fresh alarm, so messages that
+`processed_updates`, queue the user message in `pending_messages`, arm the
+alarm), and returns 200. A queued message is not in the transcript yet: the turn
+takes it, moving every queued message for that conversation to the transcript
+tail in one transaction, in arrival order, so a burst becomes one turn and a
+reset can neither lose a message nor inject it twice.
+
+The alarm handler drains every conversation that still owes work and runs the
+orchestrator for each. "Owes work" is read from the protocol, not from the tail's
+role: a conversation has work when messages are queued, when the tail is a user
+message or a tool result awaiting a model response, or when the last assistant
+response stopped for a non-terminal reason (`tool_use`, `pause_turn`, or none
+recorded). An assistant response with a terminal stop reason and an empty queue
+is idle. A concurrent enqueue arms a fresh alarm, so messages that
 arrive mid-run are picked up on the next fire. A self-rescheduling `setTimeout`
 re-sends the Telegram typing action every 4s across the interface phase
 (including any research the user genuinely waits on) and stops the moment the
@@ -302,9 +312,9 @@ authoritative `outcome`, `wallTimeMs` and `cpuTimeMs`.
 
 If draining throws a **catchable** error (LLM gateway error, network abort),
 `do/alarm.ts` self-reschedules the alarm with exponential backoff — but only
-while `findThreadsAwaitingReply()` still returns work. Once every thread's tail
-is `assistant` it stops, which is the circuit breaker against a runaway paid
-alarm loop. It catches and returns rather than rethrowing: rethrowing would break
+while `findConversationsWithWork()` still returns work. Once every conversation
+has an empty queue and a finished assistant response it stops, which is the
+circuit breaker against a runaway paid alarm loop. It catches and returns rather than rethrowing: rethrowing would break
 the DO output gate and discard the reschedule write, falling back to CF's
 built-in retry (capped at 6). Backoff grows from a storage-backed attempt counter
 (`alarmAttempts`), not `alarmInfo.retryCount`, which resets on the catch-return

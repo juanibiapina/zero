@@ -74,7 +74,7 @@ zero/
 │          arm the DO alarm) → return                              │
 │                                                                  │
 │  UserDO (idFromName(clerkUserId), SQLite via do-orm)             │
-│  ├─ alarm(): drain threads whose tail is a user message;         │
+│  ├─ alarm(): drain conversations that still owe work;            │
 │  │    on catchable failure self-reschedule w/ backoff while work  │
 │  │    remains, else stop (see do/alarm.ts)                        │
 │  ├─ runTurn(chatId, topicId):                                    │
@@ -156,7 +156,9 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `topics`            | `id`, `name`, `description`, `body`, timestamps, `messageCount` | The knowledge model (see [`topics.md`](topics.md)) |
 | `knowledge`         | `id`, `version`, `systemFingerprint`                         | The knowledge version guarding topic writes    |
 | `conversations`     | `id`, `chatId`, `topicId`, `createdAt`                       | One thread per Telegram (chatId, topicId)      |
-| `messages`          | `id`, `conversationId`, `role`, `content`, `createdAt`       | User/assistant exchanges                       |
+| `messages`          | `id`, `conversationId`, `role`, `kind`, `content`, `stopReason`, `consolidatedAt`, `createdAt` | The conversation's protocol log: `content` is a JSON array of wire-format content blocks |
+| `pending_messages`  | `id`, `conversationId`, `content`, `createdAt`, `injectedAt` | Telegram messages queued until a turn injects them |
+| `deliveries`        | `messageId`, `blockIndex`, `claimedAt`                       | Assistant text blocks already handed to Telegram |
 | `attachments`       | `id`, `conversationId`, `r2Key`, `filename`, `mimeType`, `createdAt` | Image lookup-by-id (bytes live in R2)  |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |
 

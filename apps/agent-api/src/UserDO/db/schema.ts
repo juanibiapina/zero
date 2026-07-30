@@ -58,13 +58,41 @@ export const conversations = table("conversations", {
   createdAt: column.text().notNull(),
 });
 
-// Messages: explicit user/assistant exchanges within a conversation.
+// Messages: the conversation's append-only protocol log. `content` is a JSON
+// array of wire-format content blocks (text, tool_use, tool_result, image), so
+// a turn's tool calls and results survive into later turns. `kind` names the
+// row (user_message / assistant_message / tool_result), `stopReason` is the
+// model's own reason for ending an assistant response (null for user rows),
+// and `consolidatedAt` is set once learning has folded the row into topics.
 export const messages = table("messages", {
-  id: column.integer().primaryKey().autoIncrement(),
+  id: column.integer().notNull().primaryKey().autoIncrement(),
   conversationId: column.text().notNull(),
   role: column.text().notNull(),
   content: column.text().notNull(),
+  kind: column.text().notNull().default("user_message"),
+  stopReason: column.text(),
+  consolidatedAt: column.text(),
   createdAt: column.text().notNull(),
+});
+
+// Pending messages: Telegram inputs waiting to enter the transcript. The
+// webhook enqueues here; a turn injects them at a safe point in arrival order.
+// `injectedAt` marks a row already drained into `messages`.
+export const pendingMessages = table("pending_messages", {
+  id: column.integer().notNull().primaryKey().autoIncrement(),
+  conversationId: column.text().notNull(),
+  content: column.text().notNull(),
+  createdAt: column.text().notNull(),
+  injectedAt: column.text(),
+});
+
+// Deliveries: one row per assistant text block handed to Telegram, claimed
+// before the send leaves. A resumed run skips claimed blocks, which is what
+// keeps delivery at-most-once without putting delivery state in the transcript.
+export const deliveries = table("deliveries", {
+  messageId: column.integer().notNull().references(ref(messages, "id")),
+  blockIndex: column.integer().notNull(),
+  claimedAt: column.text().notNull(),
 });
 
 // Attachments: lookup-by-id metadata for files the user sent. Bytes live in R2
