@@ -14,16 +14,21 @@ export const createStoreLearningPort = (store: Store): LearningPort => ({
     afterId?: number;
     limit: number;
   }): Promise<LearningMessage[]> => store.listUnconsolidatedMessages(input),
-  completeJob: async (jobId: string): Promise<void> =>
-    store.completeLearningJob(jobId),
-  getContext: async (
+  completeJob: async (jobId: string, throughMessageId: number): Promise<void> =>
+    store.completeLearningJob(jobId, throughMessageId),
+  getCompactionWindow: async (
     conversationId: string,
     limit: number,
-  ): Promise<{ summary: string | null; messages: LearningMessage[] }> => {
-    const context = store.getConversationContext(conversationId, limit);
+  ): Promise<{
+    summary: string | null;
+    messages: LearningMessage[];
+    hasMore: boolean;
+  }> => {
+    const window = store.getCompactionWindow(conversationId, limit);
     return {
-      summary: context.summary,
-      messages: context.messages.map((m) => ({ ...m, conversationId })),
+      summary: window.summary,
+      messages: window.messages.map((m) => ({ ...m, conversationId })),
+      hasMore: window.hasMore,
     };
   },
   compactConversation: async (

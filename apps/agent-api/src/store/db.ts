@@ -24,10 +24,13 @@ import {
   decodeContent,
   defaultKind,
   encodeContent,
+  trimOrphanToolResults,
+  unclaimedBlockIndexes,
 } from "./messages";
 import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
+  CompactionWindow,
   ConversationContext,
   ExternalCallClaim,
   LearningMessage,
@@ -396,7 +399,28 @@ export class DbStore implements Store {
     });
     return {
       summary: conv?.summary ?? null,
-      messages: rows.reverse().map(toMessage),
+      messages: trimOrphanToolResults(rows.reverse().map(toMessage)),
+    };
+  }
+
+  getCompactionWindow(conversationId: string, limit: number): CompactionWindow {
+    const conv = this.db.get(conversations, {
+      where: eq("id", conversationId),
+    });
+    const boundary = conv?.compactedThroughMessageId ?? null;
+    // One row beyond the window answers `hasMore` without a second query.
+    const rows = this.db.all(messages, {
+      where:
+        boundary === null
+          ? eq("conversationId", conversationId)
+          : and(eq("conversationId", conversationId), gt("id", boundary)),
+      orderBy: asc("id"),
+      limit: limit + 1,
+    });
+    return {
+      summary: conv?.summary ?? null,
+      messages: rows.slice(0, limit).map(toMessage),
+      hasMore: rows.length > limit,
     };
   }
 
@@ -496,6 +520,15 @@ export class DbStore implements Store {
     });
   }
 
+  countUndeliveredBlocks(messageId: number): number {
+    const row = this.db.get(messages, { where: eq("id", messageId) });
+    if (!row || row.role !== "assistant") return 0;
+    const claimed = this.db
+      .all(deliveries, { where: eq("messageId", messageId) })
+      .map((d) => d.blockIndex);
+    return unclaimedBlockIndexes(decodeContent(row.content), claimed).length;
+  }
+
   // --- learning jobs ---
 
   beginLearningJob(jobId: string): number {
@@ -543,17 +576,24 @@ export class DbStore implements Store {
     return out.slice(0, input.limit);
   }
 
-  completeLearningJob(jobId: string): void {
+  completeLearningJob(jobId: string, throughMessageId?: number): void {
     this.db.transaction(() => {
       const job = this.db.get(learningJobs, { where: eq("jobId", jobId) });
       // Idempotent by job id: a repeated completion after a lost acknowledgement
       // must not stamp a wider range or run twice.
       if (!job || job.completedAt !== null) return;
       const at = this.nowIso();
+      // Never wider than what the learner was shown. A job whose input was cut
+      // short leaves the remainder unconsolidated for its successor; stamping
+      // the whole frozen range would mark those rows learned forever.
+      const through = Math.min(
+        job.highWaterMessageId,
+        throughMessageId ?? job.highWaterMessageId,
+      );
       this.db.update(
         messages,
         { consolidatedAt: at },
-        { where: lte("id", job.highWaterMessageId) },
+        { where: lte("id", through) },
       );
       this.db.update(
         learningJobs,
@@ -605,6 +645,7 @@ export class DbStore implements Store {
         tail: tail
           ? { kind: tail.kind as MessageKind, stopReason: tail.stopReason }
           : undefined,
+        undeliveredCount: tail ? this.countUndeliveredBlocks(tail.id) : 0,
       });
       if (hasWork) out.push({ id: c.id, chatId: c.chatId, topicId: c.topicId });
     }

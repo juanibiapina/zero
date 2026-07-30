@@ -228,7 +228,10 @@ arrive later belong to the next job, never to a prompt that was already built.
 
 At the first slice the job asks UserDO for a high-water message id and pages the
 unconsolidated messages up to it. That id is frozen and idempotent by job id, so
-a restart never widens the range. Then, per alarm:
+a restart never widens the range. The page is bounded by the rendered size of the
+learner's prompt, not by a message count, because that is the resource the input
+actually consumes; a job that fills the budget stamps only the messages it was
+shown and hands the rest to a successor. Then, per alarm:
 
 - a bounded number of model steps run (`LEARN_STEPS_PER_SLICE`);
 - each response is appended to the learner's durable wire log before its tools
@@ -245,14 +248,28 @@ instead of appending twice — which is why the version contract, not an operati
 marker, is what makes learning safe to retry.
 
 When the learner stops cleanly, a `size` job also compacts the named
-conversation, then UserDO stamps the covered messages consolidated (idempotent by
-job id, and it does not touch the knowledge version — the topic writes already
-did). Only then is a queued successor started.
+conversation, then UserDO stamps the messages the learner read as consolidated
+(idempotent by job id, never past what was read, and it does not touch the
+knowledge version — the topic writes already did). Only then is a queued
+successor started.
 
 Compaction summarizes the conversation up to a boundary, keeping the newest
-exchanges raw. The summary must never carry topic knowledge: it is unversioned,
-so anything copied into it could never be detected as stale. The prompt says to
-name topics as `[[Topic Name]]` and reread them instead.
+exchanges raw. It reads **forward from the current boundary**, one window at a
+time, and a window that does not reach the tail hands the rest to a successor
+pass. Reading the newest messages instead and then moving the boundary to the end
+of that window would jump the boundary over everything in between, and no summary
+would ever cover those rows.
+
+The boundary may only land **after a terminal assistant response**, so what
+survives it starts on a user message. A cut by row count can fall between an
+assistant tool call and its result, and the rendered context would then open on a
+result whose call is missing, which the API rejects. Rendering applies the same
+rule defensively: a window truncated by the read limit drops its leading orphan
+results.
+
+The summary must never carry topic knowledge: it is unversioned, so anything
+copied into it could never be detected as stale. The prompt says to name topics
+as `[[Topic Name]]` and reread them instead.
 
 ## Knowledge versions
 
@@ -315,6 +332,15 @@ the blocks a reset left undelivered, so an interrupted turn neither repeats itse
 nor swallows a message. The residual trade-off is unchanged and deliberate: a
 reset between the claim and Telegram loses that one message.
 
+An unclaimed block is therefore **work**, even when the response that holds it is
+terminal. A reset between persisting a response and claiming its first block
+leaves a finished reply nobody read, and if "the tail is a finished response"
+counted as idle, neither the thread scan nor the turn would ever look at it
+again. Such a conversation is picked up and delivered without calling the model:
+the answer already exists, and re-running it would answer the same message twice.
+The fallback and rate-limit replies take the same claim, so they cannot be sent
+twice either.
+
 **Unfinished tool calls are re-run on resume.** A reset between a response and its
 results leaves an assistant tail whose `tool_use` blocks have no `tool_result`,
 which is not a valid request, so the resuming run executes those calls and stores
@@ -333,6 +359,16 @@ comes back as an error result saying the outcome is unknown, must not be retried
 and the user should check Gmail or Calendar. That is at-most-once by choice —
 neither API offers exactly-once — and it is the same trade made for Telegram
 delivery: a possible "did that send?" instead of a possible duplicate.
+
+A *failure* of such a call is classified, not assumed. An exception proves the
+tool returned nothing, never that the provider did nothing: a fetch that dies
+while reading the response looks identical to one that never arrived, and the
+mail may already be sent. Only the adapter can tell, so it raises
+`ExternalCallNotSent` when the request provably had no effect (Google not
+connected, or a rejection status that is not a timeout or a throttle). That case
+completes the claim and the model may try again. Every other failure leaves the
+claim `started`, so this call and any replay of its id report the unknown-outcome
+error instead of inviting a duplicate send.
 
 **Follow-ups are injected where the loop would stop.** A Telegram message that
 arrives mid-run waits in `pending_messages`; when the model asks for no more

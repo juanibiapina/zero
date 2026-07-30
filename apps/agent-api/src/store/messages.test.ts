@@ -7,9 +7,13 @@ import {
   encodeContent,
   isTerminalStopReason,
   messageText,
+  safeCompactionCut,
   STALE_TOPIC_STUB,
+  trimOrphanToolResults,
+  unclaimedBlockIndexes,
 } from "./messages";
-import type { Message, Role } from "./types";
+import type { ContentBlock } from "../agents/protocol";
+import type { Message, MessageKind, Role } from "./types";
 
 describe("content encoding", () => {
   it("round-trips a string as one text block", () => {
@@ -122,6 +126,94 @@ describe("conversationHasWork", () => {
         tail: { kind: "assistant_message", stopReason: "tool_use" },
       }),
     ).toBe(true);
+  });
+
+  it("is true for a finished response whose text was never sent", () => {
+    expect(
+      conversationHasWork({
+        pendingCount: 0,
+        tail: { kind: "assistant_message", stopReason: "end_turn" },
+        undeliveredCount: 1,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("unclaimedBlockIndexes", () => {
+  it("lists text blocks that carry something to say and were not claimed", () => {
+    const content: ContentBlock[] = [
+      { type: "text", text: "one" },
+      { type: "text", text: "   " },
+      { type: "tool_use", id: "tu_1", name: "get_topic", input: {} },
+      { type: "text", text: "two" },
+    ];
+    expect(unclaimedBlockIndexes(content, [])).toEqual([0, 3]);
+    expect(unclaimedBlockIndexes(content, [0])).toEqual([3]);
+    expect(unclaimedBlockIndexes(content, [0, 3])).toEqual([]);
+  });
+});
+
+describe("safeCompactionCut", () => {
+  const row = (kind: MessageKind, stopReason: string | null = null) => ({
+    kind,
+    stopReason,
+  });
+
+  it("cuts after the newest terminal assistant response", () => {
+    const rows = [
+      row("user_message"),
+      row("assistant_message", "end_turn"),
+      row("user_message"),
+      row("assistant_message", "end_turn"),
+    ];
+    expect(safeCompactionCut(rows, { keepTail: 0 })).toBe(3);
+  });
+
+  it("never cuts between a tool call and its result", () => {
+    const rows = [
+      row("user_message"),
+      row("assistant_message", "end_turn"),
+      row("user_message"),
+      row("assistant_message", "tool_use"),
+      row("tool_result"),
+      row("assistant_message", "end_turn"),
+    ];
+    // A row count would cut at index 3 or 4 and orphan the result.
+    expect(safeCompactionCut(rows, { keepTail: 2 })).toBe(1);
+  });
+
+  it("is null when the window holds no finished response", () => {
+    const rows = [row("assistant_message", "tool_use"), row("tool_result")];
+    expect(safeCompactionCut(rows, { keepTail: 0 })).toBeNull();
+  });
+
+  it("holds the newest rows out of the summary", () => {
+    const rows = [
+      row("assistant_message", "end_turn"),
+      row("user_message"),
+      row("assistant_message", "end_turn"),
+    ];
+    expect(safeCompactionCut(rows, { keepTail: 0 })).toBe(2);
+    expect(safeCompactionCut(rows, { keepTail: 2 })).toBe(0);
+  });
+});
+
+describe("trimOrphanToolResults", () => {
+  it("drops leading results whose call was cut away", () => {
+    const rows = [
+      { kind: "tool_result" as MessageKind },
+      { kind: "tool_result" as MessageKind },
+      { kind: "user_message" as MessageKind },
+    ];
+    expect(trimOrphanToolResults(rows)).toEqual([{ kind: "user_message" }]);
+  });
+
+  it("keeps a window that opens on an assistant row with its own calls", () => {
+    const rows = [
+      { kind: "assistant_message" as MessageKind },
+      { kind: "tool_result" as MessageKind },
+    ];
+    expect(trimOrphanToolResults(rows)).toEqual(rows);
   });
 });
 

@@ -15,10 +15,12 @@ import {
   conversationHasWork,
   CONTEXT_MESSAGE_PAGE,
   countTopicReads,
+  isTerminalStopReason,
   LEARN_SIZE_THRESHOLD_TOKENS,
   estimateTokens,
   messageText,
 } from "../store/messages";
+import { createDelivery } from "./delivery";
 import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
@@ -103,7 +105,28 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   // message (already drained above), a user message or tool result at the tail,
   // or a response that stopped for a non-terminal reason. A terminal assistant
   // tail is idle.
-  if (!conversationHasWork({ pendingCount: 0, tail })) return;
+  // A reply is persisted before it is sent, so a reset in that window leaves a
+  // finished response nobody read. That state is work even though the response
+  // is terminal, and it is delivery work only: re-running the model here would
+  // answer the same user message a second time.
+  const undeliveredCount =
+    tail && tail.role === "assistant" ? store.countUndeliveredBlocks(tail.id) : 0;
+  if (!conversationHasWork({ pendingCount: 0, tail, undeliveredCount })) return;
+  if (
+    tail &&
+    tail.kind === "assistant_message" &&
+    isTerminalStopReason(tail.stopReason) &&
+    undeliveredCount > 0
+  ) {
+    const lastUserIdx = all.findLastIndex((m) => m.kind === "user_message");
+    const { deliverUnclaimed } = createDelivery({
+      claim: (messageId, blockIndex) => store.claimDelivery(messageId, blockIndex),
+      send: (text) => send(text),
+    });
+    await deliverUnclaimed(all.slice(lastUserIdx + 1));
+    stopTyping();
+    return;
+  }
 
   const { messages: filtered, stubbed } = applyStalenessFilter(
     all,
@@ -253,11 +276,14 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       error: fmtErr(err),
     });
     const reply = rateLimited ? RATE_LIMIT_MESSAGE : FALLBACK_MESSAGE;
-    await send(reply);
+    // Same discipline as an ordinary reply: persist, claim, send. Without the
+    // claim this row looks like a reply that was written and never sent, and
+    // the next scan would deliver the fallback a second time.
+    const replyId = store.storeMessage(conversationId, "assistant", reply);
+    if (store.claimDelivery(replyId, 0)) await send(reply);
     // The failure reply is out; stop typing on this path too (it is idempotent
     // if the interface phase already stopped it before a writer-phase throw).
     stopTyping();
-    store.storeMessage(conversationId, "assistant", reply);
   }
   // "Returned", not "succeeded": a handled agent failure reaches here too (it
   // sent the fallback), and only the DO-reset path rethrows past it. That is

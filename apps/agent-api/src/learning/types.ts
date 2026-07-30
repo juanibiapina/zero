@@ -27,15 +27,22 @@ export interface LearningPort {
     afterId?: number;
     limit: number;
   }): Promise<LearningMessage[]>;
-  // Stamp the job's range consolidated. Idempotent by job id, and it never
-  // changes the knowledge version: the topic writes already did that.
-  completeJob(jobId: string): Promise<void>;
-  // One conversation as the model currently sees it, which is what compaction
-  // summarizes: the previous summary plus the messages after the boundary.
-  getContext(
+  // Stamp the job's range consolidated, never past `throughMessageId` — the id
+  // of the last message the learner was actually shown. A job that read only
+  // part of its range must not mark the rest learned. Idempotent by job id, and
+  // it never changes the knowledge version: the topic writes already did that.
+  completeJob(jobId: string, throughMessageId: number): Promise<void>;
+  // What compaction summarizes: the previous summary plus the OLDEST messages
+  // after the boundary, and whether more follow. Forward, not the tail, so the
+  // boundary can only ever advance across rows this window contained.
+  getCompactionWindow(
     conversationId: string,
     limit: number,
-  ): Promise<{ summary: string | null; messages: LearningMessage[] }>;
+  ): Promise<{
+    summary: string | null;
+    messages: LearningMessage[];
+    hasMore: boolean;
+  }>;
   // Move one conversation's compaction boundary and store its summary. Deletes
   // nothing: the raw log is what learning reads.
   compactConversation(

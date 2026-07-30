@@ -33,7 +33,7 @@ describe("runTurn", () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "hi");
-    store.storeMessage(id, "assistant", "hello");
+    store.claimDelivery(store.storeMessage(id, "assistant", "hello"), 0);
     const sink = collectSink();
 
     await runTurn({
@@ -48,6 +48,49 @@ describe("runTurn", () => {
     });
 
     expect(sink.sent).toEqual([]);
+  });
+
+  it("sends a persisted reply nobody delivered, without calling the model", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    // What a reset between persist and claim leaves behind: a finished response
+    // that never reached the user.
+    store.storeMessage(id, "assistant", "hello there");
+    const sink = collectSink();
+    const calls: unknown[] = [];
+    const model = capturingModel((request) => {
+      calls.push(request);
+      return {};
+    });
+
+    await runTurn({
+      store,
+      makeModel: constModel(model),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    expect(sink.sent).toEqual(["hello there"]);
+    expect(calls).toEqual([]);
+    // The claim is now in place, so the conversation is idle and a second pass
+    // stays quiet.
+    expect(store.findConversationsWithWork()).toEqual([]);
+    await runTurn({
+      store,
+      makeModel: constModel(model),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+    expect(sink.sent).toEqual(["hello there"]);
   });
 
   it("runs the interface agent and persists what it sent", async () => {

@@ -7,10 +7,13 @@ import {
   decodeContent,
   defaultKind,
   encodeContent,
+  trimOrphanToolResults,
+  unclaimedBlockIndexes,
 } from "./messages";
 import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
+  CompactionWindow,
   ConversationContext,
   ConversationStore,
   ExternalCallClaim,
@@ -358,14 +361,31 @@ export class MemoryStore implements Store {
     const boundary = conv?.compactedThroughMessageId ?? null;
     return {
       summary: conv?.summary ?? null,
-      messages: this.msgs
-        .filter(
-          (m) =>
-            m.conversationId === conversationId &&
-            (boundary === null || m.id > boundary),
-        )
-        .slice(-limit)
-        .map(toMessage),
+      messages: trimOrphanToolResults(
+        this.msgs
+          .filter(
+            (m) =>
+              m.conversationId === conversationId &&
+              (boundary === null || m.id > boundary),
+          )
+          .slice(-limit)
+          .map(toMessage),
+      ),
+    };
+  }
+
+  getCompactionWindow(conversationId: string, limit: number): CompactionWindow {
+    const conv = this.convs.find((c) => c.id === conversationId);
+    const boundary = conv?.compactedThroughMessageId ?? null;
+    const after = this.msgs.filter(
+      (m) =>
+        m.conversationId === conversationId &&
+        (boundary === null || m.id > boundary),
+    );
+    return {
+      summary: conv?.summary ?? null,
+      messages: after.slice(0, limit).map(toMessage),
+      hasMore: after.length > limit,
     };
   }
 
@@ -439,6 +459,17 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  countUndeliveredBlocks(messageId: number): number {
+    const row = this.msgs.find((m) => m.id === messageId);
+    if (!row || row.role !== "assistant") return 0;
+    const claimed: number[] = [];
+    for (const key of this.claimed) {
+      const [id, index] = key.split(":");
+      if (Number(id) === messageId) claimed.push(Number(index));
+    }
+    return unclaimedBlockIndexes(decodeContent(row.content), claimed).length;
+  }
+
   // --- learning jobs ---
 
   beginLearningJob(jobId: string): number {
@@ -466,12 +497,16 @@ export class MemoryStore implements Store {
       .map((m) => ({ ...toMessage(m), conversationId: m.conversationId }));
   }
 
-  completeLearningJob(jobId: string): void {
+  completeLearningJob(jobId: string, throughMessageId?: number): void {
     const job = this.jobs.get(jobId);
     if (!job || job.completed) return;
     const at = this.now();
+    const through = Math.min(
+      job.highWaterMessageId,
+      throughMessageId ?? job.highWaterMessageId,
+    );
     for (const m of this.msgs) {
-      if (m.id <= job.highWaterMessageId) m.consolidatedAt = at;
+      if (m.id <= through) m.consolidatedAt = at;
     }
     this.jobs.set(jobId, { ...job, completed: true });
   }
@@ -509,6 +544,7 @@ export class MemoryStore implements Store {
       const hasWork = conversationHasWork({
         pendingCount,
         tail: tail ? { kind: tail.kind, stopReason: tail.stopReason } : undefined,
+        undeliveredCount: tail ? this.countUndeliveredBlocks(tail.id) : 0,
       });
       if (hasWork) out.push({ id: c.id, chatId: c.chatId, topicId: c.topicId });
     }

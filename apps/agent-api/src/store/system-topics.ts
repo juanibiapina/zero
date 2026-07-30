@@ -12,6 +12,7 @@ import changelogMarkdown from "../../CHANGELOG.md";
 import { extractLinks } from "./links";
 import type {
   Attachment,
+  CompactionWindow,
   ConversationContext,
   ConversationStore,
   ExternalCallClaim,
@@ -241,6 +242,10 @@ export class SystemTopicStore implements Store {
     return this.inner.getConversationContext(conversationId, limit);
   }
 
+  getCompactionWindow(conversationId: string, limit: number): CompactionWindow {
+    return this.inner.getCompactionWindow(conversationId, limit);
+  }
+
   compactConversation(
     conversationId: string,
     input: { throughMessageId: number; summary: string },
@@ -264,6 +269,10 @@ export class SystemTopicStore implements Store {
     return this.inner.claimDelivery(messageId, blockIndex);
   }
 
+  countUndeliveredBlocks(messageId: number): number {
+    return this.inner.countUndeliveredBlocks(messageId);
+  }
+
   findConversationsWithWork(): Thread[] {
     return this.inner.findConversationsWithWork();
   }
@@ -280,8 +289,8 @@ export class SystemTopicStore implements Store {
     return this.inner.listUnconsolidatedMessages(input);
   }
 
-  completeLearningJob(jobId: string): void {
-    this.inner.completeLearningJob(jobId);
+  completeLearningJob(jobId: string, throughMessageId?: number): void {
+    this.inner.completeLearningJob(jobId, throughMessageId);
   }
 
   beginExternalCall(toolUseId: string, tool: string): ExternalCallClaim {

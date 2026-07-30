@@ -34,6 +34,7 @@ import {
   renderPinnedTopics,
 } from "./prompts";
 import { runAgent, usageLogFields, type ExternalCallGuard } from "./run";
+import { createDelivery } from "./delivery";
 import { markCacheBreakpoint } from "./cache";
 import { log } from "../log";
 
@@ -294,37 +295,14 @@ export const runInterfaceAgent = async (
   const drainFollowups = input.drainFollowups ?? (() => []);
   const timezone = input.timezone ?? "UTC";
 
-  // Deliver one text block of a persisted assistant response. The response is
-  // already in the log (the runner persists it before this runs), so what is
-  // needed here is at-most-once sending: claim the block durably, then send.
-  // A resumed run finds the block already claimed and stays quiet instead of
-  // repeating it. A send failure propagates out of runAgent to the
-  // orchestrator's error boundary rather than becoming a tool error the model
-  // would retry.
-  const deliver = async (
-    text: string,
-    ref?: { messageId: number | null; blockIndex: number },
-  ): Promise<void> => {
-    if (ref && ref.messageId !== null && !claimDelivery(ref.messageId, ref.blockIndex)) {
-      log("delivery_skipped", { block_index: ref.blockIndex });
-      return;
-    }
-    await input.send(text);
-    replies.push(text);
-  };
-
-  // A run interrupted between persisting a response and sending its text left
-  // the user with nothing to read. The claims say exactly which blocks got out,
-  // so send the rest before continuing the loop.
-  const deliverUnclaimed = async (rows: Message[]): Promise<void> => {
-    for (const row of rows) {
-      if (row.role !== "assistant") continue;
-      for (const [blockIndex, block] of toBlocks(row.content).entries()) {
-        if (block.type !== "text" || block.text.trim() === "") continue;
-        await deliver(block.text, { messageId: row.id, blockIndex });
-      }
-    }
-  };
+  // At-most-once sending of persisted text (see agents/delivery.ts). A send
+  // failure propagates out of runAgent to the orchestrator's error boundary
+  // rather than becoming a tool error the model would retry.
+  const { deliver, deliverUnclaimed } = createDelivery({
+    claim: (messageId, blockIndex) => claimDelivery(messageId, blockIndex),
+    send: (text) => input.send(text),
+    onSent: (text) => replies.push(text),
+  });
 
   const tools = {
     ...buildInterfaceTools({
