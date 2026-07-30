@@ -795,6 +795,50 @@ describe("runTurn durable loop", () => {
     expect(store.findConversationsWithWork()).toEqual([]);
   });
 
+  it("does not re-send mail a dead run had already started", async () => {
+    const store = new MemoryStore();
+    const google = createMemoryGoogle();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "email alice");
+    store.storeMessage(
+      id,
+      "assistant",
+      [
+        {
+          type: "tool_use",
+          id: "call_send",
+          name: "gmail_send",
+          input: { to: "alice@x.com", subject: "hi", body: "hi" },
+        },
+      ],
+      { stopReason: "tool_use" },
+    );
+    // The request left (or did not) and the reset landed before the result was
+    // recorded.
+    store.beginExternalCall("call_send", "gmail_send");
+    const sink = collectSink();
+
+    await runTurn({
+      store,
+      makeModel: constModel(
+        scriptedModel([
+          { text: "I'm not sure that email went out — check Gmail." },
+          { text: "nothing to consolidate" },
+        ]),
+      ),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google,
+      chatId: 1,
+      topicId: 0,
+    });
+
+    expect(google.sentMail).toEqual([]);
+    const rows = store.getConversationHistory(id, 10);
+    expect(JSON.stringify(rows[2].content)).toContain("Do not retry it");
+  });
+
   it("answers a message that arrives mid-run in the same run", async () => {
     const store = new MemoryStore();
     seedTopic(store, "weather", "climate");

@@ -37,6 +37,28 @@ import { cachedSystem, markLastTool, slideMessageBreakpoint } from "./cache";
 // high step count), lower it.
 export const AGENT_MAX_STEPS = 200;
 
+// Durable bookkeeping for calls that cannot be replayed. Implemented by the
+// store; omitted by agents with no external writes (research, writer).
+export interface ExternalCallGuard {
+  begin(
+    toolUseId: string,
+    tool: string,
+  ):
+    | { status: "claimed" }
+    | { status: "in_flight" }
+    | { status: "completed"; result: string };
+  complete(toolUseId: string, result: string): void;
+}
+
+// What the model is told about a call an earlier attempt started and never
+// finished recording. It is an error result, so the model must react to it, and
+// it says the one thing that is true: nobody knows whether it went out.
+export const UNCERTAIN_EXTERNAL_CALL =
+  "This action was already started by an earlier attempt at this turn and its " +
+  "outcome was never recorded, so it may or may not have gone through. Do not " +
+  "retry it. Tell the user to check Gmail or Calendar to confirm before trying " +
+  "again.";
+
 export interface RunAgentInput {
   model: AgentModel;
   system: string;
@@ -79,6 +101,10 @@ export interface RunAgentInput {
   // is how Telegram messages that arrived mid-run are injected without ever
   // interrupting a tool sequence. Returning nothing ends the run.
   onIdle?: () => Promise<AgentMessage[]>;
+  // Durable at-most-once bookkeeping for tools marked `externalWrite`. Without
+  // it such a tool is simply run, which is what tests and the read-only agents
+  // want.
+  externalCalls?: ExternalCallGuard;
   // Prompt caching on by default: the system text gets a 1h cache breakpoint
   // and so does the last tool. Set false to opt out (tests that assert the
   // plain shape).
@@ -204,6 +230,7 @@ const errorResult = (
 const runTool = async (
   tools: AgentToolSet,
   call: ToolUseBlock,
+  guard?: ExternalCallGuard,
 ): Promise<ToolResultBlock> => {
   const tool = tools[call.name];
   if (!tool) {
@@ -216,10 +243,28 @@ const runTool = async (
       `Invalid input for tool ${call.name}: ${parsed.error.message}`,
     );
   }
+  // An irreversible call is claimed before it leaves. A replay (the same
+  // tool_use id after a reset) therefore lands on the existing row: a finished
+  // call hands back its recorded result, an unfinished one is reported as
+  // uncertain rather than fired again. At-most-once, explicitly — the same
+  // tradeoff as Telegram delivery, since no external API here offers
+  // exactly-once.
+  const claim =
+    tool.externalWrite && guard
+      ? guard.begin(call.id, call.name)
+      : { status: "claimed" as const };
+  if (claim.status === "completed") {
+    return { type: "tool_result", tool_use_id: call.id, content: claim.result };
+  }
+  if (claim.status === "in_flight") {
+    return errorResult(call.id, UNCERTAIN_EXTERNAL_CALL);
+  }
   try {
     const output = await tool.execute(parsed.data);
     if (tool.toContent) {
       const { content, isError } = tool.toContent(output);
+      if (tool.externalWrite && guard)
+        guard.complete(call.id, typeof content === "string" ? content : "");
       return {
         type: "tool_result",
         tool_use_id: call.id,
@@ -228,12 +273,14 @@ const runTool = async (
       };
     }
     const content: ToolResultContent = serializeOutput(output);
+    if (tool.externalWrite && guard) guard.complete(call.id, content);
     return { type: "tool_result", tool_use_id: call.id, content };
   } catch (err) {
-    return errorResult(
-      call.id,
-      err instanceof Error ? err.message : String(err),
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    // A throw means the tool itself reported failure, so the outcome is known
+    // and the model may try again with the next call id.
+    if (tool.externalWrite && guard) guard.complete(call.id, message);
+    return errorResult(call.id, message);
   }
 };
 
@@ -277,7 +324,7 @@ export const runAgent = async (
   const resumeCalls = pendingToolCalls(messages[messages.length - 1]);
   if (resumeCalls.length > 0) {
     const results = await Promise.all(
-      resumeCalls.map((call) => runTool(tools, call)),
+      resumeCalls.map((call) => runTool(tools, call, input.externalCalls)),
     );
     const toolTurn: AgentMessage = { role: "user", content: results };
     messages.push(toolTurn);
@@ -328,7 +375,7 @@ export const runAgent = async (
       // Parallel execution, results kept in call order (the API requires one
       // tool_result per tool_use, and pairs them by id).
       const results = await Promise.all(
-        calls.map((call) => runTool(tools, call)),
+        calls.map((call) => runTool(tools, call, input.externalCalls)),
       );
       const toolTurn: AgentMessage = { role: "user", content: results };
       messages.push(toolTurn);

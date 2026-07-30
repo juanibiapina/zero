@@ -174,6 +174,11 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       // Telegram messages that arrived mid-run, taken only where the loop would
       // otherwise stop.
       drainFollowups: () => store.drainPendingMessages(conversationId),
+      externalCalls: {
+        begin: (toolUseId, tool) => store.beginExternalCall(toolUseId, tool),
+        complete: (toolUseId, result) =>
+          store.completeExternalCall(toolUseId, result),
+      },
       trailing,
       search,
       fetcher,

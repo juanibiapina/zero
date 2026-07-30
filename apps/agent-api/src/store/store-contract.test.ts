@@ -537,6 +537,33 @@ describe("Store contract: delivery claims", () => {
   });
 });
 
+describe("Store contract: external call claims", () => {
+  it("claims a call once, then reports it in flight until it completes", () => {
+    const s = makeStore();
+    expect(s.beginExternalCall("call_1", "gmail_send")).toEqual({
+      status: "claimed",
+    });
+    // A replay before the outcome is recorded: the request may or may not have
+    // left, so the only honest answer is "unknown".
+    expect(s.beginExternalCall("call_1", "gmail_send")).toEqual({
+      status: "in_flight",
+    });
+    s.completeExternalCall("call_1", '{"id":"m1"}');
+    expect(s.beginExternalCall("call_1", "gmail_send")).toEqual({
+      status: "completed",
+      result: '{"id":"m1"}',
+    });
+  });
+
+  it("keeps calls independent by tool_use id", () => {
+    const s = makeStore();
+    s.beginExternalCall("call_1", "gmail_send");
+    expect(s.beginExternalCall("call_2", "calendar_create_event")).toEqual({
+      status: "claimed",
+    });
+  });
+});
+
 describe("Store contract: attachments", () => {
   it("putAttachment then getAttachment round-trips the row", () => {
     const s = makeStore();

@@ -112,6 +112,20 @@ export const attachments = table("attachments", {
   createdAt: column.text().notNull(),
 });
 
+// External calls: one row per irreversible outbound action (send mail, create a
+// calendar event), keyed by the model's tool_use id. Claimed 'started' before
+// the request leaves and 'completed' with the serialized result after it
+// returns, so a resumed turn can tell "already done" from "outcome unknown"
+// instead of firing it twice.
+export const externalCalls = table("external_calls", {
+  toolUseId: column.text().notNull().primaryKey(),
+  tool: column.text().notNull(),
+  status: column.text().notNull(),
+  result: column.text(),
+  startedAt: column.text().notNull(),
+  completedAt: column.text(),
+});
+
 // Webhook idempotency: dedupe fully re-delivered Telegram updates.
 export const processedUpdates = table("processed_updates", {
   updateId: column.text().notNull().primaryKey(),

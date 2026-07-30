@@ -32,7 +32,7 @@ import {
   interfaceSystemPrompt,
   renderPinnedTopics,
 } from "./prompts";
-import { runAgent, usageLogFields } from "./run";
+import { runAgent, usageLogFields, type ExternalCallGuard } from "./run";
 import { markCacheBreakpoint } from "./cache";
 import { log } from "../log";
 
@@ -77,6 +77,10 @@ export interface InterfaceAgentInput {
   // only where the loop would otherwise stop, so a follow-up never cuts into a
   // tool sequence. Defaults to no follow-ups.
   drainFollowups?: () => Message[];
+  // Durable claims for irreversible tool calls (send mail, create an event), so
+  // a resumed turn reports an unknown outcome instead of repeating it. Omitted
+  // in tests that do not exercise external writes.
+  externalCalls?: ExternalCallGuard;
   history: Message[];
   // Rows persisted for this turn by an interrupted run of it (see
   // ConversationRender.trailing).
@@ -448,6 +452,7 @@ export const runInterfaceAgent = async (
     messages: convo,
     tools,
     maxSteps: input.maxSteps,
+    externalCalls: input.externalCalls,
     onAssistant: async (content, stopReason) =>
       persistAssistant(content, stopReason),
     onText: deliver,

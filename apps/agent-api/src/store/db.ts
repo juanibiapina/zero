@@ -7,6 +7,7 @@ import {
   attachments,
   conversations,
   deliveries,
+  externalCalls,
   knowledge,
   messages,
   pendingMessages,
@@ -27,6 +28,7 @@ import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
   ConversationContext,
+  ExternalCallClaim,
   Message,
   MessageContent,
   MessageKind,
@@ -484,6 +486,36 @@ export class DbStore implements Store {
       });
       return true;
     });
+  }
+
+  // --- external calls ---
+
+  beginExternalCall(toolUseId: string, tool: string): ExternalCallClaim {
+    return this.db.transaction(() => {
+      const existing = this.db.get(externalCalls, {
+        where: eq("toolUseId", toolUseId),
+      });
+      if (existing) {
+        return existing.status === "completed"
+          ? { status: "completed" as const, result: existing.result ?? "" }
+          : { status: "in_flight" as const };
+      }
+      this.db.insert(externalCalls, {
+        toolUseId,
+        tool,
+        status: "started",
+        startedAt: this.nowIso(),
+      });
+      return { status: "claimed" as const };
+    });
+  }
+
+  completeExternalCall(toolUseId: string, result: string): void {
+    this.db.update(
+      externalCalls,
+      { status: "completed", result, completedAt: this.nowIso() },
+      { where: eq("toolUseId", toolUseId) },
+    );
   }
 
   findConversationsWithWork(): Thread[] {
