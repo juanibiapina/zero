@@ -19,7 +19,31 @@ export interface Deadline {
   dueAt: number;
   // The conversation a learning deadline is about. Absent for user-wide jobs.
   conversationId?: string;
+  // How many dispatches of this entry have already failed. Absent until one
+  // does.
+  attempts?: number;
 }
+
+// Retry policy for a dispatch that threw. Taking a deadline removes it, so
+// without this a transient RPC failure would silently drop the work: `idle` and
+// `size` come back on the user's next message, but nothing ever re-requests
+// onboarding or an admin task.
+export const RETRY_BASE_MS = 60 * 1000;
+export const RETRY_MAX_MS = 60 * 60 * 1000;
+export const RETRY_MAX_ATTEMPTS = 6;
+
+// The same deadline, due again later, or null once it has failed too often to
+// be worth keeping. Exponential so a target that is down does not get hammered,
+// capped so a retry never disappears an hour and a half into the future.
+export const retryDeadline = (
+  entry: Deadline,
+  now: number,
+): Deadline | null => {
+  const attempts = (entry.attempts ?? 0) + 1;
+  if (attempts > RETRY_MAX_ATTEMPTS) return null;
+  const delay = Math.min(RETRY_BASE_MS * 2 ** (attempts - 1), RETRY_MAX_MS);
+  return { ...entry, attempts, dueAt: now + delay };
+};
 
 // Deadlines by key, so a repeated touch of the same conversation replaces its
 // entry instead of accumulating one per message.
@@ -167,6 +191,19 @@ export const logScheduleFired = (entry: Deadline): void =>
     reason: entry.reason,
     has_conversation: entry.conversationId !== undefined,
     late_ms: Math.max(0, Date.now() - entry.dueAt),
+  });
+
+export const logScheduleRetry = (entry: Deadline, dueAt: number): void =>
+  log("schedule_dispatch_retry", {
+    reason: entry.reason,
+    attempts: entry.attempts ?? 0,
+    retry_in_ms: dueAt - Date.now(),
+  });
+
+export const logScheduleGaveUp = (entry: Deadline): void =>
+  logError("schedule_dispatch_gave_up", {
+    reason: entry.reason,
+    attempts: entry.attempts ?? 0,
   });
 
 export const logScheduleFinished = (input: {

@@ -12,9 +12,13 @@ import { DurableObject } from "cloudflare:workers";
 import {
   logScheduleFinished,
   logScheduleFired,
+  logScheduleGaveUp,
+  logScheduleRetry,
+  retryDeadline,
   scheduleDeadline,
   takeDueDeadlines,
   touchConversation,
+  type Deadline,
 } from "../do/schedule";
 import type { LearnReason } from "../do/learning-job";
 import { getLearningDO } from "../LearningDO/stub";
@@ -76,9 +80,27 @@ export class ScheduleDO extends DurableObject<Env> {
           reason: entry.reason,
           error: fmtErr(err),
         });
+        // Taking a deadline removed it, so a failure here would drop the work
+        // for good. Learning comes back on the user's next message, but nothing
+        // else re-requests onboarding or an admin task: put the entry back with
+        // a backoff instead.
+        await this.retry(entry);
       }
     }
     logScheduleFinished({ dispatched, durationMs: Date.now() - startedAt });
+  }
+
+  // Put a failed deadline back, later. Re-arming by key means a fresh request
+  // for the same reason replaces the retry, which is what should happen: the
+  // newer request carries the newer intent.
+  private async retry(entry: Deadline): Promise<void> {
+    const next = retryDeadline(entry, Date.now());
+    if (next === null) {
+      logScheduleGaveUp(entry);
+      return;
+    }
+    await scheduleDeadline(this.ctx.storage, next);
+    logScheduleRetry(next, next.dueAt);
   }
 
   // Hand the work to whoever owns it. Learning goes to LearningDO, which
