@@ -32,7 +32,7 @@ import {
 import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
 import { getScheduleDO } from "../ScheduleDO/stub";
-import { touchScheduleSafely } from "../do/schedule";
+import { requestLearnSafely, touchScheduleSafely } from "../do/schedule";
 import type { Env } from "../types";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
@@ -282,7 +282,33 @@ export class UserDO extends DurableObject<Env> {
     };
     tick();
     try {
-      await orchestrateTurn({ store: this.store, makeModel, send, stopTyping, search, fetcher, google, attachments: this.attachments, chatId, topicId, clerkUserId, timezone, setTimezone });
+      await orchestrateTurn({
+        store: this.store,
+        makeModel,
+        send,
+        stopTyping,
+        search,
+        fetcher,
+        google,
+        attachments: this.attachments,
+        chatId,
+        topicId,
+        clerkUserId,
+        timezone,
+        setTimezone,
+        // A conversation that has grown past the threshold asks for learning
+        // now instead of waiting to go idle, which is what covers the
+        // always-active user. Fire-and-forget and best-effort: the reply must
+        // not wait on a scheduling round trip.
+        onContextTooLarge: (conversationId) => {
+          void requestLearnSafely(
+            getScheduleDO(this.env, clerkUserId),
+            clerkUserId,
+            "size",
+            conversationId,
+          );
+        },
+      });
     } finally {
       stopTyping();
     }

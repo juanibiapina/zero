@@ -217,6 +217,26 @@ Two mechanical filters run at render time, both in `store/messages.ts`:
 messages survived the boundary, and how many results were stubbed. The compaction
 threshold is derived from that line, not guessed.
 
+## Learning triggers
+
+Learning is asked for in two ways, and both are events rather than polls:
+
+- **Idle.** Every accepted user message pushes that conversation's deadline to
+  now + 1h in ScheduleDO. When it comes due with no newer message, the schedule
+  asks LearningDO to consolidate.
+- **Size.** When a turn renders a context at or above
+  `LEARN_SIZE_THRESHOLD_TOKENS` (45,000, provisional — it is the starting point
+  from PLAN.md, to be moved using real `context_rendered.total_tokens`), the turn
+  asks for learning on that conversation immediately, logging
+  `learn_size_requested`. This is what covers a conversation that never goes
+  idle; without it an always-active user would grow context without bound.
+
+Both requests are best-effort from the turn's point of view: a schedule that
+cannot be reached is logged and ignored, never allowed to fail a message or a
+reply. LearningDO's executor is not enabled yet (Phase 3), so today a request is
+recorded, coalesced and logged as `learn_skipped`, while the per-turn writer
+still does the consolidating.
+
 ## Knowledge versions
 
 Every topic read (`list_topics`, `get_topic`, `list_backlinks`) returns the

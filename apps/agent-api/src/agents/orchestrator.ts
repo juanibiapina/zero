@@ -18,6 +18,7 @@ import {
   conversationHasWork,
   CONTEXT_BACKSTOP_MESSAGES,
   countTopicReads,
+  LEARN_SIZE_THRESHOLD_TOKENS,
   estimateTokens,
   messageText,
 } from "../store/messages";
@@ -71,6 +72,11 @@ export interface TurnInput {
   // Reference time for the date anchor and relative message ages. Defaults to
   // now; injected in tests for deterministic prompt rendering.
   now?: Date;
+  // Called when this conversation's rendered context crosses the learning size
+  // threshold. The DO wires it to the user's schedule, which asks LearningDO to
+  // consolidate and compact this conversation. An event, not a poll: the turn is
+  // the only place the rendered size is known.
+  onContextTooLarge?: (conversationId: string, tokens: number) => void;
 }
 
 // Process one awaiting-reply thread: run the interface agent (which persists
@@ -129,14 +135,26 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   const summaryChars = context.summary?.length ?? 0;
   const messageChars =
     all.reduce((sum, m) => sum + contentChars(m.content), 0) + summaryChars;
+  const totalTokens = estimateTokens(messageChars);
   log("context_rendered", {
     chat_id: chatId,
     topic_id: topicId,
-    total_tokens: estimateTokens(messageChars),
+    total_tokens: totalTokens,
     summary_tokens: estimateTokens(summaryChars),
     messages_after_boundary: all.length,
     stale_stubs: stubbed,
   });
+  // Size trigger. Raised before the model call, not after: a conversation that
+  // is already too large is too large whether or not this turn succeeds, and the
+  // request only queues a job.
+  if (totalTokens >= LEARN_SIZE_THRESHOLD_TOKENS) {
+    log("learn_size_requested", {
+      chat_id: chatId,
+      topic_id: topicId,
+      total_tokens: totalTokens,
+    });
+    input.onContextTooLarge?.(conversationId, totalTokens);
+  }
 
   // Reads that survived the staleness filter are topic knowledge the model does
   // not have to fetch again. This pair is the whole justification for persisting

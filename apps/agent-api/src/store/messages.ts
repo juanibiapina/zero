@@ -116,6 +116,15 @@ export const applyContextBackstop = (
   return start === 0 ? messages : messages.slice(start);
 };
 
+// The rendered-context size at which a conversation asks for learning, which is
+// what triggers its compaction. Provisional, and deliberately not presented as
+// derived: a large prefix costs cache reads on every call of every turn (100k
+// tokens at $0.30/M is ~$0.03 per call, several calls per turn), while
+// compaction costs one summarization plus a cache rebuild. 45k is the starting
+// point named in PLAN.md; `context_rendered.total_tokens` from real sessions is
+// what must move it.
+export const LEARN_SIZE_THRESHOLD_TOKENS = 45_000;
+
 // --- staleness ---
 
 // Topic reads return the knowledge version they were taken at. Once tool
