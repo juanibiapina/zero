@@ -24,31 +24,33 @@ const makeStorage = (task?: AdminTask) => {
 };
 
 describe("admin task", () => {
-  it("queues immediately and rejects a second queued task", async () => {
+  it("queues a task and rejects a second queued task", async () => {
     const d = makeStorage();
-    const first = await queueAdminTask(
-      d.storage,
-      { clerkUserId: "user_1", prompt: "organize notes", status: "queued" },
-      123,
-    );
-    const second = await queueAdminTask(
-      d.storage,
-      { clerkUserId: "user_1", prompt: "another task", status: "queued" },
-      456,
-    );
+    const first = await queueAdminTask(d.storage, {
+      clerkUserId: "user_1",
+      prompt: "organize notes",
+      status: "queued",
+    });
+    const second = await queueAdminTask(d.storage, {
+      clerkUserId: "user_1",
+      prompt: "another task",
+      status: "queued",
+    });
 
     expect(first).toBe(true);
     expect(second).toBe(false);
-    expect(d.alarms).toEqual([123]);
+    // Queueing never touches UserDO's alarm: that slot belongs to turn draining,
+    // and the deadline for this job lives in ScheduleDO.
+    expect(d.alarms).toEqual([]);
   });
 
   it("replaces a terminal task for a manual retry", async () => {
     const d = makeStorage({ clerkUserId: "user_1", status: "failed" });
-    await queueAdminTask(
-      d.storage,
-      { clerkUserId: "user_1", prompt: "retry", status: "queued" },
-      123,
-    );
+    await queueAdminTask(d.storage, {
+      clerkUserId: "user_1",
+      prompt: "retry",
+      status: "queued",
+    });
 
     expect(d.values.get(ADMIN_TASK_KEY)).toEqual({
       clerkUserId: "user_1",

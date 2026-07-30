@@ -18,6 +18,7 @@ import {
 } from "../do/schedule";
 import type { LearnReason } from "../do/learning-job";
 import { getLearningDO } from "../LearningDO/stub";
+import { getUserDO } from "../UserDO/stub";
 import { logError, fmtErr } from "../log";
 import type { Env } from "../types";
 
@@ -45,6 +46,18 @@ export class ScheduleDO extends DurableObject<Env> {
     });
   }
 
+  // Ask for one of the user-wide jobs (Google onboarding, an admin task) as soon
+  // as possible. They used to share UserDO's alarm with turn draining, which is
+  // exactly what delayed replies; the deadline lives here and the job still runs
+  // through its existing UserDO entry point.
+  async requestJob(
+    clerkUserId: string,
+    reason: "onboarding" | "admin_task",
+  ): Promise<void> {
+    await this.ctx.storage.put("clerkUserId", clerkUserId);
+    await scheduleDeadline(this.ctx.storage, { reason, dueAt: Date.now() });
+  }
+
   override async alarm(): Promise<void> {
     const startedAt = Date.now();
     const due = await takeDueDeadlines(this.ctx.storage, startedAt);
@@ -52,17 +65,13 @@ export class ScheduleDO extends DurableObject<Env> {
     let dispatched = 0;
     for (const entry of due) {
       logScheduleFired(entry);
-      if (entry.reason !== "idle" && entry.reason !== "size") continue;
       if (!clerkUserId) continue;
       try {
-        await getLearningDO(this.env, clerkUserId).request(
-          entry.reason,
-          entry.conversationId,
-        );
+        await this.dispatch(clerkUserId, entry.reason, entry.conversationId);
         dispatched++;
       } catch (err) {
-        // A learner that cannot be reached must not take the schedule down: the
-        // next deadline for this conversation will ask again.
+        // One unreachable target must not take the whole schedule down, and must
+        // not lose the other due deadlines in this invocation.
         logError("schedule_dispatch_failed", {
           reason: entry.reason,
           error: fmtErr(err),
@@ -70,5 +79,23 @@ export class ScheduleDO extends DurableObject<Env> {
       }
     }
     logScheduleFinished({ dispatched, durationMs: Date.now() - startedAt });
+  }
+
+  // Hand the work to whoever owns it. Learning goes to LearningDO, which
+  // persists the request and returns; the two user-wide jobs go to their
+  // existing UserDO entry points. Nothing here awaits an agent loop except those
+  // UserDO calls, which are the jobs themselves.
+  private async dispatch(
+    clerkUserId: string,
+    reason: "idle" | "size" | "onboarding" | "admin_task",
+    conversationId?: string,
+  ): Promise<void> {
+    if (reason === "idle" || reason === "size") {
+      await getLearningDO(this.env, clerkUserId).request(reason, conversationId);
+      return;
+    }
+    const userDO = getUserDO(this.env, clerkUserId);
+    if (reason === "onboarding") await userDO.runQueuedOnboarding();
+    else await userDO.runQueuedAdminTask();
   }
 }
