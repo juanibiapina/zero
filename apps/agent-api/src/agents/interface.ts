@@ -9,14 +9,19 @@
 // thread instead of re-sending. Multi-message turns (acknowledge, then answer
 // after research) come from the model producing text on more than one step.
 
-import type { AgentMessage, AgentModel, ToolResultBlock } from "./protocol";
+import type {
+  AgentMessage,
+  AgentModel,
+  ContentBlock,
+  ToolResultBlock,
+} from "./protocol";
 import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
 import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
 import { buildGoogleTools } from "../tools/google";
 import { buildAttachmentTool } from "../tools/attachments";
-import { messageText } from "../store/messages";
+import { messageText, toBlocks } from "../store/messages";
 import type { Attachment, Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
@@ -54,11 +59,28 @@ export interface InterfaceAgentInput {
   researchModel?: AgentModel;
   store: TopicStore;
   send: (text: string) => Promise<void>;
-  // Persist an assistant message durably before it is sent. Wired by the
-  // orchestrator to the message store; defaults to a no-op in tests that only
-  // assert on send/replies. Persist-before-send keeps retries idempotent.
-  persistReply?: (text: string) => void;
+  // Persist one model response verbatim, returning its row id. Called before
+  // the response's text is sent and before its tools run, so the log always has
+  // the response ahead of its side effects. Defaults to a no-op returning null
+  // in tests that only assert on send/replies.
+  persistAssistant?: (
+    content: ContentBlock[],
+    stopReason: string | null,
+  ) => number | null;
+  // Persist one step's ordered tool results before the next model call.
+  persistToolResults?: (results: ToolResultBlock[]) => void;
+  // Claim one assistant text block for delivery, returning false when it was
+  // already claimed. A resumed run must not send a block the interrupted run
+  // already sent. Defaults to always claiming.
+  claimDelivery?: (messageId: number, blockIndex: number) => boolean;
+  // Take the Telegram messages that arrived while this run was working. Called
+  // only where the loop would otherwise stop, so a follow-up never cuts into a
+  // tool sequence. Defaults to no follow-ups.
+  drainFollowups?: () => Message[];
   history: Message[];
+  // Rows persisted for this turn by an interrupted run of it (see
+  // ConversationRender.trailing).
+  trailing?: Message[];
   // Summary of the compacted prefix of this conversation, if it has one. It is
   // rendered as the first user message, ahead of the surviving history, so the
   // model keeps continuity without the raw messages.
@@ -193,49 +215,101 @@ export const formatTimestamp = (createdAt: string, timezone: string): string => 
   return `${get("year")}-${get("month")}-${get("day")} ${hour}:${get("minute")}`;
 };
 
-// Build the model's message array from the stored dialogue plus the current
-// user message. The system prompt (instructions, pinned topics) is assembled
-// separately, and the volatile per-turn context (current time, timezone) is
-// prepended to the latest message by the caller; this array is only the
-// Telegram dialogue. The history before the current message stays byte-stable
+// Render one stored row as a wire message.
+//
+// - A real user message becomes plain text with an absolute timestamp prefix.
+// - An assistant response keeps its content blocks **verbatim**: it is what the
+//   model produced, tool calls included, and re-sending the same bytes next turn
+//   is what lets the prefix cache across turns (see docs/caching.md). Never
+//   flatten it to prose.
+// - A tool-result row keeps its blocks verbatim too, on the `user` role, which
+//   is where the wire format puts them.
+const renderRow = (row: Message, timezone: string): AgentMessage => {
+  if (row.role === "assistant") {
+    return { role: "assistant", content: toBlocks(row.content) };
+  }
+  if (row.kind === "tool_result") {
+    return { role: "user", content: toBlocks(row.content) };
+  }
+  return {
+    role: "user",
+    content: `[${formatTimestamp(row.createdAt, timezone)}] ${messageText(row.content)}`,
+  };
+};
+
+// Tool results must lead their user message; the model pairs them with the
+// preceding assistant response.
+const orderUserBlocks = (blocks: ContentBlock[]): ContentBlock[] => {
+  const results = blocks.filter((b) => b.type === "tool_result");
+  if (results.length === 0 || results.length === blocks.length) return blocks;
+  return [...results, ...blocks.filter((b) => b.type !== "tool_result")];
+};
+
+// Append a rendered message, coalescing it into the previous one when the roles
+// match: Anthropic's models are trained on alternating turns, and a drained
+// burst of Telegram messages or two assistant rows in a row would otherwise
+// produce consecutive same-role messages. Two texts join with a blank line;
+// anything carrying blocks concatenates as blocks.
+const appendMessage = (messages: AgentMessage[], next: AgentMessage): void => {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== next.role) {
+    messages.push(next);
+    return;
+  }
+  if (typeof last.content === "string" && typeof next.content === "string") {
+    last.content = `${last.content}\n\n${next.content}`;
+    return;
+  }
+  const merged = [...toBlocks(last.content), ...toBlocks(next.content)];
+  last.content = next.role === "user" ? orderUserBlocks(merged) : merged;
+};
+
+export interface ConversationRender {
+  // Everything before the user message being answered.
+  history: Message[];
+  // The text of the user message being answered.
+  userMessage: string;
+  // Rows already persisted for this same turn by a run that was interrupted:
+  // the model's responses and their tool results. Empty on a fresh turn; on a
+  // resume they are what tells the model where it got to.
+  trailing?: Message[];
+  now?: Date;
+  timezone?: string;
+  summary?: string;
+  // Volatile per-turn context (current time, timezone). Prepended to the user
+  // message being answered so it sits after the cached prefix instead of
+  // invalidating it.
+  context?: string;
+}
+
+// Build the model's message array from the durable log. The system prompt
+// (instructions, pinned topics) is assembled separately; this array is only the
+// conversation. Everything before the current user message stays byte-stable
 // turn-to-turn so it caches across turns (see docs/caching.md).
 //
 // Rules (see PLAN.md):
-// - User messages carry an absolute timestamp prefix; assistant messages are
-//   left verbatim (never rewrite the model's own prior words).
 // - Leading assistant messages are dropped so the array starts with a user
 //   turn (Anthropic requires the first non-system message to be `user`; a
 //   windowed history slice can begin on an assistant reply).
-// - Consecutive same-role messages are coalesced into one (joined by a blank
-//   line): multiple reply() rows in a turn, or two user messages before a
-//   reply.
+// - Consecutive same-role messages are coalesced into one.
 // - Empty history yields a single current user message.
 export const buildConversationMessages = (
-  history: Message[],
-  userMessage: string,
-  now: Date = new Date(),
-  timezone = "UTC",
-  summary?: string,
+  input: ConversationRender,
 ): AgentMessage[] => {
-  const turns: Message[] = [
-    ...history,
-    {
-      id: 0,
-      role: "user",
-      kind: "user_message",
-      content: userMessage,
-      stopReason: null,
-      createdAt: now.toISOString(),
-    },
-  ];
+  const now = input.now ?? new Date();
+  const timezone = input.timezone ?? "UTC";
+  const stamp = formatTimestamp(now.toISOString(), timezone);
+  const current = input.context
+    ? `${input.context}\n\n[${stamp}] ${input.userMessage}`
+    : `[${stamp}] ${input.userMessage}`;
 
   const messages: AgentMessage[] = [];
   // The compacted prefix opens the array as a user message. It is stable text
   // (it only changes when compaction runs again), so it caches like history.
-  if (summary) {
+  if (input.summary) {
     messages.push({
       role: "user",
-      content: `[summary of earlier conversation]\n\n${summary}`,
+      content: `[summary of earlier conversation]\n\n${input.summary}`,
     });
   }
 
@@ -243,28 +317,17 @@ export const buildConversationMessages = (
   // needed without a summary: with one, the array already opens on `user` and
   // dropping the first replies would lose real conversation.
   let start = 0;
-  if (!summary) {
-    while (start < turns.length && turns[start].role === "assistant") start++;
+  if (!input.summary) {
+    while (start < input.history.length && input.history[start].role === "assistant")
+      start++;
   }
 
-  for (const turn of turns.slice(start)) {
-    // Phase 1.1 stores every row as content blocks; until the loop persists
-    // tool calls (Phase 1.3) each row is one text block, so flattening to text
-    // here is lossless and the rendered prompt is byte-identical to before.
-    const body = messageText(turn.content);
-    const text =
-      turn.role === "user"
-        ? `[${formatTimestamp(turn.createdAt, timezone)}] ${body}`
-        : body;
-    const last = messages[messages.length - 1];
-    if (last && last.role === turn.role) {
-      // Coalesce consecutive same-role turns into one message.
-      last.content = `${last.content as string}\n\n${text}`;
-    } else if (turn.role === "user") {
-      messages.push({ role: "user", content: text });
-    } else {
-      messages.push({ role: "assistant", content: text });
-    }
+  for (const row of input.history.slice(start)) {
+    appendMessage(messages, renderRow(row, timezone));
+  }
+  appendMessage(messages, { role: "user", content: current });
+  for (const row of input.trailing ?? []) {
+    appendMessage(messages, renderRow(row, timezone));
   }
   return messages;
 };
@@ -278,16 +341,43 @@ export const runInterfaceAgent = async (
   // `summary` from the listing only saves input if the model does not replace
   // it with extra full-body reads.
   const reads = { count: 0 };
-  const persistReply = input.persistReply ?? (() => {});
+  const persistAssistant =
+    input.persistAssistant ?? ((): number | null => null);
+  const persistToolResults = input.persistToolResults ?? (() => {});
+  const claimDelivery = input.claimDelivery ?? (() => true);
+  const drainFollowups = input.drainFollowups ?? (() => []);
+  const timezone = input.timezone ?? "UTC";
 
-  // Deliver one text block: persist it, then send it. Persist-before-send is
-  // load-bearing (see the file header), so the order must not flip. A send
-  // failure propagates out of runAgent to the orchestrator's error boundary
-  // rather than becoming a tool error the model would retry.
-  const deliver = async (text: string): Promise<void> => {
-    persistReply(text);
+  // Deliver one text block of a persisted assistant response. The response is
+  // already in the log (the runner persists it before this runs), so what is
+  // needed here is at-most-once sending: claim the block durably, then send.
+  // A resumed run finds the block already claimed and stays quiet instead of
+  // repeating it. A send failure propagates out of runAgent to the
+  // orchestrator's error boundary rather than becoming a tool error the model
+  // would retry.
+  const deliver = async (
+    text: string,
+    ref?: { messageId: number | null; blockIndex: number },
+  ): Promise<void> => {
+    if (ref && ref.messageId !== null && !claimDelivery(ref.messageId, ref.blockIndex)) {
+      log("delivery_skipped", { block_index: ref.blockIndex });
+      return;
+    }
     await input.send(text);
     replies.push(text);
+  };
+
+  // A run interrupted between persisting a response and sending its text left
+  // the user with nothing to read. The claims say exactly which blocks got out,
+  // so send the rest before continuing the loop.
+  const deliverUnclaimed = async (rows: Message[]): Promise<void> => {
+    for (const row of rows) {
+      if (row.role !== "assistant") continue;
+      for (const [blockIndex, block] of toBlocks(row.content).entries()) {
+        if (block.type !== "text" || block.text.trim() === "") continue;
+        await deliver(block.text, { messageId: row.id, blockIndex });
+      }
+    }
   };
 
   const tools = {
@@ -325,26 +415,21 @@ export const runInterfaceAgent = async (
   // closures above. The runner's returned text is the model's final prose.
   const now = input.now ?? new Date();
   const start = Date.now();
-  const timezone = input.timezone ?? "UTC";
   const pinned = renderPinnedTopics(input.store.getPinnedTopics());
 
-  const convo = buildConversationMessages(
-    input.history,
-    input.userMessage,
+  // The volatile context (current time + timezone) rides on the user message
+  // being answered, so it sits after the cached history prefix and never
+  // invalidates it.
+  const convo = buildConversationMessages({
+    history: input.history,
+    userMessage: input.userMessage,
+    trailing: input.trailing,
     now,
     timezone,
-    input.summary,
-  );
-  // Prepend the volatile context (current time + timezone) to the current user
-  // message so it sits after the cached history prefix and never invalidates it.
-  // The last message is always the current user turn (appended by
-  // buildConversationMessages), so rebuild it as a user message with the context
-  // prepended.
+    summary: input.summary,
+    context: interfaceContext(now, timezone),
+  });
   const lastIdx = convo.length - 1;
-  convo[lastIdx] = {
-    role: "user",
-    content: `${interfaceContext(now, timezone)}\n\n${convo[lastIdx].content as string}`,
-  };
   // Cross-turn anchor breakpoint in the messages region. The last stable message
   // (previous turn's final block) is byte-identical next turn, so it is the
   // write that yields the cross-turn history read. The current message's tail is
@@ -354,13 +439,29 @@ export const runInterfaceAgent = async (
   // loop's sliding breakpoint covers the single current message.
   if (lastIdx >= 1) convo[lastIdx - 1] = markCacheBreakpoint(convo[lastIdx - 1]);
 
+  await deliverUnclaimed(input.trailing ?? []);
+
+  let injectedFollowups = 0;
   const { finishReason, steps, messages, usage, stepUsages } = await runAgent({
     model: input.model,
     system: interfaceSystemPrompt(pinned),
     messages: convo,
     tools,
     maxSteps: input.maxSteps,
+    onAssistant: async (content, stopReason) =>
+      persistAssistant(content, stopReason),
     onText: deliver,
+    onToolResults: async (results) => persistToolResults(results),
+    onIdle: async () => {
+      const rows = drainFollowups();
+      if (rows.length === 0) return [];
+      injectedFollowups += rows.length;
+      log("followups_injected", {
+        count: rows.length,
+        oldest_age_ms: Date.now() - new Date(rows[0].createdAt).getTime(),
+      });
+      return rows.map((row) => renderRow(row, timezone));
+    },
   });
 
   const transcript = renderTranscript(input.userMessage, messages);
@@ -370,6 +471,7 @@ export const runInterfaceAgent = async (
     finish_reason: finishReason,
     replies_count: replies.length,
     accessed_count: accessed.size,
+    followups_injected: injectedFollowups,
     duration_ms: Date.now() - start,
     ...usageLogFields(usage),
   });
@@ -394,7 +496,17 @@ export const runInterfaceAgent = async (
 
   if (needsFallback({ finishReason, sentCount: replies.length })) {
     log("turn_incomplete", { finish_reason: finishReason, steps });
-    await deliver(FALLBACK_MESSAGE);
+    // The fallback is Zero's own text, not the model's, so it gets its own
+    // assistant row. Persisting it terminally is also what stops the work rule
+    // from resuming a run the step cap already gave up on.
+    const messageId = persistAssistant(
+      [{ type: "text", text: FALLBACK_MESSAGE }],
+      "end_turn",
+    );
+    await deliver(
+      FALLBACK_MESSAGE,
+      messageId === null ? undefined : { messageId, blockIndex: 0 },
+    );
   }
 
   return { replies, accessed: [...accessed], transcript };

@@ -2,6 +2,8 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-30: Send Zero another message while it is working and it answers that too in the same reply flow, instead of leaving it for later.
+- 2026-07-30: If Zero is interrupted mid-answer, it picks up where it stopped rather than redoing the work or repeating a message you already got.
 - 2026-07-30: Zero remembers much more of a long conversation instead of only the last handful of messages.
 - 2026-07-30: Zero's messages now arrive as it writes them, so a long turn no longer ends with a repeated or missing message.
 - 2026-07-30: Give Zero a web link and it can open and read the page directly, without starting a broader web search.

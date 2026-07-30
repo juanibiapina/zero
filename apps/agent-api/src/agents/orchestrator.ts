@@ -15,7 +15,9 @@ import {
   applyContextBackstop,
   applyStalenessFilter,
   contentChars,
+  conversationHasWork,
   CONTEXT_BACKSTOP_MESSAGES,
+  countTopicReads,
   estimateTokens,
   messageText,
 } from "../store/messages";
@@ -94,15 +96,25 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   // older knowledge version replaced by a stub.
   const context = store.getConversationContext(conversationId, limit);
   const all = applyContextBackstop(context.messages);
-  const last = all[all.length - 1];
-  if (!last || last.kind !== "user_message") return;
+  const tail = all[all.length - 1];
+  // The protocol decides whether this conversation owes a response: a queued
+  // message (already drained above), a user message or tool result at the tail,
+  // or a response that stopped for a non-terminal reason. A terminal assistant
+  // tail is idle.
+  if (!conversationHasWork({ pendingCount: 0, tail })) return;
 
-  const userMessage = messageText(last.content);
   const { messages: filtered, stubbed } = applyStalenessFilter(
-    all.slice(0, -1),
+    all,
     store.getKnowledgeVersion(),
   );
-  const history = filtered;
+  // The turn answers the newest real user message. Anything after it is what an
+  // interrupted run of this same turn already persisted (responses and tool
+  // results), which the resumed run continues from rather than replaying.
+  const currentIdx = filtered.findLastIndex((m) => m.kind === "user_message");
+  if (currentIdx === -1) return;
+  const history = filtered.slice(0, currentIdx);
+  const userMessage = messageText(filtered[currentIdx].content);
+  const trailing = filtered.slice(currentIdx + 1);
 
   log("turn_started", {
     chat_id: chatId,
@@ -126,8 +138,18 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
     stale_stubs: stubbed,
   });
 
-  const persistReply = (text: string) =>
-    store.storeMessage(conversationId, "assistant", text);
+  // Reads that survived the staleness filter are topic knowledge the model does
+  // not have to fetch again. This pair is the whole justification for persisting
+  // tool results: `topic_reads_avoided` has to outweigh `stale_stubs`.
+  log("conversation_size", {
+    chat_id: chatId,
+    topic_id: topicId,
+    message_count: all.length,
+    stored_bytes: all.reduce((sum, m) => sum + contentChars(m.content), 0),
+  });
+  log("topic_reads_avoided", {
+    count: countTopicReads(filtered) - stubbed,
+  });
 
   try {
     const { accessed, transcript } = await runInterfaceAgent({
@@ -135,7 +157,24 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       researchModel: makeModel("research"),
       store,
       send,
-      persistReply,
+      // Persist the log as the loop runs: the response before its tools, the
+      // results before the next call. A reset therefore resumes rather than
+      // replaying, and a delivery claim keeps a sent block from being sent
+      // twice.
+      persistAssistant: (content, stopReason) =>
+        store.storeMessage(conversationId, "assistant", content, {
+          stopReason,
+        }),
+      persistToolResults: (results) =>
+        store.storeMessage(conversationId, "user", results, {
+          kind: "tool_result",
+        }),
+      claimDelivery: (messageId, blockIndex) =>
+        store.claimDelivery(messageId, blockIndex),
+      // Telegram messages that arrived mid-run, taken only where the loop would
+      // otherwise stop.
+      drainFollowups: () => store.drainPendingMessages(conversationId),
+      trailing,
       search,
       fetcher,
       google,

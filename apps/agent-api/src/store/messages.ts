@@ -145,6 +145,26 @@ const resultVersion = (content: ToolResultContent): number | null => {
   return null;
 };
 
+// How many persisted topic-read results the rendered context carries. Counted
+// on the filtered messages, so subtracting `stale_stubs` gives the reads the
+// model does not have to make again this turn.
+export const countTopicReads = (messages: Message[]): number => {
+  const toolNames = new Map<string, string>();
+  let count = 0;
+  for (const message of messages) {
+    if (typeof message.content === "string") continue;
+    for (const block of message.content) {
+      if (block.type === "tool_use") toolNames.set(block.id, block.name);
+      else if (
+        block.type === "tool_result" &&
+        TOPIC_READ_TOOLS.has(toolNames.get(block.tool_use_id) ?? "")
+      )
+        count++;
+    }
+  }
+  return count;
+};
+
 // Replace, never delete: every `tool_use` block requires a matching
 // `tool_result`, so a stale read keeps its pair and loses only its content.
 // Mechanical and version-based, so it applies to every conversation without a

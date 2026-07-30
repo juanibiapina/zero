@@ -48,13 +48,37 @@ export interface RunAgentInput {
   messages?: AgentMessage[];
   tools?: AgentToolSet;
   maxSteps?: number;
+  // Called once per model response, with the response content verbatim, before
+  // any of its tools run and before its text is delivered. The interface agent
+  // persists the response here, so the durable log gains the assistant message
+  // ahead of every side effect it asks for. The returned value is the stored row
+  // id, threaded into `onText` so a caller can claim each text block for
+  // delivery.
+  onAssistant?: (
+    content: ContentBlock[],
+    stopReason: StopReason | null,
+  ) => Promise<number | null>;
   // Called once per text block the model produces, in order, as each step
   // completes and before that step's tools run. The interface agent uses it to
   // deliver messages as the model writes them: in a normal agent the assistant's
-  // text blocks ARE the messages. It is awaited, so a persist-before-send hook
-  // completes before the loop continues, and a throw propagates out of the run
-  // (it is not a tool error the model can retry).
-  onText?: (text: string) => Promise<void>;
+  // text blocks ARE the messages. `ref` names the persisted row and the block's
+  // index inside it, which is what a delivery claim is keyed by. It is awaited,
+  // so a persist-before-send hook completes before the loop continues, and a
+  // throw propagates out of the run (it is not a tool error the model can
+  // retry).
+  onText?: (
+    text: string,
+    ref: { messageId: number | null; blockIndex: number },
+  ) => Promise<void>;
+  // Called with one step's ordered tool results, before the next model call, so
+  // the durable log carries what the tools returned rather than re-fetching them
+  // next turn.
+  onToolResults?: (results: ToolResultBlock[]) => Promise<void>;
+  // Called at the point the loop would otherwise stop (the model asked for no
+  // tools). Returning messages continues the same loop with them appended: this
+  // is how Telegram messages that arrived mid-run are injected without ever
+  // interrupting a tool sequence. Returning nothing ends the run.
+  onIdle?: () => Promise<AgentMessage[]>;
   // Prompt caching on by default: the system text gets a 1h cache breakpoint
   // and so does the last tool. Set false to opt out (tests that assert the
   // plain shape).
@@ -139,6 +163,15 @@ const finishReasonFor = (stop: StopReason | null): string =>
 
 const isToolUse = (block: ContentBlock): block is ToolUseBlock =>
   block.type === "tool_use";
+
+// The tool calls a persisted assistant tail is still waiting on. Empty for
+// anything else, including a normal caller-supplied prompt, so a fresh run is
+// unaffected.
+const pendingToolCalls = (message: AgentMessage | undefined): ToolUseBlock[] => {
+  if (!message || message.role !== "assistant") return [];
+  if (typeof message.content === "string") return [];
+  return message.content.filter(isToolUse);
+};
 
 const isText = (block: ContentBlock): block is TextBlock =>
   block.type === "text";
@@ -234,6 +267,24 @@ export const runAgent = async (
   // The chain never crosses runs (see docs/caching.md).
   let previousMessageId: string | null = null;
 
+  // Resume: the caller's log can end on an assistant response whose tool_use
+  // blocks never got results, because a reset landed between persisting the
+  // response and persisting its results. The wire format has no valid request in
+  // that state, so run those tools now and open the loop with their results.
+  // Re-running is safe by construction: read tools are pure, topic writes carry
+  // the expected knowledge version so an already-applied write conflicts instead
+  // of duplicating, and external writes guard themselves (see tools/).
+  const resumeCalls = pendingToolCalls(messages[messages.length - 1]);
+  if (resumeCalls.length > 0) {
+    const results = await Promise.all(
+      resumeCalls.map((call) => runTool(tools, call)),
+    );
+    const toolTurn: AgentMessage = { role: "user", content: results };
+    messages.push(toolTurn);
+    generated.push(toolTurn);
+    await input.onToolResults?.(results);
+  }
+
   for (let step = 0; step < maxSteps; step++) {
     // Snapshot: the loop keeps appending to `messages`, and the request must not
     // mutate under the adapter after it is handed over. When caching is on, the
@@ -262,9 +313,14 @@ export const runAgent = async (
     };
     messages.push(assistant);
     generated.push(assistant);
+    // Persist before anything leaves the isolate: the response is in the log
+    // ahead of its tool side effects and ahead of any Telegram send.
+    const messageId =
+      (await input.onAssistant?.(response.content, response.stopReason)) ?? null;
 
-    for (const block of response.content.filter(isText)) {
-      if (block.text.trim() !== "") await input.onText?.(block.text);
+    for (const [blockIndex, block] of response.content.entries()) {
+      if (!isText(block) || block.text.trim() === "") continue;
+      await input.onText?.(block.text, { messageId, blockIndex });
     }
 
     const calls = response.content.filter(isToolUse);
@@ -277,6 +333,17 @@ export const runAgent = async (
       const toolTurn: AgentMessage = { role: "user", content: results };
       messages.push(toolTurn);
       generated.push(toolTurn);
+      await input.onToolResults?.(results);
+      continue;
+    }
+
+    // The model asked for no tools, so this is where the run would end. Any
+    // message that arrived while it was working gets injected here and answered
+    // by the same loop; follow-ups never cut into a tool sequence.
+    const injected = (await input.onIdle?.()) ?? [];
+    if (injected.length > 0) {
+      messages.push(...injected);
+      generated.push(...injected);
       continue;
     }
 

@@ -97,10 +97,13 @@ migration and no per-user seeding.
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new
    user message plus recent history, it runs a tool loop and sends replies as it
    works. The history is assembled as a real multi-turn conversation
-   (`buildConversationMessages`), not a single flattened prompt: each stored
-   user/assistant message becomes a native turn (user turns prefixed with an
-   absolute `[YYYY-MM-DD HH:MM]` timestamp, assistant turns verbatim), leading
-   assistant messages are dropped, and consecutive same-role turns are coalesced.
+   (`buildConversationMessages`), not a single flattened prompt: each stored row
+   becomes a native turn — a user message as text with an absolute
+   `[YYYY-MM-DD HH:MM]` timestamp, a model response with its content blocks
+   verbatim (tool calls included), a tool-result row as the `user` turn the wire
+   format expects. Sending back the same bytes the model produced is what makes
+   the prefix cacheable across turns. Leading assistant messages are dropped, and
+   consecutive same-role turns are coalesced.
    Instructions, the datetime anchor, and pinned topics stay in the system
    prompt; only the dialogue is in the messages array. Tools (`tools/topics.ts`):
    There is **no `reply` tool**. The assistant's own text blocks are the
@@ -254,16 +257,48 @@ not pre-loaded bodies, and fetches bodies itself via `get_topic`. There is no lo
 log-append fallback: the `## Log` line is a prompt-driven `append_topic` write,
 so a turn the writer judges trivial leaves the model untouched.
 
-Messages are persisted **as they are sent**, not after the turn. Every text
-block (and the no-silence fallback) is persisted before `send()` is called. Behind the DO output gate the durable row commits before the Telegram
-fetch leaves, so a mid-run eviction leaves the thread tail already `assistant`
-and the retry skips it — no duplicate Telegram messages. Trade-off: if an
-eviction lands between two replies within one turn (reply 1 persisted, reply 2
-not yet sent), the retry skips the thread and reply 2 is lost. This converts a
-rare "duplicate message" into a rare "partial turn," which is preferred. On such
-a skipped retry the writer consolidation for that turn also does not re-run; live
-topic create/update calls already persisted the durable facts, only the writer's
-Log-line refresh is lost for that one turn.
+## The loop writes into the log as it runs
+
+The conversation is the model's own message log, and it is written while the loop
+runs, not after it:
+
+- each model response is persisted **verbatim** (text, tool calls, whatever block
+  types the model produced) before any of its tools run and before any of its
+  text is sent;
+- that step's ordered tool results are persisted before the next model call.
+
+So a turn that dies anywhere has a log that says exactly where it got to, and the
+retry continues from there instead of replaying it. Two things follow.
+
+**Delivery is claim-then-send.** The response row is already durable, so what a
+resumed run needs is at-most-once sending, not re-persisting: each text block is
+claimed in `deliveries` (keyed by row id plus block index) before the Telegram
+fetch leaves. A resumed run skips claimed blocks (`delivery_skipped`) and sends
+the blocks a reset left undelivered, so an interrupted turn neither repeats itself
+nor swallows a message. The residual trade-off is unchanged and deliberate: a
+reset between the claim and Telegram loses that one message.
+
+**Unfinished tool calls are re-run on resume.** A reset between a response and its
+results leaves an assistant tail whose `tool_use` blocks have no `tool_result`,
+which is not a valid request, so the resuming run executes those calls and stores
+their results before calling the model. Re-running is safe by construction: read
+tools are pure, and a topic write replays with the knowledge version it was based
+on, so an already-applied write comes back as a conflict rather than a duplicate
+append. (External writes — sending mail, creating a calendar event — are the one
+class this does not cover; they are guarded separately.)
+
+**Follow-ups are injected where the loop would stop.** A Telegram message that
+arrives mid-run waits in `pending_messages`; when the model asks for no more
+tools, the queue is drained into the same loop as a user message and answered by
+the next response. A follow-up therefore never cuts into a tool sequence, and a
+message sent while Zero is working does not have to wait for a fresh turn.
+`followups_injected` records how many were taken and how long the oldest waited.
+
+Trade-off of persisting as it goes: if an eviction lands between two replies
+within one turn (reply 1 sent, reply 2 not), the retry resumes and only the
+missing part is produced. On such a resume the writer consolidation for the lost
+segment does not re-run; live topic create/update calls already persisted the
+durable facts, only the writer's Log-line refresh is lost for that one turn.
 
 A failed `send()` is a related case. It happens inside the runner's delivery
 hook, not inside a tool, so it is not swallowed into a `tool_result` the model
@@ -288,9 +323,10 @@ One error class is exempt: a **DO isolate reset** (`isDurableObjectReset`, a new
 Worker version deployed mid-turn). It is not an agent failure — the platform's
 at-least-once alarm retry re-runs the turn on a fresh isolate. On a reset the
 orchestrator sends nothing, persists nothing, logs `turn_reset_retrying`, and
-rethrows so the uncaught throw leaves `alarm()` and triggers that retry. Since
-the reply path is persist-before-send, the tail stays `user` and the retry
-delivers the real answer exactly once — no premature fallback. After this,
+rethrows so the uncaught throw leaves `alarm()` and triggers that retry. The log
+already holds everything the dead run reached, and delivery claims say what got
+out, so the retry resumes and the user's answer arrives exactly once — no
+premature fallback and no repeated message. After this,
 `turn_failed` means only a genuine agent failure.
 
 ## Execution (DO alarm)
