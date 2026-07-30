@@ -38,6 +38,15 @@ A `null` token (not connected, or a Clerk outage) makes the adapter throw a type
 model tells the user to connect Google in the Zero app and does not retry. A
 `401` from Google (revoked grant / missing scope) maps to a distinct error.
 
+The two irreversible tools do not use that error-as-data path. `gmail_send` and
+`calendar_create_event` classify a failure instead: a missing connection, or a
+rejection status that is not a timeout (`408`) or a throttle (`429`), becomes
+`ExternalCallNotSent`, which says the request provably had no effect. Anything
+else — a `5xx`, a dead socket, a response lost while being read — is left
+unclassified and propagates. Turning those into `{ error }` data would tell the
+model the send failed when it may well have gone through, and the retry would
+deliver the same mail twice. See the external-call claim in `docs/topics.md`.
+
 ## Tools
 
 Reads need no confirmation. `gmail_send` and `calendar_create_event` are

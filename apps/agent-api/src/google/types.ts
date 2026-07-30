@@ -27,6 +27,20 @@ export class GoogleNotConnectedError extends Error {
   }
 }
 
+// A non-2xx response from the Google API. Carries the status because that is
+// what decides whether a failed irreversible call provably did nothing (a
+// rejection) or may have taken effect (a timeout, a throttle, a 5xx). See
+// agents/external-call.ts.
+export class GoogleApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GoogleApiError";
+  }
+}
+
 // --- Gmail ---
 
 // A single hit from a Gmail search: enough to name a thread, not its bodies.
