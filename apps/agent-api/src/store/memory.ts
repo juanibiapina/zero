@@ -13,6 +13,7 @@ import type {
   Attachment,
   ConversationContext,
   ConversationStore,
+  ExternalCallClaim,
   Message,
   MessageContent,
   MessageKind,
@@ -79,6 +80,11 @@ export class MemoryStore implements Store {
   private pending: PendingRow[] = [];
   // Claimed delivery keys, `${messageId}:${blockIndex}`.
   private claimed = new Set<string>();
+  // External-call claims by tool_use id, mirroring the external_calls table.
+  private external = new Map<
+    string,
+    { tool: string; status: string; result: string | null }
+  >();
   private attachments = new Map<string, Attachment>();
   private settingsRow: SettingsRow | null = null;
   private telegramId: string | null = null;
@@ -415,6 +421,28 @@ export class MemoryStore implements Store {
     if (this.claimed.has(key)) return false;
     this.claimed.add(key);
     return true;
+  }
+
+  // --- external calls ---
+
+  beginExternalCall(toolUseId: string, tool: string): ExternalCallClaim {
+    const existing = this.external.get(toolUseId);
+    if (existing) {
+      return existing.status === "completed"
+        ? { status: "completed", result: existing.result ?? "" }
+        : { status: "in_flight" };
+    }
+    this.external.set(toolUseId, { tool, status: "started", result: null });
+    return { status: "claimed" };
+  }
+
+  completeExternalCall(toolUseId: string, result: string): void {
+    const existing = this.external.get(toolUseId);
+    this.external.set(toolUseId, {
+      tool: existing?.tool ?? "",
+      status: "completed",
+      result,
+    });
   }
 
   findConversationsWithWork(): Thread[] {

@@ -191,6 +191,25 @@ export interface ConversationStore {
   findConversationsWithWork(): Thread[];
 }
 
+// What a claim on an irreversible external call says about it.
+//
+// - `claimed`: nobody had this call; the caller owns it and must run it.
+// - `in_flight`: an earlier attempt claimed it and never recorded an outcome, so
+//   the request may or may not have left. It must NOT be repeated.
+// - `completed`: it returned, and `result` is what it returned.
+export type ExternalCallClaim =
+  | { status: "claimed" }
+  | { status: "in_flight" }
+  | { status: "completed"; result: string };
+
+// Durable at-most-once bookkeeping for calls that cannot be replayed (sending
+// mail, creating a calendar event), keyed by the model's own `tool_use` id so a
+// resumed turn replaying the same response lands on the same row.
+export interface ExternalCallStore {
+  beginExternalCall(toolUseId: string, tool: string): ExternalCallClaim;
+  completeExternalCall(toolUseId: string, result: string): void;
+}
+
 // Attachment metadata rows, keyed by the id embedded in the message marker.
 export interface AttachmentRecordStore {
   putAttachment(attachment: {
@@ -233,5 +252,6 @@ export interface SettingsStore {
 
 export type Store = TopicStore &
   ConversationStore &
+  ExternalCallStore &
   AttachmentRecordStore &
   SettingsStore;

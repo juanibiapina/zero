@@ -163,6 +163,10 @@ export interface AgentTool<Input = unknown> {
     content: ToolResultContent;
     isError?: boolean;
   };
+  // True for a call that changes the world outside Zero and cannot be replayed
+  // (sending mail, creating a calendar event). The runner claims such a call
+  // durably before it leaves and refuses to repeat one whose outcome is unknown.
+  externalWrite?: boolean;
 }
 
 export type AgentToolSet = Record<string, AgentTool>;
@@ -175,6 +179,7 @@ export const defineTool = <Schema extends z.ZodType>(def: {
   inputSchema: Schema;
   execute: (input: z.output<Schema>) => Promise<unknown>;
   toContent?: AgentTool["toContent"];
+  externalWrite?: boolean;
 }): AgentTool => def as unknown as AgentTool;
 
 // Convert a tool set into wire definitions, preserving insertion order. Key

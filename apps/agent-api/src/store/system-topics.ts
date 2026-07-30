@@ -14,6 +14,7 @@ import type {
   Attachment,
   ConversationContext,
   ConversationStore,
+  ExternalCallClaim,
   Message,
   MessageContent,
   MessageKind,
@@ -264,6 +265,14 @@ export class SystemTopicStore implements Store {
 
   findConversationsWithWork(): Thread[] {
     return this.inner.findConversationsWithWork();
+  }
+
+  beginExternalCall(toolUseId: string, tool: string): ExternalCallClaim {
+    return this.inner.beginExternalCall(toolUseId, tool);
+  }
+
+  completeExternalCall(toolUseId: string, result: string): void {
+    this.inner.completeExternalCall(toolUseId, result);
   }
 
   // --- attachments (delegate verbatim) ---

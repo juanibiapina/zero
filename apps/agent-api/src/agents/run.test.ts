@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { runAgent } from "./run";
+import {
+  runAgent,
+  UNCERTAIN_EXTERNAL_CALL,
+  type ExternalCallGuard,
+} from "./run";
 import { capturingModel, scriptedModel } from "./mock-model";
 import {
   defineTool,
@@ -555,5 +559,128 @@ describe("runAgent", () => {
       expect(result.finishReason).toBe("stop");
       expect(result.steps).toBe(2);
     });
+  });
+});
+
+// Phase 1.3: a call that changes the world outside Zero is claimed durably
+// before it leaves, so a replay after a reset cannot fire it twice.
+describe("runAgent external write claims", () => {
+  const sendTool = (execute: () => Promise<unknown>): AgentToolSet => ({
+    gmail_send: defineTool({
+      description: "send",
+      inputSchema: z.object({}),
+      execute,
+      externalWrite: true,
+    }),
+  });
+
+  const guardOver = (
+    rows: Map<string, { status: string; result: string }>,
+  ): ExternalCallGuard => ({
+    begin: (toolUseId, tool) => {
+      const existing = rows.get(toolUseId);
+      if (existing)
+        return existing.status === "completed"
+          ? { status: "completed", result: existing.result }
+          : { status: "in_flight" };
+      rows.set(toolUseId, { status: "started", result: "" });
+      void tool;
+      return { status: "claimed" };
+    },
+    complete: (toolUseId, result) => rows.set(toolUseId, { status: "completed", result }),
+  });
+
+  const oneSend = () =>
+    recordingModel([
+      {
+        content: [{ type: "tool_use", id: "call_1", name: "gmail_send", input: {} }],
+        stopReason: "tool_use",
+      },
+      { content: [{ type: "text", text: "sent" }], stopReason: "end_turn" },
+    ]);
+
+  it("claims the call, runs it, and records the result", async () => {
+    const rows = new Map<string, { status: string; result: string }>();
+    const send = vi.fn(async () => ({ id: "m1" }));
+    const { model } = oneSend();
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: sendTool(send),
+      externalCalls: guardOver(rows),
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(rows.get("call_1")).toEqual({
+      status: "completed",
+      result: '{"id":"m1"}',
+    });
+  });
+
+  it("reports an unknown outcome instead of sending again", async () => {
+    const rows = new Map([["call_1", { status: "started", result: "" }]]);
+    const send = vi.fn(async () => ({ id: "m1" }));
+    const { model, requests } = oneSend();
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: sendTool(send),
+      externalCalls: guardOver(rows),
+    });
+
+    expect(send).not.toHaveBeenCalled();
+    const result = toolResults(requests[requests.length - 1])[0];
+    expect(result.is_error).toBe(true);
+    expect(result.content).toBe(UNCERTAIN_EXTERNAL_CALL);
+  });
+
+  it("hands back the recorded result of a call that already finished", async () => {
+    const rows = new Map([
+      ["call_1", { status: "completed", result: '{"id":"m1"}' }],
+    ]);
+    const send = vi.fn(async () => ({ id: "m2" }));
+    const { model, requests } = oneSend();
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: sendTool(send),
+      externalCalls: guardOver(rows),
+    });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(toolResults(requests[requests.length - 1])[0]).toEqual({
+      type: "tool_result",
+      tool_use_id: "call_1",
+      content: '{"id":"m1"}',
+    });
+  });
+
+  it("runs an unmarked tool with no claim at all", async () => {
+    const rows = new Map<string, { status: string; result: string }>();
+    const ping = vi.fn(async () => "pong");
+    const { model } = recordingModel([
+      {
+        content: [{ type: "tool_use", id: "call_1", name: "ping", input: {} }],
+        stopReason: "tool_use",
+      },
+      { content: [{ type: "text", text: "done" }], stopReason: "end_turn" },
+    ]);
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: pingTool(ping),
+      externalCalls: guardOver(rows),
+    });
+
+    expect(ping).toHaveBeenCalledTimes(1);
+    expect(rows.size).toBe(0);
   });
 });

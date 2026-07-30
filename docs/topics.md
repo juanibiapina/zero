@@ -281,11 +281,21 @@ reset between the claim and Telegram loses that one message.
 **Unfinished tool calls are re-run on resume.** A reset between a response and its
 results leaves an assistant tail whose `tool_use` blocks have no `tool_result`,
 which is not a valid request, so the resuming run executes those calls and stores
-their results before calling the model. Re-running is safe by construction: read
-tools are pure, and a topic write replays with the knowledge version it was based
-on, so an already-applied write comes back as a conflict rather than a duplicate
-append. (External writes — sending mail, creating a calendar event — are the one
-class this does not cover; they are guarded separately.)
+their results before calling the model. Re-running is safe by construction for
+the two ordinary classes: read tools are pure, and a topic write replays with the
+knowledge version it was based on, so an already-applied write comes back as a
+conflict rather than a duplicate append.
+
+**Irreversible calls are claimed, not replayed.** `gmail_send` and
+`calendar_create_event` are marked `externalWrite`, and the runner takes a durable
+row in `external_calls` keyed by the model's own `tool_use` id **before** the
+request leaves, then records the serialized result when it returns. A replay after
+a reset therefore lands on that row: a completed call hands its recorded result
+straight back without calling Google again, and a call still marked `started`
+comes back as an error result saying the outcome is unknown, must not be retried,
+and the user should check Gmail or Calendar. That is at-most-once by choice —
+neither API offers exactly-once — and it is the same trade made for Telegram
+delivery: a possible "did that send?" instead of a possible duplicate.
 
 **Follow-ups are injected where the loop would stop.** A Telegram message that
 arrives mid-run waits in `pending_messages`; when the model asks for no more

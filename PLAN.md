@@ -21,7 +21,8 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 0.5b select by cost | **blocked on production data** (todo #17) | — |
 | 1.1 message protocol schema, queue, delivery records | done | `feat(agent): store conversations as a protocol log with a durable message queue` |
 | 1.2 compaction boundary, summary, staleness filter | done | `feat(agent): render conversations from a compaction boundary instead of a fixed window` |
-| 1.3 persist the loop as it runs, resume, follow-up injection | done except external-write claims | `feat(agent): persist the agent loop as it runs and resume an interrupted turn` |
+| 1.3 persist the loop as it runs, resume, follow-up injection | done | `feat(agent): persist the agent loop as it runs and resume an interrupted turn` |
+| 1.3 external-write claims | done | `feat(agent): claim irreversible tool calls so a resumed turn cannot repeat them` |
 | Phase 1.4, 2, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
@@ -161,24 +162,29 @@ production data yet; the acceptance criteria that read them are still open.
   `topic_reads_avoided` (topic reads surviving the staleness filter),
   `followups_injected` (count + oldest age), `delivery_skipped`, plus
   `followups_injected` on `interface_completed`.
-- Still open in 1.3: the external-write class (`gmail_send`,
-  `calendar_create_event`) has **no** `started`/`completed` claim yet, so a resume
-  can re-send mail. That is the next commit, and it does need a new table.
-  `tool_result_reused` with `age_turns` was not added; `topic_reads_avoided`
+- **External writes** (second commit): migration `0026` adds `external_calls`
+  (`toolUseId` PK, `tool`, `status`, `result`, timestamps). A tool declares
+  `externalWrite: true` (`gmail_send`, `calendar_create_event`) and `runTool`
+  claims it through the `ExternalCallGuard` port before `execute` runs:
+  `claimed` -> run and record the serialized result; `completed` -> return the
+  recorded result without calling out; `in_flight` -> return
+  `UNCERTAIN_EXTERNAL_CALL` as an error result and do not call out. A tool that
+  throws is recorded as completed with its error text, because the tool reported a
+  known failure.
+- `tool_result_reused` with `age_turns` was not added; `topic_reads_avoided`
   covers the same question per turn.
 
 ### Picking this up in a new session
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 545 passing
+pnpm --filter @zero/agent-api run test    # 552 passing
 ```
 
-Next action is the external-write half of **1.3**: a durable per-`tool_use.id`
-claim taken before the request leaves, a `completed` result after it returns, and
-an uncertainty result on resume for a `started` call whose outcome is unknown.
-Everything else in 1.3 is shipped; do not rebuild the hooks, the resume path or
-the delivery claims.
+Next action is **Phase 1.4**: chain the cache diagnostic across model calls and
+alarm resumptions by persisting the last response id per conversation. Phase 1.3
+is fully shipped; do not rebuild the hooks, the resume path, the delivery claims
+or the external-call guard.
 
 Two Phase 0 outcomes Phase 1 depends on and should not re-derive: the knowledge
 counter and `KnowledgeConflictError` already exist (so the staleness filter has
@@ -272,8 +278,8 @@ As of the branch head (Phase 0 and 1.1 applied):
   change.
 - The interface agent is resumable: an interrupted turn's persisted responses and
   tool results are handed back to it as `trailing`, unclaimed text blocks are
-  delivered, and unanswered tool calls are re-run. External writes are the one
-  gap left (see Phase 1.3).
+  delivered, unanswered tool calls are re-run, and an irreversible call an earlier
+  attempt started is reported as uncertain instead of repeated.
 
 ## Design decision: one knowledge version
 
@@ -688,7 +694,7 @@ visual appearance. Log selected dimensions, estimated tokens and bytes after
 0.5b so the saving is observable. This is independently useful today and a
 precondition for persisting image blocks in Phase 1.
 
-## Phase 1 — Persist the real message log (1.1-1.3 done except external-write claims, 1.4 not started)
+## Phase 1 — Persist the real message log (1.1-1.3 done, 1.4 not started)
 
 **1.1 Migrate conversation history and delivery state in one migration**, so
 the schema moves once. **DONE** (migration `0024`, `store/messages.ts`, the new
@@ -758,7 +764,7 @@ the limit here would put unbounded context into production between deploys.
 Keep a hard message/char ceiling here and delete it in the same 3.4 commit that
 enables size-triggered compaction. Do not ship 1.2 with neither.
 
-**1.3 DONE except the external-write class** (see "What Phase 1.3 shipped").
+**1.3 DONE** (see "What Phase 1.3 shipped").
 Persist as the loop runs. Store each model response as one verbatim
 assistant wire message before executing its tools; store the ordered
 `tool_result` user message before making the next model call. A response that

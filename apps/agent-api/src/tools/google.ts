@@ -121,6 +121,9 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
           .optional(),
       }),
       execute: (input) => guard("gmail_send", () => google.mail.send(input)),
+      // Irreversible: once the mail leaves there is no unsend, so a resumed turn
+      // must never fire this twice (see agents/run.ts).
+      externalWrite: true,
     }),
 
     calendar_list_calendars: defineTool({
@@ -193,6 +196,8 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
           };
           return google.calendar.createEvent(event, calendarId);
         }),
+      // Irreversible: a duplicate event is visible to every attendee.
+      externalWrite: true,
     }),
   };
 };
