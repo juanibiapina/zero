@@ -27,10 +27,11 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 2.1 ScheduleDO + LearningDO shells | done | `feat(agent): add per-user schedule and learning durable objects` |
 | 2.2 UserDO alarm drains turns only | done | `feat(agent): keep UserDO's alarm for turns and move other deadlines to the schedule` |
 | 2.3 touch the idle deadline per message | done | `feat(agent): push a conversation's idle learning deadline on every message` |
-| Phase 2.4, 3 | not started | — |
+| 2.4 size trigger | done | `feat(agent): ask for learning when a conversation's context grows too large` |
+| Phase 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
-(569 tests). The branch is pushed to `origin` but not merged; a branch push only
+(573 tests). The branch is pushed to `origin` but not merged; a branch push only
 uploads a Worker version, so nothing is deployed, so none of the Phase 0 log lines have produced
 production data yet; the acceptance criteria that read them are still open.
 
@@ -182,14 +183,18 @@ production data yet; the acceptance criteria that read them are still open.
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 569 passing
+pnpm --filter @zero/agent-api run test    # 573 passing
 ```
 
-Next action is **Phase 2.2**: strip `UserDO.alarm()` down to `runAlarmTurns` by
-moving the admin-task and onboarding deadlines onto ScheduleDO (which triggers
-their existing UserDO RPC entry points). Phase 1 and 2.1 are shipped; do not
-rebuild the loop hooks, the resume path, the delivery claims, the external-call
-guard, the diagnostic chain or the two new DO classes.
+Next action is **Phase 3.1**: the remote learning port on UserDO (begin a job at
+a frozen high-water message id, page raw unconsolidated messages, versioned topic
+reads/writes, complete a job, compact one conversation). Phases 0-2 are shipped
+apart from 0.5b; do not rebuild the loop hooks, the resume path, the delivery
+claims, the external-call guard, the diagnostic chain, the DO classes or the
+triggers. The remaining piece before the learner can run is that port plus
+LearningDO's checkpoint machine (3.2); the trigger path already reaches
+`LearningDO.request`, which today logs `learn_skipped` with
+`executor_not_enabled`.
 
 Note before Phase 2: Phase 1's acceptance criteria are log-based and nothing is
 deployed yet. `topic_reads_avoided`, `stale_stubs`, `followups_injected`,
@@ -830,7 +835,7 @@ Constraint this phase does not remove: the messages-region cache TTL is 5m
 hit however well shaped the log is. The win is "do not re-fetch" across sessions
 and "cheap prefix" within one.
 
-## Phase 2 — ScheduleDO and LearningDO shell (not started)
+## Phase 2 — ScheduleDO and LearningDO shell (DONE)
 
 **2.1 DONE.** Both classes exist with bindings `SCHEDULE_DO` / `LEARNING_DO` and
 migration tag `v7` (`new_sqlite_classes`), exported from `src/index.ts`, keyed by
@@ -882,7 +887,15 @@ does not make an active conversation look idle. ScheduleDO stores all
 conversation deadlines and arms its one alarm for the earliest. Wrap the RPC
 best-effort: a scheduling failure must never reject `enqueueTurn`.
 
-**2.4** Size trigger is an event, not a poll. UserDO knows rendered size after a
+**2.4 DONE.** `LEARN_SIZE_THRESHOLD_TOKENS` (45,000, provisional) lives in
+`store/messages.ts`; `runTurn` compares it against the same estimate it logs as
+`context_rendered.total_tokens`, logs `learn_size_requested` and calls the
+`onContextTooLarge` hook, which UserDO wires to
+`requestLearnSafely(schedule, clerkUserId, "size", conversationId)`. The check
+runs before the model call: an oversized conversation is oversized whether or not
+the turn succeeds. The original text:
+
+Size trigger is an event, not a poll. UserDO knows rendered size after a
 turn, so it calls `ScheduleDO.requestLearn("size", conversationId)`. When either
 learning trigger becomes due, ScheduleDO calls `LearningDO.request(...)`; that
 short RPC persists/coalesces the job and arms LearningDO's alarm. ScheduleDO

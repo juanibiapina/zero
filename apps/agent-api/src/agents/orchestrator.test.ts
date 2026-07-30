@@ -5,7 +5,10 @@ import { RATE_LIMIT_MESSAGE } from "./llm-error";
 import { capturingModel, scriptedModel } from "./mock-model";
 import type { AgentModel } from "./protocol";
 import { MemoryStore } from "../store/memory";
-import { messageText } from "../store/messages";
+import {
+  LEARN_SIZE_THRESHOLD_TOKENS,
+  messageText,
+} from "../store/messages";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryGoogle } from "../google/memory";
@@ -746,6 +749,59 @@ describe("runTurn phase markers", () => {
     const msgs = logSpy.mock.calls.map((c) => (c[0] as { msg?: string }).msg);
     expect(msgs).toContain("turn_completed");
     expect(msgs).not.toContain("writer_started");
+  });
+});
+
+describe("runTurn size trigger", () => {
+  it("asks for learning once the rendered context crosses the threshold", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    // ~45k tokens is ~180k characters; the backstop keeps 150k of them, which is
+    // still over the threshold.
+    store.storeMessage(id, "user", "x".repeat(200_000));
+    const requests: Array<[string, number]> = [];
+
+    await runTurn({
+      store,
+      makeModel: constModel(
+        scriptedModel([{ text: "ok" }, { text: "nothing to consolidate" }]),
+      ),
+      send: collectSink().send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+      onContextTooLarge: (conversationId, tokens) =>
+        requests.push([conversationId, tokens]),
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0][0]).toBe(id);
+    expect(requests[0][1]).toBeGreaterThanOrEqual(LEARN_SIZE_THRESHOLD_TOKENS);
+  });
+
+  it("stays quiet on an ordinary conversation", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const requests: string[] = [];
+
+    await runTurn({
+      store,
+      makeModel: constModel(
+        scriptedModel([{ text: "ok" }, { text: "nothing to consolidate" }]),
+      ),
+      send: collectSink().send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+      onContextTooLarge: (conversationId) => requests.push(conversationId),
+    });
+
+    expect(requests).toEqual([]);
   });
 });
 
