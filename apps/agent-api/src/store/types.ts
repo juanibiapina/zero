@@ -66,6 +66,16 @@ export interface ConversationContext {
   messages: Message[];
 }
 
+// One compaction pass's input: the oldest rows after the boundary, the summary
+// they extend, and whether the window stopped short of the conversation's tail.
+// `hasMore` is what tells a pass to hand the rest to a successor instead of
+// pretending it saw the whole conversation.
+export interface CompactionWindow {
+  summary: string | null;
+  messages: Message[];
+  hasMore: boolean;
+}
+
 // A conversation thread awaiting processing.
 export interface Thread {
   id: string;
@@ -209,6 +219,15 @@ export interface ConversationStore {
     conversationId: string,
     limit: number,
   ): ConversationContext;
+  // What compaction reads: the OLDEST `limit` rows after the boundary, plus
+  // whether more follow. It pages forward on purpose. Reading the newest rows
+  // instead (what the turn does) and then moving the boundary to the end of
+  // that window would jump the boundary over every row in between, and those
+  // rows would never enter any summary.
+  getCompactionWindow(
+    conversationId: string,
+    limit: number,
+  ): CompactionWindow;
   // Move the compaction boundary and store the summary covering everything up
   // to and including `throughMessageId`. Deletes nothing.
   compactConversation(
@@ -227,6 +246,11 @@ export interface ConversationStore {
   // Claim one assistant text block for delivery. True the first time, false if
   // it was already claimed: a resumed run must not send it again.
   claimDelivery(messageId: number, blockIndex: number): boolean;
+  // How many text blocks of this row were persisted and never sent. Zero for a
+  // fully delivered row and for a row with no text. It is what tells a finished
+  // response apart from one that was only written down, which is the difference
+  // between an idle conversation and a lost reply.
+  countUndeliveredBlocks(messageId: number): number;
   // Conversations that still owe work: a queued message, a tail awaiting a
   // model response, or a response that stopped for a non-terminal reason.
   findConversationsWithWork(): Thread[];
@@ -271,10 +295,13 @@ export interface LearningStore {
     afterId?: number;
     limit: number;
   }): LearningMessage[];
-  // Stamp every message the job covers as consolidated, in one transaction.
+  // Stamp the job's messages as consolidated, in one transaction, up to
+  // `throughMessageId` (defaulting to the job's high-water mark) and never past
+  // the high-water mark. A job that was handed only part of its range passes
+  // what it actually read, so the rest stays available to a successor.
   // Idempotent by job id: a repeated call after a lost acknowledgement does
-  // nothing, and it never touches messages above the job's high-water mark.
-  completeLearningJob(jobId: string): void;
+  // nothing.
+  completeLearningJob(jobId: string, throughMessageId?: number): void;
 }
 
 // Attachment metadata rows, keyed by the id embedded in the message marker.

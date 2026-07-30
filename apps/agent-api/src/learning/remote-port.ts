@@ -22,13 +22,17 @@ export interface LearningRpc {
     afterId?: number;
     limit: number;
   }): Promise<LearningMessage[]> | LearningMessage[];
-  learnCompleteJob(jobId: string): Promise<void> | void;
-  learnGetContext(
+  learnCompleteJob(jobId: string, throughMessageId: number): Promise<void> | void;
+  learnGetCompactionWindow(
     conversationId: string,
     limit: number,
   ):
-    | Promise<{ summary: string | null; messages: LearningMessage[] }>
-    | { summary: string | null; messages: LearningMessage[] };
+    | Promise<{
+        summary: string | null;
+        messages: LearningMessage[];
+        hasMore: boolean;
+      }>
+    | { summary: string | null; messages: LearningMessage[]; hasMore: boolean };
   learnCompactConversation(
     conversationId: string,
     input: { throughMessageId: number; summary: string },
@@ -93,9 +97,10 @@ export const createRemoteLearningPort = (rpc: LearningRpc): LearningPort => {
     topics,
     beginJob: async (jobId) => rpc.learnBeginJob(jobId),
     listMessages: async (input) => rpc.learnListMessages(input),
-    completeJob: async (jobId) => void (await rpc.learnCompleteJob(jobId)),
-    getContext: async (conversationId, limit) =>
-      rpc.learnGetContext(conversationId, limit),
+    completeJob: async (jobId, throughMessageId) =>
+      void (await rpc.learnCompleteJob(jobId, throughMessageId)),
+    getCompactionWindow: async (conversationId, limit) =>
+      rpc.learnGetCompactionWindow(conversationId, limit),
     compactConversation: async (conversationId, input) =>
       void (await rpc.learnCompactConversation(conversationId, input)),
   };

@@ -949,7 +949,7 @@ unchecked write interface.
 `runLearnerSlice` (the shared `runAgent` over the port's topic tools, bounded by
 `LEARN_STEPS_PER_SLICE` = 12, returning `finished` from the finish reason) and
 `summarizeConversation` (one tool-free call). `LearningDO` drives them: freeze the
-mark, page up to `MAX_JOB_MESSAGES` (400), append each response and each result to
+mark, page up to `LEARN_JOB_BUDGET_TOKENS` of rendered input, append each response and each result to
 a per-key wire log (`do/learning-log.ts`, one message per key because a DO storage
 value is capped at 128 KiB), re-arm while unfinished, compact on a `size` job, then
 `completeJob` and promote any successor. Prompts: `learnerSystemPrompt` shares one
@@ -1002,6 +1002,30 @@ tests and the first production learning jobs; rollback is the previous commit.
 Idempotence is an implemented protocol, not an acceptance note: kill tests must
 prove that a retry after each persistence point neither duplicates an append nor
 skips a message range.
+
+## Review fixes (PR #40, DONE)
+
+Six correctness findings from the review of this branch, all closed before merge.
+See `docs/plans/pr40-review-fixes.md` for the reasoning behind each.
+
+1. A response persisted but never sent is now work: the predicate counts
+   unclaimed text blocks, and such a conversation is delivered without a model
+   call. The fallback and rate-limit replies take a claim too.
+2. Compaction pages forward from the boundary instead of reading the newest
+   rows, so the boundary can never jump over rows no summary covers. A window
+   that stops short hands the rest to a successor pass.
+3. The boundary may only land after a terminal assistant response, so it cannot
+   split a `tool_use` from its `tool_result`. Rendering drops leading orphan
+   results as a backstop.
+4. A learning job stamps only the messages it was shown, and its input is
+   bounded by the rendered size of the learner prompt
+   (`LEARN_JOB_BUDGET_TOKENS`, a guess to be moved from `learn_started`) rather
+   than the unexplained 400-message count.
+5. A failed dispatch in ScheduleDO is rescheduled with backoff instead of being
+   dropped; onboarding and admin tasks had no other trigger.
+6. An irreversible call whose failure does not prove non-effect keeps its claim
+   in flight and reports an unknown outcome. Only `ExternalCallNotSent` from the
+   adapter completes the claim.
 
 ## Test strategy
 

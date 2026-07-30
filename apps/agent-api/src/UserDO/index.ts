@@ -353,18 +353,19 @@ export class UserDO extends DurableObject<Env> {
     return this.store.listUnconsolidatedMessages(input);
   }
 
-  learnCompleteJob(jobId: string): void {
-    this.store.completeLearningJob(jobId);
+  learnCompleteJob(jobId: string, throughMessageId: number): void {
+    this.store.completeLearningJob(jobId, throughMessageId);
   }
 
-  learnGetContext(
+  learnGetCompactionWindow(
     conversationId: string,
     limit: number,
-  ): { summary: string | null; messages: LearningMessage[] } {
-    const context = this.store.getConversationContext(conversationId, limit);
+  ): { summary: string | null; messages: LearningMessage[]; hasMore: boolean } {
+    const window = this.store.getCompactionWindow(conversationId, limit);
     return {
-      summary: context.summary,
-      messages: context.messages.map((m) => ({ ...m, conversationId })),
+      summary: window.summary,
+      messages: window.messages.map((m) => ({ ...m, conversationId })),
+      hasMore: window.hasMore,
     };
   }
 

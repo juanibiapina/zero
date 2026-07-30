@@ -62,6 +62,23 @@ export const messageText = (content: MessageContent): string =>
         .map((b) => b.text)
         .join("\n\n");
 
+// Which text blocks of an assistant row still owe the user a send. A block is
+// deliverable when it carries non-blank text; it is outstanding until its index
+// appears in the delivery claims. Shared so both stores and the delivery retry
+// agree on what "already sent" means.
+export const unclaimedBlockIndexes = (
+  content: MessageContent,
+  claimed: Iterable<number>,
+): number[] => {
+  const done = new Set(claimed);
+  const out: number[] = [];
+  for (const [index, block] of toBlocks(content).entries()) {
+    if (block.type !== "text" || block.text.trim() === "") continue;
+    if (!done.has(index)) out.push(index);
+  }
+  return out;
+};
+
 // Does a conversation still owe work? The rule replaces the old "tail role is
 // user" check and is protocol-aware:
 //
@@ -70,15 +87,23 @@ export const messageText = (content: MessageContent): string =>
 // - an assistant response that stopped for a non-terminal reason (tool_use,
 //   pause_turn, or no reason at all) is mid-flight and needs continuation;
 // - an assistant response with a terminal stop reason and an empty queue is
-//   idle.
+//   idle, unless one of its text blocks was persisted but never sent. A reset
+//   between persisting a response and claiming its delivery leaves exactly that
+//   state, and the reply is only recoverable if this predicate calls it work:
+//   it is what both the alarm's thread scan and the turn itself ask.
 export const conversationHasWork = (input: {
   pendingCount: number;
   tail?: { kind: MessageKind; stopReason: string | null };
+  // Text blocks of the tail row that were persisted and never sent.
+  undeliveredCount?: number;
 }): boolean => {
   if (input.pendingCount > 0) return true;
   const tail = input.tail;
   if (!tail) return false;
-  if (tail.kind === "assistant_message") return !isTerminalStopReason(tail.stopReason);
+  if (tail.kind === "assistant_message")
+    return (
+      !isTerminalStopReason(tail.stopReason) || (input.undeliveredCount ?? 0) > 0
+    );
   return true;
 };
 
@@ -89,6 +114,46 @@ export const conversationHasWork = (input: {
 // compaction moving its boundary. It exists so a single read cannot pull an
 // unbounded number of rows out of storage.
 export const CONTEXT_MESSAGE_PAGE = 500;
+
+// Make a rendered window safe to send. A window can open mid-turn in two ways:
+// a read that hit `CONTEXT_MESSAGE_PAGE` and cut the oldest rows, or a boundary
+// that landed between an assistant `tool_use` and its `tool_result`. Either way
+// the array would start with a result whose call is not in it, which the API
+// rejects, so drop the leading results. Rows that follow are self-contained: a
+// leading assistant row carries its own calls and their results come after it.
+export const trimOrphanToolResults = <T extends { kind: MessageKind }>(
+  messages: T[],
+): T[] => {
+  let start = 0;
+  while (start < messages.length && messages[start].kind === "tool_result")
+    start++;
+  return start === 0 ? messages : messages.slice(start);
+};
+
+// Where compaction may move a conversation's boundary.
+//
+// Not a row count: four rows are not one exchange, and a multi-step turn puts an
+// assistant `tool_use` and its `tool_result` in separate rows, so a count-based
+// cut can split them and leave the rendered context starting with an orphan
+// result. The only position that is safe by construction is right after a
+// terminal assistant response, because what follows it is a user message.
+//
+// `keepTail` holds that many newest rows out of the summary: the user is
+// mid-conversation and those are the messages they are still talking about.
+// Returns the index to compact through (inclusive), or null when the window has
+// no safe cut, in which case the boundary must stay where it is.
+export const safeCompactionCut = (
+  messages: { kind: MessageKind; stopReason: string | null }[],
+  options: { keepTail: number },
+): number | null => {
+  const end = messages.length - Math.max(0, options.keepTail);
+  for (let i = end - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.kind === "assistant_message" && isTerminalStopReason(m.stopReason))
+      return i;
+  }
+  return null;
+};
 
 // Rough token estimate from character count (~4 chars per token). Used only for
 // the `context_rendered` log line the compaction threshold is derived from, so

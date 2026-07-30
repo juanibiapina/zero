@@ -26,12 +26,14 @@ const rpcOver = (store: MemoryStore): LearningRpc => {
   return {
     learnBeginJob: (jobId) => store.beginLearningJob(jobId),
     learnListMessages: (input) => store.listUnconsolidatedMessages(input),
-    learnCompleteJob: (jobId) => store.completeLearningJob(jobId),
-    learnGetContext: (conversationId, limit) => {
-      const context = store.getConversationContext(conversationId, limit);
+    learnCompleteJob: (jobId, throughMessageId) =>
+      store.completeLearningJob(jobId, throughMessageId),
+    learnGetCompactionWindow: (conversationId, limit) => {
+      const window = store.getCompactionWindow(conversationId, limit);
       return {
-        summary: context.summary,
-        messages: context.messages.map((m) => ({ ...m, conversationId })),
+        summary: window.summary,
+        messages: window.messages.map((m) => ({ ...m, conversationId })),
+        hasMore: window.hasMore,
       };
     },
     learnCompactConversation: (conversationId, input) =>
@@ -65,7 +67,7 @@ describe.each(adapters)("learning port (%s)", (_name, build) => {
     const later = store.storeMessage(conv, "user", "two");
 
     expect((await port.listMessages({ throughMessageId: high, limit: 10 })).map((m) => m.id)).toEqual([high]);
-    await port.completeJob("job_1");
+    await port.completeJob("job_1", high);
     expect(
       (await port.listMessages({ throughMessageId: later, limit: 10 })).map(
         (m) => m.id,
@@ -137,10 +139,11 @@ describe.each(adapters)("learning port (%s)", (_name, build) => {
       summary: "they said one",
     });
 
-    const context = await port.getContext(conv, 10);
-    expect(context.summary).toBe("they said one");
-    expect(context.messages).toHaveLength(1);
-    expect(context.messages[0].conversationId).toBe(conv);
+    const window = await port.getCompactionWindow(conv, 10);
+    expect(window.summary).toBe("they said one");
+    expect(window.messages).toHaveLength(1);
+    expect(window.messages[0].conversationId).toBe(conv);
+    expect(window.hasMore).toBe(false);
     // The raw rows are still there: learning reads them, rendering skips them.
     const high = await port.beginJob("job_1");
     expect(

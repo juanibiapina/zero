@@ -316,6 +316,47 @@ describe("Store contract: conversations", () => {
     ).toEqual(["m2", "m3"]);
   });
 
+  it("pages the compaction window forward from the boundary", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const ids = [
+      s.storeMessage(id, "user", "m1"),
+      s.storeMessage(id, "assistant", "m2"),
+      s.storeMessage(id, "user", "m3"),
+      s.storeMessage(id, "assistant", "m4"),
+    ];
+
+    // The oldest rows, not the newest: a boundary set from this window can only
+    // skip rows the window contained.
+    const first = s.getCompactionWindow(id, 2);
+    expect(first.messages.map((m) => m.id)).toEqual([ids[0], ids[1]]);
+    expect(first.hasMore).toBe(true);
+
+    s.compactConversation(id, { throughMessageId: ids[1], summary: "so far" });
+    const second = s.getCompactionWindow(id, 2);
+    expect(second.messages.map((m) => m.id)).toEqual([ids[2], ids[3]]);
+    expect(second.summary).toBe("so far");
+    expect(second.hasMore).toBe(false);
+  });
+
+  it("drops a leading tool result whose call fell outside the window", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(id, "assistant", "calling", { stopReason: "tool_use" });
+    s.storeMessage(
+      id,
+      "user",
+      [{ type: "tool_result", tool_use_id: "tu_1", content: "ok" }],
+      { kind: "tool_result" },
+    );
+    s.storeMessage(id, "user", "hi");
+
+    // Truncating to the newest 2 rows would open the context on the result.
+    expect(
+      s.getConversationContext(id, 2).messages.map((m) => m.kind),
+    ).toEqual(["user_message"]);
+  });
+
   it("stores a plain string as a single text block", () => {
     const s = makeStore();
     const id = s.getOrCreateConversation(1, 0);
@@ -404,7 +445,7 @@ describe("Store contract: conversations with work", () => {
     const b = s.getOrCreateConversation(2, 0);
     s.storeMessage(a, "user", "hi");
     s.storeMessage(b, "user", "hi");
-    s.storeMessage(b, "assistant", "hello");
+    s.claimDelivery(s.storeMessage(b, "assistant", "hello"), 0);
     expect(withWork(s)).toEqual([a]);
   });
 
@@ -439,7 +480,39 @@ describe("Store contract: conversations with work", () => {
     const s = makeStore();
     const a = s.getOrCreateConversation(1, 0);
     s.storeMessage(a, "user", "hi");
+    s.claimDelivery(s.storeMessage(a, "assistant", "hello"), 0);
+    expect(withWork(s)).toEqual([]);
+  });
+
+  it("a terminal assistant response nobody delivered is still work", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "user", "hi");
     s.storeMessage(a, "assistant", "hello");
+    expect(withWork(s)).toEqual([a]);
+  });
+
+  it("a partly delivered terminal response is work for its remaining block", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "user", "hi");
+    const id = s.storeMessage(a, "assistant", [
+      { type: "text", text: "one moment" },
+      { type: "text", text: "here it is" },
+    ]);
+    s.claimDelivery(id, 0);
+    expect(withWork(s)).toEqual([a]);
+    s.claimDelivery(id, 1);
+    expect(withWork(s)).toEqual([]);
+  });
+
+  it("a response with no text to send is idle without any claim", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "user", "hi");
+    s.storeMessage(a, "assistant", [
+      { type: "tool_use", id: "tu_1", name: "get_topic", input: {} },
+    ]);
     expect(withWork(s)).toEqual([]);
   });
 
@@ -447,7 +520,7 @@ describe("Store contract: conversations with work", () => {
     const s = makeStore();
     const a = s.getOrCreateConversation(1, 0);
     s.storeMessage(a, "user", "hi");
-    s.storeMessage(a, "assistant", "hello");
+    s.claimDelivery(s.storeMessage(a, "assistant", "hello"), 0);
     s.enqueuePendingMessage(a, "one more thing");
     expect(withWork(s)).toEqual([a]);
   });
@@ -595,6 +668,38 @@ describe("Store contract: learning jobs", () => {
 
     // Repeated completion (a lost acknowledgement) changes nothing.
     s.completeLearningJob("job_1");
+    expect(
+      s.listUnconsolidatedMessages({ throughMessageId: later, limit: 10 }).map((m) => m.id),
+    ).toEqual([later]);
+  });
+
+  it("stamps only what the job was shown when its input was cut short", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const ids = [
+      s.storeMessage(id, "user", "one"),
+      s.storeMessage(id, "assistant", "two"),
+      s.storeMessage(id, "user", "three"),
+    ];
+    const high = s.beginLearningJob("job_1");
+    expect(high).toBe(ids[2]);
+
+    // The job only read the first two rows.
+    s.completeLearningJob("job_1", ids[1]);
+    expect(
+      s.listUnconsolidatedMessages({ throughMessageId: high, limit: 10 }).map((m) => m.id),
+    ).toEqual([ids[2]]);
+  });
+
+  it("never stamps past the job's frozen mark", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const first = s.storeMessage(id, "user", "one");
+    const high = s.beginLearningJob("job_1");
+    expect(high).toBe(first);
+    const later = s.storeMessage(id, "user", "two");
+
+    s.completeLearningJob("job_1", later);
     expect(
       s.listUnconsolidatedMessages({ throughMessageId: later, limit: 10 }).map((m) => m.id),
     ).toEqual([later]);
