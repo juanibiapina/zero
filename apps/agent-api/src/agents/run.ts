@@ -23,6 +23,7 @@ import {
   type ToolUseBlock,
 } from "./protocol";
 import { cachedSystem, markLastTool, slideMessageBreakpoint } from "./cache";
+import { ExternalCallNotSent } from "./external-call";
 
 // Shared step cap for every agent (interface and research). The cap is a
 // runaway-loop guard, not an expected stopping point: the model normally
@@ -283,9 +284,17 @@ const runTool = async (
     return { type: "tool_result", tool_use_id: call.id, content };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // A throw means the tool itself reported failure, so the outcome is known
-    // and the model may try again with the next call id.
-    if (tool.externalWrite && guard) guard.complete(call.id, message);
+    // For an irreversible call, an exception does not prove the provider did
+    // nothing: a fetch that times out reading the response looks the same as one
+    // that never arrived, and the mail may already be sent. Only the adapter can
+    // tell, and it says so with ExternalCallNotSent. Without that proof the
+    // claim stays in flight, so this call — and any replay of the same id —
+    // reports an unknown outcome instead of inviting a duplicate send.
+    if (tool.externalWrite && guard) {
+      if (!(err instanceof ExternalCallNotSent))
+        return errorResult(call.id, UNCERTAIN_EXTERNAL_CALL);
+      guard.complete(call.id, message);
+    }
     return errorResult(call.id, message);
   }
 };

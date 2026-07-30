@@ -12,7 +12,12 @@ import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
 import {
+  ExternalCallNotSent,
+  isProvableRejection,
+} from "../agents/external-call";
+import {
   CALENDAR_EVENTS_CAP,
+  GoogleApiError,
   GoogleNotConnectedError,
   MAIL_SEARCH_CAP,
   type CreateEventInput,
@@ -41,6 +46,25 @@ const guard = async <T>(
     const message = err instanceof Error ? err.message : String(err);
     log(`${op}_failed`, { error: message });
     return { error: message };
+  }
+};
+
+// The guard for the two irreversible tools. It must not turn every failure into
+// data: swallowing an ambiguous error would let the model retry under a new
+// tool_use id and send the same mail twice. Only a provable non-effect is
+// reported as a normal failure; anything else propagates, and agents/run.ts
+// leaves the call's claim in flight and tells the model the outcome is unknown.
+const writeGuard = async <T>(op: string, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`${op}_failed`, { error: message });
+    if (err instanceof GoogleNotConnectedError)
+      throw new ExternalCallNotSent(err.message);
+    if (err instanceof GoogleApiError && isProvableRejection(err.status))
+      throw new ExternalCallNotSent(message);
+    throw err;
   }
 };
 
@@ -120,7 +144,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
           .object({ messageIdHeader: z.string(), threadId: z.string() })
           .optional(),
       }),
-      execute: (input) => guard("gmail_send", () => google.mail.send(input)),
+      execute: (input) => writeGuard("gmail_send", () => google.mail.send(input)),
       // Irreversible: once the mail leaves there is no unsend, so a resumed turn
       // must never fire this twice (see agents/run.ts).
       externalWrite: true,
@@ -181,7 +205,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
         calendarId: z.string().optional(),
       }),
       execute: ({ summary, start, end, description, location, attendees, allDay, calendarId }) =>
-        guard("calendar_create_event", () => {
+        writeGuard("calendar_create_event", () => {
           const toDateTime = (v: string): EventDateTime =>
             allDay
               ? { date: normalizeWallClock(v, false).slice(0, 10) }

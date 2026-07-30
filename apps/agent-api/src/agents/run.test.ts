@@ -6,6 +6,7 @@ import {
   type ExternalCallGuard,
 } from "./run";
 import { capturingModel, scriptedModel } from "./mock-model";
+import { ExternalCallNotSent } from "./external-call";
 import {
   defineTool,
   type AgentModelRequest,
@@ -686,6 +687,71 @@ describe("runAgent external write claims", () => {
       type: "tool_result",
       tool_use_id: "call_1",
       content: '{"id":"m1"}',
+    });
+  });
+
+  it("leaves the claim in flight when a failure does not prove non-effect", async () => {
+    const rows = new Map<string, { status: string; result: string }>();
+    const send = vi.fn(async () => {
+      // What a fetch that dies while reading the response looks like. The mail
+      // may already be sent.
+      throw new Error("network error");
+    });
+    const { model, requests } = oneSend();
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: sendTool(send),
+      externalCalls: guardOver(rows),
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    const result = toolResults(requests[requests.length - 1])[0];
+    expect(result.is_error).toBe(true);
+    expect(result.content).toBe(UNCERTAIN_EXTERNAL_CALL);
+    // Still in flight, so a replay of the same id says the same thing rather
+    // than firing the send again.
+    expect(rows.get("call_1")).toEqual({ status: "started", result: "" });
+
+    const replay = oneSend();
+    await runAgent({
+      model: replay.model,
+      system: "sys",
+      prompt: "q",
+      tools: sendTool(send),
+      externalCalls: guardOver(rows),
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(
+      toolResults(replay.requests[replay.requests.length - 1])[0].content,
+    ).toBe(UNCERTAIN_EXTERNAL_CALL);
+  });
+
+  it("completes the claim when the adapter proves the request never left", async () => {
+    const rows = new Map<string, { status: string; result: string }>();
+    const send = vi.fn(async () => {
+      throw new ExternalCallNotSent("Google isn't connected.");
+    });
+    const { model, requests } = oneSend();
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: sendTool(send),
+      externalCalls: guardOver(rows),
+    });
+
+    const result = toolResults(requests[requests.length - 1])[0];
+    expect(result.is_error).toBe(true);
+    expect(result.content).toBe("Google isn't connected.");
+    // Recorded as a real failure: nothing happened, so the model may try again
+    // under a new call id.
+    expect(rows.get("call_1")).toEqual({
+      status: "completed",
+      result: "Google isn't connected.",
     });
   });
 

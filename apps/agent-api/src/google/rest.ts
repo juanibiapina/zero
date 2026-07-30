@@ -11,6 +11,7 @@
 import {
   CALENDAR_EVENTS_CAP,
   CALENDAR_PER_LIST_CAP,
+  GoogleApiError,
   GoogleNotConnectedError,
   MAIL_SEARCH_CAP,
   type CalendarApi,
@@ -174,11 +175,13 @@ export const createGoogleWorkspace = (
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       if (res.status === 401) {
-        throw new Error(
+        throw new GoogleApiError(
+          res.status,
           `Google auth failed (401): token expired or scope missing. ${detail}`.trim(),
         );
       }
-      throw new Error(
+      throw new GoogleApiError(
+        res.status,
         `Google API ${res.status} ${res.statusText}: ${detail}`.trim(),
       );
     }

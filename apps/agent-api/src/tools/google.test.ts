@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildGoogleTools } from "./google";
 import { createMemoryGoogle } from "../google/memory";
+import { GoogleApiError, GoogleNotConnectedError } from "../google/types";
+import { ExternalCallNotSent } from "../agents/external-call";
 
 // Invoke a tool's execute with an untyped input (mirrors research.test.ts).
 const run = (
@@ -53,6 +55,89 @@ describe("buildGoogleTools gmail", () => {
       error: string;
     };
     expect(res.error).toContain("connect");
+  });
+});
+
+describe("irreversible tools classify their failures", () => {
+  // A failing adapter for the two write tools. The tools must not swallow these
+  // into { error } data: that is what lets the model retry a send under a new
+  // tool_use id and deliver the same mail twice (see agents/run.ts).
+  const failingGoogle = (err: Error) => {
+    const google = createMemoryGoogle();
+    return {
+      ...google,
+      mail: {
+        ...google.mail,
+        send: async () => {
+          throw err;
+        },
+      },
+      calendar: {
+        ...google.calendar,
+        createEvent: async () => {
+          throw err;
+        },
+      },
+    };
+  };
+
+  const sendInput = { to: "bob@x.com", subject: "Hi", body: "b" };
+
+  it("reports a rejected request as provably not sent", async () => {
+    const tools = buildGoogleTools({
+      google: failingGoogle(new GoogleApiError(400, "bad recipient")),
+      timezone: "UTC",
+    });
+    await expect(run(tools, "gmail_send", sendInput)).rejects.toBeInstanceOf(
+      ExternalCallNotSent,
+    );
+  });
+
+  it("reports a missing connection as provably not sent", async () => {
+    const tools = buildGoogleTools({
+      google: failingGoogle(new GoogleNotConnectedError()),
+      timezone: "UTC",
+    });
+    await expect(run(tools, "gmail_send", sendInput)).rejects.toBeInstanceOf(
+      ExternalCallNotSent,
+    );
+  });
+
+  it("lets an ambiguous failure through unclassified", async () => {
+    // A 500, a 429 and a dead socket all leave the outcome unknown: the send may
+    // have been accepted before the response was lost.
+    for (const err of [
+      new GoogleApiError(500, "backend error"),
+      new GoogleApiError(429, "rate limited"),
+      new Error("network error"),
+    ]) {
+      const tools = buildGoogleTools({
+        google: failingGoogle(err),
+        timezone: "UTC",
+      });
+      await expect(run(tools, "gmail_send", sendInput)).rejects.not.toBeInstanceOf(
+        ExternalCallNotSent,
+      );
+    }
+  });
+
+  it("classifies calendar_create_event the same way", async () => {
+    const event = { summary: "s", start: "2026-01-01T09:00", end: "2026-01-01T10:00" };
+    const rejected = buildGoogleTools({
+      google: failingGoogle(new GoogleApiError(403, "no access")),
+      timezone: "UTC",
+    });
+    await expect(
+      run(rejected, "calendar_create_event", event),
+    ).rejects.toBeInstanceOf(ExternalCallNotSent);
+
+    const ambiguous = buildGoogleTools({
+      google: failingGoogle(new Error("socket hang up")),
+      timezone: "UTC",
+    });
+    await expect(
+      run(ambiguous, "calendar_create_event", event),
+    ).rejects.not.toBeInstanceOf(ExternalCallNotSent);
   });
 });
 
