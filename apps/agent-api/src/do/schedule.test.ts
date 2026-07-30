@@ -9,6 +9,10 @@ import {
   setDeadline,
   takeDueDeadlines,
   requestLearnSafely,
+  retryDeadline,
+  RETRY_BASE_MS,
+  RETRY_MAX_ATTEMPTS,
+  RETRY_MAX_MS,
   touchConversation,
   touchScheduleSafely,
   type Deadlines,
@@ -142,6 +146,45 @@ describe("takeDueDeadlines", () => {
 });
 
 // The turn path must never fail because a timer could not be set.
+describe("retryDeadline", () => {
+  it("backs off exponentially from the first failure", () => {
+    const entry = { reason: "onboarding" as const, dueAt: 1000 };
+    const first = retryDeadline(entry, 10_000);
+    expect(first).toEqual({
+      reason: "onboarding",
+      attempts: 1,
+      dueAt: 10_000 + RETRY_BASE_MS,
+    });
+    const second = retryDeadline(first!, 20_000);
+    expect(second).toEqual({
+      reason: "onboarding",
+      attempts: 2,
+      dueAt: 20_000 + RETRY_BASE_MS * 2,
+    });
+  });
+
+  it("caps the delay", () => {
+    const entry = { reason: "admin_task" as const, dueAt: 0, attempts: 20 };
+    // Attempt count above the ceiling is refused, so cap the delay one below it.
+    const late = { ...entry, attempts: RETRY_MAX_ATTEMPTS - 1 };
+    expect(retryDeadline(late, 0)?.dueAt).toBeLessThanOrEqual(RETRY_MAX_MS);
+  });
+
+  it("keeps the conversation a learning deadline is about", () => {
+    const entry = { reason: "size" as const, dueAt: 0, conversationId: "c1" };
+    expect(retryDeadline(entry, 0)?.conversationId).toBe("c1");
+  });
+
+  it("gives up after too many failures instead of retrying forever", () => {
+    const entry = {
+      reason: "onboarding" as const,
+      dueAt: 0,
+      attempts: RETRY_MAX_ATTEMPTS,
+    };
+    expect(retryDeadline(entry, 0)).toBeNull();
+  });
+});
+
 describe("best-effort scheduling from the turn path", () => {
   afterEach(() => {
     vi.restoreAllMocks();
