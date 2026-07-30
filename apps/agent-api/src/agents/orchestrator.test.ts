@@ -521,6 +521,48 @@ describe("runTurn", () => {
     expect(chains.interface).toEqual([null]);
     expect(chains.writer).toEqual([null]);
   });
+
+  it("chains the next turn's first request to the previous turn's response", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    const chain: Array<{ previous: string | null | undefined; crossRun?: boolean }> = [];
+    let counter = 0;
+    const makeModel = (agent: string): AgentModel => ({
+      modelId: "mock-model",
+      generate: async (request) => {
+        if (agent === "interface")
+          chain.push({ previous: request.previousMessageId, crossRun: request.crossRun });
+        return {
+          id: `msg_${agent}_${counter++}`,
+          content: [{ type: "text", text: "ok" }],
+          stopReason: "end_turn",
+          usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          diagnostic: { state: "initial" },
+        };
+      },
+    });
+    const turn = () =>
+      runTurn({
+        store,
+        makeModel,
+        send: collectSink().send,
+        search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
+        google: createMemoryGoogle(),
+        chatId: 1,
+        topicId: 0,
+      });
+
+    store.storeMessage(id, "user", "first");
+    await turn();
+    store.storeMessage(id, "user", "second");
+    await turn();
+
+    expect(chain[0]).toEqual({ previous: null, crossRun: false });
+    // The second turn's prefix extends the first turn's, so it is compared
+    // against that response rather than starting a fresh chain.
+    expect(chain[1]).toEqual({ previous: "msg_interface_0", crossRun: true });
+  });
 });
 
 // Phase markers for stall diagnosis. A DO alarm invocation killed at the 900s

@@ -156,7 +156,7 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `topics`            | `id`, `name`, `description`, `body`, timestamps, `messageCount` | The knowledge model (see [`topics.md`](topics.md)) |
 | `knowledge`         | `id`, `version`, `systemFingerprint`                         | The knowledge version guarding topic writes    |
 | `conversations`     | `id`, `chatId`, `topicId`, `createdAt`, `compactedThroughMessageId`, `summary` | One thread per Telegram (chatId, topicId); the last two are the non-destructive compaction boundary |
-| `messages`          | `id`, `conversationId`, `role`, `kind`, `content`, `stopReason`, `consolidatedAt`, `createdAt` | The conversation's protocol log: `content` is a JSON array of wire-format content blocks |
+| `messages`          | `id`, `conversationId`, `role`, `kind`, `content`, `stopReason`, `responseId`, `consolidatedAt`, `createdAt` | The conversation's protocol log: `content` is a JSON array of wire-format content blocks; `responseId` is the model's own id, chained into the next turn's cache diagnostics |
 | `pending_messages`  | `id`, `conversationId`, `content`, `createdAt`, `injectedAt` | Telegram messages queued until a turn injects them |
 | `deliveries`        | `messageId`, `blockIndex`, `claimedAt`                       | Assistant text blocks already handed to Telegram |
 | `external_calls`    | `toolUseId`, `tool`, `status`, `result`, `startedAt`, `completedAt` | Irreversible outbound calls (send mail, create event), claimed before the request leaves |

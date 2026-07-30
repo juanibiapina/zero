@@ -172,6 +172,10 @@ export const createModelFactory = async (
           agent,
           ...(request.step !== undefined ? { step: request.step } : {}),
           state: diagnostic.state,
+          // Whether the comparison crossed a turn boundary: a divergence here
+          // means the conversation prefix changed between turns, not within a
+          // run.
+          chain_crossed_turn: request.crossRun === true,
           ...("missedInputTokens" in diagnostic &&
           diagnostic.missedInputTokens !== undefined
             ? { cache_missed_input_tokens: diagnostic.missedInputTokens }

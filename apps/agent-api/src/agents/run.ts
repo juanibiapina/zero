@@ -79,6 +79,7 @@ export interface RunAgentInput {
   onAssistant?: (
     content: ContentBlock[],
     stopReason: StopReason | null,
+    responseId: string,
   ) => Promise<number | null>;
   // Called once per text block the model produces, in order, as each step
   // completes and before that step's tools run. The interface agent uses it to
@@ -105,6 +106,11 @@ export interface RunAgentInput {
   // it such a tool is simply run, which is what tests and the read-only agents
   // want.
   externalCalls?: ExternalCallGuard;
+  // The id of the last response this conversation received, from an earlier run.
+  // With an append-only log turn N+1's prefix extends turn N's, so chaining to
+  // it is what makes a cross-turn cache break visible. Null/undefined starts a
+  // fresh chain.
+  previousResponseId?: string | null;
   // Prompt caching on by default: the system text gets a 1h cache breakpoint
   // and so does the last tool. Set false to opt out (tests that assert the
   // plain shape).
@@ -308,11 +314,12 @@ export const runAgent = async (
   const generated: AgentMessage[] = [];
   const stepUsages: RunAgentUsage[] = [];
   const maxSteps = input.maxSteps ?? AGENT_MAX_STEPS;
-  // Cache-diagnostic chain for this run: the first request opts in with null
-  // (nothing to compare against), every later one names the previous response.
-  // Within a run the comparison is meaningful because each step only appends.
-  // The chain never crosses runs (see docs/caching.md).
-  let previousMessageId: string | null = null;
+  // Cache-diagnostic chain: the first request names the conversation's last
+  // response (from an earlier turn) when there is one, and every later one names
+  // this run's previous response. Each step only appends, and so does each turn,
+  // so both comparisons are meaningful (see docs/caching.md).
+  let previousMessageId: string | null = input.previousResponseId ?? null;
+  let crossRun = previousMessageId !== null;
 
   // Resume: the caller's log can end on an assistant response whose tool_use
   // blocks never got results, because a reset landed between persisting the
@@ -347,9 +354,11 @@ export const runAgent = async (
       messages: requestMessages,
       tools: wireTools,
       previousMessageId,
+      crossRun,
       step,
     });
     previousMessageId = response.id;
+    crossRun = false;
     stepUsages.push(response.usage);
 
     // Round-trip the response content verbatim: tool ids, inputs, and block
@@ -363,7 +372,11 @@ export const runAgent = async (
     // Persist before anything leaves the isolate: the response is in the log
     // ahead of its tool side effects and ahead of any Telegram send.
     const messageId =
-      (await input.onAssistant?.(response.content, response.stopReason)) ?? null;
+      (await input.onAssistant?.(
+        response.content,
+        response.stopReason,
+        response.id,
+      )) ?? null;
 
     for (const [blockIndex, block] of response.content.entries()) {
       if (!isText(block) || block.text.trim() === "") continue;

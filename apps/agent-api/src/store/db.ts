@@ -340,7 +340,11 @@ export class DbStore implements Store {
     conversationId: string,
     role: Role,
     content: MessageContent,
-    options?: { kind?: MessageKind; stopReason?: string | null },
+    options?: {
+      kind?: MessageKind;
+      stopReason?: string | null;
+      responseId?: string | null;
+    },
   ): number {
     const row = this.db.insertReturning(
       messages,
@@ -355,6 +359,7 @@ export class DbStore implements Store {
             : role === "assistant"
               ? "end_turn"
               : null,
+        responseId: options?.responseId ?? null,
         createdAt: this.nowIso(),
       },
       ["id"],
@@ -464,6 +469,7 @@ export class DbStore implements Store {
           kind: "user_message",
           content: [{ type: "text", text: row.content }],
           stopReason: null,
+          responseId: null,
           createdAt: row.createdAt,
         });
       }
@@ -684,6 +690,7 @@ function toMessage(m: {
   kind: string;
   content: string;
   stopReason: string | null;
+  responseId?: string | null;
   createdAt: string;
 }): Message {
   return {
@@ -692,6 +699,7 @@ function toMessage(m: {
     kind: m.kind as MessageKind,
     content: decodeContent(m.content),
     stopReason: m.stopReason,
+    responseId: m.responseId ?? null,
     createdAt: m.createdAt,
   };
 }

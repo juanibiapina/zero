@@ -132,6 +132,7 @@ const msg = (id: number, content: Message["content"], role: Role = "user"): Mess
   kind: role === "assistant" ? "assistant_message" : "user_message",
   content,
   stopReason: null,
+  responseId: null,
   createdAt: "2026-01-01T00:00:00.000Z",
 });
 

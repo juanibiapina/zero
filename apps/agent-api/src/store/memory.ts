@@ -50,6 +50,7 @@ interface MsgRow {
   // Encoded exactly as the SQLite adapter stores it: JSON content blocks.
   content: string;
   stopReason: string | null;
+  responseId: string | null;
   createdAt: string;
 }
 
@@ -67,6 +68,7 @@ const toMessage = (m: MsgRow): Message => ({
   kind: m.kind,
   content: decodeContent(m.content),
   stopReason: m.stopReason,
+  responseId: m.responseId,
   createdAt: m.createdAt,
 });
 
@@ -306,7 +308,11 @@ export class MemoryStore implements Store {
     conversationId: string,
     role: Role,
     content: MessageContent,
-    options?: { kind?: MessageKind; stopReason?: string | null },
+    options?: {
+      kind?: MessageKind;
+      stopReason?: string | null;
+      responseId?: string | null;
+    },
   ): number {
     const id = this.nextMsgId++;
     this.msgs.push({
@@ -323,6 +329,7 @@ export class MemoryStore implements Store {
           : role === "assistant"
             ? "end_turn"
             : null,
+      responseId: options?.responseId ?? null,
       createdAt: this.now(),
     });
     return id;
@@ -408,6 +415,7 @@ export class MemoryStore implements Store {
         kind: "user_message",
         content: [{ type: "text", text: row.content }],
         stopReason: null,
+        responseId: null,
         createdAt: row.createdAt,
       });
     }

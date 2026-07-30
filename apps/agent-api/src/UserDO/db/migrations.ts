@@ -25,5 +25,6 @@ import m0023 from "./migrations/0023_knowledge_version.sql";
 import m0024 from "./migrations/0024_message_protocol.sql";
 import m0025 from "./migrations/0025_conversation_compaction.sql";
 import m0026 from "./migrations/0026_external_calls.sql";
+import m0027 from "./migrations/0027_message_response_id.sql";
 
-export const migrations = { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014, m0015, m0016, m0017, m0018, m0019, m0020, m0021, m0022, m0023, m0024, m0025, m0026 };
+export const migrations = { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014, m0015, m0016, m0017, m0018, m0019, m0020, m0021, m0022, m0023, m0024, m0025, m0026, m0027 };

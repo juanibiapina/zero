@@ -127,6 +127,12 @@ export interface AgentModelRequest {
   // divergence reporting. `null` opts in with nothing to compare against;
   // `undefined` opts out entirely.
   previousMessageId?: string | null;
+  // True when `previousMessageId` names a response from an earlier run of this
+  // conversation (the previous turn, or a run this one resumed) rather than from
+  // this run's own loop. A divergence reported on such a request is a cross-turn
+  // cache break, which has different causes from one inside a run, so the log
+  // line has to distinguish them.
+  crossRun?: boolean;
   // Zero-based index of this call within the run's tool loop, for per-step cache
   // diagnostics. Lets the adapter's cache_diagnostic line carry the step so the
   // write-then-read pattern is readable per agent per call.
