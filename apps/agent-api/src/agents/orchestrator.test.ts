@@ -114,15 +114,15 @@ describe("runTurn", () => {
     expect(sink.sent).toEqual(["hello there"]);
   });
 
-  it("stops the typing indicator when the reply is sent, before the writer runs", async () => {
+  it("stops the typing indicator as soon as the reply is sent", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "hi");
     const sink = collectSink();
 
-    // Record the order of key events: when the reply reaches the user, when
-    // typing stops, and when the writer model is pulled. The indicator must
-    // stop between the reply and the writer.
+    // Record the order of key events: when the reply reaches the user and when
+    // typing stops. Nothing runs after the reply any more, so the indicator must
+    // stop right behind it.
     const events: string[] = [];
     const origSend = sink.send;
     const send = async (t: string) => {
@@ -130,13 +130,7 @@ describe("runTurn", () => {
       await origSend(t);
     };
     const stopTyping = () => events.push("stopTyping");
-    const makeModel = (agent: string) => {
-      if (agent === "writer") events.push("writer");
-      return scriptedModel([
-        { text: "hello there" },
-        { text: "nothing to consolidate" },
-      ]);
-    };
+    const makeModel = () => scriptedModel([{ text: "hello there" }]);
 
     await runTurn({
       store,
@@ -150,8 +144,7 @@ describe("runTurn", () => {
       topicId: 0,
     });
 
-    // stopTyping fires after the reply and before the writer is ever built.
-    expect(events).toEqual(["reply", "stopTyping", "writer"]);
+    expect(events).toEqual(["reply", "stopTyping"]);
     // And it is not left running past the turn: exactly one stop.
     expect(events.filter((e) => e === "stopTyping")).toHaveLength(1);
   });
@@ -192,35 +185,22 @@ describe("runTurn", () => {
     expect(events).toEqual(["send:fallback", "stopTyping"]);
   });
 
-  it("consolidates accessed topics via the writer", async () => {
+  it("does not consolidate topics on the turn path", async () => {
     const store = new MemoryStore();
     seedTopic(store, "travel", "trips");
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "I'm going to Rome");
     const sink = collectSink();
-
+    // One reply and nothing else: a second scripted step would throw
+    // ("ran out of steps") if anything ran after the interface agent.
     await runTurn({
       store,
-      makeModel: constModel(scriptedModel([
-        // interface: read topic, then reply
-        { tools: [{ name: "get_topic", input: { name: "travel" } }] },
-        { text: "Have fun!" },
-        // writer: read then revise the topic
-        { tools: [{ name: "get_topic", input: { name: "travel" } }] },
-        {
-          tools: [
-            {
-              name: "append_topic",
-              input: {
-                expectedVersion: 2,
-                name: "travel",
-                text: "Rome trip planned.",
-              },
-            },
-          ],
-        },
-        { text: "done" },
-      ])),
+      makeModel: constModel(
+        scriptedModel([
+          { tools: [{ name: "get_topic", input: { name: "travel" } }] },
+          { text: "Have fun!" },
+        ]),
+      ),
       send: sink.send,
       search: createMemorySearch(),
       fetcher: createMemoryFetcher(),
@@ -230,7 +210,8 @@ describe("runTurn", () => {
     });
 
     expect(sink.sent).toEqual(["Have fun!"]);
-    expect(store.getTopic("travel")?.body).toContain("Rome trip planned.");
+    // Consolidation happens in LearningDO, per idle period or size threshold.
+    expect(store.getTopic("travel")?.body).toBe("");
   });
 
   it("delivers a fallback and logs turn_failed when a reply send fails", async () => {
@@ -447,17 +428,14 @@ describe("runTurn", () => {
     expect(events.some((e) => e.msg === "turn_failed")).toBe(false);
   });
 
-  it("requests interface, research, and writer models from the factory", async () => {
+  it("requests interface and research models from the factory", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "hi");
     const sink = collectSink();
 
     const requested: string[] = [];
-    const shared = scriptedModel([
-      { text: "hi back" },
-      { text: "nothing to consolidate" },
-    ]);
+    const shared = scriptedModel([{ text: "hi back" }]);
     const makeModel = (agent: string) => {
       requested.push(agent);
       return shared;
@@ -474,10 +452,10 @@ describe("runTurn", () => {
       topicId: 0,
     });
 
-    // Interface, its research tool, and the writer each pull a tagged model.
+    // The interface agent and its research tool each pull a tagged model.
     expect(requested).toContain("interface");
     expect(requested).toContain("research");
-    expect(requested).toContain("writer");
+    expect(requested).not.toContain("writer");
   });
 
   it("gives each agent its own in-run cache-diagnostic chain", async () => {
@@ -519,10 +497,10 @@ describe("runTurn", () => {
       topicId: 0,
     });
 
-    // Each agent opts in with null on its own first request; no chain leaks
-    // across the interface -> writer boundary.
+    // The interface agent opens its chain with null on a fresh conversation, and
+    // no other agent runs on the turn path to inherit it.
     expect(chains.interface).toEqual([null]);
-    expect(chains.writer).toEqual([null]);
+    expect(Object.keys(chains)).toEqual(["interface"]);
   });
 
   it("chains the next turn's first request to the previous turn's response", async () => {
@@ -573,7 +551,7 @@ describe("runTurn", () => {
 // which of these lines is missing. Their absence on the failure path is
 // therefore as load-bearing as their presence on the happy path.
 describe("runTurn phase markers", () => {
-  it("logs writer_started then turn_completed on a normal turn", async () => {
+  it("logs turn_completed on a normal turn", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "hi");
@@ -582,11 +560,7 @@ describe("runTurn phase markers", () => {
 
     await runTurn({
       store,
-      makeModel: () =>
-        scriptedModel([
-          { text: "hello there" },
-          { text: "nothing to consolidate" },
-        ]),
+      makeModel: () => scriptedModel([{ text: "hello there" }]),
       send: sink.send,
       search: createMemorySearch(),
       fetcher: createMemoryFetcher(),
@@ -598,14 +572,13 @@ describe("runTurn phase markers", () => {
     const msgs = logSpy.mock.calls
       .map((c) => (c[0] as { msg?: string }).msg)
       .filter((m): m is string => typeof m === "string");
-    expect(msgs).toContain("writer_started");
+    expect(msgs).toContain("interface_completed");
     expect(msgs).toContain("turn_completed");
-    expect(msgs.indexOf("writer_started")).toBeLessThan(
-      msgs.indexOf("writer_completed"),
-    );
-    expect(msgs.indexOf("writer_completed")).toBeLessThan(
+    expect(msgs.indexOf("interface_completed")).toBeLessThan(
       msgs.indexOf("turn_completed"),
     );
+    // The writer is gone from the turn path entirely.
+    expect(msgs).not.toContain("writer_started");
   });
 
   it("shows the model the summary instead of the compacted messages", async () => {
@@ -723,7 +696,7 @@ describe("runTurn phase markers", () => {
   // agent failure still returns (it sends the fallback), and saying so is the
   // point: it distinguishes a failed turn from a stalled invocation. The phase
   // it never reached — the writer — is what the missing marker reports.
-  it("logs turn_completed but not writer_started when the turn fails", async () => {
+  it("logs turn_completed but not interface_completed when the turn fails", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "hi");
@@ -748,7 +721,9 @@ describe("runTurn phase markers", () => {
 
     const msgs = logSpy.mock.calls.map((c) => (c[0] as { msg?: string }).msg);
     expect(msgs).toContain("turn_completed");
-    expect(msgs).not.toContain("writer_started");
+    // The phase that never finished leaves no completion line behind: that
+    // absence is the diagnostic, since a killed invocation throws nothing.
+    expect(msgs).not.toContain("interface_completed");
   });
 });
 

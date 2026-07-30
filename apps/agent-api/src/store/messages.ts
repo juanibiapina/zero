@@ -84,13 +84,11 @@ export const conversationHasWork = (input: {
 
 // --- context rendering ---
 
-// The backstop ceiling on rendered context. It exists because compaction is
-// only activated in Phase 3.4: until something moves the boundary in
-// production, a conversation would otherwise grow without bound between
-// deploys. Delete both constants in the same commit that enables size-triggered
-// compaction, not before.
-export const CONTEXT_BACKSTOP_MESSAGES = 60;
-export const CONTEXT_BACKSTOP_CHARS = 150_000;
+// How many rows one context read pages in. This is a query bound, not a context
+// ceiling: what keeps a conversation's context small is size-triggered
+// compaction moving its boundary. It exists so a single read cannot pull an
+// unbounded number of rows out of storage.
+export const CONTEXT_MESSAGE_PAGE = 500;
 
 // Rough token estimate from character count (~4 chars per token). Used only for
 // the `context_rendered` log line the compaction threshold is derived from, so
@@ -99,22 +97,6 @@ export const estimateTokens = (chars: number): number => Math.ceil(chars / 4);
 
 export const contentChars = (content: MessageContent): number =>
   typeof content === "string" ? content.length : JSON.stringify(content).length;
-
-// Drop the oldest messages until the rendered context fits the character
-// ceiling. The newest message is always kept, however large it is: dropping the
-// message being answered would be worse than exceeding the ceiling.
-export const applyContextBackstop = (
-  messages: Message[],
-  maxChars: number = CONTEXT_BACKSTOP_CHARS,
-): Message[] => {
-  let total = messages.reduce((sum, m) => sum + contentChars(m.content), 0);
-  let start = 0;
-  while (start < messages.length - 1 && total > maxChars) {
-    total -= contentChars(messages[start].content);
-    start++;
-  }
-  return start === 0 ? messages : messages.slice(start);
-};
 
 // The rendered-context size at which a conversation asks for learning, which is
 // what triggers its compaction. Provisional, and deliberately not presented as

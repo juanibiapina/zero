@@ -27,7 +27,7 @@ pass).
 Topic bodies link to each other with Obsidian-style `[[Topic Name]]` tokens, so
 the knowledge model is a graph, not a flat list. A link is the target topic's
 exact `name` wrapped in double brackets; it resolves to that topic. This lets
-the writer keep topics small and granular and connect related subjects (a person
+the learner keep topics small and granular and connect related subjects (a person
 links `[[Trip to Japan]]`, a project links `[[Deadline]]`) instead of copying
 facts between bodies.
 
@@ -55,7 +55,7 @@ a "Pinned topics (always in your context)" block, so their current bodies are
 available every turn without a `get_topic` lookup. Pinning is a Store operation
 (`setPinned(name, pinned)` / `getPinnedTopics()`), not an agent tool; a pinned
 topic is otherwise an ordinary topic reachable by the normal tools and
-consolidated by the writer like any other. The canonical use is a stable
+consolidated by learning like any other. The canonical use is a stable
 `User` topic seeded at Google onboarding (see `docs/onboarding.md`).
 
 Each pinned body is capped (~1.5 KB) when rendered into the prompt so a topic
@@ -87,12 +87,12 @@ decorator once at construction, so every consumer (DO RPC methods, the
 orchestrator, all three agents) sees the same overlay. Read-only is thus enforced
 structurally at the store boundary, not by a prompt or a soft tool check; the
 `update_topic`/`delete_topic` tools surface the thrown error as a tool error. The
-writer prompt also tells it not to edit `Zero`/`Changelog`, to avoid a wasted,
+learner prompt also tells it not to edit `Zero`/`Changelog`, to avoid a wasted,
 always-rejected call. Updating a system topic is a source edit plus deploy (edit
 the `Zero` body or `apps/agent-api/CHANGELOG.md`); every user picks up the new content with no
 migration and no per-user seeding.
 
-## Two-phase turn
+## The turn, and what happens after it
 
 1. **Interface agent** (`agents/interface.ts`, stateless per turn). Given the new
    user message plus recent history, it runs a tool loop and sends replies as it
@@ -120,55 +120,39 @@ migration and no per-user seeding.
      over is read directly instead of spawning a research run. Full URLs and
      shorthand (`thing.com/path`) both work; the adapter normalizes them.
    - `delete_topic` — permanently remove a topic. Interface-agent only (not in
-     the shared `buildTopicTools`, so the writer/research agents cannot delete),
+     the shared `buildTopicTools`, so the learner and research agents cannot
+     delete),
      and the prompt gates it on explicit user confirmation. Deleting a topic
      drops its own outbound link rows; inbound links from other bodies keep
      their `[[Name]]` text and become dangling, re-resolving if a topic of that
      name is recreated. Bodies of other topics are left untouched.
-2. **Writer agent** (`agents/writer.ts`, stateless per turn). The interface
-   agent's twin: the same `runAgent` machine with the same topic tools
-   (`buildTopicTools`: `list_topics`/`get_topic`/`create_topic`/`edit_topic`/`append_topic`/`update_topic_metadata`/`list_backlinks`),
-   minus `research`. Its inputs are the **turn transcript** and the list
-   of topic names the interface agent accessed this turn. The transcript is a
-   serialization of the interface run: the user message, every tool call and its
-   (truncated) result, and assistant replies. This matters because durable facts
-   often live in tool results (calendar events, email bodies, research), not in
-   the user-facing replies, which are lossy. The interface agent builds it from
-   the run's generated messages (`renderTranscript`), capping each tool result
-   so a large payload cannot blow up the writer's input. The cap is per-tool:
-   non-research tools are clipped at ~1.5 KB (1,500 chars), but a `research`
-   result gets a generous 8,000-char ceiling because a research report is the
-   payload the writer must persist verbatim (every claim and its `Source:` URL),
-   not context it samples from. The tradeoff is higher writer token cost and
-   latency, bounded by those caps. (The 8,000-char research ceiling is
-   code-verified in `interface.ts`; it has not yet been exercised on a real turn
-   (see `docs/research.md`).) For each
-   accessed topic that gained durable information it reads the body
-   (`get_topic`), merges new facts under sensible sections with `edit_topic`,
-   appends one `## Log` line with `append_topic`, and uses `update_topic` only to
-   refresh the description (or to rename, or to fill a topic it just
-   created empty). It never rewrites or compacts a body — and since 2026-07-29
-   the tools enforce that rather than only the prompt asking for it. Because it
-   has `list_topics` +
-   `create_topic`, it is also proactive: it creates a topic for any durable
-   subject in the turn with no existing topic. The prompt biases it toward
-   recording generously (people, projects, events, trips, gear, house/utilities,
-   goals, and any other recurring subject; the list is illustrative). Only
-   genuinely trivial turns (pure chit-chat or acks with no durable fact) get no
-   tool call.
+2. **Learning agent** (`agents/learner.ts`), which does **not** run on the turn
+   path. It is the same `runAgent` machine with the same shared topic tools
+   (`buildTopicTools`), reading the raw message log since the last consolidation
+   across all of the user's conversations, and it runs in LearningDO on its own
+   alarm (see "How a learning job runs"). Durable facts often live in tool
+   results — calendar events, email bodies, research reports — so it reads the
+   persisted results, not a summary of the turn. For each topic that gained
+   durable information it reads the body (`get_topic`), merges new facts under
+   sensible sections with `edit_topic`, appends one `## Log` line with
+   `append_topic`, and uses `update_topic_metadata` only to refresh the
+   description or rename. It never rewrites or compacts a body — the tools
+   enforce that, not only the prompt. With `list_topics` + `create_topic` it is
+   also proactive: it creates a topic for any durable subject with none. The
+   prompt biases it toward recording generously (people, projects, events, trips,
+   gear, house/utilities, goals, and any other recurring subject; the list is
+   illustrative).
 
 A third agent gathers material for topics: the **research agent** (spawned by
 the interface agent's `research` tool; see `docs/research.md`). It has read-only
 topic tools + `web_search` + `read_page` and **no write tools**; it returns a
 compact sourced findings report as its tool result rather than writing topics
-itself. The writer then persists those findings — it sees the research report in
-the turn transcript, and any topic research **read** for context is merged into
-the interface agent's `accessed` set so the writer consolidates it like any
-other accessed topic. The writer is prompted to **preserve research findings and
-their reference URLs verbatim** (fold near-duplicate research topics together
-rather than rewriting a body). Preservation is
-prompt-enforced; if it degrades in practice, the stronger fix is a mechanically
-protected body region.
+itself. Learning persists those findings later: the report is a persisted tool
+result in the conversation log, so the learner reads the real thing rather than a
+truncated copy. It is prompted to **preserve research findings and their
+reference URLs verbatim** (fold near-duplicate research topics together rather
+than rewriting a body). Preservation is prompt-enforced; if it degrades in
+practice, the stronger fix is a mechanically protected body region.
 
 The topic tools are shared, and **no tool replaces a complete body**:
 
@@ -293,22 +277,22 @@ makes a persisted read of them stale.
 This exists for cost, not ergonomics. `update_topic`'s full-document `body` meant
 that preserving a topic while adding one line to it cost the model the entire
 document in generated tokens, growing with the topic without bound: on
-2026-07-29 the writer reached 13,856 output tokens in a single 298s generation,
+2026-07-29 the per-turn writer reached 13,856 output tokens in a single 298s generation,
 took 76% of the day's LLM time and 69% of its spend, and the wall time landed on
 the *next* message, since turns drain serially per DO. Anchored edits make a
 write cost the change. See `docs/plans/writer-latency-investigation.md` for the
-measurements. The writer prompt also asks it to split a subject into a new linked
+measurements. The learner prompt also asks it to split a subject into a new linked
 topic once a body passes roughly 8,000 characters, so bodies stop growing without
 limit in the first place.
 
 The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
-load history, run the interface agent, then run the writer. It knows nothing
-about alarms, DOs, or Telegram. The writer runs **every** turn (not only when a
-topic was accessed) so proactive creation is possible on turns that introduce a
-brand-new subject; it is given the turn transcript and the accessed-topic names,
-not pre-loaded bodies, and fetches bodies itself via `get_topic`. There is no longer a mechanical
+render the conversation, run the interface agent, done. It knows nothing about
+alarms, DOs, or Telegram, and nothing consolidates knowledge after the reply —
+that moved off the turn path entirely (see "Learning triggers"). Until
+2026-07-30 a writer agent ran on every turn, which is what put 20-40s of topic
+consolidation in front of the user's *next* message. There is no mechanical
 log-append fallback: the `## Log` line is a prompt-driven `append_topic` write,
-so a turn the writer judges trivial leaves the model untouched.
+so material the learner judges trivial leaves the model untouched.
 
 ## The loop writes into the log as it runs
 
@@ -359,9 +343,8 @@ message sent while Zero is working does not have to wait for a fresh turn.
 
 Trade-off of persisting as it goes: if an eviction lands between two replies
 within one turn (reply 1 sent, reply 2 not), the retry resumes and only the
-missing part is produced. On such a resume the writer consolidation for the lost
-segment does not re-run; live topic create/update calls already persisted the
-durable facts, only the writer's Log-line refresh is lost for that one turn.
+missing part is produced. Nothing about consolidation is lost either way — the
+messages are in the durable log, and learning reads that log later.
 
 A failed `send()` is a related case. It happens inside the runner's delivery
 hook, not inside a tool, so it is not swallowed into a `tool_result` the model
@@ -414,10 +397,9 @@ is idle. A concurrent enqueue arms a fresh alarm, so messages that
 arrive mid-run are picked up on the next fire. A self-rescheduling `setTimeout`
 re-sends the Telegram typing action every 4s across the interface phase
 (including any research the user genuinely waits on) and stops the moment the
-reply (or fallback) is sent, before the writer's consolidation runs, since the
-writer is internal topic bookkeeping the user is not waiting on
-(`orchestrator.ts` calls `stopTyping` after the interface phase). The DO alarm
-stays dedicated to turn scheduling.
+reply (or fallback) is sent (`orchestrator.ts` calls `stopTyping` right after the
+interface phase, which is now the end of the turn). The DO alarm stays dedicated
+to turn scheduling.
 
 **An alarm invocation is killed at a 900-second wall-time ceiling**, reported by
 Cloudflare as `outcome: exceededWallTime`. It is not an exception: no `catch` in
@@ -429,13 +411,15 @@ five consecutive invocations at ~900,000 ms wall against ~50 ms CPU (idle on an
 unsettled promise, not computing), each stranding the user's next message for a
 quarter of an hour.
 
-Three phase markers exist to localize such a stall, and are useful mainly by
-their **absence**: `writer_started` (orchestrator, before the writer runs),
+Phase markers exist to localize such a stall, and are useful mainly by their
+**absence**: `interface_completed` (once the agent loop returns),
 `turn_completed` (orchestrator, once `runTurn` returns — including the handled
 failure path, since it means "did not stall", not "succeeded"), and
-`alarm_finished` (`do/alarm.ts`, with the turn count and duration). A
-`writer_started` with no `writer_completed` puts the stall in the writer's tool
-loop; a `turn_completed` with no `alarm_finished` puts it in the drain loop.
+`alarm_finished` (`do/alarm.ts`, with the turn count and duration). The same
+rule covers the other two objects: `schedule_finished` for ScheduleDO, and
+`learn_slice_completed` / `learn_completed` for LearningDO. A `turn_started`
+with no `interface_completed` puts the stall in the agent loop; a
+`turn_completed` with no `alarm_finished` puts it in the drain loop.
 Read them alongside the Workers Logs `invocations` view, which carries the
 authoritative `outcome`, `wallTimeMs` and `cpuTimeMs`.
 

@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-30: Replies land sooner and stay quick in long conversations: Zero now files away what it learned between conversations instead of after each reply, so nothing you send waits behind that work.
 - 2026-07-30: Send Zero another message while it is working and it answers that too in the same reply flow, instead of leaving it for later.
 - 2026-07-30: If Zero is interrupted mid-answer, it picks up where it stopped rather than redoing the work or repeating a message you already got. An email or calendar invite it was sending is never sent twice — if it can't tell whether one went out, it says so and asks you to check.
 - 2026-07-30: Zero remembers much more of a long conversation instead of only the last handful of messages.

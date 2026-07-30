@@ -118,7 +118,7 @@ keeps it warm and the 2x write premium amortizes over huge read volume; 5m on th
 per-user history segments matches burst cadence and avoids the 1h write premium
 on prefixes that often won't be reused.
 
-The research, writer, and onboarding agents run the same `runAgent` machine, so
+The research, learning, and onboarding agents run the same `runAgent` machine, so
 they get tiers 1-2 (cached system + tools) for free. They use the single-`prompt`
 path with no caller anchor, but the loop's sliding tail breakpoint (tier 4) now
 caches their growing message region too: on a multi-step research turn each step
@@ -171,7 +171,7 @@ request".
 **Across turns, per conversation.** Now that the conversation is an append-only
 log, turn N+1's prefix genuinely extends turn N's, so the interface agent opens
 its chain on the conversation's last persisted response id and the line says so
-with `chain_crossed_turn: true`. Research and the writer pass no previous id of
+with `chain_crossed_turn: true`. Research and learning pass no previous id of
 their own, so nothing leaks across an agent boundary.
 
 Read a cross-turn line with its known confounders in mind rather than as a fault:
@@ -199,7 +199,7 @@ silently. Concretely:
 `runAgent` returns `usage` (whole-run aggregate) and `stepUsages` (per step).
 Each agent's completion log carries token fields via `usageLogFields`:
 
-- `interface_completed`, `research_completed`, `writer_completed`,
+- `interface_completed`, `research_completed`, `learn_slice_completed`,
   `onboarding_completed`: `input_tokens`, `output_tokens`, `cache_read_tokens`,
   `cache_write_tokens`, and a derived `cache_hit_ratio` =
   `cache_read / (cache_read + cache_write + input)`.

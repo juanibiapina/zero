@@ -36,7 +36,6 @@ import type { Env } from "../types";
 export type AgentLabel =
   | "interface"
   | "research"
-  | "writer"
   | "learner"
   | "compaction"
   | "onboarding"

@@ -277,8 +277,11 @@ describe("gatewayMetadata", () => {
       user_id: "user_123",
       agent: "research",
     });
-    expect(JSON.parse(gatewayMetadata("u", "writer"))).toMatchObject({
-      agent: "writer",
+    expect(JSON.parse(gatewayMetadata("u", "learner"))).toMatchObject({
+      agent: "learner",
+    });
+    expect(JSON.parse(gatewayMetadata("u", "compaction"))).toMatchObject({
+      agent: "compaction",
     });
     expect(JSON.parse(gatewayMetadata("u", "onboarding"))).toMatchObject({
       agent: "onboarding",

@@ -52,10 +52,10 @@ route.
 ## The agent
 
 `agents/onboarding.ts` is the same `runAgent` machine as the interface and
-writer agents, given the topic tools plus **read-only** Gmail (`gmail_search`,
+learning agents, given the topic tools plus **read-only** Gmail (`gmail_search`,
 `gmail_thread`) — no `reply`, no delivery (`gmail_send`), no calendar, no
 `research`/`web_search`. It authors the pinned topic directly in one pass, with
-no separate writer agent afterward. The prompt
+no separate consolidation pass afterward. The prompt
 (`onboardingSystemPrompt`) revives the old onboarding-skill intent: scan inbox
 and sent mail; record identity name-first (then location, role, languages, key
 relationships); "capture only what shows repeated interaction or emotional

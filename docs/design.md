@@ -25,7 +25,7 @@ stores the real key and bills us directly) authenticated with
 conversations, messages, attachment metadata); image bytes live in the
 `ATTACHMENTS` R2 bucket. There is no container and no per-user filesystem. A
 self-rescheduling `setTimeout` drives the Telegram typing action across the
-interface phase and stops when the reply is sent, before the writer runs. See
+interface phase and stops when the reply is sent, which ends the turn. See
 [`topics.md`](topics.md) for the full design of the topic model and the two
 agents.
 
@@ -84,7 +84,7 @@ zero/
 │  │         1. interface agent — reply()/topic + research +        │
 │  │            set_timezone + Gmail/Calendar tools                 │
 │  │            (each reply persisted before it is sent)            │
-│  │         2. writer agent — consolidate accessed topics         │
+│  │      (consolidation happens later, in LearningDO)             │
 │  └─ send: grammY bot.api.sendMessage(…, { message_thread_id })   │
 │                                                                  │
 │  LLM: POST {AI Gateway}/anthropic/v1/messages                    │
@@ -129,7 +129,7 @@ are verbatim. Leading assistant messages are dropped so the array starts on a
 `user` turn (Anthropic requirement), and consecutive same-role turns are
 coalesced (proxy compatibility). Only final user/assistant **text** is persisted
 — never tool blocks — which structurally avoids orphaned `tool_use` 400s and
-keeps cross-turn memory in topics, not the transcript. The research, writer, and
+keeps cross-turn memory in topics as well as the log. The research, learning, and
 onboarding agents still use the single-`prompt` path.
 
 ## State Model
@@ -315,7 +315,7 @@ documented in [caching.md](./caching.md).
 
 - Support non-image attachments (PDF, audio, video) through the same
   `view_attachment` path once their `tool_result` serialization is verified.
-- Consider structured multi-turn history for the research and writer agents
+- Consider structured multi-turn history for the research and learning agents
   (they currently use the single-`prompt` path).
 - An R2 lifecycle expiry rule for attachment objects.
 - Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
