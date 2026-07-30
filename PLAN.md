@@ -176,25 +176,30 @@ in `docs/plans/agent-latency-investigation.md` and
 
 ## Current shape, for a fresh reader
 
-As of the branch head (Phase 0 applied):
+As of the branch head (Phase 0 and 1.1 applied):
 
-- `runTurn` (`src/agents/orchestrator.ts`) reads the last 20 messages, requires
-  the tail to be a `user` row, runs the interface agent, then runs the writer.
-  Unchanged by Phase 0 except that the busy flag and its `try/finally` are gone.
+- `runTurn` (`src/agents/orchestrator.ts`) drains the pending queue, reads the
+  last 20 messages, requires the tail to be a `user_message` row, runs the
+  interface agent, then runs the writer. The busy flag and its `try/finally`
+  are gone.
 - `runAgent` (`src/agents/run.ts`) is the shared tool loop. It now calls
   `onText` per text block per step, so the interface agent delivers messages as
   the model writes them; it still returns the final text for other callers.
 - The interface agent has no `reply` tool. Delivery is persist-then-send inside
   `deliver`, and `needsFallback` covers the no-silence case.
-- History is still stored as one TEXT `content` per row (`0015_messages.sql`),
-  so tool calls and results are still lost between turns and re-rendered for the
-  writer by `renderTranscript`. **This is what Phase 1 changes.**
+- History rows carry wire-format content blocks, `kind` and `stopReason`
+  (`0024_message_protocol.sql`), but **the loop still does not write tool calls
+  or results into them**: every row is one text block, and the writer still gets
+  its own in-memory `renderTranscript`. Persisting the loop as it runs is 1.3.
 - `getConversationHistory` has exactly one caller, the orchestrator.
   `listTopics()` has exactly one caller, the `list_topics` tool.
 - Topic knowledge is versioned; every write states `expectedVersion` (Phase 0.3).
   Phase 1's staleness filter builds directly on that counter, which already
   exists and is already bumped by every write and by a system-topic content
   change.
+- The interface agent is not yet resumable: nothing reads `deliveries` or
+  `stopReason` except `findConversationsWithWork`, so a reset still replays a
+  whole turn. 1.3 is what closes that.
 
 ## Design decision: one knowledge version
 
@@ -609,10 +614,25 @@ visual appearance. Log selected dimensions, estimated tokens and bytes after
 0.5b so the saving is observable. This is independently useful today and a
 precondition for persisting image blocks in Phase 1.
 
-## Phase 1 — Persist the real message log (not started)
+## Phase 1 — Persist the real message log (1.1 done, 1.2-1.4 not started)
 
 **1.1 Migrate conversation history and delivery state in one migration**, so
-the schema moves once:
+the schema moves once. **DONE** (migration `0024`, `store/messages.ts`, the new
+conversation-port methods). Deviations from the text below, all deliberate:
+
+- Attachment references are not duplicated into `pending_messages`. Attachment
+  rows are already written by `enqueueTurn` against the conversation and are
+  addressed by the marker in the message text, so the queue stores the text
+  only.
+- The queue is drained once per turn, at turn start, not "at each safe point".
+  Mid-loop injection is 1.3; until then the drain is what supplies the prompt.
+- `stopReason` is stored for every assistant row, but the value is currently
+  written by the persist-before-send path as `end_turn`, not read off a model
+  response. 1.3 is where the model's own reason lands.
+- Migration `0024` stamps legacy assistant rows `end_turn`. Without it the new
+  work rule would treat every historical conversation as unfinished.
+
+The original text:
 
 - `content` becomes `ContentBlock[]` as JSON. Store wire format verbatim —
   `protocol.ts` round-trips unknown block types (`thinking`, server tool use),
@@ -653,7 +673,7 @@ Persist stop reason with every assistant response so this is data, not an
 inference from text or role. `runTurn` must move from string/tail assumptions to
 this state machine.
 
-**1.2** Add a per-conversation compaction boundary and summary.
+**1.2 (next)** Add a per-conversation compaction boundary and summary.
 `getConversationHistory` returns `AgentMessage[]` rendered as
 `summary + messages after boundary`, with the staleness filter applied. Delete
 the 20-message window (`DEFAULT_HISTORY_LIMIT`).
@@ -824,6 +844,11 @@ skips a message range.
   append; report a `started` external write uncertain rather than call it again;
   prove a claimed Telegram delivery is not resent. Existing writer transcript
   tests stay until Phase 3 deletes that module.
+  Covered by 1.1 already: every protocol-state case of the work rule, queue
+  drain order and idempotence, per-block delivery claims, mixed text/`tool_use`
+  round-trip, and pre-migration plain-text rows. Still open: everything that
+  needs the loop to persist as it runs (resume without re-calling tools,
+  mid-tool follow-ups, staleness stubs, external-write uncertainty).
 - **Phase 2**: `runAlarmTurns` tests stay; ScheduleDO tracks multiple deadlines
   and arms the earliest; a due deadline queues LearningDO without awaiting it;
   a queued turn is never blocked by either new alarm; a throwing `touch()` does
