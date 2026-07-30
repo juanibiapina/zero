@@ -3,12 +3,13 @@ import { runOnboardingAgent } from "./onboarding";
 import { scriptedModel } from "./mock-model";
 import { MemoryStore } from "../store/memory";
 import { createMemoryGoogle } from "../google/memory";
+import { pinTopic, seedTopic } from "../store/test-support";
 
 describe("runOnboardingAgent", () => {
   it("scans Gmail and writes the pinned identity topic", async () => {
     const store = new MemoryStore();
-    store.createTopic("User", "identity");
-    store.setPinned("User", true);
+    seedTopic(store, "User", "identity");
+    pinTopic(store, "User", true);
 
     const google = createMemoryGoogle({
       threadSummaries: [
@@ -27,11 +28,11 @@ describe("runOnboardingAgent", () => {
       {
         tools: [
           {
-            name: "update_topic",
+            name: "append_topic",
             input: {
+              expectedVersion: store.getKnowledgeVersion(),
               name: "User",
-              body: "## Identity\n\nName: Alice Smith\nEmail: alice@example.com",
-              summary: "The user is Alice Smith.",
+              text: "## Identity\n\nName: Alice Smith\nEmail: alice@example.com",
             },
           },
         ],
@@ -50,8 +51,8 @@ describe("runOnboardingAgent", () => {
 
   it("does not expose write-side Gmail or calendar tools", async () => {
     const store = new MemoryStore();
-    store.createTopic("User", "identity");
-    store.setPinned("User", true);
+    seedTopic(store, "User", "identity");
+    pinTopic(store, "User", true);
 
     // The model tries to send mail; the tool does not exist, so nothing is sent.
     const google = createMemoryGoogle();

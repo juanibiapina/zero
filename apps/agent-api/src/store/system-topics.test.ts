@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MemoryStore } from "./memory";
 import { SystemTopicStore, SYSTEM_TOPICS } from "./system-topics";
 import type { Store } from "./types";
+import { pinTopic, removeTopic, renameTopic, seedTopic, setBody, setDescription } from "./test-support";
 
 const makeStore = (): Store =>
   new SystemTopicStore(new MemoryStore(() => "2026-01-01T00:00:00.000Z"));
@@ -9,7 +10,7 @@ const makeStore = (): Store =>
 describe("SystemTopicStore: reads overlay bundled topics", () => {
   it("listTopics includes user and system topics, system marked", () => {
     const s = makeStore();
-    s.createTopic("weather", "climate notes");
+    seedTopic(s, "weather", "climate notes");
     const names = s.listTopics().map((t) => t.name);
     for (const def of SYSTEM_TOPICS) expect(names).toContain(def.name);
     expect(names).toContain("weather");
@@ -33,7 +34,7 @@ describe("SystemTopicStore: reads overlay bundled topics", () => {
   it("getTopic delegates for unknown and user topics", () => {
     const s = makeStore();
     expect(s.getTopic("nope")).toBeNull();
-    s.createTopic("weather", "");
+    seedTopic(s, "weather", "");
     expect(s.getTopic("weather")?.system).toBe(false);
   });
 
@@ -46,48 +47,44 @@ describe("SystemTopicStore: reads overlay bundled topics", () => {
 
   it("getTopicsWithBodies injects requested system topics", () => {
     const s = makeStore();
-    s.createTopic("weather", "");
+    seedTopic(s, "weather", "");
     const got = s.getTopicsWithBodies(["Zero", "weather"]);
     expect(got.map((t) => t.name)).toEqual(["Zero", "weather"]);
   });
 
   it("getBacklinks resolves a user topic linking a system topic", () => {
     const s = makeStore();
-    s.createTopic("notes", "");
-    s.saveTopic("notes", { body: "see [[Zero]]", description: "" });
+    seedTopic(s, "notes", "");
+    setBody(s, "notes", "see [[Zero]]");
     expect(s.getBacklinks("Zero").map((t) => t.name)).toEqual(["notes"]);
   });
 });
 
 describe("SystemTopicStore: writes to system topics are rejected", () => {
   it("createTopic on a reserved name throws", () => {
-    expect(() => makeStore().createTopic("Zero", "x")).toThrow(/read-only/);
+    expect(() => seedTopic(makeStore(), "Zero", "x", "b")).toThrow(/read-only/);
   });
 
-  it("updateTopicBody / saveTopic / deleteTopic / setPinned throw", () => {
+  it("body, metadata, delete and pin writes throw", () => {
     const s = makeStore();
-    expect(() => s.updateTopicBody("Zero", "x")).toThrow(/read-only/);
-    expect(() =>
-      s.saveTopic("Zero", { body: "x", description: "" }),
-    ).toThrow(/read-only/);
-    expect(() => s.deleteTopic("Changelog")).toThrow(/read-only/);
-    expect(() => s.setPinned("Zero", false)).toThrow(/read-only/);
+    expect(() => setBody(s, "Zero", "x")).toThrow(/read-only/);
+    expect(() => setDescription(s, "Zero", "x")).toThrow(/read-only/);
+    expect(() => removeTopic(s, "Changelog")).toThrow(/read-only/);
+    expect(() => pinTopic(s, "Zero", false)).toThrow(/read-only/);
   });
 
   it("renaming a user topic onto a reserved name throws", () => {
     const s = makeStore();
-    s.createTopic("draft", "");
-    expect(() =>
-      s.saveTopic("draft", { body: "", description: "" }, "Zero"),
-    ).toThrow(/read-only/);
+    seedTopic(s, "draft", "");
+    expect(() => renameTopic(s, "draft", "Zero")).toThrow(/read-only/);
   });
 
   it("user-topic writes are unaffected", () => {
     const s = makeStore();
-    s.createTopic("weather", "notes");
-    s.saveTopic("weather", { body: "sunny", description: "" });
+    seedTopic(s, "weather", "notes");
+    setBody(s, "weather", "sunny");
     expect(s.getTopic("weather")?.body).toBe("sunny");
-    s.deleteTopic("weather");
+    removeTopic(s, "weather");
     expect(s.getTopic("weather")).toBeNull();
   });
 });

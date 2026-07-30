@@ -62,6 +62,24 @@ export const SYSTEM_TOPICS: SystemTopicDef[] = [
 
 const SYSTEM_BY_NAME = new Map(SYSTEM_TOPICS.map((t) => [t.name, t]));
 
+// Fingerprint of the bundled system-topic content. Derived from the text itself
+// (never a hand-maintained constant, which drifts), so a Worker build that
+// changes a body or description changes this string and the next UserDO
+// initialization bumps the user's knowledge version once — making persisted
+// reads of Zero/Changelog stale after a deploy.
+export const systemTopicsFingerprint = (): string => {
+  const material = JSON.stringify(
+    SYSTEM_TOPICS.map((t) => [t.name, t.description, t.body, t.pinned]),
+  );
+  // FNV-1a, 32-bit. Not cryptographic: it only has to change when the text does.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < material.length; i++) {
+    hash ^= material.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${material.length.toString(36)}.${hash.toString(36)}`;
+};
+
 // Fixed timestamps for the virtual rows: system topics have no per-user history.
 const SYSTEM_TIME = "1970-01-01T00:00:00.000Z";
 
@@ -138,34 +156,58 @@ export class SystemTopicStore implements Store {
 
   // --- topic writes (reject system topics, else delegate) ---
 
-  createTopic(name: string, description: string): void {
-    if (this.isSystem(name)) readOnly(name);
-    this.inner.createTopic(name, description);
+  createTopic(input: {
+    expectedVersion: number;
+    name: string;
+    description: string;
+    body: string;
+  }): number {
+    if (this.isSystem(input.name)) readOnly(input.name);
+    return this.inner.createTopic(input);
   }
 
-  deleteTopic(name: string): void {
-    if (this.isSystem(name)) readOnly(name);
-    this.inner.deleteTopic(name);
+  deleteTopic(input: { expectedVersion: number; name: string }): number {
+    if (this.isSystem(input.name)) readOnly(input.name);
+    return this.inner.deleteTopic(input);
   }
 
-  updateTopicBody(name: string, body: string): void {
-    if (this.isSystem(name)) readOnly(name);
-    this.inner.updateTopicBody(name, body);
+  updateTopicBody(input: {
+    expectedVersion: number;
+    name: string;
+    body: string;
+  }): number {
+    if (this.isSystem(input.name)) readOnly(input.name);
+    return this.inner.updateTopicBody(input);
   }
 
-  setPinned(name: string, pinned: boolean): void {
-    if (this.isSystem(name)) readOnly(name);
-    this.inner.setPinned(name, pinned);
+  setPinned(input: {
+    expectedVersion: number;
+    name: string;
+    pinned: boolean;
+  }): number {
+    if (this.isSystem(input.name)) readOnly(input.name);
+    return this.inner.setPinned(input);
   }
 
-  saveTopic(
-    name: string,
-    patch: { body: string; description: string },
-    newName?: string,
-  ): void {
-    if (this.isSystem(name)) readOnly(name);
-    if (newName && this.isSystem(newName)) readOnly(newName);
-    this.inner.saveTopic(name, patch, newName);
+  updateTopicMetadata(input: {
+    expectedVersion: number;
+    name: string;
+    description?: string;
+    newName?: string;
+  }): number {
+    if (this.isSystem(input.name)) readOnly(input.name);
+    if (input.newName && this.isSystem(input.newName)) readOnly(input.newName);
+    return this.inner.updateTopicMetadata(input);
+  }
+
+  // --- knowledge version (delegate verbatim) ---
+
+  getKnowledgeVersion(): number {
+    return this.inner.getKnowledgeVersion();
+  }
+
+  syncSystemTopicsFingerprint(fingerprint: string): number {
+    return this.inner.syncSystemTopicsFingerprint(fingerprint);
   }
 
   // --- conversations (delegate verbatim) ---

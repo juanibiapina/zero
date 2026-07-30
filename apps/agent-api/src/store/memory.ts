@@ -2,6 +2,7 @@
 // turn orchestrator without a Durable Object. Mirrors DbStore semantics; the
 // shared contract test (store-contract.test.ts) runs against both.
 
+import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
   ConversationStore,
@@ -49,6 +50,8 @@ export class MemoryStore implements Store {
   private telegramId: string | null = null;
   private processed = new Set<string>();
   private nextMsgId = 1;
+  private version = 1;
+  private systemFingerprint: string | null = null;
   private now: () => string;
 
   constructor(now: () => string = () => new Date().toISOString()) {
@@ -105,34 +108,51 @@ export class MemoryStore implements Store {
     return out;
   }
 
-  createTopic(name: string, description: string): void {
-    if (this.topics.has(name)) throw new Error(`topic exists: ${name}`);
+  createTopic(input: {
+    expectedVersion: number;
+    name: string;
+    description: string;
+    body: string;
+  }): number {
+    this.requireVersion(input.expectedVersion);
+    if (this.topics.has(input.name)) throw new Error(`topic exists: ${input.name}`);
     const now = this.now();
-    this.topics.set(name, {
-      name,
-      description,
-      body: "",
+    this.topics.set(input.name, {
+      name: input.name,
+      description: input.description,
+      body: input.body,
       createdAt: now,
       lastActiveAt: now,
       messageCount: 0,
       pinned: false,
       system: false,
     });
+    this.syncOutboundLinks(input.name, input.body);
+    return this.bumpVersion();
   }
 
-  deleteTopic(name: string): void {
-    if (!this.topics.has(name)) throw new Error(`topic not found: ${name}`);
-    this.topics.delete(name);
+  deleteTopic(input: { expectedVersion: number; name: string }): number {
+    this.requireVersion(input.expectedVersion);
+    if (!this.topics.has(input.name))
+      throw new Error(`topic not found: ${input.name}`);
+    this.topics.delete(input.name);
     // Drop this topic's own outbound rows. Inbound rows (other bodies linking
     // to `name`) stay: their [[Name]] tokens remain in those bodies, so the
     // links become dangling, consistent with a not-yet-created target.
-    this.links = this.links.filter((l) => l.source !== name);
+    this.links = this.links.filter((l) => l.source !== input.name);
+    return this.bumpVersion();
   }
 
-  setPinned(name: string, pinned: boolean): void {
-    const t = this.topics.get(name);
-    if (!t) throw new Error(`topic not found: ${name}`);
-    t.pinned = pinned;
+  setPinned(input: {
+    expectedVersion: number;
+    name: string;
+    pinned: boolean;
+  }): number {
+    this.requireVersion(input.expectedVersion);
+    const t = this.topics.get(input.name);
+    if (!t) throw new Error(`topic not found: ${input.name}`);
+    t.pinned = input.pinned;
+    return this.bumpVersion();
   }
 
   getPinnedTopics(): Topic[] {
@@ -141,12 +161,19 @@ export class MemoryStore implements Store {
       .map((t) => ({ ...t }));
   }
 
-  updateTopicBody(name: string, body: string): void {
-    const t = this.topics.get(name);
-    if (!t) throw new Error(`topic not found: ${name}`);
-    t.body = body;
+  updateTopicBody(input: {
+    expectedVersion: number;
+    name: string;
+    body: string;
+  }): number {
+    this.requireVersion(input.expectedVersion);
+    const t = this.topics.get(input.name);
+    if (!t) throw new Error(`topic not found: ${input.name}`);
+    t.body = input.body;
     t.lastActiveAt = this.now();
-    this.syncOutboundLinks(name, body);
+    t.messageCount += 1;
+    this.syncOutboundLinks(input.name, input.body);
+    return this.bumpVersion();
   }
 
   getTopicsWithBodies(names: string[]): Topic[] {
@@ -158,22 +185,23 @@ export class MemoryStore implements Store {
     return out;
   }
 
-  saveTopic(
-    name: string,
-    patch: { body: string; description: string },
-    newName?: string,
-  ): void {
+  updateTopicMetadata(input: {
+    expectedVersion: number;
+    name: string;
+    description?: string;
+    newName?: string;
+  }): number {
+    this.requireVersion(input.expectedVersion);
+    const { name, newName } = input;
     const t = this.topics.get(name);
     if (!t) throw new Error(`topic not found: ${name}`);
     if (newName && newName !== name && this.topics.has(newName)) {
       throw new Error(`topic exists: ${newName}`);
     }
-    t.body = patch.body;
-    t.description = patch.description;
+    if (input.description !== undefined) t.description = input.description;
     t.lastActiveAt = this.now();
     t.messageCount += 1;
-    const rename = Boolean(newName && newName !== name);
-    if (rename && newName) {
+    if (newName && newName !== name) {
       this.topics.delete(name);
       t.name = newName;
       this.topics.set(newName, t);
@@ -190,7 +218,29 @@ export class MemoryStore implements Store {
         }
       }
     }
-    this.syncOutboundLinks(rename && newName ? newName : name, patch.body);
+    return this.bumpVersion();
+  }
+
+  // --- knowledge version ---
+
+  getKnowledgeVersion(): number {
+    return this.version;
+  }
+
+  private requireVersion(expected: number): void {
+    if (this.version !== expected)
+      throw new KnowledgeConflictError(expected, this.version);
+  }
+
+  private bumpVersion(): number {
+    this.version += 1;
+    return this.version;
+  }
+
+  syncSystemTopicsFingerprint(fingerprint: string): number {
+    if (this.systemFingerprint === fingerprint) return this.version;
+    this.systemFingerprint = fingerprint;
+    return this.bumpVersion();
   }
 
   // --- conversations ---

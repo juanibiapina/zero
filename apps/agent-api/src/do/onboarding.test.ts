@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { runOnboarding } from "./onboarding";
 import { MemoryStore } from "../store/memory";
+import { setBody } from "../store/test-support";
 
 const deps = (over: Partial<Parameters<typeof runOnboarding>[0]> = {}) => {
   const store = new MemoryStore();
@@ -43,7 +44,7 @@ describe("runOnboarding", () => {
     const d = deps();
     await runOnboarding(d.args);
     // Simulate the agent having written a body on the first run.
-    d.store.updateTopicBody("User", "name: Alice");
+    setBody(d.store, "User", "name: Alice");
     await runOnboarding(d.args);
     expect(d.store.getPinnedTopics().map((t) => t.name)).toEqual(["User"]);
     expect(d.store.getTopic("User")?.body).toBe("name: Alice");

@@ -6,6 +6,7 @@ import { and, desc, eq, type Database } from "do-orm";
 import {
   attachments,
   conversations,
+  knowledge,
   messages,
   processedUpdates,
   telegramLink,
@@ -14,6 +15,7 @@ import {
   userSettings,
 } from "../UserDO/db/schema";
 import { extractLinks, rewriteLinks } from "./links";
+import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
   Message,
@@ -114,12 +116,18 @@ export class DbStore implements Store {
     return out;
   }
 
-  setPinned(name: string, pinned: boolean): void {
+  setPinned(input: {
+    expectedVersion: number;
+    name: string;
+    pinned: boolean;
+  }): number {
+    this.requireVersion(input.expectedVersion);
     this.db.update(
       topics,
-      { pinned: pinned ? 1 : 0 },
-      { where: eq("name", name) },
+      { pinned: input.pinned ? 1 : 0 },
+      { where: eq("name", input.name) },
     );
+    return this.bumpVersion();
   }
 
   getPinnedTopics(): Topic[] {
@@ -128,30 +136,42 @@ export class DbStore implements Store {
       .map((t) => toTopic(t));
   }
 
-  createTopic(name: string, description: string): void {
+  createTopic(input: {
+    expectedVersion: number;
+    name: string;
+    description: string;
+    body: string;
+  }): number {
+    this.requireVersion(input.expectedVersion);
+    if (this.db.get(topics, { where: eq("name", input.name) })) {
+      throw new Error(`topic exists: ${input.name}`);
+    }
     const now = this.nowIso();
     this.db.insert(topics, {
-      name,
-      description,
-      body: "",
+      name: input.name,
+      description: input.description,
+      body: input.body,
       createdAt: now,
       lastActiveAt: now,
       messageCount: 0,
     });
+    const created = this.db.get(topics, { where: eq("name", input.name) })!;
     // Resolve any dangling links that pointed at this name before it existed.
-    const created = this.db.get(topics, { where: eq("name", name) });
-    if (created) {
-      this.db.update(
-        topicLinks,
-        { targetId: created.id },
-        { where: eq("targetName", name) },
-      );
-    }
+    this.db.update(
+      topicLinks,
+      { targetId: created.id },
+      { where: eq("targetName", input.name) },
+    );
+    // A topic is created complete, so its own outbound links exist from the
+    // first write.
+    this.syncOutboundLinks(created.id, input.body);
+    return this.bumpVersion();
   }
 
-  deleteTopic(name: string): void {
-    const t = this.db.get(topics, { where: eq("name", name) });
-    if (!t) throw new Error(`topic not found: ${name}`);
+  deleteTopic(input: { expectedVersion: number; name: string }): number {
+    this.requireVersion(input.expectedVersion);
+    const t = this.db.get(topics, { where: eq("name", input.name) });
+    if (!t) throw new Error(`topic not found: ${input.name}`);
     // Null out inbound links so no row references the deleted id (FK safety);
     // their [[Name]] tokens stay in the source bodies, so the links become
     // dangling and re-resolve if a topic of this name is recreated.
@@ -163,16 +183,28 @@ export class DbStore implements Store {
     // Drop this topic's own outbound rows, then the topic row itself.
     this.db.delete(topicLinks, { where: eq("sourceId", t.id) });
     this.db.delete(topics, { where: eq("id", t.id) });
+    return this.bumpVersion();
   }
 
-  updateTopicBody(name: string, body: string): void {
+  updateTopicBody(input: {
+    expectedVersion: number;
+    name: string;
+    body: string;
+  }): number {
+    this.requireVersion(input.expectedVersion);
+    const existing = this.db.get(topics, { where: eq("name", input.name) });
+    if (!existing) throw new Error(`topic not found: ${input.name}`);
     this.db.update(
       topics,
-      { body, lastActiveAt: this.nowIso() },
-      { where: eq("name", name) },
+      {
+        body: input.body,
+        lastActiveAt: this.nowIso(),
+        messageCount: existing.messageCount + 1,
+      },
+      { where: eq("id", existing.id) },
     );
-    const t = this.db.get(topics, { where: eq("name", name) });
-    if (t) this.syncOutboundLinks(t.id, body);
+    this.syncOutboundLinks(existing.id, input.body);
+    return this.bumpVersion();
   }
 
   getTopicsWithBodies(names: string[]): Topic[] {
@@ -184,23 +216,26 @@ export class DbStore implements Store {
     return out;
   }
 
-  saveTopic(
-    name: string,
-    patch: { body: string; description: string },
-    newName?: string,
-  ): void {
+  updateTopicMetadata(input: {
+    expectedVersion: number;
+    name: string;
+    description?: string;
+    newName?: string;
+  }): number {
+    this.requireVersion(input.expectedVersion);
+    const { name, newName } = input;
     const existing = this.db.get(topics, { where: eq("name", name) });
     if (!existing) throw new Error(`topic not found: ${name}`);
-    const rename = newName && newName !== name;
-    if (rename) {
-      const clash = this.db.get(topics, { where: eq("name", newName) });
-      if (clash) throw new Error(`topic exists: ${newName}`);
+    const rename = Boolean(newName && newName !== name);
+    if (rename && this.db.get(topics, { where: eq("name", newName!) })) {
+      throw new Error(`topic exists: ${newName}`);
     }
     this.db.update(
       topics,
       {
-        body: patch.body,
-        description: patch.description,
+        ...(input.description !== undefined
+          ? { description: input.description }
+          : {}),
         lastActiveAt: this.nowIso(),
         messageCount: existing.messageCount + 1,
         ...(rename ? { name: newName } : {}),
@@ -231,7 +266,44 @@ export class DbStore implements Store {
         }
       }
     }
-    this.syncOutboundLinks(existing.id, patch.body);
+    return this.bumpVersion();
+  }
+
+  // --- knowledge version ---
+
+  private knowledgeRow(): { id: number; version: number; systemFingerprint: string | null } {
+    const row = this.db.get(knowledge);
+    if (row) return row;
+    this.db.insert(knowledge, { id: 1, version: 1 });
+    return this.db.get(knowledge)!;
+  }
+
+  getKnowledgeVersion(): number {
+    return this.knowledgeRow().version;
+  }
+
+  private requireVersion(expected: number): void {
+    const current = this.getKnowledgeVersion();
+    if (current !== expected) throw new KnowledgeConflictError(expected, current);
+  }
+
+  private bumpVersion(): number {
+    const row = this.knowledgeRow();
+    const next = row.version + 1;
+    this.db.update(knowledge, { version: next }, { where: eq("id", row.id) });
+    return next;
+  }
+
+  syncSystemTopicsFingerprint(fingerprint: string): number {
+    const row = this.knowledgeRow();
+    if (row.systemFingerprint === fingerprint) return row.version;
+    const next = row.version + 1;
+    this.db.update(
+      knowledge,
+      { version: next, systemFingerprint: fingerprint },
+      { where: eq("id", row.id) },
+    );
+    return next;
   }
 
   // --- conversations ---

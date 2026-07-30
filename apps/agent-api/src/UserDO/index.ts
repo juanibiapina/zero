@@ -5,7 +5,10 @@ import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
-import { SystemTopicStore } from "../store/system-topics";
+import {
+  SystemTopicStore,
+  systemTopicsFingerprint,
+} from "../store/system-topics";
 import type { Store } from "../store/types";
 import { createR2Attachments } from "../attachments/r2";
 import type { AttachmentStore } from "../attachments/types";
@@ -68,6 +71,10 @@ export class UserDO extends DurableObject<Env> {
         dbStore.rebuildAllLinks();
         await ctx.storage.put(LINKS_REBUILT_KEY, true);
       }
+      // Bundled system topics live in no user's SQLite, so a build that changes
+      // their text must still invalidate persisted reads of them. This bumps
+      // the knowledge version once per content change, never per boot.
+      dbStore.syncSystemTopicsFingerprint(systemTopicsFingerprint());
     });
   }
 

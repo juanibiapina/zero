@@ -8,6 +8,7 @@ import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryGoogle } from "../google/memory";
+import { seedTopic } from "../store/test-support";
 
 const collectSink = () => {
   const sent: string[] = [];
@@ -192,7 +193,7 @@ describe("runTurn", () => {
 
   it("consolidates accessed topics via the writer", async () => {
     const store = new MemoryStore();
-    store.createTopic("travel", "trips");
+    seedTopic(store, "travel", "trips");
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "I'm going to Rome");
     const sink = collectSink();
@@ -209,12 +210,11 @@ describe("runTurn", () => {
         {
           tools: [
             {
-              name: "update_topic",
+              name: "append_topic",
               input: {
+                expectedVersion: 2,
                 name: "travel",
-                body: "Rome trip planned.",
-                description: "trip planning",
-                summary: "Rome trip",
+                text: "Rome trip planned.",
               },
             },
           ],

@@ -6,13 +6,14 @@
 import { describe, expect, it } from "vitest";
 import { MemoryStore } from "./memory";
 import type { Store } from "./types";
+import { pinTopic, removeTopic, renameTopic, seedTopic, setBody, setDescription } from "./test-support";
 
 const makeStore = (): Store => new MemoryStore(() => "2026-01-01T00:00:00.000Z");
 
 describe("Store contract: topics", () => {
   it("createTopic then getTopic returns the topic", () => {
     const s = makeStore();
-    s.createTopic("weather", "climate notes");
+    seedTopic(s, "weather", "climate notes");
     expect(s.getTopic("weather")).toMatchObject({
       name: "weather",
       description: "climate notes",
@@ -27,112 +28,129 @@ describe("Store contract: topics", () => {
 
   it("real adapter topics are never system", () => {
     const s = makeStore();
-    s.createTopic("weather", "");
+    seedTopic(s, "weather", "");
     expect(s.getTopic("weather")?.system).toBe(false);
     expect(s.listTopics()[0]?.system).toBe(false);
   });
 
   it("deleteTopic removes the topic", () => {
     const s = makeStore();
-    s.createTopic("gone", "");
-    s.deleteTopic("gone");
+    seedTopic(s, "gone", "");
+    removeTopic(s, "gone");
     expect(s.getTopic("gone")).toBeNull();
   });
 
   it("deleteTopic throws for unknown topic", () => {
-    expect(() => makeStore().deleteTopic("nope")).toThrow();
+    expect(() => removeTopic(makeStore(), "nope")).toThrow();
   });
 
   it("deleteTopic leaves inbound links dangling and bodies untouched", () => {
     const s = makeStore();
-    s.createTopic("trip", "");
-    s.createTopic("flights", "");
-    s.saveTopic("trip", { body: "book [[flights]]", description: "" });
-    s.deleteTopic("flights");
+    seedTopic(s, "trip", "");
+    seedTopic(s, "flights", "");
+    setBody(s, "trip", "book [[flights]]");
+    removeTopic(s, "flights");
     // The source body keeps its [[flights]] token.
     expect(s.getTopic("trip")?.body).toBe("book [[flights]]");
     // The link is still an outbound row from trip (now dangling).
     expect(s.getOutboundLinks("trip")).toEqual(["flights"]);
     // Recreating the target re-resolves the dangling link.
-    s.createTopic("flights", "");
+    seedTopic(s, "flights", "");
     expect(s.getBacklinks("flights").map((t) => t.name)).toEqual(["trip"]);
   });
 
   it("deleteTopic drops the topic's own outbound links", () => {
     const s = makeStore();
-    s.createTopic("trip", "");
-    s.createTopic("flights", "");
-    s.saveTopic("trip", { body: "book [[flights]]", description: "" });
-    s.deleteTopic("trip");
+    seedTopic(s, "trip", "");
+    seedTopic(s, "flights", "");
+    setBody(s, "trip", "book [[flights]]");
+    removeTopic(s, "trip");
     expect(s.getBacklinks("flights")).toEqual([]);
   });
 
   it("listTopics returns metadata without requiring bodies", () => {
     const s = makeStore();
-    s.createTopic("a", "first");
-    s.createTopic("b", "second");
+    seedTopic(s, "a", "first");
+    seedTopic(s, "b", "second");
     const names = s.listTopics().map((t) => t.name).sort();
     expect(names).toEqual(["a", "b"]);
   });
 
   it("updateTopicBody sets the body", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.updateTopicBody("a", "hello");
+    seedTopic(s, "a", "");
+    setBody(s, "a", "hello");
     expect(s.getTopic("a")?.body).toBe("hello");
   });
 
   it("getTopicsWithBodies returns bodies for known names, skips unknown", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.updateTopicBody("a", "body-a");
+    seedTopic(s, "a", "");
+    setBody(s, "a", "body-a");
     const got = s.getTopicsWithBodies(["a", "missing"]);
     expect(got).toHaveLength(1);
     expect(got[0].body).toBe("body-a");
   });
 
-  it("saveTopic updates body/description and bumps messageCount", () => {
+  it("updateTopicBody replaces the body and bumps messageCount", () => {
     const s = makeStore();
-    s.createTopic("a", "old");
-    s.saveTopic("a", { body: "B", description: "new" });
+    seedTopic(s, "a", "old");
+    setBody(s, "a", "B");
     expect(s.getTopic("a")).toMatchObject({
       body: "B",
-      description: "new",
+      description: "old",
       messageCount: 1,
     });
   });
 
-  it("saveTopic renames when newName is given", () => {
+  it("updateTopicMetadata changes the description without touching the body", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.saveTopic("a", { body: "", description: "" }, "b");
+    seedTopic(s, "a", "old", "kept");
+    setDescription(s, "a", "new");
+    expect(s.getTopic("a")).toMatchObject({ body: "kept", description: "new" });
+  });
+
+  it("updateTopicMetadata renames when newName is given", () => {
+    const s = makeStore();
+    seedTopic(s, "a", "");
+    renameTopic(s, "a", "b");
     expect(s.getTopic("a")).toBeNull();
     expect(s.getTopic("b")).not.toBeNull();
   });
 
-  it("saveTopic rejects rename onto an existing name", () => {
+  it("updateTopicMetadata rejects rename onto an existing name", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.createTopic("b", "");
-    expect(() =>
-      s.saveTopic("a", { body: "", description: "" }, "b"),
-    ).toThrow();
+    seedTopic(s, "a", "");
+    seedTopic(s, "b", "");
+    expect(() => renameTopic(s, "a", "b")).toThrow();
+  });
+
+  it("createTopic rejects an existing name", () => {
+    const s = makeStore();
+    seedTopic(s, "a", "");
+    expect(() => seedTopic(s, "a", "")).toThrow(/exists/);
+  });
+
+  it("createTopic derives links from the body it was created with", () => {
+    const s = makeStore();
+    seedTopic(s, "a", "", "see [[b]]");
+    expect(s.getOutboundLinks("a")).toEqual(["b"]);
   });
 });
 
 describe("Store contract: pinned topics", () => {
   it("topics start unpinned", () => {
     const s = makeStore();
-    s.createTopic("a", "");
+    seedTopic(s, "a", "");
     expect(s.getTopic("a")?.pinned).toBe(false);
     expect(s.getPinnedTopics()).toEqual([]);
   });
 
   it("setPinned pins a topic and getPinnedTopics returns its full body", () => {
     const s = makeStore();
-    s.createTopic("User", "identity");
-    s.updateTopicBody("User", "name: Alice");
-    s.setPinned("User", true);
+    seedTopic(s, "User", "identity");
+    setBody(s, "User", "name: Alice");
+    pinTopic(s, "User", true);
     expect(s.getTopic("User")?.pinned).toBe(true);
     const pinned = s.getPinnedTopics();
     expect(pinned.map((t) => t.name)).toEqual(["User"]);
@@ -141,46 +159,45 @@ describe("Store contract: pinned topics", () => {
 
   it("setPinned false unpins", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.setPinned("a", true);
-    s.setPinned("a", false);
+    seedTopic(s, "a", "");
+    pinTopic(s, "a", true);
+    pinTopic(s, "a", false);
     expect(s.getPinnedTopics()).toEqual([]);
   });
 
   it("listTopics reports the pinned flag", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.createTopic("b", "");
-    s.setPinned("a", true);
+    seedTopic(s, "a", "");
+    seedTopic(s, "b", "");
+    pinTopic(s, "a", true);
     const byName = Object.fromEntries(
       s.listTopics().map((t) => [t.name, t.pinned]),
     );
     expect(byName).toEqual({ a: true, b: false });
   });
 
-  it("pinned survives a saveTopic rename", () => {
+  it("pinned survives a rename", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.setPinned("a", true);
-    s.saveTopic("a", { body: "x", description: "" }, "b");
+    seedTopic(s, "a", "");
+    pinTopic(s, "a", true);
+    renameTopic(s, "a", "b");
     expect(s.getPinnedTopics().map((t) => t.name)).toEqual(["b"]);
   });
 });
 
 describe("Store contract: topic links", () => {
-  const save = (s: Store, name: string, body: string) =>
-    s.saveTopic(name, { body, description: "" });
+  const save = (s: Store, name: string, body: string) => setBody(s, name, body);
 
   it("derives outbound links from the body", () => {
     const s = makeStore();
-    s.createTopic("a", "");
+    seedTopic(s, "a", "");
     save(s, "a", "see [[b]] and [[c]]");
     expect(s.getOutboundLinks("a").sort()).toEqual(["b", "c"]);
   });
 
   it("re-derives outbound links when the body changes", () => {
     const s = makeStore();
-    s.createTopic("a", "");
+    seedTopic(s, "a", "");
     save(s, "a", "[[b]] [[c]]");
     save(s, "a", "only [[b]] now");
     expect(s.getOutboundLinks("a")).toEqual(["b"]);
@@ -188,20 +205,20 @@ describe("Store contract: topic links", () => {
 
   it("tracks backlinks even when the target does not exist yet", () => {
     const s = makeStore();
-    s.createTopic("a", "");
+    seedTopic(s, "a", "");
     save(s, "a", "points at [[b]]");
     // b does not exist: the link is dangling but still a backlink of b.
     expect(s.getBacklinks("b").map((t) => t.name)).toEqual(["a"]);
-    s.createTopic("b", "");
+    seedTopic(s, "b", "");
     expect(s.getBacklinks("b").map((t) => t.name)).toEqual(["a"]);
   });
 
   it("rename rewrites `[[old]]` tokens in other bodies and keeps backlinks", () => {
     const s = makeStore();
-    s.createTopic("a", "");
-    s.createTopic("japan", "");
+    seedTopic(s, "a", "");
+    seedTopic(s, "japan", "");
     save(s, "a", "trip: [[japan]] near [[japan bar]]");
-    s.saveTopic("japan", { body: "", description: "" }, "japan 2026");
+    renameTopic(s, "japan", "japan 2026");
     expect(s.getTopic("a")?.body).toBe("trip: [[japan 2026]] near [[japan bar]]");
     expect(s.getBacklinks("japan 2026").map((t) => t.name)).toEqual(["a"]);
     expect(s.getBacklinks("japan")).toEqual([]);
@@ -209,7 +226,7 @@ describe("Store contract: topic links", () => {
 
   it("drops link rows when a link is removed from the body", () => {
     const s = makeStore();
-    s.createTopic("a", "");
+    seedTopic(s, "a", "");
     save(s, "a", "[[b]]");
     save(s, "a", "no more links");
     expect(s.getOutboundLinks("a")).toEqual([]);
