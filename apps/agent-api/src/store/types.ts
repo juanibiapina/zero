@@ -247,10 +247,16 @@ export interface ConversationStore {
   // it was already claimed: a resumed run must not send it again.
   claimDelivery(messageId: number, blockIndex: number): boolean;
   // How many text blocks of this row were persisted and never sent. Zero for a
-  // fully delivered row and for a row with no text. It is what tells a finished
-  // response apart from one that was only written down, which is the difference
-  // between an idle conversation and a lost reply.
+  // fully delivered row, for a row with no text, and for any row at or below the
+  // conversation's delivery watermark. It is what tells a finished response
+  // apart from one that was only written down, which is the difference between
+  // an idle conversation and a lost reply.
   countUndeliveredBlocks(messageId: number): number;
+  // Declare every message up to `messageId` delivered without a claim. Rows
+  // written before delivery claims existed have none, and without this they read
+  // as "persisted but never sent" and would be sent again. Production sets it
+  // once, in migration 0029; this is the same statement, for tests.
+  markDeliveredThrough(conversationId: string, messageId: number): void;
   // Conversations that still owe work: a queued message, a tail awaiting a
   // model response, or a response that stopped for a non-terminal reason.
   findConversationsWithWork(): Thread[];

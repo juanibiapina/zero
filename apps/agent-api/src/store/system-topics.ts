@@ -273,6 +273,10 @@ export class SystemTopicStore implements Store {
     return this.inner.countUndeliveredBlocks(messageId);
   }
 
+  markDeliveredThrough(conversationId: string, messageId: number): void {
+    this.inner.markDeliveredThrough(conversationId, messageId);
+  }
+
   findConversationsWithWork(): Thread[] {
     return this.inner.findConversationsWithWork();
   }

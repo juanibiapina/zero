@@ -506,6 +506,22 @@ describe("Store contract: conversations with work", () => {
     expect(withWork(s)).toEqual([]);
   });
 
+  it("a reply that predates delivery claims is not resent", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    s.storeMessage(a, "user", "hi");
+    // What every conversation looked like the moment claims shipped: sent by the
+    // old path, so no claim exists and none is coming.
+    const old = s.storeMessage(a, "assistant", "hello");
+    s.markDeliveredThrough(a, old);
+    expect(withWork(s)).toEqual([]);
+
+    // A reply written after the watermark is still recoverable.
+    s.storeMessage(a, "user", "again");
+    s.storeMessage(a, "assistant", "second answer");
+    expect(withWork(s)).toEqual([a]);
+  });
+
   it("a response with no text to send is idle without any claim", () => {
     const s = makeStore();
     const a = s.getOrCreateConversation(1, 0);

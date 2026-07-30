@@ -1010,7 +1010,12 @@ See `docs/plans/pr40-review-fixes.md` for the reasoning behind each.
 
 1. A response persisted but never sent is now work: the predicate counts
    unclaimed text blocks, and such a conversation is delivered without a model
-   call. The fallback and rate-limit replies take a claim too.
+   call, logging `turn_delivery_recovered`. The fallback and rate-limit replies
+   take a claim too. Rows written before claims existed carry no claim either,
+   so migration 0029 stamps a per-conversation delivery watermark below which
+   the absence of a claim means "sent by the old path" — without it the first
+   alarm after the deploy resends the last reply of every conversation, which is
+   what happened in production on 2026-07-30.
 2. Compaction pages forward from the boundary instead of reading the newest
    rows, so the boundary can never jump over rows no summary covers. A window
    that stops short hands the rest to a successor pass.

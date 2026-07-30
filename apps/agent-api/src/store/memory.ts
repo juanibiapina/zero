@@ -44,6 +44,7 @@ interface ConvRow {
   topicId: number;
   compactedThroughMessageId: number | null;
   summary: string | null;
+  deliveredThroughMessageId: number | null;
 }
 
 interface MsgRow {
@@ -310,6 +311,7 @@ export class MemoryStore implements Store {
       topicId,
       compactedThroughMessageId: null,
       summary: null,
+      deliveredThroughMessageId: null,
     });
     return id;
   }
@@ -462,12 +464,19 @@ export class MemoryStore implements Store {
   countUndeliveredBlocks(messageId: number): number {
     const row = this.msgs.find((m) => m.id === messageId);
     if (!row || row.role !== "assistant") return 0;
+    const conv = this.convs.find((c) => c.id === row.conversationId);
+    if ((conv?.deliveredThroughMessageId ?? 0) >= messageId) return 0;
     const claimed: number[] = [];
     for (const key of this.claimed) {
       const [id, index] = key.split(":");
       if (Number(id) === messageId) claimed.push(Number(index));
     }
     return unclaimedBlockIndexes(decodeContent(row.content), claimed).length;
+  }
+
+  markDeliveredThrough(conversationId: string, messageId: number): void {
+    const conv = this.convs.find((c) => c.id === conversationId);
+    if (conv) conv.deliveredThroughMessageId = messageId;
   }
 
   // --- learning jobs ---

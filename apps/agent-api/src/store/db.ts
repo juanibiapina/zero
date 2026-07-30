@@ -523,10 +523,24 @@ export class DbStore implements Store {
   countUndeliveredBlocks(messageId: number): number {
     const row = this.db.get(messages, { where: eq("id", messageId) });
     if (!row || row.role !== "assistant") return 0;
+    const conv = this.db.get(conversations, {
+      where: eq("id", row.conversationId),
+    });
+    // Below the watermark the absence of a claim means "written before claims
+    // existed", not "never sent".
+    if ((conv?.deliveredThroughMessageId ?? 0) >= messageId) return 0;
     const claimed = this.db
       .all(deliveries, { where: eq("messageId", messageId) })
       .map((d) => d.blockIndex);
     return unclaimedBlockIndexes(decodeContent(row.content), claimed).length;
+  }
+
+  markDeliveredThrough(conversationId: string, messageId: number): void {
+    this.db.update(
+      conversations,
+      { deliveredThroughMessageId: messageId },
+      { where: eq("id", conversationId) },
+    );
   }
 
   // --- learning jobs ---

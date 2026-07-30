@@ -338,8 +338,17 @@ leaves a finished reply nobody read, and if "the tail is a finished response"
 counted as idle, neither the thread scan nor the turn would ever look at it
 again. Such a conversation is picked up and delivered without calling the model:
 the answer already exists, and re-running it would answer the same message twice.
-The fallback and rate-limit replies take the same claim, so they cannot be sent
-twice either.
+It logs `turn_delivery_recovered`, because it is the one path that sends a
+message and calls no model, so nothing else would record it. The fallback and
+rate-limit replies take the same claim, so they cannot be sent twice either.
+
+That rule needs a floor. The `deliveries` table shipped empty, so every reply
+written before claims existed has none, and "no claim" would read as "never
+sent": on 2026-07-30 the first alarm after the deploy resent the last reply of
+existing conversations. Migration 0029 stamps each conversation's newest message
+at that moment as a **delivery watermark**, and rows at or below it are treated
+as delivered. Rows above it are governed by claims, which is what keeps a real
+lost reply recoverable.
 
 **Unfinished tool calls are re-run on resume.** A reset between a response and its
 results leaves an assistant tail whose `tool_use` blocks have no `tool_result`,

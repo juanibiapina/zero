@@ -61,6 +61,9 @@ export const conversations = table("conversations", {
   createdAt: column.text().notNull(),
   compactedThroughMessageId: column.integer(),
   summary: column.text(),
+  // Newest message that predates delivery claims; rows at or below it were sent
+  // by the pre-claim code and must not be redelivered. See migration 0029.
+  deliveredThroughMessageId: column.integer(),
 });
 
 // Messages: the conversation's append-only protocol log. `content` is a JSON

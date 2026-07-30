@@ -123,6 +123,18 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       claim: (messageId, blockIndex) => store.claimDelivery(messageId, blockIndex),
       send: (text) => send(text),
     });
+    // This path sends the user a message and calls no model, so it logs nothing
+    // else: without this line a recovered reply is invisible, and the only trace
+    // is `alarm_finished.turns` counting a thread with no `turn_started`. That
+    // is how the 2026-07-30 watermark bug was found — from the mismatch, not
+    // from the event.
+    log("turn_delivery_recovered", {
+      chat_id: chatId,
+      topic_id: topicId,
+      clerk_user_id: input.clerkUserId,
+      blocks: undeliveredCount,
+      message_id: tail.id,
+    });
     await deliverUnclaimed(all.slice(lastUserIdx + 1));
     stopTyping();
     return;
