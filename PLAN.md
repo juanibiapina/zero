@@ -25,7 +25,8 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 1.3 external-write claims | done | `feat(agent): claim irreversible tool calls so a resumed turn cannot repeat them` |
 | 1.4 cross-turn cache diagnostic chain | done | `feat(agent): chain cache diagnostics across turns of a conversation` |
 | 2.1 ScheduleDO + LearningDO shells | done | `feat(agent): add per-user schedule and learning durable objects` |
-| Phase 2.2-2.4, 3 | not started | — |
+| 2.2 UserDO alarm drains turns only | done | `feat(agent): keep UserDO's alarm for turns and move other deadlines to the schedule` |
+| Phase 2.3-2.4, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
 (569 tests). The branch is pushed to `origin` but not merged; a branch push only
@@ -853,7 +854,15 @@ Add both bindings and one new migration tag (`v7`, `new_sqlite_classes`) in
 derive all three DO IDs from the same Clerk user ID. Creating both namespaces in
 one migration avoids another schema-only deploy in Phase 3.
 
-**2.2** `UserDO.alarm()` keeps **only** `runAlarmTurns`. Onboarding and
+**2.2 DONE.** `UserDO.alarm()` is only `runAlarmTurns`. The admin-task and
+onboarding branches became the RPCs `runQueuedAdminTask` / `runQueuedOnboarding`,
+each a no-op unless its job is queued, dispatched by `ScheduleDO.alarm` via
+`ScheduleDO.requestJob(clerkUserId, reason)`. `queueAdminTask` in
+`do/admin-task.ts` no longer sets an alarm at all (its storage port lost
+`setAlarm`), and `UserDO.queueOnboarding` now takes the Clerk user id so it can
+reach that user's schedule. The original text:
+
+`UserDO.alarm()` keeps **only** `runAlarmTurns`. Onboarding and
 admin-task deadlines move to ScheduleDO, which triggers their existing UserDO
 RPC entry points. Direct lesson from 2026-07-29: a DO has one alarm, and anything
 sharing it with turn draining eventually delays a reply. Today `alarm()` runs an

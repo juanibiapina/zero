@@ -13,13 +13,18 @@ type UserDOStub = Pick<UserDO, "queueOnboarding">;
 // Fake DO that models the null -> queued idempotency guard.
 const createFakeUserDO = () => {
   let status: string | null = null;
+  const queuedFor: string[] = [];
   return {
     get _status() {
       return status;
     },
+    get _queuedFor() {
+      return queuedFor;
+    },
     setStatus: (s: string | null) => void (status = s),
-    queueOnboarding: async (force = false) => {
+    queueOnboarding: async (clerkUserId: string, force = false) => {
       if (!force && status !== null) return;
+      queuedFor.push(clerkUserId);
       status = "queued";
     },
   };
@@ -54,6 +59,8 @@ describe("POST /api/onboarding/google", () => {
 
     expect(res.status).toBe(202);
     expect(userDO._status).toBe("queued");
+    // The DO needs the user id to reach that user's schedule.
+    expect(userDO._queuedFor).toEqual(["user_abc"]);
   });
 
   it("is idempotent: a second call does not re-queue", async () => {

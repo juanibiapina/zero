@@ -11,8 +11,10 @@ point.
 ```
 Google connected (web)
   → POST /api/onboarding/google        (routes/onboarding.ts, Clerk-authed)
-  → UserDO.queueOnboarding()           set googleOnboardingStatus = "queued", arm alarm
-  → UserDO.alarm()                     after draining turns, if status == "queued":
+  → UserDO.queueOnboarding()           set googleOnboardingStatus = "queued",
+                                        ask ScheduleDO for an onboarding deadline
+  → ScheduleDO.alarm()                 deadline due → UserDO.runQueuedOnboarding()
+  → UserDO.runQueuedOnboarding()       if status == "queued", delegate to…
   → UserDO.runOnboarding()             build model + Google token, delegate to…
   → do/onboarding.ts runOnboarding()   ensure pinned "User" topic, run agent,
                                         set status "done" (or "failed" on throw)
@@ -38,12 +40,14 @@ route.
 - **Durability trick.** The status never moves to a transient `running` state.
   It stays `queued` until success flips it to `done` (or a caught failure flips
   it to `failed`). A mid-run DO eviction skips the catch and leaves it `queued`,
-  so the next alarm re-runs it. Re-running is idempotent: it re-authors the same
-  `User` topic. A caught failure is logged (`onboarding_failed`), marked
+  so a later dispatch re-runs it. Re-running is idempotent: it re-authors the
+  same `User` topic. A caught failure is logged (`onboarding_failed`), marked
   `failed`, and not retried in a loop.
-- **Alarm ordering.** `alarm()` drains conversation turns first (replies stay
-  low-latency), then runs onboarding when queued. Onboarding is best-effort and
-  off Telegram, so waiting behind turns is fine.
+- **Not on UserDO's alarm.** Onboarding used to run on UserDO's alarm after turn
+  draining, which put it in the same single alarm slot as replies. Its deadline
+  lives in ScheduleDO now, which calls `runQueuedOnboarding` when it comes due,
+  so onboarding can take as long as it likes without a queued message waiting
+  behind it.
 
 ## The agent
 

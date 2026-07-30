@@ -41,7 +41,7 @@ export const createOnboardingRoutes = () => {
     const clerkUserId = c.get("userId");
     const { force } = c.req.valid("query");
     const userDO = getUserDO(c.env, clerkUserId);
-    await userDO.queueOnboarding(Boolean(force));
+    await userDO.queueOnboarding(clerkUserId, Boolean(force));
     log("onboarding_queued", { clerk_user_id: clerkUserId, force: Boolean(force) });
     return c.body(null, 202);
   });

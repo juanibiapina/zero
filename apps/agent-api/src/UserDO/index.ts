@@ -31,6 +31,7 @@ import {
 } from "../do/admin-task";
 import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
+import { getScheduleDO } from "../ScheduleDO/stub";
 import type { Env } from "../types";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
@@ -128,7 +129,17 @@ export class UserDO extends DurableObject<Env> {
     clerkUserId: string;
     prompt: string;
   }): Promise<boolean> {
-    return queueAdminTask(this.ctx.storage, { ...input, status: "queued" });
+    const queued = await queueAdminTask(this.ctx.storage, {
+      ...input,
+      status: "queued",
+    });
+    if (queued) {
+      await getScheduleDO(this.env, input.clerkUserId).requestJob(
+        input.clerkUserId,
+        "admin_task",
+      );
+    }
+    return queued;
   }
 
   // Never expose the queued prompt through an RPC response.
@@ -137,43 +148,48 @@ export class UserDO extends DurableObject<Env> {
     return task ? toAdminTaskStatus(task) : null;
   }
 
-  // The turn runner. Drains every thread whose tail is a user message. A
-  // concurrent enqueueTurn arms a fresh alarm (this handler cleared the old
+  // The turn runner, and nothing else. A DO has exactly one alarm, so anything
+  // else that shared it eventually delayed a reply: on 2026-07-29 an admin task
+  // and onboarding sat in front of a queued user message for a quarter of an
+  // hour. Those deadlines now live in ScheduleDO, which calls
+  // runQueuedAdminTask / runQueuedOnboarding below.
+  //
+  // A concurrent enqueueTurn arms a fresh alarm (this handler cleared the old
   // one on entry), so messages that arrive mid-run are picked up on the next
   // fire. On a catchable failure runAlarmTurns self-reschedules with backoff
   // while any thread still awaits reply, and returns normally (never rethrows,
   // which would discard the reschedule). See do/alarm.ts.
-  //
-  // After turns are drained (replies stay low-latency), run Google onboarding
-  // if it is queued. Onboarding is best-effort and off Telegram, so it waits
-  // behind turn draining.
   override async alarm(): Promise<void> {
-    const task = await this.ctx.storage.get<AdminTask>(ADMIN_TASK_KEY);
-    if (task?.status === "queued") {
-      await runAdminTask({
-        task,
-        runAgent: async (prompt) => {
-          const model = await createModel(this.env, task.clerkUserId, "admin_task");
-          return runAdminTaskAgent({ model, store: this.store, prompt });
-        },
-        setTask: (terminalTask) =>
-          this.ctx.storage.put(ADMIN_TASK_KEY, terminalTask),
-      });
-      // An admin task replaces the DO's sole alarm. A separate invocation
-      // resumes displaced turn retry or onboarding work without delaying it.
-      await this.ctx.storage.setAlarm(Date.now());
-      return;
-    }
-
     await runAlarmTurns({
       storage: this.ctx.storage,
       findConversationsWithWork: () => this.store.findConversationsWithWork(),
       runTurn: (chatId, topicId) => this.runTurn(chatId, topicId),
       reportError: (err) => reportError(this.env, err, { site: "alarm_turn" }),
     });
-    if (this.store.getSettings().googleOnboardingStatus === "queued") {
-      await this.runOnboarding();
-    }
+  }
+
+  // Run the queued admin task, if there is one. Called by ScheduleDO when the
+  // deadline it holds for this job comes due. A no-op when nothing is queued, so
+  // a duplicate dispatch cannot re-run a finished task.
+  async runQueuedAdminTask(): Promise<void> {
+    const task = await this.ctx.storage.get<AdminTask>(ADMIN_TASK_KEY);
+    if (task?.status !== "queued") return;
+    await runAdminTask({
+      task,
+      runAgent: async (prompt) => {
+        const model = await createModel(this.env, task.clerkUserId, "admin_task");
+        return runAdminTaskAgent({ model, store: this.store, prompt });
+      },
+      setTask: (terminalTask) =>
+        this.ctx.storage.put(ADMIN_TASK_KEY, terminalTask),
+    });
+  }
+
+  // Run Google onboarding, if it is queued. Called by ScheduleDO, same shape as
+  // runQueuedAdminTask.
+  async runQueuedOnboarding(): Promise<void> {
+    if (this.store.getSettings().googleOnboardingStatus !== "queued") return;
+    await this.runOnboarding();
   }
 
   // Queue Google onboarding: set status `queued` and arm the alarm. Idempotent
@@ -182,13 +198,15 @@ export class UserDO extends DurableObject<Env> {
   // `force` bypasses the guard to re-run for an already-onboarded user
   // (re-running is idempotent: it re-authors the same pinned topic). Called by
   // POST /api/onboarding/google.
-  async queueOnboarding(force = false): Promise<void> {
+  async queueOnboarding(clerkUserId: string, force = false): Promise<void> {
     if (!force && this.store.getSettings().googleOnboardingStatus !== null)
       return;
+    await this.ctx.storage.put("clerkUserId", clerkUserId);
     this.store.setGoogleOnboardingStatus("queued");
-    if ((await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now());
-    }
+    await getScheduleDO(this.env, clerkUserId).requestJob(
+      clerkUserId,
+      "onboarding",
+    );
   }
 
   // Run the one-shot Gmail onboarding scan. Builds the per-user model and

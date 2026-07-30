@@ -20,7 +20,6 @@ export type AdminTaskStatus =
 export interface AdminTaskStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T): Promise<void>;
-  setAlarm(scheduledTime: number): Promise<void>;
 }
 
 export const toAdminTaskStatus = (task: AdminTask): AdminTaskStatus => {
@@ -42,14 +41,13 @@ export const toAdminTaskStatus = (task: AdminTask): AdminTaskStatus => {
 export const queueAdminTask = async (
   storage: AdminTaskStorage,
   task: Extract<AdminTask, { status: "queued" }>,
-  now: number = Date.now(),
 ): Promise<boolean> => {
   const existing = await storage.get<AdminTask>(ADMIN_TASK_KEY);
   if (existing?.status === "queued") return false;
   await storage.put(ADMIN_TASK_KEY, task);
-  // A DO has one alarm. Always replace it so this task runs now; its terminal
-  // follow-up alarm lets pre-existing turn/onboarding work resume afterwards.
-  await storage.setAlarm(now);
+  // No alarm here: the deadline for this job lives in ScheduleDO, so it can
+  // never take UserDO's single alarm slot away from turn draining. The caller
+  // (UserDO.queueAdminTask) asks the schedule to dispatch it.
   return true;
 };
 

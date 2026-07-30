@@ -349,7 +349,10 @@ tail in one transaction, in arrival order, so a burst becomes one turn and a
 reset can neither lose a message nor inject it twice.
 
 The alarm handler drains every conversation that still owes work and runs the
-orchestrator for each. "Owes work" is read from the protocol, not from the tail's
+orchestrator for each, **and does nothing else**. An admin task and Google
+onboarding used to share that one alarm slot; on 2026-07-29 they left a queued
+user message waiting a quarter of an hour. Their deadlines live in ScheduleDO
+now, which calls `UserDO.runQueuedAdminTask` / `runQueuedOnboarding` when due. "Owes work" is read from the protocol, not from the tail's
 role: a conversation has work when messages are queued, when the tail is a user
 message or a tool result awaiting a model response, or when the last assistant
 response stopped for a non-terminal reason (`tool_use`, `pause_turn`, or none
