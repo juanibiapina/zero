@@ -41,3 +41,26 @@ deploy from re-provisioning the domain.
 
 This corrects the earlier "additive / manual delete" claim in
 `docs/plans/drop-old-console-hosts.md`.
+
+## A branch that adds a Durable Object migration always fails its preview build
+
+`wrangler versions upload` refuses a version whose `wrangler.jsonc` contains a
+new `migrations[]` tag:
+
+```
+Version upload failed. You attempted to upload a version of a Worker that
+includes a Durable Object migration, but migrations must be fully applied via a
+non-versioned deployment. [code: 10211]
+```
+
+The non-production triggers for `zero-api`, `zero-landing` and `zero-docs` all
+run `versions upload` on purpose (a branch push must not route production
+traffic — see AGENTS.md). So a branch that introduces a new DO class, or any
+other migration tag, gets a red **Workers Builds** check on its PR that no code
+change can fix. The same commit deploys fine on `main`, where the default-branch
+trigger runs `wrangler deploy` and applies the migration.
+
+Observed 2026-07-30 on PR #40 (`v7`, `new_sqlite_classes: ["ScheduleDO",
+"LearningDO"]`). Do not "fix" it by switching the preview trigger to `deploy`:
+that is exactly the mistake that would land a branch on production. Read the red
+check, confirm from the build log that 10211 is the only failure, and merge.
