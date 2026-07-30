@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-30: Zero remembers much more of a long conversation instead of only the last handful of messages.
 - 2026-07-30: Zero's messages now arrive as it writes them, so a long turn no longer ends with a repeated or missing message.
 - 2026-07-30: Give Zero a web link and it can open and read the page directly, without starting a broader web search.
 - 2026-07-29: Follow-up messages get answered right away instead of waiting minutes while Zero files away what it learned, and your topics keep growing without replies getting slower.

@@ -266,6 +266,56 @@ describe("Store contract: conversations", () => {
     });
   });
 
+  it("returns the whole log and no summary before any compaction", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(id, "user", "m1");
+    s.storeMessage(id, "assistant", "m2");
+    const context = s.getConversationContext(id, 10);
+    expect(context.summary).toBeNull();
+    expect(context.messages.map((m) => messageText(m.content))).toEqual([
+      "m1",
+      "m2",
+    ]);
+  });
+
+  it("renders summary plus the messages after the compaction boundary", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(id, "user", "m1");
+    const boundary = s.storeMessage(id, "assistant", "m2");
+    s.storeMessage(id, "user", "m3");
+    s.compactConversation(id, {
+      throughMessageId: boundary,
+      summary: "they talked about m1 and m2",
+    });
+    const context = s.getConversationContext(id, 10);
+    expect(context.summary).toBe("they talked about m1 and m2");
+    expect(context.messages.map((m) => messageText(m.content))).toEqual(["m3"]);
+  });
+
+  it("keeps every compacted message in raw storage", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    const boundary = s.storeMessage(id, "user", "m1");
+    s.storeMessage(id, "assistant", "m2");
+    s.compactConversation(id, { throughMessageId: boundary, summary: "s" });
+    expect(
+      s.getConversationHistory(id, 10).map((m) => messageText(m.content)),
+    ).toEqual(["m1", "m2"]);
+  });
+
+  it("bounds the context by limit, newest last", () => {
+    const s = makeStore();
+    const id = s.getOrCreateConversation(1, 0);
+    s.storeMessage(id, "user", "m1");
+    s.storeMessage(id, "assistant", "m2");
+    s.storeMessage(id, "user", "m3");
+    expect(
+      s.getConversationContext(id, 2).messages.map((m) => messageText(m.content)),
+    ).toEqual(["m2", "m3"]);
+  });
+
   it("stores a plain string as a single text block", () => {
     const s = makeStore();
     const id = s.getOrCreateConversation(1, 0);

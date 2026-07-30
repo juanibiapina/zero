@@ -59,6 +59,10 @@ export interface InterfaceAgentInput {
   // assert on send/replies. Persist-before-send keeps retries idempotent.
   persistReply?: (text: string) => void;
   history: Message[];
+  // Summary of the compacted prefix of this conversation, if it has one. It is
+  // rendered as the first user message, ahead of the surviving history, so the
+  // model keeps continuity without the raw messages.
+  summary?: string;
   userMessage: string;
   search: WebSearch;
   // Page-fetch port for the read_page tool, registered on this agent and on the
@@ -211,6 +215,7 @@ export const buildConversationMessages = (
   userMessage: string,
   now: Date = new Date(),
   timezone = "UTC",
+  summary?: string,
 ): AgentMessage[] => {
   const turns: Message[] = [
     ...history,
@@ -224,11 +229,24 @@ export const buildConversationMessages = (
     },
   ];
 
-  // Drop leading assistant messages so the array opens on a user turn.
-  let start = 0;
-  while (start < turns.length && turns[start].role === "assistant") start++;
-
   const messages: AgentMessage[] = [];
+  // The compacted prefix opens the array as a user message. It is stable text
+  // (it only changes when compaction runs again), so it caches like history.
+  if (summary) {
+    messages.push({
+      role: "user",
+      content: `[summary of earlier conversation]\n\n${summary}`,
+    });
+  }
+
+  // Drop leading assistant messages so the array opens on a user turn. Only
+  // needed without a summary: with one, the array already opens on `user` and
+  // dropping the first replies would lose real conversation.
+  let start = 0;
+  if (!summary) {
+    while (start < turns.length && turns[start].role === "assistant") start++;
+  }
+
   for (const turn of turns.slice(start)) {
     // Phase 1.1 stores every row as content blocks; until the loop persists
     // tool calls (Phase 1.3) each row is one text block, so flattening to text
@@ -315,6 +333,7 @@ export const runInterfaceAgent = async (
     input.userMessage,
     now,
     timezone,
+    input.summary,
   );
   // Prepend the volatile context (current time + timezone) to the current user
   // message so it sits after the cached history prefix and never invalidates it.

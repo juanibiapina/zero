@@ -187,6 +187,33 @@ rows, and both check `getTopic` themselves before writing: `DbStore.updateTopicB
 silently no-ops on an unknown topic while `MemoryStore.updateTopicBody` throws, so
 a store-level check would pass tests and lose writes in production.
 
+## Conversation context
+
+What the model sees for a conversation is `summary + messages after the
+compaction boundary`, not a fixed window of recent messages. Compaction is
+non-destructive: `conversations.compactedThroughMessageId` moves and
+`conversations.summary` holds the prose covering everything up to it, while every
+raw row stays in storage, because learning reads the raw log. A conversation that
+has never been compacted has neither, which renders as the whole log.
+
+Two mechanical filters run at render time, both in `store/messages.ts`:
+
+- **Backstop ceiling** (`CONTEXT_BACKSTOP_MESSAGES`, `CONTEXT_BACKSTOP_CHARS`).
+  Nothing moves the boundary in production yet, so this is what keeps context
+  bounded in the meantime: at most 60 messages, then the oldest are dropped until
+  the rendered characters fit. The newest message is always kept. Both constants
+  go away when size-triggered compaction is switched on.
+- **Staleness stubs.** A persisted topic read carries the knowledge version it
+  was taken at (see below). If that differs from the current version, the
+  `tool_result` content is replaced by
+  `[stale: topic knowledge changed; reread before using or writing]`. It is
+  replaced, never removed: the wire format requires every `tool_use` to keep its
+  matching result. There is no LLM call and no per-topic bookkeeping.
+
+`context_rendered` logs the estimated total tokens, the summary tokens, how many
+messages survived the boundary, and how many results were stubbed. The compaction
+threshold is derived from that line, not guessed.
+
 ## Knowledge versions
 
 Every topic read (`list_topics`, `get_topic`, `list_backlinks`) returns the

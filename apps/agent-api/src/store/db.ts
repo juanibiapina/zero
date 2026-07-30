@@ -2,7 +2,7 @@
 // turn orchestrator address it through the Store interface. Column names match
 // the do-orm schema keys (camelCase).
 
-import { and, asc, desc, eq, type Database } from "do-orm";
+import { and, asc, desc, eq, gt, type Database } from "do-orm";
 import {
   attachments,
   conversations,
@@ -26,6 +26,7 @@ import {
 import { KnowledgeConflictError } from "./types";
 import type {
   Attachment,
+  ConversationContext,
   Message,
   MessageContent,
   MessageKind,
@@ -366,6 +367,42 @@ export class DbStore implements Store {
       limit,
     });
     return rows.reverse().map(toMessage);
+  }
+
+  getConversationContext(
+    conversationId: string,
+    limit: number,
+  ): ConversationContext {
+    const conv = this.db.get(conversations, {
+      where: eq("id", conversationId),
+    });
+    const boundary = conv?.compactedThroughMessageId ?? null;
+    const rows = this.db.all(messages, {
+      where:
+        boundary === null
+          ? eq("conversationId", conversationId)
+          : and(eq("conversationId", conversationId), gt("id", boundary)),
+      orderBy: desc("id"),
+      limit,
+    });
+    return {
+      summary: conv?.summary ?? null,
+      messages: rows.reverse().map(toMessage),
+    };
+  }
+
+  compactConversation(
+    conversationId: string,
+    input: { throughMessageId: number; summary: string },
+  ): void {
+    this.db.update(
+      conversations,
+      {
+        compactedThroughMessageId: input.throughMessageId,
+        summary: input.summary,
+      },
+      { where: eq("id", conversationId) },
+    );
   }
 
   resetConversation(chatId: number, topicId: number): void {

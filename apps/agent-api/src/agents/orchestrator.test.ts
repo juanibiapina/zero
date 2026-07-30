@@ -563,6 +563,117 @@ describe("runTurn phase markers", () => {
     );
   });
 
+  it("shows the model the summary instead of the compacted messages", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "what about Rome");
+    const boundary = store.storeMessage(id, "assistant", "Rome is warm");
+    store.storeMessage(id, "user", "and Oslo");
+    store.compactConversation(id, {
+      throughMessageId: boundary,
+      summary: "they discussed Rome",
+    });
+    const sink = collectSink();
+    const requests: string[] = [];
+
+    await runTurn({
+      store,
+      makeModel: constModel(
+        capturingModel((request) => {
+          requests.push(JSON.stringify(request.messages));
+          return { content: [{ type: "text", text: "Oslo is cold" }] };
+        }),
+      ),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    expect(requests[0]).toContain("they discussed Rome");
+    expect(requests[0]).not.toContain("Rome is warm");
+    expect(requests[0]).toContain("and Oslo");
+  });
+
+  it("carries history past the old 20-message window", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    for (let i = 0; i < 25; i++) {
+      store.storeMessage(id, "user", `q${i}`);
+      store.storeMessage(id, "assistant", `a${i}`);
+    }
+    store.storeMessage(id, "user", "last question");
+    const sink = collectSink();
+    const requests: string[] = [];
+
+    await runTurn({
+      store,
+      makeModel: constModel(
+        capturingModel((request) => {
+          requests.push(JSON.stringify(request.messages));
+          return { content: [{ type: "text", text: "ok" }] };
+        }),
+      ),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    // 51 rows, under the 60-message backstop, so the whole conversation is
+    // rendered. The old fixed window would have cut everything before q15.
+    expect(requests[0]).toContain("q0");
+    expect(requests[0]).toContain("q24");
+  });
+
+  it("logs context_rendered with the rendered size and stale stub count", async () => {
+    const store = new MemoryStore();
+    seedTopic(store, "travel", "trips");
+    const id = store.getOrCreateConversation(1, 0);
+    // A persisted topic read taken at an older knowledge version.
+    store.storeMessage(id, "assistant", [
+      { type: "tool_use", id: "tu_1", name: "get_topic", input: { name: "travel" } },
+    ], { stopReason: "tool_use" });
+    store.storeMessage(
+      id,
+      "user",
+      [
+        {
+          type: "tool_result",
+          tool_use_id: "tu_1",
+          content: JSON.stringify({ version: 0, topic: { name: "travel" } }),
+        },
+      ],
+      { kind: "tool_result" },
+    );
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await runTurn({
+      store,
+      makeModel: constModel(
+        capturingModel(() => ({ content: [{ type: "text", text: "hello" }] })),
+      ),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+    const line = logSpy.mock.calls
+      .map((c) => c[0] as { msg?: string; stale_stubs?: number; messages_after_boundary?: number; total_tokens?: number })
+      .find((e) => e.msg === "context_rendered");
+    expect(line).toMatchObject({ stale_stubs: 1, messages_after_boundary: 3 });
+    expect(line?.total_tokens).toBeGreaterThan(0);
+  });
+
   // turn_completed means "runTurn returned", not "the turn succeeded". A handled
   // agent failure still returns (it sends the fallback), and saying so is the
   // point: it distinguishes a failed turn from a stalled invocation. The phase

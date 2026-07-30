@@ -374,6 +374,26 @@ describe("buildConversationMessages", () => {
     );
   });
 
+  it("opens with the compacted summary as a user message", () => {
+    const messages = buildConversationMessages(
+      [historyMessage("assistant", "reply after boundary", iso(2 * 60_000))],
+      "now",
+      NOW,
+      "UTC",
+      "earlier: they picked a flight",
+    );
+
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content:
+          "[summary of earlier conversation]\n\nearlier: they picked a flight",
+      },
+      { role: "assistant", content: "reply after boundary" },
+      { role: "user", content: "[2026-07-17 12:00] now" },
+    ]);
+  });
+
   it("coalesces consecutive assistant messages", () => {
     const messages = buildConversationMessages(
       [
