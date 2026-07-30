@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyContextBackstop,
   applyStalenessFilter,
   conversationHasWork,
   decodeContent,
@@ -134,25 +133,6 @@ const msg = (id: number, content: Message["content"], role: Role = "user"): Mess
   stopReason: null,
   responseId: null,
   createdAt: "2026-01-01T00:00:00.000Z",
-});
-
-describe("context backstop", () => {
-  it("keeps everything under the ceiling", () => {
-    const messages = [msg(1, "a"), msg(2, "b")];
-    expect(applyContextBackstop(messages, 100)).toBe(messages);
-  });
-
-  it("drops the oldest messages until the context fits", () => {
-    const messages = [msg(1, "aaaa"), msg(2, "bbbb"), msg(3, "cc")];
-    expect(
-      applyContextBackstop(messages, 8).map((m) => messageText(m.content)),
-    ).toEqual(["bbbb", "cc"]);
-  });
-
-  it("never drops the newest message, however large it is", () => {
-    const messages = [msg(1, "aaaa"), msg(2, "b".repeat(100))];
-    expect(applyContextBackstop(messages, 10).map((m) => m.id)).toEqual([2]);
-  });
 });
 
 describe("staleness filter", () => {

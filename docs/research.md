@@ -11,25 +11,25 @@ instead of spawning research.
 
 The research agent **gathers and reports**: it reads related topics for context,
 investigates with web search, and returns a compact sourced report as its final
-message. It has **no write tools** — the writer agent that runs after every turn
+message. It has **no write tools** — the learning agent that runs off the turn path
 persists the findings into topics. Authoring full topic bodies inside the
 research loop was the dominant cost (5-8k output tokens per write, minutes of
 wall clock), so removing the write tools is what makes research fast. Measured
 on the 2026-07-27 17:51:20Z production research turn, the no-write design ran the
 research loop in ~48s over 6 steps (largest single generation 1,115 tokens) and
-the whole turn (interface + research + writer) in ~88s for $0.217, against a
+the whole turn (interface + research, plus the per-turn writer that still ran then) in ~88s for $0.217, against a
 pre-fix baseline of ~10+ minutes and $3–4 for the one turn when research authored
 bodies in-loop (see `docs/plans/agent-latency-investigation.md` for the sourced
 per-call breakdown). The prompt asks for a compact report (roughly 2,500
 characters of prose, with an explicit exception that lets a sourced enumeration
-run longer rather than drop an item), and the writer transcript gives research
+run longer rather than drop an item), and the persisted tool result gives research
 results a generous 8,000-char ceiling (vs 1,500 chars for every other tool), so a
-normal sourced report and its per-claim `Source:` URLs reach the writer whole.
+normal sourced report and its per-claim `Source:` URLs reach learning whole.
 The ceiling was raised to fit the report, not the report shrunk to fit the
 ceiling. (The 8,000-char ceiling is code-verified in `interface.ts`; it has not
 yet been observed on a real turn, since the measured report above was only 1,115
 tokens.) When the interface passes an existing `topic`, the agent reads it for
-context; that topic is merged into the interface's `accessed` set so the writer
+context; that topic is merged into the interface's `accessed` set so learning
 knows it is relevant.
 
 ## Proactive triggering
@@ -51,11 +51,11 @@ tunable; err toward more triggering and tune down from logs.
   the agent reads it for context instead of starting cold.
 - **Output — a findings report.** The tool returns the agent's final sourced
   report (claims with inline `Source: <url>` first, a brief summary last) as the
-  tool result. Research writes nothing; the writer persists the findings after
+  tool result. Research writes nothing; learning persists the findings after
   the turn.
 - **Accessed.** Topics the research agent **reads** (via `get_topic`) are merged
-  into the interface agent's `accessed` set, so the writer still knows which
-  topics are relevant to the turn (see `docs/topics.md`).
+  into the interface agent's `accessed` set, which is what the turn's
+  `accessed_count` log line reports (see `docs/topics.md`).
 
 ## One runner, three agents
 
@@ -69,32 +69,32 @@ runAgent({ model, system, prompt, tools, maxSteps }) →
 `runAgent` also applies prompt caching: it sends `system` as a text block with a
 cache breakpoint and marks the last tool with another, and advances a sliding
 breakpoint over the growing message tail before every step, so even the
-prompt-only research and writer agents cache their message region within a run
+prompt-only research and learning agents cache their message region within a run
 (research previously had none). It returns token counts (`usage`, `stepUsages`).
 See [caching.md](./caching.md).
 
-The interface agent, the research agent, and the writer agent are the same
+The interface agent, the research agent, and the learning agent are the same
 runner with different system prompts and toolsets:
 
 - **Interface agent** (`agents/interface.ts`): tools are the topic tools +
-  `reply` + `research` + `read_page`. `read_page` is registered here too, so a
-  web address the user hands over is opened directly, with no research run. Its output is the `{ replies, accessed }` collected by
-  the tool closures; the runner's `text` and `finishReason` are used only to
-  decide the no-silence fallback (deliver prose the model forgot to `reply`, or
-  send a generic fallback when the loop hit the cap without a final answer).
+  `research` + `read_page` + Google + attachments. `read_page` is registered here
+  too, so a web address the user hands over is opened directly, with no research
+  run. There is no `reply` tool: the model's own text blocks are the messages,
+  delivered as it writes them. `finishReason` is used only to decide the
+  no-silence fallback.
 - **Research agent** (spawned by `tools/research.ts`): tools are the read-only
   topic tools (`list_topics`, `get_topic`) + `web_search` + `read_page` (no
-  `reply`, no `create_topic`/`update_topic`). `web_search` returns snippets;
+  no write tools at all). `web_search` returns snippets;
   `read_page` fetches the full cleaned content of a chosen result's URL on
   demand. It returns a compact sourced findings report as the `research` tool
   result; the tool merges the topics research read into the interface's
   `accessed` set.
-- **Writer agent** (`agents/writer.ts`): the topic tools only. See
-  `docs/topics.md`.
+- **Learning agent** (`agents/learner.ts`): the topic tools only, run off the
+  turn path in LearningDO. See `docs/topics.md`.
 
 The research agent gets its own model from the per-turn factory, tagged
 `agent: "research"` in `cf-aig-metadata` (alongside `user_id`), so the AI Gateway
-attributes its cost/tokens separately from the interface and writer agents while
+attributes its cost/tokens separately from the interface and learning agents while
 keeping per-user attribution. The research loop runs inline in
 the turn's DO alarm (no separate alarm). The interface agent uses the shared
 step cap `AGENT_MAX_STEPS = 200`; the research agent has its own generous bound

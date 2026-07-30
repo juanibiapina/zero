@@ -216,10 +216,9 @@ useful [[Topic Name]] links. End with a short summary of the work completed.
 
 ${TOPIC_VERSION_RULES}`;
 
-// The shared instruction body for whoever maintains the knowledge model. The
-// per-turn writer and the learning agent differ only in what they are given (one
-// turn's transcript versus every message since the last consolidation), so the
-// rules they follow are one text, not two that can drift apart.
+// How the knowledge model is maintained. Shared text, kept separate from the
+// framing above it because the learning agent is not the only reader of these
+// rules over time.
 const KNOWLEDGE_MAINTAINER_RULES = `Be proactive and generous in what you record. If something in the turn can be
 categorised, a topic very likely should exist for it. Durable subjects worth a
 topic include, and are not limited to:
@@ -287,18 +286,9 @@ Rules:
 
 ${TOPIC_VERSION_RULES}`;
 
-export const writerSystemPrompt = (): string =>
-  `You maintain the whole knowledge model: a set of topics, each a living
-document about one subject (a project, a person, an ongoing thread). You are
-given the transcript of the turn that just happened and the names of the topics
-the interface agent accessed this turn. Use list_topics to see everything that
-exists and get_topic to read a body before you change it.
-
-${KNOWLEDGE_MAINTAINER_RULES}`;
-
-// The learning agent: the same job as the writer, but over every message since
-// the last consolidation instead of one turn, and running outside the turn path
-// so it is never what a user is waiting on.
+// The learning agent: consolidates every message since the last consolidation,
+// across all of a user's conversations, outside the turn path so it is never
+// what a user is waiting on.
 export const learnerSystemPrompt = (): string =>
   `You maintain the whole knowledge model: a set of topics, each a living
 document about one subject (a project, a person, an ongoing thread). You are

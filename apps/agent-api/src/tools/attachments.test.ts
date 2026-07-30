@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAttachmentTool } from "./attachments";
 import { runAgent } from "../agents/run";
-import { renderTranscript } from "../agents/interface";
 import { capturingModel } from "../agents/mock-model";
 import type {
   AgentModelRequest,
@@ -134,10 +133,5 @@ describe("view_attachment", () => {
         source: { type: "base64", media_type: "image/png", data: PNG_B64 },
       },
     ]);
-
-    // The transcript redacts the payload the writer must never see.
-    const transcript = renderTranscript("show me att_1", result.messages);
-    expect(transcript).toContain("Tool result view_attachment: [image image/png]");
-    expect(transcript).not.toContain(PNG_B64);
   });
 });

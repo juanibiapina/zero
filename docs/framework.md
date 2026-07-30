@@ -128,7 +128,7 @@ runner: it drains every conversation that still owes work and runs the
 meta-agent turn inside the DO, where the topic tools hit local SQLite and
 replies go straight to Telegram via grammY. A self-rescheduling `setTimeout`
 drives the Telegram typing action across the interface phase and stops when the
-reply is sent, before the writer's consolidation runs; the alarm stays dedicated
+reply is sent; the alarm stays dedicated
 to turn scheduling.
 
 ### Three Durable Objects per user
@@ -149,7 +149,7 @@ neither can delay a reply. Both keep their decision logic in DO-free modules
 (`do/schedule.ts`, `do/learning-job.ts`) so it is unit-tested without a Durable
 Object, exactly like `do/alarm.ts`. `LearningDO`'s executor is not enabled yet
 (Phase 3): today it records and coalesces requests and logs `learn_skipped`,
-while the per-turn writer still consolidates topics.
+and advances one bounded slice of a job per alarm.
 
 LearningDO reaches the user's data through the **learning port**
 (`learning/types.ts`), because one Durable Object cannot read another's SQLite.

@@ -21,7 +21,7 @@ It mirrors the WebSearch seam:
 
 Tools are built by `buildGoogleTools({ google, timezone })`
 (`apps/agent-api/src/tools/google.ts`) and added to the interface agent's tool set
-alongside the topic, research, and set_timezone tools. The writer and research
+alongside the topic, research, and set_timezone tools. The learning and research
 agents do **not** get them.
 
 ## Token strategy

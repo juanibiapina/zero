@@ -5,18 +5,15 @@
 
 import { runInterfaceAgent, FALLBACK_MESSAGE } from "./interface";
 import { isRateLimitError, RATE_LIMIT_MESSAGE } from "./llm-error";
-import { runWriterAgent } from "./writer";
-import { usageLogFields } from "./run";
 import { log, logError, fmtErr } from "../log";
 import { isDurableObjectReset } from "../do/retry";
 import type { AgentLabel } from "./model";
 import type { AgentModel } from "./protocol";
 import {
-  applyContextBackstop,
   applyStalenessFilter,
   contentChars,
   conversationHasWork,
-  CONTEXT_BACKSTOP_MESSAGES,
+  CONTEXT_MESSAGE_PAGE,
   countTopicReads,
   LEARN_SIZE_THRESHOLD_TOKENS,
   estimateTokens,
@@ -28,10 +25,9 @@ import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { AttachmentStore } from "../attachments/types";
 
-// No fixed history window any more: the conversation is rendered as
-// `summary + messages after the compaction boundary`. The message ceiling below
-// is the backstop that keeps context bounded until size-triggered compaction is
-// activated (Phase 3.4), not a window.
+// No history window: the conversation is rendered as `summary + messages after
+// the compaction boundary`, and what bounds it is size-triggered compaction, not
+// a ceiling here.
 
 export interface TurnInput {
   store: Store;
@@ -60,8 +56,8 @@ export interface TurnInput {
   attachments?: AttachmentStore;
   chatId: number;
   topicId: number;
-  // Test override for the backstop message ceiling; production uses
-  // CONTEXT_BACKSTOP_MESSAGES.
+  // Test override for how many rows one context read pages in; production uses
+  // CONTEXT_MESSAGE_PAGE.
   historyLimit?: number;
   clerkUserId?: string;
   // The user's IANA timezone for the datetime anchor; undefined falls back to
@@ -89,7 +85,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   const { store, makeModel, send, search, fetcher, google, chatId, topicId } =
     input;
   const stopTyping = input.stopTyping ?? (() => {});
-  const limit = input.historyLimit ?? CONTEXT_BACKSTOP_MESSAGES;
+  const limit = input.historyLimit ?? CONTEXT_MESSAGE_PAGE;
 
   const conversationId = store.getOrCreateConversation(chatId, topicId);
   // Telegram messages wait in the durable queue until a turn takes them. One
@@ -101,7 +97,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   // after the boundary, capped by the backstop, with topic reads taken at an
   // older knowledge version replaced by a stub.
   const context = store.getConversationContext(conversationId, limit);
-  const all = applyContextBackstop(context.messages);
+  const all = context.messages;
   const tail = all[all.length - 1];
   // The protocol decides whether this conversation owes a response: a queued
   // message (already drained above), a user message or tool result at the tail,
@@ -170,7 +166,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   });
 
   try {
-    const { accessed, transcript } = await runInterfaceAgent({
+    await runInterfaceAgent({
       model: makeModel("interface"),
       researchModel: makeModel("research"),
       store,
@@ -214,36 +210,11 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       now: input.now,
     });
 
-    // The reply is out (the interface agent persists-then-sends before
-    // returning). Stop typing here, before the writer runs — the writer only
-    // consolidates topics internally and the user is no longer waiting.
+    // The reply is out and the turn is over. Consolidating what was learned is
+    // no longer part of a turn: it happens per idle period or per size threshold
+    // in LearningDO, off this path entirely, so nothing the user is waiting on
+    // sits behind it.
     stopTyping();
-
-    // Run the writer every turn, even when nothing was accessed: proactive
-    // topic creation must be possible on turns that introduce a brand-new
-    // subject. The prompt keeps trivial turns to a single no-tool step.
-    // Phase markers. Their value is in their ABSENCE: a DO alarm invocation is
-    // killed at a 900s wall-time ceiling with `outcome: exceededWallTime`,
-    // which is not an exception and which no catch here will ever see, so a
-    // stalled turn leaves no error behind — only a missing log. writer_started
-    // without writer_completed pins the stall inside the writer's tool loop;
-    // turn_completed without alarm_finished pins it in the drain loop. Observed
-    // 2026-07-29: five consecutive alarm invocations at ~900,000ms wall and
-    // ~50ms CPU (idle on an unsettled promise), each stranding the user's next
-    // message for a quarter of an hour. See docs/plans/writer-latency-investigation.md.
-    const writerStart = Date.now();
-    log("writer_started", { chat_id: chatId, topic_id: topicId });
-    const writerUsage = await runWriterAgent({
-      model: makeModel("writer"),
-      store,
-      accessed,
-      transcript,
-    });
-    log("writer_completed", {
-      accessed_count: accessed.length,
-      duration_ms: Date.now() - writerStart,
-      ...usageLogFields(writerUsage),
-    });
   } catch (err) {
     // A DO isolate reset (a new Worker version deployed mid-turn) is not an
     // agent failure: the platform's at-least-once alarm retry re-runs this turn

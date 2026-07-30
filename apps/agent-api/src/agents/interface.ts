@@ -1,7 +1,8 @@
-// Interface agent: stateless per turn. Runs the tool loop, sends each of the
-// model's text blocks to the user as it is produced, and reports which topics it
-// touched so the writer can consolidate them. The returned { replies, accessed }
-// is the test surface for the whole system.
+// Interface agent: stateless per turn. Runs the tool loop and sends each of the
+// model's text blocks to the user as it is produced. The returned
+// { replies, accessed } is the test surface for the whole system. Nothing
+// consolidates knowledge after it: the durable message log is what learning
+// reads, off the turn path.
 //
 // There is one delivery path: the assistant's text blocks are the messages. A
 // block is persisted before the Telegram fetch leaves (persist-before-send), so
@@ -121,85 +122,10 @@ export interface InterfaceAgentInput {
 
 export interface InterfaceAgentResult {
   replies: string[];
+  // Topics this turn read or wrote. Kept for the completion log; learning reads
+  // the durable message log itself rather than being handed a turn summary.
   accessed: string[];
-  // A readable serialization of the turn: the user message, each tool call and
-  // its (truncated) result, and assistant text. The writer consumes this so it
-  // sees what tools returned (calendar events, emails, research), not only the
-  // final replies, which are lossy.
-  transcript: string;
 }
-
-// Cap each serialized tool result so a large payload (a full calendar listing,
-// a long email body) cannot blow up the writer's input. Truncated results keep
-// enough to extract durable facts.
-const MAX_TOOL_RESULT_CHARS = 1500;
-
-// Research results get a much higher ceiling. Unlike calendar/email dumps, which
-// are context the writer samples from, a research report is the payload the
-// writer must persist verbatim with every Source: URL. Clipping it drops
-// enumerated items and their provenance before storage. The ceiling is generous
-// enough that a normal report is never touched but still bounds a pathological
-// runaway. See docs/plans/research-writer-handoff.md.
-const MAX_RESEARCH_RESULT_CHARS = 8000;
-
-const stringify = (value: unknown): string => {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
-
-const truncate = (text: string, max: number): string =>
-  text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
-
-// Render a tool result's content for the transcript. Image blocks are redacted
-// to a marker: their base64 payload is worth thousands of tokens and nothing to
-// the writer.
-const renderToolResult = (content: ToolResultBlock["content"]): string => {
-  if (typeof content === "string") return content;
-  return content
-    .map((block) =>
-      block.type === "text" ? block.text : `[image ${block.source.media_type}]`,
-    )
-    .join("\n");
-};
-
-// Serialize the run's generated messages into a compact transcript. Generic
-// over tools: any tool call and result is captured without per-tool code. Tool
-// results carry only the call id, so names are resolved from the tool_use
-// blocks seen earlier in the run.
-export const renderTranscript = (
-  userMessage: string,
-  messages: AgentMessage[],
-): string => {
-  const lines: string[] = [`User: ${userMessage}`];
-  const toolNames = new Map<string, string>();
-  for (const message of messages) {
-    const content = message.content;
-    if (typeof content === "string") {
-      if (content.trim()) lines.push(`Assistant: ${content}`);
-      continue;
-    }
-    for (const block of content) {
-      if (block.type === "text") {
-        if (block.text.trim()) lines.push(`Assistant: ${block.text}`);
-      } else if (block.type === "tool_use") {
-        toolNames.set(block.id, block.name);
-        lines.push(`Tool call ${block.name}: ${stringify(block.input)}`);
-      } else if (block.type === "tool_result") {
-        const name = toolNames.get(block.tool_use_id) ?? "unknown";
-        const max =
-          name === "research" ? MAX_RESEARCH_RESULT_CHARS : MAX_TOOL_RESULT_CHARS;
-        lines.push(
-          `Tool result ${name}: ${truncate(renderToolResult(block.content), max)}`,
-        );
-      }
-    }
-  }
-  return lines.join("\n\n");
-};
 
 // Absolute local timestamp (YYYY-MM-DD HH:MM) for a stored message, in the
 // user's timezone. Prefixed onto each user message so the model can place it in
@@ -462,7 +388,7 @@ export const runInterfaceAgent = async (
   await deliverUnclaimed(input.trailing ?? []);
 
   let injectedFollowups = 0;
-  const { finishReason, steps, messages, usage, stepUsages } = await runAgent({
+  const { finishReason, steps, usage, stepUsages } = await runAgent({
     model: input.model,
     system: interfaceSystemPrompt(pinned),
     messages: convo,
@@ -485,8 +411,6 @@ export const runInterfaceAgent = async (
       return rows.map((row) => renderRow(row, timezone));
     },
   });
-
-  const transcript = renderTranscript(input.userMessage, messages);
 
   log("interface_completed", {
     steps,
@@ -531,7 +455,7 @@ export const runInterfaceAgent = async (
     );
   }
 
-  return { replies, accessed: [...accessed], transcript };
+  return { replies, accessed: [...accessed] };
 };
 
 export type { TopicStore };

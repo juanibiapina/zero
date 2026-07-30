@@ -30,10 +30,10 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 2.4 size trigger | done | `feat(agent): ask for learning when a conversation's context grows too large` |
 | 3.1 learning port on UserDO | done | `feat(agent): give learning a versioned port into the user's data` |
 | 3.2-3.3 learner slices, checkpoints, compaction | done | `feat(agent): run learning as checkpointed slices in its own durable object` |
-| Phase 3.4 | not started | — |
+| 3.4 activation: writer deleted | done | `feat(agent): move consolidation off the turn path` |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
-(598 tests). The branch is pushed to `origin` but not merged; a branch push only
+(581 tests; the count fell when the writer's suite was deleted). The branch is pushed to `origin` but not merged; a branch push only
 uploads a Worker version, so nothing is deployed, so none of the Phase 0 log lines have produced
 production data yet; the acceptance criteria that read them are still open.
 
@@ -185,13 +185,30 @@ production data yet; the acceptance criteria that read them are still open.
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 598 passing
+pnpm --filter @zero/agent-api run test    # 581 passing
 ```
 
-Next action is **Phase 3.4**, the activation commit: delete the per-turn writer
-call and the `writer.ts` module with its `renderTranscript` handoff and
-truncation constants, and remove the Phase 1.2 context backstop now that size
-compaction is live. Everything else in the plan is shipped apart from 0.5b.
+**Every phase of this plan is implemented apart from 0.5b**, which is gated on a
+production sample (todo #17). Nothing is deployed: the branch is unmerged, and a
+branch push only uploads a Worker version.
+
+What is left is verification, not construction:
+
+1. Merge and deploy, then read the log lines the acceptance criteria name. They
+   have no production data yet: `topic_list_rendered.chars`,
+   `topic_reads_per_turn`, `turn_messages_sent`, `topic_reads_avoided` vs
+   `stale_stubs`, `followups_injected`, `conversation_size`,
+   `chain_crossed_turn`, `turn_queue_delay_ms` (**not implemented — see below**),
+   `schedule_fired` / `schedule_finished`, `learn_started` /
+   `learn_slice_completed` / `learn_completed`, `compaction_completed`.
+2. `turn_queue_delay_ms` (enqueue -> `turn_started`) is the one named log line
+   that was never added, and the plan calls it the most valuable one. Add it.
+3. `LEARN_SIZE_THRESHOLD_TOKENS` (45,000) is a starting point, not a
+   measurement. Move it using real `context_rendered.total_tokens` and
+   `compaction_completed` pairs.
+4. Watch the first real learning jobs: `learn_slice_completed` should show most
+   jobs finishing in one slice, and `learn_completed` should always follow
+   `learn_started` (its absence is the stall signal).
 
 Note before Phase 2: Phase 1's acceptance criteria are log-based and nothing is
 deployed yet. `topic_reads_avoided`, `stale_stubs`, `followups_injected`,
@@ -907,7 +924,7 @@ folding them back.
 Both new alarm handlers need start and completion markers. The markers added on
 2026-07-29 live in `runAlarmTurns` and cover neither class.
 
-## Phase 3 — Durable learning (3.1-3.3 done)
+## Phase 3 — Durable learning (DONE)
 
 **3.1 DONE.** Migration `0028` adds `learning_jobs`; the Store gained
 `beginLearningJob` (frozen high-water mark, stable on re-attach),
@@ -964,7 +981,16 @@ conversation up to a frozen boundary. A clean idempotent completion stamps the
 covered messages. Topic writes have already advanced `knowledgeVersion`;
 completion does not invalidate reads again.
 
-**3.4** Replace the per-turn writer directly in one activation commit: enable
+**3.4 DONE.** `agents/writer.ts` (+ its tests), `renderTranscript`,
+`MAX_TOOL_RESULT_CHARS`, `MAX_RESEARCH_RESULT_CHARS`, `InterfaceAgentResult.transcript`,
+`writerSystemPrompt` and the `writer` gateway label are deleted; the turn ends
+when delivery and `turn_completed` finish. The Phase 1.2 backstop is gone:
+`applyContextBackstop` and `CONTEXT_BACKSTOP_CHARS` were removed and
+`CONTEXT_BACKSTOP_MESSAGES` became `CONTEXT_MESSAGE_PAGE` (500), a query bound
+rather than a ceiling — what bounds context now is size-triggered compaction.
+`accessed` survives only as the `accessed_count` log field. The original text:
+
+Replace the per-turn writer directly in one activation commit: enable
 ScheduleDO's idle/size dispatch to `LearningDO.request`, remove the writer call,
 delete the old writer module and its `renderTranscript` handoff/truncation
 constants, and remove the Phase 1.2 context backstop now that size compaction is
