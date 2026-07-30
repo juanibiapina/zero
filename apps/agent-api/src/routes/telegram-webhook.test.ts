@@ -75,11 +75,11 @@ describe("extractAttachment", () => {
     expect(extractAttachment({})).toBeNull();
   });
 
-  it("picks the largest photo (last in array) with synthesized name", () => {
+  it("picks the last photo candidate, with a synthesized name", () => {
     const result = extractAttachment({
       photo: [
-        { file_id: "small", file_unique_id: "u1" },
-        { file_id: "large", file_unique_id: "u2" },
+        { file_id: "small", file_unique_id: "u1", width: 320, height: 240 },
+        { file_id: "large", file_unique_id: "u2", width: 1280, height: 960 },
       ],
     });
     expect(result).toEqual({
@@ -94,7 +94,7 @@ describe("extractAttachment", () => {
   it("prefers photo over a back-compat double-set field", () => {
     // live_photo also sets photo; photo must win.
     const result = extractAttachment({
-      photo: [{ file_id: "p", file_unique_id: "up" }],
+      photo: [{ file_id: "p", file_unique_id: "up", width: 90, height: 60 }],
       document: { file_id: "d", file_unique_id: "ud" },
     });
     expect(result?.file_id).toBe("p");
@@ -206,7 +206,9 @@ describe("processTelegramMessage", () => {
   };
 
   const photoMsg = (caption?: string) => ({
-    photo: [{ file_id: "large", file_unique_id: "u2" }],
+    photo: [
+      { file_id: "large", file_unique_id: "u2", width: 1280, height: 960 },
+    ],
     ...(caption ? { caption } : {}),
   });
 

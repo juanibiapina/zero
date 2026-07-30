@@ -53,10 +53,24 @@ export const resolveContext = (
   return null;
 };
 
+// Telegram's PhotoSize. The Bot API guarantees `Message.photo` is an array of
+// the available sizes, each with width and height and an optional file size. It
+// does NOT document the array's order or promise fixed dimensions, so both are
+// measured rather than assumed (see the telegram_photo_variants log below).
+// https://core.telegram.org/bots/api#photosize
 interface PhotoSize {
   file_id: string;
   file_unique_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
 }
+// The two fields every downloadable Telegram file carries.
+interface FileRef {
+  file_id: string;
+  file_unique_id: string;
+}
+
 interface GenericFile {
   file_id: string;
   file_unique_id: string;
@@ -71,9 +85,9 @@ export interface AttachmentMessage {
   video?: GenericFile;
   audio?: GenericFile;
   voice?: GenericFile;
-  video_note?: PhotoSize;
+  video_note?: FileRef;
   document?: GenericFile;
-  sticker?: PhotoSize;
+  sticker?: FileRef;
 }
 
 export interface AttachmentMeta {
@@ -145,6 +159,17 @@ const deriveName = (f: GenericFile, prefix: string, defaultMime: string): string
 // more specific field first.
 export const extractAttachment = (msg: AttachmentMessage): AttachmentMeta | null => {
   if (msg.photo && msg.photo.length > 0) {
+    // Selection is unchanged (the last candidate) while the shape of real
+    // payloads is being sampled. The log carries only dimensions and sizes,
+    // never file ids, and records which candidate the current rule picked, so
+    // a cost-based rule can be derived from production data instead of folklore.
+    log("telegram_photo_variants", {
+      candidate_count: msg.photo.length,
+      widths: msg.photo.map((p) => p.width),
+      heights: msg.photo.map((p) => p.height),
+      file_sizes: msg.photo.map((p) => p.file_size ?? null),
+      selected_index: msg.photo.length - 1,
+    });
     const largest = msg.photo[msg.photo.length - 1];
     return {
       file_id: largest.file_id,
