@@ -7,7 +7,7 @@
 // hour behind them. Deadlines therefore live in their own DO, whose alarm can
 // stall without ever delaying a reply.
 
-import { log } from "../log";
+import { fmtErr, log, logError } from "../log";
 
 // What a deadline is for. `idle` and `size` both mean "learn"; the other two are
 // the existing UserDO jobs whose timers move here.
@@ -116,6 +116,48 @@ export const touchConversation = async (
     conversationId,
     dueAt: now + IDLE_LEARN_MS,
   });
+
+// The bit of ScheduleDO the turn path talks to. Narrow on purpose: a caller
+// should not be able to reach anything else on the schedule.
+export interface ScheduleTarget {
+  touch(clerkUserId: string, conversationId: string): Promise<void>;
+  requestLearn(
+    clerkUserId: string,
+    reason: "idle" | "size",
+    conversationId?: string,
+  ): Promise<void>;
+}
+
+// Push a conversation's idle deadline out, best-effort. A schedule that is
+// unreachable must never reject the enqueue: losing the user's message to
+// protect a learning timer would be the wrong trade, and the next message
+// touches it again.
+export const touchScheduleSafely = async (
+  schedule: ScheduleTarget,
+  clerkUserId: string,
+  conversationId: string,
+): Promise<void> => {
+  try {
+    await schedule.touch(clerkUserId, conversationId);
+  } catch (err) {
+    logError("schedule_touch_failed", { error: fmtErr(err) });
+  }
+};
+
+// Ask for learning now, best-effort, for the same reason: a turn that has
+// already answered the user must not fail because a timer could not be set.
+export const requestLearnSafely = async (
+  schedule: ScheduleTarget,
+  clerkUserId: string,
+  reason: "idle" | "size",
+  conversationId?: string,
+): Promise<void> => {
+  try {
+    await schedule.requestLearn(clerkUserId, reason, conversationId);
+  } catch (err) {
+    logError("schedule_request_failed", { reason, error: fmtErr(err) });
+  }
+};
 
 // Log lines. `schedule_finished` matters by its absence: an alarm invocation
 // killed at the 900s wall-time ceiling throws nothing, so a missing completion

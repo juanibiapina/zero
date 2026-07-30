@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { afterEach, vi } from "vitest";
 import {
   DEADLINES_KEY,
   IDLE_LEARN_MS,
@@ -7,7 +8,9 @@ import {
   scheduleDeadline,
   setDeadline,
   takeDueDeadlines,
+  requestLearnSafely,
   touchConversation,
+  touchScheduleSafely,
   type Deadlines,
   type ScheduleStorage,
 } from "./schedule";
@@ -135,5 +138,48 @@ describe("takeDueDeadlines", () => {
     });
     await takeDueDeadlines(s.storage, 100);
     expect(await takeDueDeadlines(s.storage, 100)).toEqual([]);
+  });
+});
+
+// The turn path must never fail because a timer could not be set.
+describe("best-effort scheduling from the turn path", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("swallows a schedule that cannot be reached on touch", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const schedule = {
+      touch: async () => {
+        throw new Error("do unreachable");
+      },
+      requestLearn: async () => {},
+    };
+    await expect(
+      touchScheduleSafely(schedule, "user_1", "c1"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("swallows a failed learn request and passes the reason through otherwise", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const calls: Array<[string, string, string | undefined]> = [];
+    const schedule = {
+      touch: async () => {},
+      requestLearn: async (user: string, reason: "idle" | "size", conversationId?: string) => {
+        calls.push([user, reason, conversationId]);
+      },
+    };
+    await requestLearnSafely(schedule, "user_1", "size", "c1");
+    expect(calls).toEqual([["user_1", "size", "c1"]]);
+
+    const broken = {
+      touch: async () => {},
+      requestLearn: async () => {
+        throw new Error("do unreachable");
+      },
+    };
+    await expect(
+      requestLearnSafely(broken, "user_1", "size", "c1"),
+    ).resolves.toBeUndefined();
   });
 });

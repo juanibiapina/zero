@@ -26,7 +26,8 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 1.4 cross-turn cache diagnostic chain | done | `feat(agent): chain cache diagnostics across turns of a conversation` |
 | 2.1 ScheduleDO + LearningDO shells | done | `feat(agent): add per-user schedule and learning durable objects` |
 | 2.2 UserDO alarm drains turns only | done | `feat(agent): keep UserDO's alarm for turns and move other deadlines to the schedule` |
-| Phase 2.3-2.4, 3 | not started | — |
+| 2.3 touch the idle deadline per message | done | `feat(agent): push a conversation's idle learning deadline on every message` |
+| Phase 2.4, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
 (569 tests). The branch is pushed to `origin` but not merged; a branch push only
@@ -869,7 +870,12 @@ sharing it with turn draining eventually delays a reply. Today `alarm()` runs an
 admin task, then turns, then onboarding (`src/UserDO/index.ts:129-155`) — that is
 the shape being dismantled.
 
-**2.3** Each accepted user message calls
+**2.3 DONE.** `UserDO.enqueueTurn` calls `touchScheduleSafely` after the durable
+enqueue and after arming the turn alarm. Both directions of "best-effort" are
+in `do/schedule.ts` (`touchScheduleSafely`, `requestLearnSafely`) and unit-tested,
+so a schedule that throws never rejects a user's message. The original text:
+
+Each accepted user message calls
 `ScheduleDO.touch(conversationId)` to push that conversation's idle deadline to
 now+1h. Do this after durable enqueue, not after the model turn, so an LLM failure
 does not make an active conversation look idle. ScheduleDO stores all

@@ -32,6 +32,7 @@ import {
 import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
 import { getScheduleDO } from "../ScheduleDO/stub";
+import { touchScheduleSafely } from "../do/schedule";
 import type { Env } from "../types";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
@@ -121,6 +122,15 @@ export class UserDO extends DurableObject<Env> {
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(Date.now());
     }
+    // The conversation is active again: push its idle-learning deadline out to
+    // now + 1h. After the durable enqueue, never after the turn — an LLM failure
+    // must not make an active conversation look idle. Best-effort: a schedule
+    // problem must not reject the user's message.
+    await touchScheduleSafely(
+      getScheduleDO(this.env, input.clerkUserId),
+      input.clerkUserId,
+      conversationId,
+    );
   }
 
   // Queue one admin-authored task. A queued task is a conflict; a terminal
