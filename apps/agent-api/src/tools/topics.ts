@@ -35,10 +35,12 @@
 import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
-import { KnowledgeConflictError, type TopicStore } from "../store/types";
+import { KnowledgeConflictError, type TopicToolStore } from "../store/types";
 
 export interface TopicToolDeps {
-  store: TopicStore;
+  // Sync in a turn (the DO's own SQLite), async when learning reaches another
+  // Durable Object over RPC. One tool module, two transports.
+  store: TopicToolStore;
   // Optional: the interface agent passes a set to record which topics it read or
   // wrote. The writer omits it — it has no downstream consumer of `accessed`.
   accessed?: Set<string>;
@@ -53,12 +55,12 @@ export interface TopicToolDeps {
 // tool error the model can act on. A conflict is logged so the cost of the
 // single global counter is measurable in production; the topic name and any
 // content stay out of the log.
-const write = <T>(
+const write = async <T>(
   tool: string,
-  apply: () => T,
-): T | { error: string } => {
+  apply: () => Promise<T>,
+): Promise<T | { error: string }> => {
   try {
-    return apply();
+    return await apply();
   } catch (err) {
     if (err instanceof KnowledgeConflictError) {
       log("topic_write_conflict", {
@@ -82,14 +84,15 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
         "not included; read one with get_topic.",
       inputSchema: z.object({}),
       execute: async () => {
-        const listed = store
-          .listTopics()
-          .map((t) => ({ name: t.name, description: t.description }));
+        const listed = (await store.listTopics()).map((t) => ({
+          name: t.name,
+          description: t.description,
+        }));
         log("topic_list_rendered", {
           topic_count: listed.length,
           chars: JSON.stringify(listed).length,
         });
-        return { version: store.getKnowledgeVersion(), topics: listed };
+        return { version: await store.getKnowledgeVersion(), topics: listed };
       },
     }),
 
@@ -100,16 +103,16 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
         "(topics that link to it). Read it before revising it.",
       inputSchema: z.object({ name: z.string() }),
       execute: async ({ name }) => {
-        const topic = store.getTopic(name);
+        const topic = await store.getTopic(name);
         if (!topic) return { error: `topic not found: ${name}` };
         accessed?.add(name);
         if (reads) reads.count += 1;
         return {
-          version: store.getKnowledgeVersion(),
+          version: await store.getKnowledgeVersion(),
           topic: {
             ...topic,
-            outboundLinks: store.getOutboundLinks(name),
-            backlinks: store.getBacklinks(name).map((t) => t.name),
+            outboundLinks: await store.getOutboundLinks(name),
+            backlinks: (await store.getBacklinks(name)).map((t) => t.name),
           },
         };
       },
@@ -124,8 +127,8 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
       execute: async ({ name }) => {
         accessed?.add(name);
         return {
-          version: store.getKnowledgeVersion(),
-          topics: store.getBacklinks(name),
+          version: await store.getKnowledgeVersion(),
+          topics: await store.getBacklinks(name),
         };
       },
     }),
@@ -147,9 +150,9 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
             error:
               "body must not be empty: create a topic with its content, not as an empty shell",
           };
-        if (store.getTopic(name)) return { error: `topic exists: ${name}` };
-        return write("create_topic", () => {
-          const version = store.createTopic({
+        if (await store.getTopic(name)) return { error: `topic exists: ${name}` };
+        return write("create_topic", async () => {
+          const version = await store.createTopic({
             expectedVersion,
             name,
             description,
@@ -176,7 +179,7 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
         newText: z.string(),
       }),
       execute: async ({ expectedVersion, name, oldText, newText }) => {
-        const current = store.getTopic(name);
+        const current = await store.getTopic(name);
         if (!current) return { error: `topic not found: ${name}` };
         if (oldText === "")
           return {
@@ -192,8 +195,8 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
           return {
             error: `oldText appears more than once in ${name}: extend it with surrounding lines until it is unique.`,
           };
-        return write("edit_topic", () => {
-          const version = store.updateTopicBody({
+        return write("edit_topic", async () => {
+          const version = await store.updateTopicBody({
             expectedVersion,
             name,
             body:
@@ -219,13 +222,13 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
         text: z.string(),
       }),
       execute: async ({ expectedVersion, name, text }) => {
-        const current = store.getTopic(name);
+        const current = await store.getTopic(name);
         if (!current) return { error: `topic not found: ${name}` };
         const addition = text.replace(/^\s+|\s+$/g, "");
         if (addition === "") return { error: "text must not be empty" };
         const existing = current.body.replace(/\s+$/, "");
-        return write("append_topic", () => {
-          const version = store.updateTopicBody({
+        return write("append_topic", async () => {
+          const version = await store.updateTopicBody({
             expectedVersion,
             name,
             body: existing === "" ? addition : `${existing}\n\n${addition}`,
@@ -248,7 +251,7 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
         newName: z.string().optional(),
       }),
       execute: async ({ expectedVersion, name, description, newName }) => {
-        const current = store.getTopic(name);
+        const current = await store.getTopic(name);
         if (!current) return { error: `topic not found: ${name}` };
         const renaming = newName !== undefined && newName !== name;
         const redescribing =
@@ -258,8 +261,8 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
             error:
               "nothing to change: provide a new description or a different newName",
           };
-        return write("update_topic_metadata", () => {
-          const version = store.updateTopicMetadata({
+        return write("update_topic_metadata", async () => {
+          const version = await store.updateTopicMetadata({
             expectedVersion,
             name,
             ...(redescribing ? { description } : {}),
@@ -275,7 +278,7 @@ export const buildTopicTools = (deps: TopicToolDeps): AgentToolSet => {
 };
 
 export interface InterfaceToolDeps {
-  store: TopicStore;
+  store: TopicToolStore;
   accessed: Set<string>;
   reads?: { count: number };
 }
@@ -300,11 +303,12 @@ export const buildInterfaceTools = (deps: InterfaceToolDeps): AgentToolSet => {
         name: z.string(),
       }),
       execute: async ({ expectedVersion, name }) => {
-        if (!store.getTopic(name)) return { error: `topic not found: ${name}` };
+        if (!(await store.getTopic(name)))
+          return { error: `topic not found: ${name}` };
         // Rejected system-topic deletes surface as a tool error, not a throw.
-        return write("delete_topic", () => ({
+        return write("delete_topic", async () => ({
           deleted: name,
-          version: store.deleteTopic({ expectedVersion, name }),
+          version: await store.deleteTopic({ expectedVersion, name }),
         }));
       },
     }),

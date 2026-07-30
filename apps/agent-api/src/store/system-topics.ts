@@ -15,6 +15,7 @@ import type {
   ConversationContext,
   ConversationStore,
   ExternalCallClaim,
+  LearningMessage,
   Message,
   MessageContent,
   MessageKind,
@@ -265,6 +266,22 @@ export class SystemTopicStore implements Store {
 
   findConversationsWithWork(): Thread[] {
     return this.inner.findConversationsWithWork();
+  }
+
+  beginLearningJob(jobId: string): number {
+    return this.inner.beginLearningJob(jobId);
+  }
+
+  listUnconsolidatedMessages(input: {
+    throughMessageId: number;
+    afterId?: number;
+    limit: number;
+  }): LearningMessage[] {
+    return this.inner.listUnconsolidatedMessages(input);
+  }
+
+  completeLearningJob(jobId: string): void {
+    this.inner.completeLearningJob(jobId);
   }
 
   beginExternalCall(toolUseId: string, tool: string): ExternalCallClaim {

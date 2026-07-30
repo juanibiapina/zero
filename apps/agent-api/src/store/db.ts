@@ -2,13 +2,14 @@
 // turn orchestrator address it through the Store interface. Column names match
 // the do-orm schema keys (camelCase).
 
-import { and, asc, desc, eq, gt, type Database } from "do-orm";
+import { and, asc, desc, eq, gt, lte, type Database } from "do-orm";
 import {
   attachments,
   conversations,
   deliveries,
   externalCalls,
   knowledge,
+  learningJobs,
   messages,
   pendingMessages,
   processedUpdates,
@@ -29,6 +30,7 @@ import type {
   Attachment,
   ConversationContext,
   ExternalCallClaim,
+  LearningMessage,
   Message,
   MessageContent,
   MessageKind,
@@ -491,6 +493,73 @@ export class DbStore implements Store {
         claimedAt: this.nowIso(),
       });
       return true;
+    });
+  }
+
+  // --- learning jobs ---
+
+  beginLearningJob(jobId: string): number {
+    return this.db.transaction(() => {
+      const existing = this.db.get(learningJobs, { where: eq("jobId", jobId) });
+      // Re-attaching to a job must not widen its range: a restarted job keeps
+      // the high-water mark its prompt was built from.
+      if (existing) return existing.highWaterMessageId;
+      const newest = this.db.get(messages, { orderBy: desc("id") });
+      const highWaterMessageId = newest?.id ?? 0;
+      this.db.insert(learningJobs, {
+        jobId,
+        highWaterMessageId,
+        startedAt: this.nowIso(),
+      });
+      return highWaterMessageId;
+    });
+  }
+
+  listUnconsolidatedMessages(input: {
+    throughMessageId: number;
+    afterId?: number;
+    limit: number;
+  }): LearningMessage[] {
+    const out: LearningMessage[] = [];
+    let cursor = input.afterId ?? 0;
+    // `consolidatedAt IS NULL` cannot be expressed by do-orm's `eq` (it renders
+    // `= ?`, which never matches NULL), so scan in batches and filter here,
+    // paging until the page is full or the range is exhausted.
+    const batch = Math.max(input.limit, 1) * 2;
+    while (out.length < input.limit) {
+      const rows = this.db.all(messages, {
+        where: and(gt("id", cursor), lte("id", input.throughMessageId)),
+        orderBy: asc("id"),
+        limit: batch,
+      });
+      if (rows.length === 0) break;
+      cursor = rows[rows.length - 1].id;
+      for (const row of rows) {
+        if (row.consolidatedAt === null)
+          out.push({ ...toMessage(row), conversationId: row.conversationId });
+      }
+      if (rows.length < batch) break;
+    }
+    return out.slice(0, input.limit);
+  }
+
+  completeLearningJob(jobId: string): void {
+    this.db.transaction(() => {
+      const job = this.db.get(learningJobs, { where: eq("jobId", jobId) });
+      // Idempotent by job id: a repeated completion after a lost acknowledgement
+      // must not stamp a wider range or run twice.
+      if (!job || job.completedAt !== null) return;
+      const at = this.nowIso();
+      this.db.update(
+        messages,
+        { consolidatedAt: at },
+        { where: lte("id", job.highWaterMessageId) },
+      );
+      this.db.update(
+        learningJobs,
+        { completedAt: at },
+        { where: eq("jobId", jobId) },
+      );
     });
   }
 

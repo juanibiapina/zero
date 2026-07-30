@@ -159,6 +159,7 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `messages`          | `id`, `conversationId`, `role`, `kind`, `content`, `stopReason`, `responseId`, `consolidatedAt`, `createdAt` | The conversation's protocol log: `content` is a JSON array of wire-format content blocks; `responseId` is the model's own id, chained into the next turn's cache diagnostics |
 | `pending_messages`  | `id`, `conversationId`, `content`, `createdAt`, `injectedAt` | Telegram messages queued until a turn injects them |
 | `deliveries`        | `messageId`, `blockIndex`, `claimedAt`                       | Assistant text blocks already handed to Telegram |
+| `learning_jobs`     | `jobId`, `highWaterMessageId`, `startedAt`, `completedAt` | One consolidation run's frozen input range; completion is idempotent by job id |
 | `external_calls`    | `toolUseId`, `tool`, `status`, `result`, `startedAt`, `completedAt` | Irreversible outbound calls (send mail, create event), claimed before the request leaves |
 | `attachments`       | `id`, `conversationId`, `r2Key`, `filename`, `mimeType`, `createdAt` | Image lookup-by-id (bytes live in R2)  |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |

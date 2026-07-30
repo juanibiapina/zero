@@ -28,10 +28,11 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 2.2 UserDO alarm drains turns only | done | `feat(agent): keep UserDO's alarm for turns and move other deadlines to the schedule` |
 | 2.3 touch the idle deadline per message | done | `feat(agent): push a conversation's idle learning deadline on every message` |
 | 2.4 size trigger | done | `feat(agent): ask for learning when a conversation's context grows too large` |
-| Phase 3 | not started | — |
+| 3.1 learning port on UserDO | done | `feat(agent): give learning a versioned port into the user's data` |
+| Phase 3.2-3.4 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
-(573 tests). The branch is pushed to `origin` but not merged; a branch push only
+(587 tests). The branch is pushed to `origin` but not merged; a branch push only
 uploads a Worker version, so nothing is deployed, so none of the Phase 0 log lines have produced
 production data yet; the acceptance criteria that read them are still open.
 
@@ -183,18 +184,15 @@ production data yet; the acceptance criteria that read them are still open.
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 573 passing
+pnpm --filter @zero/agent-api run test    # 587 passing
 ```
 
-Next action is **Phase 3.1**: the remote learning port on UserDO (begin a job at
-a frozen high-water message id, page raw unconsolidated messages, versioned topic
-reads/writes, complete a job, compact one conversation). Phases 0-2 are shipped
-apart from 0.5b; do not rebuild the loop hooks, the resume path, the delivery
-claims, the external-call guard, the diagnostic chain, the DO classes or the
-triggers. The remaining piece before the learner can run is that port plus
-LearningDO's checkpoint machine (3.2); the trigger path already reaches
-`LearningDO.request`, which today logs `learn_skipped` with
-`executor_not_enabled`.
+Next action is **Phase 3.2**: LearningDO's checkpoint machine — job state and
+the learner's wire log in LearningDO SQLite, a bounded number of model steps per
+alarm slice, persist before every external mutation, re-arm while unfinished, no
+`ctx.waitUntil`. Phases 0-2 and 3.1 are shipped apart from 0.5b; do not rebuild
+the loop hooks, the resume path, the delivery claims, the external-call guard,
+the diagnostic chain, the DO classes, the triggers or the learning port.
 
 Note before Phase 2: Phase 1's acceptance criteria are log-based and nothing is
 deployed yet. `topic_reads_avoided`, `stale_stubs`, `followups_injected`,
@@ -910,9 +908,20 @@ folding them back.
 Both new alarm handlers need start and completion markers. The markers added on
 2026-07-29 live in `runAlarmTurns` and cover neither class.
 
-## Phase 3 — Durable learning (not started)
+## Phase 3 — Durable learning (3.1 done)
 
-**3.1** Implement the remote learning port on UserDO: begin a job at a frozen
+**3.1 DONE.** Migration `0028` adds `learning_jobs`; the Store gained
+`beginLearningJob` (frozen high-water mark, stable on re-attach),
+`listUnconsolidatedMessages` (paged, id order) and `completeLearningJob`
+(idempotent by job id, never above the mark). `learning/types.ts` is the port,
+with adapters `store-port.ts` (local Store) and `remote-port.ts` (UserDO RPC),
+both run against one shared suite. `tools/topics.ts` now takes a `TopicToolStore`
+whose methods may be sync or async, so the learner uses the same versioned tools
+as a turn. UserDO exposes the flat `learn*` RPC surface, with topic writes
+returning `TopicWriteResult` data that the remote adapter turns back into a
+`KnowledgeConflictError`. The original text:
+
+Implement the remote learning port on UserDO: begin a job at a frozen
 high-water message ID, page raw unconsolidated messages, perform versioned topic
 reads and writes, complete a job, and compact one conversation. The interface
 contains data and invariants, not do-orm types. It uses the same

@@ -14,6 +14,7 @@ import type {
   ConversationContext,
   ConversationStore,
   ExternalCallClaim,
+  LearningMessage,
   Message,
   MessageContent,
   MessageKind,
@@ -51,6 +52,7 @@ interface MsgRow {
   content: string;
   stopReason: string | null;
   responseId: string | null;
+  consolidatedAt: string | null;
   createdAt: string;
 }
 
@@ -82,6 +84,11 @@ export class MemoryStore implements Store {
   private pending: PendingRow[] = [];
   // Claimed delivery keys, `${messageId}:${blockIndex}`.
   private claimed = new Set<string>();
+  // Learning jobs by id, mirroring the learning_jobs table.
+  private jobs = new Map<
+    string,
+    { highWaterMessageId: number; completed: boolean }
+  >();
   // External-call claims by tool_use id, mirroring the external_calls table.
   private external = new Map<
     string,
@@ -330,6 +337,7 @@ export class MemoryStore implements Store {
             ? "end_turn"
             : null,
       responseId: options?.responseId ?? null,
+      consolidatedAt: null,
       createdAt: this.now(),
     });
     return id;
@@ -429,6 +437,43 @@ export class MemoryStore implements Store {
     if (this.claimed.has(key)) return false;
     this.claimed.add(key);
     return true;
+  }
+
+  // --- learning jobs ---
+
+  beginLearningJob(jobId: string): number {
+    const existing = this.jobs.get(jobId);
+    if (existing) return existing.highWaterMessageId;
+    const highWaterMessageId = this.msgs[this.msgs.length - 1]?.id ?? 0;
+    this.jobs.set(jobId, { highWaterMessageId, completed: false });
+    return highWaterMessageId;
+  }
+
+  listUnconsolidatedMessages(input: {
+    throughMessageId: number;
+    afterId?: number;
+    limit: number;
+  }): LearningMessage[] {
+    const after = input.afterId ?? 0;
+    return this.msgs
+      .filter(
+        (m) =>
+          m.id > after &&
+          m.id <= input.throughMessageId &&
+          m.consolidatedAt === null,
+      )
+      .slice(0, input.limit)
+      .map((m) => ({ ...toMessage(m), conversationId: m.conversationId }));
+  }
+
+  completeLearningJob(jobId: string): void {
+    const job = this.jobs.get(jobId);
+    if (!job || job.completed) return;
+    const at = this.now();
+    for (const m of this.msgs) {
+      if (m.id <= job.highWaterMessageId) m.consolidatedAt = at;
+    }
+    this.jobs.set(jobId, { ...job, completed: true });
   }
 
   // --- external calls ---

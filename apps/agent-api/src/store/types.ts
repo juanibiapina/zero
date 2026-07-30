@@ -152,6 +152,39 @@ export interface TopicStore {
   getBacklinks(name: string): TopicMeta[];
 }
 
+// A value that may arrive later. The topic tools are written against this so
+// one tool module serves both transports: a local `TopicStore` inside a turn,
+// and a remote learning port that reaches another Durable Object.
+export type Awaitable<T> = T | Promise<T>;
+
+// Exactly the topic surface the tools use, sync or async. `TopicStore`
+// satisfies it structurally, so nothing at the turn path changes.
+export interface TopicToolStore {
+  getKnowledgeVersion(): Awaitable<number>;
+  listTopics(): Awaitable<TopicMeta[]>;
+  getTopic(name: string): Awaitable<Topic | null>;
+  getOutboundLinks(name: string): Awaitable<string[]>;
+  getBacklinks(name: string): Awaitable<TopicMeta[]>;
+  createTopic(input: {
+    expectedVersion: number;
+    name: string;
+    description: string;
+    body: string;
+  }): Awaitable<number>;
+  updateTopicBody(input: {
+    expectedVersion: number;
+    name: string;
+    body: string;
+  }): Awaitable<number>;
+  updateTopicMetadata(input: {
+    expectedVersion: number;
+    name: string;
+    description?: string;
+    newName?: string;
+  }): Awaitable<number>;
+  deleteTopic(input: { expectedVersion: number; name: string }): Awaitable<number>;
+}
+
 export interface ConversationStore {
   getOrCreateConversation(chatId: number, topicId: number): string;
   // Append one row to the transcript and return its id. `kind` defaults from
@@ -218,6 +251,32 @@ export interface ExternalCallStore {
   completeExternalCall(toolUseId: string, result: string): void;
 }
 
+// A raw log row as learning reads it: the same message, plus which conversation
+// it belongs to (learning reads across all of them, a turn reads one).
+export interface LearningMessage extends Message {
+  conversationId: string;
+}
+
+// The raw-log side of learning. Topic reads and writes are the ordinary
+// versioned TopicStore methods; this is only the message bookkeeping a job needs.
+export interface LearningStore {
+  // Start (or re-attach to) a job and return the newest message id it covers.
+  // Calling it again with the same job id returns the same frozen number, so a
+  // restarted job never widens its own range.
+  beginLearningJob(jobId: string): number;
+  // Unconsolidated messages in id order, up to the job's high-water mark.
+  // `afterId` pages forward; the caller stops when a page comes back short.
+  listUnconsolidatedMessages(input: {
+    throughMessageId: number;
+    afterId?: number;
+    limit: number;
+  }): LearningMessage[];
+  // Stamp every message the job covers as consolidated, in one transaction.
+  // Idempotent by job id: a repeated call after a lost acknowledgement does
+  // nothing, and it never touches messages above the job's high-water mark.
+  completeLearningJob(jobId: string): void;
+}
+
 // Attachment metadata rows, keyed by the id embedded in the message marker.
 export interface AttachmentRecordStore {
   putAttachment(attachment: {
@@ -260,6 +319,7 @@ export interface SettingsStore {
 
 export type Store = TopicStore &
   ConversationStore &
+  LearningStore &
   ExternalCallStore &
   AttachmentRecordStore &
   SettingsStore;
