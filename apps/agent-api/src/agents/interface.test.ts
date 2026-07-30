@@ -333,40 +333,123 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
 });
 
 describe("buildConversationMessages", () => {
+  const text = (t: string) => [{ type: "text", text: t }];
+
   it("returns a single user message for empty history", () => {
-    expect(buildConversationMessages([], "hi", NOW, "UTC")).toEqual([
-      { role: "user", content: "[2026-07-17 12:00] hi" },
-    ]);
+    expect(
+      buildConversationMessages({
+        history: [],
+        userMessage: "hi",
+        now: NOW,
+        timezone: "UTC",
+      }),
+    ).toEqual([{ role: "user", content: "[2026-07-17 12:00] hi" }]);
   });
 
-  it("maps roles and prefixes user messages with an absolute timestamp", () => {
-    const messages = buildConversationMessages(
-      [
+  it("prefixes user messages with a timestamp and keeps assistant blocks verbatim", () => {
+    const messages = buildConversationMessages({
+      history: [
         historyMessage("user", "hello", iso(2 * 86_400_000)),
         historyMessage("assistant", "hi there", iso(5 * 60_000)),
       ],
-      "how are you",
-      NOW,
-      "UTC",
-    );
+      userMessage: "how are you",
+      now: NOW,
+      timezone: "UTC",
+    });
 
     expect(messages).toEqual([
       { role: "user", content: "[2026-07-15 12:00] hello" },
-      { role: "assistant", content: "hi there" },
+      { role: "assistant", content: text("hi there") },
       { role: "user", content: "[2026-07-17 12:00] how are you" },
     ]);
   });
 
+  it("prepends the volatile per-turn context to the message being answered", () => {
+    const messages = buildConversationMessages({
+      history: [],
+      userMessage: "hi",
+      now: NOW,
+      timezone: "UTC",
+      context: "Current time: whenever.",
+    });
+
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content: "Current time: whenever.\n\n[2026-07-17 12:00] hi",
+      },
+    ]);
+  });
+
+  it("replays a tool call and its result verbatim, results first in the user turn", () => {
+    const toolUse = {
+      type: "tool_use" as const,
+      id: "call_1",
+      name: "get_topic",
+      input: { name: "weather" },
+    };
+    const toolResult = {
+      type: "tool_result" as const,
+      tool_use_id: "call_1",
+      content: '{"version":1}',
+    };
+    const messages = buildConversationMessages({
+      history: [
+        historyMessage("user", "weather?", iso(60_000)),
+        historyMessage("assistant", [{ type: "text", text: "checking" }, toolUse], iso(50_000)),
+        historyMessage("user", [toolResult], iso(40_000), {
+          kind: "tool_result",
+        }),
+        historyMessage("assistant", "sunny", iso(30_000)),
+      ],
+      userMessage: "and tomorrow",
+      now: NOW,
+      timezone: "UTC",
+    });
+
+    expect(messages).toEqual([
+      { role: "user", content: "[2026-07-17 11:59] weather?" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "checking" }, toolUse],
+      },
+      { role: "user", content: [toolResult] },
+      { role: "assistant", content: text("sunny") },
+      { role: "user", content: "[2026-07-17 12:00] and tomorrow" },
+    ]);
+  });
+
+  it("appends the rows an interrupted run of this turn already persisted", () => {
+    const toolUse = {
+      type: "tool_use" as const,
+      id: "call_9",
+      name: "list_topics",
+      input: {},
+    };
+    const messages = buildConversationMessages({
+      history: [],
+      userMessage: "hi",
+      trailing: [historyMessage("assistant", [toolUse], iso(1000))],
+      now: NOW,
+      timezone: "UTC",
+    });
+
+    expect(messages).toEqual([
+      { role: "user", content: "[2026-07-17 12:00] hi" },
+      { role: "assistant", content: [toolUse] },
+    ]);
+  });
+
   it("drops leading assistant messages so the array starts with a user turn", () => {
-    const messages = buildConversationMessages(
-      [
+    const messages = buildConversationMessages({
+      history: [
         historyMessage("assistant", "earlier reply", iso(3 * 60_000)),
         historyMessage("user", "hi", iso(2 * 60_000)),
       ],
-      "now",
-      NOW,
-      "UTC",
-    );
+      userMessage: "now",
+      now: NOW,
+      timezone: "UTC",
+    });
 
     expect(messages.map((m) => m.role)).toEqual(["user"]);
     expect(messages[0].content).toBe(
@@ -375,13 +458,13 @@ describe("buildConversationMessages", () => {
   });
 
   it("opens with the compacted summary as a user message", () => {
-    const messages = buildConversationMessages(
-      [historyMessage("assistant", "reply after boundary", iso(2 * 60_000))],
-      "now",
-      NOW,
-      "UTC",
-      "earlier: they picked a flight",
-    );
+    const messages = buildConversationMessages({
+      history: [historyMessage("assistant", "reply after boundary", iso(2 * 60_000))],
+      userMessage: "now",
+      now: NOW,
+      timezone: "UTC",
+      summary: "earlier: they picked a flight",
+    });
 
     expect(messages).toEqual([
       {
@@ -389,37 +472,43 @@ describe("buildConversationMessages", () => {
         content:
           "[summary of earlier conversation]\n\nearlier: they picked a flight",
       },
-      { role: "assistant", content: "reply after boundary" },
+      { role: "assistant", content: text("reply after boundary") },
       { role: "user", content: "[2026-07-17 12:00] now" },
     ]);
   });
 
   it("coalesces consecutive assistant messages", () => {
-    const messages = buildConversationMessages(
-      [
+    const messages = buildConversationMessages({
+      history: [
         historyMessage("user", "q", iso(4 * 60_000)),
         historyMessage("assistant", "one", iso(3 * 60_000)),
         historyMessage("assistant", "two", iso(2 * 60_000)),
       ],
-      "next",
-      NOW,
-      "UTC",
-    );
+      userMessage: "next",
+      now: NOW,
+      timezone: "UTC",
+    });
 
     expect(messages).toEqual([
       { role: "user", content: "[2026-07-17 11:56] q" },
-      { role: "assistant", content: "one\n\ntwo" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "one" },
+          { type: "text", text: "two" },
+        ],
+      },
       { role: "user", content: "[2026-07-17 12:00] next" },
     ]);
   });
 
   it("coalesces the current message with a trailing user message", () => {
-    const messages = buildConversationMessages(
-      [historyMessage("user", "first", iso(2 * 60_000))],
-      "second",
-      NOW,
-      "UTC",
-    );
+    const messages = buildConversationMessages({
+      history: [historyMessage("user", "first", iso(2 * 60_000))],
+      userMessage: "second",
+      now: NOW,
+      timezone: "UTC",
+    });
 
     expect(messages).toEqual([
       {
@@ -708,7 +797,7 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
-  it("persists each message before sending it", async () => {
+  it("persists the response, then claims the block, then sends it", async () => {
     const store = new MemoryStore();
     const order: string[] = [];
     const model = scriptedModel([{ text: "hi" }]);
@@ -717,7 +806,14 @@ describe("runInterfaceAgent", () => {
       model,
       store,
       send: async (t) => void order.push(`send:${t}`),
-      persistReply: (t) => order.push(`persist:${t}`),
+      persistAssistant: (content) => {
+        order.push(`persist:${JSON.stringify(content)}`);
+        return 7;
+      },
+      claimDelivery: (messageId, blockIndex) => {
+        order.push(`claim:${messageId}:${blockIndex}`);
+        return true;
+      },
       search: createMemorySearch(),
       google: createMemoryGoogle(),
       fetcher: createMemoryFetcher(),
@@ -725,19 +821,88 @@ describe("runInterfaceAgent", () => {
       userMessage: "x",
     });
 
-    expect(order).toEqual(["persist:hi", "send:hi"]);
+    expect(order).toEqual([
+      'persist:[{"type":"text","text":"hi"}]',
+      "claim:7:0",
+      "send:hi",
+    ]);
+  });
+
+  it("stays quiet on a block a previous run already claimed", async () => {
+    const store = new MemoryStore();
+    const sent: string[] = [];
+    const model = scriptedModel([{ text: "hi" }]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: async (t) => void sent.push(t),
+      persistAssistant: () => 7,
+      claimDelivery: () => false,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
+      history: [],
+      userMessage: "x",
+    });
+
+    // Nothing sent, so the no-silence rule fires and the fallback is delivered
+    // through the same claim path (which this stub also refuses).
+    expect(sent).toEqual([]);
+    expect(result.replies).toEqual([]);
+  });
+
+  it("sends the text of an interrupted run's response that never got out", async () => {
+    const store = new MemoryStore();
+    const sent: string[] = [];
+    const claimed = new Set<string>(["11:0"]);
+    const model = scriptedModel([{ text: "and here it is" }]);
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: async (t) => void sent.push(t),
+      persistAssistant: () => 12,
+      claimDelivery: (messageId, blockIndex) => {
+        const key = `${messageId}:${blockIndex}`;
+        if (claimed.has(key)) return false;
+        claimed.add(key);
+        return true;
+      },
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
+      history: [],
+      userMessage: "x",
+      trailing: [
+        historyMessage(
+          "assistant",
+          [
+            { type: "text", text: "already sent" },
+            { type: "text", text: "never sent" },
+          ],
+          iso(1000),
+          { id: 11 },
+        ),
+      ],
+    });
+
+    expect(sent).toEqual(["never sent", "and here it is"]);
   });
 
   it("persists the prose fallback before sending it", async () => {
     const store = new MemoryStore();
     const order: string[] = [];
-    const model = scriptedModel([{ text: "prose answer" }]);
+    const model = scriptedModel([{ text: "" }]);
 
     await runInterfaceAgent({
       model,
       store,
       send: async (t) => void order.push(`send:${t}`),
-      persistReply: (t) => order.push(`persist:${t}`),
+      persistAssistant: (content) => {
+        order.push(`persist:${JSON.stringify(content)}`);
+        return 3;
+      },
       search: createMemorySearch(),
       google: createMemoryGoogle(),
       fetcher: createMemoryFetcher(),
@@ -745,7 +910,11 @@ describe("runInterfaceAgent", () => {
       userMessage: "x",
     });
 
-    expect(order).toEqual(["persist:prose answer", "send:prose answer"]);
+    expect(order).toEqual([
+      'persist:[{"type":"text","text":""}]',
+      `persist:[{"type":"text","text":${JSON.stringify(FALLBACK_MESSAGE)}}]`,
+      `send:${FALLBACK_MESSAGE}`,
+    ]);
   });
 
   it("sends the final text when the model never calls reply", async () => {
@@ -917,7 +1086,10 @@ describe("runInterfaceAgent", () => {
         send: async () => {
           throw new Error("telegram down");
         },
-        persistReply: (t) => persisted.push(t),
+        persistAssistant: (content) => {
+          persisted.push(JSON.stringify(content));
+          return 1;
+        },
         search: createMemorySearch(),
         google: createMemoryGoogle(),
         fetcher: createMemoryFetcher(),
@@ -927,7 +1099,7 @@ describe("runInterfaceAgent", () => {
     ).rejects.toThrow("telegram down");
 
     // Persist-before-send preserved even though the send failed.
-    expect(persisted).toEqual(["undelivered"]);
+    expect(persisted).toEqual(['[{"type":"text","text":"undelivered"}]']);
   });
 
   it("builds a transcript with the user message, tool calls, and results", async () => {

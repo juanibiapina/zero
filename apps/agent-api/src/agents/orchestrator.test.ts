@@ -706,3 +706,152 @@ describe("runTurn phase markers", () => {
     expect(msgs).not.toContain("writer_started");
   });
 });
+
+// Phase 1.3: the loop writes into the log as it goes, so a turn interrupted
+// anywhere resumes from what is stored instead of replaying it.
+describe("runTurn durable loop", () => {
+  const runOne = (store: MemoryStore, model: AgentModel, send: (t: string) => Promise<void>) =>
+    runTurn({
+      store,
+      makeModel: constModel(model),
+      send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+    });
+
+  it("persists the response and its tool results in order", async () => {
+    const store = new MemoryStore();
+    seedTopic(store, "weather", "climate");
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "weather?");
+    const sink = collectSink();
+
+    await runOne(
+      store,
+      scriptedModel([
+        { text: "checking", tools: [{ name: "get_topic", input: { name: "weather" } }] },
+        { text: "sunny" },
+        { text: "nothing to consolidate" },
+      ]),
+      sink.send,
+    );
+
+    const rows = store.getConversationHistory(id, 10);
+    expect(rows.map((r) => r.kind)).toEqual([
+      "user_message",
+      "assistant_message",
+      "tool_result",
+      "assistant_message",
+    ]);
+    const call = rows[1].content;
+    expect(Array.isArray(call) && call.some((b) => b.type === "tool_use")).toBe(true);
+    const result = rows[2].content;
+    expect(Array.isArray(result) && result[0].type === "tool_result").toBe(true);
+    // Both replies out, and the conversation is idle again.
+    expect(sink.sent).toEqual(["checking", "sunny"]);
+    expect(store.findConversationsWithWork()).toEqual([]);
+  });
+
+  it("resumes a response whose tool results were never stored", async () => {
+    const store = new MemoryStore();
+    seedTopic(store, "weather", "climate");
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "weather?");
+    // What a reset between persisting a response and persisting its results
+    // leaves behind: an assistant row with an unanswered tool call, and its
+    // text already claimed for delivery.
+    const messageId = store.storeMessage(
+      id,
+      "assistant",
+      [
+        { type: "text", text: "checking" },
+        { type: "tool_use", id: "call_1", name: "get_topic", input: { name: "weather" } },
+      ],
+      { stopReason: "tool_use" },
+    );
+    store.claimDelivery(messageId, 0);
+    const sink = collectSink();
+
+    expect(store.findConversationsWithWork()).toHaveLength(1);
+
+    await runOne(
+      store,
+      scriptedModel([{ text: "sunny" }, { text: "nothing to consolidate" }]),
+      sink.send,
+    );
+
+    // "checking" was already sent, so only the continuation reaches the user.
+    expect(sink.sent).toEqual(["sunny"]);
+    const rows = store.getConversationHistory(id, 10);
+    expect(rows.map((r) => r.kind)).toEqual([
+      "user_message",
+      "assistant_message",
+      "tool_result",
+      "assistant_message",
+    ]);
+    expect(store.findConversationsWithWork()).toEqual([]);
+  });
+
+  it("answers a message that arrives mid-run in the same run", async () => {
+    const store = new MemoryStore();
+    seedTopic(store, "weather", "climate");
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "weather?");
+    const sink = collectSink();
+
+    // The follow-up lands while the model is working: queued during the tool
+    // step, so it can only be injected at the first terminal stop.
+    let step = 0;
+    const model: AgentModel = {
+      modelId: "mock",
+      generate: async () => {
+        step++;
+        if (step === 1)
+          return {
+            id: "msg_1",
+            content: [
+              { type: "tool_use", id: "call_1", name: "get_topic", input: { name: "weather" } },
+            ],
+            stopReason: "tool_use",
+            usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+            diagnostic: { state: "initial" },
+          };
+        if (step === 2) {
+          store.enqueuePendingMessage(id, "and tomorrow?");
+          return {
+            id: "msg_2",
+            content: [{ type: "text", text: "sunny" }],
+            stopReason: "end_turn",
+            usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+            diagnostic: { state: "initial" },
+          };
+        }
+        return {
+          id: `msg_${step}`,
+          content: [{ type: "text", text: step === 3 ? "sunny then too" : "nothing to consolidate" }],
+          stopReason: "end_turn",
+          usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          diagnostic: { state: "initial" },
+        };
+      },
+    };
+
+    await runOne(store, model, sink.send);
+
+    expect(sink.sent).toEqual(["sunny", "sunny then too"]);
+    const rows = store.getConversationHistory(id, 10);
+    expect(rows.map((r) => r.kind)).toEqual([
+      "user_message",
+      "assistant_message",
+      "tool_result",
+      "assistant_message",
+      "user_message",
+      "assistant_message",
+    ]);
+    expect(messageText(rows[4].content)).toBe("and tomorrow?");
+    expect(store.findConversationsWithWork()).toEqual([]);
+  });
+});

@@ -21,7 +21,8 @@ deployed. **Phase 0 is done except 0.5b. Phases 1-3 are untouched.**
 | 0.5b select by cost | **blocked on production data** (todo #17) | — |
 | 1.1 message protocol schema, queue, delivery records | done | `feat(agent): store conversations as a protocol log with a durable message queue` |
 | 1.2 compaction boundary, summary, staleness filter | done | `feat(agent): render conversations from a compaction boundary instead of a fixed window` |
-| Phase 1.3-1.4, 2, 3 | not started | — |
+| 1.3 persist the loop as it runs, resume, follow-up injection | done except external-write claims | `feat(agent): persist the agent loop as it runs and resume an interrupted turn` |
+| Phase 1.4, 2, 3 | not started | — |
 
 `pnpm --filter @zero/agent-api run test | lint | typecheck` pass on the branch
 (537 tests). The branch is pushed to `origin` but not merged; a branch push only
@@ -132,19 +133,52 @@ production data yet; the acceptance criteria that read them are still open.
 - Docs: `docs/topics.md` "Conversation context", `docs/design.md` schema table.
   Changelog entry for the longer memory.
 
+### What Phase 1.3 shipped
+
+- `runAgent` gained four hooks: `onAssistant(content, stopReason)` (persist the
+  response verbatim, returns the row id), `onText(text, {messageId, blockIndex})`,
+  `onToolResults(results)` (persist before the next model call) and `onIdle()`
+  (returning messages continues the same loop). No schema change: 1.1's
+  `pending_messages` and `deliveries` were already there.
+- **Resume**: `runAgent` opens by running the tool calls of a persisted assistant
+  tail that has no results, so the invalid mid-response wire state is repaired
+  before the first model call. Read tools re-run; topic writes replay with their
+  original `expectedVersion` and conflict instead of duplicating.
+- **Delivery is claim-then-send**, not persist-then-send: the row is already
+  durable, so `deliver` claims `(messageId, blockIndex)` and skips a claimed block
+  (`delivery_skipped`). `deliverUnclaimed(trailing)` sends what an interrupted run
+  persisted but never delivered. The fallback gets its own terminal assistant row,
+  which is also what stops the work rule from resuming a cap-exhausted run.
+- **Rendering is block-verbatim.** `buildConversationMessages` now takes one input
+  object (`{history, userMessage, trailing, now, timezone, summary, context}`) and
+  renders an assistant row's blocks unchanged, a `tool_result` row as a `user`
+  turn (results ordered first when coalesced), and a user row as timestamped text.
+  The volatile per-turn context moved into the renderer as `context`.
+- `runTurn` no longer requires a user tail: it asks `conversationHasWork`, then
+  splits the filtered context at the newest `user_message` into
+  `history` / `userMessage` / `trailing`.
+- Logs added: `conversation_size` (`message_count`, `stored_bytes`),
+  `topic_reads_avoided` (topic reads surviving the staleness filter),
+  `followups_injected` (count + oldest age), `delivery_skipped`, plus
+  `followups_injected` on `interface_completed`.
+- Still open in 1.3: the external-write class (`gmail_send`,
+  `calendar_create_event`) has **no** `started`/`completed` claim yet, so a resume
+  can re-send mail. That is the next commit, and it does need a new table.
+  `tool_result_reused` with `age_turns` was not added; `topic_reads_avoided`
+  covers the same question per turn.
+
 ### Picking this up in a new session
 
 ```bash
 git checkout agent-normal-interface   # unmerged, ahead of main
-pnpm --filter @zero/agent-api run test    # 537 passing
+pnpm --filter @zero/agent-api run test    # 545 passing
 ```
 
-Next action is **Phase 1.3**: persist the loop as it runs (assistant response
-before its tools, ordered tool results before the next call), the resume classes
-keyed by `tool_use.id`, per-block delivery claims read back on resume, and
-mid-loop follow-up injection at terminal stop. The staleness filter and the
-delivery-claim store method already exist and should not be rebuilt; 1.3 is what
-finally produces the persisted tool results the filter is written for.
+Next action is the external-write half of **1.3**: a durable per-`tool_use.id`
+claim taken before the request leaves, a `completed` result after it returns, and
+an uncertainty result on resume for a `started` call whose outcome is unknown.
+Everything else in 1.3 is shipped; do not rebuild the hooks, the resume path or
+the delivery claims.
 
 Two Phase 0 outcomes Phase 1 depends on and should not re-derive: the knowledge
 counter and `KnowledgeConflictError` already exist (so the staleness filter has
@@ -218,24 +252,28 @@ As of the branch head (Phase 0 and 1.1 applied):
   last 20 messages, requires the tail to be a `user_message` row, runs the
   interface agent, then runs the writer. The busy flag and its `try/finally`
   are gone.
-- `runAgent` (`src/agents/run.ts`) is the shared tool loop. It now calls
-  `onText` per text block per step, so the interface agent delivers messages as
-  the model writes them; it still returns the final text for other callers.
-- The interface agent has no `reply` tool. Delivery is persist-then-send inside
-  `deliver`, and `needsFallback` covers the no-silence case.
+- `runAgent` (`src/agents/run.ts`) is the shared tool loop. It persists each
+  response and its tool results through hooks as it goes, delivers text blocks as
+  the model writes them, and injects queued follow-ups where it would otherwise
+  stop.
+- The interface agent has no `reply` tool. Delivery is claim-then-send inside
+  `deliver` (the row is persisted by the runner first), and `needsFallback`
+  covers the no-silence case.
 - History rows carry wire-format content blocks, `kind` and `stopReason`
-  (`0024_message_protocol.sql`), but **the loop still does not write tool calls
-  or results into them**: every row is one text block, and the writer still gets
-  its own in-memory `renderTranscript`. Persisting the loop as it runs is 1.3.
-- `getConversationHistory` has exactly one caller, the orchestrator.
-  `listTopics()` has exactly one caller, the `list_topics` tool.
+  (`0024_message_protocol.sql`), and the loop now writes tool calls and results
+  into them. The writer still gets its own in-memory `renderTranscript`, which is
+  deleted with the writer at the LearningDO cutover.
+- `getConversationHistory` is now the raw pager (learning will use it); the
+  orchestrator reads `getConversationContext`. `listTopics()` has exactly one
+  caller, the `list_topics` tool.
 - Topic knowledge is versioned; every write states `expectedVersion` (Phase 0.3).
   Phase 1's staleness filter builds directly on that counter, which already
   exists and is already bumped by every write and by a system-topic content
   change.
-- The interface agent is not yet resumable: nothing reads `deliveries` or
-  `stopReason` except `findConversationsWithWork`, so a reset still replays a
-  whole turn. 1.3 is what closes that.
+- The interface agent is resumable: an interrupted turn's persisted responses and
+  tool results are handed back to it as `trailing`, unclaimed text blocks are
+  delivered, and unanswered tool calls are re-run. External writes are the one
+  gap left (see Phase 1.3).
 
 ## Design decision: one knowledge version
 
@@ -650,7 +688,7 @@ visual appearance. Log selected dimensions, estimated tokens and bytes after
 0.5b so the saving is observable. This is independently useful today and a
 precondition for persisting image blocks in Phase 1.
 
-## Phase 1 — Persist the real message log (1.1 done, 1.2-1.4 not started)
+## Phase 1 — Persist the real message log (1.1-1.3 done except external-write claims, 1.4 not started)
 
 **1.1 Migrate conversation history and delivery state in one migration**, so
 the schema moves once. **DONE** (migration `0024`, `store/messages.ts`, the new
@@ -720,7 +758,8 @@ the limit here would put unbounded context into production between deploys.
 Keep a hard message/char ceiling here and delete it in the same 3.4 commit that
 enables size-triggered compaction. Do not ship 1.2 with neither.
 
-**1.3** Persist as the loop runs. Store each model response as one verbatim
+**1.3 DONE except the external-write class** (see "What Phase 1.3 shipped").
+Persist as the loop runs. Store each model response as one verbatim
 assistant wire message before executing its tools; store the ordered
 `tool_result` user message before making the next model call. A response that
 contains text and `tool_use` stays one row. Image blocks are persisted
