@@ -91,7 +91,11 @@ export class ScheduleDO extends DurableObject<Env> {
     conversationId?: string,
   ): Promise<void> {
     if (reason === "idle" || reason === "size") {
-      await getLearningDO(this.env, clerkUserId).request(reason, conversationId);
+      await getLearningDO(this.env, clerkUserId).request(
+        clerkUserId,
+        reason,
+        conversationId,
+      );
       return;
     }
     const userDO = getUserDO(this.env, clerkUserId);

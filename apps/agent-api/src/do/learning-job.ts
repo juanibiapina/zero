@@ -11,6 +11,9 @@ import { log } from "../log";
 export type LearnReason = "idle" | "size";
 
 export interface LearningJob {
+  // Stable id for this job. It keys the frozen input range and the idempotent
+  // completion on the UserDO side, so it must survive a restart of the job.
+  id: string;
   reason: LearnReason;
   // The conversation a size-triggered job must also compact. Absent for idle.
   conversationId?: string;
@@ -53,7 +56,9 @@ export const requestJob = (
     };
   }
   const queued =
-    request.reason === "size" ? { ...request, requestedAt: state.queued.requestedAt } : state.queued;
+    request.reason === "size"
+      ? { ...request, requestedAt: state.queued.requestedAt }
+      : state.queued;
   return { state: { ...state, queued }, coalesced: true, startNow: false };
 };
 

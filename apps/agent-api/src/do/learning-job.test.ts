@@ -6,7 +6,9 @@ import {
   type LearningState,
 } from "./learning-job";
 
+let ids = 0;
 const job = (reason: "idle" | "size", conversationId?: string, at = 1) => ({
+  id: `job_${++ids}`,
   reason,
   conversationId,
   requestedAt: at,
