@@ -6,4 +6,5 @@
 export const renderAttachmentMarker = (a: {
   id: string;
   filename: string;
-}): string => `[image "${a.filename}" id=${a.id}]`;
+  kind?: "image" | "pdf";
+}): string => `[${a.kind ?? "image"} "${a.filename}" id=${a.id}]`;

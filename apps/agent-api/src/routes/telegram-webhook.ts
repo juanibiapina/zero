@@ -121,6 +121,25 @@ const IMAGE_MIME_TYPES = new Set([
 export const isImage = (mimeType: string): boolean =>
   IMAGE_MIME_TYPES.has(mimeType);
 
+const isPdfAttachment = (attachment: AttachmentMeta): boolean =>
+  attachment.kind === "document" &&
+  (attachment.mimeType === "application/pdf" || attachment.filename.toLowerCase().endsWith(".pdf"));
+
+const bytesContain = (bytes: Uint8Array, needle: string, limit = bytes.length): boolean => {
+  const encoded = new TextEncoder().encode(needle);
+  const end = Math.min(bytes.length, limit) - encoded.length;
+  outer: for (let i = 0; i <= end; i += 1) {
+    for (let j = 0; j < encoded.length; j += 1) {
+      if (bytes[i + j] !== encoded[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
+};
+
+export const hasPdfSignature = (bytes: Uint8Array): boolean =>
+  bytesContain(bytes, "%PDF-", 1024);
+
 // Cap on downloaded attachment bytes. Anything larger is skipped with a notice
 // rather than pushed through R2 and the model.
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -248,11 +267,15 @@ export interface WebhookDeps {
 }
 
 const ATTACHMENT_ONLY_NOTICE =
-  "\u26a0\ufe0f I can't handle that attachment \u2014 send me a photo or text.";
+  "\u26a0\ufe0f I can't handle that attachment \u2014 send me a photo, PDF, or text.";
 const IGNORED_NOTICE =
   "\u26a0\ufe0f I ignored the attached file (not a supported type).";
 const OVERSIZE_NOTICE =
-  "\u26a0\ufe0f That image is too large for me to handle (over 5 MB).";
+  "\u26a0\ufe0f That file is too large for me to handle (over 5 MB).";
+const INVALID_PDF_NOTICE =
+  "\u26a0\ufe0f That file is not a valid PDF, so I couldn't read it.";
+const ENCRYPTED_PDF_NOTICE =
+  "\u26a0\ufe0f That PDF appears to be encrypted or password-protected, so I couldn't read it.";
 
 // The whole async body of a message webhook: resolve the user, download an
 // image to R2 (marker into the message body), or keep today's notice-and-skip
@@ -278,10 +301,11 @@ export const processTelegramMessage = async (
     attachment !== null &&
     attachment.kind !== "sticker" &&
     isImage(attachment.mimeType);
+  const isPdf = attachment !== null && isPdfAttachment(attachment);
 
-  // Non-image attachment: keep prior behavior. Attachment-only -> notice + skip;
-  // text + attachment -> process the text and note the file was ignored.
-  if (attachment && !isImageAttachment) {
+  // Unsupported attachment: attachment-only -> notice + skip; text plus a file
+  // -> process the text and note the file was ignored.
+  if (attachment && !isImageAttachment && !isPdf) {
     if (text.length === 0) {
       await deps
         .sendReply(topic.chatId, topic.topicId, ATTACHMENT_ONLY_NOTICE)
@@ -302,28 +326,38 @@ export const processTelegramMessage = async (
     return;
   }
 
-  // Image: download bytes, enforce the size cap, put to R2, build the marker.
+  // Supported file: download bytes, enforce the size cap, put to R2, build the marker.
   let marker = "";
   let row: AttachmentRow | undefined;
-  if (attachment && isImageAttachment) {
+  if (attachment && (isImageAttachment || isPdf)) {
     try {
       const { bytes, filePath } = await deps.download(attachment.file_id);
       if (bytes.length > MAX_ATTACHMENT_BYTES) {
         await deps
           .sendReply(topic.chatId, topic.topicId, OVERSIZE_NOTICE)
           .catch(() => {});
+      } else if (isPdf && !hasPdfSignature(bytes)) {
+        await deps
+          .sendReply(topic.chatId, topic.topicId, INVALID_PDF_NOTICE)
+          .catch(() => {});
+      } else if (isPdf && bytesContain(bytes, "/Encrypt")) {
+        await deps
+          .sendReply(topic.chatId, topic.topicId, ENCRYPTED_PDF_NOTICE)
+          .catch(() => {});
       } else {
         const filename = refineFilename(attachment.filename, filePath);
         const r2Key = attachmentKey(clerkUserId, attachment.fileUniqueId);
-        await deps.attachments.put(r2Key, bytes, attachment.mimeType);
+        const mimeType = isPdf ? "application/pdf" : attachment.mimeType;
+        await deps.attachments.put(r2Key, bytes, mimeType);
         const id = `att_${crypto.randomUUID()}`;
-        marker = renderAttachmentMarker({ id, filename });
-        row = { id, r2Key, filename, mimeType: attachment.mimeType };
+        marker = renderAttachmentMarker({ id, filename, kind: isPdf ? "pdf" : "image" });
+        row = { id, r2Key, filename, mimeType };
+        if (isPdf) log("pdf_attachment_stored", { byte_count: bytes.length });
       }
     } catch (err) {
       logError("attachment_download_failed", { error: fmtErr(err) });
       await deps
-        .sendReply(topic.chatId, topic.topicId, OVERSIZE_NOTICE)
+        .sendReply(topic.chatId, topic.topicId, isPdf ? INVALID_PDF_NOTICE : OVERSIZE_NOTICE)
         .catch(() => {});
     }
   }

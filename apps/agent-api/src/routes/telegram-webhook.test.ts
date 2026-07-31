@@ -267,12 +267,72 @@ describe("processTelegramMessage", () => {
     expect(enqueued[0].input.attachments).toBeUndefined();
   });
 
-  it("notices and skips a non-image attachment with no text", async () => {
+  const pdfMsg = (caption?: string, mimeType = "application/pdf") => ({
+    document: { file_id: "d", file_unique_id: "ud", file_name: "report.pdf", mime_type: mimeType },
+    ...(caption ? { caption } : {}),
+  });
+  const validPdf = new TextEncoder().encode("%PDF-1.7\nvalid enough for ingestion");
+
+  it.each([[undefined], ["summarize this"]])("stores and enqueues a PDF with caption %s", async (caption) => {
+    const { deps, enqueued, replies, attachments } = makeDeps({
+      download: vi.fn(async () => ({ bytes: validPdf, filePath: "documents/report.pdf" })),
+    });
+    await processTelegramMessage(deps, topic, pdfMsg(caption), "1");
+
+    expect(replies).toEqual([]);
+    expect(enqueued).toHaveLength(1);
+    const input = enqueued[0].input;
+    expect(input.text).toMatch(/\[pdf "report\.pdf" id=att_.+\]/);
+    if (caption) expect(input.text).toContain(caption);
+    const row = input.attachments![0];
+    expect(row.mimeType).toBe("application/pdf");
+    expect(await attachments.get(row.r2Key)).toEqual(validPdf);
+  });
+
+  it("accepts a PDF filename without a MIME type after byte validation", async () => {
+    const { deps, enqueued } = makeDeps({
+      download: vi.fn(async () => ({ bytes: validPdf, filePath: "documents/report.pdf" })),
+    });
+    await processTelegramMessage(deps, topic, pdfMsg(undefined, "application/octet-stream"), "1");
+    expect(enqueued[0].input.text).toContain('[pdf "report.pdf"');
+  });
+
+  it("rejects spoofed PDF content without storing or enqueueing", async () => {
+    const { deps, enqueued, replies, attachments } = makeDeps({
+      download: vi.fn(async () => ({ bytes: new TextEncoder().encode("not a pdf"), filePath: "documents/report.pdf" })),
+    });
+    await processTelegramMessage(deps, topic, pdfMsg(), "1");
+    expect(enqueued).toEqual([]);
+    expect(replies[0]).toContain("not a valid PDF");
+    expect(await attachments.get("attachments/user_1/ud")).toBeNull();
+  });
+
+  it("rejects an encrypted-looking PDF with a clear notice", async () => {
+    const { deps, enqueued, replies } = makeDeps({
+      download: vi.fn(async () => ({ bytes: new TextEncoder().encode("%PDF-1.7\n/Encrypt 4 0 R"), filePath: "documents/report.pdf" })),
+    });
+    await processTelegramMessage(deps, topic, pdfMsg(), "1");
+    expect(enqueued).toEqual([]);
+    expect(replies[0]).toMatch(/encrypted|password-protected/i);
+  });
+
+  it("rejects an oversize PDF without storing an attachment row", async () => {
+    const bytes = new Uint8Array(6 * 1024 * 1024);
+    bytes.set(new TextEncoder().encode("%PDF-1.7"));
+    const { deps, enqueued, replies } = makeDeps({
+      download: vi.fn(async () => ({ bytes, filePath: "documents/report.pdf" })),
+    });
+    await processTelegramMessage(deps, topic, pdfMsg(), "1");
+    expect(enqueued).toEqual([]);
+    expect(replies[0]).toContain("file is too large");
+  });
+
+  it("notices and skips an unsupported document with no text", async () => {
     const { deps, enqueued, replies } = makeDeps();
     await processTelegramMessage(
       deps,
       topic,
-      { document: { file_id: "d", file_unique_id: "ud", mime_type: "application/pdf" } },
+      { document: { file_id: "d", file_unique_id: "ud", mime_type: "text/plain" } },
       "1",
     );
 
@@ -281,13 +341,13 @@ describe("processTelegramMessage", () => {
     expect(replies[0]).toContain("can't handle");
   });
 
-  it("processes text and notes the ignored file for a non-image attachment with a caption", async () => {
+  it("processes text and notes an ignored unsupported document with a caption", async () => {
     const { deps, enqueued, replies } = makeDeps();
     await processTelegramMessage(
       deps,
       topic,
       {
-        document: { file_id: "d", file_unique_id: "ud", mime_type: "application/pdf" },
+        document: { file_id: "d", file_unique_id: "ud", mime_type: "text/plain" },
         caption: "see attached",
       },
       "1",

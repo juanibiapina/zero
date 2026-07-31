@@ -22,7 +22,7 @@ LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic; the gateway
 stores the real key and bills us directly) authenticated with
 `cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
 `MODEL_ID` (`claude-sonnet-4-6`). Durable state is the DO SQLite (topics,
-conversations, messages, attachment metadata); image bytes live in the
+conversations, messages, attachment metadata); attachment bytes live in the
 `ATTACHMENTS` R2 bucket. There is no container and no per-user filesystem. A
 self-rescheduling `setTimeout` drives the Telegram typing action across the
 interface phase and stops when the reply is sent, which ends the turn. See
@@ -161,7 +161,7 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `deliveries`        | `messageId`, `blockIndex`, `claimedAt`                       | Assistant text blocks already handed to Telegram |
 | `learning_jobs`     | `jobId`, `highWaterMessageId`, `startedAt`, `completedAt` | One consolidation run's frozen input range; completion is idempotent by job id |
 | `external_calls`    | `toolUseId`, `tool`, `status`, `result`, `startedAt`, `completedAt` | Irreversible outbound calls (send mail, create event), claimed before the request leaves |
-| `attachments`       | `id`, `conversationId`, `r2Key`, `filename`, `mimeType`, `createdAt` | Image lookup-by-id (bytes live in R2)  |
+| `attachments`       | `id`, `conversationId`, `r2Key`, `filename`, `mimeType`, `createdAt` | Attachment lookup-by-id (bytes live in R2) |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |
 
 The `telegram_link` table is the source of truth for the Clerk↔Telegram mapping.
@@ -220,8 +220,8 @@ immediately. The background task:
 
 1. `resolveContext` keeps topic messages and DMs; everything else is dropped.
 2. KV `tg:{telegramId}` → `clerkUserId`; drop the message if unknown.
-3. For an image, the bytes are downloaded to R2 and an `attachments` row plus a
-   text marker are prepared (see Attachments).
+3. For an image or PDF, the bytes are downloaded to R2 and an `attachments` row
+   plus a text marker are prepared (see Attachments).
 4. `UserDO.enqueueTurn` dedupes on `processed_updates`, stores the user
    message (with any marker) and attachment rows, and arms the DO alarm. The
    alarm runs the turn (see Architecture).
@@ -250,16 +250,25 @@ re-flattened turn). Instead:
    reference re-fetches by id. Images are billed only on turns where they are
    viewed.
 
-The `AttachmentStore` port (`apps/agent-api/src/attachments/types.ts`) abstracts the
-bytes: `createR2Attachments` in prod, an in-memory adapter in tests.
-`deleteAllForUser` (wired into Telegram unlink) removes every object under the
-user's prefix. The bot token stays in the download URL and never reaches
-Anthropic.
+**PDFs** use the same R2 storage and metadata flow, with a `[pdf "report.pdf"
+id=att_abc]` marker. The interface agent calls `read_pdf(id, start_page,
+end_page)` on demand. The tool extracts text in the Worker and returns ordinary,
+page-labelled text inside the durable `tool_result`; PDF bytes and base64 never
+enter SQLite or the model request. One call reads at most 20 pages and 30,000
+characters, and defaults to the first 20 pages. Files remain capped at 5 MB.
+Scanned or image-only PDFs, encrypted files, charts, and visual layout are not
+supported because this path does not perform OCR or visual analysis.
 
-**Non-image attachments** (PDF, audio, video, voice, stickers, documents) stay
-out of scope: an attachment-only message gets a short notice and is skipped; a
-message with both text and such a file is processed as text with a notice that
-the file was ignored.
+The `AttachmentStore` interface (`apps/agent-api/src/attachments/types.ts`)
+abstracts the bytes: `createR2Attachments` in prod, an in-memory adapter in
+tests. `deleteAllForUser` (wired into Telegram unlink) removes every object
+under the user's prefix. The bot token stays in the download URL and never
+reaches Anthropic.
+
+**Other attachments** (audio, video, voice, stickers, and non-PDF documents)
+stay out of scope: an attachment-only message gets a short notice and is
+skipped; a message with both text and such a file is processed as text with a
+notice that the file was ignored.
 
 ## Secrets
 
@@ -313,8 +322,8 @@ documented in [caching.md](./caching.md).
 
 ## Future Work
 
-- Support non-image attachments (PDF, audio, video) through the same
-  `view_attachment` path once their `tool_result` serialization is verified.
+- Support audio and video attachments once their extraction and `tool_result`
+  serialization paths are defined.
 - Consider structured multi-turn history for the research and learning agents
   (they currently use the single-`prompt` path).
 - An R2 lifecycle expiry rule for attachment objects.

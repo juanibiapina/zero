@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-31: Send Zero a PDF and ask questions about its text, including later page ranges in long documents.
 - 2026-07-30: Replies land sooner and stay quick in long conversations: Zero now files away what it learned between conversations instead of after each reply, so nothing you send waits behind that work.
 - 2026-07-30: Send Zero another message while it is working and it answers that too in the same reply flow, instead of leaving it for later.
 - 2026-07-30: If Zero is interrupted mid-answer, it picks up where it stopped rather than redoing the work or repeating a message you already got. An email or calendar invite it was sending is never sent twice — if it can't tell whether one went out, it says so and asks you to check.
@@ -20,7 +21,7 @@ User-facing changes to Zero, most recent first.
 - 2026-07-21: Faster replies on research and calendar-heavy turns and in longer conversations.
 - 2026-07-21: Starting a new conversation now works even in threads where you had sent a photo or file.
 - 2026-07-20: Sign in to the Zero Agent mobile app with your Zero account.
-- 2026-07-18: Send Zero a photo, PDF, or file and it can read and work with it.
+- 2026-07-18: Send Zero a photo and it can see and work with it.
 - 2026-07-18: Zero can now tell you about itself and its latest features.
 - 2026-07-17: Zero remembers what matters to you across conversations, organized into topics you can browse and that link to each other.
 - 2026-07-17: Zero reads and sends your Gmail and reads and schedules on your Google Calendar.
