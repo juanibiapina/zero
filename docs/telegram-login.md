@@ -65,3 +65,31 @@ recipe (from [Telegram's docs](https://core.telegram.org/widgets/login#checking-
 `POST /api/telegram-link` overwrites whatever Telegram id was bound to
 the caller, clearing the previous reverse-index entry. To unlink
 entirely call `DELETE /api/telegram-id`.
+
+## First conversation
+
+A bot cannot initiate a conversation: `sendMessage` to a user who never
+pressed START returns `403 Forbidden: bot can't initiate conversation with
+a user`. Linking through the Login Widget proves identity but creates no
+chat, so after `POST /api/telegram-link` there is nothing to send to.
+
+So the web CTAs link to `https://t.me/<bot>?start=welcome`. Telegram
+replaces the input bar with a **Start button** on any `?start=` link, even
+if the user has already started the bot
+([spec](https://core.telegram.org/api/links)). Pressing it delivers a
+`/start` update, which is the first moment Zero can speak. The `welcome`
+payload is unused today and kept for future attribution.
+
+`/start` is handled in `apps/agent-api/src/commands/start.ts`:
+
+- unlinked sender → a reply pointing at the web app (the same reply an
+  ordinary message from an unlinked sender now gets, instead of silence)
+- first contact → a real turn, so Zero introduces itself
+- every later `/start` → a short canned ack, no model run
+
+"First contact" is a one-shot claim in the store (`claimFirstContact`,
+persisted as `user_settings.firstContactAt`). It is taken inside
+`UserDO.enqueueTurn`, after the webhook dedupe gate, so the first turn a
+user ever has carries the introduction note whether they pressed START,
+typed `/start`, or asked a question straight away. Because it is persisted,
+a relink, a DO eviction or a second `/start` never re-introduces Zero.

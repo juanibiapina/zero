@@ -366,6 +366,10 @@ export class SystemTopicStore implements Store {
   markProcessed(updateId: string): boolean {
     return this.inner.markProcessed(updateId);
   }
+
+  claimFirstContact(): boolean {
+    return this.inner.claimFirstContact();
+  }
 }
 
 // Re-exported for tests that only need a ConversationStore view.

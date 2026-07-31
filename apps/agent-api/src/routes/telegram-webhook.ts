@@ -20,6 +20,7 @@ import { webhookCallback } from "grammy";
 import { createBot } from "../telegram/bot";
 import { log, logError, fmtErr } from "../log";
 import { processNewCommand } from "../commands/new";
+import { processStartCommand, SIGN_IN_REPLY } from "../commands/start";
 import type { TopicContext } from "../telegram/context";
 import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
@@ -294,6 +295,8 @@ export const processTelegramMessage = async (
   const clerkUserId = await deps.getClerkUserId(topic.telegramId);
   if (!clerkUserId) {
     log("drop_unknown_telegram_id", { telegram_id: topic.telegramId });
+    // Someone who found the bot on their own gets directions, not silence.
+    await deps.sendReply(topic.chatId, topic.topicId, SIGN_IN_REPLY).catch(() => {});
     return;
   }
 
@@ -384,11 +387,31 @@ export const createTelegramWebhookRoute = () => {
     const deps: WebhookDeps = {
       download: (fileId) => downloadTelegramFile(c.env, fileId),
       getClerkUserId: (telegramId) => c.env.KV.get(tgKey(telegramId)),
-      enqueue: (clerkUserId, input) =>
-        getUserDO(c.env, clerkUserId).enqueueTurn(input),
+      enqueue: async (clerkUserId, input) => {
+        await getUserDO(c.env, clerkUserId).enqueueTurn(input);
+      },
       sendReply,
       sendTyping: (chatId, topicId) => sendChatAction(c.env, chatId, topicId),
     };
+
+    // Registered before the generic message handler, which never runs for a
+    // command: handlers run in registration order and this one does not call
+    // next(), so "/start" is never sent to the model as user text.
+    bot.command("start", (ctx) => {
+      const msg = ctx.msg;
+      if (!ctx.from) return;
+      const topic = resolveContext(ctx.from.id, msg);
+      if (!topic) return;
+      c.executionCtx.waitUntil(
+        processStartCommand(
+          topic,
+          c.env,
+          { sendReply, sendTyping: deps.sendTyping },
+          String(ctx.update.update_id),
+          msg.chat.type,
+        ),
+      );
+    });
 
     bot.on("message", (ctx) => {
       const msg = ctx.message;

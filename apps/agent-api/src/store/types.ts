@@ -353,6 +353,12 @@ export interface SettingsStore {
 
   // Record an update id; true if newly seen, false if already processed.
   markProcessed(updateId: string): boolean;
+
+  // True exactly once per user, on the first call. Persisted, so a relink, a
+  // DO eviction or a second /start never re-introduces Zero. The
+  // read-decide-write rule lives here so no caller can get the idempotency
+  // wrong.
+  claimFirstContact(): boolean;
 }
 
 export type Store = TopicStore &

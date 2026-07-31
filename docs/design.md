@@ -214,7 +214,11 @@ grammY validates the secret-token header against `TELEGRAM_WEBHOOK_SECRET`,
 parses the `Update`, and dispatches to bot middleware. The middleware accepts
 **forum topic messages**, **DMs** and **ordinary group messages**, including a
 forum's General tab; anything without a topic uses topicId=0. The `/new` command resets the
-conversation thread for a `(chatId, topicId)` (topics are left intact).
+conversation thread for a `(chatId, topicId)` (topics are left intact). The
+`/start` command runs a normal turn on a user's first contact so Zero
+introduces itself, and answers with a short ack on every later `/start`; an
+unlinked sender is told where to sign in (see
+[`telegram-login.md`](telegram-login.md)).
 
 A regular message with text/caption is enqueued and returns 200 to Telegram
 immediately. The background task:

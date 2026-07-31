@@ -4,10 +4,12 @@ import {
   extractAttachment,
   refineFilename,
   processTelegramMessage,
+  createTelegramWebhookRoute,
   type WebhookDeps,
   type EnqueueTurnInput,
 } from "./telegram-webhook";
 import type { TopicContext } from "../telegram/context";
+import { SIGN_IN_REPLY } from "../commands/start";
 
 describe("resolveContext", () => {
   it("returns topicId from forum supergroup topic message", () => {
@@ -432,9 +434,89 @@ describe("processTelegramMessage", () => {
     expect(enqueued).toEqual([]);
   });
 
-  it("drops when the telegram id is unknown", async () => {
-    const { deps, enqueued } = makeDeps({ getClerkUserId: async () => null });
+  it("tells an unknown telegram id where to sign in and enqueues nothing", async () => {
+    const { deps, enqueued, replies } = makeDeps({ getClerkUserId: async () => null });
     await processTelegramMessage(deps, topic, photoMsg(), "1");
     expect(enqueued).toEqual([]);
+    expect(replies).toEqual([SIGN_IN_REPLY]);
+  });
+});
+
+// Route-level: the /start command must never reach the generic message handler,
+// which would send the literal text "/start" to the model as a user message.
+describe("webhook routing of /start", () => {
+  const post = async (body: unknown, env: Record<string, unknown>) => {
+    const router = createTelegramWebhookRoute();
+    const pending: Promise<unknown>[] = [];
+    const res = await router.fetch(
+      new Request("https://example.test/api/webhooks/telegram", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-telegram-bot-api-secret-token": "secret",
+        },
+        body: JSON.stringify(body),
+      }),
+      env,
+      {
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+        passThroughOnException: () => {},
+        props: {},
+      },
+    );
+    await Promise.all(pending);
+    return res;
+  };
+
+  const startUpdate = {
+    update_id: 7,
+    message: {
+      message_id: 1,
+      date: 0,
+      chat: { id: 100, type: "private" },
+      from: { id: 111, is_bot: false, first_name: "A" },
+      text: "/start",
+      entities: [{ type: "bot_command", offset: 0, length: 6 }],
+    },
+  };
+
+  it("does not enqueue the literal /start text", async () => {
+    const enqueued: EnqueueTurnInput[] = [];
+    const started: unknown[][] = [];
+    const env = {
+      TELEGRAM_BOT_TOKEN: "t",
+      TELEGRAM_BOT_INFO: JSON.stringify({
+        id: 1,
+        is_bot: true,
+        first_name: "Zero",
+        username: "zero_bot",
+        can_join_groups: true,
+        can_read_all_group_messages: false,
+        supports_inline_queries: false,
+      }),
+      TELEGRAM_API_ROOT: "https://api.telegram.test",
+      TELEGRAM_WEBHOOK_SECRET: "secret",
+      KV: { get: async () => "user_abc" },
+      USER_DO: {
+        idFromName: () => ({ toString: () => "id" }),
+        get: () => ({
+          enqueueTurn: async (input: EnqueueTurnInput) => {
+            enqueued.push(input);
+          },
+          startConversation: async (...args: unknown[]) => {
+            started.push(args);
+            return true;
+          },
+        }),
+      },
+    };
+
+    const res = await post(startUpdate, env);
+
+    expect(res.status).toBe(200);
+    expect(enqueued).toEqual([]);
+    expect(started).toEqual([["user_abc", 100, 0, "start:7"]]);
   });
 });

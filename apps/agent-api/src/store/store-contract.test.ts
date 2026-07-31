@@ -911,3 +911,36 @@ describe("Store contract: webhook idempotency", () => {
     expect(s.markProcessed("u2")).toBe(false);
   });
 });
+
+describe("Store contract: first contact", () => {
+  it("claimFirstContact returns true once and false afterwards", () => {
+    const s = makeStore();
+    expect(s.claimFirstContact()).toBe(true);
+    expect(s.claimFirstContact()).toBe(false);
+    expect(s.claimFirstContact()).toBe(false);
+  });
+
+  it("claimFirstContact survives other settings writes", () => {
+    const s = makeStore();
+    expect(s.claimFirstContact()).toBe(true);
+    s.updateSettings({ onboardingSeen: true, timezone: "Europe/Berlin" });
+    s.setGoogleOnboardingStatus("done");
+    expect(s.claimFirstContact()).toBe(false);
+    expect(s.getSettings().timezone).toBe("Europe/Berlin");
+  });
+
+  it("a relink does not reset the claim", () => {
+    const s = makeStore();
+    s.linkTelegram("111");
+    expect(s.claimFirstContact()).toBe(true);
+    s.unlinkTelegram();
+    s.linkTelegram("222");
+    expect(s.claimFirstContact()).toBe(false);
+  });
+
+  it("claiming first seeds the settings row without losing it", () => {
+    const s = makeStore();
+    expect(s.claimFirstContact()).toBe(true);
+    expect(s.getSettings().isNewUser).toBe(false);
+  });
+});

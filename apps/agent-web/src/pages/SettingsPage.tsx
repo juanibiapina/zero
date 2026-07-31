@@ -23,6 +23,9 @@ import {
 const GOOGLE_SCOPES_MUTABLE: string[] = [...GOOGLE_WORKSPACE_SCOPES];
 
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string;
+// The ?start= payload makes Telegram show a Start button instead of the input
+// bar, which is how Zero gets to speak first on a new chat.
+const TELEGRAM_DEEP_LINK = `https://t.me/${TELEGRAM_BOT_USERNAME}?start=welcome`;
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -122,7 +125,7 @@ function TelegramConnect() {
             <ConnectedStatus>Connected · {telegramId}</ConnectedStatus>
             <div className="flex items-center gap-3">
               <a
-                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                href={TELEGRAM_DEEP_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-foreground underline underline-offset-4 hover:text-foreground/70"

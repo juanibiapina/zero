@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-31: After linking Telegram, tap "Open in Telegram" and Zero introduces itself the moment you press Start, instead of waiting for you to write first.
 - 2026-07-31: Messages you write in a group's main chat, outside any topic, now get an answer instead of silence.
 - 2026-07-31: Zero now keeps files across conversations and topics, can import Gmail attachments, read saved PDFs, view saved images, and send any saved file back to Telegram when asked.
 - 2026-07-30: Replies land sooner and stay quick in long conversations: Zero now files away what it learned between conversations instead of after each reply, so nothing you send waits behind that work.

@@ -22,6 +22,7 @@ import { createBot } from "../telegram/bot";
 import { createR2FileBlobs } from "../files/r2";
 import { createUserFileStore } from "../files/store";
 import { renderFileMarker } from "../files/marker";
+import { composeTurnText, FIRST_CONTACT_NOTE } from "./turn-text";
 import type { FileBlobStore } from "../files/types";
 import { TelegramFileSendError } from "../tools/files";
 import { createModel, createModelFactory } from "../agents/model";
@@ -123,7 +124,10 @@ export class UserDO extends DurableObject<Env> {
     topicId: number;
     text: string;
     files?: Array<{ filename: string; mimeType: string; bytes: Uint8Array }>;
-  }): Promise<void> {
+    // Set by /start: enqueue only when this is the user's first contact. A
+    // later /start carries nothing to answer, so it must not run a turn.
+    firstContactOnly?: boolean;
+  }): Promise<boolean> {
     await this.ctx.storage.put("clerkUserId", input.clerkUserId);
     const files = createUserFileStore({
       clerkUserId: input.clerkUserId,
@@ -142,11 +146,19 @@ export class UserDO extends DurableObject<Env> {
     }
     // Save is deterministic, so duplicate webhooks may repeat it safely. Claim
     // the update only after saving, then queue the message once.
-    if (!this.store.markProcessed(input.updateId)) return;
+    if (!this.store.markProcessed(input.updateId)) return false;
+    // Strictly after markProcessed: the claim is one-shot, so taking it before
+    // the dedupe gate would burn it on a duplicate webhook delivery whose
+    // update is then dropped, and the introduction would never be sent.
+    const firstContact = this.store.claimFirstContact();
+    if (firstContact) log("first_contact_claimed", { clerk_user_id: input.clerkUserId });
+    if (input.firstContactOnly && !firstContact) return false;
     const conversationId = this.store.getOrCreateConversation(input.chatId, input.topicId);
-    const text = markers.length > 0
-      ? [input.text, ...markers].filter(Boolean).join("\n\n")
-      : input.text;
+    const text = composeTurnText({
+      ...(firstContact ? { note: FIRST_CONTACT_NOTE } : {}),
+      text: input.text,
+      markers,
+    });
     // The message enters the durable queue, not the transcript. A turn injects
     // it at a safe point, so a message arriving while the agent is mid-run is
     // never spliced into a request the model is already answering.
@@ -163,6 +175,26 @@ export class UserDO extends DurableObject<Env> {
       input.clerkUserId,
       conversationId,
     );
+    return true;
+  }
+
+  // The /start command. Runs the normal enqueue path with no user text, so
+  // Zero introduces itself; returns false when this user has already been
+  // introduced, and the caller sends a plain ack instead of running a turn.
+  async startConversation(
+    clerkUserId: string,
+    chatId: number,
+    topicId: number,
+    updateId: string,
+  ): Promise<boolean> {
+    return this.enqueueTurn({
+      updateId,
+      clerkUserId,
+      chatId,
+      topicId,
+      text: "",
+      firstContactOnly: true,
+    });
   }
 
   // Queue one admin-authored task. A queued task is a conflict; a terminal

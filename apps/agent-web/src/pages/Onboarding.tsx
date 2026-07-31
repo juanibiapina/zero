@@ -22,6 +22,10 @@ import {
 // Clerk's createExternalAccount/reauthorize want a mutable string[].
 const GOOGLE_SCOPES_MUTABLE: string[] = [...GOOGLE_WORKSPACE_SCOPES];
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string;
+// The ?start= payload is what makes Telegram show a Start button instead of the
+// input bar, which is how Zero gets to speak first. The value is unused today;
+// it is kept for future attribution.
+const TELEGRAM_DEEP_LINK = `https://t.me/${TELEGRAM_BOT_USERNAME}?start=welcome`;
 
 // ─── Google ─────────────────────────────────────────────────────────
 
@@ -96,9 +100,11 @@ function GoogleCard() {
 function TelegramCard({
   telegramId,
   onLinked,
+  onOpen,
 }: {
   telegramId: string | null;
   onLinked: (id: string | null) => void;
+  onOpen: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
 
@@ -138,8 +144,19 @@ function TelegramCard({
         {telegramId === null ? (
           <TelegramLoginWidget onAuth={onAuth} />
         ) : (
-          <div className="animate-in fade-in duration-200 motion-reduce:animate-none">
+          <div className="space-y-3 animate-in fade-in duration-200 motion-reduce:animate-none">
             <ConnectedStatus>Connected · {telegramId}</ConnectedStatus>
+            <p className="text-sm text-muted-foreground">
+              Tap to open Telegram and press Start — Zero will say hello.
+            </p>
+            <a
+              href={TELEGRAM_DEEP_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onOpen}
+            >
+              <Button>Open in Telegram</Button>
+            </a>
           </div>
         )}
         {error && <ErrorText>{error}</ErrorText>}
@@ -156,18 +173,10 @@ function CompletionBlock({ onFinish }: { onFinish: () => void }) {
       <div className="space-y-1">
         <p className="text-sm font-medium text-foreground">You're all set.</p>
         <p className="text-sm text-muted-foreground">
-          Open Telegram and send a message to start your first conversation.
+          Open Telegram above and press Start, or head to settings.
         </p>
       </div>
       <div className="flex items-center gap-3">
-        <a
-          href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onFinish}
-        >
-          <Button>Open in Telegram</Button>
-        </a>
         <Button variant="ghost" onClick={onFinish}>
           Go to settings
         </Button>
@@ -276,7 +285,11 @@ export function Onboarding({
 
       <div className="space-y-4">
         <GoogleCard />
-        <TelegramCard telegramId={telegramId} onLinked={setTelegramId} />
+        <TelegramCard
+          telegramId={telegramId}
+          onLinked={setTelegramId}
+          onOpen={finish}
+        />
       </div>
 
       {bothConnected ? (

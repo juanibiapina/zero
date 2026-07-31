@@ -36,6 +36,7 @@ interface SettingsRow {
   googleOnboardingStatus: string | null;
   createdAt: string;
   timezone: string | null;
+  firstContactAt: string | null;
 }
 
 interface ConvRow {
@@ -603,6 +604,7 @@ export class MemoryStore implements Store {
       onboardingSeen: number;
       googleOnboardingStatus: string;
       timezone: string;
+      firstContactAt: string;
     }>,
   ): SettingsRow {
     if (this.settingsRow) {
@@ -615,6 +617,9 @@ export class MemoryStore implements Store {
       if (columns.timezone !== undefined) {
         this.settingsRow.timezone = columns.timezone;
       }
+      if (columns.firstContactAt !== undefined) {
+        this.settingsRow.firstContactAt = columns.firstContactAt;
+      }
       return this.settingsRow;
     }
     this.settingsRow = {
@@ -622,6 +627,7 @@ export class MemoryStore implements Store {
       googleOnboardingStatus: columns.googleOnboardingStatus ?? null,
       createdAt: this.now(),
       timezone: columns.timezone ?? null,
+      firstContactAt: columns.firstContactAt ?? null,
     };
     return this.settingsRow;
   }
@@ -657,6 +663,12 @@ export class MemoryStore implements Store {
 
   setGoogleOnboardingStatus(status: string): void {
     this.upsertSettings({ googleOnboardingStatus: status });
+  }
+
+  claimFirstContact(): boolean {
+    if (this.settingsRow?.firstContactAt) return false;
+    this.upsertSettings({ firstContactAt: this.now() });
+    return true;
   }
 
   // --- telegram link ---

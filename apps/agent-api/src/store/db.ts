@@ -52,6 +52,7 @@ interface SettingsRow {
   googleOnboardingStatus: string | null;
   createdAt: string | null;
   timezone: string | null;
+  firstContactAt: string | null;
 }
 
 export class DbStore implements Store {
@@ -716,6 +717,7 @@ export class DbStore implements Store {
       onboardingSeen: number;
       googleOnboardingStatus: string;
       timezone: string;
+      firstContactAt: string;
     }>,
   ): SettingsRow {
     const existing = this.db.get(userSettings);
@@ -768,6 +770,13 @@ export class DbStore implements Store {
 
   setGoogleOnboardingStatus(status: string): void {
     this.upsertSettings({ googleOnboardingStatus: status });
+  }
+
+  claimFirstContact(): boolean {
+    const row = this.db.get(userSettings) as SettingsRow | undefined;
+    if (row?.firstContactAt) return false;
+    this.upsertSettings({ firstContactAt: this.nowIso() });
+    return true;
   }
 
   // --- telegram link ---
