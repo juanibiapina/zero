@@ -7,11 +7,14 @@
 // DO eviction skips the catch and leaves the status "queued", so the next alarm
 // re-runs it. Re-running is idempotent: it re-authors the same pinned topic.
 
-import { logError, fmtErr } from "../log";
+import { log, logError, fmtErr } from "../log";
 import type { TopicStore } from "../store/types";
 
 export interface OnboardingDeps {
   store: TopicStore;
+  // Logged and reported on every boundary, so an onboarding run is joinable
+  // with the `onboarding_queued` line the route emits.
+  clerkUserId: string;
   // The pinned identity topic to ensure + fill.
   topicName: string;
   description: string;
@@ -21,10 +24,37 @@ export interface OnboardingDeps {
   runAgent: (topicName: string) => Promise<void>;
   // Persist the terminal status ("done" | "failed").
   setStatus: (status: string) => void;
+  // Report the run's boundaries to a human channel (production: Discord).
+  // Injected so this module stays free of env and fetch.
+  notify: (message: string) => Promise<void>;
 }
 
+const secs = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
+
+// A notification must never change the outcome of a run: production's
+// `notifyDiscord` already swallows its own errors, this guards the seam.
+const safeNotify = async (
+  notify: (message: string) => Promise<void>,
+  message: string,
+): Promise<void> => {
+  try {
+    await notify(message);
+  } catch (err) {
+    logError("onboarding_notify_failed", { error: fmtErr(err) });
+  }
+};
+
 export const runOnboarding = async (deps: OnboardingDeps): Promise<void> => {
-  const { store, topicName, description, runAgent, setStatus } = deps;
+  const { store, clerkUserId, topicName, description, runAgent, setStatus } =
+    deps;
+
+  // Boundary logging. `onboarding_started` matters by the absence of its
+  // terminal partner: a mid-run DO eviction skips the catch below, so a start
+  // line with no `onboarding_finished` / `onboarding_failed` is the only
+  // evidence that the run died with the status left at "queued".
+  const startedAt = Date.now();
+  log("onboarding_started", { clerk_user_id: clerkUserId });
+  await safeNotify(deps.notify, `🔍 Onboarding started: ${clerkUserId}`);
 
   // Pre-create and pin the topic before the agent fills it. Idempotent across
   // re-runs: create only when absent, always (re-)assert the pin.
@@ -51,8 +81,28 @@ export const runOnboarding = async (deps: OnboardingDeps): Promise<void> => {
   try {
     await runAgent(topicName);
     setStatus("done");
+    const durationMs = Date.now() - startedAt;
+    log("onboarding_finished", {
+      clerk_user_id: clerkUserId,
+      status: "done",
+      duration_ms: durationMs,
+    });
+    await safeNotify(
+      deps.notify,
+      `✅ Onboarding done: ${clerkUserId} (${secs(durationMs)})`,
+    );
   } catch (err) {
-    logError("onboarding_failed", { error: fmtErr(err) });
+    const durationMs = Date.now() - startedAt;
+    const formatted = fmtErr(err);
+    logError("onboarding_failed", {
+      clerk_user_id: clerkUserId,
+      duration_ms: durationMs,
+      error: formatted,
+    });
     setStatus("failed");
+    await safeNotify(
+      deps.notify,
+      `❌ Onboarding failed: ${clerkUserId} (${secs(durationMs)}) — ${formatted.message.slice(0, 200)}`,
+    );
   }
 };

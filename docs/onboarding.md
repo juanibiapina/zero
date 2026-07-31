@@ -72,12 +72,39 @@ weight; when in doubt leave it out"; never invent facts.
   real requirements (crons, workflows, email triggers) land. This one branch
   either folds into the real abstraction later or gets deleted.
 
+## Observability
+
+Every run reports both of its boundaries, to Workers Logs and to the Discord
+channel already used for signup notices (`DISCORD_SIGNUP_WEBHOOK_URL`, reused
+because onboarding is a rare per-user event with signup-scale volume).
+
+| line | when | fields |
+|---|---|---|
+| `onboarding_queued` | the route accepts the request | `clerk_user_id`, `force` |
+| `onboarding_started` | the run begins, before the topic is ensured | `clerk_user_id` |
+| `onboarding_finished` | the agent returned | `clerk_user_id`, `status: "done"`, `duration_ms` |
+| `onboarding_failed` | the agent threw (level=error) | `clerk_user_id`, `duration_ms`, `error` |
+
+Exactly one terminal line per run: `onboarding_finished` **or**
+`onboarding_failed`, never both.
+
+**A start line with no terminal line means the run died mid-flight** — a DO
+eviction skips the `catch`, so nothing is logged and the status is still
+`queued`. That is not lost work: the next dispatch re-runs it (see the
+durability trick above). It is the only evidence such an eviction happened.
+
+Notifications never affect the run: a throwing notifier is caught and logged as
+`onboarding_notify_failed`, and the production `notifyDiscord` already swallows
+non-2xx and network errors.
+
 ## Testing
 
 - `agents/onboarding.test.ts` — the agent reads Gmail (memory adapter) and
   writes the pinned topic; write-side Gmail/calendar tools are absent.
 - `do/onboarding.test.ts` — the status state machine: `done` on success,
-  `failed` on throw, idempotent re-run keeps the topic and pin.
+  `failed` on throw, idempotent re-run keeps the topic and pin; plus the
+  start/end notifications, the log lines, and that a failing notifier leaves the
+  outcome untouched.
 - `routes/onboarding.test.ts` — enqueue returns 202 and is idempotent.
 
 No e2e change: the e2e mock Anthropic issues no tool calls, so onboarding does

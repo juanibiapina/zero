@@ -43,6 +43,7 @@ import {
 } from "../do/admin-task";
 import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
+import { notifyDiscord } from "../discord";
 import { getScheduleDO } from "../ScheduleDO/stub";
 import { requestLearnSafely, touchScheduleSafely } from "../do/schedule";
 import type { Env } from "../types";
@@ -264,11 +265,16 @@ export class UserDO extends DurableObject<Env> {
 
     await runOnboarding({
       store: this.store,
+      clerkUserId,
       topicName: USER_TOPIC,
       description: USER_TOPIC_DESCRIPTION,
       runAgent: (topicName) =>
         runOnboardingAgent({ model, store: this.store, google, topicName }),
       setStatus: (status) => this.store.setGoogleOnboardingStatus(status),
+      // Same channel as the signup notice: onboarding is a rare per-user event,
+      // so its volume is on the order of signups.
+      notify: (message) =>
+        notifyDiscord(this.env.DISCORD_SIGNUP_WEBHOOK_URL, message),
     });
   }
 
