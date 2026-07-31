@@ -21,6 +21,7 @@ import type {
   MessageContent,
   MessageKind,
   Role,
+  ScheduleRecord,
   Store,
   Thread,
   Topic,
@@ -335,6 +336,50 @@ export class SystemTopicStore implements Store {
 
   deleteAllFiles(): void {
     this.inner.deleteAllFiles();
+  }
+
+  // --- schedules (delegate verbatim) ---
+
+  createSchedule(input: {
+    id: string;
+    conversationId: string;
+    prompt: string;
+    pattern: string;
+    timezone: string;
+    nextDueAt: number;
+  }): ScheduleRecord {
+    return this.inner.createSchedule(input);
+  }
+
+  listSchedules(conversationId?: string): ScheduleRecord[] {
+    return this.inner.listSchedules(conversationId);
+  }
+
+  getSchedule(id: string): ScheduleRecord | null {
+    return this.inner.getSchedule(id);
+  }
+
+  cancelSchedule(id: string): boolean {
+    return this.inner.cancelSchedule(id);
+  }
+
+  listDueSchedules(now: number): ScheduleRecord[] {
+    return this.inner.listDueSchedules(now);
+  }
+
+  advanceSchedule(
+    id: string,
+    input: { nextDueAt: number; lastFiredAt: string },
+  ): void {
+    this.inner.advanceSchedule(id, input);
+  }
+
+  retireSchedule(id: string, input: { lastFiredAt: string }): void {
+    this.inner.retireSchedule(id, input);
+  }
+
+  earliestScheduleDueAt(): number | null {
+    return this.inner.earliestScheduleDueAt();
   }
 
   // --- settings / link / idempotency (delegate verbatim) ---

@@ -16,6 +16,7 @@ import {
   scheduleDeadline,
   takeDueDeadlines,
   touchConversation,
+  type ScheduleReason,
 } from "../do/schedule";
 import type { LearnReason } from "../do/learning-job";
 import { getLearningDO } from "../LearningDO/stub";
@@ -60,6 +61,16 @@ export class ScheduleDO extends DurableObject<Env> {
     await scheduleDeadline(this.ctx.storage, { reason, dueAt: Date.now() });
   }
 
+  // Hold this user's schedule deadline at `dueAt`. There is exactly one such
+  // deadline, and `scheduleDeadline` replaces by key, so the caller must always
+  // pass the EARLIEST pending due time: a later one would push the alarm past
+  // a schedule that is due sooner. UserDO computes it from the store, which is
+  // the only place that knows.
+  async requestReminderAt(clerkUserId: string, dueAt: number): Promise<void> {
+    await this.ctx.storage.put("clerkUserId", clerkUserId);
+    await scheduleDeadline(this.ctx.storage, { reason: "reminder", dueAt });
+  }
+
   override async alarm(): Promise<void> {
     const startedAt = Date.now();
     const due = await takeDueDeadlines(this.ctx.storage, startedAt);
@@ -102,7 +113,7 @@ export class ScheduleDO extends DurableObject<Env> {
   // UserDO calls, which are the jobs themselves.
   private async dispatch(
     clerkUserId: string,
-    reason: "idle" | "size" | "onboarding" | "admin_task",
+    reason: ScheduleReason,
     conversationId?: string,
   ): Promise<void> {
     if (reason === "idle" || reason === "size") {
@@ -114,7 +125,10 @@ export class ScheduleDO extends DurableObject<Env> {
       return;
     }
     const userDO = getUserDO(this.env, clerkUserId);
-    if (reason === "onboarding") await userDO.runQueuedOnboarding();
+    // A due schedule enqueues its prompt and returns; the turn it books runs on
+    // UserDO's own alarm, so no LLM work happens on this one.
+    if (reason === "reminder") await userDO.runDueSchedules();
+    else if (reason === "onboarding") await userDO.runQueuedOnboarding();
     else await userDO.runQueuedAdminTask();
   }
 }

@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-07-31: Ask Zero to remind you about something later, or to do something on a routine ("every weekday at 8, send me my calendar and unread mail"). It messages you at that time in the same chat, and you can ask what's scheduled or have one cancelled.
 - 2026-07-31: After linking Telegram, tap "Open in Telegram" and Zero introduces itself the moment you press Start, instead of waiting for you to write first.
 - 2026-07-31: Admins can see estimated AI costs by user, agent, and conversation for selectable time ranges.
 - 2026-07-31: Messages you write in a group's main chat, outside any topic, now get an answer instead of silence.

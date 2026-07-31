@@ -20,6 +20,7 @@ import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
 import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
+import { buildScheduleTools } from "../tools/schedules";
 import { buildGoogleTools } from "../tools/google";
 import { buildFileTools } from "../tools/files";
 import { messageText, toBlocks } from "../store/messages";
@@ -28,6 +29,7 @@ import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { StoredFile, UserFileStore } from "../files/types";
+import type { ScheduleBook } from "../schedules/types";
 import {
   interfaceContext,
   interfaceSystemPrompt,
@@ -113,6 +115,11 @@ export interface InterfaceAgentInput {
   // when these are absent so the cached tool schema stays stable.
   files?: UserFileStore;
   sendFile?: (file: StoredFile, bytes: Uint8Array) => Promise<void>;
+  // What the user has asked to happen later, bound to this conversation. Tools
+  // stay registered when it is absent so the cached tool schema stays stable.
+  schedules?: ScheduleBook;
+  // Re-arm the user's schedule timer after a create or cancel. Fire-and-forget.
+  onScheduleChanged?: () => void;
   // Absolute reference time for the date anchor and relative message ages.
   // Defaults to now; injected in tests for deterministic rendering.
   now?: Date;
@@ -331,6 +338,14 @@ export const runInterfaceAgent = async (
     ...buildFileTools({
       files: input.files,
       sendFile: input.sendFile,
+    }),
+    // Registered unconditionally, same reason. Given to the interface agent
+    // only: the research and writer agents cannot message the user, so they
+    // must not be able to book a turn that does.
+    ...buildScheduleTools({
+      schedules: input.schedules,
+      timezone,
+      onScheduleChanged: input.onScheduleChanged,
     }),
   };
 

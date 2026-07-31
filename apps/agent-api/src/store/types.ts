@@ -327,6 +327,58 @@ export interface FileRecordStore {
   deleteAllFiles(): void;
 }
 
+// A schedule as stored: what to do, when it is next due, and which thread it
+// speaks in. `prompt` is an instruction to Zero's future self, not user-facing
+// copy. `pattern` is a five-field cron expression or an ISO-8601 local
+// datetime, read in `timezone` (snapshotted at creation). `nextDueAt` is epoch
+// ms, null once the record is retired.
+export interface ScheduleRecord {
+  id: string;
+  conversationId: string;
+  prompt: string;
+  pattern: string;
+  timezone: string;
+  nextDueAt: number | null;
+  status: ScheduleStatus;
+  createdAt: string;
+  lastFiredAt: string | null;
+}
+
+// `active` is due to fire again; `done` is a one-shot that has fired; the user
+// cancelled a `cancelled` one. Only `active` rows are listed or fired.
+export type ScheduleStatus = "active" | "done" | "cancelled";
+
+// Schedule rows, backed by the current user's Durable Object SQLite database
+// (hence synchronous, like FileRecordStore). Deciding *when* a pattern next
+// fires is not this port's business: schedules/recurrence.ts does that, and the
+// caller hands the resolved time in.
+export interface ScheduleRecordStore {
+  createSchedule(input: {
+    id: string;
+    conversationId: string;
+    prompt: string;
+    pattern: string;
+    timezone: string;
+    nextDueAt: number;
+  }): ScheduleRecord;
+  // Active schedules only, soonest first. Scoped to one conversation when a
+  // conversation id is given, else every active schedule for the user (which is
+  // what the per-user cap counts).
+  listSchedules(conversationId?: string): ScheduleRecord[];
+  getSchedule(id: string): ScheduleRecord | null;
+  // True when an active schedule with this id existed and is now cancelled.
+  cancelSchedule(id: string): boolean;
+  // Active schedules due at or before `now`, soonest first. A read: the caller
+  // advances or retires each one after enqueuing its prompt.
+  listDueSchedules(now: number): ScheduleRecord[];
+  advanceSchedule(id: string, input: { nextDueAt: number; lastFiredAt: string }): void;
+  // Mark a schedule finished: no next occurrence, so it stops being listed.
+  retireSchedule(id: string, input: { lastFiredAt: string }): void;
+  // The earliest pending due time across every active schedule, or null when
+  // none is pending. It is what the user's ScheduleDO deadline is set to.
+  earliestScheduleDueAt(): number | null;
+}
+
 // The per-user settings row, as reported to callers. Nullable columns come
 // through as null; `isNewUser` marks the access that seeded the row.
 export interface UserSettings {
@@ -366,4 +418,5 @@ export type Store = TopicStore &
   LearningStore &
   ExternalCallStore &
   FileRecordStore &
+  ScheduleRecordStore &
   SettingsStore;

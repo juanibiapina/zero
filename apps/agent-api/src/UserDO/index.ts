@@ -22,7 +22,7 @@ import { createBot } from "../telegram/bot";
 import { createR2FileBlobs } from "../files/r2";
 import { createUserFileStore } from "../files/store";
 import { renderFileMarker } from "../files/marker";
-import { composeTurnText, FIRST_CONTACT_NOTE } from "./turn-text";
+import { composeTurnText, FIRST_CONTACT_NOTE, SCHEDULE_NOTE } from "./turn-text";
 import type { FileBlobStore } from "../files/types";
 import { TelegramFileSendError } from "../tools/files";
 import { createModel, createModelFactory } from "../agents/model";
@@ -46,7 +46,14 @@ import { reportError } from "../reporting/zero-errors";
 import { runOnboarding } from "../do/onboarding";
 import { notifyDiscord } from "../discord";
 import { getScheduleDO } from "../ScheduleDO/stub";
-import { requestLearnSafely, touchScheduleSafely } from "../do/schedule";
+import {
+  requestLearnSafely,
+  requestReminderSafely,
+  touchScheduleSafely,
+} from "../do/schedule";
+import { fireDueSchedules } from "../do/schedules";
+import { createScheduleBook } from "../schedules/book";
+import { nextRun } from "../schedules/recurrence";
 import type { Env } from "../types";
 import { log } from "../log";
 
@@ -175,6 +182,13 @@ export class UserDO extends DurableObject<Env> {
       input.clerkUserId,
       conversationId,
     );
+    // Ordinary activity heals a lost arm: if a create could not reach the
+    // schedule, or a deadline was dropped, the next message puts it back.
+    await requestReminderSafely(
+      getScheduleDO(this.env, input.clerkUserId),
+      input.clerkUserId,
+      this.store.earliestScheduleDueAt(),
+    );
     return true;
   }
 
@@ -269,6 +283,37 @@ export class UserDO extends DurableObject<Env> {
   async runQueuedOnboarding(): Promise<void> {
     if (this.store.getSettings().googleOnboardingStatus !== "queued") return;
     await this.runOnboarding();
+  }
+
+  // Fire every schedule that has come due. Called by ScheduleDO when the single
+  // reminder deadline it holds for this user comes due.
+  //
+  // No model runs here: each due schedule's prompt goes into the conversation's
+  // pending queue and the turn happens on this DO's own alarm, like any other
+  // message. The enqueue comes BEFORE the record is advanced, so a reset in
+  // between fires a schedule twice rather than never — for a reminder the
+  // duplicate is the better failure.
+  async runDueSchedules(): Promise<void> {
+    const clerkUserId = await this.ctx.storage.get<string>("clerkUserId");
+    const fired = fireDueSchedules({
+      store: this.store,
+      now: Date.now(),
+      nextRun,
+      composeText: (prompt) =>
+        composeTurnText({ note: SCHEDULE_NOTE, text: prompt }),
+    });
+    if (fired > 0 && (await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Date.now());
+    }
+    // Re-arm for whatever is now earliest, including the occurrence just
+    // scheduled by an advance.
+    if (clerkUserId) {
+      await requestReminderSafely(
+        getScheduleDO(this.env, clerkUserId),
+        clerkUserId,
+        this.store.earliestScheduleDueAt(),
+      );
+    }
   }
 
   // Queue Google onboarding: set status `queued` and arm the alarm. Idempotent
@@ -377,6 +422,22 @@ export class UserDO extends DurableObject<Env> {
       }
     };
 
+    // Bound to this conversation: a schedule speaks in the thread it was
+    // created in.
+    const schedules = createScheduleBook({
+      store: this.store,
+      conversationId,
+    });
+    // Re-arm the user's timer after a create or cancel, best-effort and off the
+    // reply path.
+    const onScheduleChanged = () => {
+      void requestReminderSafely(
+        getScheduleDO(this.env, clerkUserId),
+        clerkUserId,
+        this.store.earliestScheduleDueAt(),
+      );
+    };
+
     let timer: ReturnType<typeof setTimeout> | undefined;
     // stopTyping cancels the pending refresh so no tick reschedules. Idempotent:
     // the orchestrator calls it the moment the reply is sent (before the writer
@@ -404,6 +465,8 @@ export class UserDO extends DurableObject<Env> {
         google,
         files,
         sendFile,
+        schedules,
+        onScheduleChanged,
         chatId,
         topicId,
         clerkUserId,

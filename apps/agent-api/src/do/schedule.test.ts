@@ -198,6 +198,7 @@ describe("best-effort scheduling from the turn path", () => {
         throw new Error("do unreachable");
       },
       requestLearn: async () => {},
+      requestReminderAt: async () => {},
     };
     await expect(
       touchScheduleSafely(schedule, "user_1", "c1"),
@@ -212,6 +213,7 @@ describe("best-effort scheduling from the turn path", () => {
       requestLearn: async (user: string, reason: "idle" | "size", conversationId?: string) => {
         calls.push([user, reason, conversationId]);
       },
+      requestReminderAt: async () => {},
     };
     await requestLearnSafely(schedule, "user_1", "size", "c1");
     expect(calls).toEqual([["user_1", "size", "c1"]]);
@@ -221,6 +223,7 @@ describe("best-effort scheduling from the turn path", () => {
       requestLearn: async () => {
         throw new Error("do unreachable");
       },
+      requestReminderAt: async () => {},
     };
     await expect(
       requestLearnSafely(broken, "user_1", "size", "c1"),

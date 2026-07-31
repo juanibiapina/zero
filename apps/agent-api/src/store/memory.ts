@@ -22,6 +22,7 @@ import type {
   MessageContent,
   MessageKind,
   Role,
+  ScheduleRecord,
   Store,
   Thread,
   Topic,
@@ -100,6 +101,8 @@ export class MemoryStore implements Store {
     { tool: string; status: string; result: string | null }
   >();
   private files = new Map<string, StoredFileRecord>();
+  // Schedule rows in creation order, mirroring the schedules table.
+  private schedules: ScheduleRecord[] = [];
   private settingsRow: SettingsRow | null = null;
   private telegramId: string | null = null;
   private processed = new Set<string>();
@@ -415,6 +418,9 @@ export class MemoryStore implements Store {
     this.claimed = new Set(
       [...this.claimed].filter((k) => !dropped.has(Number(k.split(":")[0]))),
     );
+    // Schedules deliver into this thread and have no other one to speak in, so
+    // a reset takes them with it (DbStore also needs this for FK ordering).
+    this.schedules = this.schedules.filter((s) => s.conversationId !== conv.id);
     this.convs = this.convs.filter((c) => c.id !== conv.id);
   }
 
@@ -592,6 +598,81 @@ export class MemoryStore implements Store {
 
   deleteAllFiles(): void {
     this.files.clear();
+  }
+
+  // --- schedules ---
+
+  createSchedule(input: {
+    id: string;
+    conversationId: string;
+    prompt: string;
+    pattern: string;
+    timezone: string;
+    nextDueAt: number;
+  }): ScheduleRecord {
+    const record: ScheduleRecord = {
+      ...input,
+      status: "active",
+      createdAt: this.now(),
+      lastFiredAt: null,
+    };
+    this.schedules.push(record);
+    return { ...record };
+  }
+
+  listSchedules(conversationId?: string): ScheduleRecord[] {
+    return this.schedules
+      .filter(
+        (s) =>
+          s.status === "active" &&
+          (conversationId === undefined || s.conversationId === conversationId),
+      )
+      .map((s) => ({ ...s }))
+      .sort((a, b) => (a.nextDueAt ?? Infinity) - (b.nextDueAt ?? Infinity));
+  }
+
+  getSchedule(id: string): ScheduleRecord | null {
+    const record = this.schedules.find((s) => s.id === id);
+    return record ? { ...record } : null;
+  }
+
+  cancelSchedule(id: string): boolean {
+    const record = this.schedules.find((s) => s.id === id);
+    if (!record || record.status !== "active") return false;
+    record.status = "cancelled";
+    record.nextDueAt = null;
+    return true;
+  }
+
+  listDueSchedules(now: number): ScheduleRecord[] {
+    return this.listSchedules().filter(
+      (s) => s.nextDueAt !== null && s.nextDueAt <= now,
+    );
+  }
+
+  advanceSchedule(
+    id: string,
+    input: { nextDueAt: number; lastFiredAt: string },
+  ): void {
+    const record = this.schedules.find((s) => s.id === id);
+    if (!record) return;
+    record.nextDueAt = input.nextDueAt;
+    record.lastFiredAt = input.lastFiredAt;
+  }
+
+  retireSchedule(id: string, input: { lastFiredAt: string }): void {
+    const record = this.schedules.find((s) => s.id === id);
+    if (!record) return;
+    record.status = "done";
+    record.nextDueAt = null;
+    record.lastFiredAt = input.lastFiredAt;
+  }
+
+  earliestScheduleDueAt(): number | null {
+    const due = this.listSchedules()
+      .map((s) => s.nextDueAt)
+      .filter((at): at is number => at !== null);
+    return due.length === 0 ? null : Math.min(...due);
   }
 
   // --- settings ---

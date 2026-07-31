@@ -41,9 +41,12 @@ importers:
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
+      croner:
+        specifier: ^10.0.1
+        version: 10.0.1
       do-orm:
         specifier: github:juanibiapina/do-orm
-        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/5094ebcbe8a9717a472e13432c313757f3942f57
+        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/0dd9db36bb3e921886b7b7b4f9923918826ad633
       grammy:
         specifier: ^1.45.1
         version: 1.45.1
@@ -438,7 +441,7 @@ importers:
         version: link:../../packages/vault-core
       do-orm:
         specifier: github:juanibiapina/do-orm
-        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/5094ebcbe8a9717a472e13432c313757f3942f57
+        version: https://codeload.github.com/juanibiapina/do-orm/tar.gz/0dd9db36bb3e921886b7b7b4f9923918826ad633
       hono:
         specifier: ^4.12.30
         version: 4.12.31
@@ -4970,6 +4973,10 @@ packages:
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
     hasBin: true
 
+  croner@10.0.1:
+    resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
+    engines: {node: '>=18.0'}
+
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
 
@@ -5181,8 +5188,8 @@ packages:
   dnssd-advertise@1.1.6:
     resolution: {integrity: sha512-Ndrrf6BMPalkQPd/zubL+4YghH2J9NspapQ09uDXwYbvOPkP0oaqf5CkcwJ0b50kS2O3ul6yVu+jz+RY62Cejg==}
 
-  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/5094ebcbe8a9717a472e13432c313757f3942f57:
-    resolution: {tarball: https://codeload.github.com/juanibiapina/do-orm/tar.gz/5094ebcbe8a9717a472e13432c313757f3942f57}
+  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/0dd9db36bb3e921886b7b7b4f9923918826ad633:
+    resolution: {tarball: https://codeload.github.com/juanibiapina/do-orm/tar.gz/0dd9db36bb3e921886b7b7b4f9923918826ad633}
     version: 0.1.0
 
   doctrine@2.1.0:
@@ -14755,6 +14762,8 @@ snapshots:
       - supports-color
       - ts-node
 
+  croner@10.0.1: {}
+
   cross-fetch@3.2.0:
     dependencies:
       node-fetch: 2.7.0
@@ -14934,7 +14943,7 @@ snapshots:
 
   dnssd-advertise@1.1.6: {}
 
-  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/5094ebcbe8a9717a472e13432c313757f3942f57: {}
+  do-orm@https://codeload.github.com/juanibiapina/do-orm/tar.gz/0dd9db36bb3e921886b7b7b4f9923918826ad633: {}
 
   doctrine@2.1.0:
     dependencies:

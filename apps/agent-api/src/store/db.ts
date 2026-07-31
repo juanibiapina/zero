@@ -13,6 +13,7 @@ import {
   messages,
   pendingMessages,
   processedUpdates,
+  schedules,
   telegramLink,
   topics,
   topicLinks,
@@ -38,6 +39,8 @@ import type {
   MessageContent,
   MessageKind,
   Role,
+  ScheduleRecord,
+  ScheduleStatus,
   Store,
   Thread,
   Topic,
@@ -454,6 +457,10 @@ export class DbStore implements Store {
     }
     this.db.delete(messages, { where: eq("conversationId", conv.id) });
     this.db.delete(pendingMessages, { where: eq("conversationId", conv.id) });
+    // Schedules reference the conversation they deliver to, so they go before
+    // it too. Resetting a thread cancels what was scheduled in it: the record
+    // has no other thread to speak in.
+    this.db.delete(schedules, { where: eq("conversationId", conv.id) });
     this.db.delete(conversations, { where: eq("id", conv.id) });
   }
 
@@ -706,6 +713,87 @@ export class DbStore implements Store {
     }
   }
 
+  // --- schedules ---
+
+  createSchedule(input: {
+    id: string;
+    conversationId: string;
+    prompt: string;
+    pattern: string;
+    timezone: string;
+    nextDueAt: number;
+  }): ScheduleRecord {
+    const row = {
+      ...input,
+      status: "active" as const,
+      createdAt: this.nowIso(),
+      lastFiredAt: null,
+    };
+    this.db.insert(schedules, row);
+    return row;
+  }
+
+  listSchedules(conversationId?: string): ScheduleRecord[] {
+    return this.db
+      .all(schedules, {
+        where:
+          conversationId === undefined
+            ? eq("status", "active")
+            : and(eq("status", "active"), eq("conversationId", conversationId)),
+      })
+      .map(toSchedule)
+      .sort(byDueAt);
+  }
+
+  getSchedule(id: string): ScheduleRecord | null {
+    const row = this.db.get(schedules, { where: eq("id", id) });
+    return row ? toSchedule(row) : null;
+  }
+
+  cancelSchedule(id: string): boolean {
+    const row = this.db.get(schedules, { where: eq("id", id) });
+    if (!row || row.status !== "active") return false;
+    this.db.update(
+      schedules,
+      { status: "cancelled", nextDueAt: null },
+      { where: eq("id", id) },
+    );
+    return true;
+  }
+
+  listDueSchedules(now: number): ScheduleRecord[] {
+    return this.db
+      .all(schedules, { where: and(eq("status", "active"), lte("nextDueAt", now)) })
+      .map(toSchedule)
+      .sort(byDueAt);
+  }
+
+  advanceSchedule(
+    id: string,
+    input: { nextDueAt: number; lastFiredAt: string },
+  ): void {
+    this.db.update(
+      schedules,
+      { nextDueAt: input.nextDueAt, lastFiredAt: input.lastFiredAt },
+      { where: eq("id", id) },
+    );
+  }
+
+  retireSchedule(id: string, input: { lastFiredAt: string }): void {
+    this.db.update(
+      schedules,
+      { status: "done", nextDueAt: null, lastFiredAt: input.lastFiredAt },
+      { where: eq("id", id) },
+    );
+  }
+
+  earliestScheduleDueAt(): number | null {
+    const due = this.listSchedules()
+      .map((s) => s.nextDueAt)
+      .filter((at): at is number => at !== null);
+    return due.length === 0 ? null : Math.min(...due);
+  }
+
   // --- settings ---
 
   // Get the single settings row, updating the given columns if it exists or
@@ -842,6 +930,30 @@ function toMessage(m: {
     createdAt: m.createdAt,
   };
 }
+
+function toSchedule(s: {
+  id: string;
+  conversationId: string;
+  prompt: string;
+  pattern: string;
+  timezone: string;
+  nextDueAt: number | null;
+  status: string;
+  createdAt: string;
+  lastFiredAt: string | null;
+}): ScheduleRecord {
+  return {
+    ...s,
+    nextDueAt: s.nextDueAt ?? null,
+    status: s.status as ScheduleStatus,
+    lastFiredAt: s.lastFiredAt ?? null,
+  };
+}
+
+// Soonest first. A retired row has no due time and sorts last, though the two
+// call sites only ever see active rows.
+const byDueAt = (a: ScheduleRecord, b: ScheduleRecord): number =>
+  (a.nextDueAt ?? Infinity) - (b.nextDueAt ?? Infinity);
 
 function toTopic(t: {
   name: string;

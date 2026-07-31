@@ -944,3 +944,133 @@ describe("Store contract: first contact", () => {
     expect(s.getSettings().isNewUser).toBe(false);
   });
 });
+
+describe("Store contract: schedules", () => {
+  const seed = (
+    s: Store,
+    conversationId: string,
+    patch: Partial<{ id: string; prompt: string; nextDueAt: number }> = {},
+  ) =>
+    s.createSchedule({
+      id: patch.id ?? "sch_1",
+      conversationId,
+      prompt: patch.prompt ?? "remind the user to call Ana",
+      pattern: "0 8 * * 1-5",
+      timezone: "Europe/Berlin",
+      nextDueAt: patch.nextDueAt ?? 1_000,
+    });
+
+  it("createSchedule stores an active record and getSchedule returns it", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    const created = seed(s, c);
+    expect(created).toMatchObject({
+      id: "sch_1",
+      conversationId: c,
+      status: "active",
+      nextDueAt: 1_000,
+      lastFiredAt: null,
+    });
+    expect(s.getSchedule("sch_1")).toMatchObject({ id: "sch_1", status: "active" });
+  });
+
+  it("getSchedule returns null for an unknown id", () => {
+    expect(makeStore().getSchedule("sch_nope")).toBeNull();
+  });
+
+  it("listSchedules returns active records soonest first", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    seed(s, c, { id: "late", nextDueAt: 5_000 });
+    seed(s, c, { id: "early", nextDueAt: 2_000 });
+    expect(s.listSchedules().map((r) => r.id)).toEqual(["early", "late"]);
+  });
+
+  it("listSchedules scopes to one conversation when asked", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    const b = s.getOrCreateConversation(2, 0);
+    seed(s, a, { id: "here" });
+    seed(s, b, { id: "there" });
+    expect(s.listSchedules(a).map((r) => r.id)).toEqual(["here"]);
+    expect(s.listSchedules().map((r) => r.id).sort()).toEqual(["here", "there"]);
+  });
+
+  it("cancelSchedule takes a record out of listings, once", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    seed(s, c);
+    expect(s.cancelSchedule("sch_1")).toBe(true);
+    expect(s.cancelSchedule("sch_1")).toBe(false);
+    expect(s.cancelSchedule("sch_nope")).toBe(false);
+    expect(s.listSchedules()).toEqual([]);
+    expect(s.getSchedule("sch_1")).toMatchObject({
+      status: "cancelled",
+      nextDueAt: null,
+    });
+  });
+
+  it("listDueSchedules returns what is due at or before now, and nothing else", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    seed(s, c, { id: "due", nextDueAt: 1_000 });
+    seed(s, c, { id: "later", nextDueAt: 9_000 });
+    seed(s, c, { id: "cancelled", nextDueAt: 500 });
+    s.cancelSchedule("cancelled");
+    expect(s.listDueSchedules(1_000).map((r) => r.id)).toEqual(["due"]);
+    expect(s.listDueSchedules(999)).toEqual([]);
+  });
+
+  it("advanceSchedule moves the due time and records the fire", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    seed(s, c);
+    s.advanceSchedule("sch_1", {
+      nextDueAt: 60_000,
+      lastFiredAt: "2026-01-02T12:00:00.000Z",
+    });
+    expect(s.getSchedule("sch_1")).toMatchObject({
+      status: "active",
+      nextDueAt: 60_000,
+      lastFiredAt: "2026-01-02T12:00:00.000Z",
+    });
+    expect(s.listDueSchedules(1_000)).toEqual([]);
+  });
+
+  it("retireSchedule ends a schedule without deleting its history", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    seed(s, c);
+    s.retireSchedule("sch_1", { lastFiredAt: "2026-01-02T12:00:00.000Z" });
+    expect(s.listSchedules()).toEqual([]);
+    expect(s.getSchedule("sch_1")).toMatchObject({
+      status: "done",
+      nextDueAt: null,
+      lastFiredAt: "2026-01-02T12:00:00.000Z",
+    });
+  });
+
+  it("earliestScheduleDueAt reports the next pending fire, or null", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    expect(s.earliestScheduleDueAt()).toBeNull();
+    seed(s, c, { id: "late", nextDueAt: 5_000 });
+    seed(s, c, { id: "early", nextDueAt: 2_000 });
+    expect(s.earliestScheduleDueAt()).toBe(2_000);
+    s.cancelSchedule("early");
+    expect(s.earliestScheduleDueAt()).toBe(5_000);
+    s.cancelSchedule("late");
+    expect(s.earliestScheduleDueAt()).toBeNull();
+  });
+
+  it("resetConversation takes its schedules with it", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    const b = s.getOrCreateConversation(2, 0);
+    seed(s, a, { id: "here" });
+    seed(s, b, { id: "there" });
+    s.resetConversation(1, 0);
+    expect(s.getSchedule("here")).toBeNull();
+    expect(s.listSchedules().map((r) => r.id)).toEqual(["there"]);
+  });
+});

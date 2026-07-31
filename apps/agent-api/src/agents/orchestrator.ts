@@ -26,6 +26,7 @@ import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { StoredFile, UserFileStore } from "../files/types";
+import type { ScheduleBook } from "../schedules/types";
 
 // No history window: the conversation is rendered as `summary + messages after
 // the compaction boundary`, and what bounds it is size-triggered compaction, not
@@ -55,6 +56,10 @@ export interface TurnInput {
   // User-owned file storage and active Telegram-topic delivery.
   files?: UserFileStore;
   sendFile?: (file: StoredFile, bytes: Uint8Array) => Promise<void>;
+  // What the user has asked to happen later, bound to this conversation, plus
+  // the callback that re-arms their timer after a change.
+  schedules?: ScheduleBook;
+  onScheduleChanged?: () => void;
   chatId: number;
   topicId: number;
   // Test override for how many rows one context read pages in; production uses
@@ -242,6 +247,8 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       google,
       files: input.files,
       sendFile: input.sendFile,
+      schedules: input.schedules,
+      onScheduleChanged: input.onScheduleChanged,
       history,
       summary: context.summary ?? undefined,
       userMessage,

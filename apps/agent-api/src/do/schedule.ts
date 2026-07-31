@@ -9,9 +9,16 @@
 
 import { fmtErr, log, logError } from "../log";
 
-// What a deadline is for. `idle` and `size` both mean "learn"; the other two are
-// the existing UserDO jobs whose timers move here.
-export type ScheduleReason = "idle" | "size" | "onboarding" | "admin_task";
+// What a deadline is for. `idle` and `size` both mean "learn"; `onboarding` and
+// `admin_task` are the UserDO jobs whose timers moved here; `reminder` is the
+// user's own schedules, held as a single deadline set to the earliest pending
+// one (see docs/schedules.md).
+export type ScheduleReason =
+  | "idle"
+  | "size"
+  | "onboarding"
+  | "admin_task"
+  | "reminder";
 
 export interface Deadline {
   reason: ScheduleReason;
@@ -184,6 +191,7 @@ export interface ScheduleTarget {
     reason: "idle" | "size",
     conversationId?: string,
   ): Promise<void>;
+  requestReminderAt(clerkUserId: string, dueAt: number): Promise<void>;
 }
 
 // Push a conversation's idle deadline out, best-effort. A schedule that is
@@ -214,6 +222,23 @@ export const requestLearnSafely = async (
     await schedule.requestLearn(clerkUserId, reason, conversationId);
   } catch (err) {
     logError("schedule_request_failed", { reason, error: fmtErr(err) });
+  }
+};
+
+// Hold the user's reminder deadline at their earliest pending schedule, or
+// clear nothing when there is none. Best-effort for the same reason as the
+// others: a timer that cannot be armed must not fail the turn that set it, and
+// the next enqueue re-arms it from the store.
+export const requestReminderSafely = async (
+  schedule: ScheduleTarget,
+  clerkUserId: string,
+  dueAt: number | null,
+): Promise<void> => {
+  if (dueAt === null) return;
+  try {
+    await schedule.requestReminderAt(clerkUserId, dueAt);
+  } catch (err) {
+    logError("schedule_reminder_failed", { error: fmtErr(err) });
   }
 };
 

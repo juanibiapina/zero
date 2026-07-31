@@ -143,6 +143,24 @@ export const learningJobs = table("learning_jobs", {
   completedAt: column.text(),
 });
 
+// Schedules: one row per thing the user asked Zero to do later. `prompt` is an
+// instruction to Zero's future self; when the row comes due the prompt is
+// enqueued as a pending message and the ordinary turn path answers it.
+// `pattern` is a five-field cron expression or an ISO-8601 local datetime,
+// read in `timezone` (snapshotted at creation, never re-read from settings).
+// `nextDueAt` is epoch ms and NULL once the row is retired.
+export const schedules = table("schedules", {
+  id: column.text().notNull().primaryKey(),
+  conversationId: column.text().notNull().references(ref(conversations, "id")),
+  prompt: column.text().notNull(),
+  pattern: column.text().notNull(),
+  timezone: column.text().notNull(),
+  nextDueAt: column.integer(),
+  status: column.text().notNull().default("active"),
+  createdAt: column.text().notNull(),
+  lastFiredAt: column.text(),
+});
+
 // Webhook idempotency: dedupe fully re-delivered Telegram updates.
 export const processedUpdates = table("processed_updates", {
   updateId: column.text().notNull().primaryKey(),
