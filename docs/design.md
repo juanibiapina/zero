@@ -22,8 +22,8 @@ LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic; the gateway
 stores the real key and bills us directly) authenticated with
 `cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
 `MODEL_ID` (`claude-sonnet-4-6`). Durable state is the DO SQLite (topics,
-conversations, messages, attachment metadata); attachment bytes live in the
-`ATTACHMENTS` R2 bucket. There is no container and no per-user filesystem. A
+conversations, messages, file metadata); file bytes live in the `FILES` R2
+binding. There is no container and no per-user filesystem. A
 self-rescheduling `setTimeout` drives the Telegram typing action across the
 interface phase and stops when the reply is sent, which ends the turn. See
 [`topics.md`](topics.md) for the full design of the topic model and the two
@@ -161,7 +161,7 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `deliveries`        | `messageId`, `blockIndex`, `claimedAt`                       | Assistant text blocks already handed to Telegram |
 | `learning_jobs`     | `jobId`, `highWaterMessageId`, `startedAt`, `completedAt` | One consolidation run's frozen input range; completion is idempotent by job id |
 | `external_calls`    | `toolUseId`, `tool`, `status`, `result`, `startedAt`, `completedAt` | Irreversible outbound calls (send mail, create event), claimed before the request leaves |
-| `attachments`       | `id`, `conversationId`, `r2Key`, `filename`, `mimeType`, `createdAt` | Attachment lookup-by-id (bytes live in R2) |
+| `files`             | `id`, `storageKey`, `filename`, `mimeType`, `byteSize`, `createdAt` | User-owned file metadata (bytes live in R2) |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |
 
 The `telegram_link` table is the source of truth for the Clerk↔Telegram mapping.
@@ -220,55 +220,55 @@ immediately. The background task:
 
 1. `resolveContext` keeps topic messages and DMs; everything else is dropped.
 2. KV `tg:{telegramId}` → `clerkUserId`; drop the message if unknown.
-3. For an image or PDF, the bytes are downloaded to R2 and an `attachments` row
-   plus a text marker are prepared (see Attachments).
-4. `UserDO.enqueueTurn` dedupes on `processed_updates`, stores the user
-   message (with any marker) and attachment rows, and arms the DO alarm. The
+3. For any downloadable file under 5 MB, the route resolves Telegram's file,
+   downloads the bytes, and hands canonical metadata plus bytes to UserDO.
+4. `UserDO.enqueueTurn` saves through `UserFileStore`, appends the canonical
+   marker, dedupes the update, queues the message, and arms the DO alarm. The
    alarm runs the turn (see Architecture).
 
 The webhook URL and secret are registered with Telegram manually via the Bot
 API's `setWebhook` method — see [`telegram-webhook.md`](telegram-webhook.md).
 
-### Attachments
+### User files
 
-**Images** are supported via an on-demand `view_attachment` tool. Image bytes
-never ride in the conversation history (they would cost ~1,600 tokens every turn
-they stayed in context, and could not persist at their real position across a
-re-flattened turn). Instead:
+Files belong to the Zero user, not to Telegram, Gmail, a conversation, or a
+topic. `/new`, topic deletion, Telegram unlink, and Google disconnect leave
+saved files intact. `delete_file` removes one file; a full account-data purge
+removes all metadata and both new and legacy R2 objects.
 
-1. On an image message the webhook downloads the bytes
-   (`downloadTelegramFile`), enforces a ~5 MB cap, and puts them in the
-   `ATTACHMENTS` R2 bucket under `attachments/{clerkUserId}/{file_unique_id}`
-   (per-user prefix so a user's files list/delete together; the unique-id
-   component makes duplicate webhooks idempotent). It persists an `attachments`
-   metadata row and enqueues the turn with a text marker appended to the message
-   body: `[image "cat.jpg" id=att_abc]`.
-2. The interface agent calls `view_attachment(id)` when it needs to see an
-   image; the tool resolves the id to R2 bytes (user-scoped via the DO) and
-   returns them inside an intra-turn `tool_result` image block.
-3. Across turns only the marker persists (tool results are stripped), so a later
-   reference re-fetches by id. Images are billed only on turns where they are
-   viewed.
+`UserFileStore` (`apps/agent-api/src/files/`) is the only module that coordinates
+SQLite metadata and R2 bytes. New files use deterministic IDs derived from the
+normalized filename, MIME type, and bytes, with objects under
+`files/{clerkUserId}/{fileId}`. Save writes R2 first and metadata second. A replay
+deduplicates an intact file or repairs a missing object. Migrated `att_*` rows
+retain their old `attachments/{clerkUserId}/...` object keys and get their sizes
+backfilled lazily from R2.
 
-**PDFs** use the same R2 storage and metadata flow, with a `[pdf "report.pdf"
-id=att_abc]` marker. The interface agent calls `read_pdf(id, start_page,
-end_page)` on demand. The tool extracts text in the Worker and returns ordinary,
-page-labelled text inside the durable `tool_result`; PDF bytes and base64 never
-enter SQLite or the model request. One call reads at most 20 pages and 30,000
-characters, and defaults to the first 20 pages. Files remain capped at 5 MB.
-Scanned or image-only PDFs, encrypted files, charts, and visual layout are not
-supported because this path does not perform OCR or visual analysis.
+Each file is capped at 5 MB and each user at 100 MB. Filename and MIME
+normalization, PDF signature validation, quota checks, listing, reads, and
+deletion all live behind the same store interface so Telegram and Gmail follow
+the same policy. File bytes never enter SQLite, topic text, durable messages, or
+ordinary tool results.
 
-The `AttachmentStore` interface (`apps/agent-api/src/attachments/types.ts`)
-abstracts the bytes: `createR2Attachments` in prod, an in-memory adapter in
-tests. `deleteAllForUser` (wired into Telegram unlink) removes every object
-under the user's prefix. The bot token stays in the download URL and never
-reaches Anthropic.
+New files use this stable marker:
 
-**Other attachments** (audio, video, voice, stickers, and non-PDF documents)
-stay out of scope: an attachment-only message gets a short notice and is
-skipped; a message with both text and such a file is processed as text with a
-notice that the file was ignored.
+```text
+[file id=file_123 name="report.pdf" mime="application/pdf"]
+```
+
+Topics may keep markers as durable references. Agents preserve them
+byte-for-byte and resolve them through `get_file`; editing topic text never
+changes file ownership. Legacy `[image ...]` and `[pdf ...]` markers and the
+`view_attachment` alias remain readable.
+
+The generic tools are `get_file`, `list_files`, `send_file`, and `delete_file`.
+`send_file` uses Telegram `sendDocument` in the active topic and requires an
+explicit user request. Images use `view_image`, which accepts only JPEG, PNG,
+GIF, and WebP before returning a native model image block. PDFs use
+`read_pdf(id, start_page, end_page)`, with one-indexed ranges, a 20-page limit,
+page-labelled text, and bounded output. Audio, video, voice messages, stickers,
+and other documents remain stored, listable, sendable, and deletable even when
+Zero has no reader for their content.
 
 ## Secrets
 
@@ -322,11 +322,9 @@ documented in [caching.md](./caching.md).
 
 ## Future Work
 
-- Support audio and video attachments once their extraction and `tool_result`
-  serialization paths are defined.
+- Add format-specific readers for stored audio and video files.
 - Consider structured multi-turn history for the research and learning agents
   (they currently use the single-`prompt` path).
-- An R2 lifecycle expiry rule for attachment objects.
 - Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
   shapes are known; Google onboarding is the first, deliberately minimal, one
   (see [`onboarding.md`](onboarding.md)).

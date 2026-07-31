@@ -1,5 +1,5 @@
 // Mock Telegram Bot API server.
-// Captures sendMessage calls so the test can assert on them.
+// Captures sendMessage and multipart sendDocument calls for assertions.
 //
 // grammY sends to /bot<TOKEN>/sendMessage where token is directly after "bot".
 // We use middleware to match all POST /bot*/method requests.
@@ -14,12 +14,21 @@ interface CapturedMessage {
   parse_mode?: string;
 }
 
+interface CapturedDocument {
+  chat_id: number;
+  message_thread_id?: number;
+  filename: string;
+  contentType: string;
+  content_base64: string;
+}
+
 interface RegisteredFile {
   file_path: string;
   content: Buffer;
 }
 
 const messages: CapturedMessage[] = [];
+const documents: CapturedDocument[] = [];
 // Files the test registers so getFile + the download URL can resolve them.
 const filesById = new Map<string, RegisteredFile>();
 const filesByPath = new Map<string, Buffer>();
@@ -36,11 +45,12 @@ app.get("/test/messages", (c) => {
 });
 
 app.get("/test/events", (c) => {
-  return c.json({ getFileCalls, downloads });
+  return c.json({ getFileCalls, downloads, documents });
 });
 
 app.delete("/test/messages", (c) => {
   messages.length = 0;
+  documents.length = 0;
   messageIdCounter = 1;
   filesById.clear();
   filesByPath.clear();
@@ -97,6 +107,31 @@ app.post("/*", async (c) => {
       result: {
         message_id: messageIdCounter++,
         chat: { id: body.chat_id },
+      },
+    });
+  }
+
+  if (method === "sendDocument") {
+    const form = await c.req.formData();
+    const document = form.get("document");
+    if (!document || typeof document === "string") {
+      return c.json({ ok: false, description: "document file missing" }, 400);
+    }
+    const chatId = Number(form.get("chat_id"));
+    const thread = form.get("message_thread_id");
+    documents.push({
+      chat_id: chatId,
+      ...(thread ? { message_thread_id: Number(thread) } : {}),
+      filename: document.name,
+      contentType: document.type,
+      content_base64: Buffer.from(await document.arrayBuffer()).toString("base64"),
+    });
+    return c.json({
+      ok: true,
+      result: {
+        message_id: messageIdCounter++,
+        chat: { id: chatId },
+        document: { file_name: document.name, mime_type: document.type },
       },
     });
   }

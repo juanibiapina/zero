@@ -25,7 +25,7 @@ import type { Store } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
-import type { AttachmentStore } from "../attachments/types";
+import type { StoredFile, UserFileStore } from "../files/types";
 
 // No history window: the conversation is rendered as `summary + messages after
 // the compaction boundary`, and what bounds it is size-triggered compaction, not
@@ -52,10 +52,9 @@ export interface TurnInput {
   // Gmail + Calendar access, built by the DO and forwarded to the interface
   // agent (threaded like `search`).
   google: GoogleWorkspace;
-  // Attachment blob store (R2), forwarded to the interface agent's
-  // view_attachment tool. Optional so tests that don't exercise images can omit
-  // it (the tool is then not registered).
-  attachments?: AttachmentStore;
+  // User-owned file storage and active Telegram-topic delivery.
+  files?: UserFileStore;
+  sendFile?: (file: StoredFile, bytes: Uint8Array) => Promise<void>;
   chatId: number;
   topicId: number;
   // Test override for how many rows one context read pages in; production uses
@@ -233,10 +232,8 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       search,
       fetcher,
       google,
-      attachments: input.attachments,
-      getAttachment: input.attachments
-        ? (id) => store.getAttachment(id)
-        : undefined,
+      files: input.files,
+      sendFile: input.sendFile,
       history,
       summary: context.summary ?? undefined,
       userMessage,

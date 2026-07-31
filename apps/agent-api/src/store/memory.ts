@@ -12,8 +12,8 @@ import {
 } from "./messages";
 import { KnowledgeConflictError } from "./types";
 import type {
-  Attachment,
   CompactionWindow,
+  StoredFileRecord,
   ConversationContext,
   ConversationStore,
   ExternalCallClaim,
@@ -98,7 +98,7 @@ export class MemoryStore implements Store {
     string,
     { tool: string; status: string; result: string | null }
   >();
-  private attachments = new Map<string, Attachment>();
+  private files = new Map<string, StoredFileRecord>();
   private settingsRow: SettingsRow | null = null;
   private telegramId: string | null = null;
   private processed = new Set<string>();
@@ -414,9 +414,6 @@ export class MemoryStore implements Store {
     this.claimed = new Set(
       [...this.claimed].filter((k) => !dropped.has(Number(k.split(":")[0]))),
     );
-    for (const [id, a] of this.attachments) {
-      if (a.conversationId === conv.id) this.attachments.delete(id);
-    }
     this.convs = this.convs.filter((c) => c.id !== conv.id);
   }
 
@@ -560,21 +557,40 @@ export class MemoryStore implements Store {
     return out;
   }
 
-  // --- attachments ---
+  // --- files ---
 
-  putAttachment(a: {
+  putFile(input: {
     id: string;
-    conversationId: string;
-    r2Key: string;
+    storageKey: string;
     filename: string;
     mimeType: string;
-  }): void {
-    this.attachments.set(a.id, { ...a, createdAt: this.now() });
+    byteSize: number | null;
+  }): StoredFileRecord {
+    const file = { ...input, createdAt: this.now() };
+    this.files.set(file.id, file);
+    return { ...file };
   }
 
-  getAttachment(id: string): Attachment | null {
-    const a = this.attachments.get(id);
-    return a ? { ...a } : null;
+  getFile(id: string): StoredFileRecord | null {
+    const file = this.files.get(id);
+    return file ? { ...file } : null;
+  }
+
+  listFiles(): StoredFileRecord[] {
+    return [...this.files.values()].map((file) => ({ ...file }));
+  }
+
+  updateFileSize(id: string, byteSize: number): void {
+    const file = this.files.get(id);
+    if (file) this.files.set(id, { ...file, byteSize });
+  }
+
+  deleteFile(id: string): void {
+    this.files.delete(id);
+  }
+
+  deleteAllFiles(): void {
+    this.files.clear();
   }
 
   // --- settings ---

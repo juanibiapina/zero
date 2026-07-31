@@ -19,8 +19,8 @@ import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
 import { createMemoryGoogle } from "../google/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
-import { createMemoryAttachments } from "../attachments/memory";
-import { attachmentKey } from "../attachments/types";
+import { createMemoryFileBlobs } from "../files/memory";
+import { createUserFileStore } from "../files/store";
 import { historyMessage, pinTopic, seedTopic, setBody } from "../store/test-support";
 
 const collectSink = () => {
@@ -695,6 +695,7 @@ describe("runInterfaceAgent", () => {
               subject: "Lunch?",
               date: "today",
               body: "Want lunch?",
+              attachments: [],
             },
           ],
         },
@@ -1029,17 +1030,17 @@ describe("runInterfaceAgent", () => {
 
   it("views a stored image via view_attachment and answers", async () => {
     const store = new MemoryStore();
-    const attachments = createMemoryAttachments();
-    const conv = store.getOrCreateConversation(1, 0);
-    const r2Key = attachmentKey("user_1", "u2");
-    store.putAttachment({
+    const blobs = createMemoryFileBlobs();
+    const r2Key = "attachments/user_1/u2";
+    store.putFile({
       id: "att_1",
-      conversationId: conv,
-      r2Key,
+      storageKey: r2Key,
       filename: "cat.jpg",
       mimeType: "image/jpeg",
+      byteSize: null,
     });
-    await attachments.put(r2Key, new Uint8Array([1, 2, 3]), "image/jpeg");
+    await blobs.put(r2Key, new Uint8Array([1, 2, 3]), "image/jpeg");
+    const files = createUserFileStore({ clerkUserId: "user_1", records: store, blobs });
     const sink = collectSink();
     const model = scriptedModel([
       { tools: [{ name: "view_attachment", input: { id: "att_1" } }] },
@@ -1053,8 +1054,7 @@ describe("runInterfaceAgent", () => {
       search: createMemorySearch(),
       google: createMemoryGoogle(),
       fetcher: createMemoryFetcher(),
-      attachments,
-      getAttachment: (id) => store.getAttachment(id),
+      files,
       history: [],
       userMessage: 'what is this? [image "cat.jpg" id=att_1]',
     });

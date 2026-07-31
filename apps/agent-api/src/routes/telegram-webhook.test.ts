@@ -7,7 +7,6 @@ import {
   type WebhookDeps,
   type EnqueueTurnInput,
 } from "./telegram-webhook";
-import { createMemoryAttachments } from "../attachments/memory";
 import type { TopicContext } from "../telegram/context";
 
 describe("resolveContext", () => {
@@ -185,9 +184,7 @@ describe("processTelegramMessage", () => {
   const makeDeps = (over: Partial<WebhookDeps> = {}) => {
     const enqueued: Array<{ clerkUserId: string; input: EnqueueTurnInput }> = [];
     const replies: string[] = [];
-    const attachments = createMemoryAttachments();
     const deps: WebhookDeps = {
-      attachments,
       download: vi.fn(async () => ({
         bytes: new Uint8Array([1, 2, 3]),
         filePath: "photos/file_1.jpg",
@@ -202,7 +199,7 @@ describe("processTelegramMessage", () => {
       sendTyping: async () => {},
       ...over,
     };
-    return { deps, enqueued, replies, attachments };
+    return { deps, enqueued, replies };
   };
 
   const photoMsg = (caption?: string) => ({
@@ -212,30 +209,37 @@ describe("processTelegramMessage", () => {
     ...(caption ? { caption } : {}),
   });
 
-  it("downloads a photo to R2, enqueues with a marker, and sends no notice", async () => {
-    const { deps, enqueued, replies, attachments } = makeDeps();
+  it("downloads a photo and hands its bytes to UserDO", async () => {
+    const { deps, enqueued, replies } = makeDeps();
     await processTelegramMessage(deps, topic, photoMsg(), "1");
 
     expect(replies).toEqual([]);
     expect(enqueued).toHaveLength(1);
-    const input = enqueued[0].input;
-    expect(input.text).toMatch(/^\[image "photo_u2\.jpg" id=att_.+\]$/);
-    expect(input.attachments).toHaveLength(1);
-    const row = input.attachments![0];
-    expect(row.r2Key).toBe("attachments/user_1/u2");
-    // The marker id matches the persisted row id.
-    expect(input.text).toContain(row.id);
-    // Bytes landed in the store under the row key.
-    expect(await attachments.get(row.r2Key)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(enqueued[0].input.text).toBe("");
+    expect(enqueued[0].input.files).toEqual([{
+      filename: "photo_u2.jpg",
+      mimeType: "image/jpeg",
+      bytes: new Uint8Array([1, 2, 3]),
+    }]);
   });
 
-  it("keeps the caption alongside the marker", async () => {
+  it("keeps the caption alongside the downloaded file", async () => {
     const { deps, enqueued } = makeDeps();
     await processTelegramMessage(deps, topic, photoMsg("what is this?"), "1");
 
-    const text = enqueued[0].input.text;
-    expect(text).toContain("what is this?");
-    expect(text).toMatch(/\[image "photo_u2\.jpg" id=att_.+\]/);
+    expect(enqueued[0].input.text).toBe("what is this?");
+    expect(enqueued[0].input.files).toHaveLength(1);
+  });
+
+  it("rejects a declared oversize file before downloading", async () => {
+    const download = vi.fn(async () => ({ bytes: new Uint8Array([1]), filePath: "file.bin" }));
+    const { deps, enqueued, replies } = makeDeps({ download });
+    await processTelegramMessage(deps, topic, {
+      document: { file_id: "d", file_unique_id: "u", file_size: 6 * 1024 * 1024 },
+    }, "1");
+    expect(download).not.toHaveBeenCalled();
+    expect(enqueued).toEqual([]);
+    expect(replies[0]).toContain("too large");
   });
 
   it("skips an oversize image with a notice and no enqueue", async () => {
@@ -264,7 +268,7 @@ describe("processTelegramMessage", () => {
     expect(replies[0]).toContain("too large");
     expect(enqueued).toHaveLength(1);
     expect(enqueued[0].input.text).toBe("caption");
-    expect(enqueued[0].input.attachments).toBeUndefined();
+    expect(enqueued[0].input.files).toBeUndefined();
   });
 
   const pdfMsg = (caption?: string, mimeType = "application/pdf") => ({
@@ -274,7 +278,7 @@ describe("processTelegramMessage", () => {
   const validPdf = new TextEncoder().encode("%PDF-1.7\nvalid enough for ingestion");
 
   it.each([[undefined], ["summarize this"]])("stores and enqueues a PDF with caption %s", async (caption) => {
-    const { deps, enqueued, replies, attachments } = makeDeps({
+    const { deps, enqueued, replies } = makeDeps({
       download: vi.fn(async () => ({ bytes: validPdf, filePath: "documents/report.pdf" })),
     });
     await processTelegramMessage(deps, topic, pdfMsg(caption), "1");
@@ -282,11 +286,12 @@ describe("processTelegramMessage", () => {
     expect(replies).toEqual([]);
     expect(enqueued).toHaveLength(1);
     const input = enqueued[0].input;
-    expect(input.text).toMatch(/\[pdf "report\.pdf" id=att_.+\]/);
-    if (caption) expect(input.text).toContain(caption);
-    const row = input.attachments![0];
-    expect(row.mimeType).toBe("application/pdf");
-    expect(await attachments.get(row.r2Key)).toEqual(validPdf);
+    expect(input.text).toBe(caption ?? "");
+    expect(input.files).toEqual([{
+      filename: "report.pdf",
+      mimeType: "application/pdf",
+      bytes: validPdf,
+    }]);
   });
 
   it("accepts a PDF filename without a MIME type after byte validation", async () => {
@@ -294,26 +299,25 @@ describe("processTelegramMessage", () => {
       download: vi.fn(async () => ({ bytes: validPdf, filePath: "documents/report.pdf" })),
     });
     await processTelegramMessage(deps, topic, pdfMsg(undefined, "application/octet-stream"), "1");
-    expect(enqueued[0].input.text).toContain('[pdf "report.pdf"');
+    expect(enqueued[0].input.files?.[0].mimeType).toBe("application/pdf");
   });
 
   it("rejects spoofed PDF content without storing or enqueueing", async () => {
-    const { deps, enqueued, replies, attachments } = makeDeps({
+    const { deps, enqueued, replies } = makeDeps({
       download: vi.fn(async () => ({ bytes: new TextEncoder().encode("not a pdf"), filePath: "documents/report.pdf" })),
     });
     await processTelegramMessage(deps, topic, pdfMsg(), "1");
     expect(enqueued).toEqual([]);
     expect(replies[0]).toContain("not a valid PDF");
-    expect(await attachments.get("attachments/user_1/ud")).toBeNull();
   });
 
-  it("rejects an encrypted-looking PDF with a clear notice", async () => {
+  it("stores an encrypted-looking PDF for later format-specific handling", async () => {
     const { deps, enqueued, replies } = makeDeps({
       download: vi.fn(async () => ({ bytes: new TextEncoder().encode("%PDF-1.7\n/Encrypt 4 0 R"), filePath: "documents/report.pdf" })),
     });
     await processTelegramMessage(deps, topic, pdfMsg(), "1");
-    expect(enqueued).toEqual([]);
-    expect(replies[0]).toMatch(/encrypted|password-protected/i);
+    expect(replies).toEqual([]);
+    expect(enqueued[0].input.files?.[0].mimeType).toBe("application/pdf");
   });
 
   it("rejects an oversize PDF without storing an attachment row", async () => {
@@ -327,7 +331,7 @@ describe("processTelegramMessage", () => {
     expect(replies[0]).toContain("file is too large");
   });
 
-  it("notices and skips an unsupported document with no text", async () => {
+  it("stores a generic document with no text", async () => {
     const { deps, enqueued, replies } = makeDeps();
     await processTelegramMessage(
       deps,
@@ -336,12 +340,14 @@ describe("processTelegramMessage", () => {
       "1",
     );
 
-    expect(enqueued).toEqual([]);
-    expect(replies).toHaveLength(1);
-    expect(replies[0]).toContain("can't handle");
+    expect(replies).toEqual([]);
+    expect(enqueued[0].input.files?.[0]).toMatchObject({
+      filename: "document_ud.txt",
+      mimeType: "text/plain",
+    });
   });
 
-  it("processes text and notes an ignored unsupported document with a caption", async () => {
+  it("stores a generic document alongside its caption", async () => {
     const { deps, enqueued, replies } = makeDeps();
     await processTelegramMessage(
       deps,
@@ -353,13 +359,12 @@ describe("processTelegramMessage", () => {
       "1",
     );
 
-    expect(enqueued).toHaveLength(1);
     expect(enqueued[0].input.text).toBe("see attached");
-    expect(enqueued[0].input.attachments).toBeUndefined();
-    expect(replies.some((r) => r.includes("ignored"))).toBe(true);
+    expect(enqueued[0].input.files).toHaveLength(1);
+    expect(replies).toEqual([]);
   });
 
-  it("treats a sticker as a non-image attachment", async () => {
+  it("stores a sticker as a generic file", async () => {
     const { deps, enqueued, replies } = makeDeps();
     await processTelegramMessage(
       deps,
@@ -368,8 +373,28 @@ describe("processTelegramMessage", () => {
       "1",
     );
 
-    expect(enqueued).toEqual([]);
-    expect(replies[0]).toContain("can't handle");
+    expect(replies).toEqual([]);
+    expect(enqueued[0].input.files?.[0]).toMatchObject({
+      filename: "sticker_us.webp",
+      mimeType: "image/webp",
+    });
+  });
+
+  it("notifies on file quota exhaustion and still enqueues the caption", async () => {
+    const calls: EnqueueTurnInput[] = [];
+    const quota = new Error("full");
+    quota.name = "FileQuotaExceededError";
+    const { deps, replies } = makeDeps({
+      enqueue: async (_user, input) => {
+        calls.push(input);
+        if (input.files) throw quota;
+      },
+    });
+    await processTelegramMessage(deps, topic, photoMsg("keep this text"), "1");
+    expect(replies[0]).toContain("storage is full");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toMatchObject({ text: "keep this text" });
+    expect(calls[1].files).toBeUndefined();
   });
 
   it("enqueues a plain text message unchanged", async () => {
@@ -378,7 +403,7 @@ describe("processTelegramMessage", () => {
 
     expect(replies).toEqual([]);
     expect(enqueued[0].input.text).toBe("hello");
-    expect(enqueued[0].input.attachments).toBeUndefined();
+    expect(enqueued[0].input.files).toBeUndefined();
   });
 
   it("drops a message with no content and no attachment", async () => {

@@ -39,7 +39,7 @@ export interface ToolUseBlock {
 }
 
 // What a tool hands back to the model. A string is the common case; the block
-// array carries images (view_attachment) so the model sees pixels, not base64.
+// array carries images (view_image) so the model sees pixels, not base64.
 export type ToolResultContent = string | Array<TextBlock | ImageBlock>;
 
 export interface ToolResultBlock {

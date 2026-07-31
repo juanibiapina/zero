@@ -419,19 +419,18 @@ describe("Store contract: conversations", () => {
     expect(s.getConversationHistory(newId, 10)).toEqual([]);
   });
 
-  it("resetConversation drops attachments in the thread (FK-safe)", () => {
+  it("resetConversation leaves user files intact", () => {
     const s = makeStore();
-    const id = s.getOrCreateConversation(1, 0);
-    s.putAttachment({
+    s.getOrCreateConversation(1, 0);
+    s.putFile({
       id: "att_reset",
-      conversationId: id,
-      r2Key: "attachments/user_1/xyz",
+      storageKey: "attachments/user_1/xyz",
       filename: "cat.jpg",
       mimeType: "image/jpeg",
+      byteSize: 3,
     });
-    // Must not throw a FOREIGN KEY constraint error when the thread has attachments.
     s.resetConversation(1, 0);
-    expect(s.getAttachment("att_reset")).toBeNull();
+    expect(s.getFile("att_reset")).not.toBeNull();
   });
 
 });
@@ -759,29 +758,33 @@ describe("Store contract: external call claims", () => {
   });
 });
 
-describe("Store contract: attachments", () => {
-  it("putAttachment then getAttachment round-trips the row", () => {
+describe("Store contract: files", () => {
+  it("putFile then getFile round-trips the row", () => {
     const s = makeStore();
-    const conv = s.getOrCreateConversation(1, 0);
-    s.putAttachment({
+    expect(s.putFile({
       id: "att_1",
-      conversationId: conv,
-      r2Key: "attachments/user_1/abc",
+      storageKey: "attachments/user_1/abc",
       filename: "cat.jpg",
       mimeType: "image/jpeg",
-    });
-    expect(s.getAttachment("att_1")).toEqual({
+      byteSize: 3,
+    })).toEqual({
       id: "att_1",
-      conversationId: conv,
-      r2Key: "attachments/user_1/abc",
+      storageKey: "attachments/user_1/abc",
       filename: "cat.jpg",
       mimeType: "image/jpeg",
+      byteSize: 3,
       createdAt: "2026-01-01T00:00:00.000Z",
     });
+    expect(s.getFile("att_1")?.byteSize).toBe(3);
+    expect(s.listFiles()).toHaveLength(1);
+    s.updateFileSize("att_1", 4);
+    expect(s.getFile("att_1")?.byteSize).toBe(4);
+    s.deleteFile("att_1");
+    expect(s.getFile("att_1")).toBeNull();
   });
 
-  it("getAttachment returns null for an unknown id", () => {
-    expect(makeStore().getAttachment("nope")).toBeNull();
+  it("getFile returns null for an unknown id", () => {
+    expect(makeStore().getFile("nope")).toBeNull();
   });
 });
 

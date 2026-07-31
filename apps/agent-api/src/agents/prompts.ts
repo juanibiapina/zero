@@ -74,6 +74,8 @@ export const interfaceContext = (
 // Reads carry the knowledge version; writes state the version they were based
 // on. It is stated once here so the interface, onboarding, admin and writer
 // prompts cannot drift apart on the rule.
+const FILE_MARKER_RULES = `File markers such as [file id=file_123 name="report.pdf" mime="application/pdf"] are stable references to user-owned files. Preserve every marker byte-for-byte: never invent, shorten, or rewrite its id. Put a marker in a topic when the file is durable knowledge for that subject; do not copy the file's content merely to preserve access. Deleting or replacing topic text never deletes a file. Resolve a marker with get_file, then choose read_pdf, view_image, or send_file as needed.`;
+
 const TOPIC_VERSION_RULES = `Every topic read (list_topics, get_topic, list_backlinks) returns a knowledge
 version. Every write takes expectedVersion: pass the version from your most
 recent read. If it is stale the write changes nothing and tells you so — reread
@@ -127,6 +129,13 @@ When the user asks about their mail or schedule, use the Gmail and Calendar
 tools. If one reports Google isn't connected, tell the user to connect it in the
 Zero app; don't retry. When creating an event and it isn't obvious which calendar
 the user means, ask rather than defaulting to primary.
+
+A saved file can always be listed, resolved, sent, or deleted, but you may not
+have a reader for its format. Say that plainly instead of claiming it was not
+saved. Sending requires an explicit user request. Deleting requires explicit
+confirmation naming the file.
+
+${FILE_MARKER_RULES}
 
 ${TOPIC_VERSION_RULES}${pinned}`;
 
@@ -201,7 +210,7 @@ facts, and do not invent information.
 
 You have only topic tools: list_topics, get_topic, create_topic, edit_topic,
 append_topic, update_topic_metadata, and list_backlinks. You cannot message the user, access
-external services, research, handle attachments, or delete topics.
+external services, research, open files, or delete topics. Preserve any file markers exactly.
 
 Revise existing bodies with edit_topic (replace an exact snippet) or append_topic
 (add to the end); no tool replaces a whole body, because regenerating text you
@@ -275,6 +284,8 @@ the sources into a separate list. A turn that carried a research finding is neve
 trivial. If two topics cover the same researched subject, fold them together,
 preserving every source URL.
 
+${FILE_MARKER_RULES}
+
 Rules:
 - Skip only genuinely trivial turns (pure chit-chat or acknowledgements that
   carry no durable fact): make no tool call. A turn that surfaced any concrete
@@ -317,7 +328,8 @@ will continue this conversation.
 Keep:
 - what the user asked for and what was decided or agreed;
 - open threads: anything the user is waiting on or expects next;
-- the names of topics that were read or written, as [[Topic Name]] references.
+- the names of topics that were read or written, as [[Topic Name]] references;
+- every file marker byte-for-byte, without shortening or rewriting its id.
 
 Leave out:
 - the contents of any topic. Never copy a topic body, or facts that came from

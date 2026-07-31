@@ -11,8 +11,8 @@
 import changelogMarkdown from "../../CHANGELOG.md";
 import { extractLinks } from "./links";
 import type {
-  Attachment,
   CompactionWindow,
+  StoredFileRecord,
   ConversationContext,
   ConversationStore,
   ExternalCallClaim,
@@ -305,20 +305,36 @@ export class SystemTopicStore implements Store {
     this.inner.completeExternalCall(toolUseId, result);
   }
 
-  // --- attachments (delegate verbatim) ---
+  // --- files (delegate verbatim) ---
 
-  putAttachment(attachment: {
+  putFile(file: {
     id: string;
-    conversationId: string;
-    r2Key: string;
+    storageKey: string;
     filename: string;
     mimeType: string;
-  }): void {
-    this.inner.putAttachment(attachment);
+    byteSize: number | null;
+  }): StoredFileRecord {
+    return this.inner.putFile(file);
   }
 
-  getAttachment(id: string): Attachment | null {
-    return this.inner.getAttachment(id);
+  getFile(id: string): StoredFileRecord | null {
+    return this.inner.getFile(id);
+  }
+
+  listFiles(): StoredFileRecord[] {
+    return this.inner.listFiles();
+  }
+
+  updateFileSize(id: string, byteSize: number): void {
+    this.inner.updateFileSize(id, byteSize);
+  }
+
+  deleteFile(id: string): void {
+    this.inner.deleteFile(id);
+  }
+
+  deleteAllFiles(): void {
+    this.inner.deleteAllFiles();
   }
 
   // --- settings / link / idempotency (delegate verbatim) ---

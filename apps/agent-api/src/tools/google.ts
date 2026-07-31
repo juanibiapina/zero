@@ -11,6 +11,8 @@
 import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { z } from "zod";
 import { log } from "../log";
+import { renderFileMarker } from "../files/marker";
+import type { UserFileStore } from "../files/types";
 import {
   ExternalCallNotSent,
   isProvableRejection,
@@ -29,6 +31,7 @@ export interface GoogleToolsDeps {
   google: GoogleWorkspace;
   // The user's IANA timezone; calendar tools stamp it onto wall-clock times.
   timezone: string;
+  files?: UserFileStore;
 }
 
 // Run an adapter call, converting a not-connected error into a friendly message
@@ -100,7 +103,7 @@ const toRfc3339 = (value: string, timeZone: string, endOfDay: boolean): string =
 };
 
 export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
-  const { google, timezone } = deps;
+  const { google, timezone, files } = deps;
 
   return {
     gmail_search: defineTool({
@@ -120,11 +123,43 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
       description:
         "Read a full Gmail thread by threadId (from gmail_search). Returns each " +
         "message with its Gmail id, RFC-822 Message-ID header, From/To/Subject/" +
-        "Date, and decoded body. Needed before replying: copy messageIdHeader " +
-        "and threadId into gmail_send's replyTo.",
+        "Date, decoded body, and named attachment summaries. To import an attachment, " +
+        "copy its message id and partId exactly into gmail_save_attachment. Needed " +
+        "before replying: copy messageIdHeader and threadId into gmail_send's replyTo.",
       inputSchema: z.object({ threadId: z.string() }),
       execute: ({ threadId }) =>
         guard("gmail_thread", () => google.mail.getThread(threadId)),
+    }),
+
+    gmail_save_attachment: defineTool({
+      description:
+        "Save one Gmail attachment into the user's Zero files. Copy messageId and " +
+        "partId exactly from gmail_thread. Returns metadata and a stable marker, never bytes.",
+      inputSchema: z.object({ messageId: z.string(), partId: z.string() }),
+      execute: ({ messageId, partId }) =>
+        guard("gmail_save_attachment", async () => {
+          if (!files) throw new Error("File storage is unavailable.");
+          const attachment = await google.mail.downloadAttachment(messageId, partId);
+          const file = await files.save({
+            filename: attachment.filename,
+            mimeType: attachment.mimeType,
+            bytes: attachment.bytes,
+          });
+          log("file_imported", {
+            source: "gmail",
+            byte_count: file.byteSize ?? attachment.bytes.length,
+            mime_major: file.mimeType.split("/")[0],
+          });
+          return {
+            file: {
+              id: file.id,
+              filename: file.filename,
+              mimeType: file.mimeType,
+              byteSize: file.byteSize,
+              marker: renderFileMarker(file),
+            },
+          };
+        }),
     }),
 
     gmail_send: defineTool({

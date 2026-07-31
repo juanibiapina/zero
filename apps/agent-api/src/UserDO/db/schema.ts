@@ -106,15 +106,14 @@ export const deliveries = table("deliveries", {
   claimedAt: column.text().notNull(),
 });
 
-// Attachments: lookup-by-id metadata for files the user sent. Bytes live in R2
-// under `r2Key`; the id is embedded in the message marker so view_attachment
-// can re-fetch a file referenced from any past turn.
-export const attachments = table("attachments", {
+// User-owned file metadata. Bytes live in R2 under storageKey; legacy rows keep
+// their attachments/ key and null size until the file store backfills it.
+export const files = table("files", {
   id: column.text().notNull().primaryKey(),
-  conversationId: column.text().notNull(),
-  r2Key: column.text().notNull(),
+  storageKey: column.text().notNull(),
   filename: column.text().notNull(),
   mimeType: column.text().notNull(),
+  byteSize: column.integer(),
   createdAt: column.text().notNull(),
 });
 

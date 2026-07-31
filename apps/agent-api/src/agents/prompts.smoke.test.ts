@@ -10,6 +10,7 @@ describe("knowledge-maintainer prompts", () => {
     expect(prompt).toContain("since the last\nconsolidation");
     expect(prompt).toContain("Be proactive and generous");
     expect(prompt).toContain("[[Topic Name]]");
+    expect(prompt).toContain("Preserve every marker byte-for-byte");
     // An escaping mistake in the shared body would show up here.
     expect(prompt).not.toContain("\\`");
   });
@@ -19,5 +20,6 @@ describe("knowledge-maintainer prompts", () => {
     expect(prompt).toContain("Never copy a topic body");
     expect(prompt).toContain("not versioned");
     expect(prompt).toContain("[[Topic Name]]");
+    expect(prompt).toContain("every file marker byte-for-byte");
   });
 });

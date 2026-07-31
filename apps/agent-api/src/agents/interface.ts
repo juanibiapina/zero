@@ -21,13 +21,13 @@ import { buildResearchTool } from "../tools/research";
 import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
 import { buildGoogleTools } from "../tools/google";
-import { buildAttachmentTool } from "../tools/attachments";
+import { buildFileTools } from "../tools/files";
 import { messageText, toBlocks } from "../store/messages";
-import type { Attachment, Message, TopicStore } from "../store/types";
+import type { Message, TopicStore } from "../store/types";
 import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
-import type { AttachmentStore } from "../attachments/types";
+import type { StoredFile, UserFileStore } from "../files/types";
 import {
   interfaceContext,
   interfaceSystemPrompt,
@@ -109,11 +109,10 @@ export interface InterfaceAgentInput {
   // Persist a new user timezone (wired by the orchestrator to user settings).
   // Omitted in tests that don't exercise set_timezone.
   setTimezone?: (tz: string) => void;
-  // Attachment blob store (R2) plus the id->row lookup, wired together into the
-  // view_attachment tool. Omitted in tests that don't exercise attachments; the
-  // tool is then not registered.
-  attachments?: AttachmentStore;
-  getAttachment?: (id: string) => Attachment | null;
+  // User-owned files and active Telegram-topic delivery. Tools remain registered
+  // when these are absent so the cached tool schema stays stable.
+  files?: UserFileStore;
+  sendFile?: (file: StoredFile, bytes: Uint8Array) => Promise<void>;
   // Absolute reference time for the date anchor and relative message ages.
   // Defaults to now; injected in tests for deterministic rendering.
   now?: Date;
@@ -317,7 +316,7 @@ export const runInterfaceAgent = async (
       fetcher: input.fetcher,
       accessed,
     }),
-    // Registered unconditionally (like the attachment tool) so the tool schema
+    // Registered unconditionally (like the file tools) so the tool schema
     // stays byte-identical across users and turns. Lets the interface open a
     // link the user handed over without spawning a research run.
     ...buildReadPageTool({ fetcher: input.fetcher, caller: "interface" }),
@@ -325,13 +324,13 @@ export const runInterfaceAgent = async (
     ...buildGoogleTools({
       google: input.google,
       timezone: input.timezone ?? "UTC",
+      files: input.files,
     }),
     // Registered unconditionally so the tool schema is byte-identical across
-    // users and turns (a conditional tool would break cross-user tool-cache
-    // sharing). When no attachment store is wired the tool returns an error.
-    ...buildAttachmentTool({
-      attachments: input.attachments,
-      getAttachment: input.getAttachment,
+    // users and turns. Unwired storage returns normal tool errors.
+    ...buildFileTools({
+      files: input.files,
+      sendFile: input.sendFile,
     }),
   };
 

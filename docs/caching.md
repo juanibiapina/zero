@@ -189,8 +189,10 @@ within a run too; that is the loop appending tool results, which is normal.
 Nothing per-user may appear in `tools` or the static `system`, or tier 2 breaks
 silently. Concretely:
 
-- The `view_attachment` tool is registered **unconditionally** so its schema is
-  byte-identical across users (a conditional tool would differ per user/turn).
+- The file tools (`get_file`, `list_files`, `view_image`, the legacy
+  `view_attachment` alias, `read_pdf`, `send_file`, and `delete_file`) are
+  registered **unconditionally** so their schemas are byte-identical across
+  users.
 - Tool descriptions/schemas carry no user values (the Google calendar tools close
   over `timezone` only in their `execute` bodies, not descriptions).
 

@@ -3,7 +3,7 @@
 // Runtime types generated with workerd@1.20260617.1 2026-06-01 nodejs_compat
 interface __BaseEnv_Env {
 	KV: KVNamespace;
-	ATTACHMENTS: R2Bucket;
+	FILES: R2Bucket;
 	ANALYTICS: AnalyticsEngineDataset;
 	AI: Ai;
 	TELEGRAM_API_ROOT: "https://api.telegram.org";

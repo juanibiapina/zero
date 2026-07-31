@@ -65,7 +65,7 @@
   ],
   "r2_buckets": [
     {
-      "binding": "ATTACHMENTS",
+      "binding": "FILES",
       "bucket_name": "zero-attachments"
     }
   ],

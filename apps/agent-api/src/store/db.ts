@@ -4,7 +4,7 @@
 
 import { and, asc, desc, eq, gt, lte, type Database } from "do-orm";
 import {
-  attachments,
+  files,
   conversations,
   deliveries,
   externalCalls,
@@ -29,8 +29,8 @@ import {
 } from "./messages";
 import { KnowledgeConflictError } from "./types";
 import type {
-  Attachment,
   CompactionWindow,
+  StoredFileRecord,
   ConversationContext,
   ExternalCallClaim,
   LearningMessage,
@@ -453,7 +453,6 @@ export class DbStore implements Store {
     }
     this.db.delete(messages, { where: eq("conversationId", conv.id) });
     this.db.delete(pendingMessages, { where: eq("conversationId", conv.id) });
-    this.db.delete(attachments, { where: eq("conversationId", conv.id) });
     this.db.delete(conversations, { where: eq("id", conv.id) });
   }
 
@@ -666,37 +665,44 @@ export class DbStore implements Store {
     return out;
   }
 
-  // --- attachments ---
+  // --- files ---
 
-  putAttachment(a: {
+  putFile(input: {
     id: string;
-    conversationId: string;
-    r2Key: string;
+    storageKey: string;
     filename: string;
     mimeType: string;
-  }): void {
-    this.db.insert(attachments, {
-      id: a.id,
-      conversationId: a.conversationId,
-      r2Key: a.r2Key,
-      filename: a.filename,
-      mimeType: a.mimeType,
-      createdAt: this.nowIso(),
-    });
+    byteSize: number | null;
+  }): StoredFileRecord {
+    const file = { ...input, createdAt: this.nowIso() };
+    this.db.insert(files, file);
+    return file;
   }
 
-  getAttachment(id: string): Attachment | null {
-    const a = this.db.get(attachments, { where: eq("id", id) });
-    return a
-      ? {
-          id: a.id,
-          conversationId: a.conversationId,
-          r2Key: a.r2Key,
-          filename: a.filename,
-          mimeType: a.mimeType,
-          createdAt: a.createdAt,
-        }
-      : null;
+  getFile(id: string): StoredFileRecord | null {
+    const file = this.db.get(files, { where: eq("id", id) });
+    return file ? { ...file, byteSize: file.byteSize ?? null } : null;
+  }
+
+  listFiles(): StoredFileRecord[] {
+    return this.db.all(files).map((file) => ({
+      ...file,
+      byteSize: file.byteSize ?? null,
+    }));
+  }
+
+  updateFileSize(id: string, byteSize: number): void {
+    this.db.update(files, { byteSize }, { where: eq("id", id) });
+  }
+
+  deleteFile(id: string): void {
+    this.db.delete(files, { where: eq("id", id) });
+  }
+
+  deleteAllFiles(): void {
+    for (const file of this.db.all(files)) {
+      this.db.delete(files, { where: eq("id", file.id) });
+    }
   }
 
   // --- settings ---

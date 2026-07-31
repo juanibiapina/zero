@@ -8,6 +8,7 @@
 // means Google isn't connected and surfaces as GoogleNotConnectedError, which
 // the tool layer turns into `{ error }` data.
 
+import { MAX_FILE_BYTES } from "../files/types";
 import {
   CALENDAR_EVENTS_CAP,
   CALENDAR_PER_LIST_CAP,
@@ -47,12 +48,49 @@ const base64FromString = (s: string): string =>
 const base64urlFromString = (s: string): string =>
   base64FromString(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-const stringFromBase64url = (b64: string): string => {
-  const norm = b64.replace(/-/g, "+").replace(/_/g, "/");
-  const bin = atob(norm);
+const bytesFromBase64url = (b64: string): Uint8Array => {
+  if (!/^[A-Za-z0-9_-]*={0,2}$/.test(b64)) throw new Error("Malformed Gmail attachment data.");
+  const unpadded = b64.replace(/=+$/, "");
+  const norm = unpadded.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - unpadded.length % 4) % 4);
+  let bin: string;
+  try {
+    bin = atob(norm);
+  } catch {
+    throw new Error("Malformed Gmail attachment data.");
+  }
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return bytes;
+};
+
+const stringFromBase64url = (b64: string): string =>
+  new TextDecoder().decode(bytesFromBase64url(b64));
+
+const attachmentSummaries = (part: GmailPart | undefined) => {
+  const out: { partId: string; filename: string; mimeType: string; byteSize: number }[] = [];
+  const visit = (node: GmailPart): void => {
+    if (node.filename && node.partId) {
+      out.push({
+        partId: node.partId,
+        filename: node.filename,
+        mimeType: node.mimeType ?? "application/octet-stream",
+        byteSize: node.body?.size ?? 0,
+      });
+    }
+    for (const child of node.parts ?? []) visit(child);
+  };
+  if (part) visit(part);
+  return out;
+};
+
+const findPartById = (part: GmailPart | undefined, partId: string): GmailPart | undefined => {
+  if (!part) return undefined;
+  if (part.partId === partId) return part;
+  for (const child of part.parts ?? []) {
+    const found = findPartById(child, partId);
+    if (found) return found;
+  }
+  return undefined;
 };
 
 const isAscii = (s: string): boolean => {
@@ -74,9 +112,11 @@ interface GmailHeader {
 }
 
 interface GmailPart {
+  partId?: string;
   mimeType?: string;
+  filename?: string;
   headers?: GmailHeader[];
-  body?: { data?: string; size?: number };
+  body?: { data?: string; size?: number; attachmentId?: string };
   parts?: GmailPart[];
 }
 
@@ -238,9 +278,54 @@ export const createGoogleWorkspace = (
           subject: findHeader(headers, "Subject") ?? "",
           date: findHeader(headers, "Date") ?? "",
           body: extractBody(m.payload),
+          attachments: attachmentSummaries(m.payload),
         };
       });
       return { threadId, messages };
+    },
+
+    async downloadAttachment(messageId, partId) {
+      const message = await getJson<GmailMessage>(
+        `${GMAIL_BASE}/messages/${encodeURIComponent(messageId)}?format=full`,
+      );
+      const part = findPartById(message.payload, partId);
+      if (!part || !part.filename) {
+        throw new Error("The Gmail attachment part is missing or changed.");
+      }
+      const declaredSize = part.body?.size ?? 0;
+      if (declaredSize > MAX_FILE_BYTES) {
+        throw new Error("That Gmail attachment is too large (over 5 MB).");
+      }
+      let data = part.body?.data;
+      if (!data) {
+        const attachmentId = part.body?.attachmentId;
+        if (!attachmentId) throw new Error("The Gmail attachment has no downloadable data.");
+        const body = await getJson<{ data?: string; size?: number }>(
+          `${GMAIL_BASE}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+        );
+        const endpointSize = body.size ?? declaredSize;
+        if (endpointSize > MAX_FILE_BYTES) {
+          throw new Error("That Gmail attachment is too large (over 5 MB).");
+        }
+        if (endpointSize !== declaredSize) {
+          throw new Error("The Gmail attachment size changed while downloading.");
+        }
+        data = body.data;
+      }
+      if (!data) throw new Error("The Gmail attachment has no downloadable data.");
+      const bytes = bytesFromBase64url(data);
+      if (bytes.length > MAX_FILE_BYTES) {
+        throw new Error("That Gmail attachment is too large (over 5 MB).");
+      }
+      if (declaredSize !== bytes.length) {
+        throw new Error("The Gmail attachment size changed while downloading.");
+      }
+      return {
+        filename: part.filename,
+        mimeType: part.mimeType ?? "application/octet-stream",
+        declaredSize,
+        bytes,
+      };
     },
 
     async send(input: SendMailInput): Promise<{ id: string }> {

@@ -3,6 +3,9 @@ import { buildGoogleTools } from "./google";
 import { createMemoryGoogle } from "../google/memory";
 import { GoogleApiError, GoogleNotConnectedError } from "../google/types";
 import { ExternalCallNotSent } from "../agents/external-call";
+import { MemoryStore } from "../store/memory";
+import { createMemoryFileBlobs } from "../files/memory";
+import { createUserFileStore } from "../files/store";
 
 // Invoke a tool's execute with an untyped input (mirrors research.test.ts).
 const run = (
@@ -27,6 +30,33 @@ describe("buildGoogleTools gmail", () => {
     };
     expect(res.threads).toHaveLength(1);
     expect(res.truncated).toBe(false);
+  });
+
+  it("gmail_save_attachment stores canonical bytes and returns no base64", async () => {
+    const pdf = new TextEncoder().encode("%PDF-1.7");
+    const google = createMemoryGoogle({
+      attachments: {
+        "M1:2": { filename: "report.pdf", mimeType: "application/pdf", bytes: pdf },
+      },
+    });
+    const files = createUserFileStore({
+      clerkUserId: "user_1",
+      records: new MemoryStore(),
+      blobs: createMemoryFileBlobs(),
+    });
+    const tools = buildGoogleTools({ google, timezone: "UTC", files });
+    const first = await run(tools, "gmail_save_attachment", { messageId: "M1", partId: "2" });
+    const second = await run(tools, "gmail_save_attachment", { messageId: "M1", partId: "2" });
+    expect(second).toEqual(first);
+    expect(first).toMatchObject({ file: {
+      filename: "report.pdf",
+      mimeType: "application/pdf",
+      byteSize: 8,
+    } });
+    const serialized = JSON.stringify(first);
+    expect(serialized).toContain("[file id=file_");
+    expect(serialized).not.toContain(btoa("%PDF-1.7"));
+    expect(files.list({}).files).toHaveLength(1);
   });
 
   it("gmail_send reaches the adapter with reply linkage", async () => {

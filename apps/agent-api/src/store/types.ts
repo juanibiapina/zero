@@ -83,17 +83,17 @@ export interface Thread {
   topicId: number;
 }
 
-// An attachment the user sent. Bytes live in R2 under `r2Key`; this row is the
-// lookup-by-id record so view_attachment can resolve an id referenced from any
-// past turn. `id` is embedded in the message marker text.
-export interface Attachment {
+// User-owned file metadata. Bytes live in R2 under storageKey. Legacy records
+// may have an unknown byte size until file-store quota enforcement backfills it.
+export interface StoredFileRecord {
   id: string;
-  conversationId: string;
-  r2Key: string;
+  storageKey: string;
   filename: string;
   mimeType: string;
+  byteSize: number | null;
   createdAt: string;
 }
+
 
 // Raised when a write is based on a knowledge version that is no longer
 // current: something else changed a topic since the caller read one. The caller
@@ -310,16 +310,21 @@ export interface LearningStore {
   completeLearningJob(jobId: string, throughMessageId?: number): void;
 }
 
-// Attachment metadata rows, keyed by the id embedded in the message marker.
-export interface AttachmentRecordStore {
-  putAttachment(attachment: {
+// Metadata seam used only by UserFileStore. It stays synchronous because it is
+// backed by the current user's Durable Object SQLite database.
+export interface FileRecordStore {
+  putFile(file: {
     id: string;
-    conversationId: string;
-    r2Key: string;
+    storageKey: string;
     filename: string;
     mimeType: string;
-  }): void;
-  getAttachment(id: string): Attachment | null;
+    byteSize: number | null;
+  }): StoredFileRecord;
+  getFile(id: string): StoredFileRecord | null;
+  listFiles(): StoredFileRecord[];
+  updateFileSize(id: string, byteSize: number): void;
+  deleteFile(id: string): void;
+  deleteAllFiles(): void;
 }
 
 // The per-user settings row, as reported to callers. Nullable columns come
@@ -343,7 +348,7 @@ export interface SettingsStore {
 
   getTelegramId(): string | null;
   linkTelegram(telegramId: string): { previous: string | null };
-  // Removes the link row only; R2 attachment purge is the DO's job.
+  // Removes the link row only; user-owned files remain intact.
   unlinkTelegram(): { removed: string | null };
 
   // Record an update id; true if newly seen, false if already processed.
@@ -354,5 +359,5 @@ export type Store = TopicStore &
   ConversationStore &
   LearningStore &
   ExternalCallStore &
-  AttachmentRecordStore &
+  FileRecordStore &
   SettingsStore;

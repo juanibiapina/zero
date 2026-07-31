@@ -17,8 +17,13 @@ import type {
   TopicMeta,
 } from "../store/types";
 import type { TopicWriteResult } from "../learning/types";
-import { createR2Attachments } from "../attachments/r2";
-import type { AttachmentStore } from "../attachments/types";
+import { InputFile } from "grammy";
+import { createBot } from "../telegram/bot";
+import { createR2FileBlobs } from "../files/r2";
+import { createUserFileStore } from "../files/store";
+import { renderFileMarker } from "../files/marker";
+import type { FileBlobStore } from "../files/types";
+import { TelegramFileSendError } from "../tools/files";
 import { createModel, createModelFactory } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
 import { createTavilyFetcher } from "../pagefetch/tavily";
@@ -41,6 +46,7 @@ import { runOnboarding } from "../do/onboarding";
 import { getScheduleDO } from "../ScheduleDO/stub";
 import { requestLearnSafely, touchScheduleSafely } from "../do/schedule";
 import type { Env } from "../types";
+import { log } from "../log";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
 const TYPING_INTERVAL_MS = 4000;
@@ -72,15 +78,15 @@ export class UserDO extends DurableObject<Env> {
   // Changelog) are overlaid on every read and blocked from writes. See
   // store/system-topics.ts.
   private store: Store;
-  // Attachment bytes (R2). Metadata rows live in `store`; bytes live here.
-  private attachments: AttachmentStore;
+  // File bytes in R2. Metadata rows live in this user's SQLite store.
+  private fileBlobs: FileBlobStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.db = createDb(ctx.storage);
     const dbStore = new DbStore(this.db);
     this.store = new SystemTopicStore(dbStore);
-    this.attachments = createR2Attachments(env.ATTACHMENTS);
+    this.fileBlobs = createR2FileBlobs(env.FILES);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
@@ -115,28 +121,35 @@ export class UserDO extends DurableObject<Env> {
     chatId: number;
     topicId: number;
     text: string;
-    // Attachment metadata rows to persist for this turn. Bytes are already in
-    // R2 (the webhook put them); the message text carries their markers.
-    attachments?: Array<{
-      id: string;
-      r2Key: string;
-      filename: string;
-      mimeType: string;
-    }>;
+    files?: Array<{ filename: string; mimeType: string; bytes: Uint8Array }>;
   }): Promise<void> {
-    if (!this.store.markProcessed(input.updateId)) return;
     await this.ctx.storage.put("clerkUserId", input.clerkUserId);
-    const conversationId = this.store.getOrCreateConversation(
-      input.chatId,
-      input.topicId,
-    );
-    for (const a of input.attachments ?? []) {
-      this.store.putAttachment({ ...a, conversationId });
+    const files = createUserFileStore({
+      clerkUserId: input.clerkUserId,
+      records: this.store,
+      blobs: this.fileBlobs,
+    });
+    const markers: string[] = [];
+    for (const incoming of input.files ?? []) {
+      const file = await files.save(incoming);
+      markers.push(renderFileMarker(file));
+      log("file_imported", {
+        source: "telegram",
+        byte_count: file.byteSize ?? incoming.bytes.length,
+        mime_major: file.mimeType.split("/")[0],
+      });
     }
+    // Save is deterministic, so duplicate webhooks may repeat it safely. Claim
+    // the update only after saving, then queue the message once.
+    if (!this.store.markProcessed(input.updateId)) return;
+    const conversationId = this.store.getOrCreateConversation(input.chatId, input.topicId);
+    const text = markers.length > 0
+      ? [input.text, ...markers].filter(Boolean).join("\n\n")
+      : input.text;
     // The message enters the durable queue, not the transcript. A turn injects
     // it at a safe point, so a message arriving while the agent is mid-run is
     // never spliced into a request the model is already answering.
-    this.store.enqueuePendingMessage(conversationId, input.text);
+    this.store.enqueuePendingMessage(conversationId, text);
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(Date.now());
     }
@@ -282,6 +295,33 @@ export class UserDO extends DurableObject<Env> {
     const setTimezone = (tz: string) =>
       this.store.updateSettings({ timezone: tz });
     const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
+    const files = createUserFileStore({
+      clerkUserId,
+      records: this.store,
+      blobs: this.fileBlobs,
+    });
+    const sendFile = async (
+      file: { filename: string; mimeType: string },
+      bytes: Uint8Array,
+    ) => {
+      try {
+        await createBot(this.env).api.sendDocument(
+          chatId,
+          new InputFile(bytes, file.filename),
+          { ...(topicId && { message_thread_id: topicId }) },
+        );
+        log("file_sent", {
+          byte_count: bytes.length,
+          mime_major: file.mimeType.split("/")[0],
+        });
+      } catch (error) {
+        const status = typeof error === "object" && error !== null && "error_code" in error
+          ? Number(error.error_code)
+          : 0;
+        if (status) throw new TelegramFileSendError(status, error instanceof Error ? error.message : String(error));
+        throw error;
+      }
+    };
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     // stopTyping cancels the pending refresh so no tick reschedules. Idempotent:
@@ -308,7 +348,8 @@ export class UserDO extends DurableObject<Env> {
         search,
         fetcher,
         google,
-        attachments: this.attachments,
+        files,
+        sendFile,
         chatId,
         topicId,
         clerkUserId,
@@ -441,15 +482,17 @@ export class UserDO extends DurableObject<Env> {
   }
 
   async unlinkTelegram(): Promise<{ removed: string | null }> {
-    const { removed } = this.store.unlinkTelegram();
-    if (!removed) return { removed: null };
-    // Purge the user's stored images: unlinking is an account teardown path, so
-    // their photos leave with their data. clerkUserId is set on first enqueue,
-    // which is also the only path that creates attachments, so a null here means
-    // nothing to purge.
+    return this.store.unlinkTelegram();
+  }
+
+  async deleteAllFiles(): Promise<void> {
     const clerkUserId = await this.ctx.storage.get<string>("clerkUserId");
-    if (clerkUserId) await this.attachments.deleteAllForUser(clerkUserId);
-    return { removed };
+    if (!clerkUserId) return;
+    await createUserFileStore({
+      clerkUserId,
+      records: this.store,
+      blobs: this.fileBlobs,
+    }).deleteAll();
   }
 
   getSettings(): {

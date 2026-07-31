@@ -25,12 +25,7 @@ import type { Env } from "../types";
 import { sendChatAction } from "../telegram/chat-action";
 import { formatAndSend } from "../telegram/send";
 import { downloadTelegramFile } from "../telegram/files";
-import {
-  attachmentKey,
-  type AttachmentStore,
-} from "../attachments/types";
-import { createR2Attachments } from "../attachments/r2";
-import { renderAttachmentMarker } from "../attachments/marker";
+import { MAX_FILE_BYTES } from "../files/types";
 
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
@@ -69,13 +64,17 @@ interface PhotoSize {
 interface FileRef {
   file_id: string;
   file_unique_id: string;
+  file_size?: number;
 }
 
-interface GenericFile {
-  file_id: string;
-  file_unique_id: string;
+interface GenericFile extends FileRef {
   file_name?: string;
   mime_type?: string;
+}
+
+interface StickerFile extends FileRef {
+  is_animated?: boolean;
+  is_video?: boolean;
 }
 
 // The subset of a Telegram message that may carry a downloadable file.
@@ -87,7 +86,7 @@ export interface AttachmentMessage {
   voice?: GenericFile;
   video_note?: FileRef;
   document?: GenericFile;
-  sticker?: FileRef;
+  sticker?: StickerFile;
 }
 
 export interface AttachmentMeta {
@@ -96,6 +95,7 @@ export interface AttachmentMeta {
   fileUniqueId: string;
   filename: string;
   mimeType: string;
+  declaredSize?: number;
   // Which Telegram field the file came from. Used to keep stickers (which carry
   // an image/webp mimeType) out of the image path.
   kind:
@@ -109,8 +109,7 @@ export interface AttachmentMeta {
     | "sticker";
 }
 
-// Image mime types the view_attachment path handles. Stickers are excluded by
-// kind even though a static sticker is image/webp.
+// Image MIME types view_image can return as native Anthropic image blocks.
 const IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -142,7 +141,7 @@ export const hasPdfSignature = (bytes: Uint8Array): boolean =>
 
 // Cap on downloaded attachment bytes. Anything larger is skipped with a notice
 // rather than pushed through R2 and the model.
-export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = MAX_FILE_BYTES;
 
 // Strip an untrusted filename to a safe basename: no path separators,
 // no parent-dir traversal.
@@ -195,36 +194,49 @@ export const extractAttachment = (msg: AttachmentMessage): AttachmentMeta | null
       fileUniqueId: largest.file_unique_id,
       filename: `photo_${largest.file_unique_id}.jpg`,
       mimeType: "image/jpeg",
+      declaredSize: largest.file_size,
       kind: "photo",
     };
   }
   if (msg.animation) {
     const a = msg.animation;
-    return { file_id: a.file_id, fileUniqueId: a.file_unique_id, filename: deriveName(a, "animation", "video/mp4"), mimeType: a.mime_type ?? "video/mp4", kind: "animation" };
+    return { file_id: a.file_id, fileUniqueId: a.file_unique_id, filename: deriveName(a, "animation", "video/mp4"), mimeType: a.mime_type ?? "video/mp4", declaredSize: a.file_size, kind: "animation" };
   }
   if (msg.video) {
     const v = msg.video;
-    return { file_id: v.file_id, fileUniqueId: v.file_unique_id, filename: deriveName(v, "video", "video/mp4"), mimeType: v.mime_type ?? "video/mp4", kind: "video" };
+    return { file_id: v.file_id, fileUniqueId: v.file_unique_id, filename: deriveName(v, "video", "video/mp4"), mimeType: v.mime_type ?? "video/mp4", declaredSize: v.file_size, kind: "video" };
   }
   if (msg.audio) {
     const a = msg.audio;
-    return { file_id: a.file_id, fileUniqueId: a.file_unique_id, filename: deriveName(a, "audio", "audio/mpeg"), mimeType: a.mime_type ?? "audio/mpeg", kind: "audio" };
+    return { file_id: a.file_id, fileUniqueId: a.file_unique_id, filename: deriveName(a, "audio", "audio/mpeg"), mimeType: a.mime_type ?? "audio/mpeg", declaredSize: a.file_size, kind: "audio" };
   }
   if (msg.voice) {
     const v = msg.voice;
-    return { file_id: v.file_id, fileUniqueId: v.file_unique_id, filename: deriveName(v, "voice", "audio/ogg"), mimeType: v.mime_type ?? "audio/ogg", kind: "voice" };
+    return { file_id: v.file_id, fileUniqueId: v.file_unique_id, filename: deriveName(v, "voice", "audio/ogg"), mimeType: v.mime_type ?? "audio/ogg", declaredSize: v.file_size, kind: "voice" };
   }
   if (msg.video_note) {
     const v = msg.video_note;
-    return { file_id: v.file_id, fileUniqueId: v.file_unique_id, filename: `video_note_${v.file_unique_id}.mp4`, mimeType: "video/mp4", kind: "video_note" };
+    return { file_id: v.file_id, fileUniqueId: v.file_unique_id, filename: `video_note_${v.file_unique_id}.mp4`, mimeType: "video/mp4", declaredSize: v.file_size, kind: "video_note" };
   }
   if (msg.document) {
     const d = msg.document;
-    return { file_id: d.file_id, fileUniqueId: d.file_unique_id, filename: deriveName(d, "document", "application/octet-stream"), mimeType: d.mime_type ?? "application/octet-stream", kind: "document" };
+    return { file_id: d.file_id, fileUniqueId: d.file_unique_id, filename: deriveName(d, "document", "application/octet-stream"), mimeType: d.mime_type ?? "application/octet-stream", declaredSize: d.file_size, kind: "document" };
   }
   if (msg.sticker) {
     const s = msg.sticker;
-    return { file_id: s.file_id, fileUniqueId: s.file_unique_id, filename: `sticker_${s.file_unique_id}.webp`, mimeType: "image/webp", kind: "sticker" };
+    const format = s.is_animated
+      ? { extension: "tgs", mimeType: "application/x-tgsticker" }
+      : s.is_video
+        ? { extension: "webm", mimeType: "video/webm" }
+        : { extension: "webp", mimeType: "image/webp" };
+    return {
+      file_id: s.file_id,
+      fileUniqueId: s.file_unique_id,
+      filename: `sticker_${s.file_unique_id}.${format.extension}`,
+      mimeType: format.mimeType,
+      declaredSize: s.file_size,
+      kind: "sticker",
+    };
   }
   return null;
 };
@@ -237,28 +249,17 @@ export const refineFilename = (filename: string, filePath: string): string => {
   return m ? `${filename}.${m[1]}` : filename;
 };
 
-// A persisted attachment metadata row (bytes already in R2).
-interface AttachmentRow {
-  id: string;
-  r2Key: string;
-  filename: string;
-  mimeType: string;
-}
-
-// The turn payload handed to the DO. Attachment rows ride along so the DO
-// persists them against the conversation it creates.
 export interface EnqueueTurnInput {
   updateId: string;
   clerkUserId: string;
   chatId: number;
   topicId: number;
   text: string;
-  attachments?: AttachmentRow[];
+  files?: Array<{ filename: string; mimeType: string; bytes: Uint8Array }>;
 }
 
 // Injected seams so the message pipeline is testable without grammY or a DO.
 export interface WebhookDeps {
-  attachments: AttachmentStore;
   download: (fileId: string) => Promise<{ bytes: Uint8Array; filePath: string }>;
   getClerkUserId: (telegramId: string) => Promise<string | null>;
   enqueue: (clerkUserId: string, input: EnqueueTurnInput) => Promise<void>;
@@ -266,21 +267,13 @@ export interface WebhookDeps {
   sendTyping: (chatId: number, topicId: number) => Promise<void>;
 }
 
-const ATTACHMENT_ONLY_NOTICE =
-  "\u26a0\ufe0f I can't handle that attachment \u2014 send me a photo, PDF, or text.";
-const IGNORED_NOTICE =
-  "\u26a0\ufe0f I ignored the attached file (not a supported type).";
-const OVERSIZE_NOTICE =
-  "\u26a0\ufe0f That file is too large for me to handle (over 5 MB).";
-const INVALID_PDF_NOTICE =
-  "\u26a0\ufe0f That file is not a valid PDF, so I couldn't read it.";
-const ENCRYPTED_PDF_NOTICE =
-  "\u26a0\ufe0f That PDF appears to be encrypted or password-protected, so I couldn't read it.";
+const OVERSIZE_NOTICE = "\u26a0\ufe0f That file is too large to save (over 5 MB).";
+const INVALID_PDF_NOTICE = "\u26a0\ufe0f That file is not a valid PDF, so I couldn't save it as one.";
+const DOWNLOAD_FAILED_NOTICE = "\u26a0\ufe0f I couldn't download that file, so it wasn't saved.";
+const QUOTA_NOTICE = "\u26a0\ufe0f I couldn't save that file because your 100 MB file storage is full.";
 
-// The whole async body of a message webhook: resolve the user, download an
-// image to R2 (marker into the message body), or keep today's notice-and-skip
-// for non-image attachments, then enqueue the turn. Extracted from the grammY
-// closure so it is unit-testable with injected deps.
+// Resolve and download at the Telegram edge, then hand canonical metadata and
+// bytes to UserDO. UserDO owns persistence and marker construction.
 export const processTelegramMessage = async (
   deps: WebhookDeps,
   topic: TopicContext,
@@ -297,85 +290,59 @@ export const processTelegramMessage = async (
     return;
   }
 
-  const isImageAttachment =
-    attachment !== null &&
-    attachment.kind !== "sticker" &&
-    isImage(attachment.mimeType);
-  const isPdf = attachment !== null && isPdfAttachment(attachment);
-
-  // Unsupported attachment: attachment-only -> notice + skip; text plus a file
-  // -> process the text and note the file was ignored.
-  if (attachment && !isImageAttachment && !isPdf) {
-    if (text.length === 0) {
-      await deps
-        .sendReply(topic.chatId, topic.topicId, ATTACHMENT_ONLY_NOTICE)
-        .catch(() => {});
-      return;
+  let incoming: { filename: string; mimeType: string; bytes: Uint8Array } | undefined;
+  if (attachment) {
+    const isPdf = isPdfAttachment(attachment);
+    if ((attachment.declaredSize ?? 0) > MAX_FILE_BYTES) {
+      await deps.sendReply(topic.chatId, topic.topicId, OVERSIZE_NOTICE).catch(() => {});
+    } else {
+      try {
+        const { bytes, filePath } = await deps.download(attachment.file_id);
+        if (bytes.length > MAX_FILE_BYTES) {
+          await deps.sendReply(topic.chatId, topic.topicId, OVERSIZE_NOTICE).catch(() => {});
+        } else if (isPdf && !hasPdfSignature(bytes)) {
+          await deps.sendReply(topic.chatId, topic.topicId, INVALID_PDF_NOTICE).catch(() => {});
+        } else {
+          incoming = {
+            filename: refineFilename(attachment.filename, filePath),
+            mimeType: isPdf ? "application/pdf" : attachment.mimeType,
+            bytes,
+          };
+        }
+      } catch (error) {
+        logError("file_download_failed", { reason: "provider_rejection", error: fmtErr(error) });
+        await deps.sendReply(topic.chatId, topic.topicId, DOWNLOAD_FAILED_NOTICE).catch(() => {});
+      }
     }
-    await deps.sendTyping(topic.chatId, topic.topicId).catch(() => {});
+  }
+
+  if (!text && !incoming) return;
+  await deps.sendTyping(topic.chatId, topic.topicId).catch(() => {});
+  try {
     await deps.enqueue(clerkUserId, {
       updateId,
       clerkUserId,
       chatId: topic.chatId,
       topicId: topic.topicId,
       text,
+      ...(incoming ? { files: [incoming] } : {}),
     });
-    await deps
-      .sendReply(topic.chatId, topic.topicId, IGNORED_NOTICE)
-      .catch(() => {});
-    return;
-  }
-
-  // Supported file: download bytes, enforce the size cap, put to R2, build the marker.
-  let marker = "";
-  let row: AttachmentRow | undefined;
-  if (attachment && (isImageAttachment || isPdf)) {
-    try {
-      const { bytes, filePath } = await deps.download(attachment.file_id);
-      if (bytes.length > MAX_ATTACHMENT_BYTES) {
-        await deps
-          .sendReply(topic.chatId, topic.topicId, OVERSIZE_NOTICE)
-          .catch(() => {});
-      } else if (isPdf && !hasPdfSignature(bytes)) {
-        await deps
-          .sendReply(topic.chatId, topic.topicId, INVALID_PDF_NOTICE)
-          .catch(() => {});
-      } else if (isPdf && bytesContain(bytes, "/Encrypt")) {
-        await deps
-          .sendReply(topic.chatId, topic.topicId, ENCRYPTED_PDF_NOTICE)
-          .catch(() => {});
-      } else {
-        const filename = refineFilename(attachment.filename, filePath);
-        const r2Key = attachmentKey(clerkUserId, attachment.fileUniqueId);
-        const mimeType = isPdf ? "application/pdf" : attachment.mimeType;
-        await deps.attachments.put(r2Key, bytes, mimeType);
-        const id = `att_${crypto.randomUUID()}`;
-        marker = renderAttachmentMarker({ id, filename, kind: isPdf ? "pdf" : "image" });
-        row = { id, r2Key, filename, mimeType };
-        if (isPdf) log("pdf_attachment_stored", { byte_count: bytes.length });
-      }
-    } catch (err) {
-      logError("attachment_download_failed", { error: fmtErr(err) });
-      await deps
-        .sendReply(topic.chatId, topic.topicId, isPdf ? INVALID_PDF_NOTICE : OVERSIZE_NOTICE)
-        .catch(() => {});
+  } catch (error) {
+    if (!incoming || !(error instanceof Error) || error.name !== "FileQuotaExceededError") {
+      throw error;
+    }
+    logError("file_save_failed", { reason: "quota", error: fmtErr(error) });
+    await deps.sendReply(topic.chatId, topic.topicId, QUOTA_NOTICE).catch(() => {});
+    if (text) {
+      await deps.enqueue(clerkUserId, {
+        updateId,
+        clerkUserId,
+        chatId: topic.chatId,
+        topicId: topic.topicId,
+        text,
+      });
     }
   }
-
-  const body = marker ? (text ? `${text}\n\n${marker}` : marker) : text;
-  // No text and no usable image (oversize or failed download): the notice was
-  // already sent, nothing to process.
-  if (body.length === 0) return;
-
-  await deps.sendTyping(topic.chatId, topic.topicId).catch(() => {});
-  await deps.enqueue(clerkUserId, {
-    updateId,
-    clerkUserId,
-    chatId: topic.chatId,
-    topicId: topic.topicId,
-    text: body,
-    ...(row ? { attachments: [row] } : {}),
-  });
 };
 
 export const createTelegramWebhookRoute = () => {
@@ -408,7 +375,6 @@ export const createTelegramWebhookRoute = () => {
     });
 
     const deps: WebhookDeps = {
-      attachments: createR2Attachments(c.env.ATTACHMENTS),
       download: (fileId) => downloadTelegramFile(c.env, fileId),
       getClerkUserId: (telegramId) => c.env.KV.get(tgKey(telegramId)),
       enqueue: (clerkUserId, input) =>

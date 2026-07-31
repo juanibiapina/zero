@@ -55,6 +55,13 @@ export interface MailThreadSummary {
 // One message inside a thread. Three distinct id spaces (see docs): `id` is the
 // opaque Gmail message handle; `messageIdHeader` is the RFC-822 `Message-ID`
 // header that In-Reply-To/References must echo to make a proper reply.
+export interface MailAttachmentSummary {
+  partId: string;
+  filename: string;
+  mimeType: string;
+  byteSize: number;
+}
+
 export interface MailMessage {
   id: string;
   threadId: string;
@@ -64,6 +71,7 @@ export interface MailMessage {
   subject: string;
   date: string;
   body: string;
+  attachments: MailAttachmentSummary[];
 }
 
 export interface MailThread {
@@ -138,6 +146,12 @@ export interface ListEventsParams {
 export interface MailApi {
   search(query: string): Promise<MailThreadSummary[]>;
   getThread(threadId: string): Promise<MailThread>;
+  downloadAttachment(messageId: string, partId: string): Promise<{
+    filename: string;
+    mimeType: string;
+    declaredSize: number;
+    bytes: Uint8Array;
+  }>;
   send(input: SendMailInput): Promise<{ id: string }>;
 }
 

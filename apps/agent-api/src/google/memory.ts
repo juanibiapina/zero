@@ -18,6 +18,12 @@ import { GoogleNotConnectedError } from "./types";
 export interface MemoryGoogleSeed {
   threadSummaries?: MailThreadSummary[];
   threads?: Record<string, MailThread>;
+  attachments?: Record<string, {
+    filename: string;
+    mimeType: string;
+    declaredSize?: number;
+    bytes: Uint8Array;
+  }>;
   calendars?: CalendarSummary[];
   events?: CalendarEvent[];
   // When true, every method throws GoogleNotConnectedError (simulates a user
@@ -53,6 +59,17 @@ export const createMemoryGoogle = (
         return (
           seed.threads?.[threadId] ?? { threadId, messages: [] }
         );
+      },
+      async downloadAttachment(messageId, partId) {
+        guard();
+        const attachment = seed.attachments?.[`${messageId}:${partId}`];
+        if (!attachment) throw new Error("The Gmail attachment part is missing or changed.");
+        return {
+          filename: attachment.filename,
+          mimeType: attachment.mimeType,
+          declaredSize: attachment.declaredSize ?? attachment.bytes.length,
+          bytes: attachment.bytes.slice(),
+        };
       },
       async send(input: SendMailInput): Promise<{ id: string }> {
         guard();

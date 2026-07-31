@@ -56,7 +56,11 @@ confirmation of the exact content before either runs.
 - `gmail_search(query)` — Gmail query syntax; returns thread
   id/date/sender/subject/snippet.
 - `gmail_thread(threadId)` — full thread, each message with its Gmail id,
-  RFC-822 `Message-ID` header, headers, and decoded body.
+  RFC-822 `Message-ID` header, headers, decoded body, and named attachment
+  summaries (`partId`, filename, MIME type, byte size).
+- `gmail_save_attachment({ messageId, partId })` — re-fetch the canonical MIME
+  part, download up to 5 MB, save it as a user-owned Zero file, and return its
+  metadata and stable marker without bytes or base64.
 - `gmail_send({ to, subject, body, cc?, bcc?, replyTo? })` — send or reply.
   `replyTo` is `{ messageIdHeader, threadId }` copied from a `gmail_thread`
   result.
@@ -75,7 +79,8 @@ The interface agent is not the only Gmail consumer. The **onboarding agent**
 (`agents/onboarding.ts`, see [`onboarding.md`](onboarding.md)) reuses the same
 `GoogleWorkspace` port but is given only the read-only Gmail tools
 (`gmail_search`, `gmail_thread`) to scan a new user's mail once and seed the
-pinned `User` topic; it gets no `gmail_send` or calendar tools.
+pinned `User` topic; it gets no `gmail_save_attachment`, `gmail_send`, or
+calendar tools.
 
 ## Gmail id spaces
 
@@ -97,7 +102,12 @@ Sending builds an RFC-822 MIME message (`Content-Type: text/plain;
 charset="UTF-8"`, base64 body, encoded-word Subject when non-ASCII),
 base64url-encodes it into `raw`, and POSTs to `users/me/messages/send`. Reading a
 thread walks the nested `payload` tree, decodes base64url part bodies, and
-prefers `text/plain` (falls back to stripped `text/html`).
+prefers `text/plain` (falls back to stripped `text/html`). It also walks nested
+mixed, related, and alternative parts for named files. Imports use the Gmail
+message id plus MIME `partId` only as transient tool inputs: the adapter
+re-fetches the message, resolves canonical filename/MIME/size metadata, then
+uses inline `body.data` or the Gmail attachments endpoint. Gmail identifiers are
+not stored in file metadata or markers.
 
 ## Calendar / timezone contract
 

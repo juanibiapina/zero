@@ -122,6 +122,77 @@ describe("createGoogleWorkspace mail", () => {
     expect(thread.messages[0].body).toBe("body");
   });
 
+  it("discovers named attachments recursively with distinct part ids", async () => {
+    globalThis.fetch = routed([{
+      match: "/threads/T3?format=full",
+      response: () => json({ messages: [{
+        id: "M3",
+        threadId: "T3",
+        payload: {
+          mimeType: "multipart/mixed",
+          parts: [
+            { mimeType: "multipart/related", parts: [
+              { partId: "1.1", filename: "résumé.pdf", mimeType: "application/pdf", body: { size: 7, attachmentId: "A1" } },
+            ] },
+            { partId: "2", filename: "résumé.pdf", mimeType: "application/pdf", body: { size: 8, attachmentId: "A2" } },
+          ],
+        },
+      }] }),
+    }]);
+    const thread = await createGoogleWorkspace(token).mail.getThread("T3");
+    expect(thread.messages[0].attachments).toEqual([
+      { partId: "1.1", filename: "résumé.pdf", mimeType: "application/pdf", byteSize: 7 },
+      { partId: "2", filename: "résumé.pdf", mimeType: "application/pdf", byteSize: 8 },
+    ]);
+  });
+
+  it("re-fetches canonical part metadata and downloads inline bytes", async () => {
+    globalThis.fetch = routed([{
+      match: "/messages/M4?format=full",
+      response: () => json({ id: "M4", threadId: "T4", payload: {
+        parts: [{ partId: "2", filename: "report.pdf", mimeType: "application/pdf", body: { size: 8, data: b64url("%PDF-1.7") } }],
+      } }),
+    }]);
+    const attachment = await createGoogleWorkspace(token).mail.downloadAttachment("M4", "2");
+    expect(attachment).toMatchObject({ filename: "report.pdf", mimeType: "application/pdf", declaredSize: 8 });
+    expect(new TextDecoder().decode(attachment.bytes)).toBe("%PDF-1.7");
+  });
+
+  it("downloads endpoint-backed bytes and rejects missing or changed parts", async () => {
+    globalThis.fetch = routed([
+      { match: "/messages/M5?format=full", response: () => json({ id: "M5", payload: { parts: [
+        { partId: "3", filename: "a.txt", mimeType: "text/plain", body: { size: 3, attachmentId: "A3" } },
+      ] } }) },
+      { match: "/messages/M5/attachments/A3", response: () => json({ size: 3, data: b64url("abc") }) },
+    ]);
+    const mail = createGoogleWorkspace(token).mail;
+    expect(new TextDecoder().decode((await mail.downloadAttachment("M5", "3")).bytes)).toBe("abc");
+    await expect(mail.downloadAttachment("M5", "missing")).rejects.toThrow("missing or changed");
+  });
+
+  it("rejects a declared oversize part before downloading attachment bytes", async () => {
+    const fetchMock = routed([{
+      match: "/messages/M7?format=full",
+      response: () => json({ id: "M7", payload: { parts: [
+        { partId: "1", filename: "big.bin", body: { size: 6 * 1024 * 1024, attachmentId: "A7" } },
+      ] } }),
+    }]);
+    globalThis.fetch = fetchMock;
+    await expect(createGoogleWorkspace(token).mail.downloadAttachment("M7", "1")).rejects.toThrow("too large");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects malformed data and post-download size changes", async () => {
+    const payload = (data: string, size: number) => json({ id: "M6", payload: { parts: [
+      { partId: "1", filename: "a.bin", mimeType: "application/octet-stream", body: { size, data } },
+    ] } });
+    globalThis.fetch = routed([{ match: "/messages/M6", response: () => payload("***", 2) }]);
+    const mail = createGoogleWorkspace(token).mail;
+    await expect(mail.downloadAttachment("M6", "1")).rejects.toThrow("Malformed");
+    globalThis.fetch = routed([{ match: "/messages/M6", response: () => payload(b64url("abc"), 2) }]);
+    await expect(mail.downloadAttachment("M6", "1")).rejects.toThrow("size changed");
+  });
+
   it("send builds a base64url MIME message, round-trips non-ASCII subject/body", async () => {
     globalThis.fetch = routed([
       {

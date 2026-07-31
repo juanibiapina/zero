@@ -27,10 +27,8 @@ Telegram or Anthropic traffic leaves the machine.
 Current tests:
 
 - `hello.test.ts` — a plain text message produces a reply.
-- `attachments.test.ts` covers a document upload. **Currently failing and
-  stale:** it uploads a `text/plain` document and waits for a `getFile`
-  download, but the worker only downloads image attachments and answers anything
-  else with a notice. It needs rewriting around an image upload.
+- `attachments.test.ts` covers a generic document upload and Telegram file
+  download through the user-owned file ingestion path.
 - `rate-limit.test.ts` — a 429 from the model produces the rate-limit message.
 
 Webhook update ids are deduped durably per user, so `buildWebhookUpdate`
