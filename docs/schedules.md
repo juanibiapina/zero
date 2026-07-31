@@ -107,6 +107,26 @@ Every fire is a full agent turn, which is the cost that shapes the two limits:
 | `do/schedules.ts` | firing policy and the firing pass, free of the Durable Object. |
 | `tools/schedules.ts` | `create_schedule` / `list_schedules` / `cancel_schedule`. |
 | `store/types.ts` | `ScheduleRecordStore`, implemented by `DbStore` and `MemoryStore`. |
+| `ScheduleDO/dispatch.ts` | which object owns each deadline reason. |
+
+## Dispatch
+
+A deadline is a flat record (`reason`, `dueAt`, optional `conversationId` and
+`attempts`), and `reason` is the discriminant that decides what runs. The whole
+set lives in one JSON blob under the `deadlines` key, keyed by
+`${reason}:${conversationId ?? ""}`, which is why `reminder:` is a single slot
+per user and why the caller must always pass the earliest due time.
+
+`ScheduleDO/dispatch.ts` maps each reason to one RPC, as a
+`Record<ScheduleReason, Handler>`. It is total on purpose: adding a reason
+without a handler is a compile error, rather than falling through to whichever
+branch happened to be last, which would fail as silence. The alarm itself picks
+a handler and calls it; it holds no job logic.
+
+`reason` is a persisted wire format, so those strings sit in live Durable Object
+storage. A reason that was renamed or retired comes back with no handler; such an
+entry is dropped with a `schedule_unknown_reason` log rather than retried,
+because no amount of backoff will produce a handler for it.
 
 The tools are registered unconditionally, like the file tools, so the tool
 schema stays byte-identical across users and turns (see `caching.md`). They go

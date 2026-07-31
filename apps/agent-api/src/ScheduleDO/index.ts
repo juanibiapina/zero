@@ -1,14 +1,15 @@
 // ScheduleDO: one instance per user, owning every deadline for that user — idle
-// learning, size-triggered learning, and later the onboarding and admin-task
-// timers that still sit on UserDO's alarm.
+// and size-triggered learning, Google onboarding, admin tasks, and the
+// schedules the user set themselves (see docs/schedules.md).
 //
-// It owns *when*, never the work itself. A due learning deadline is handed to
-// LearningDO through a short RPC and this invocation ends; it never awaits a
-// learner's model calls. That separation is the point: UserDO's alarm stays
-// dedicated to draining turns, so nothing a schedule or a learner does can delay
-// a reply.
+// It owns *when*, never the work itself. Each due deadline is handed to
+// whichever object owns it (see dispatch.ts) and this invocation ends; it never
+// awaits a learner's model calls. That separation is the point: UserDO's alarm
+// stays dedicated to draining turns, so nothing a schedule or a learner does can
+// delay a reply.
 
 import { DurableObject } from "cloudflare:workers";
+import { dispatchFor } from "./dispatch";
 import {
   logScheduleFinished,
   logScheduleFired,
@@ -16,11 +17,8 @@ import {
   scheduleDeadline,
   takeDueDeadlines,
   touchConversation,
-  type ScheduleReason,
 } from "../do/schedule";
 import type { LearnReason } from "../do/learning-job";
-import { getLearningDO } from "../LearningDO/stub";
-import { getUserDO } from "../UserDO/stub";
 import { logError, fmtErr } from "../log";
 import { reportError } from "../reporting/zero-errors";
 import type { Env } from "../types";
@@ -79,8 +77,17 @@ export class ScheduleDO extends DurableObject<Env> {
     for (const entry of due) {
       logScheduleFired(entry);
       if (!clerkUserId) continue;
+      const dispatch = dispatchFor(entry.reason);
+      if (!dispatch) {
+        logError("schedule_unknown_reason", { reason: entry.reason });
+        continue;
+      }
       try {
-        await this.dispatch(clerkUserId, entry.reason, entry.conversationId);
+        await dispatch({
+          env: this.env,
+          clerkUserId,
+          conversationId: entry.conversationId,
+        });
         dispatched++;
       } catch (err) {
         // One unreachable target must not take the whole schedule down, and must
@@ -105,30 +112,5 @@ export class ScheduleDO extends DurableObject<Env> {
       }
     }
     logScheduleFinished({ dispatched, durationMs: Date.now() - startedAt });
-  }
-
-  // Hand the work to whoever owns it. Learning goes to LearningDO, which
-  // persists the request and returns; the two user-wide jobs go to their
-  // existing UserDO entry points. Nothing here awaits an agent loop except those
-  // UserDO calls, which are the jobs themselves.
-  private async dispatch(
-    clerkUserId: string,
-    reason: ScheduleReason,
-    conversationId?: string,
-  ): Promise<void> {
-    if (reason === "idle" || reason === "size") {
-      await getLearningDO(this.env, clerkUserId).request(
-        clerkUserId,
-        reason,
-        conversationId,
-      );
-      return;
-    }
-    const userDO = getUserDO(this.env, clerkUserId);
-    // A due schedule enqueues its prompt and returns; the turn it books runs on
-    // UserDO's own alarm, so no LLM work happens on this one.
-    if (reason === "reminder") await userDO.runDueSchedules();
-    else if (reason === "onboarding") await userDO.runQueuedOnboarding();
-    else await userDO.runQueuedAdminTask();
   }
 }
