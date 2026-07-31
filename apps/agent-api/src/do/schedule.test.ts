@@ -10,6 +10,7 @@ import {
   takeDueDeadlines,
   requestLearnSafely,
   retryDeadline,
+  retryDispatch,
   RETRY_BASE_MS,
   RETRY_MAX_ATTEMPTS,
   RETRY_MAX_MS,
@@ -224,5 +225,60 @@ describe("best-effort scheduling from the turn path", () => {
     await expect(
       requestLearnSafely(broken, "user_1", "size", "c1"),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("retryDispatch", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("re-arms a failed deadline without reporting: nothing is lost yet", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const d = fakeStorage();
+    const reportError = vi.fn(async () => {});
+
+    await retryDispatch({
+      storage: d.storage,
+      entry: { reason: "onboarding", dueAt: 1_000 },
+      err: new Error("do unreachable"),
+      now: 1_000,
+      reportError,
+      clerkUserId: "user_1",
+    });
+
+    expect(Object.values(d.deadlines())).toEqual([
+      { reason: "onboarding", dueAt: 1_000 + RETRY_BASE_MS, attempts: 1 },
+    ]);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("reports the cause when it gives up, dropping the work for good", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const d = fakeStorage();
+    const reportError = vi.fn(async () => {});
+    const err = new Error("do unreachable");
+
+    await retryDispatch({
+      storage: d.storage,
+      entry: { reason: "admin_task", dueAt: 1_000, attempts: RETRY_MAX_ATTEMPTS },
+      err,
+      now: 1_000,
+      reportError,
+      clerkUserId: "user_1",
+    });
+
+    // Nothing re-scheduled: the deadline is gone.
+    expect(d.deadlines()).toEqual({});
+    expect(reportError).toHaveBeenCalledTimes(1);
+    const [reported, context] = reportError.mock.calls[0] as unknown as [
+      Error,
+      Record<string, unknown>,
+    ];
+    expect(reported).toBe(err);
+    expect(context).toEqual({
+      site: "schedule_gave_up",
+      reason: "admin_task",
+      attempts: RETRY_MAX_ATTEMPTS,
+      clerk_user_id: "user_1",
+    });
   });
 });

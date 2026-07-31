@@ -28,6 +28,7 @@ import { sendChatAction } from "../telegram/chat-action";
 import { formatAndSend } from "../telegram/send";
 import { downloadTelegramFile } from "../telegram/files";
 import { MAX_FILE_BYTES } from "../files/types";
+import { reportError as reportZeroError } from "../reporting/zero-errors";
 
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
@@ -273,6 +274,9 @@ export interface WebhookDeps {
   enqueue: (clerkUserId: string, input: EnqueueTurnInput) => Promise<void>;
   sendReply: (chatId: number, topicId: number, text: string) => Promise<void>;
   sendTyping: (chatId: number, topicId: number) => Promise<void>;
+  // Report a failure the user saw a notice for. Optional and injected by the
+  // route, which owns `env`.
+  reportError?: (err: unknown) => Promise<void>;
 }
 
 const OVERSIZE_NOTICE = "\u26a0\ufe0f That file is too large to save (over 5 MB).";
@@ -321,6 +325,9 @@ export const processTelegramMessage = async (
         }
       } catch (error) {
         logError("file_download_failed", { reason: "provider_rejection", error: fmtErr(error) });
+        // Telegram refused a file the user sent us: they get a notice instead
+        // of their attachment. A warning, not an error — the provider, not us.
+        await deps.reportError?.(error);
         await deps.sendReply(topic.chatId, topic.topicId, DOWNLOAD_FAILED_NOTICE).catch(() => {});
       }
     }
@@ -392,6 +399,10 @@ export const createTelegramWebhookRoute = () => {
       },
       sendReply,
       sendTyping: (chatId, topicId) => sendChatAction(c.env, chatId, topicId),
+      reportError: (err) =>
+        reportZeroError(c.env, err, { site: "file_download" }, {
+          level: "warning",
+        }),
     };
 
     // Registered before the generic message handler, which never runs for a

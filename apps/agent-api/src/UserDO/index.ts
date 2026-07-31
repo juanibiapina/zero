@@ -256,6 +256,11 @@ export class UserDO extends DurableObject<Env> {
       },
       setTask: (terminalTask) =>
         this.ctx.storage.put(ADMIN_TASK_KEY, terminalTask),
+      reportError: (err) =>
+        reportError(this.env, err, {
+          site: "admin_task",
+          clerk_user_id: task.clerkUserId,
+        }),
     });
   }
 
@@ -307,6 +312,11 @@ export class UserDO extends DurableObject<Env> {
       // so its volume is on the order of signups.
       notify: (message) =>
         notifyDiscord(this.env.DISCORD_SIGNUP_WEBHOOK_URL, message),
+      reportError: (err) =>
+        reportError(this.env, err, {
+          site: "onboarding",
+          clerk_user_id: clerkUserId,
+        }),
     });
   }
 
@@ -399,6 +409,8 @@ export class UserDO extends DurableObject<Env> {
         clerkUserId,
         timezone,
         setTimezone,
+        reportError: (err, context, options) =>
+          reportError(this.env, err, context, options),
         // A conversation that has grown past the threshold asks for learning
         // now instead of waiting to go idle, which is what covers the
         // always-active user. Fire-and-forget and best-effort: the reply must

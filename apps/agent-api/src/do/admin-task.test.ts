@@ -81,19 +81,23 @@ describe("admin task", () => {
     });
   });
 
-  it("marks failed when the agent throws", async () => {
+  it("marks failed and reports when the agent throws", async () => {
     const setTask = vi.fn(async (_task: AdminTask) => {});
+    const reportError = vi.fn(async (_err: unknown) => {});
     await runAdminTask({
       task: { clerkUserId: "user_1", prompt: "notes", status: "queued" },
       runAgent: async () => {
         throw new Error("gateway down");
       },
       setTask,
+      reportError,
     });
     expect(setTask).toHaveBeenCalledWith({
       clerkUserId: "user_1",
       status: "failed",
     });
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect((reportError.mock.calls[0][0] as Error).message).toBe("gateway down");
   });
 
   it("does not replace a queued record until the agent completes", async () => {

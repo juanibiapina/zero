@@ -27,6 +27,10 @@ export interface OnboardingDeps {
   // Report the run's boundaries to a human channel (production: Discord).
   // Injected so this module stays free of env and fetch.
   notify: (message: string) => Promise<void>;
+  // Report a failed run to ZeroErrors. Optional and injected by the DO, same
+  // shape as `notify`: the failure leaves the user without the identity topic
+  // they were promised, so it is a defect, not a log line.
+  reportError?: (err: unknown) => Promise<void>;
 }
 
 const secs = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
@@ -100,6 +104,7 @@ export const runOnboarding = async (deps: OnboardingDeps): Promise<void> => {
       error: formatted,
     });
     setStatus("failed");
+    await deps.reportError?.(err);
     await safeNotify(
       deps.notify,
       `❌ Onboarding failed: ${clerkUserId} (${secs(durationMs)}) — ${formatted.message.slice(0, 200)}`,

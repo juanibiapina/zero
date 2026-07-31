@@ -208,6 +208,11 @@ The worker follows a layered architecture: Entry Point → App → Routes → Du
 
 ## Production Logs
 
+Failures the user felt, or that lost work, are also reported as ZeroErrors
+issues in project `zero-agent` (`dash.zeroapps.dev/errors`). See
+`docs/error-reporting.md` for what reports, at which level, and why Durable
+Object resets never do.
+
 ```bash
 gob add pnpm --dir apps/agent-api exec wrangler tail
 ```

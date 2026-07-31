@@ -471,6 +471,118 @@ describe("runTurn", () => {
     expect(events.some((e) => e.msg === "turn_failed")).toBe(false);
   });
 
+  it("reports a turn failure once, at error level, with the ids", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const reportError = vi.fn(async () => {});
+
+    const model = capturingModel(() => {
+      throw new Error("gateway down");
+    });
+
+    await runTurn({
+      store,
+      makeModel: constModel(model),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+      clerkUserId: "user_1",
+      reportError,
+    });
+
+    expect(sink.sent).toEqual([FALLBACK_MESSAGE]);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    const [err, context, options] = reportError.mock.calls[0] as unknown as [
+      Error,
+      Record<string, unknown>,
+      { level: string },
+    ];
+    expect(err.message).toBe("gateway down");
+    expect(context).toMatchObject({
+      site: "turn",
+      chat_id: 1,
+      topic_id: 0,
+      clerk_user_id: "user_1",
+    });
+    expect(options.level).toBe("error");
+  });
+
+  it("reports a rate-limited turn at warning level, still sending the notice", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const reportError = vi.fn(async () => {});
+
+    const model = capturingModel(() => {
+      throw Object.assign(new Error("rate limited"), { status: 429 });
+    });
+
+    await runTurn({
+      store,
+      makeModel: constModel(model),
+      send: sink.send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+      reportError,
+    });
+
+    expect(sink.sent).toEqual([RATE_LIMIT_MESSAGE]);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    const [, context, options] = reportError.mock.calls[0] as unknown as [
+      Error,
+      Record<string, unknown>,
+      { level: string },
+    ];
+    expect(context.site).toBe("turn_rate_limited");
+    expect(options.level).toBe("warning");
+  });
+
+  it("reports nothing for a DO reset, which still rethrows", async () => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "hi");
+    const sink = collectSink();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const reportError = vi.fn(async () => {});
+
+    const model = capturingModel(() => {
+      throw Object.assign(
+        new Error("Durable Object reset because its code was updated."),
+        { durableObjectReset: true },
+      );
+    });
+
+    await expect(
+      runTurn({
+        store,
+        makeModel: constModel(model),
+        send: sink.send,
+        search: createMemorySearch(),
+        fetcher: createMemoryFetcher(),
+        google: createMemoryGoogle(),
+        chatId: 1,
+        topicId: 0,
+        reportError,
+      }),
+    ).rejects.toThrow(/reset/);
+
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
   it("requests interface and research models from the factory", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);

@@ -55,6 +55,26 @@ describe("runOnboarding", () => {
     expect(d.statuses).toEqual(["done", "done"]);
   });
 
+  it("reports the failure to the error tracker", async () => {
+    const reportError = vi.fn(async (_err: unknown) => {});
+    const d = deps({
+      runAgent: async () => {
+        throw new Error("gateway down");
+      },
+      reportError,
+    });
+    await runOnboarding(d.args);
+    expect(d.statuses).toEqual(["failed"]);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect((reportError.mock.calls[0][0] as Error).message).toBe("gateway down");
+  });
+
+  it("reports nothing to the error tracker on success", async () => {
+    const reportError = vi.fn(async (_err: unknown) => {});
+    await runOnboarding(deps({ reportError }).args);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
   it("passes the pinned topic name to the agent", async () => {
     const runAgent = vi.fn(async () => {});
     const d = deps({ runAgent });

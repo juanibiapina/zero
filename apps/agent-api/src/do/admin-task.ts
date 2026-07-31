@@ -55,6 +55,10 @@ export interface RunAdminTaskDeps {
   task: Extract<AdminTask, { status: "queued" }>;
   runAgent: (prompt: string) => Promise<string>;
   setTask: (task: AdminTask) => Promise<void>;
+  // Report a failed task to ZeroErrors. Optional and injected by the DO so
+  // this module stays free of env; the task is terminal-failed, so the
+  // requested work is lost until an administrator re-queues it.
+  reportError?: (err: unknown) => Promise<void>;
 }
 
 export const runAdminTask = async (deps: RunAdminTaskDeps): Promise<void> => {
@@ -71,6 +75,7 @@ export const runAdminTask = async (deps: RunAdminTaskDeps): Promise<void> => {
       clerk_user_id: task.clerkUserId,
       error: fmtErr(err),
     });
+    await deps.reportError?.(err);
     await setTask({ clerkUserId: task.clerkUserId, status: "failed" });
   }
 };

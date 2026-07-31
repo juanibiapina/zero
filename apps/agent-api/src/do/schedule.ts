@@ -127,6 +127,40 @@ export const takeDueDeadlines = async (
   return due;
 };
 
+// Put a failed deadline back, later, or give up on it. Re-arming by key means a
+// fresh request for the same reason replaces the retry, which is what should
+// happen: the newer request carries the newer intent.
+//
+// A give-up is the only reportable moment. Taking a deadline removed it, so
+// once retries are exhausted the work is gone for good; the earlier attempts
+// have lost nothing yet, and reporting them would create the issue on the first
+// failure and hide the give-up behind it.
+export const retryDispatch = async (deps: {
+  storage: ScheduleStorage;
+  entry: Deadline;
+  // The error that failed this dispatch, carried through so a give-up is
+  // reported with its cause rather than a synthetic message.
+  err: unknown;
+  now: number;
+  reportError?: (err: unknown, context: Record<string, unknown>) => Promise<void>;
+  clerkUserId?: string;
+}): Promise<void> => {
+  const { storage, entry, err, now } = deps;
+  const next = retryDeadline(entry, now);
+  if (next === null) {
+    logScheduleGaveUp(entry);
+    await deps.reportError?.(err, {
+      site: "schedule_gave_up",
+      reason: entry.reason,
+      attempts: entry.attempts ?? 0,
+      clerk_user_id: deps.clerkUserId,
+    });
+    return;
+  }
+  await scheduleDeadline(storage, next);
+  logScheduleRetry(next, next.dueAt);
+};
+
 // Push a conversation's idle-learning deadline out to now + 1h. Called on every
 // accepted user message, after the durable enqueue: an LLM failure must not make
 // an active conversation look idle.

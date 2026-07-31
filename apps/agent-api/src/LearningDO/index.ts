@@ -44,6 +44,7 @@ import { createRemoteLearningPort } from "../learning/remote-port";
 import type { LearningPort } from "../learning/types";
 import { getUserDO } from "../UserDO/stub";
 import { log } from "../log";
+import { reportError } from "../reporting/zero-errors";
 import { estimateTokens, safeCompactionCut } from "../store/messages";
 import type { LearningMessage } from "../store/types";
 import type { Env } from "../types";
@@ -106,7 +107,24 @@ export class LearningDO extends DurableObject<Env> {
     }
   }
 
+  // Report an unexpected slice failure, then let it out. Cloudflare's alarm
+  // retry is what makes a long job survivable, so the throw must still escape;
+  // the report only gives the failure a name. Retries fingerprint to the same
+  // issue, so one bad job is one issue with several events.
   override async alarm(): Promise<void> {
+    try {
+      await this.runSlice();
+    } catch (err) {
+      const clerkUserId = await this.ctx.storage.get<string>("clerkUserId");
+      await reportError(this.env, err, {
+        site: "learning",
+        clerk_user_id: clerkUserId,
+      });
+      throw err;
+    }
+  }
+
+  private async runSlice(): Promise<void> {
     const startedAt = Date.now();
     const state = await this.state();
     const job = state.active;

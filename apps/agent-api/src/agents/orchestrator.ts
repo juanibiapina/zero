@@ -69,6 +69,14 @@ export interface TurnInput {
   // Reference time for the date anchor and relative message ages. Defaults to
   // now; injected in tests for deterministic prompt rendering.
   now?: Date;
+  // Report a failure the user experienced to ZeroErrors. Optional and injected
+  // by the DO (which owns `env`), so this module stays runtime-agnostic and
+  // tests opt in. A DO reset is filtered inside the reporter, not here.
+  reportError?: (
+    err: unknown,
+    context: Record<string, unknown>,
+    options: { level: "error" | "warning" },
+  ) => Promise<void>;
   // Called when this conversation's rendered context crosses the learning size
   // threshold. The DO wires it to the user's schedule, which asks LearningDO to
   // consolidate and compact this conversation. An event, not a poll: the turn is
@@ -284,6 +292,21 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       topic_id: topicId,
       error: fmtErr(err),
     });
+    // The user just got a fallback instead of an answer, so this is a defect
+    // worth a ZeroErrors issue. Awaited (not fire-and-forget) because a DO
+    // alarm ends the moment this returns; the reporter never rejects.
+    await input.reportError?.(
+      err,
+      {
+        site: rateLimited ? "turn_rate_limited" : "turn",
+        chat_id: chatId,
+        topic_id: topicId,
+        clerk_user_id: input.clerkUserId,
+      },
+      // A throttle is upstream capacity, not a bug in us: it is a warning so it
+      // does not sit next to real defects.
+      { level: rateLimited ? "warning" : "error" },
+    );
     const reply = rateLimited ? RATE_LIMIT_MESSAGE : FALLBACK_MESSAGE;
     // Same discipline as an ordinary reply: persist, claim, send. Without the
     // claim this row looks like a reply that was written and never sent, and
