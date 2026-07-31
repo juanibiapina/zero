@@ -38,7 +38,8 @@
     "binding": "AI"
   },
   "analytics_engine_datasets": [
-    { "binding": "ANALYTICS", "dataset": "zero-events" }
+    { "binding": "ANALYTICS", "dataset": "zero-events" },
+    { "binding": "AI_USAGE", "dataset": "zero-ai-usage" }
   ],
   "durable_objects": {
     "bindings": [

@@ -30,6 +30,10 @@ import type {
 } from "./protocol";
 import { log } from "../log";
 import type { Env } from "../types";
+import {
+  recordAgentUsage,
+  type AiUsageAttribution,
+} from "./ai-usage";
 
 // The agents that issue LLM calls. Each turn runs the interface agent (which
 // may spawn research) then the writer; onboarding and admin tasks run alone.
@@ -77,11 +81,17 @@ const toUsage = (usage: {
   output_tokens: number;
   cache_read_input_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
+  cache_creation?: {
+    ephemeral_5m_input_tokens: number;
+    ephemeral_1h_input_tokens: number;
+  } | null;
 }): TokenUsage => ({
   inputTokens: usage.input_tokens ?? 0,
   outputTokens: usage.output_tokens ?? 0,
   cacheReadTokens: usage.cache_read_input_tokens ?? 0,
   cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+  cacheWrite5mTokens: usage.cache_creation?.ephemeral_5m_input_tokens ?? 0,
+  cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
 });
 
 // Translate the response's diagnostics envelope into Zero's local states. The
@@ -120,10 +130,12 @@ export const createModelFactory = async (
   // Test seam: the request bytes are what the prompt cache keys on, so tests
   // assert on them by intercepting the transport. Production passes nothing.
   fetchImpl?: typeof fetch,
+  attribution?: AiUsageAttribution,
 ): Promise<(agent: AgentLabel) => AgentModel> => {
   const baseURL = await resolveBaseUrl(env);
   const modelId = env.MODEL_ID;
   return (agent: AgentLabel): AgentModel => {
+    let reportedModelId: string = modelId;
     const client = new Anthropic({
       apiKey: "gateway-byok",
       baseURL,
@@ -157,6 +169,7 @@ export const createModelFactory = async (
             ? { diagnostics: { previous_message_id: request.previousMessageId } }
             : {}),
         });
+        reportedModelId = response.model;
         const usage = toUsage(response.usage);
         const diagnostic = toDiagnostic(
           response.diagnostics,
@@ -193,6 +206,14 @@ export const createModelFactory = async (
           diagnostic,
         };
       },
+      reportRunUsage: (usage) =>
+        recordAgentUsage(env, {
+          clerkUserId,
+          model: reportedModelId,
+          agent,
+          attribution,
+          usage,
+        }),
     };
   };
 };
@@ -204,7 +225,13 @@ export const createModel = async (
   clerkUserId: string,
   agent: AgentLabel = "interface",
   fetchImpl?: typeof fetch,
+  attribution?: AiUsageAttribution,
 ): Promise<AgentModel> => {
-  const makeModel = await createModelFactory(env, clerkUserId, fetchImpl);
+  const makeModel = await createModelFactory(
+    env,
+    clerkUserId,
+    fetchImpl,
+    attribution,
+  );
   return makeModel(agent);
 };

@@ -4,10 +4,24 @@ import { UserButton } from "@clerk/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  formatCost,
+  formatCount,
   formatDate,
+  totalTokens,
   truncateId,
+  USAGE_RANGES,
   type AdminUserDetail,
   type GithubStatus,
+  type UsageRange,
+  type UserUsageReport,
 } from "./admin-shared";
 
 // ─── GitHub status ──────────────────────────────────────────────────
@@ -206,6 +220,158 @@ function AdminTaskCard({ userId }: { userId: string }) {
   );
 }
 
+// ─── AI usage ──────────────────────────────────────────────────────
+
+function UserUsageSection({ userId }: { userId: string }) {
+  const [range, setRange] = useState<UsageRange>("30d");
+  const [usage, setUsage] = useState<UserUsageReport | null>(null);
+  const [errorRange, setErrorRange] = useState<UsageRange | null>(null);
+  const loading = usage?.range !== range && errorRange !== range;
+  const error = errorRange === range;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/admin/users/${encodeURIComponent(userId)}/ai-usage?range=${range}`,
+        );
+        if (!res.ok) throw new Error("usage failed");
+        const data = (await res.json()) as UserUsageReport;
+        if (!cancelled) {
+          setUsage(data);
+          setErrorRange(null);
+        }
+      } catch {
+        if (!cancelled) setErrorRange(range);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [range, userId]);
+
+  return (
+    <section className="space-y-4" aria-labelledby="user-usage-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="user-usage-heading" className="text-lg font-semibold">
+            Estimated AI cost
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Agent and conversation usage for the selected period.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Range</span>
+          <select
+            value={range}
+            onChange={(event) => setRange(event.target.value as UsageRange)}
+            className="h-9 rounded-md border bg-background px-2"
+            aria-label="AI usage range"
+          >
+            {USAGE_RANGES.map((value) => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {loading && <p className="text-sm text-muted-foreground">Loading usage…</p>}
+      {error && <p className="text-sm text-destructive">Estimated AI usage is unavailable.</p>}
+      {usage?.range === range && !loading && (
+        <>
+          <dl className="grid gap-4 border-y py-4 sm:grid-cols-3">
+            <div>
+              <dt className="text-sm text-muted-foreground">Estimated cost</dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums">
+                {formatCost(usage.totals.estimatedCostUsd)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Model calls</dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums">
+                {formatCount(usage.totals.modelCalls)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Tokens</dt>
+              <dd className="mt-1 text-xl font-semibold tabular-nums">
+                {formatCount(totalTokens(usage.totals))}
+              </dd>
+            </div>
+          </dl>
+
+          {usage.totals.unpricedModelCalls > 0 && (
+            <p className="text-sm text-amber-700">
+              {formatCount(usage.totals.unpricedModelCalls)} calls and{" "}
+              {formatCount(usage.totals.unpricedTokens)} tokens are not included in the cost estimate.
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">By agent</h3>
+            {usage.byAgent.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No usage in this period.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agent</TableHead>
+                      <TableHead className="text-right">Estimated cost</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {usage.byAgent.map((row) => (
+                      <TableRow key={row.agent}>
+                        <TableCell>{row.agent}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCost(row.estimatedCostUsd)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCount(row.modelCalls)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">By conversation</h3>
+            {usage.byConversation.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No usage in this period.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Conversation</TableHead>
+                      <TableHead>Chat / topic</TableHead>
+                      <TableHead className="text-right">Estimated cost</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {usage.byConversation.map((row, index) => (
+                      <TableRow key={`${row.conversationId ?? "non-chat"}-${index}`}>
+                        <TableCell className="font-mono text-xs">
+                          {row.conversationId ? truncateId(row.conversationId) : "Non-chat"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {row.chatId ? `${row.chatId} / ${row.topicId ?? "0"}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCost(row.estimatedCostUsd)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCount(row.modelCalls)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 // ─── Page ───────────────────────────────────────────────────────────
 
 export function UserDetailPage() {
@@ -259,6 +425,7 @@ export function UserDetailPage() {
               {detail.clerkUserId}
             </p>
             <StatusCard detail={detail} />
+            <UserUsageSection userId={detail.clerkUserId} />
             <AdminTaskCard userId={detail.clerkUserId} />
           </>
         )}

@@ -21,7 +21,12 @@ alarm), then returns 200 immediately. The alarm runs the turn:
 LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic; the gateway
 stores the real key and bills us directly) authenticated with
 `cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
-`MODEL_ID` (`claude-sonnet-4-6`). Durable state is the DO SQLite (topics,
+`MODEL_ID` (`claude-sonnet-4-6`). Each completed agent execution writes one
+aggregate call/token/cost point to the `AI_USAGE` Analytics Engine dataset,
+indexed by Clerk user and attributed to its agent and conversation when one
+exists. The estimate can be sampled, retains about three months of history, and
+can miss an execution interrupted by a hard isolate reset; AI Gateway logs remain
+the request-level debugging source. Durable state is the DO SQLite (topics,
 conversations, messages, file metadata); file bytes live in the `FILES` R2
 binding. There is no container and no per-user filesystem. A
 self-rescheduling `setTimeout` drives the Telegram typing action across the
@@ -183,18 +188,22 @@ DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
 POST   /api/onboarding/google            — Queue the Gmail onboarding scan, 202 (Clerk)
 
-GET    /api/admin/users                  — List all users (admin)
-GET    /api/admin/users/{userId}         — One user's identity + link status (admin)
-GET    /api/admin/github/status          — A user's GitHub install/token check (admin)
+GET    /api/admin/users                         — List all users (admin)
+GET    /api/admin/users/{userId}                — One user's identity + link status (admin)
+GET    /api/admin/ai-usage                      — AI usage grouped by user (admin)
+GET    /api/admin/users/{userId}/ai-usage       — Agent/conversation usage (admin)
+GET    /api/admin/github/status                 — A user's GitHub install/token check (admin)
 ```
 
 Admin routes are gated by the `ADMIN_USER_ID` env var. The user list is sourced
-from Clerk (`apps/agent-api/src/admin-users.ts`) so every signed-up user appears; it
-does no per-user UserDO or GitHub calls. The detail route is the only admin path
-that pays for a per-user Clerk `getUser` plus one UserDO read (Telegram link,
-Google/onboarding status). Per-request cost tracking was removed with the
-container runtime; the Cloudflare AI Gateway now logs per-user model/token/USD
-cost, attributed via `cf-aig-metadata`.
+from Clerk (`apps/agent-api/src/admin-users.ts`) so every signed-up user appears;
+it does no per-user UserDO or GitHub calls. The identity detail route pays for a
+per-user Clerk `getUser` plus one UserDO read (Telegram link and
+Google/onboarding status). Usage routes query Analytics Engine separately, so a
+query failure cannot prevent the Clerk roster or identity detail from loading.
+The SQL adapter validates fixed ranges, escapes request-derived string literals,
+and weights calls, tokens, and cost by `_sample_interval`. Unknown models remain
+visible as unpriced calls and tokens rather than known zero-cost usage.
 
 `POST /api/onboarding/google` queues a one-shot Gmail scan on the user's DO
 (`queueOnboarding`: set status `queued` + arm the alarm, idempotent on the
@@ -290,6 +299,10 @@ Stored in Doppler (`zero-api`):
   upstream, and Anthropic bills the usage directly. The non-secret
   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_GATEWAY_ID` live in `wrangler.jsonc`
   vars; the `AI` binding resolves the gateway URL.
+- `CLOUDFLARE_ANALYTICS_TOKEN` — a separate Cloudflare token with only Account
+  Analytics Read, used by admin routes to query the `zero-ai-usage` Analytics
+  Engine dataset. The write path uses the `AI_USAGE` binding and does not use
+  this token.
 
 Google Workspace access is **not** stored in Doppler. Each user opts in via the
 “Connect Google” button in the web UI (Clerk `createExternalAccount` with the
@@ -334,7 +347,5 @@ documented in [caching.md](./caching.md).
 - Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
   shapes are known; Google onboarding is the first, deliberately minimal, one
   (see [`onboarding.md`](onboarding.md)).
-- Add an in-app cost view sourced from the AI Gateway logs
-  (`env.AI.gateway(id).getLog`, or the gateway REST API).
 - Per-user model preference + a switching API.
 - Surface topic/conversation history in the web UI for browsing/export.

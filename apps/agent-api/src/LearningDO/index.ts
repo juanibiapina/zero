@@ -273,7 +273,13 @@ export class LearningDO extends DurableObject<Env> {
       return false;
     }
     const compacted = window.messages.slice(0, cut + 1);
-    const model = await createModel(this.env, clerkUserId, "compaction");
+    const model = await createModel(
+      this.env,
+      clerkUserId,
+      "compaction",
+      undefined,
+      { conversationId },
+    );
     const { summary, usage } = await summarizeConversation({
       model,
       summary: window.summary,

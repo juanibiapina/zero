@@ -23,3 +23,20 @@ bin/sync-secrets-to-cloudflare
 The CLI is `pnpm dlx zerovault-cli@0.2.2`. The public dashboard is
 `https://dash.zeroapps.dev/vault`; CLI traffic uses the API host, not the browser
 origin.
+
+## Analytics Engine reporting
+
+`CLOUDFLARE_ANALYTICS_TOKEN` belongs in the `zero-api` development and
+production environments. Create it as a custom Cloudflare token with only
+**Account → Account Analytics → Read** for the Zero account. It reads the
+`zero-ai-usage` dataset for admin reports. Model calls write through the
+`AI_USAGE` Worker binding and do not use this token.
+
+Before deploying code that lists the token in `secrets.required`:
+
+1. Store the token in both `zero-api` environments.
+2. Run `bin/fetch-secrets` for local development.
+3. Run `bin/sync-secrets-to-cloudflare` to set the production Worker secret.
+
+Do not reuse `CLOUDFLARE_API_KEY`, which authenticates AI Gateway requests and
+has a different purpose.

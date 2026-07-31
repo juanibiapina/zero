@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenAPIHono } from "@hono/zod-openapi";
 
 import {
@@ -8,6 +8,7 @@ import {
 import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
 import { listClerkUsers, getClerkUser } from "../admin-users";
+import { getAdminUsage, getUserUsage } from "../admin-ai-usage";
 
 vi.mock("../github-token", () => ({
   getGithubInstallationStatus: vi.fn(),
@@ -18,6 +19,15 @@ vi.mock("../admin-users", () => ({
   getClerkUser: vi.fn(),
 }));
 
+vi.mock("../admin-ai-usage", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../admin-ai-usage")>();
+  return {
+    ...original,
+    getAdminUsage: vi.fn(),
+    getUserUsage: vi.fn(),
+  };
+});
+
 const { getUserDO } = vi.hoisted(() => ({ getUserDO: vi.fn() }));
 vi.mock("../UserDO/stub", () => ({ getUserDO }));
 
@@ -25,6 +35,10 @@ const fakeEnv = (adminUserId: string): Env =>
   ({
     ADMIN_USER_ID: adminUserId,
   }) as unknown as Env;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 const buildApp = (env: Env, userId: string) => {
   const app = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
@@ -122,6 +136,77 @@ describe("GET /api/admin/users", () => {
 
     await app.request("/api/admin/users");
     expect(getUserDO).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin AI usage routes", () => {
+  const totals = {
+    estimatedCostUsd: 1.25,
+    modelCalls: 3,
+    inputTokens: 10,
+    outputTokens: 5,
+    cacheReadTokens: 20,
+    cacheWrite5mTokens: 4,
+    cacheWrite1hTokens: 6,
+    unpricedModelCalls: 0,
+    unpricedTokens: 0,
+  };
+
+  it("returns usage independently of the Clerk roster", async () => {
+    vi.mocked(getAdminUsage).mockResolvedValue({
+      range: "7d",
+      totals,
+      users: [{ userId: "user_1", ...totals }],
+    });
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request("/api/admin/ai-usage?range=7d");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      range: "7d",
+      totals,
+      users: [{ userId: "user_1", ...totals }],
+    });
+    expect(getAdminUsage).toHaveBeenCalledWith(expect.anything(), "7d");
+    expect(listClerkUsers).not.toHaveBeenCalled();
+  });
+
+  it("returns a user's agent and conversation breakdown", async () => {
+    vi.mocked(getUserUsage).mockResolvedValue({
+      range: "30d",
+      totals,
+      byAgent: [{ agent: "interface", ...totals }],
+      byConversation: [
+        { conversationId: "conv_1", chatId: "42", topicId: "7", ...totals },
+      ],
+    });
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request("/api/admin/users/user_1/ai-usage");
+
+    expect(res.status).toBe(200);
+    expect(getUserUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      "user_1",
+      "30d",
+    );
+  });
+
+  it("returns a usage-only error without reading the roster", async () => {
+    vi.mocked(getAdminUsage).mockRejectedValue(new Error("Cloudflare down"));
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request("/api/admin/ai-usage");
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "AI usage unavailable" });
+    expect(listClerkUsers).not.toHaveBeenCalled();
+  });
+
+  it("keeps the admin gate on usage routes", async () => {
+    const app = buildApp(fakeEnv("admin_1"), "other_user");
+    expect((await app.request("/api/admin/ai-usage")).status).toBe(403);
   });
 });
 

@@ -52,6 +52,10 @@ const transport = (
           output_tokens: 3,
           cache_read_input_tokens: 7,
           cache_creation_input_tokens: 5,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 2,
+            ephemeral_1h_input_tokens: 3,
+          },
         },
         ...body,
       }),
@@ -202,6 +206,8 @@ describe("the Anthropic response", () => {
       outputTokens: 3,
       cacheReadTokens: 7,
       cacheWriteTokens: 5,
+      cacheWrite5mTokens: 2,
+      cacheWrite1hTokens: 3,
     });
   });
 

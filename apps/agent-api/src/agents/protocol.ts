@@ -93,6 +93,14 @@ export interface TokenUsage {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  cacheWrite5mTokens?: number;
+  cacheWrite1hTokens?: number;
+}
+
+export interface AgentRunUsage extends TokenUsage {
+  cacheWrite5mTokens: number;
+  cacheWrite1hTokens: number;
+  modelCalls: number;
 }
 
 // What the model reports about this request's prompt-cache prefix relative to
@@ -154,6 +162,9 @@ export interface AgentModel {
   // Identifies the model for logs and tests; not used for routing.
   modelId: string;
   generate(request: AgentModelRequest): Promise<AgentModelResponse>;
+  // Optional telemetry hook. The runner invokes it once per agent execution,
+  // including a partially successful execution that later throws.
+  reportRunUsage?(usage: AgentRunUsage): void;
 }
 
 // A tool the runner can dispatch. `execute` receives input already validated

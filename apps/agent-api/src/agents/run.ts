@@ -13,6 +13,7 @@ import {
   toToolDefinitions,
   type AgentMessage,
   type AgentModel,
+  type AgentRunUsage,
   type AgentToolSet,
   type ContentBlock,
   type StopReason,
@@ -118,8 +119,8 @@ export interface RunAgentInput {
   cache?: boolean;
 }
 
-// Token counts for one run (aggregate) or one step.
-export type RunAgentUsage = TokenUsage;
+// Token counts and successful model-call count for one agent execution.
+export type RunAgentUsage = AgentRunUsage;
 
 export interface RunAgentResult {
   text: string;
@@ -137,7 +138,7 @@ export interface RunAgentResult {
   // Per-step token counts. The tier-1 write-then-read pattern (step 1 writes the
   // prefix, later steps read it) is invisible in the aggregate, so callers read
   // this to see it. Empty for a zero-step run.
-  stepUsages: RunAgentUsage[];
+  stepUsages: TokenUsage[];
 }
 
 const ZERO_USAGE: RunAgentUsage = {
@@ -145,18 +146,26 @@ const ZERO_USAGE: RunAgentUsage = {
   outputTokens: 0,
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
+  cacheWrite5mTokens: 0,
+  cacheWrite1hTokens: 0,
+  modelCalls: 0,
 };
 
-const sumUsage = (usages: RunAgentUsage[]): RunAgentUsage =>
-  usages.reduce(
+const sumUsage = (usages: TokenUsage[]): RunAgentUsage => {
+  const tokens = usages.reduce<RunAgentUsage>(
     (acc, u) => ({
       inputTokens: acc.inputTokens + u.inputTokens,
       outputTokens: acc.outputTokens + u.outputTokens,
       cacheReadTokens: acc.cacheReadTokens + u.cacheReadTokens,
       cacheWriteTokens: acc.cacheWriteTokens + u.cacheWriteTokens,
+      cacheWrite5mTokens: acc.cacheWrite5mTokens + (u.cacheWrite5mTokens ?? 0),
+      cacheWrite1hTokens: acc.cacheWrite1hTokens + (u.cacheWrite1hTokens ?? 0),
+      modelCalls: acc.modelCalls + 1,
     }),
     ZERO_USAGE,
   );
+  return tokens;
+};
 
 // Compact log fields for a completion line: token totals plus a single
 // cache-hit signal. `cache_hit_ratio` = reads / (reads + writes + uncached
@@ -321,7 +330,7 @@ export const runAgent = async (
 
   const messages: AgentMessage[] = [...callerMessages];
   const generated: AgentMessage[] = [];
-  const stepUsages: RunAgentUsage[] = [];
+  const stepUsages: TokenUsage[] = [];
   const maxSteps = input.maxSteps ?? AGENT_MAX_STEPS;
   // Cache-diagnostic chain: the first request names the conversation's last
   // response (from an earlier turn) when there is one, and every later one names
@@ -348,8 +357,9 @@ export const runAgent = async (
     await input.onToolResults?.(results);
   }
 
-  for (let step = 0; step < maxSteps; step++) {
-    // Snapshot: the loop keeps appending to `messages`, and the request must not
+  try {
+    for (let step = 0; step < maxSteps; step++) {
+      // Snapshot: the loop keeps appending to `messages`, and the request must not
     // mutate under the adapter after it is handed over. When caching is on, the
     // snapshot also carries the sliding message-region breakpoint on its tail
     // (5m TTL, the default), advancing to the new last message every step so a
@@ -429,13 +439,18 @@ export const runAgent = async (
     };
   }
 
-  // Cap exhausted mid-tool-call: no final answer was produced.
-  return {
-    text: "",
-    finishReason: "tool-calls",
-    steps: stepUsages.length,
-    messages: generated,
-    usage: sumUsage(stepUsages),
-    stepUsages,
-  };
+    // Cap exhausted mid-tool-call: no final answer was produced.
+    return {
+      text: "",
+      finishReason: "tool-calls",
+      steps: stepUsages.length,
+      messages: generated,
+      usage: sumUsage(stepUsages),
+      stepUsages,
+    };
+  } finally {
+    if (stepUsages.length > 0) {
+      input.model.reportRunUsage?.(sumUsage(stepUsages));
+    }
+  }
 };

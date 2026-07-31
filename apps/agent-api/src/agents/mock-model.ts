@@ -28,6 +28,8 @@ export const MOCK_USAGE = {
   outputTokens: 5,
   cacheReadTokens: 8,
   cacheWriteTokens: 4,
+  cacheWrite5mTokens: 1,
+  cacheWrite1hTokens: 3,
 };
 
 const toResponse = (step: ScriptStep, index: number): AgentModelResponse => {

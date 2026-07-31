@@ -319,7 +319,13 @@ export class UserDO extends DurableObject<Env> {
   private async runTurn(chatId: number, topicId: number): Promise<void> {
     const clerkUserId =
       (await this.ctx.storage.get<string>("clerkUserId")) ?? "unknown";
-    const makeModel = await createModelFactory(this.env, clerkUserId);
+    const conversationId = this.store.getOrCreateConversation(chatId, topicId);
+    const makeModel = await createModelFactory(
+      this.env,
+      clerkUserId,
+      undefined,
+      { conversationId, chatId, topicId },
+    );
     const search = createBraveSearch(this.env.BRAVE_API_KEY);
     const fetcher = createTavilyFetcher(this.env.TAVILY_API_KEY);
     // Memoized Google token provider: the first Google tool call mints a token

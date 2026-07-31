@@ -9,6 +9,7 @@ import { capturingModel, scriptedModel } from "./mock-model";
 import { ExternalCallNotSent } from "./external-call";
 import {
   defineTool,
+  type AgentModel,
   type AgentModelRequest,
   type AgentToolSet,
   type ContentBlock,
@@ -528,6 +529,9 @@ describe("runAgent", () => {
       outputTokens: 10,
       cacheReadTokens: 16,
       cacheWriteTokens: 8,
+      cacheWrite5mTokens: 2,
+      cacheWrite1hTokens: 6,
+      modelCalls: 2,
     });
   });
 
@@ -776,5 +780,81 @@ describe("runAgent external write claims", () => {
 
     expect(ping).toHaveBeenCalledTimes(1);
     expect(rows.size).toBe(0);
+  });
+});
+
+describe("run usage reporting", () => {
+  it("reports one aggregate after a completed multi-step execution", async () => {
+    const reportRunUsage = vi.fn();
+    const model = scriptedModel([
+      { tools: [{ name: "ping", input: {} }] },
+      { text: "done" },
+    ]);
+    model.reportRunUsage = reportRunUsage;
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: pingTool(async () => "pong"),
+    });
+
+    expect(reportRunUsage).toHaveBeenCalledOnce();
+    expect(reportRunUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ modelCalls: 2, inputTokens: 40 }),
+    );
+  });
+
+  it("reports successful responses when a later model request fails", async () => {
+    const reportRunUsage = vi.fn();
+    let calls = 0;
+    const model: AgentModel = {
+      modelId: "test-model",
+      reportRunUsage,
+      generate: async () => {
+        calls += 1;
+        if (calls === 2) throw new Error("upstream failed");
+        return {
+          id: "msg_1",
+          content: [{ type: "tool_use", id: "call_1", name: "ping", input: {} }],
+          stopReason: "tool_use",
+          usage: {
+            inputTokens: 3,
+            outputTokens: 2,
+            cacheReadTokens: 1,
+            cacheWriteTokens: 0,
+          },
+          diagnostic: { state: "initial" },
+        };
+      },
+    };
+
+    await expect(
+      runAgent({
+        model,
+        system: "sys",
+        prompt: "q",
+        tools: pingTool(async () => "pong"),
+      }),
+    ).rejects.toThrow("upstream failed");
+    expect(reportRunUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ modelCalls: 1, inputTokens: 3 }),
+    );
+  });
+
+  it("does not report an execution with no successful response", async () => {
+    const reportRunUsage = vi.fn();
+    const model: AgentModel = {
+      modelId: "test-model",
+      reportRunUsage,
+      generate: async () => {
+        throw new Error("upstream failed");
+      },
+    };
+
+    await expect(
+      runAgent({ model, system: "sys", prompt: "q" }),
+    ).rejects.toThrow("upstream failed");
+    expect(reportRunUsage).not.toHaveBeenCalled();
   });
 });

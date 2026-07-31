@@ -12,7 +12,12 @@ import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
 import { listClerkUsers, getClerkUser } from "../admin-users";
 import { getUserDO } from "../UserDO/stub";
-import { log } from "../log";
+import { fmtErr, log, logError } from "../log";
+import {
+  AiUsageRangeSchema,
+  getAdminUsage,
+  getUserUsage,
+} from "../admin-ai-usage";
 
 type Variables = {
   userId: string;
@@ -33,6 +38,37 @@ const AdminUserDetailSchema = z.object({
   telegramId: z.string().nullable(),
   googleOnboardingStatus: z.string().nullable(),
   onboardingSeen: z.boolean(),
+});
+
+const UsageTotalsSchema = z.object({
+  estimatedCostUsd: z.number(),
+  modelCalls: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWrite5mTokens: z.number(),
+  cacheWrite1hTokens: z.number(),
+  unpricedModelCalls: z.number(),
+  unpricedTokens: z.number(),
+});
+
+const AdminUsageSchema = z.object({
+  range: AiUsageRangeSchema,
+  totals: UsageTotalsSchema,
+  users: z.array(UsageTotalsSchema.extend({ userId: z.string() })),
+});
+
+const UserUsageSchema = z.object({
+  range: AiUsageRangeSchema,
+  totals: UsageTotalsSchema,
+  byAgent: z.array(UsageTotalsSchema.extend({ agent: z.string() })),
+  byConversation: z.array(
+    UsageTotalsSchema.extend({
+      conversationId: z.string().nullable(),
+      chatId: z.string().nullable(),
+      topicId: z.string().nullable(),
+    }),
+  ),
 });
 
 export const MAX_ADMIN_TASK_PROMPT_CHARS = 65_536;
@@ -74,6 +110,65 @@ export const createAdminRoutes = () => {
       })),
       200,
     );
+  });
+
+  const usageRoute = createRoute({
+    method: "get",
+    path: "/api/admin/ai-usage",
+    tags: ["Admin"],
+    summary: "Get AI usage grouped by user",
+    request: { query: z.object({ range: AiUsageRangeSchema.default("30d") }) },
+    responses: {
+      200: {
+        content: { "application/json": { schema: AdminUsageSchema } },
+        description: "Estimated AI usage",
+      },
+      502: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "Analytics Engine unavailable",
+      },
+    },
+  });
+
+  router.openapi(usageRoute, async (c) => {
+    try {
+      return c.json(await getAdminUsage(c.env, c.req.valid("query").range), 200);
+    } catch (error) {
+      logError("admin_ai_usage_failed", { error: fmtErr(error) });
+      return c.json({ error: "AI usage unavailable" }, 502);
+    }
+  });
+
+  const userUsageRoute = createRoute({
+    method: "get",
+    path: "/api/admin/users/{userId}/ai-usage",
+    tags: ["Admin"],
+    summary: "Get a user's AI usage breakdown",
+    request: {
+      params: z.object({ userId: z.string().min(1) }),
+      query: z.object({ range: AiUsageRangeSchema.default("30d") }),
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: UserUsageSchema } },
+        description: "Estimated AI usage for one user",
+      },
+      502: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "Analytics Engine unavailable",
+      },
+    },
+  });
+
+  router.openapi(userUsageRoute, async (c) => {
+    try {
+      const { userId } = c.req.valid("param");
+      const { range } = c.req.valid("query");
+      return c.json(await getUserUsage(c.env, userId, range), 200);
+    } catch (error) {
+      logError("admin_user_ai_usage_failed", { error: fmtErr(error) });
+      return c.json({ error: "AI usage unavailable" }, 502);
+    }
   });
 
   // GET /api/admin/users/{userId} — per-user identity and link status.
