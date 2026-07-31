@@ -8,8 +8,17 @@
 // scan fills (name first), which is rendered into the system prompt every turn.
 // That scan is queued, so on the rare turn where it has not landed yet there is
 // no name in context — hence the explicit "don't guess".
+//
+// The morning check-in offer rides on this note because first contact is
+// already an exactly-once, persisted claim (claimFirstContact), so the offer
+// cannot repeat and needs no flag of its own. It is an offer, never an
+// auto-created schedule: a daily message nobody asked for gets the bot muted,
+// and it would contradict the rule that Zero only acts later when asked. The
+// acceptance lands on the next turn, where this note is gone. The model sees
+// its own offer in the conversation and calls create_schedule like any other
+// request.
 export const FIRST_CONTACT_NOTE =
-  "[First contact: this person has just connected Zero and is opening this chat for the first time. Before anything else, introduce yourself in one short, warm message: greet them by name, say who you are and that you're here to help, that you remember things across conversations, and name a couple of concrete things you can do (email, calendar). Work in one specific thing you already know about them, so it is clear you are not starting from nothing. If you do not know their name, greet them without one rather than guessing. Then answer whatever they said, if anything.]";
+  "[First contact: this person has just connected Zero and is opening this chat for the first time. Before anything else, introduce yourself in one short, warm message: greet them by name, say who you are and that you're here to help, that you remember things across conversations, and name a couple of concrete things you can do (email, calendar). Work in one specific thing you already know about them, so it is clear you are not starting from nothing. If you do not know their name, greet them without one rather than guessing. In the same message, offer once to send them a short check-in each morning with whatever is due that day, and ask what time suits them. Create nothing now: only if they accept, on a later turn, call create_schedule for that time daily, with a prompt like \"Greet the user briefly and surface anything due or unresolved today; if there is nothing, send one short line\" — never a content-free \"say good morning and ask how I can help\", which is worth nothing every morning. If they say no or say nothing about it, drop it. Then answer whatever they said, if anything.]";
 
 // A turn nobody asked for right now: the user set this up earlier, and the text
 // that follows is the instruction they left for this moment. The note says so

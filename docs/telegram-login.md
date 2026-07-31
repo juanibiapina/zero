@@ -93,3 +93,11 @@ persisted as `user_settings.firstContactAt`). It is taken inside
 user ever has carries the introduction note whether they pressed START,
 typed `/start`, or asked a question straight away. Because it is persisted,
 a relink, a DO eviction or a second `/start` never re-introduces Zero.
+
+That same introduction message also **offers** a daily morning check-in and
+asks what time suits the user. It is only an offer: nothing is scheduled
+unless the user accepts, and the acceptance goes through the ordinary
+`create_schedule` tool on a later turn. The offer rides on the first-contact
+note precisely because that claim is already exactly-once, so it cannot
+repeat and needs no flag of its own. Schedules are otherwise undiscoverable,
+and this is the one moment Zero has the user's attention.
