@@ -212,13 +212,15 @@ the required `VITE_TELEGRAM_BOT_USERNAME` env var.
 The webhook is built on grammY via its `hono` adapter (`webhookCallback`).
 grammY validates the secret-token header against `TELEGRAM_WEBHOOK_SECRET`,
 parses the `Update`, and dispatches to bot middleware. The middleware accepts
-**forum topic messages** and **DMs** (topicId=0). The `/new` command resets the
+**forum topic messages**, **DMs** and **ordinary group messages**, including a
+forum's General tab; anything without a topic uses topicId=0. The `/new` command resets the
 conversation thread for a `(chatId, topicId)` (topics are left intact).
 
 A regular message with text/caption is enqueued and returns 200 to Telegram
 immediately. The background task:
 
-1. `resolveContext` keeps topic messages and DMs; everything else is dropped.
+1. `resolveContext` keeps topic messages, and maps any other private, group or
+   supergroup chat to topicId=0; channel posts are dropped.
 2. KV `tg:{telegramId}` → `clerkUserId`; drop the message if unknown.
 3. For any downloadable file under 5 MB, the route resolves Telegram's file,
    downloads the bytes, and hands canonical metadata plus bytes to UserDO.

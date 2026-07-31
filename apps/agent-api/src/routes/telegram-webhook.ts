@@ -1,7 +1,8 @@
 // POST /api/webhooks/telegram — public route.
 //
-// Accepts forum topic messages and direct messages (DMs). Channel
-// posts and edits are dropped. DMs use topicId=0 as a convention
+// Accepts forum topic messages, direct messages (DMs) and ordinary
+// group messages (including a forum's General tab). Channel posts and
+// edits are dropped. Chats without a topic use topicId=0 as a convention
 // so the rest of the pipeline (UserDO session mapping, reply path)
 // works unchanged. grammY's `webhookCallback` validates the
 // X-Telegram-Bot-Api-Secret-Token header. The bot middleware schedules
@@ -30,8 +31,13 @@ import { MAX_FILE_BYTES } from "../files/types";
 const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
 // Build a TopicContext from a Telegram message. Topic messages (forum
-// groups or DM topics) use message_thread_id; plain DMs use topicId=0.
-// Everything else is dropped.
+// groups or DM topics) use message_thread_id; every other private, group
+// or supergroup chat uses topicId=0. Channel posts are dropped.
+//
+// The is_topic_message guard matters: Telegram attaches a message_thread_id
+// to replies in non-forum groups and to replies in a forum's General tab,
+// and that id is not a usable topic (sending to it fails with
+// "message thread not found"). Those messages belong to topicId=0.
 export const resolveContext = (
   fromId: number,
   msg: { chat: { type: string; id: number }; is_topic_message?: boolean; message_thread_id?: number },
@@ -40,8 +46,9 @@ export const resolveContext = (
   if (msg.is_topic_message && msg.message_thread_id !== undefined) {
     return { telegramId: String(fromId), chatId: msg.chat.id, topicId: msg.message_thread_id };
   }
-  // Plain DMs (no topics).
-  if (msg.chat.type === "private") {
+  // Everything else with a conversation: plain DMs, groups, and a forum's
+  // General tab (Telegram marks none of these as topic messages).
+  if (msg.chat.type === "private" || msg.chat.type === "group" || msg.chat.type === "supergroup") {
     return { telegramId: String(fromId), chatId: msg.chat.id, topicId: 0 };
   }
   log("drop_unsupported_message", { telegram_id: String(fromId), chat_type: msg.chat.type });

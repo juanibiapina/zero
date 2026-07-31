@@ -47,18 +47,38 @@ describe("resolveContext", () => {
     });
   });
 
-  it("drops group chat message (not a topic)", () => {
+  it("returns topicId=0 for a plain group message", () => {
     const result = resolveContext(111, {
       chat: { type: "group", id: 100 },
     });
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      telegramId: "111",
+      chatId: 100,
+      topicId: 0,
+    });
   });
 
-  it("drops supergroup message without topic", () => {
+  it("returns topicId=0 for a forum's General tab (no is_topic_message)", () => {
     const result = resolveContext(111, {
       chat: { type: "supergroup", id: 100 },
     });
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      telegramId: "111",
+      chatId: 100,
+      topicId: 0,
+    });
+  });
+
+  it("ignores message_thread_id on a reply in General (thread id is invalid for sending)", () => {
+    const result = resolveContext(111, {
+      chat: { type: "supergroup", id: 100 },
+      message_thread_id: 55,
+    });
+    expect(result).toEqual({
+      telegramId: "111",
+      chatId: 100,
+      topicId: 0,
+    });
   });
 
   it("drops channel message", () => {
