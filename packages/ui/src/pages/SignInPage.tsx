@@ -1,4 +1,4 @@
-import { SignIn } from "@clerk/clerk-react";
+import { SignIn } from "@clerk/react";
 
 export interface SignInPageProps {
   /** Where to land after sign-in when the URL carries no explicit redirect_url. */

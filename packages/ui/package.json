@@ -22,13 +22,13 @@
     "tailwind-merge": "^3.6.0"
   },
   "peerDependencies": {
-    "@clerk/clerk-react": "^5.61.3",
+    "@clerk/react": "^6.12.10",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0"
   },
   "devDependencies": {
-    "@clerk/clerk-react": "^5.61.3",
+    "@clerk/react": "^6.12.10",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@zero/eslint-config": "workspace:*",

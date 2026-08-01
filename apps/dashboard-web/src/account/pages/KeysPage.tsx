@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useAuth, useOrganization } from "@clerk/clerk-react";
+import { useAuth, useOrganization } from "@clerk/react";
 import { Plus, Trash2, Copy, Check } from "lucide-react";
 import {
   Button,

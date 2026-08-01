@@ -12,12 +12,11 @@ const clerk = vi.hoisted((): { organization: OrganizationState } => ({
   organization: { isLoaded: true, organization: { id: "org_1" } },
 }));
 
-vi.mock("@clerk/clerk-react", () => {
+vi.mock("@clerk/react", () => {
   const getToken = () => Promise.resolve("token");
   return {
     ClerkProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-    SignedIn: ({ children }: { children: ReactNode }) => <>{children}</>,
-    SignedOut: () => null,
+    Show: ({ children }: { children: ReactNode }) => <>{children}</>,
     RedirectToSignIn: () => null,
     UserButton: () => <div data-testid="user-button" />,
     OrganizationSwitcher: () => <div data-testid="org-switcher" />,

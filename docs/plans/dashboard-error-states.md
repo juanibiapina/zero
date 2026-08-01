@@ -159,7 +159,7 @@ for loading, so it stays inside the design system.
 In `packages/ui/src/components/AppLayout.tsx`, inside the existing `<SignedIn>`
 branch (which today unconditionally renders the shell + `<Outlet>`), read
 `useOrganization()` (`isLoaded`, `organization`) and import `CreateOrganization`
-from `@clerk/clerk-react`. Branch:
+from `@clerk/react`. Branch:
 
 - `!isLoaded` → centered minimal `Loading…` placeholder (do **not** mount the
   `<Outlet>` yet, to avoid the org-less `403` race).
@@ -235,7 +235,7 @@ Tests to write (two focused files, at the interfaces, not one trivial test):
 2. **One page end-to-end (`ProjectsPage`):** mock `api.listProjects` to reject →
    assert the error message renders, a Retry control is present, and `Loading...`
    is gone (proves the seam is wired). Then point the mock at a resolving value and
-   click Retry → assert the list/empty state renders. Mock `@clerk/clerk-react`
+   click Retry → assert the list/empty state renders. Mock `@clerk/react`
    (`useAuth`, `useOrganization`) so the page renders outside Clerk.
 
 Production e2e (below) remains the ultimate proof against the deployed app; the

@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.61.3",
+    "@clerk/react": "^6.12.10",
     "@tailwindcss/vite": "^4.3.2",
     "@zero/errors-core": "workspace:*",
     "@zero/ui": "workspace:*",

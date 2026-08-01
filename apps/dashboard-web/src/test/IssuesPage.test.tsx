@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { IssueSummary } from "@zero/errors-core";
 
-vi.mock("@clerk/clerk-react", () => {
+vi.mock("@clerk/react", () => {
   // Stable references, matching Clerk's real memoized hooks. A fresh getToken
   // each render would churn the hook's deps and refetch in a loop.
   const getToken = () => Promise.resolve("token");

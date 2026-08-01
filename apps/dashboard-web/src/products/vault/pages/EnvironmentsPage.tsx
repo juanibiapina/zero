@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { Link, useParams } from "react-router";
-import { useAuth, useOrganization } from "@clerk/clerk-react";
+import { useAuth, useOrganization } from "@clerk/react";
 import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import {
   Button,

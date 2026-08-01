@@ -1,13 +1,12 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import {
-  SignedIn,
-  SignedOut,
+  Show,
   RedirectToSignIn,
   UserButton,
   OrganizationSwitcher,
   CreateOrganization,
   useOrganization,
-} from "@clerk/clerk-react";
+} from "@clerk/react";
 import { ExternalLink } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProductId, ProductLink } from "../products";
@@ -88,8 +87,7 @@ export function AppLayout({
   };
 
   return (
-    <>
-      <SignedIn>
+    <Show when="signed-in" fallback={<RedirectToSignIn />}>
         {!isLoaded ? (
           <div className="flex min-h-screen items-center justify-center bg-background">
             <p className="text-muted-foreground">Loading…</p>
@@ -309,10 +307,6 @@ export function AppLayout({
             <Toaster position="bottom-right" />
           </div>
         )}
-      </SignedIn>
-      <SignedOut>
-        <RedirectToSignIn />
-      </SignedOut>
-    </>
+    </Show>
   );
 }
