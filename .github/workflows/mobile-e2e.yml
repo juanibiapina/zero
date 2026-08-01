@@ -81,7 +81,7 @@ jobs:
           echo "Staged: $APK"
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-release-apk
           path: apps/agent-mobile/apk-out/app-release.apk
@@ -138,7 +138,7 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mobile-e2e-artifacts
           path: ${{ runner.temp }}/artifacts
