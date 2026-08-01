@@ -31,7 +31,7 @@ adb logcat > "${OUT}/logcat.txt" &
 
 # Serve the redirect probe page on the host; the emulator reaches it at
 # http://10.0.2.2:8080/redirect.html (the app's default probe URL).
-python3 -m http.server 8080 --directory apps/mobile/.maestro >/dev/null 2>&1 &
+python3 -m http.server 8080 --directory apps/agent-mobile/.maestro >/dev/null 2>&1 &
 HTTP_PID=$!
 trap 'kill "$HTTP_PID" >/dev/null 2>&1 || true' EXIT
 
@@ -43,7 +43,7 @@ mkdir -p "${OUT}/maestro"
 # app; retry the flow once before treating it as a real failure.
 CODE=0
 for attempt in 1 2; do
-  maestro test apps/mobile/.maestro \
+  maestro test apps/agent-mobile/.maestro \
     --format junit \
     --output "${OUT}/maestro/report.xml" \
     --debug-output "${OUT}/maestro"
