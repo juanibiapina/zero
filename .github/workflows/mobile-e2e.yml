@@ -53,7 +53,7 @@ jobs:
       # iterating on the flow/harness does not pay the ~24 min native rebuild.
       - name: Restore APK cache
         id: apk-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: apps/agent-mobile/apk-out/app-release.apk
           key: apk-${{ hashFiles('apps/agent-mobile/src/**', 'apps/agent-mobile/app.json', 'apps/agent-mobile/package.json', 'pnpm-lock.yaml', '.github/workflows/mobile-e2e.yml') }}
