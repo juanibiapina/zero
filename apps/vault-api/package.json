@@ -13,21 +13,21 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/backend": "^3.11.7",
-    "@clerk/hono": "^0.1.53",
+    "@clerk/backend": "^3.13.2",
+    "@clerk/hono": "^0.1.57",
     "@zero/auth": "workspace:*",
     "@zero/errors-core": "workspace:*",
     "@zero/vault-core": "workspace:*",
     "do-orm": "github:juanibiapina/do-orm",
-    "hono": "^4.12.30",
+    "hono": "^4.12.32",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.18.5",
+    "@cloudflare/vitest-pool-workers": "0.19.0",
     "@cloudflare/workers-types": "^4.20260617.1",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@vitest/runner": "4.1.10",
     "@vitest/snapshot": "4.1.10",
     "eslint": "10.7.0",
