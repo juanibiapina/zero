@@ -212,7 +212,12 @@ Learning is asked for in two ways, and both are events rather than polls:
   `LEARN_SIZE_THRESHOLD_TOKENS` (45,000, provisional — it is the starting point
   from PLAN.md, to be moved using real `context_rendered.total_tokens`), the turn
   asks for learning on that conversation immediately, logging
-  `learn_size_requested`. This is what covers a conversation that never goes
+  `learn_size_requested`. The 45,000 predates adaptive thinking (2026-08-01):
+  stored assistant rows now also carry thinking signatures, which are counted by
+  `contentChars` and inflate the chars/4 estimate by an amount nobody has
+  calibrated, so this threshold fires sooner than it used to. Compare
+  `context_rendered.total_tokens` against the gateway's input tokens before
+  moving it. This is what covers a conversation that never goes
   idle; without it an always-active user would grow context without bound.
 
 Both requests are best-effort from the turn's point of view: a schedule that

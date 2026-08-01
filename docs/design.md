@@ -131,13 +131,33 @@ real multi-turn conversation (`buildConversationMessages` in
   run.
 
 Each user message is prefixed with an absolute timestamp `[YYYY-MM-DD HH:MM]` in
-the user's timezone (stable turn-to-turn, cache-friendly); assistant messages
-are verbatim. Leading assistant messages are dropped so the array starts on a
-`user` turn (Anthropic requirement), and consecutive same-role turns are
-coalesced (proxy compatibility). Only final user/assistant **text** is persisted
-— never tool blocks — which structurally avoids orphaned `tool_use` 400s and
-keeps cross-turn memory in topics as well as the log. The research, learning, and
+the user's timezone (stable turn-to-turn, cache-friendly); assistant messages are
+verbatim. Rendering is **append-only**: one stored row becomes one wire message,
+in id order, never merged, reordered, or dropped. That is what keeps turn N's
+request a byte prefix of turn N+1's, so nothing appended later can change a
+position the cache already covers. (Until 2026-08-01 the renderer coalesced
+consecutive same-role turns and dropped leading assistant turns; both dated from
+the pre-SDK proxy era and neither is required — the API states that consecutive
+same-role turns are combined server-side, and a leading assistant turn is
+accepted.) The one real ordering rule, that `tool_result` blocks must directly
+follow the `tool_use` they answer, holds by row order alone: a message arriving
+mid-run waits in `pendingMessages` and only becomes a row at the loop's idle
+point.
+
+Assistant responses and tool results are persisted **verbatim**, including
+`thinking` blocks and their signatures, so a resumed turn can hand the model back
+its own reasoning. Only `text` blocks are ever delivered to Telegram, and neither
+the learner nor compaction sees anything but text. The research, learning, and
 onboarding agents still use the single-`prompt` path.
+
+Every agent runs Sonnet 4.6 with adaptive thinking and `display: "omitted"`,
+which returns the reasoning signature without the reasoning prose. That includes
+the background agents: the learner and compaction decide what Zero remembers
+about a user, which is the judgement call whose mistakes last longest. Thinking
+makes learner slices slower, which the slice contract already absorbs (bounded
+steps per alarm, wire log persisted as it goes, a slice lost to wall time retried
+from where it stopped). `output_config.effort` is deliberately not sent: omitting
+it is the API's `high`, which is where Zero has always run.
 
 ## State Model
 

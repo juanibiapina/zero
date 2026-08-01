@@ -15,6 +15,7 @@ import {
   type ContentBlock,
   type StopReason,
   type ToolResultBlock,
+  type ThinkingBlock,
   type ToolUseBlock,
 } from "./protocol";
 
@@ -431,12 +432,14 @@ describe("runAgent", () => {
     expect(requests[0].system).toEqual([{ type: "text", text: "sys" }]);
   });
 
-  it("round-trips assistant blocks verbatim, including unmodelled ones", async () => {
-    const thinking = {
+  // The signature is the encrypted reasoning: modify it and the next request is
+  // rejected, so the loop has to hand it back exactly as it arrived.
+  it("round-trips a signed thinking block into the next request unchanged", async () => {
+    const thinking: ThinkingBlock = {
       type: "thinking",
-      thinking: "hmm",
+      thinking: "",
       signature: "sig",
-    } as unknown as ContentBlock;
+    };
     const call: ToolUseBlock = {
       type: "tool_use",
       id: "toolu_9",
@@ -459,6 +462,43 @@ describe("runAgent", () => {
       role: "assistant",
       content: [thinking, call],
     });
+  });
+
+  // The sliding breakpoint lands on the last message every step. When a run is
+  // cut off mid-thinking that message ends on a thinking block, which cannot
+  // carry cache_control, so the step must go out unmarked rather than 400.
+  it("sends no breakpoint on a message that ends mid-thinking", async () => {
+    const { model, requests } = recordingModel([
+      {
+        content: [
+          { type: "thinking", thinking: "", signature: "sig" },
+          { type: "tool_use", id: "toolu_1", name: "ping", input: {} },
+        ],
+        stopReason: "tool_use",
+      },
+      {
+        content: [{ type: "thinking", thinking: "", signature: "sig-2" }],
+        stopReason: "max_tokens",
+      },
+    ]);
+
+    await runAgent({
+      model,
+      system: "sys",
+      prompt: "q",
+      tools: pingTool(async () => "pong"),
+    });
+
+    // Nothing in either request carries a breakpoint on a thinking block.
+    for (const request of requests) {
+      for (const message of request.messages) {
+        if (!Array.isArray(message.content)) continue;
+        for (const block of message.content) {
+          if (block.type === "thinking" || block.type === "redacted_thinking")
+            expect(block).not.toHaveProperty("cache_control");
+        }
+      }
+    }
   });
 
   it("threads the diagnostic chain within the run: null first, then the previous id", async () => {

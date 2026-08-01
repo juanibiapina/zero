@@ -177,31 +177,27 @@ const renderRow = (row: Message, timezone: string): AgentMessage => {
   };
 };
 
-// Tool results must lead their user message; the model pairs them with the
-// preceding assistant response.
-const orderUserBlocks = (blocks: ContentBlock[]): ContentBlock[] => {
-  const results = blocks.filter((b) => b.type === "tool_result");
-  if (results.length === 0 || results.length === blocks.length) return blocks;
-  return [...results, ...blocks.filter((b) => b.type !== "tool_result")];
-};
-
-// Append a rendered message, coalescing it into the previous one when the roles
-// match: Anthropic's models are trained on alternating turns, and a drained
-// burst of Telegram messages or two assistant rows in a row would otherwise
-// produce consecutive same-role messages. Two texts join with a blank line;
-// anything carrying blocks concatenates as blocks.
+// Append a rendered message. Append-only, by design: one stored row is one wire
+// message, always, so a message's bytes are fixed the moment it is first sent
+// and no later row can change a position the cache already covers.
+//
+// This used to coalesce consecutive same-role messages "for proxy
+// compatibility", from when the worker ran on the Vercel AI SDK rather than the
+// Anthropic SDK. The API needs no such help: "Consecutive `user` or `assistant`
+// turns in your request will be combined into a single turn" (Messages API
+// reference), and consecutive turns of either role, plus a leading assistant
+// turn, were each confirmed accepted against the live API. Merging also cost
+// correctness once thinking arrived, since it could splice two responses'
+// thinking runs into one assistant message, which the API validates and rejects.
+//
+// The one ordering rule that IS real — `tool_result` blocks must come
+// immediately after the `tool_use` they answer, or the request 400s — is
+// satisfied by row order alone: a Telegram message that arrives mid-run waits in
+// `pendingMessages` and only becomes a row at the loop's idle point, which is
+// reached only when the model asked for no tools. So no user row can land
+// between an assistant row and its results.
 const appendMessage = (messages: AgentMessage[], next: AgentMessage): void => {
-  const last = messages[messages.length - 1];
-  if (!last || last.role !== next.role) {
-    messages.push(next);
-    return;
-  }
-  if (typeof last.content === "string" && typeof next.content === "string") {
-    last.content = `${last.content}\n\n${next.content}`;
-    return;
-  }
-  const merged = [...toBlocks(last.content), ...toBlocks(next.content)];
-  last.content = next.role === "user" ? orderUserBlocks(merged) : merged;
+  messages.push(next);
 };
 
 export interface ConversationRender {
@@ -227,12 +223,10 @@ export interface ConversationRender {
 // conversation. Everything before the current user message stays byte-stable
 // turn-to-turn so it caches across turns (see docs/caching.md).
 //
-// Rules (see PLAN.md):
-// - Leading assistant messages are dropped so the array starts with a user
-//   turn (Anthropic requires the first non-system message to be `user`; a
-//   windowed history slice can begin on an assistant reply).
-// - Consecutive same-role messages are coalesced into one.
-// - Empty history yields a single current user message.
+// One stored row renders to one message, in id order, unchanged. Nothing is
+// merged, reordered, or dropped: the array is append-only, which is what keeps
+// turn N's request a byte prefix of turn N+1's. Empty history yields a single
+// current user message.
 export const buildConversationMessages = (
   input: ConversationRender,
 ): AgentMessage[] => {
@@ -253,16 +247,11 @@ export const buildConversationMessages = (
     });
   }
 
-  // Drop leading assistant messages so the array opens on a user turn. Only
-  // needed without a summary: with one, the array already opens on `user` and
-  // dropping the first replies would lose real conversation.
-  let start = 0;
-  if (!input.summary) {
-    while (start < input.history.length && input.history[start].role === "assistant")
-      start++;
-  }
-
-  for (const row of input.history.slice(start)) {
+  // A windowed history slice can begin on an assistant reply. That used to be
+  // trimmed away on the belief that the array must open on a `user` turn; the
+  // API accepts a leading assistant turn (confirmed live), and dropping real
+  // replies loses conversation the user can see in their chat.
+  for (const row of input.history) {
     appendMessage(messages, renderRow(row, timezone));
   }
   appendMessage(messages, { role: "user", content: current });

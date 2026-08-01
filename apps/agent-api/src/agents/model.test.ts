@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { createModel, createModelFactory, gatewayMetadata } from "./model";
+import {
+  createModel,
+  createModelFactory,
+  gatewayMetadata,
+  type AgentLabel,
+} from "./model";
 import type { AgentModelRequest } from "./protocol";
 import type { Env } from "../types";
 
@@ -169,6 +174,47 @@ describe("the Anthropic request", () => {
     });
   });
 
+  it("asks the model to think, with the reasoning text withheld", async () => {
+    const { call } = await send();
+    expect(call.body.thinking).toEqual({
+      type: "adaptive",
+      display: "omitted",
+    });
+  });
+
+  // Omitting `effort` is the API's `high`, which is where Zero already ran
+  // before thinking was turned on. Sending it would silently change how much
+  // work the model does on everything, including tool calls.
+  it("never sends an effort level", async () => {
+    const { call } = await send();
+    expect(call.body.output_config).toBeUndefined();
+  });
+
+  // Every agent thinks, with no exceptions to remember. The learner and
+  // compaction rewrite what Zero remembers about a user, which is the judgement
+  // call whose mistakes last longest.
+  it("asks every agent to think", async () => {
+    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/v1" });
+    const agents: AgentLabel[] = [
+      "interface",
+      "research",
+      "learner",
+      "compaction",
+      "onboarding",
+      "admin_task",
+    ];
+    for (const agent of agents) {
+      const { fetchImpl, calls } = transport();
+      const model = await createModel(env, "user_123", agent, fetchImpl);
+      await model.generate(request);
+      expect(calls[0].body.thinking).toEqual({
+        type: "adaptive",
+        display: "omitted",
+      });
+      expect(calls[0].body.output_config).toBeUndefined();
+    }
+  });
+
   it("omits diagnostics unless the caller opted in", async () => {
     const { call } = await send();
     expect(call.body.diagnostics).toBeUndefined();
@@ -209,6 +255,42 @@ describe("the Anthropic response", () => {
       cacheWrite5mTokens: 2,
       cacheWrite1hTokens: 3,
     });
+  });
+
+  // Reasoning spend is inside output_tokens, so the per-request log line is the
+  // only place it is visible. Without it there is no way to tell a turn that
+  // thought hard from one that barely thought.
+  it("logs the reasoning tokens the call spent", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await send(
+      {},
+      {
+        usage: {
+          input_tokens: 11,
+          output_tokens: 300,
+          output_tokens_details: { thinking_tokens: 240 },
+        },
+      },
+    );
+    const events = logSpy.mock.calls.map(
+      (c) => c[0] as { msg: string; thinking_tokens?: number },
+    );
+    expect(events.find((e) => e.msg === "cache_diagnostic")?.thinking_tokens).toBe(
+      240,
+    );
+    logSpy.mockRestore();
+  });
+
+  it("logs zero reasoning tokens when the model did not think", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await send();
+    const events = logSpy.mock.calls.map(
+      (c) => c[0] as { msg: string; thinking_tokens?: number },
+    );
+    expect(events.find((e) => e.msg === "cache_diagnostic")?.thinking_tokens).toBe(
+      0,
+    );
+    logSpy.mockRestore();
   });
 
   it("reads a null cache read/write count as zero", async () => {

@@ -93,6 +93,35 @@ describe("renderLearningLog", () => {
     expect(rendered).toContain("…[truncated]");
     expect(rendered).not.toContain("x".repeat(2001));
   });
+
+  // The learner reads what happened, not how the model got there. A thinking
+  // block is neither: it used to fall through to the "[image]" fallback and show
+  // up as an attachment that never existed.
+  it("leaves thinking blocks out of the log entirely", () => {
+    const rendered = renderLearningLog([
+      {
+        id: 1,
+        conversationId: "c1",
+        role: "assistant",
+        kind: "assistant_message",
+        content: [
+          { type: "thinking", thinking: "maybe Lisbon?", signature: "sig" },
+          { type: "redacted_thinking", data: "encrypted" },
+          { type: "text", text: "Booked." },
+          { type: "tool_use", id: "call_1", name: "create_topic", input: {} },
+        ],
+        stopReason: "tool_use",
+        responseId: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    expect(rendered).toContain("Booked.");
+    expect(rendered).toContain("[called create_topic]");
+    expect(rendered).not.toContain("[image]");
+    expect(rendered).not.toContain("maybe Lisbon?");
+    expect(rendered).not.toContain("sig");
+  });
 });
 
 describe("runLearnerSlice", () => {
@@ -234,5 +263,39 @@ describe("summarizeConversation", () => {
     expect(captured.system).toContain("Never copy a topic body");
     expect(captured.prompt).toContain("choosing a destination");
     expect(captured.prompt).toContain("Lisbon then");
+  });
+
+  // A compacted summary outlives the raw turns it replaces, so reasoning must
+  // not be able to leak into it and become permanent.
+  it("cannot carry reasoning into the summary prompt", async () => {
+    let prompt = "";
+    const model = capturingModel((request) => {
+      prompt = JSON.stringify(request.messages);
+      return { content: [{ type: "text", text: "they picked Lisbon" }] };
+    });
+
+    await summarizeConversation({
+      model,
+      summary: null,
+      messages: [
+        {
+          id: 1,
+          conversationId: "c1",
+          role: "assistant",
+          kind: "assistant_message",
+          content: [
+            { type: "thinking", thinking: "weighing Porto", signature: "sig" },
+            { type: "text", text: "Lisbon it is." },
+          ],
+          stopReason: "end_turn",
+          responseId: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(prompt).toContain("Lisbon it is.");
+    expect(prompt).not.toContain("weighing Porto");
+    expect(prompt).not.toContain("sig");
   });
 });

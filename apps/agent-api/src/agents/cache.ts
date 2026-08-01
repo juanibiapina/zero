@@ -10,6 +10,7 @@
 // sliding breakpoint on the growing tail. The tool loop advances the sliding
 // breakpoint to the new tail each step instead of accumulating more.
 
+import { isCacheable } from "./protocol";
 import type {
   AgentMessage,
   AgentToolDefinition,
@@ -51,6 +52,13 @@ export const markLastTool = (
 // Add a breakpoint to a message. The marker goes on the message's last content
 // block (a string content is promoted to a single text block). Used for the
 // messages-region sliding window (last stable message + current message).
+//
+// A message whose last block is `thinking` or `redacted_thinking` is returned
+// unmarked: Anthropic rejects `cache_control` on those, and a response truncated
+// mid-thinking is exactly that shape. Skipping is deliberate rather than
+// searching backwards for a markable block — the sliding breakpoint moves to the
+// new tail on the next step anyway, so at most one breakpoint is lost, and the
+// marker never lands somewhere the caller did not intend.
 export const markCacheBreakpoint = (
   message: AgentMessage,
   ttl?: CacheTtl,
@@ -61,6 +69,7 @@ export const markCacheBreakpoint = (
       : message.content;
   if (blocks.length === 0) return message;
   const last = blocks[blocks.length - 1];
+  if (!isCacheable(last)) return message;
   return {
     ...message,
     content: [

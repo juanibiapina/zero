@@ -53,8 +53,25 @@ const CACHE_DIAGNOSIS_BETA = "cache-diagnosis-2026-04-07";
 // Required by the API. With an explicit client `timeout` the SDK stops deriving
 // its own non-streaming ceiling, so this is a product choice: far above any
 // reply or topic body Zero has ever produced, low enough that a runaway
-// generation is bounded.
+// generation is bounded. Thinking counts against it, so a rise in
+// `stop_reason: max_tokens` is the signal to revisit this number.
 const MAX_TOKENS = 16000;
+
+// Every agent thinks, interface and background alike, with no exception to keep
+// track of. Thinking is off on Sonnet 4.6 unless asked for, and
+// `effort` is deliberately NOT set: omitting it is the API's `high`, which is
+// where Zero already ran before this. `display: "omitted"` keeps the signature
+// needed to round-trip a thinking block through the tool loop while storing no
+// reasoning prose in the transcript; Anthropic bills it identically to
+// `summarized`.
+//
+// This includes the learner, which decides what Zero remembers about a user —
+// the judgement call most worth thinking about, and the one whose mistakes last
+// longest. It makes learner slices slower, which the slice contract already
+// absorbs: each alarm runs a bounded number of steps, the wire log is persisted
+// as it goes, and a slice lost to wall time is retried from where it stopped
+// (see LearningDO).
+const THINKING = { type: "adaptive", display: "omitted" } as const;
 
 // Per-attempt request timeout. The SDK default is 600s, an unhelpfully long
 // abort inside a DO alarm. Retries are bounded too, so a 429 burst cannot
@@ -165,6 +182,7 @@ export const createModelFactory = async (
           // unsupported type is rejected upstream, not here.
           messages: request.messages as BetaMessageParam[],
           betas: [CACHE_DIAGNOSIS_BETA],
+          thinking: THINKING,
           ...(request.previousMessageId !== undefined
             ? { diagnostics: { previous_message_id: request.previousMessageId } }
             : {}),
@@ -197,6 +215,10 @@ export const createModelFactory = async (
           input_tokens: usage.inputTokens,
           cache_read_tokens: usage.cacheReadTokens,
           cache_write_tokens: usage.cacheWriteTokens,
+          // Reasoning spend for this call. Already inside `output_tokens`, so it
+          // is reported here rather than threaded through TokenUsage and every
+          // aggregation that would have to carry a number nobody sums.
+          thinking_tokens: response.usage.output_tokens_details?.thinking_tokens ?? 0,
         });
         return {
           id: response.id,

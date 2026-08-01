@@ -13,7 +13,8 @@ import {
   researchSystemPrompt,
 } from "./prompts";
 import { capturingModel, scriptedModel } from "./mock-model";
-import type { AgentMessage, TextBlock } from "./protocol";
+import { isCacheable } from "./protocol";
+import type { AgentMessage, ContentBlock, TextBlock } from "./protocol";
 import type { Topic } from "../store/types";
 import { MemoryStore } from "../store/memory";
 import { createMemorySearch } from "../websearch/memory";
@@ -215,9 +216,11 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
   };
 
   // A message is marked when its last content block carries a breakpoint.
+  // Thinking blocks have no `cache_control` field at all, which is the point.
   const cc = (m: AgentMessage | undefined) => {
     if (!m || typeof m.content === "string") return undefined;
-    return m.content[m.content.length - 1]?.cache_control;
+    const last = m.content[m.content.length - 1];
+    return last && isCacheable(last) ? last.cache_control : undefined;
   };
 
   it("puts the current time and timezone on the latest user message, not the system prompt", async () => {
@@ -369,7 +372,7 @@ describe("buildConversationMessages", () => {
     ]);
   });
 
-  it("drops leading assistant messages so the array starts with a user turn", () => {
+  it("keeps a leading assistant message instead of dropping the reply", () => {
     const messages = buildConversationMessages({
       history: [
         historyMessage("assistant", "earlier reply", iso(3 * 60_000)),
@@ -380,10 +383,11 @@ describe("buildConversationMessages", () => {
       timezone: "UTC",
     });
 
-    expect(messages.map((m) => m.role)).toEqual(["user"]);
-    expect(messages[0].content).toBe(
-      "[2026-07-17 11:58] hi\n\n[2026-07-17 12:00] now",
-    );
+    expect(messages).toEqual([
+      { role: "assistant", content: text("earlier reply") },
+      { role: "user", content: "[2026-07-17 11:58] hi" },
+      { role: "user", content: "[2026-07-17 12:00] now" },
+    ]);
   });
 
   it("opens with the compacted summary as a user message", () => {
@@ -406,7 +410,7 @@ describe("buildConversationMessages", () => {
     ]);
   });
 
-  it("coalesces consecutive assistant messages", () => {
+  it("renders consecutive assistant rows as separate messages", () => {
     const messages = buildConversationMessages({
       history: [
         historyMessage("user", "q", iso(4 * 60_000)),
@@ -420,18 +424,13 @@ describe("buildConversationMessages", () => {
 
     expect(messages).toEqual([
       { role: "user", content: "[2026-07-17 11:56] q" },
-      {
-        role: "assistant",
-        content: [
-          { type: "text", text: "one" },
-          { type: "text", text: "two" },
-        ],
-      },
+      { role: "assistant", content: text("one") },
+      { role: "assistant", content: text("two") },
       { role: "user", content: "[2026-07-17 12:00] next" },
     ]);
   });
 
-  it("coalesces the current message with a trailing user message", () => {
+  it("keeps the current message separate from the preceding user row", () => {
     const messages = buildConversationMessages({
       history: [historyMessage("user", "first", iso(2 * 60_000))],
       userMessage: "second",
@@ -440,11 +439,40 @@ describe("buildConversationMessages", () => {
     });
 
     expect(messages).toEqual([
-      {
-        role: "user",
-        content: "[2026-07-17 11:58] first\n\n[2026-07-17 12:00] second",
-      },
+      { role: "user", content: "[2026-07-17 11:58] first" },
+      { role: "user", content: "[2026-07-17 12:00] second" },
     ]);
+  });
+
+  // The property the append-only rule exists for: what turn N sent must still be
+  // what turn N+1 sends for the same rows, or the cross-turn prefix cache breaks.
+  it("renders turn N's history as an unchanged prefix of turn N+1's", () => {
+    const history = [
+      historyMessage("user", "q", iso(4 * 60_000)),
+      historyMessage("assistant", "a", iso(3 * 60_000)),
+    ];
+    const turnN = buildConversationMessages({
+      history,
+      userMessage: "next",
+      now: NOW,
+      timezone: "UTC",
+    });
+    const turnNPlus1 = buildConversationMessages({
+      history: [
+        ...history,
+        historyMessage("user", "next", iso(2 * 60_000)),
+        historyMessage("assistant", "b", iso(60_000)),
+      ],
+      userMessage: "third",
+      now: NOW,
+      timezone: "UTC",
+    });
+
+    // Every message of turn N except its volatile tail (the current message,
+    // which carries the per-turn context) reappears byte-identical.
+    expect(turnNPlus1.slice(0, turnN.length - 1)).toEqual(
+      turnN.slice(0, turnN.length - 1),
+    );
   });
 });
 
@@ -477,6 +505,50 @@ describe("runInterfaceAgent", () => {
       "Here is the answer.",
     ]);
     expect(result.accessed).toEqual([]);
+  });
+
+  // The user gets the answer, not the reasoning: thinking is persisted so the
+  // model can pick its own reasoning back up, and never delivered.
+  it("persists the model's reasoning but sends only its text", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const persisted: ContentBlock[][] = [];
+    const model = scriptedModel([
+      {
+        thinking: "",
+        text: "Checking.",
+        tools: [{ name: "list_topics", input: {} }],
+      },
+      { thinking: "", text: "Here is the answer." },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      persistAssistant: (content) => {
+        persisted.push(content);
+        return persisted.length;
+      },
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
+      history: [],
+      userMessage: "hi",
+    });
+
+    expect(result.replies).toEqual(["Checking.", "Here is the answer."]);
+    expect(sink.sent).toEqual(["Checking.", "Here is the answer."]);
+    expect(persisted[0][0]).toEqual({
+      type: "thinking",
+      thinking: "",
+      signature: "sig-0",
+    });
+    expect(persisted[1][0]).toEqual({
+      type: "thinking",
+      thinking: "",
+      signature: "sig-1",
+    });
   });
 
   it("tracks accessed topics from get/create/update", async () => {

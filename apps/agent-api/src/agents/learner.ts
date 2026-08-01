@@ -33,7 +33,12 @@ const truncate = (text: string, max: number): string =>
   text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
 
 const renderBlocks = (blocks: ContentBlock[]): string[] =>
-  blocks.map((block) => {
+  blocks.flatMap((block) => {
+    // Reasoning is not conversation. It carries no signature-free text under
+    // `display: "omitted"` anyway, and rendering it would put the model's
+    // scratch work in front of the learner as if the user had seen it.
+    if (block.type === "thinking" || block.type === "redacted_thinking")
+      return [];
     if (block.type === "text") return block.text;
     if (block.type === "tool_use")
       return `[called ${block.name}]`;

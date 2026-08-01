@@ -22,9 +22,20 @@ describe("content encoding", () => {
     ]);
   });
 
+  // A thinking signature that survives a store round trip byte-for-byte is what
+  // lets a resumed turn hand the model back its own reasoning.
+  it("round-trips thinking blocks with their signatures intact", () => {
+    const blocks: ContentBlock[] = [
+      { type: "thinking", signature: "sig", thinking: "" },
+      { type: "redacted_thinking", data: "encrypted" },
+      { type: "text", text: "answer" },
+    ];
+    expect(decodeContent(encodeContent(blocks))).toEqual(blocks);
+  });
+
   it("round-trips blocks verbatim, including unknown block types", () => {
     const blocks = [
-      { type: "thinking", signature: "sig", thinking: "hmm" },
+      { type: "server_tool_use", id: "srv_1", name: "web_search" },
       { type: "text", text: "answer" },
     ] as never;
     expect(decodeContent(encodeContent(blocks))).toEqual(blocks);
@@ -61,6 +72,18 @@ describe("messageText", () => {
 
   it("returns a string unchanged", () => {
     expect(messageText("hi")).toBe("hi");
+  });
+
+  // messageText is what every prose surface reads (compaction prompts,
+  // transcripts), so reasoning must not be able to reach them through it.
+  it("ignores thinking blocks", () => {
+    expect(
+      messageText([
+        { type: "thinking", thinking: "私の推論", signature: "sig" },
+        { type: "redacted_thinking", data: "encrypted" },
+        { type: "text", text: "the answer" },
+      ]),
+    ).toBe("the answer");
   });
 });
 
@@ -150,6 +173,19 @@ describe("unclaimedBlockIndexes", () => {
     expect(unclaimedBlockIndexes(content, [])).toEqual([0, 3]);
     expect(unclaimedBlockIndexes(content, [0])).toEqual([3]);
     expect(unclaimedBlockIndexes(content, [0, 3])).toEqual([]);
+  });
+
+  // A delivery claim is keyed by block index, so a leading thinking block shifts
+  // every text block along. Claims are computed from the same stored array, so
+  // the two stay in step and nothing is re-sent after a reset.
+  it("indexes text blocks past a leading thinking block", () => {
+    const content: ContentBlock[] = [
+      { type: "thinking", thinking: "", signature: "sig" },
+      { type: "text", text: "one" },
+      { type: "text", text: "two" },
+    ];
+    expect(unclaimedBlockIndexes(content, [])).toEqual([1, 2]);
+    expect(unclaimedBlockIndexes(content, [1])).toEqual([2]);
   });
 });
 

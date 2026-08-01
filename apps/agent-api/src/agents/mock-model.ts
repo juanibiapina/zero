@@ -15,8 +15,8 @@ export type ScriptStep =
   // A step that calls tools, optionally saying something first (the model's own
   // text blocks are what the user sees, so a mid-run message is expressed here
   // rather than through a tool).
-  | { tools: Array<{ name: string; input: unknown }>; text?: string }
-  | { text: string };
+  | { tools: Array<{ name: string; input: unknown }>; text?: string; thinking?: string }
+  | { text: string; thinking?: string };
 
 let callCounter = 0;
 
@@ -32,6 +32,14 @@ export const MOCK_USAGE = {
   cacheWrite1hTokens: 3,
 };
 
+// A signed thinking block, as the API returns it under `display: "omitted"`:
+// the reasoning text is empty and the signature is what must survive the round
+// trip. Leads the response, which is where the model puts it.
+const thinkingBlocks = (step: ScriptStep, index: number): ContentBlock[] =>
+  step.thinking === undefined
+    ? []
+    : [{ type: "thinking", thinking: step.thinking, signature: `sig-${index}` }];
+
 const toResponse = (step: ScriptStep, index: number): AgentModelResponse => {
   const base = {
     id: `msg_${index}`,
@@ -41,13 +49,14 @@ const toResponse = (step: ScriptStep, index: number): AgentModelResponse => {
   if (!("tools" in step)) {
     return {
       ...base,
-      content: [{ type: "text", text: step.text }],
+      content: [...thinkingBlocks(step, index), { type: "text", text: step.text }],
       stopReason: "end_turn",
     };
   }
   return {
     ...base,
     content: [
+      ...thinkingBlocks(step, index),
       ...(step.text !== undefined
         ? [{ type: "text" as const, text: step.text }]
         : []),

@@ -50,14 +50,44 @@ export interface ToolResultBlock {
   cache_control?: CacheControl;
 }
 
-// The blocks Zero produces or reads. Model responses may contain other block
-// types (thinking, server tool use); those are round-tripped verbatim into the
-// next request rather than reserialized, so they never need a type here.
+// The model's reasoning, returned ahead of the text blocks when thinking is on.
+// `thinking` is empty under `display: "omitted"` (what Zero requests); the
+// signature is the encrypted reasoning, and the pair must be round-tripped
+// unmodified or the API rejects the request. Deliberately has no
+// `cache_control`: a breakpoint on a thinking block is invalid.
+export interface ThinkingBlock {
+  type: "thinking";
+  thinking: string;
+  signature: string;
+}
+
+// Reasoning the safety system flagged and encrypted wholesale. Opaque, and
+// round-tripped exactly like a thinking block.
+export interface RedactedThinkingBlock {
+  type: "redacted_thinking";
+  data: string;
+}
+
+// The blocks Zero produces or reads. Model responses may still contain types
+// Zero does not model (server tool use); those are round-tripped verbatim into
+// the next request rather than reserialized, so they need no type here.
+// Thinking is modelled because Zero has to *recognize* it: it must never carry a
+// cache breakpoint and must never be rendered as prose.
 export type ContentBlock =
   | TextBlock
   | ImageBlock
   | ToolUseBlock
-  | ToolResultBlock;
+  | ToolResultBlock
+  | ThinkingBlock
+  | RedactedThinkingBlock;
+
+// Blocks that may carry a `cache_control` breakpoint. Thinking blocks may not:
+// Anthropic rejects a breakpoint on one (they are cached implicitly, with the
+// prefix around them).
+export const isCacheable = (
+  block: ContentBlock,
+): block is TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock =>
+  block.type !== "thinking" && block.type !== "redacted_thinking";
 
 export interface AgentMessage {
   role: "user" | "assistant";

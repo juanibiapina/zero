@@ -29,6 +29,16 @@ reads for each tier (see [Production validation](#production-validation)).
   prompt, not a substitute for Zero's four.
 - **Min cacheable length:** 1024 tokens for Sonnet 4.x. Our system+tools exceed
   this comfortably; shorter prefixes silently no-op.
+- **Thinking blocks cannot carry a breakpoint.** Anthropic rejects
+  `cache_control` on a `thinking` or `redacted_thinking` block; they are cached
+  implicitly with the prefix around them and are billed as input when read back.
+  `markCacheBreakpoint` therefore leaves a message ending on one unmarked (a
+  response cut off mid-thinking is exactly that shape).
+- **The thinking configuration and the resolved effort are rendered into the
+  prompt.** Changing either starts a new cache prefix. Measured 2026-08-01: a
+  request sending no `effort` and one sending `effort: "high"` both read the same
+  1,443-token cached prefix, while `effort: "medium"` rewrote all of it. That is
+  also the proof that omitting `effort` *is* `high`.
 - **Scope:** keyed on the Anthropic org/key. We run BYOK through one gateway key,
   so an identical prefix is **shared across all users**. Per-user attribution
   lives in `cf-aig-metadata` headers, which do not affect the request body, so
@@ -260,6 +270,17 @@ misplaced). Record observed before/after numbers below so a future prompt or too
 change that silently breaks a breakpoint is caught.
 
 ## Recorded baselines
+
+**Every baseline below predates adaptive thinking** (enabled for every agent on
+2026-08-01). Two things changed with it, so do not compare across that line
+without accounting for them:
+
+- The first request after that deploy misses every prefix, because the thinking
+  configuration is part of the rendered prompt. A one-off write spike is
+  expected; a persistent one is not.
+- Retained thinking from earlier assistant turns is billed as input on every
+  later request in the conversation, so input and cache-read totals rise even
+  when nothing else changed.
 
 Measured in production (`claude-sonnet-4-6`, version `f0ed8d06`).
 

@@ -72,6 +72,52 @@ describe("markCacheBreakpoint", () => {
     expect(blocks[0].cache_control).toBeUndefined();
     expect(blocks[1].cache_control).toEqual({ type: "ephemeral" });
   });
+
+  // Anthropic rejects cache_control on a thinking block, and a response cut off
+  // during thinking ends on one. Leaving the message unmarked costs one
+  // breakpoint; marking it costs the whole request.
+  it("leaves a message ending in a thinking block unmarked", () => {
+    const message: AgentMessage = {
+      role: "assistant",
+      content: [
+        { type: "text", text: "one moment" },
+        { type: "thinking", thinking: "", signature: "sig-1" },
+      ],
+    };
+    expect(markCacheBreakpoint(message)).toEqual(message);
+  });
+
+  it("leaves a message ending in a redacted thinking block unmarked", () => {
+    const message: AgentMessage = {
+      role: "assistant",
+      content: [
+        { type: "text", text: "one moment" },
+        { type: "redacted_thinking", data: "encrypted" },
+      ],
+    };
+    expect(markCacheBreakpoint(message)).toEqual(message);
+  });
+
+  it("leaves an all-thinking message unmarked", () => {
+    const message: AgentMessage = {
+      role: "assistant",
+      content: [{ type: "thinking", thinking: "", signature: "sig-1" }],
+    };
+    expect(markCacheBreakpoint(message)).toEqual(message);
+  });
+
+  it("still marks a message whose thinking is followed by text", () => {
+    const marked = markCacheBreakpoint({
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "", signature: "sig-1" },
+        { type: "text", text: "the answer" },
+      ],
+    });
+    const blocks = marked.content as Array<{ cache_control?: unknown }>;
+    expect(blocks[0].cache_control).toBeUndefined();
+    expect(blocks[1].cache_control).toEqual({ type: "ephemeral" });
+  });
 });
 
 describe("slideMessageBreakpoint", () => {
