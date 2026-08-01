@@ -22,7 +22,7 @@
     "eslint-plugin-astro": "^3.0.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "tailwindcss": "^4.3.3",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "wrangler": "4.118.0"
   }
 }

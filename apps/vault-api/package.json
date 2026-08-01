@@ -31,7 +31,7 @@
     "@vitest/runner": "4.1.10",
     "@vitest/snapshot": "4.1.10",
     "eslint": "10.8.0",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vitest": "^4.1.10",
     "wrangler": "^4.118.0"
   }
