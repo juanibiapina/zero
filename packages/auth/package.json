@@ -20,7 +20,7 @@
     "@cloudflare/workers-types": "^4.20260617.1",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "eslint": "10.7.0",
+    "eslint": "10.8.0",
     "typescript": "6.0.3"
   }
 }

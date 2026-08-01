@@ -28,10 +28,10 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260629.1",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
-    "eslint": "10.7.0",
+    "eslint": "10.8.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.10",
     "wrangler": "^4.103.0"
