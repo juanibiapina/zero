@@ -797,6 +797,7 @@ describe("Store contract: settings", () => {
       googleOnboardingStatus: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       timezone: null,
+      country: null,
       isNewUser: true,
     });
   });
@@ -824,10 +825,15 @@ describe("Store contract: settings", () => {
     expect(s.getSettings().onboardingSeen).toBe(true);
   });
 
-  it("updateSettings sets timezone", () => {
+  it("updateSettings round-trips country across a timezone update", () => {
     const s = makeStore();
+    s.updateSettings({ country: "DE" });
+    expect(s.getSettings().country).toBe("DE");
     s.updateSettings({ timezone: "Europe/Berlin" });
-    expect(s.getSettings().timezone).toBe("Europe/Berlin");
+    expect(s.getSettings()).toMatchObject({
+      timezone: "Europe/Berlin",
+      country: "DE",
+    });
   });
 
   it("updateSettings on a missing row inserts (upsert), then updates in place", () => {

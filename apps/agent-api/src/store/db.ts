@@ -55,6 +55,7 @@ interface SettingsRow {
   googleOnboardingStatus: string | null;
   createdAt: string | null;
   timezone: string | null;
+  country: string | null;
   firstContactAt: string | null;
 }
 
@@ -805,6 +806,7 @@ export class DbStore implements Store {
       onboardingSeen: number;
       googleOnboardingStatus: string;
       timezone: string;
+      country: string;
       firstContactAt: string;
     }>,
   ): SettingsRow {
@@ -835,6 +837,7 @@ export class DbStore implements Store {
         googleOnboardingStatus: seeded.googleOnboardingStatus ?? null,
         createdAt: seeded.createdAt ?? null,
         timezone: seeded.timezone ?? null,
+        country: seeded.country ?? null,
         isNewUser: true,
       };
     }
@@ -843,16 +846,26 @@ export class DbStore implements Store {
       googleOnboardingStatus: row.googleOnboardingStatus ?? null,
       createdAt: row.createdAt ?? null,
       timezone: row.timezone ?? null,
+      country: row.country ?? null,
       isNewUser: false,
     };
   }
 
-  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
-    const columns: Partial<{ onboardingSeen: number; timezone: string }> = {};
+  updateSettings(patch: {
+    onboardingSeen?: boolean;
+    timezone?: string;
+    country?: string;
+  }): void {
+    const columns: Partial<{
+      onboardingSeen: number;
+      timezone: string;
+      country: string;
+    }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
     }
     if (patch.timezone !== undefined) columns.timezone = patch.timezone;
+    if (patch.country !== undefined) columns.country = patch.country;
     this.upsertSettings(columns);
   }
 

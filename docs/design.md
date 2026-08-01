@@ -177,12 +177,17 @@ of which Clerk user a Telegram account belongs to and answers whenever KV misses
 Both stores are behind `telegram/identity.ts` and are kept in sync by the
 link/unlink routes. See [`telegram-login.md`](telegram-login.md).
 
+The settings route resolves country from the signed-in device request, preferring
+Cloudflare's `cf.country`, then the browser locale region, then leaving it unset.
+It never reads country from a Telegram webhook because that request originates
+from a Telegram datacenter rather than the user's device.
+
 ### UserDO (per-user, addressed by `idFromName(clerkUserId)`)
 
 | Table               | Columns                                                        | Purpose                                        |
 |---------------------|---------------------------------------------------------------|------------------------------------------------|
 | `telegram_link`     | `id`, `telegramId`                                            | The user's linked Telegram account (≤1 row)    |
-| `user_settings`     | `id`, `onboardingSeen`, `googleOnboardingStatus`, `createdAt`| Web onboarding + settings                      |
+| `user_settings`     | `id`, `onboardingSeen`, `googleOnboardingStatus`, `createdAt`, `timezone`, `country` | Web onboarding + settings                      |
 | `topics`            | `id`, `name`, `description`, `body`, timestamps, `messageCount` | The knowledge model (see [`topics.md`](topics.md)) |
 | `knowledge`         | `id`, `version`, `systemFingerprint`                         | The knowledge version guarding topic writes    |
 | `conversations`     | `id`, `chatId`, `topicId`, `createdAt`, `compactedThroughMessageId`, `summary` | One thread per Telegram (chatId, topicId); the last two are the non-destructive compaction boundary |

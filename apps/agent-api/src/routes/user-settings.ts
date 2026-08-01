@@ -17,6 +17,7 @@ import {
   linkTelegramAccount,
   unlinkTelegramAccount,
 } from "../telegram/identity";
+import { isValidCountry, resolveCountry } from "../country";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
 import { isValidTimezone } from "../timezone";
@@ -135,13 +136,15 @@ export const createUserSettingsRoutes = () => {
     googleOnboardingStatus: z.string().nullable(),
     createdAt: z.string().nullable(),
     timezone: z.string().nullable(),
+    country: z.string().nullable(),
   });
 
-  const toResponse = (s: { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; timezone: string | null }) => ({
+  const toResponse = (s: { onboardingSeen: boolean; googleOnboardingStatus: string | null; createdAt: string | null; timezone: string | null; country: string | null }) => ({
     onboardingSeen: s.onboardingSeen,
     googleOnboardingStatus: s.googleOnboardingStatus,
     createdAt: s.createdAt,
     timezone: s.timezone,
+    country: s.country,
   });
 
   const getSettingsRoute = createRoute({
@@ -160,9 +163,17 @@ export const createUserSettingsRoutes = () => {
   router.openapi(getSettingsRoute, async (c) => {
     const clerkUserId = c.get("userId");
     const userDO = getUserDO(c.env, clerkUserId);
-    const settings = await userDO.getSettings();
+    let settings = await userDO.getSettings();
     if (settings.isNewUser) {
       c.env.ANALYTICS.writeDataPoint({ blobs: ["signup"], indexes: [clerkUserId] });
+    }
+    const cfCountry = c.req.raw.cf?.country;
+    const country = resolveCountry(
+      typeof cfCountry === "string" ? cfCountry : undefined,
+    );
+    if (country !== null && country !== settings.country) {
+      await userDO.updateSettings({ country });
+      settings = await userDO.getSettings();
     }
     return c.json(toResponse(settings), 200);
   });
@@ -170,6 +181,7 @@ export const createUserSettingsRoutes = () => {
   const PatchSettingsSchema = z.object({
     onboardingSeen: z.boolean().optional(),
     timezone: z.string().optional(),
+    region: z.string().optional(),
   });
 
   const patchSettingsRoute = createRoute({
@@ -202,7 +214,24 @@ export const createUserSettingsRoutes = () => {
     if (patch.timezone !== undefined && !isValidTimezone(patch.timezone)) {
       return c.json({ error: "invalid timezone" }, 400);
     }
-    await userDO.updateSettings(patch);
+    if (
+      patch.region !== undefined &&
+      !isValidCountry(patch.region.toUpperCase())
+    ) {
+      return c.json({ error: "invalid region" }, 400);
+    }
+    const cfCountry = c.req.raw.cf?.country;
+    const country = resolveCountry(
+      typeof cfCountry === "string" ? cfCountry : undefined,
+      patch.region,
+    );
+    await userDO.updateSettings({
+      ...(patch.onboardingSeen !== undefined
+        ? { onboardingSeen: patch.onboardingSeen }
+        : {}),
+      ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+      ...(country !== null ? { country } : {}),
+    });
     const after = await userDO.getSettings();
     if (patch.onboardingSeen === true && !before.onboardingSeen) {
       c.env.ANALYTICS.writeDataPoint({
@@ -211,7 +240,16 @@ export const createUserSettingsRoutes = () => {
         indexes: [clerkUserId],
       });
     }
-    log("user_settings_updated", { clerk_user_id: clerkUserId, patch });
+    log("user_settings_updated", {
+      clerk_user_id: clerkUserId,
+      patch: {
+        ...(patch.onboardingSeen !== undefined
+          ? { onboardingSeen: patch.onboardingSeen }
+          : {}),
+        ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+        ...(country !== null ? { country } : {}),
+      },
+    });
     return c.json(toResponse(after), 200);
   });
 

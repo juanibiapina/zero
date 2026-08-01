@@ -386,6 +386,7 @@ export interface UserSettings {
   googleOnboardingStatus: string | null;
   createdAt: string | null;
   timezone: string | null;
+  country: string | null;
   // True only on the access that seeded the row (first-ever getSettings).
   isNewUser: boolean;
 }
@@ -395,7 +396,11 @@ export interface UserSettings {
 export interface SettingsStore {
   // Seeds the settings row on first access; isNewUser is true only then.
   getSettings(): UserSettings;
-  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void;
+  updateSettings(patch: {
+    onboardingSeen?: boolean;
+    timezone?: string;
+    country?: string;
+  }): void;
   setGoogleOnboardingStatus(status: string): void;
 
   getTelegramId(): string | null;

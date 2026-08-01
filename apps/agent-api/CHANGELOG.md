@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-02: Zero now keeps track of your country and updates it when you travel or tell it you've moved.
 - 2026-08-01: Zero now thinks a question through before answering, so harder requests and tool results get worked out rather than answered off the top of its head.
 - 2026-07-31: Ask Zero to remind you about something later, or to do something on a routine ("every weekday at 8, send me my calendar and unread mail"). It messages you at that time in the same chat, and you can ask what's scheduled or have one cancelled.
 - 2026-07-31: After linking Telegram, tap "Open in Telegram" and Zero introduces itself the moment you press Start, instead of waiting for you to write first.

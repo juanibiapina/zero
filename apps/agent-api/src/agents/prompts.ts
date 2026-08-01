@@ -96,7 +96,8 @@ The current time and your timezone are given with the latest user message. Each
 user message in the conversation is prefixed with an absolute timestamp
 [YYYY-MM-DD HH:MM] in the user's timezone; compare it to the current time to
 judge how long ago it was. If the user tells you they are in a different place
-or timezone, call set_timezone to update it.
+or timezone, call set_timezone to update the timezone and set_country to update
+the country.
 
 You have a durable knowledge model made of topics: living documents each about
 one subject (a project, a person, an ongoing thread). Recall what a topic holds

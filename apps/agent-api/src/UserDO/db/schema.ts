@@ -13,6 +13,8 @@ export const userSettings = table("user_settings", {
   // Canonical IANA name (e.g. "Europe/Berlin"), never an offset. Null until the
   // web app reports the browser's zone on first mount.
   timezone: column.text(),
+  // Uppercase ISO 3166-1 alpha-2 code, or null when no usable signal exists.
+  country: column.text(),
   // When Zero first introduced itself. Set exactly once, by claimFirstContact.
   firstContactAt: column.text(),
 });

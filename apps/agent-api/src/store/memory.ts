@@ -37,6 +37,7 @@ interface SettingsRow {
   googleOnboardingStatus: string | null;
   createdAt: string;
   timezone: string | null;
+  country: string | null;
   firstContactAt: string | null;
 }
 
@@ -685,6 +686,7 @@ export class MemoryStore implements Store {
       onboardingSeen: number;
       googleOnboardingStatus: string;
       timezone: string;
+      country: string;
       firstContactAt: string;
     }>,
   ): SettingsRow {
@@ -698,6 +700,9 @@ export class MemoryStore implements Store {
       if (columns.timezone !== undefined) {
         this.settingsRow.timezone = columns.timezone;
       }
+      if (columns.country !== undefined) {
+        this.settingsRow.country = columns.country;
+      }
       if (columns.firstContactAt !== undefined) {
         this.settingsRow.firstContactAt = columns.firstContactAt;
       }
@@ -708,6 +713,7 @@ export class MemoryStore implements Store {
       googleOnboardingStatus: columns.googleOnboardingStatus ?? null,
       createdAt: this.now(),
       timezone: columns.timezone ?? null,
+      country: columns.country ?? null,
       firstContactAt: columns.firstContactAt ?? null,
     };
     return this.settingsRow;
@@ -721,6 +727,7 @@ export class MemoryStore implements Store {
         googleOnboardingStatus: seeded.googleOnboardingStatus ?? null,
         createdAt: seeded.createdAt ?? null,
         timezone: seeded.timezone ?? null,
+        country: seeded.country ?? null,
         isNewUser: true,
       };
     }
@@ -729,16 +736,26 @@ export class MemoryStore implements Store {
       googleOnboardingStatus: this.settingsRow.googleOnboardingStatus ?? null,
       createdAt: this.settingsRow.createdAt ?? null,
       timezone: this.settingsRow.timezone ?? null,
+      country: this.settingsRow.country ?? null,
       isNewUser: false,
     };
   }
 
-  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
-    const columns: Partial<{ onboardingSeen: number; timezone: string }> = {};
+  updateSettings(patch: {
+    onboardingSeen?: boolean;
+    timezone?: string;
+    country?: string;
+  }): void {
+    const columns: Partial<{
+      onboardingSeen: number;
+      timezone: string;
+      country: string;
+    }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
     }
     if (patch.timezone !== undefined) columns.timezone = patch.timezone;
+    if (patch.country !== undefined) columns.country = patch.country;
     this.upsertSettings(columns);
   }
 

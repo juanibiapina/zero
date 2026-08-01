@@ -747,6 +747,30 @@ describe("runInterfaceAgent", () => {
     expect(setTimezone).toHaveBeenCalledWith("Asia/Tokyo");
   });
 
+  it("routes set_country through to the setter", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const setCountry = vi.fn();
+    const model = scriptedModel([
+      { tools: [{ name: "set_country", input: { country: "PT" } }] },
+      { text: "Done, I've updated your country." },
+    ]);
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
+      setCountry,
+      history: [],
+      userMessage: "I moved to Portugal",
+    });
+
+    expect(setCountry).toHaveBeenCalledWith("PT");
+  });
+
   it("reads a Gmail thread then replies, flowing the tool result back", async () => {
     const store = new MemoryStore();
     const sink = collectSink();

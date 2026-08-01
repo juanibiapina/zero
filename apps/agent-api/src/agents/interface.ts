@@ -20,6 +20,7 @@ import { buildInterfaceTools } from "../tools/topics";
 import { buildResearchTool } from "../tools/research";
 import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
+import { buildCountryTool } from "../tools/country";
 import { buildScheduleTools } from "../tools/schedules";
 import { buildGoogleTools } from "../tools/google";
 import { buildFileTools } from "../tools/files";
@@ -111,6 +112,9 @@ export interface InterfaceAgentInput {
   // Persist a new user timezone (wired by the orchestrator to user settings).
   // Omitted in tests that don't exercise set_timezone.
   setTimezone?: (tz: string) => void;
+  // Persist a new user country (wired by the orchestrator to user settings).
+  // Omitted in tests that don't exercise set_country.
+  setCountry?: (country: string) => void;
   // User-owned files and active Telegram-topic delivery. Tools remain registered
   // when these are absent so the cached tool schema stays stable.
   files?: UserFileStore;
@@ -317,6 +321,7 @@ export const runInterfaceAgent = async (
     // link the user handed over without spawning a research run.
     ...buildReadPageTool({ fetcher: input.fetcher, caller: "interface" }),
     ...buildTimezoneTool({ setTimezone: input.setTimezone }),
+    ...buildCountryTool({ setCountry: input.setCountry }),
     ...buildGoogleTools({
       google: input.google,
       timezone: input.timezone ?? "UTC",

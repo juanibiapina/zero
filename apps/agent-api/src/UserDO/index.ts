@@ -390,9 +390,13 @@ export class UserDO extends DurableObject<Env> {
       getGoogleAccessToken(this.env, clerkUserId),
     );
     const google = createGoogleWorkspace(getToken);
-    const timezone = this.store.getSettings().timezone ?? undefined;
+    const settings = this.store.getSettings();
+    const timezone = settings.timezone ?? undefined;
+    const country = settings.country ?? undefined;
     const setTimezone = (tz: string) =>
       this.store.updateSettings({ timezone: tz });
+    const setCountry = (value: string) =>
+      this.store.updateSettings({ country: value });
     const send = (text: string) => sendMessage(this.env, chatId, topicId, text);
     const files = createUserFileStore({
       clerkUserId,
@@ -472,6 +476,8 @@ export class UserDO extends DurableObject<Env> {
         clerkUserId,
         timezone,
         setTimezone,
+        country,
+        setCountry,
         reportError: (err, context, options) =>
           reportError(this.env, err, context, options),
         // A conversation that has grown past the threshold asks for learning
@@ -619,12 +625,17 @@ export class UserDO extends DurableObject<Env> {
     googleOnboardingStatus: string | null;
     createdAt: string | null;
     timezone: string | null;
+    country: string | null;
     isNewUser: boolean;
   } {
     return this.store.getSettings();
   }
 
-  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
+  updateSettings(patch: {
+    onboardingSeen?: boolean;
+    timezone?: string;
+    country?: string;
+  }): void {
     this.store.updateSettings(patch);
   }
 

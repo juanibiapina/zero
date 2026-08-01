@@ -388,7 +388,11 @@ export class SystemTopicStore implements Store {
     return this.inner.getSettings();
   }
 
-  updateSettings(patch: { onboardingSeen?: boolean; timezone?: string }): void {
+  updateSettings(patch: {
+    onboardingSeen?: boolean;
+    timezone?: string;
+    country?: string;
+  }): void {
     this.inner.updateSettings(patch);
   }
 

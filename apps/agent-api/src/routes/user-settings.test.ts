@@ -41,12 +41,13 @@ type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegra
 
 const createFakeUserDO = (
   initial?: string,
-): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null; _timezone: string | null } => {
+): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null; _timezone: string | null; _country: string | null } => {
   let stored: string | null = initial ?? null;
   let onboardingSeen = false;
   let googleOnboardingStatus: string | null = null;
   let createdAt: string | null = null;
   let timezone: string | null = null;
+  let country: string | null = null;
   let hasRow = false;
   return {
     get _telegramId() {
@@ -64,6 +65,9 @@ const createFakeUserDO = (
     get _timezone() {
       return timezone;
     },
+    get _country() {
+      return country;
+    },
     getTelegramId: () => stored,
     linkTelegram: (telegramId: string) => {
       const previous = stored;
@@ -79,13 +83,14 @@ const createFakeUserDO = (
       if (!hasRow) {
         createdAt = new Date().toISOString();
         hasRow = true;
-        return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, isNewUser: true };
+        return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, country, isNewUser: true };
       }
-      return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, isNewUser: false };
+      return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, country, isNewUser: false };
     },
-    updateSettings: (patch: { onboardingSeen?: boolean; timezone?: string }) => {
+    updateSettings: (patch: { onboardingSeen?: boolean; timezone?: string; country?: string }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;
       if (patch.timezone !== undefined) timezone = patch.timezone;
+      if (patch.country !== undefined) country = patch.country;
     },
     setGoogleOnboardingStatus: (status: string) => {
       googleOnboardingStatus = status;
@@ -128,8 +133,15 @@ const buildApp = (env: Env, userId: string) => {
   });
   app.route("/", createUserSettingsRoutes());
   return {
-    request: (path: string, init?: RequestInit) =>
-      app.request(path, init, env),
+    request: (path: string, init?: RequestInit, cfCountry?: string) => {
+      const request = new Request(`http://localhost${path}`, init);
+      if (cfCountry !== undefined) {
+        Object.defineProperty(request, "cf", {
+          value: { country: cfCountry },
+        });
+      }
+      return app.fetch(request, env);
+    },
   };
 };
 
@@ -299,6 +311,30 @@ describe("GET /api/user-settings", () => {
     await app.request("/api/user-settings");
     expect(analytics.writeDataPoint).not.toHaveBeenCalled();
   });
+
+  it("stores and returns Cloudflare's country without rewriting it", async () => {
+    const userDO = createFakeUserDO();
+    const update = vi.spyOn(userDO, "updateSettings");
+    const app = buildApp(fakeEnv(fakeKV(), userDO), "user_abc");
+
+    const first = await app.request("/api/user-settings", undefined, "DE");
+    expect(await first.json()).toMatchObject({ country: "DE" });
+    expect(userDO._country).toBe("DE");
+    expect(update).toHaveBeenCalledTimes(1);
+
+    await app.request("/api/user-settings", undefined, "DE");
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not store Cloudflare's unknown or Tor country markers", async () => {
+    const userDO = createFakeUserDO();
+    const update = vi.spyOn(userDO, "updateSettings");
+    const app = buildApp(fakeEnv(fakeKV(), userDO), "user_abc");
+
+    const response = await app.request("/api/user-settings", undefined, "XX");
+    expect(await response.json()).toMatchObject({ country: null });
+    expect(update).not.toHaveBeenCalled();
+  });
 });
 
 describe("PATCH /api/user-settings", () => {
@@ -417,5 +453,36 @@ describe("PATCH /api/user-settings", () => {
     const res = await app.request("/api/user-settings");
     const body = await res.json<Record<string, unknown>>();
     expect(body.timezone).toBeNull();
+  });
+
+  it("uses the browser region when Cloudflare has no usable country", async () => {
+    const userDO = createFakeUserDO();
+    const app = buildApp(fakeEnv(fakeKV(), userDO), "user_abc");
+
+    const res = await app.request(
+      "/api/user-settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region: "pt" }),
+      },
+      "T1",
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ country: "PT" });
+    expect(userDO._country).toBe("PT");
+  });
+
+  it("rejects a malformed browser region", async () => {
+    const userDO = createFakeUserDO();
+    const app = buildApp(fakeEnv(fakeKV(), userDO), "user_abc");
+
+    const res = await app.request("/api/user-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ region: "USA" }),
+    });
+    expect(res.status).toBe(400);
+    expect(userDO._country).toBeNull();
   });
 });

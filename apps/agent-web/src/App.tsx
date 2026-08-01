@@ -81,12 +81,22 @@ function AppShell() {
       // Keep the stored timezone in sync with this browser. Telegram carries no
       // timezone, so the web app is the only reliable source. Only PATCH when
       // it's missing or has changed (travel) — steady state is zero writes.
-      const current = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const resolved = Intl.DateTimeFormat().resolvedOptions();
+      const current = resolved.timeZone;
       if (current && current !== data.timezone) {
+        let region: string | undefined;
+        try {
+          region = new Intl.Locale(resolved.locale).region;
+        } catch {
+          // The timezone remains useful when a browser reports an odd locale.
+        }
         void fetch("/api/user-settings", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ timezone: current }),
+          body: JSON.stringify({
+            timezone: current,
+            ...(region ? { region } : {}),
+          }),
         });
       }
     })();

@@ -71,6 +71,10 @@ export interface TurnInput {
   timezone?: string;
   // Persist a new user timezone (from the set_timezone tool).
   setTimezone?: (tz: string) => void;
+  // The user's ISO 3166-1 alpha-2 country code, reserved for market-aware tools.
+  country?: string;
+  // Persist a new user country (from the set_country tool).
+  setCountry?: (country: string) => void;
   // Reference time for the date anchor and relative message ages. Defaults to
   // now; injected in tests for deterministic prompt rendering.
   now?: Date;
@@ -254,6 +258,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       userMessage,
       timezone: input.timezone,
       setTimezone: input.setTimezone,
+      setCountry: input.setCountry,
       now: input.now,
     });
 
