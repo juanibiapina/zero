@@ -1,0 +1,27 @@
+diff --git a/wrangler-dist/cli.js b/wrangler-dist/cli.js
+index 717ca2f..29b0e2c 100644
+--- a/wrangler-dist/cli.js
++++ b/wrangler-dist/cli.js
+@@ -133747,7 +133747,7 @@ async function buildImage(dockerPath, options, verifyDockerIsRunning) {
+     pathToDockerfile: options.dockerfile,
+     buildContext: options.image_build_context,
+     args: options.image_vars,
+-    platform: "linux/amd64"
++    platform: undefined
+   });
+   return dockerBuild(dockerPath, {
+     buildCmd,
+@@ -133873,10 +133873,10 @@ async function pullImage(dockerPath, options, logger6) {
+   }
+   const pull = runDockerCmd(dockerPath, [
+     "pull",
+-    options.image_uri,
++    options.image_uri
+     // All containers running on our platform need to be built for amd64 architecture, but by default docker pull seems to look for an image matching the host system, so we need to specify this here
+-    "--platform",
+-    "linux/amd64"
++    // "--platform",
++    // "linux/amd64"
+   ]);
+   const ready = pull.ready.then(async ({ aborted: aborted5 }) => {
+     if (!aborted5) {

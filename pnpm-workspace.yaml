@@ -10,4 +10,4 @@ onlyBuiltDependencies:
   - workerd
 
 patchedDependencies:
-  wrangler@4.103.0: patches/wrangler@4.103.0.patch
+  wrangler@4.118.0: patches/wrangler@4.118.0.patch

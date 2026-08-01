@@ -23,8 +23,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.18.5",
-    "@cloudflare/workers-types": "^4.20260617.1",
+    "@cloudflare/vitest-pool-workers": "0.20.1",
+    "@cloudflare/workers-types": "^5.20260801.1",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "@types/node": "^26.1.2",
@@ -33,6 +33,6 @@
     "eslint": "10.8.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.10",
-    "wrangler": "^4.103.0"
+    "wrangler": "^4.118.0"
   }
 }
