@@ -3,7 +3,33 @@
 The "Link Telegram" button on the Zero web app is Telegram's official
 [Login Widget](https://core.telegram.org/widgets/login). The widget
 posts a signed payload back to the page; the worker verifies the HMAC
-and writes the KV mapping `clerk:{userId} ↔ tg:{telegramId}`.
+and records the binding between the Clerk user and the Telegram account.
+
+## Where the binding lives
+
+Two stores, both written on link, both cleared on unlink. All of it is behind
+`apps/agent-api/src/telegram/identity.ts`; nothing else should touch either
+store.
+
+- **`TelegramAccountDO`** — one Durable Object per Telegram account, keyed by
+  the Telegram user id. Its state is the Clerk user that account belongs to.
+  This is the **source of truth**, and it is written first.
+- **KV `tg:{telegramId} → clerkUserId`** — a cache of the same answer, read on
+  the hot path of every inbound message.
+
+A lookup reads KV and only asks the Durable Object when KV misses. The Durable
+Object is not a redundant copy: KV caches *negative* lookups per colo for about
+60 seconds, so a user who messaged the bot before linking would keep being told
+to link for a minute afterwards, from the colo that serves Telegram's webhooks.
+That colo cannot be reached from the browser, so there is nothing to wait for or
+poll; the strongly consistent record is the only thing that can answer. Deleting
+it brings the bug back (incident 2026-07-31, `docs/plans/telegram-account-claim.md`).
+
+A KV hit never touches the Durable Object, so settled users cost the same as
+before. The fallback logs `telegram_account_fallback`; a lookup neither store
+can answer logs `drop_unknown_telegram_id`.
+
+The Clerk side of the same binding lives in `UserDO` (`getTelegramId`).
 
 ## One-off setup
 
@@ -63,8 +89,12 @@ recipe (from [Telegram's docs](https://core.telegram.org/widgets/login#checking-
 ## Re-linking
 
 `POST /api/telegram-link` overwrites whatever Telegram id was bound to
-the caller, clearing the previous reverse-index entry. To unlink
-entirely call `DELETE /api/telegram-id`.
+the caller: it claims the new account, then releases the previous one in both
+stores. To unlink entirely call `DELETE /api/telegram-id`, which releases the
+account and deletes its KV entry.
+
+Linking takes effect on the very next message, including for a user who
+messaged the bot before linking.
 
 ## First conversation
 

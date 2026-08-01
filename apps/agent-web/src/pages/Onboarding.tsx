@@ -107,11 +107,20 @@ function TelegramCard({
   onOpen: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  // The widget payload names the account; the server only knows the numeric id,
+  // so a page load after linking falls back to that.
+  const [accountName, setAccountName] = useState<string | null>(null);
 
   const onAuth = useCallback(
     (payload: TelegramAuthPayload) => {
       void (async () => {
         setError(null);
+        setAccountName(
+          payload.username
+            ? `@${payload.username}`
+            : [payload.first_name, payload.last_name].filter(Boolean).join(" ") ||
+              null,
+        );
         try {
           const res = await fetch("/api/telegram-link", {
             method: "POST",
@@ -145,17 +154,23 @@ function TelegramCard({
           <TelegramLoginWidget onAuth={onAuth} />
         ) : (
           <div className="space-y-3 animate-in fade-in duration-200 motion-reduce:animate-none">
-            <ConnectedStatus>Connected · {telegramId}</ConnectedStatus>
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-1">
+              <p className="text-sm font-medium text-foreground">
+                Telegram linked
+              </p>
+              <ConnectedStatus>{accountName ?? telegramId}</ConnectedStatus>
+            </div>
             <p className="text-sm text-muted-foreground">
-              Tap to open Telegram and press Start — Zero will say hello.
+              Open Telegram and press Start — Zero will say hello.
             </p>
             <a
               href={TELEGRAM_DEEP_LINK}
               target="_blank"
               rel="noopener noreferrer"
               onClick={onOpen}
+              className="block"
             >
-              <Button>Open in Telegram</Button>
+              <Button className="w-full">Open in Telegram</Button>
             </a>
           </div>
         )}

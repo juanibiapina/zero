@@ -88,6 +88,10 @@
       {
         "name": "LEARNING_DO",
         "class_name": "LearningDO"
+      },
+      {
+        "name": "TELEGRAM_ACCOUNT_DO",
+        "class_name": "TelegramAccountDO"
       }
     ]
   },
@@ -119,6 +123,10 @@
     {
       "tag": "v7",
       "new_sqlite_classes": ["ScheduleDO", "LearningDO"]
+    },
+    {
+      "tag": "v8",
+      "new_sqlite_classes": ["TelegramAccountDO"]
     }
   ]
 }

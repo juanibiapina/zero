@@ -29,8 +29,7 @@ import { formatAndSend } from "../telegram/send";
 import { downloadTelegramFile } from "../telegram/files";
 import { MAX_FILE_BYTES } from "../files/types";
 import { reportError as reportZeroError } from "../reporting/zero-errors";
-
-const tgKey = (telegramId: string) => `tg:${telegramId}`;
+import { resolveClerkUserId } from "../telegram/identity";
 
 // Build a TopicContext from a Telegram message. Topic messages (forum
 // groups or DM topics) use message_thread_id; every other private, group
@@ -298,7 +297,7 @@ export const processTelegramMessage = async (
 
   const clerkUserId = await deps.getClerkUserId(topic.telegramId);
   if (!clerkUserId) {
-    log("drop_unknown_telegram_id", { telegram_id: topic.telegramId });
+    // The resolver logs the drop (see telegram/identity.ts).
     // Someone who found the bot on their own gets directions, not silence.
     await deps.sendReply(topic.chatId, topic.topicId, SIGN_IN_REPLY).catch(() => {});
     return;
@@ -393,7 +392,7 @@ export const createTelegramWebhookRoute = () => {
 
     const deps: WebhookDeps = {
       download: (fileId) => downloadTelegramFile(c.env, fileId),
-      getClerkUserId: (telegramId) => c.env.KV.get(tgKey(telegramId)),
+      getClerkUserId: (telegramId) => resolveClerkUserId(c.env, telegramId),
       enqueue: async (clerkUserId, input) => {
         await getUserDO(c.env, clerkUserId).enqueueTurn(input);
       },

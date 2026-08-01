@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { processNewCommand, type SendReplyFn } from "./new";
 import type { TopicContext } from "../telegram/context";
+import { fakeAccountNamespace } from "../telegram/test-support";
 import type { UserDO } from "../UserDO/index";
 import type { Env } from "../types";
 
@@ -25,13 +26,20 @@ const createFakeUserDO = (): UserDOStub & { _reset: Array<[number, number]> } =>
   };
 };
 
-const fakeEnv = (kv: ReturnType<typeof fakeKV>, userDO?: UserDOStub): Env =>
+// An unlinked user now falls through to the account record, so every env needs
+// one (see telegram/identity.ts).
+const fakeEnv = (
+  kv: ReturnType<typeof fakeKV>,
+  userDO?: UserDOStub,
+  owners: Record<string, string> = {},
+): Env =>
   ({
     KV: kv,
     USER_DO: {
       idFromName: () => ({ toString: () => "fake-id" }),
       get: () => userDO ?? createFakeUserDO(),
     },
+    TELEGRAM_ACCOUNT_DO: fakeAccountNamespace(owners).namespace,
   }) as unknown as Env;
 
 const ctx: TopicContext = {
@@ -59,5 +67,20 @@ describe("processNewCommand", () => {
 
     expect(userDO._reset).toEqual([[100, 200]]);
     expect(sendReply).toHaveBeenCalledWith(100, 200, "Started a new conversation.");
+  });
+
+  // The link is fresh: the webhook colo's KV still serves the cached miss.
+  it("resolves a just-linked user from the account record", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const sendReply = vi.fn<SendReplyFn>().mockResolvedValue(undefined);
+
+    await processNewCommand(
+      ctx,
+      fakeEnv(kv, userDO, { "111": "user_abc" }),
+      sendReply,
+    );
+
+    expect(userDO._reset).toEqual([[100, 200]]);
   });
 });

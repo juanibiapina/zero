@@ -46,6 +46,10 @@
       {
         "name": "USER_DO",
         "class_name": "UserDO"
+      },
+      {
+        "name": "TELEGRAM_ACCOUNT_DO",
+        "class_name": "TelegramAccountDO"
       }
     ]
   },
@@ -73,6 +77,12 @@
     {
       "tag": "v6",
       "deleted_classes": ["AgentContainer"]
+    },
+    // This file's migration history is its own: it stops at v6 because it never
+    // got the v7 that added ScheduleDO/LearningDO in wrangler.jsonc.
+    {
+      "tag": "v7",
+      "new_sqlite_classes": ["TelegramAccountDO"]
     }
   ]
 }

@@ -7,6 +7,7 @@ import {
 } from "./start";
 import type { SendReplyFn } from "./new";
 import type { TopicContext } from "../telegram/context";
+import { fakeAccountNamespace } from "../telegram/test-support";
 import type { Env } from "../types";
 
 const fakeKV = (entries: Record<string, string> = {}) => {
@@ -25,13 +26,20 @@ const createFakeUserDO = (enqueued: boolean) => {
   };
 };
 
-const fakeEnv = (kv: KVNamespace, userDO?: unknown): Env =>
+// An unlinked user now falls through to the account record, so every env needs
+// one (see telegram/identity.ts).
+const fakeEnv = (
+  kv: KVNamespace,
+  userDO?: unknown,
+  owners: Record<string, string> = {},
+): Env =>
   ({
     KV: kv,
     USER_DO: {
       idFromName: () => ({ toString: () => "fake-id" }),
       get: () => userDO,
     },
+    TELEGRAM_ACCOUNT_DO: fakeAccountNamespace(owners).namespace,
   }) as unknown as Env;
 
 const ctx: TopicContext = { telegramId: "111", chatId: 100, topicId: 0 };
@@ -50,6 +58,24 @@ describe("processStartCommand", () => {
 
     expect(deps.sendReply).toHaveBeenCalledWith(100, 0, SIGN_IN_REPLY);
     expect(userDO._calls).toEqual([]);
+  });
+
+  // The link is fresh: the webhook colo's KV still serves the cached miss, so
+  // only the account record can answer.
+  it("recognises a just-linked user whose KV entry has not propagated", async () => {
+    const deps = makeDeps();
+    const userDO = createFakeUserDO(true);
+
+    await processStartCommand(
+      ctx,
+      fakeEnv(fakeKV(), userDO, { "111": "user_abc" }),
+      deps,
+      "42",
+      "private",
+    );
+
+    expect(userDO._calls).toEqual([["user_abc", 100, 0, "start:42"]]);
+    expect(deps.sendReply).not.toHaveBeenCalled();
   });
 
   it("on first contact starts a turn and shows typing, with no canned reply", async () => {

@@ -16,3 +16,6 @@ export { UserDO } from "./UserDO/index";
 // data and interactive turns (see docs/topics.md).
 export { ScheduleDO } from "./ScheduleDO/index";
 export { LearningDO } from "./LearningDO/index";
+// One instance per Telegram account, keyed by the Telegram user id: the
+// authoritative record of which Zero user that account belongs to.
+export { TelegramAccountDO } from "./TelegramAccountDO/index";

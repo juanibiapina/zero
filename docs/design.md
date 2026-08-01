@@ -9,7 +9,8 @@ to a Telegram numeric id (HMAC-verified server-side against the bot token). From
 then on, each message is processed by a two-phase agent that runs inside the
 per-user `UserDO` Durable Object.
 
-The webhook resolves the user via `KV tg:{telegramId}` and calls
+The webhook resolves the user from the Telegram id (KV cache, authoritative
+`TelegramAccountDO` on a miss) and calls
 `UserDO.enqueueTurn` (dedupe the update, store the user message, arm a DO
 alarm), then returns 200 immediately. The alarm runs the turn:
 
@@ -72,7 +73,8 @@ zero/
 │  POST /api/webhooks/telegram  ◀──────────── Telegram update      │
 │    grammY (secret-token) → 200 OK → waitUntil:                   │
 │      1. resolveContext: keep topic messages + DMs (topicId=0)    │
-│      2. KV tg:{tgId} → clerkUserId   (drop unknown)              │
+│      2. tgId → clerkUserId: KV, then TelegramAccountDO on a miss │
+│         (drop unknown)                                           │
 │      3. UserDO.enqueueTurn { updateId, clerkUserId,             │
 │                              chatId, topicId, text }             │
 │         (dedupe on processed_updates, store user message,        │
@@ -140,8 +142,8 @@ onboarding agents still use the single-`prompt` path.
 ## State Model
 
 Per-user data lives in a `UserDO` Durable Object (source of truth, SQLite via
-[do-orm](https://github.com/juanibiapina/do-orm)); Workers KV holds only the
-Telegram→Clerk reverse lookup used to route incoming messages.
+[do-orm](https://github.com/juanibiapina/do-orm)); Workers KV holds only a cache
+of the Telegram→Clerk reverse lookup used to route incoming messages.
 
 ### KV (bootstrap)
 
@@ -149,8 +151,11 @@ Telegram→Clerk reverse lookup used to route incoming messages.
 |-------------------|----------------|---------------------------|--------------------------|
 | `tg:{telegramId}` | `clerkUserId`  | `POST /api/telegram-link` | webhook (route messages) |
 
-The `tg:` reverse lookup is the only way to resolve a Telegram user ID to a
-Clerk user ID; it is kept in sync by the link/unlink routes.
+This entry is a cache of `TelegramAccountDO`, which is the authoritative record
+of which Clerk user a Telegram account belongs to and answers whenever KV misses
+(KV's per-colo negative caching would otherwise hide a fresh link for a minute).
+Both stores are behind `telegram/identity.ts` and are kept in sync by the
+link/unlink routes. See [`telegram-login.md`](telegram-login.md).
 
 ### UserDO (per-user, addressed by `idFromName(clerkUserId)`)
 
@@ -169,15 +174,17 @@ Clerk user ID; it is kept in sync by the link/unlink routes.
 | `files`             | `id`, `storageKey`, `filename`, `mimeType`, `byteSize`, `createdAt` | User-owned file metadata (bytes live in R2) |
 | `processed_updates` | `updateId`, `createdAt`                                       | Webhook idempotency                            |
 
-The `telegram_link` table is the source of truth for the Clerk↔Telegram mapping.
-`GET /api/telegram-id` reads directly from the DO; the KV `tg:` entry is a
-denormalized reverse index synced on write.
+The `telegram_link` table is the source of truth for the Clerk→Telegram
+direction. `GET /api/telegram-id` reads directly from the DO. The reverse
+direction is owned by `TelegramAccountDO`, with the KV `tg:` entry as its cache;
+both are synced on write.
 
 ## Durable Objects
 
 | DO | Purpose | Storage |
 |---|---|---|
 | **UserDO** | Per-user data store and turn runner. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, settings, and the topic model, and runs the two-phase agent turn on a DO alarm. | SQLite via do-orm |
+| **TelegramAccountDO** | One instance per Telegram account (`idFromName(telegramId)`). Owns that account's claim on a Zero user, and answers the webhook's lookup whenever the KV cache misses. | `ctx.storage` (one key) |
 
 ## Routes
 
@@ -234,7 +241,8 @@ immediately. The background task:
 
 1. `resolveContext` keeps topic messages, and maps any other private, group or
    supergroup chat to topicId=0; channel posts are dropped.
-2. KV `tg:{telegramId}` → `clerkUserId`; drop the message if unknown.
+2. Resolve `telegramId` → `clerkUserId` (KV cache, `TelegramAccountDO` on a
+   miss); drop the message if neither knows it.
 3. For any downloadable file under 5 MB, the route resolves Telegram's file,
    downloads the bytes, and hands canonical metadata plus bytes to UserDO.
 4. `UserDO.enqueueTurn` saves through `UserFileStore`, appends the canonical

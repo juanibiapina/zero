@@ -9,11 +9,10 @@
 
 import { log } from "../log";
 import type { TopicContext } from "../telegram/context";
+import { resolveClerkUserId } from "../telegram/identity";
 import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
 import type { SendReplyFn } from "./new";
-
-const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
 // The web app's origin. agent-api has no web-URL binding and adding one for a
 // single string is not worth it; this matches wrangler.jsonc's route.
@@ -34,7 +33,7 @@ export const processStartCommand = async (
   updateId: string,
   chatType: string,
 ): Promise<void> => {
-  const clerkUserId = await env.KV.get(tgKey(ctx.telegramId));
+  const clerkUserId = await resolveClerkUserId(env, ctx.telegramId);
   if (!clerkUserId) {
     log("start_command", { linked: false, chat_type: chatType });
     await deps.sendReply(ctx.chatId, ctx.topicId, SIGN_IN_REPLY);

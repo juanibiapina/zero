@@ -1,9 +1,10 @@
 // Clerk-authed routes for the signed-in user's settings.
 //
-// Telegram link data lives in the UserDO (one instance per Clerk user).
-// The only KV entry is the reverse lookup `tg:{telegramId} → clerkUserId`,
-// kept in sync so the Telegram webhook can bootstrap without knowing the
-// Clerk user ID.
+// Telegram link data lives in the UserDO (one instance per Clerk user). The
+// reverse direction (Telegram account → Clerk user) is owned by
+// telegram/identity.ts, which keeps the authoritative TelegramAccountDO and
+// the KV cache in sync so the Telegram webhook can bootstrap without knowing
+// the Clerk user ID.
 
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
@@ -12,6 +13,10 @@ import {
   TelegramAuthPayloadSchema,
   verifyTelegramAuth,
 } from "../telegram-auth";
+import {
+  linkTelegramAccount,
+  unlinkTelegramAccount,
+} from "../telegram/identity";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
 import { isValidTimezone } from "../timezone";
@@ -23,8 +28,6 @@ type Variables = {
 const TelegramIdSchema = z.object({
   telegramId: z.string().nullable(),
 });
-
-const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
 
 export const createUserSettingsRoutes = () => {
@@ -91,11 +94,8 @@ export const createUserSettingsRoutes = () => {
     const userDO = getUserDO(c.env, clerkUserId);
     const { previous } = await userDO.linkTelegram(telegramId);
 
-    // Sync the reverse KV lookup for the webhook
-    if (previous && previous !== telegramId) {
-      await c.env.KV.delete(tgKey(previous));
-    }
-    await c.env.KV.put(tgKey(telegramId), clerkUserId);
+    // Claim the account (authoritative) and refresh the webhook's cache.
+    await linkTelegramAccount(c.env, telegramId, clerkUserId, previous);
 
     log("telegram_linked", {
       clerk_user_id: clerkUserId,
@@ -123,7 +123,7 @@ export const createUserSettingsRoutes = () => {
     const { removed } = await userDO.unlinkTelegram();
 
     if (removed) {
-      await c.env.KV.delete(tgKey(removed));
+      await unlinkTelegramAccount(c.env, removed);
     }
 
     log("telegram_unlinked", { clerk_user_id: clerkUserId });

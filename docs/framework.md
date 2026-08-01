@@ -177,13 +177,14 @@ per-user + per-agent `cf-aig-metadata`). The tool loop itself is Zero's
 
 ## State
 
-Identity links live in Workers KV; conversation and knowledge state lives in the
-per-user `UserDO` SQLite.
+Identity links are cached in Workers KV and owned by Durable Objects
+(`UserDO` for the Clerk side, `TelegramAccountDO` for the Telegram side);
+conversation and knowledge state lives in the per-user `UserDO` SQLite.
 
 | Key | Value | Written by | Read by |
 |---|---|---|---|
 | `clerk:{clerkUserId}` | `telegramId` | `PUT /api/telegram-id` | `GET /api/telegram-id` |
-| `tg:{telegramId}` | `clerkUserId` | `PUT /api/telegram-id` | webhook |
+| `tg:{telegramId}` | `clerkUserId` | `POST /api/telegram-link` | webhook (cache; falls back to `TelegramAccountDO`) |
 
 Conversations and topics are keyed by `(chatId, topicId)` inside `UserDO`; there
 are no per-session KV keys.

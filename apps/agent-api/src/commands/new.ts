@@ -4,10 +4,9 @@
 
 import { log } from "../log";
 import type { TopicContext } from "../telegram/context";
+import { resolveClerkUserId } from "../telegram/identity";
 import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
-
-const tgKey = (telegramId: string) => `tg:${telegramId}`;
 
 export type SendReplyFn = (
   chatId: number,
@@ -20,11 +19,8 @@ export const processNewCommand = async (
   env: Env,
   sendReply: SendReplyFn,
 ): Promise<void> => {
-  const clerkUserId = await env.KV.get(tgKey(ctx.telegramId));
-  if (!clerkUserId) {
-    log("drop_unknown_telegram_id", { telegram_id: ctx.telegramId });
-    return;
-  }
+  const clerkUserId = await resolveClerkUserId(env, ctx.telegramId);
+  if (!clerkUserId) return;
 
   const userDO = getUserDO(env, clerkUserId);
   await userDO.resetConversation(ctx.chatId, ctx.topicId);

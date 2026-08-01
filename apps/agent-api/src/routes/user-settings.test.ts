@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OpenAPIHono } from "@hono/zod-openapi";
 
 import type { UserDO } from "../UserDO/index";
+import { fakeAccountNamespace } from "../telegram/test-support";
 
 // ---------------------------------------------------------------------------
 // Mock only the auth verification, not the schema
@@ -99,7 +100,12 @@ const fakeAnalytics = () => ({
   writeDataPoint: vi.fn(),
 });
 
-const fakeEnv = (kv: ReturnType<typeof fakeKV>, userDO?: UserDOStub, analytics?: ReturnType<typeof fakeAnalytics>) => {
+const fakeEnv = (
+  kv: ReturnType<typeof fakeKV>,
+  userDO?: UserDOStub,
+  analytics?: ReturnType<typeof fakeAnalytics>,
+  accounts: ReturnType<typeof fakeAccountNamespace> = fakeAccountNamespace(),
+) => {
   return {
     KV: kv,
     TELEGRAM_BOT_TOKEN: "test-bot-token",
@@ -108,6 +114,7 @@ const fakeEnv = (kv: ReturnType<typeof fakeKV>, userDO?: UserDOStub, analytics?:
       idFromName: (_name: string) => ({ toString: () => "fake-id" }),
       get: () => userDO ?? createFakeUserDO(),
     },
+    TELEGRAM_ACCOUNT_DO: accounts.namespace,
   } as unknown as Env;
 };
 
@@ -161,10 +168,11 @@ describe("GET /api/telegram-id", () => {
 });
 
 describe("POST /api/telegram-link", () => {
-  it("links telegram via DO and writes tg: KV entry", async () => {
+  it("links telegram via DO, claims the account and writes tg: KV entry", async () => {
     const kv = fakeKV();
     const userDO = createFakeUserDO();
-    const env = fakeEnv(kv, userDO);
+    const accounts = fakeAccountNamespace();
+    const env = fakeEnv(kv, userDO, undefined, accounts);
     const app = buildApp(env, "user_abc");
 
     vi.mocked(verifyTelegramAuth).mockResolvedValue(true);
@@ -179,12 +187,14 @@ describe("POST /api/telegram-link", () => {
     expect(await res.json()).toEqual({ telegramId: "12345" });
     expect(userDO.getTelegramId()).toBe("12345");
     expect(kv._store.get("tg:12345")).toBe("user_abc");
+    expect(accounts.state.get("12345")).toBe("user_abc");
   });
 
-  it("cleans up old tg: entry when re-linking", async () => {
+  it("cleans up the old account and tg: entry when re-linking", async () => {
     const kv = fakeKV({ "tg:111": "user_abc" });
     const userDO = createFakeUserDO("111");
-    const env = fakeEnv(kv, userDO);
+    const accounts = fakeAccountNamespace({ "111": "user_abc" });
+    const env = fakeEnv(kv, userDO, undefined, accounts);
     const app = buildApp(env, "user_abc");
 
     vi.mocked(verifyTelegramAuth).mockResolvedValue(true);
@@ -198,6 +208,8 @@ describe("POST /api/telegram-link", () => {
     expect(res.status).toBe(200);
     expect(kv._store.has("tg:111")).toBe(false);
     expect(kv._store.get("tg:222")).toBe("user_abc");
+    expect(accounts.state.get("111")).toBeUndefined();
+    expect(accounts.state.get("222")).toBe("user_abc");
   });
 
   it("rejects invalid auth", async () => {
@@ -219,10 +231,11 @@ describe("POST /api/telegram-link", () => {
 });
 
 describe("DELETE /api/telegram-id", () => {
-  it("unlinks telegram via DO and removes tg: KV entry", async () => {
+  it("unlinks telegram via DO and clears both stores", async () => {
     const kv = fakeKV({ "tg:12345": "user_abc" });
     const userDO = createFakeUserDO("12345");
-    const env = fakeEnv(kv, userDO);
+    const accounts = fakeAccountNamespace({ "12345": "user_abc" });
+    const env = fakeEnv(kv, userDO, undefined, accounts);
     const app = buildApp(env, "user_abc");
 
     const res = await app.request("/api/telegram-id", { method: "DELETE" });
@@ -231,6 +244,7 @@ describe("DELETE /api/telegram-id", () => {
     expect(await res.json()).toEqual({ telegramId: null });
     expect(userDO.getTelegramId()).toBeNull();
     expect(kv._store.has("tg:12345")).toBe(false);
+    expect(accounts.state.get("12345")).toBeUndefined();
   });
 
   it("returns null when nothing was linked", async () => {
