@@ -149,7 +149,7 @@ the effect re-runs and the page loads without a manual refresh.
 1. **Org gate in `AppLayout`** (`packages/ui/src/components/AppLayout.tsx`):
    - Inside the existing `<SignedIn>` branch, read org state with Clerk's
      `useOrganization()` (`isLoaded`, `organization`). Import `CreateOrganization`
-     from `@clerk/react`.
+     from `@clerk/clerk-react`.
    - Branch:
      - while `!isLoaded` → render a minimal centered "Loading…" placeholder (do
        not render the data `<Outlet>` yet, to avoid the 403 race).
@@ -202,7 +202,7 @@ it can import `AppLayout` from `@zero/ui`). Avoid adding a second setup to
   `@zero/dashboard-web#build`, so a real `test` script is picked up by CI).
 - Add a `vitest.config.ts` with `environment: "jsdom"` and a setup file importing
   `@testing-library/jest-dom`.
-- Mock `@clerk/react` so tests control org state: `SignedIn` renders children,
+- Mock `@clerk/clerk-react` so tests control org state: `SignedIn` renders children,
   `SignedOut` renders nothing, `useOrganization` returns a controllable
   `{ isLoaded, organization }`, and `CreateOrganization` renders an identifiable
   stub (e.g. `<div>create-organization</div>`). `useAuth` returns a stub `getToken`.

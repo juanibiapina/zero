@@ -238,7 +238,7 @@ app's `brand.to` / `afterOrgUrl`).
 **File: `packages/ui/src/pages/SignInPage.tsx`**
 
 ```tsx
-import { SignIn } from "@clerk/react";
+import { SignIn } from "@clerk/clerk-react";
 
 export interface SignInPageProps {
   /** Where to land after sign-in when the URL carries no explicit redirect_url. */
@@ -262,7 +262,7 @@ export function SignInPage({ fallbackRedirectUrl }: SignInPageProps = {}) {
 **File: `packages/ui/src/pages/SignUpPage.tsx`**
 
 ```tsx
-import { SignUp } from "@clerk/react";
+import { SignUp } from "@clerk/clerk-react";
 
 export interface SignUpPageProps {
   /** Where to land after sign-up when the URL carries no explicit redirect_url. */

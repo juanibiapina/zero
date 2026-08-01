@@ -88,7 +88,7 @@ nits are already folded in below, so read this file, not that one.
 - **Testing patterns** (`src/test/*.test.tsx`, vitest 4 + jsdom 30 +
   @testing-library/react 16, `src/test/setup.ts` only wires jest-dom and
   `cleanup`):
-  - mock `@clerk/react` with **stable** `getToken`/`organization`
+  - mock `@clerk/clerk-react` with **stable** `getToken`/`organization`
     references (a fresh `getToken` per render churns the hook deps and refetches
     in a loop);
   - mock only the page's own API module (`@/products/vault/lib/api`,
@@ -235,7 +235,7 @@ worse locality.
 ## Tests
 
 All in `apps/dashboard-web/src/test/`, plain vitest + jsdom, following the
-patterns listed above. Mock the page's API module, `@clerk/react`, and
+patterns listed above. Mock the page's API module, `@clerk/clerk-react`, and
 `toast`; the real `ConfirmDialog` runs.
 
 **Per site, four site-specific tests:**

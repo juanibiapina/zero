@@ -494,7 +494,7 @@ Resolve/Reopen button; the delete's in-flight state lives in the dialog.
 **Local on this box (no workerd):**
 
 `apps/dashboard-web` vitest (jsdom). Tests go through the page, mocking only
-`@/products/errors/lib/api`, `@clerk/react`, and the `toast` export,
+`@/products/errors/lib/api`, `@clerk/clerk-react`, and the `toast` export,
 following the existing `ProjectsPage`/`KeysPage` test shape.
 
 Toast handling: a page rendered without `AppLayout` has no `<Toaster />`, so

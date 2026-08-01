@@ -71,7 +71,7 @@ value, the DO, and both HTTP surfaces stay exactly as they are.
   optional guide). Do not reintroduce Cloudflare-first phrasing.
 - `apps/dashboard-web` has a vitest + jsdom harness (`vitest.config.ts`,
   `src/test/setup.ts`, `ProjectsPage.test.tsx`) with a working pattern for
-  mocking `@clerk/react` with stable hook return values.
+  mocking `@clerk/clerk-react` with stable hook return values.
 
 **Current shipped user-facing key-acquisition paths.**
 
@@ -538,7 +538,7 @@ not a break.
 ### What the dashboard-web vitest + jsdom harness covers
 
 `apps/dashboard-web/src/test/KeysPage.test.tsx` (mock `@/account/lib/api` and
-`@clerk/react` with stable hook returns, following `ProjectsPage.test.tsx`):
+`@clerk/clerk-react` with stable hook returns, following `ProjectsPage.test.tsx`):
 
 - Empty state renders the product-neutral copy and **both** doc links, asserting
   the two `href`s (`/vault/loading-secrets/` and `/errors/getting-started/`),
@@ -580,7 +580,7 @@ one a confirmed reason the naive version does not run:
    exactly one node, and queries scope with `within(...)`. A bare
    `getByRole("link", { name: "API keys" })` matches twice and throws.
 
-Also mock `@clerk/react` so `ClerkProvider` and `SignedIn` pass through,
+Also mock `@clerk/clerk-react` so `ClerkProvider` and `SignedIn` pass through,
 `SignedOut` renders nothing, `UserButton`/`OrganizationSwitcher` are stubs, and
 `useOrganization` returns a loaded org.
 
