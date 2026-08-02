@@ -132,10 +132,12 @@ migration and no per-user seeding.
    `[YYYY-MM-DD HH:MM]` timestamp, a model response with its content blocks
    verbatim (tool calls included), a tool-result row as the `user` turn the wire
    format expects. Sending back the same bytes the model produced is what makes
-   the prefix cacheable across turns. Leading assistant messages are dropped, and
-   consecutive same-role turns are coalesced.
-   Instructions, the datetime anchor, and pinned topics stay in the system
-   prompt; only the dialogue is in the messages array. Tools (`tools/topics.ts`):
+   the prefix cacheable across turns. Nothing is merged, reordered or dropped:
+   one stored row is one wire message, including a leading assistant turn and
+   consecutive same-role turns, both of which the API accepts.
+   Instructions and pinned topics stay in the system prompt; the current time,
+   timezone and country ride on the latest user message, and everything else is
+   dialogue in the messages array.
    There is **no `reply` tool**. The assistant's own text blocks are the
    messages: the runner delivers each one (persist, then send) as the model
    produces it, before that step's tools run, so a turn that acknowledges and
@@ -152,7 +154,7 @@ migration and no per-user seeding.
    - `delete_topic` — permanently remove a topic. Interface-agent only (not in
      the shared `buildTopicTools`, so the learner and research agents cannot
      delete),
-     and the prompt gates it on explicit user confirmation. Deleting a topic
+     and its tool description gates it on explicit user confirmation. Deleting a topic
      drops its own outbound link rows; inbound links from other bodies keep
      their `[[Name]]` text and become dangling, re-resolving if a topic of that
      name is recreated. Bodies of other topics are left untouched.

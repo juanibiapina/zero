@@ -70,13 +70,24 @@ describe("interfaceSystemPrompt", () => {
     expect(prompt).not.toContain("Current time:");
     expect(prompt).not.toContain("The user's timezone is");
     expect(prompt).not.toContain("your country code is");
-    expect(prompt).toContain("given with the\nlatest user message");
   });
 
-  it("asks for set_country instead of guessing the country from the timezone", () => {
+  // A budget, not a measurement. The prompt is paid for on every turn and its
+  // last three quarters are the shared topic-write rules, so anything the
+  // interface adds about itself has to earn room. Most of what used to sit here
+  // restated a tool description or told an assistant how to be an assistant;
+  // this ceiling is what stops that coming back one sentence at a time.
+  it("stays small: instructions the tools and the Zero topic do not already carry", () => {
+    expect(interfaceSystemPrompt().length).toBeLessThan(4000);
+  });
+
+  it("says nothing the tool descriptions and tool errors already say", () => {
     const prompt = interfaceSystemPrompt();
-    expect(prompt).toContain("do not\ninfer it from the timezone");
-    expect(prompt).toContain("call set_country");
+    // Schedules, Google and the file send/delete gates live on the tools.
+    expect(prompt).not.toContain("create_schedule");
+    expect(prompt).not.toContain("Gmail");
+    expect(prompt).not.toContain("set_country");
+    expect(prompt).not.toContain("set_timezone");
   });
 
   it("folds pinned topics onto the tail when present, absent when empty", () => {
@@ -90,13 +101,6 @@ describe("interfaceSystemPrompt", () => {
     const prompt = interfaceSystemPrompt();
     expect(prompt).toContain("read_page");
     expect(prompt).toContain("research");
-  });
-
-  it("describes research as read-only context gathering that returns findings", () => {
-    const prompt = interfaceSystemPrompt();
-    expect(prompt).toContain("Research reads topics");
-    expect(prompt).toContain("another agent saves them");
-    expect(prompt).not.toContain("reads and writes topics");
   });
 });
 

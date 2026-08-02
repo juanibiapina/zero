@@ -54,7 +54,8 @@ silently move every schedule the user already has. `set_timezone` plus
 re-creating the schedule is the fix.
 
 Cron's day-of-month/day-of-week field pair fires on *either*, which is a
-standard footgun; the interface prompt tells the model to leave one as `*`.
+standard footgun. Nothing in the prompt or the tool schema warns about it;
+a schedule caught firing on the wrong days is cancelled and re-created.
 
 ## Why croner
 

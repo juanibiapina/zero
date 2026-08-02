@@ -50,8 +50,8 @@ deliver the same mail twice. See the external-call claim in `docs/topics.md`.
 ## Tools
 
 Reads need no confirmation. `gmail_send` and `calendar_create_event` are
-side-effecting and irreversible; the interface prompt requires explicit user
-confirmation of the exact content before either runs.
+side-effecting and irreversible; their own tool descriptions require explicit
+user confirmation of the exact content before either runs.
 
 - `gmail_search(query)` — Gmail query syntax; returns thread
   id/date/sender/subject/snippet.

@@ -84,10 +84,11 @@ pinned topics) inside the system text. Because `system` precedes `messages`, the
 per-minute time alone invalidated the history cache every turn, and the timezone
 blocked cross-user sharing. So we split stable from volatile:
 
-- **Static system head (cached, cross-user):** instructions only, generic
-  wording. It refers to the current time and timezone as "given with the latest
-  user message" rather than embedding them. See `interfaceSystemPrompt` in
-  `agents/prompts.ts`.
+- **Static system head (cached, cross-user):** instructions only, and no
+  volatile value of any kind. It does not mention the current time, the timezone
+  or the country at all; `interfaceContext` states them in plain English on the
+  latest user message, where they sit after the cached prefix. See
+  `interfaceSystemPrompt` in `agents/prompts.ts`.
 - **Pinned topics** are per-user, so they are a **separate block** after the
   static instructions, carrying their own breakpoint (`systemTail` in
   `runAgent`, built by `cachedSystem`). The cross-user share is the instructions

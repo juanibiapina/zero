@@ -125,8 +125,9 @@ real multi-turn conversation (`buildConversationMessages` in
 `agents/interface.ts`), not a single flattened blob. The split is deliberate:
 
 - **System prompt** carries everything that is instruction or stable reference,
-  not a turn: agent instructions, the datetime anchor, and the pinned-topics
-  block.
+  not a turn: agent instructions and the pinned-topics block. The datetime
+  anchor is not there; it is volatile, so it rides on the current user message
+  (see `docs/caching.md`).
 - **`messages`** carries only the Telegram dialogue: each stored user/assistant
   message as a native turn, ending with the current user message. The tool loop
   appends the assistant response and one `tool_result` turn per step during the
