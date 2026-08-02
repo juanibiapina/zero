@@ -107,5 +107,5 @@ non-2xx and network errors.
   outcome untouched.
 - `routes/onboarding.test.ts` — enqueue returns 202 and is idempotent.
 
-No e2e change: the e2e mock Anthropic issues no tool calls, so onboarding does
+No e2e change: the e2e mock LLM issues no tool calls, so onboarding does
 not fire there.

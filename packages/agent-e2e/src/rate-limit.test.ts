@@ -10,8 +10,8 @@ const RATE_LIMIT_MESSAGE =
 const WORKER_URL = process.env.WORKER_URL ?? "http://localhost:8791";
 const MOCK_TELEGRAM_URL =
   process.env.MOCK_TELEGRAM_URL ?? "http://localhost:3501";
-const MOCK_ANTHROPIC_URL =
-  process.env.MOCK_ANTHROPIC_URL ?? "http://localhost:3502";
+const MOCK_OPENAI_URL =
+  process.env.MOCK_OPENAI_URL ?? "http://localhost:3502";
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 
 describe("rate limit", () => {
@@ -25,12 +25,12 @@ describe("rate limit", () => {
 
   afterEach(async () => {
     // Reset the mock so other tests see normal responses.
-    await fetch(`${MOCK_ANTHROPIC_URL}/test/mode`, { method: "DELETE" });
+    await fetch(`${MOCK_OPENAI_URL}/test/mode`, { method: "DELETE" });
   });
 
   it("tells the user when the model is rate limited", async () => {
-    // 1. Put the mock Anthropic server into 429 mode and clear mock Telegram.
-    await fetch(`${MOCK_ANTHROPIC_URL}/test/mode`, {
+    // 1. Put the mock OpenAI server into 429 mode and clear mock Telegram.
+    await fetch(`${MOCK_OPENAI_URL}/test/mode`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode: "rate_limit" }),
@@ -54,7 +54,7 @@ describe("rate limit", () => {
     });
     expect(res.status).toBe(200);
 
-    // 3. Poll for the reply. The worker's Anthropic client retries the 429
+    // 3. Poll for the reply. The worker's OpenAI client retries the 429
     // twice (maxRetries: 2) with backoff before surfacing, so allow extra time
     // over hello.test.ts.
     const message = await pollForMessage(MOCK_TELEGRAM_URL, {

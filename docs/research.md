@@ -173,5 +173,5 @@ gap on demand. The `WebSearch` and `PageFetcher` ports are the swap points:
 
 ## e2e
 
-The e2e mock Anthropic returns canned text and never issues tool calls, so
+The e2e mock LLM returns canned text and never issues tool calls, so
 `research` never fires in e2e and no real search call is made.

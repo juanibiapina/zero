@@ -35,8 +35,8 @@ echo "=== Starting mock Telegram API on :3501 ==="
 pnpm exec tsx packages/agent-e2e/src/mock-telegram.ts &
 PIDS+=($!)
 
-echo "=== Starting mock Anthropic API on :3502 ==="
-pnpm exec tsx packages/agent-e2e/src/mock-anthropic.ts &
+echo "=== Starting mock OpenAI API on :3502 ==="
+pnpm exec tsx packages/agent-e2e/src/mock-openai.ts &
 PIDS+=($!)
 
 echo "=== Starting wrangler dev (test config) on :8791 ==="

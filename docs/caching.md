@@ -1,63 +1,66 @@
 # Prompt caching
 
-> **Out of date as of 2026-08-02.** Zero moved to `gpt-5.6-luna` on the OpenAI
-> Responses API, whose caching rules differ from what this document describes:
-> breakpoints are explicit (`prompt_cache_options.mode: "explicit"`, marker
-> `prompt_cache_breakpoint`), only input blocks can carry one (so tools no longer
-> do and the anchor sits on the last user message), there is a single 30m TTL,
-> the budget is four cache writes per request, and routing needs a shared
-> `prompt_cache_key`. The divergence diagnostics below are gone; the log line is
-> now `cache_stats`. See `docs/plans/openai-gpt56-luna.md` until this document is
-> rewritten.
-
-Zero caches the stable prefix of every LLM call so Anthropic bills it at ~0.1x
-on reads instead of re-billing the full system prompt, tool schemas, and history
-on every tool-loop step and every turn. This doc explains the three reuse tiers,
-the breakpoint layout, and the production playbook that validates each tier.
+Zero caches the stable prefix of every LLM call so the provider bills it at a
+fraction of the input price on reads, instead of re-billing the full system
+prompt, tool schemas, and history on every tool-loop step and every turn. This
+doc explains the three reuse tiers, the breakpoint layout, and the production
+playbook that validates each tier.
 
 A misplaced breakpoint is silent: the request still succeeds, you just pay full
 price. So caching is only "done" once production telemetry shows the expected
 reads for each tier (see [Production validation](#production-validation)).
 
-## How Anthropic prompt caching works
+Zero runs on `gpt-5.6-luna` (OpenAI Responses API) since 2026-08-02. Everything
+below describes that API. Sections dated before then were measured on
+`claude-sonnet-4-6` and are kept as history, marked where they are no longer
+literally true.
 
-- **Prefix-based.** Up to **4 `cache_control` breakpoints** per request. Each
-  marks the end of a cacheable segment; a later request sharing the
-  byte-identical prefix up to that marker reads it from cache. Any change earlier
-  in the prefix invalidates everything after it.
-- **Cache order is `tools` -> `system` -> `messages`.** Anthropic caches over
-  that serialized prefix, so volatile content early (e.g. in `system`) kills
-  caching of everything after it.
-- **TTL:** 5 minutes default, 1 hour optional (`ttl: '1h'`, higher write
-  premium; no beta header needed). Refreshed on every hit. The response splits
-  writes by tier in `cache_creation.ephemeral_5m/1h_input_tokens`, so a TTL-tier
-  check does not need separate requests.
-- **Placement.** Zero sets `cache_control` on the exact block it means: the last
-  tool definition, the system text block, and a message's last content block.
-  The API also accepts a top-level `cache_control` request param that
-  auto-marks the last cacheable block; that is one breakpoint at the end of the
-  prompt, not a substitute for Zero's four.
-- **Min cacheable length:** 1024 tokens for Sonnet 4.x. Our system+tools exceed
-  this comfortably; shorter prefixes silently no-op.
-- **Thinking blocks cannot carry a breakpoint.** Anthropic rejects
-  `cache_control` on a `thinking` or `redacted_thinking` block; they are cached
-  implicitly with the prefix around them and are billed as input when read back.
-  `markCacheBreakpoint` therefore leaves a message ending on one unmarked (a
-  response cut off mid-thinking is exactly that shape).
-- **The thinking configuration and the resolved effort are rendered into the
-  prompt.** Changing either starts a new cache prefix. Measured 2026-08-01: a
-  request sending no `effort` and one sending `effort: "high"` both read the same
-  1,443-token cached prefix, while `effort: "medium"` rewrote all of it. That is
-  also the proof that omitting `effort` *is* `high`.
-- **Scope:** keyed on the Anthropic org/key. We run BYOK through one gateway key,
-  so an identical prefix is **shared across all users**. Per-user attribution
-  lives in `cf-aig-metadata` headers, which do not affect the request body, so
-  cross-user prefix sharing is intact.
+## How prompt caching works here
 
-Cache writes cost 1.25x (5m) or 2x (1h) of input price; reads cost ~0.1x. A net
-win requires reuse. Keep the AI Gateway's own **response caching off** — our
-requests are never byte-identical (history grows, tools run), and stale full
-responses would be wrong. Prompt caching is the right layer.
+- **Prefix-based.** A cached entry is a prompt prefix ending at a **breakpoint**.
+  A later request sharing the byte-identical prefix up to that marker reads it
+  from cache. Any change earlier in the prefix invalidates everything after it.
+- **Cache order is `tools` -> `instructions`/system -> `input`.** Volatile
+  content early in that order kills caching of everything after it.
+- **Breakpoints are explicit.** Zero sends `prompt_cache_options: { mode:
+  "explicit" }`, which disables the implicit breakpoint the service would
+  otherwise place on the latest message, and marks its own with
+  `prompt_cache_breakpoint: { mode: "explicit" }`. Implicit mode would pay a
+  cache write on the volatile tail of every single step, for bytes no later
+  request can reuse.
+- **Only an input block can carry a breakpoint** — `input_text`, `input_image`,
+  `input_file`. Never a tool definition, an assistant message, a function call,
+  or a reasoning item. This is why tools carry no marker (the system block's
+  breakpoint covers the tool schemas rendered before it) and why the cross-turn
+  anchor walks back past the previous assistant reply onto the last user message
+  (`anchorIndex` in `agents/interface.ts`, `markCacheBreakpoint` in
+  `agents/cache.ts`).
+- **Budget: 4 cache writes per request.** Breakpoints from earlier turns are
+  read-only — they can match, but the request does not rewrite them. Up to the
+  latest 50 breakpoints in a conversation are considered for reads, and the
+  service reads from the longest matching prefix.
+- **TTL is a single 30m minimum**, set request-wide. There is no per-breakpoint
+  TTL choice, so the `"1h"` argument Zero still passes through `cachedSystem` is
+  inert on this provider (it survives so a rollback to Anthropic keeps its 1h
+  head).
+- **Routing needs `prompt_cache_key`.** It is combined with the prefix hash to
+  route a request to a machine that may hold the entry, and it is required for
+  the reliable matching path. Zero sends `zero:<agent>:v1:<shard>` (see
+  `promptCacheKey` in `agents/model-openai.ts`): shared across users so the
+  cross-user prefix is reusable, namespaced per agent, versioned so a prompt
+  change cannot land on a stale route, and sharded because the provider asks for
+  roughly <=15 requests/minute per key. Raise `SHARDS` when traffic grows.
+- **Min cacheable length:** 1024 tokens. Shorter prefixes silently no-op, which
+  is why a toy probe shows zero reads and proves nothing.
+- **Scope:** keyed on the provider account. Zero runs one BYOK key through one
+  gateway, so an identical prefix is **shared across all users**. Per-user
+  attribution lives in `cf-aig-metadata` headers, which are not part of the
+  request body, so cross-user prefix sharing is intact.
+
+Cache writes cost 1.25x the uncached input rate; reads cost 0.1x. A net win
+requires reuse. Keep the AI Gateway's own **response caching off** — our requests
+are never byte-identical (history grows, tools run), and stale full responses
+would be wrong. Prompt caching is the right layer.
 
 ## The three reuse tiers
 
@@ -65,7 +68,7 @@ responses would be wrong. Prompt caching is the right layer.
    fixed across the loop's steps; only assistant/tool messages append. Every step
    after the first reads the prefix from cache. Biggest win on tool-heavy turns
    (research, calendar).
-2. **Across users.** `tools` + the static part of every agent's `system` are
+2. **Across users.** `tools` + the static head of every agent's `system` are
    byte-identical for all users, so high traffic keeps this shared prefix warm
    and nearly every call reads it.
 3. **Across turns for one user.** Conversation history is an append-only,
@@ -85,11 +88,12 @@ blocked cross-user sharing. So we split stable from volatile:
   wording. It refers to the current time and timezone as "given with the latest
   user message" rather than embedding them. See `interfaceSystemPrompt` in
   `agents/prompts.ts`.
-- **Pinned topics** are per-user, so they are folded onto the **tail** of the
-  static system text (instructions first, pinned last). The one system breakpoint
-  covers both; the cross-user share is the instructions prefix, and the pinned
-  tail re-bills only when pins change. The 4-breakpoint budget leaves no
-  dedicated breakpoint for pinned.
+- **Pinned topics** are per-user, so they are a **separate block** after the
+  static instructions, carrying their own breakpoint (`systemTail` in
+  `runAgent`, built by `cachedSystem`). The cross-user share is the instructions
+  block; a change to one user's pins re-bills only the pinned block, never the
+  shared head. Freeing tools from a breakpoint is what paid for this: the budget
+  is still four.
 - **Volatile tail (uncached):** the datetime anchor and timezone
   (`interfaceContext` in `prompts.ts`) are prepended to the **current** user
   message, so they sit after the cached history prefix and never invalidate it.
@@ -98,24 +102,23 @@ blocked cross-user sharing. So we split stable from volatile:
 
 In cache order:
 
-1. **Last tool** — `ttl: '1h'`. Caches all tool schemas; shared across users.
-   Marked by `markLastTool` in `runAgent`, which sets `cache_control` directly
-   on the last tool definition.
-2. **Static system head (pinned folded onto its tail)** — `ttl: '1h'`.
-   Instructions shared across users; pinned tail makes the block per-user,
-   cross-turn while unchanged. Injected by `cachedSystem` in `runAgent`, which
-   sends `system` as a text block carrying `cache_control`.
-3. **Cross-turn anchor: last stable history message** — default 5m. The previous
-   turn's final block; byte-identical next turn, so this is the write that
-   produces the cross-turn history read. Set by `interface.ts`; omitted when
-   history is empty.
-4. **Loop-owned sliding tail** — default 5m. Owned by `runAgent`, not the
-   caller: before every step it marks the **last message of a per-request
-   snapshot** (`slideMessageBreakpoint` in `cache.ts`), advancing the breakpoint
-   to the new tail as the tool loop appends steps. This keeps a cache write
-   within Anthropic's 20-block lookback of the growing tail, so step N reads
-   everything through step N-1 and writes only the delta. The persisted messages
-   are never mutated, so no breakpoints accumulate.
+1. **Static system head** — instructions only, byte-identical across users, and
+   its breakpoint also covers every tool schema (tools are rendered before it and
+   cannot carry a marker of their own). Emitted by `cachedSystem` in `runAgent`.
+2. **Per-user system tail** — the pinned topics. Per-user, stable across turns
+   while the pins do not change.
+3. **Cross-turn anchor: last stable history message** — the last message before
+   the current one that can carry a marker, which in a normal turn is the
+   previous **user** message (the assistant reply in between cannot carry one).
+   It is byte-identical next turn, so this is the write that produces the
+   cross-turn history read. Set by `interface.ts`; omitted when history is empty.
+4. **Loop-owned sliding tail** — owned by `runAgent`, not the caller: before
+   every step it marks the tail of a per-request snapshot
+   (`slideMessageBreakpoint` in `cache.ts`), advancing to the new tail as the
+   tool loop appends steps, and walking back if the tail is an assistant message
+   (a resumed run). Step N therefore reads everything through step N-1 and writes
+   only the delta. The persisted messages are never mutated, so no breakpoints
+   accumulate.
 
 Breakpoints 3 and 4 form a **sliding window**. The cross-turn win requires a
 write at a byte-stable end-of-history boundary. A single breakpoint on the
@@ -125,84 +128,42 @@ it is never re-read. The stable-message anchor is what yields the cross-turn
 read; the loop's sliding tail keeps the newest turn (and every appended tool
 step) warm for the within-run loop.
 
-Empirically verified (live, BYOK key, `claude-sonnet-4-6`, two-turn
-conversation):
+Measured on Anthropic in 2026-07, and the reason the layout is shaped this way
+(the mechanism is prefix matching on both providers):
 
 - Breakpoint **on the volatile current message**: turn 1 write=1613 read=0; turn
   2 write=4823 read=0. Zero cross-turn reuse.
 - Breakpoint **on the last stable block** (this layout): turn 1 write=1611
   read=0; turn 2 write=10 read=1611. Full cross-turn hit.
 
-TTL rationale: 1h on the shared static head is cheap because cross-user traffic
-keeps it warm and the 2x write premium amortizes over huge read volume; 5m on the
-per-user history segments matches burst cadence and avoids the 1h write premium
-on prefixes that often won't be reused.
-
 The research, learning, and onboarding agents run the same `runAgent` machine, so
 they get tiers 1-2 (cached system + tools) for free. They use the single-`prompt`
-path with no caller anchor, but the loop's sliding tail breakpoint (tier 4) now
-caches their growing message region too: on a multi-step research turn each step
-reads the accumulated context from cache and writes only its delta, instead of
-re-billing the whole conversation at full price every step (the pre-fix defect
-was `cache_read` pinned at the ~1.7k head with `cache_write = 0` across the loop).
-A prompt-only agent thus spends tools + system + one sliding breakpoint (3 of 4);
-the interface agent spends all 4 (tools + system + anchor + sliding).
+path with no caller anchor and no system tail, but the loop's sliding tail
+breakpoint caches their growing message region too: on a multi-step research turn
+each step reads the accumulated context from cache and writes only its delta.
 
-## Cache diagnostics
+## Cache statistics
 
-Every request carries the `cache-diagnosis-2026-04-07` beta, and every request
-names a previous response with `diagnostics.previous_message_id`: within a run
-the run's own previous response, and on a run's first request the response this
-conversation last received, read from the persisted log
-(`messages.responseId`). The response reports how this request's
-prefix diverged from that one. `agents/model.ts` logs a content-free
-`cache_diagnostic` line per response: `agent`, `step` (the zero-based loop
-index), `state`, `chain_crossed_turn` (true only on the first request of a run,
-when the comparison reaches back to an earlier turn), `cache_missed_input_tokens`
-(when the state carries one), plus
-this response's own `input_tokens` (uncached, full-price), `cache_read_tokens`,
-and `cache_write_tokens`. On a working message-region cache, `cache_read_tokens`
-grows step-over-step while `input_tokens` stays small; the broken case shows a
-large constant `input_tokens` and a tiny constant read.
+`agents/model-openai.ts` logs a content-free `cache_stats` line per model call:
+`agent`, `step` (the zero-based loop index), `input_tokens` (uncached,
+full-price), `cache_read_tokens`, `cache_write_tokens`, and `thinking_tokens`
+(reasoning spend, which is inside `output_tokens` and invisible otherwise).
 
-**A miss reason is chain-relative, not a cache miss.** It answers "how does this
-request's prefix differ from the request I named", never "was the cache used".
-A live probe reported `system_changed` with `cache_missed_input_tokens: 940`
-while reading 1466 tokens from cache and writing none. That is why the log line
-carries the read/write counts: they are the cache signal, the state is the
-divergence signal.
+Read it per agent per step. On a working message-region cache,
+`cache_read_tokens` grows step over step within a run while `input_tokens` stays
+small; the broken case is a large constant `input_tokens` with a tiny constant
+read.
 
-States (`state` in the log line):
+Note that the API's reported `input_tokens` **includes** the cached tokens. Zero
+subtracts them (`toUsage` in `agents/openai-wire.ts`) so `input_tokens` in the
+log and in cost accounting means what it says: the part billed at full price.
 
-- `initial`: Zero passed `previous_message_id: null` (first request of a run).
-  The wire returns `diagnostics: null` here, exactly as it does for "no
-  divergence"; the two are told apart locally by what Zero sent.
-- `no_divergence`: a previous id was sent and the prefix matched it.
-- `pending`: the response was serialized before the background comparison
-  finished (`cache_miss_reason: null`).
-- `model_changed`, `system_changed`, `tools_changed`, `messages_changed`: each
-  carries `cache_missed_input_tokens`.
-- `previous_message_not_found`, `unavailable`: no token count.
-
-Small requests still get a miss reason: a tiny request with no system block
-reported `system_changed` with a count of 0. Do not read `initial` as "small
-request".
-
-**Across turns, per conversation.** Now that the conversation is an append-only
-log, turn N+1's prefix genuinely extends turn N's, so the interface agent opens
-its chain on the conversation's last persisted response id and the line says so
-with `chain_crossed_turn: true`. Research and learning pass no previous id of
-their own, so nothing leaks across an agent boundary.
-
-Read a cross-turn line with its known confounders in mind rather than as a fault:
-fingerprints expire well inside the gap between many turns
-(`previous_message_not_found`), and Zero prepends volatile context (the clock) to
-the current user message, so `messages_changed` on a first request is expected by
-construction. What the flag buys is the ability to separate those from an
-in-run divergence, and to notice a conversation whose prefix changes between
-turns for a reason that is **not** the volatile context — a rewritten history row,
-a staleness stub landing, a reordered block. Expect late-step `messages_changed`
-within a run too; that is the loop appending tool results, which is normal.
+There is no divergence diagnostic on this API. The Anthropic-only
+`cache_diagnostic` line (which reported *how* a request's prefix differed from a
+named earlier response) was removed with the provider switch, along with the
+`previous_message_id` chain it needed. The provider's response id is still
+persisted on each assistant row (`messages.responseId`) for tracing a turn back
+to a provider log line.
 
 ## Cross-user sharing invariant
 
@@ -237,22 +198,22 @@ signal and use `interface_step_usage` for the within-run check.
 
 Prompt caching cannot be validated in unit or e2e tests: the mocks implement no
 real cache. Validation happens in production by reading the logged cache-token
-fields. Anthropic returns aggregate read/write for the whole request (not
+fields. The API returns aggregate read/write for the whole request (not
 per-breakpoint), so each tier is validated by a scenario where only that tier's
 segment can be warm.
 
-Tail logs with `gob add pnpm --dir apps/agent-api exec wrangler tail`, filter to
-`*_completed` lines, and read `cache_read_tokens` / `cache_write_tokens`.
-Cross-check against the AI Gateway dashboard token breakdown (split by the
-`agent` metadata tag).
+Read `cache_stats` and the `*_completed` lines in Workers Logs (the dashboard's
+Observability tab, or the telemetry query in the root `AGENTS.md`) and look at
+`cache_read_tokens` / `cache_write_tokens`. Cross-check against the AI Gateway
+logs, which break tokens and cost down by the `agent` metadata tag.
 
 ### Tier 1 — within one run
 
 - **Scenario:** a multi-step turn (a message that fires `research` or a calendar
   lookup).
 - **Pass:** the first step logs `cache_write_tokens > 0`; later steps
-  (`interface_step_usage`) log `cache_read_tokens` on the order of the
-  system+tools token count.
+  (`interface_step_usage`, or the per-step `cache_stats` lines) log
+  `cache_read_tokens` on the order of the system+tools token count.
 
 ### Tier 2 — across users
 
@@ -264,12 +225,18 @@ Cross-check against the AI Gateway dashboard token breakdown (split by the
 
 ### Tier 3 — across turns
 
-- **Scenario:** one user sends a message, waits under the 5-min TTL, sends a
+- **Scenario:** one user sends a message, waits under the 30-min TTL, sends a
   second.
 - **Pass:** the second turn's first step logs `cache_read_tokens` covering system
   + tools + the full prior history (much larger than the static head), with only
   the new tail written; it grows turn over turn. A message after the TTL expires
   shows the history segment written again (expected expiry).
+
+**Confirmed on OpenAI (2026-08-02, version `dd9afd0c`, first production hours):**
+an interface run's step 1 logged `cache_read_tokens: 6088` against
+`input_tokens: 1628`, i.e. the system head, tools, pinned tail, and history
+prefix all served from cache with only the new tail billed at full price. The
+explicit-breakpoint layout works as designed on this provider.
 
 ### Regression guard
 
@@ -281,7 +248,12 @@ change that silently breaks a breakpoint is caught.
 
 ## Recorded baselines
 
-**Every baseline below predates adaptive thinking** (enabled for every agent on
+**Every baseline below was measured on `claude-sonnet-4-6`**, before the
+2026-08-02 switch to `gpt-5.6-luna`. They are kept because they establish the
+layout's mechanism and the shapes to expect, not because the absolute numbers
+still hold: prompts render differently per provider, so every prefix size moved.
+
+**They also predate adaptive thinking** (enabled for every agent on
 2026-08-01). Two things changed with it, so do not compare across that line
 without accounting for them:
 
