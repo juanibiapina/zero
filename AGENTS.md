@@ -240,11 +240,33 @@ POST /accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/
   invocation running in the same Durable Object.
 - `$workers.event.scheduledTime` on an alarm is the time it was *scheduled*, not
   when it ran. The gap between the two is how alarm delay is measured.
+- `limit` caps at **1000** and truncates silently: a query returning exactly
+  1000 rows is a truncated query, not a busy hour. A larger value (e.g. 5000)
+  returns `success: false`, which reads as zero rows if you only look at
+  `result`. Check `success`, and treat 1000 as suspect.
+- There is **no aggregation**: counting means fetching events and counting them
+  yourself, which the row cap breaks on a busy day. Split the window (per hour,
+  per day) and sum the parts.
 
 Brave search spend is countable from Workers Logs: every request to Brave emits
-one `brave_request` (filter on it and split by `status`; `attempt > 0` is retry
-cost), and each research run reports its own `searches` / `unique_queries` on
-`research_completed`. See `docs/research.md` (Search usage).
+one `brave_request`, and each research run reports its own `searches` /
+`unique_queries` on `research_completed`. See `docs/research.md` (Search usage).
+Brave bills 200s only, so the day's bill is the `status: 200` count:
+
+```bash
+FROM=$(date -u -d 'today 00:00' +%s)000; TO=$(date +%s)000
+curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/query" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"queryId\":\"q\",\"timeframe\":{\"from\":$FROM,\"to\":$TO},
+       \"parameters\":{\"datasets\":[\"cloudflare-workers\"],
+         \"filters\":[{\"key\":\"\$metadata.message\",\"operation\":\"eq\",\"value\":\"brave_request\",\"type\":\"string\"}]},
+       \"limit\":1000,\"view\":\"events\"}" \
+  | jq -r '.result.events.events[].source | "\(.status) \(.attempt)"' | sort | uniq -c
+```
+
+First column is the count, then `status` and `attempt`: `200 0` is a paid
+search, any row with `attempt > 0` is retry cost, and `429` rows are throttling.
+Mind the 1000-row cap above — on a heavy day, run it per hour.
 
 Per-LLM-call cost, tokens, cache counts and a `metadata.agent` tag live in the
 **AI Gateway** logs instead:
