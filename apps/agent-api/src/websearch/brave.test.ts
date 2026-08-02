@@ -39,6 +39,27 @@ const rateLimitBody = (over: Partial<{ quota_current: number; quota_limit: numbe
     time: 1,
   });
 
+// Real 429 body from the paid Search plan, which has no monthly quota and
+// reports that as `quota_limit: 0`. Captured 2026-08-02.
+const searchPlanRateLimitBody = () =>
+  JSON.stringify({
+    type: "ErrorResponse",
+    error: {
+      status: 429,
+      detail: "Request rate limit exceeded for plan",
+      meta: {
+        plan: "Search",
+        rate_limit: 50,
+        rate_current: 50,
+        quota_limit: 0,
+        quota_current: 14,
+        component: "rate_limiter",
+      },
+      code: "RATE_LIMITED",
+    },
+    time: 1,
+  });
+
 const rateLimited = (resetHeader?: string, bodyOver = {}) =>
   new Response(rateLimitBody(bodyOver), {
     status: 429,
@@ -82,6 +103,27 @@ describe("createBraveSearch", () => {
     const delay = sleep.mock.calls[0][0];
     expect(delay).toBeGreaterThanOrEqual(1000);
     expect(delay).toBeLessThan(1250);
+  });
+
+  it("retries a 429 on a plan with no monthly quota", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(searchPlanRateLimitBody(), {
+          status: 429,
+          headers: { "x-ratelimit-reset": "1, 2558678" },
+        }),
+      )
+      .mockResolvedValueOnce(okResponse());
+    globalThis.fetch = fetchMock;
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {});
+
+    const search = createBraveSearch("k", { sleep });
+    const results = await search.search("q");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(2);
   });
 
   it("throws immediately when the monthly quota is exhausted", async () => {

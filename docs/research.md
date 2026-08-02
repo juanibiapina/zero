@@ -121,13 +121,15 @@ logged. No message content is logged (see `log.ts` conventions).
 
 - `brave.ts` — `createBraveSearch(apiKey)`, production. Calls the Brave Web
   Search API (`X-Subscription-Token: BRAVE_API_KEY`) and normalizes
-  `web.results[]`. Brave's free tier is 1 req/s, so bursts of `web_search`
-  calls trip HTTP 429 (`code: RATE_LIMITED`). The adapter retries those
-  transient per-second 429s with bounded backoff driven by `x-ratelimit-reset`
-  (Brave sends no `Retry-After`; the header's first CSV component is seconds
-  until the 1-req/s window resets, defaulting to ~1s), so the model never sees
-  the blip. A 429 from monthly-quota exhaustion (`meta.quota_current >=
-  meta.quota_limit`) is not transient and throws immediately. Retries are
+  `web.results[]`. The key is on Brave's Search plan at 50 req/s, so a burst of
+  `web_search` calls can still trip HTTP 429 (`code: RATE_LIMITED`). The adapter
+  retries those transient per-second 429s with bounded backoff driven by
+  `x-ratelimit-reset` (Brave sends no `Retry-After`; the header's first CSV
+  component is seconds until the per-second window resets, defaulting to ~1s),
+  so the model never sees the blip. Only a plan that has a monthly quota can
+  exhaust one, and that 429 (`meta.quota_limit > 0 && meta.quota_current >=
+  meta.quota_limit`) is not transient and throws immediately; plans with no
+  monthly cap report `quota_limit: 0`, which is not exhaustion. Retries are
   capped (`maxRetries`, default 3); a persistent 429 eventually throws and
   `web-search.ts` surfaces it to the model. `sleep`/`maxRetries`/`defaultDelayMs`
   are injectable for tests.

@@ -1,11 +1,13 @@
 // Brave Search adapter for the WebSearch port. Calls the Brave Web Search API
 // and normalizes its payload to SearchResult[]. Uses the global Workers fetch.
 //
-// Brave's free tier is 1 request/second, so bursts of web_search calls in a
-// single research loop routinely trip HTTP 429 (`code: RATE_LIMITED`). Those
-// per-second limits clear in ~1s, so the adapter waits and retries them
-// transparently. A 429 caused by monthly-quota exhaustion is not transient, so
-// it throws immediately. See docs/research.md.
+// Brave enforces a per-second rate limit (50 req/s on the Search plan,
+// `x-ratelimit-policy: 50;w=1`), so a burst of web_search calls in a single
+// research loop can still trip HTTP 429 (`code: RATE_LIMITED`). Those clear in
+// ~1s, so the adapter waits and retries them transparently. A monthly quota
+// only exists on plans that have one; where it does, exhausting it also returns
+// 429 but is not transient, so it throws immediately. Plans without a monthly
+// cap report `quota_limit: 0`, which is not exhaustion. See docs/research.md.
 
 import { log, logError } from "../log";
 import type { SearchResult, WebSearch } from "./types";
@@ -97,6 +99,7 @@ export const createBraveSearch = (
           meta &&
           typeof meta.quota_current === "number" &&
           typeof meta.quota_limit === "number" &&
+          meta.quota_limit > 0 &&
           meta.quota_current >= meta.quota_limit
         ) {
           logError("brave_quota_exhausted", {
