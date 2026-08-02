@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-02: Zero writes plainer replies: no filler, no hedging, shorter words, shorter sentences.
 - 2026-08-02: Zero now knows which country you're in when it answers, so shops, services, holidays and prices match where you are, and it asks instead of guessing when it doesn't know.
 - 2026-08-02: Zero runs on a new model, so replies come back faster while it still thinks a request through before answering.
 - 2026-08-02: Zero now keeps track of your country and updates it when you travel or tell it you've moved.

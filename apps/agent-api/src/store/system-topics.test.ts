@@ -24,6 +24,9 @@ describe("SystemTopicStore: reads overlay bundled topics", () => {
     const zero = s.getTopic("Zero");
     expect(zero?.system).toBe(true);
     expect(zero?.body).toContain("Zero");
+    // The communication rules ship in this body; they must not be dropped.
+    expect(zero?.body).toContain("## Communication");
+    expect(zero?.body).toContain("Never use the em dash character");
     const changelog = s.getTopic("Changelog")?.body ?? "";
     expect(changelog).toContain("Changelog");
     // The agent changelog must not carry console (Vault/Errors) entries.
