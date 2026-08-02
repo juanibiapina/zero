@@ -71,19 +71,17 @@ city and country, work, languages, the closest people as `[[Name]]` links, and
 how the user wants to be spoken to. Addresses, phone numbers, documents and
 account numbers, health details, plans, trips, projects, events and gear are
 durable and kept — in their own topics, linked from `User` (contact and address
-details go in `[[Personal Details]]`). `User` also carries no `## Log` section,
-the one exception to the learner's per-topic log line.
+details go in `[[Personal Details]]`).
 
 The contract is `USER_TOPIC_RULES` in `agents/prompts.ts`, appended to all four
 prompts that can write topics (interface, learner, onboarding, admin task).
 Enforcement is by prompt, deliberately: a store-level size limit would bounce a
 write and lose the fact rather than relocate it, while the render cap already
-bounds the cost. The rules tell a writer that finds out-of-scope content in
-`User` to **move** it (write it to the right topic, then `edit_topic` it out and
-leave a `[[link]]`), so a body bloated under the old rules shrinks itself over
-the next few learning passes. For a user who needs it now, queue an admin task
+bounds the cost. The rules state the scope; they no longer spell out a migration
+procedure for a body that already breaks it, so an over-full `User` is corrected
+opportunistically as writers touch it, or on demand with an admin task
 (`POST /api/admin/users/{userId}/task`) saying to bring `User` within its stated
-scope; that agent carries the same rules.
+scope — that agent carries the same rules.
 
 The topic name and its routing description are `USER_TOPIC` /
 `USER_TOPIC_DESCRIPTION` in `src/user-topic.ts`, shared by `UserDO` and the
@@ -166,25 +164,31 @@ migration and no per-user seeding.
    results — calendar events, email bodies, research reports — so it reads the
    persisted results, not a summary of the turn. For each topic that gained
    durable information it reads the body (`get_topic`), merges new facts under
-   sensible sections with `edit_topic`, appends one `## Log` line with
-   `append_topic`, and uses `update_topic_metadata` only to refresh the
-   description or rename. It never rewrites or compacts a body — the tools
-   enforce that, not only the prompt. With `list_topics` + `create_topic` it is
-   also proactive: it creates a topic for any durable subject with none. The
-   prompt biases it toward recording generously (people, projects, events, trips,
-   gear, house/utilities, goals, and any other recurring subject; the list is
-   illustrative).
+   sensible sections with `edit_topic` or `append_topic`, and uses
+   `update_topic_metadata` only to refresh the description or rename. It never
+   rewrites or compacts a body — the tools enforce that, not only the prompt.
+   With `list_topics` + `create_topic` it creates a topic for a subject that has
+   none.
+
+   What it records is **what is true of the user and findable nowhere else**:
+   their projects and where each stands, their goals, plans and decisions, the
+   people, companies and organisations in their life and what each is to them,
+   their commitments, dates, circumstances, preferences and belongings.
+   Everything a search would answer the same way for a stranger — background on a
+   company, product, technology or place, general explanations, public facts —
+   is left out. Until 2026-08-02 the prompt said the opposite ("be proactive and
+   generous", ten illustrative categories, research reports persisted verbatim),
+   and the model filled with encyclopedia content that buried the user's own
+   material.
 
 A third agent gathers material for topics: the **research agent** (spawned by
 the interface agent's `research` tool; see `docs/research.md`). It has read-only
 topic tools + `web_search` + `read_page` and **no write tools**; it returns a
-compact sourced findings report as its tool result rather than writing topics
-itself. Learning persists those findings later: the report is a persisted tool
-result in the conversation log, so the learner reads the real thing rather than a
-truncated copy. It is prompted to **preserve research findings and their
-reference URLs verbatim** (fold near-duplicate research topics together rather
-than rewriting a body). Preservation is prompt-enforced; if it degrades in
-practice, the stronger fix is a mechanically protected body region.
+sourced findings report as its tool result rather than writing topics itself. The report is a persisted tool result in the conversation log, so the
+learner reads the real thing rather than a truncated copy — but what it keeps is
+**what the research meant for the user** (what they were deciding, what they
+chose, what they will do), not the findings. A report that changed nothing for
+the user leaves no topic behind.
 
 The topic tools are shared, and **no tool replaces a complete body**:
 
@@ -305,8 +309,10 @@ rule defensively: a window truncated by the read limit drops its leading orphan
 results.
 
 The summary must never carry topic knowledge: it is unversioned, so anything
-copied into it could never be detected as stale. The prompt says to name topics
-as `[[Topic Name]]` and reread them instead.
+copied into it could never be detected as stale. The prompt states the rule
+flatly ("never copy a topic body") and asks for topic names as `[[Topic Name]]`
+references, so the assistant rereads them instead. The rationale lives here and
+in the comment above `compactionSystemPrompt`, not in the prompt itself.
 
 ## Knowledge versions
 
@@ -336,7 +342,7 @@ took 76% of the day's LLM time and 69% of its spend, and the wall time landed on
 the *next* message, since turns drain serially per DO. Anchored edits make a
 write cost the change. See `docs/plans/writer-latency-investigation.md` for the
 measurements. The learner prompt also asks it to split a subject into a new linked
-topic once a body passes roughly 8,000 characters, so bodies stop growing without
+topic once a body passes roughly 2,000 characters, so bodies stop growing without
 limit in the first place.
 
 The `TurnOrchestrator` (`agents/orchestrator.ts`) is the runtime-agnostic glue:
@@ -344,9 +350,9 @@ render the conversation, run the interface agent, done. It knows nothing about
 alarms, DOs, or Telegram, and nothing consolidates knowledge after the reply —
 that moved off the turn path entirely (see "Learning triggers"). Until
 2026-07-30 a writer agent ran on every turn, which is what put 20-40s of topic
-consolidation in front of the user's *next* message. There is no mechanical
-log-append fallback: the `## Log` line is a prompt-driven `append_topic` write,
-so material the learner judges trivial leaves the model untouched.
+consolidation in front of the user's *next* message. Nothing writes to a topic
+mechanically: every body change is a tool call the learner chose to make, so
+material it judges to be about nobody in particular leaves the model untouched.
 
 ## The loop writes into the log as it runs
 

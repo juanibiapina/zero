@@ -105,22 +105,20 @@ describe("interfaceSystemPrompt", () => {
 });
 
 describe("researchSystemPrompt", () => {
-  it("requires an inline source URL after each claim, never a list at the end", () => {
-    const prompt = researchSystemPrompt();
-    expect(prompt).toContain("Source: <url>");
-    expect(prompt).toContain("Never collect sources into a list at the end");
+  it("requires an inline source URL after each claim", () => {
+    expect(researchSystemPrompt()).toContain("Source: <url>");
   });
 
-  it("preserves every item of a sourced enumeration", () => {
-    expect(researchSystemPrompt()).toContain(
-      "rather than dropping any item or its source",
-    );
+  it("makes the final message the whole output, since research writes nothing", () => {
+    const prompt = researchSystemPrompt();
+    expect(prompt).toContain("final message is your ONLY output");
+    expect(prompt).toContain("complete and self-contained");
   });
 
-  it("states that it writes no topics and reports back instead", () => {
+  it("asks for a wide net and a stopping point", () => {
     const prompt = researchSystemPrompt();
-    expect(prompt).toContain("Another agent persists it afterward");
-    expect(prompt).toContain("Read the relevant topics for context");
+    expect(prompt).toContain("Cast a wide net");
+    expect(prompt).toContain("Stop once further searches stop changing the answer");
   });
 });
 

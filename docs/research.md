@@ -9,24 +9,29 @@ Research is for wider investigation across sources. When the user simply hands
 over a web address, the interface agent opens it with its own `read_page` tool
 instead of spawning research.
 
-The research agent **gathers and reports**: it reads related topics for context,
-investigates with web search, and returns a compact sourced report as its final
-message. It has **no write tools** — the learning agent that runs off the turn path
-persists the findings into topics. Authoring full topic bodies inside the
-research loop was the dominant cost (5-8k output tokens per write, minutes of
+The research agent **gathers and reports**: it casts a wide net with web search
+(including opinion sources such as Reddit and Hacker News where the subject
+warrants it), reads related topics when they help, and returns a sourced report
+as its final message, stopping once further searches stop changing the answer.
+It has **no write tools** — the learning agent that runs off the turn path
+decides what, if anything, the report leaves in the knowledge model: what the
+research meant for the user (what they were deciding, what they chose, what they
+will do), never the findings themselves, which are public and findable again.
+Authoring full topic bodies inside the research loop was the dominant cost
+(5-8k output tokens per write, minutes of
 wall clock), so removing the write tools is what makes research fast. Measured
 on the 2026-07-27 17:51:20Z production research turn, the no-write design ran the
 research loop in ~48s over 6 steps (largest single generation 1,115 tokens) and
 the whole turn (interface + research, plus the per-turn writer that still ran then) in ~88s for $0.217, against a
 pre-fix baseline of ~10+ minutes and $3–4 for the one turn when research authored
 bodies in-loop (see `docs/plans/agent-latency-investigation.md` for the sourced
-per-call breakdown). The prompt asks for a compact report (roughly 2,500
-characters of prose, with an explicit exception that lets a sourced enumeration
-run longer rather than drop an item), and the persisted tool result gives research
-results a generous 8,000-char ceiling (vs 1,500 chars for every other tool), so a
-normal sourced report and its per-claim `Source:` URLs reach learning whole.
-The ceiling was raised to fit the report, not the report shrunk to fit the
-ceiling. (The 8,000-char ceiling is code-verified in `interface.ts`; it has not
+per-call breakdown). The prompt sets no length target — it asks for a short
+report and lets the question decide the shape — and the persisted tool result
+gives research results a generous 8,000-char ceiling (vs 1,500 chars for every
+other tool), so a normal sourced report reaches the interface agent's reply whole
+rather than truncated mid-claim. The ceiling was raised to fit the report, not
+the report shrunk to fit the ceiling. (The 8,000-char ceiling is code-verified in
+`interface.ts`; it has not
 yet been observed on a real turn, since the measured report above was only 1,115
 tokens.) When the interface passes an existing `topic`, the agent reads it for
 context; that topic is merged into the interface's `accessed` set so learning
@@ -50,9 +55,9 @@ tunable; err toward more triggering and tune down from logs.
   (optional) names an existing topic the interface already knows is relevant, so
   the agent reads it for context instead of starting cold.
 - **Output — a findings report.** The tool returns the agent's final sourced
-  report (claims with inline `Source: <url>` first, a brief summary last) as the
-  tool result. Research writes nothing; learning persists the findings after
-  the turn.
+  report (each claim followed by its inline `Source: <url>`) as the tool result.
+  Research writes nothing; after the turn, learning records what the report meant
+  for the user, not the report.
 - **Accessed.** Topics the research agent **reads** (via `get_topic`) are merged
   into the interface agent's `accessed` set, which is what the turn's
   `accessed_count` log line reports (see `docs/topics.md`).

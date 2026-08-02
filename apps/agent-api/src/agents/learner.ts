@@ -113,7 +113,7 @@ export const runLearnerSlice = async (
   const tools = buildTopicTools({ store: input.port.topics });
   const prompt = `# Messages since the last consolidation\n\n${renderLearningLog(
     input.messages,
-  )}\n\nConsolidate the durable knowledge in these messages into topics.`;
+  )}\n\nConsolidate what these messages establish about the user into topics.`;
 
   const { finishReason, steps, usage } = await runAgent({
     model: input.model,

@@ -309,9 +309,10 @@ New files use this stable marker:
 [file id=file_123 name="report.pdf" mime="application/pdf"]
 ```
 
-Topics may keep markers as durable references. Agents preserve them
-byte-for-byte and resolve them through `get_file`; editing topic text never
-changes file ownership. Legacy `[image ...]` and `[pdf ...]` markers and the
+Topics may keep markers as durable references, resolved through `get_file`. A
+marker survives an edit because no tool replaces a whole body: text the agent
+does not quote is left byte-for-byte. Editing topic text never changes file
+ownership. Legacy `[image ...]` and `[pdf ...]` markers and the
 `view_attachment` alias remain readable.
 
 The generic tools are `get_file`, `list_files`, `send_file`, and `delete_file`.
