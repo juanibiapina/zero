@@ -58,10 +58,40 @@ topic is otherwise an ordinary topic reachable by the normal tools and
 consolidated by learning like any other. The canonical use is a stable
 `User` topic seeded at Google onboarding (see `docs/onboarding.md`).
 
-Each pinned body is capped (~1.5 KB) when rendered into the prompt so a topic
+Each pinned body is capped (1,000 chars) when rendered into the prompt so a topic
 that keeps growing can't blow up the prompt; the full body is still reachable
 via `get_topic`. Pinning survives a `saveTopic` rename. The tradeoff is a
 slightly higher token cost every turn in exchange for always-on identity.
+
+A pinned body is **index-shaped, not a document**. Whatever sits in `User` is
+paid for on every turn of every conversation, and past the cap it is silently
+truncated (the head is kept, the newest facts at the tail are dropped). So the
+topic is scoped by contract to identity: name and preferred form of address,
+city and country, work, languages, the closest people as `[[Name]]` links, and
+how the user wants to be spoken to. Addresses, phone numbers, documents and
+account numbers, health details, plans, trips, projects, events and gear are
+durable and kept — in their own topics, linked from `User` (contact and address
+details go in `[[Personal Details]]`). `User` also carries no `## Log` section,
+the one exception to the learner's per-topic log line.
+
+The contract is `USER_TOPIC_RULES` in `agents/prompts.ts`, appended to all four
+prompts that can write topics (interface, learner, onboarding, admin task).
+Enforcement is by prompt, deliberately: a store-level size limit would bounce a
+write and lose the fact rather than relocate it, while the render cap already
+bounds the cost. The rules tell a writer that finds out-of-scope content in
+`User` to **move** it (write it to the right topic, then `edit_topic` it out and
+leave a `[[link]]`), so a body bloated under the old rules shrinks itself over
+the next few learning passes. For a user who needs it now, queue an admin task
+(`POST /api/admin/users/{userId}/task`) saying to bring `User` within its stated
+scope; that agent carries the same rules.
+
+The topic name and its routing description are `USER_TOPIC` /
+`USER_TOPIC_DESCRIPTION` in `src/user-topic.ts`, shared by `UserDO` and the
+prompts. Only a topic created after this change carries the scoped description;
+an already-onboarded user keeps the old one in `list_topics` until a writer
+refreshes it with `update_topic_metadata`. There is no migration for that on
+purpose: the description is prose the learner may rewrite anyway, and a boot-time
+write would bump the knowledge version for every user just to restate a blurb.
 
 ### System topics
 

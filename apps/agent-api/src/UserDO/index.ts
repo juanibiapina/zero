@@ -55,20 +55,14 @@ import { fireDueSchedules } from "../do/schedules";
 import { createScheduleBook } from "../schedules/book";
 import { nextRun } from "../schedules/recurrence";
 import type { Env } from "../types";
+import { USER_TOPIC, USER_TOPIC_DESCRIPTION } from "../user-topic";
 import { log } from "../log";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
 const TYPING_INTERVAL_MS = 4000;
 
-// The stable pinned topic seeded by Google onboarding. The name never changes;
-// the user's actual name is a fact recorded in the body (see docs/onboarding.md).
 // Marks the one-time link reconciliation that follows migration 0022.
 const LINKS_REBUILT_KEY = "topicLinksRebuiltV22";
-
-const USER_TOPIC = "User";
-const USER_TOPIC_DESCRIPTION =
-  "Durable facts about the user: name, location, role, languages, key relationships.";
-
 
 // Turn a versioned topic write into data that survives an RPC hop.
 const toWriteResult = (apply: () => number): TopicWriteResult => {

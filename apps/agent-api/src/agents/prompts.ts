@@ -3,13 +3,18 @@
 
 import type { Topic } from "../store/types";
 import { countryLabel } from "../country";
+import { USER_TOPIC } from "../user-topic";
 
 // Cap each pinned body rendered into the interface prompt. Pinned topics keep
 // filling as the user interacts, so an uncapped body would grow the prompt
 // every turn; the cap bounds that cost. The tradeoff is that a very long pinned
 // topic is truncated in the prompt (the full body is still reachable via
 // get_topic).
-const MAX_PINNED_BODY_CHARS = 1500;
+//
+// Deliberately the same number the writers are asked to stay under in
+// USER_TOPIC_RULES: the rules keep the body identity-shaped, this cap is only
+// the backstop for when they don't.
+const MAX_PINNED_BODY_CHARS = 1000;
 
 const truncateBody = (body: string): string =>
   body.length > MAX_PINNED_BODY_CHARS
@@ -105,6 +110,35 @@ body; edit_topic replaces an exact snippet inside a body; append_topic adds to
 the end (and fills a topic whose body is still empty); update_topic_metadata
 changes only the description or the name.`;
 
+// Scope contract for the pinned "User" topic, shared by every agent that can
+// write topics. It is pinned into the interface prompt, so its body is paid for
+// on every turn of every conversation: whatever lands in it is a permanent tax,
+// and past the render cap it is silently truncated. Keeping it identity-shaped
+// (a short note plus [[links]]) is what makes always-on identity cheap.
+const USER_TOPIC_RULES = `The topic named "${USER_TOPIC}" is special: it is always in the assistant's
+context, on every turn of every conversation, so it must stay small — under
+1,000 characters, a short note rather than a document.
+
+It holds identity only: the user's name and what they like being called, the
+city and country they live in, what they do for work, the languages they speak,
+the handful of people closest to them (as [[Name]] links), and how they want to
+be talked to.
+
+It holds nothing else. Street addresses, phone numbers, email addresses,
+document and account numbers, health details, prices, current plans, trips,
+projects, events, gear, and anything with a date are durable and worth keeping —
+in their own topic, linked from "${USER_TOPIC}" with [[Topic Name]]. Contact and
+address details go in [[Personal Details]]; create that topic if it does not
+exist yet.
+
+It has no "## Log" section. Log an exchange in the topic of the subject it was
+about, never in "${USER_TOPIC}".
+
+When "${USER_TOPIC}" already holds something outside this scope, move it: find or
+create the right topic, write the facts there, then remove them from
+"${USER_TOPIC}" with edit_topic, leaving a [[link]] where they used to be. Moving
+is not deleting — never drop a fact on the floor.`;
+
 export const interfaceSystemPrompt = (pinned = ""): string =>
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
@@ -171,7 +205,9 @@ confirmation naming the file.
 
 ${FILE_MARKER_RULES}
 
-${TOPIC_VERSION_RULES}${pinned}`;
+${TOPIC_VERSION_RULES}
+
+${USER_TOPIC_RULES}${pinned}`;
 
 // Research gathers and REPORTS: its final message IS the findings, returned to
 // the interface agent as the research tool result. It has no write tools; the
@@ -223,14 +259,16 @@ Record identity, name first:
 - The user's NAME is the priority. Look at their sign-offs and the account's
   own address. If you cannot determine it confidently, say so in the topic
   rather than guessing.
-- Then a few durable facts: location, role or work, languages, and key
-  relationships (people they interact with repeatedly).
+- Then a few durable facts: location, role or work, languages, and the people
+  they interact with repeatedly.
 - Capture only what shows repeated interaction or emotional weight. When in
   doubt, leave it out. This topic is a small, high-signal identity note, not a
   log of every email.
 - Write it into the topic you are told to fill, using append_topic (that topic
   already exists and its body is empty). Organise it under short sections; keep
   it concise.
+
+${USER_TOPIC_RULES}
 
 ${TOPIC_VERSION_RULES}
 
@@ -257,6 +295,8 @@ with get_topic. Prefer updating the best existing topic over creating a
 near-duplicate. When you create or connect durable subjects, use concise,
 useful [[Topic Name]] links. End with a short summary of the work completed.
 
+${USER_TOPIC_RULES}
+
 ${TOPIC_VERSION_RULES}`;
 
 // How the knowledge model is maintained. Shared text, kept separate from the
@@ -275,7 +315,8 @@ topic include, and are not limited to:
 - Health, finance, preferences, vehicles, pets, learning, food, media, and any
   other recurring subject.
 This list is illustrative, not exhaustive. When in doubt, create the topic; more
-small well-scoped topics beat losing a durable fact.
+small well-scoped topics beat losing a durable fact. Generous means many topics,
+not big ones — and never a bigger "${USER_TOPIC}" topic (see its rules below).
 
 Link topics to each other with Obsidian-style [[Topic Name]] tokens in the body.
 Prefer small, granular topics connected by links over one sprawling document, and
@@ -295,7 +336,8 @@ For each accessed topic that gained durable information:
   is the single most expensive thing you can do.
 - Append exactly one line to a "## Log" section summarising this exchange. Use
   edit_topic anchored on the "## Log" heading, or append_topic when the section
-  is absent or the line belongs at the end.
+  is absent or the line belongs at the end. The one exception is "${USER_TOPIC}",
+  which never gets a "## Log" section.
 - Use update_topic_metadata only to refresh the description (a short routing
   blurb, one line, so another agent can tell from list_topics whether this topic
   is worth opening) or to rename. Never keep a second copy of the topic's state
@@ -328,6 +370,8 @@ Rules:
   by the system; any write to them is rejected. Read them if useful, but do not
   try to update, rename, or delete them.
 - Never invent facts. Only record what the turn actually established.
+
+${USER_TOPIC_RULES}
 
 ${TOPIC_VERSION_RULES}`;
 

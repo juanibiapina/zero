@@ -177,9 +177,9 @@ describe("renderPinnedTopics", () => {
   });
 
   it("truncates a very long body", () => {
-    const block = renderPinnedTopics([topic("User", "x".repeat(2000))]);
+    const block = renderPinnedTopics([topic("User", "x".repeat(1500))]);
     expect(block).toContain("…[truncated]");
-    expect(block.length).toBeLessThan(2000);
+    expect(block.length).toBeLessThan(1500);
   });
 });
 

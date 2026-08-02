@@ -66,6 +66,18 @@ weight; when in doubt leave it out"; never invent facts.
 - **Stable topic name, identity in the body.** The pinned topic is always named
   `User`; the user's actual name is a fact recorded in the body. Avoids
   rename churn and `[[link]]` rewriting on every identity correction.
+- **Identity only.** The topic is scoped by contract to who the user is (see
+  [`topics.md`](topics.md), "Pinned topics"): everything else the scan turns up
+  belongs in its own linked topic, not here. `onboardingSystemPrompt` carries
+  the same `USER_TOPIC_RULES` as the other writers, and the seeded description
+  (`USER_TOPIC_DESCRIPTION` in `src/user-topic.ts`) states the scope so
+  `list_topics` does not invite bloat later. Already-onboarded users keep their
+  old description until a writer refreshes it; there is no migration.
+- **Fixing an already-bloated topic.** No bulk job. The learner moves
+  out-of-scope content out on its own over the next few passes; to fix one user
+  now, queue an admin task with a prompt such as "Bring the User topic within
+  its stated scope: move everything that is not identity into the right topic
+  and link it from User."
 - **Pinning is a Store/DO operation, not an agent tool.** `runOnboarding`
   pre-creates and pins the topic, then passes its name to the agent to fill.
 - **No task system yet.** A generic queue/registry would guess wrong before the
