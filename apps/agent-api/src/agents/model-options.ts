@@ -6,10 +6,10 @@ import type { Env } from "../types";
 import type { AiUsageAttribution } from "./ai-usage";
 
 // The agents that issue LLM calls. Each turn runs the interface agent (which
-// may spawn research) then the writer; onboarding and admin tasks run alone.
+// may search the web in its own loop) then the writer; onboarding and admin
+// tasks run alone.
 export type AgentLabel =
   | "interface"
-  | "research"
   | "learner"
   | "compaction"
   | "onboarding"

@@ -90,7 +90,7 @@ zero/
 │  │    ├─ create model (AI Gateway, cf-aig-metadata)              │
 │  │    ├─ setTimeout typing loop (chatAction every 4s)            │
 │  │    └─ orchestrateTurn(store, model, send, search, google):     │
-│  │         1. interface agent — reply()/topic + research +        │
+│  │         1. interface agent — topic + web_search/read_page +   │
 │  │            set_timezone + Gmail/Calendar tools                 │
 │  │            (each reply persisted before it is sent)            │
 │  │      (consolidation happens later, in LearningDO)             │
@@ -111,14 +111,14 @@ in-memory search/Google adapters; `UserDO` supplies the production `DbStore`,
 `createBraveSearch`, and `createGoogleWorkspace` (with a memoized Clerk token
 provider) adapters and the alarm-driven execution.
 
-The interface agent and the research agent are the **same runner**
+The interface agent, the learner and onboarding are the **same runner**
 (`agents/run.ts`: `model + system + (prompt | messages) + tools → final text`)
 instantiated with different system prompts and toolsets. The interface agent's
 returned text is ignored (its output is the `{ replies, accessed }` collected by
-its tool closures); it exposes a `research` tool that spawns a research-prompted
-agent armed with `web_search`, whose final message becomes the tool result. Both
-run inline in the turn's DO alarm. See [`topics.md`](topics.md),
-[`research.md`](research.md), and [`framework.md`](framework.md).
+its tool closures); it investigates the web in its own loop with `web_search`
+and `read_page`, no nested agent involved, inline in the turn's DO alarm. See
+[`topics.md`](topics.md), [`research.md`](research.md), and
+[`framework.md`](framework.md).
 
 **Structured message history (interface agent).** The interface agent builds a
 real multi-turn conversation (`buildConversationMessages` in
@@ -152,8 +152,8 @@ point.
 Assistant responses and tool results are persisted **verbatim**, including
 `thinking` blocks and their signatures, so a resumed turn can hand the model back
 its own reasoning. Only `text` blocks are ever delivered to Telegram, and neither
-the learner nor compaction sees anything but text. The research, learning, and
-onboarding agents still use the single-`prompt` path.
+the learner nor compaction sees anything but text. The learning and onboarding
+agents still use the single-`prompt` path.
 
 Every agent runs Sonnet 4.6 with adaptive thinking and `display: "omitted"`,
 which returns the reasoning signature without the reasoning prose. That includes
@@ -381,8 +381,8 @@ documented in [caching.md](./caching.md).
 ## Future Work
 
 - Add format-specific readers for stored audio and video files.
-- Consider structured multi-turn history for the research and learning agents
-  (they currently use the single-`prompt` path).
+- Consider structured multi-turn history for the learning agent (it currently
+  uses the single-`prompt` path).
 - Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
   shapes are known; Google onboarding is the first, deliberately minimal, one
   (see [`onboarding.md`](onboarding.md)).

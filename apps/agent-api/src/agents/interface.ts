@@ -7,8 +7,9 @@
 // There is one delivery path: the assistant's text blocks are the messages. A
 // block is persisted before the Telegram fetch leaves (persist-before-send), so
 // a mid-run eviction leaves the tail already `assistant` and the retry skips the
-// thread instead of re-sending. Multi-message turns (acknowledge, then answer
-// after research) come from the model producing text on more than one step.
+// thread instead of re-sending. Multi-message turns (say it is looking, then
+// answer after searching) come from the model producing text on more than one
+// step.
 
 import type {
   AgentMessage,
@@ -17,7 +18,7 @@ import type {
   ToolResultBlock,
 } from "./protocol";
 import { buildInterfaceTools } from "../tools/topics";
-import { buildResearchTool } from "../tools/research";
+import { buildWebSearchTool, newWebSearchStats } from "../tools/web-search";
 import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
 import { buildCountryTool } from "../tools/country";
@@ -58,10 +59,6 @@ export const needsFallback = (input: {
 
 export interface InterfaceAgentInput {
   model: AgentModel;
-  // Model for the nested research agent, tagged "research" for gateway
-  // attribution. Falls back to `model` when omitted (tests that don't exercise
-  // research need not distinguish the two).
-  researchModel?: AgentModel;
   store: TopicStore;
   send: (text: string) => Promise<void>;
   // Persist one model response verbatim, returning its row id. Called before
@@ -98,10 +95,10 @@ export interface InterfaceAgentInput {
   // model keeps continuity without the raw messages.
   summary?: string;
   userMessage: string;
+  // Web-search port for the web_search tool; tests inject the memory adapter.
   search: WebSearch;
-  // Page-fetch port for the read_page tool, registered on this agent and on the
-  // nested research agent. Threaded exactly like `search`; tests inject the
-  // memory adapter.
+  // Page-fetch port for the read_page tool. Threaded exactly like `search`;
+  // tests inject the memory adapter.
   fetcher: PageFetcher;
   // Gmail + Calendar access. Threaded exactly like `search`; tests inject the
   // memory adapter.
@@ -296,6 +293,10 @@ export const runInterfaceAgent = async (
   const claimDelivery = input.claimDelivery ?? (() => true);
   const drainFollowups = input.drainFollowups ?? (() => []);
   const timezone = input.timezone ?? "UTC";
+  // Per-turn search tally. Brave bills per query and the loop can fan out
+  // several tool calls per step, so `steps` says nothing about spend; this is
+  // what makes a turn's search cost readable in the logs.
+  const searchStats = newWebSearchStats();
 
   // At-most-once sending of persisted text (see agents/delivery.ts). A send
   // failure propagates out of runAgent to the orchestrator's error boundary
@@ -312,17 +313,13 @@ export const runInterfaceAgent = async (
       accessed,
       reads,
     }),
-    ...buildResearchTool({
-      model: input.researchModel ?? input.model,
-      store: input.store,
-      search: input.search,
-      fetcher: input.fetcher,
-      accessed,
-    }),
+    // Investigation runs in this loop, not in a nested agent: the model can
+    // tell the user it is looking, search, open what it finds, and answer,
+    // all as one stream of text blocks.
+    ...buildWebSearchTool({ search: input.search, stats: searchStats }),
     // Registered unconditionally (like the file tools) so the tool schema
-    // stays byte-identical across users and turns. Lets the interface open a
-    // link the user handed over without spawning a research run.
-    ...buildReadPageTool({ fetcher: input.fetcher, caller: "interface" }),
+    // stays byte-identical across users and turns.
+    ...buildReadPageTool({ fetcher: input.fetcher }),
     ...buildTimezoneTool({ setTimezone: input.setTimezone }),
     ...buildCountryTool({ setCountry: input.setCountry }),
     ...buildGoogleTools({
@@ -337,8 +334,8 @@ export const runInterfaceAgent = async (
       sendFile: input.sendFile,
     }),
     // Registered unconditionally, same reason. Given to the interface agent
-    // only: the research and writer agents cannot message the user, so they
-    // must not be able to book a turn that does.
+    // only: the writer agent cannot message the user, so it must not be able
+    // to book a turn that does.
     ...buildScheduleTools({
       schedules: input.schedules,
       timezone,
@@ -411,6 +408,11 @@ export const runInterfaceAgent = async (
     accessed_count: accessed.size,
     followups_injected: injectedFollowups,
     duration_ms: Date.now() - start,
+    searches: searchStats.calls,
+    searches_failed: searchStats.failed,
+    searches_empty: searchStats.empty,
+    unique_queries: searchStats.queries.size,
+    search_ms_total: searchStats.durationMs,
     ...usageLogFields(usage),
   });
 

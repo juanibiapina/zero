@@ -226,14 +226,14 @@ describe("runAgent", () => {
     ]);
   });
 
-  it("caches a single-prompt (research/writer) message region on the tail", async () => {
+  it("caches a single-prompt (writer/onboarding) message region on the tail", async () => {
     const { model, requests } = recordingModel([{}]);
 
     await runAgent({ model, system: "sys", prompt: "the prompt" });
 
     // With no caller anchor, the loop supplies the only message breakpoint, on
-    // the tail. This is the fix that makes research and writer cache their
-    // growing message region.
+    // the tail. This is the fix that makes the writer and onboarding cache
+    // their growing message region.
     expect(requests[0].messages).toEqual([
       {
         role: "user",

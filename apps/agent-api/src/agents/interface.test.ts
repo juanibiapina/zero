@@ -10,7 +10,6 @@ import {
   interfaceContext,
   interfaceSystemPrompt,
   renderPinnedTopics,
-  researchSystemPrompt,
 } from "./prompts";
 import { capturingModel, scriptedModel } from "./mock-model";
 import { isCacheable } from "./protocol";
@@ -97,28 +96,20 @@ describe("interfaceSystemPrompt", () => {
     expect(withPinned.endsWith("body")).toBe(true);
   });
 
-  it("routes a given web address to read_page and wider questions to research", () => {
+  it("routes a given web address to read_page and wider questions to web_search", () => {
     const prompt = interfaceSystemPrompt();
     expect(prompt).toContain("read_page");
-    expect(prompt).toContain("research");
-  });
-});
-
-describe("researchSystemPrompt", () => {
-  it("requires an inline source URL after each claim", () => {
-    expect(researchSystemPrompt()).toContain("Source: <url>");
+    expect(prompt).toContain("web_search");
   });
 
-  it("makes the final message the whole output, since research writes nothing", () => {
-    const prompt = researchSystemPrompt();
-    expect(prompt).toContain("final message is your ONLY output");
-    expect(prompt).toContain("complete and self-contained");
-  });
-
-  it("asks for a wide net and a stopping point", () => {
-    const prompt = researchSystemPrompt();
-    expect(prompt).toContain("Cast a wide net");
-    expect(prompt).toContain("Stop once further searches stop changing the answer");
+  // These rules used to live in a separate research agent's prompt. With the
+  // searching in this loop, this prompt is the only place that can carry them.
+  it("carries the investigation discipline the research prompt used to hold", () => {
+    const prompt = interfaceSystemPrompt();
+    expect(prompt).toContain("cast a wide net");
+    expect(prompt).toContain("stop changing the answer");
+    expect(prompt).toContain("Source: <url>");
+    expect(prompt).toContain("Say you are looking");
   });
 });
 
@@ -615,22 +606,19 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(["ok"]);
   });
 
-  it("researches then replies with the result", async () => {
+  it("says it is looking, searches, then answers from what it found", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const search = createMemorySearch([
       { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
     ]);
     const model = scriptedModel([
-      // interface acknowledges, then researches
+      // One loop: the acknowledgement and the answer are both this agent's
+      // own text blocks, with the search in between.
       {
         text: "Let me check.",
-        tools: [{ name: "research", input: { prompt: "distance to Mars" } }],
+        tools: [{ name: "web_search", input: { query: "distance to Mars" } }],
       },
-      // research agent: search then summarise
-      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
-      { text: "Mars is far. Source: https://ex.com/mars" },
-      // interface relays the finding
       { text: "Mars is far. Source: https://ex.com/mars" },
     ]);
 
@@ -651,7 +639,48 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
-  it("surfaces a topic the research agent read via accessed, without research writing it", async () => {
+  // Brave bills per query and the loop can fan out several searches per step,
+  // so `steps` says nothing about spend. This rollup used to sit on
+  // `research_completed`; the searching moved, so it moved with it.
+  it("reports the turn's search tally on interface_completed", async () => {
+    const lines: Record<string, unknown>[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args) => {
+      lines.push(args[0] as Record<string, unknown>);
+    });
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const search = createMemorySearch([
+      { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
+    ]);
+    const model = scriptedModel([
+      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
+      { tools: [{ name: "web_search", input: { query: "Mars orbit" } }] },
+      { tools: [{ name: "web_search", input: { query: "Mars orbit" } }] },
+      { text: "Mars is far. Source: https://ex.com/mars" },
+    ]);
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search,
+      google: createMemoryGoogle(),
+      fetcher: createMemoryFetcher(),
+      history: [],
+      userMessage: "how far is Mars",
+    });
+
+    const done = lines.find((l) => l.msg === "interface_completed");
+    expect(done).toMatchObject({
+      searches: 3,
+      unique_queries: 2,
+      searches_failed: 0,
+      searches_empty: 0,
+    });
+    expect(typeof done?.search_ms_total).toBe("number");
+  });
+
+  it("surfaces a topic read for context on a searching turn via accessed", async () => {
     const store = new MemoryStore();
     seedTopic(store, "Mars", "the planet");
     setBody(store, "Mars", "Mars is far. Source: https://ex.com/mars");
@@ -660,18 +689,13 @@ describe("runInterfaceAgent", () => {
       { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
     ]);
     const model = scriptedModel([
-      // interface acks then researches
+      // Read the existing topic for context, then search on top of it.
       {
         text: "Let me check.",
-        tools: [
-          { name: "research", input: { prompt: "distance to Mars", topic: "Mars" } },
-        ],
+        tools: [{ name: "get_topic", input: { name: "Mars" } }],
       },
-      // research agent: read the topic for context, then report findings back
-      { tools: [{ name: "get_topic", input: { name: "Mars" } }] },
-      { text: "- Mars is far. Source: https://ex.com/mars" },
-      // interface finishes without replying the finding
-      { text: "" },
+      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
+      { text: "Mars averages 225M km away. Source: https://ex.com/mars" },
     ]);
 
     const result = await runInterfaceAgent({
@@ -685,15 +709,15 @@ describe("runInterfaceAgent", () => {
       userMessage: "how far is Mars",
     });
 
-    // Research writes nothing; the stored body is unchanged.
+    // Searching writes nothing; the stored body is unchanged.
     expect(store.getTopic("Mars")?.body).toBe(
       "Mars is far. Source: https://ex.com/mars",
     );
-    // The topic research read still reaches the writer via accessed.
+    // The topic read for context still reaches the writer via accessed.
     expect(result.accessed).toContain("Mars");
   });
 
-  it("reads a page directly and answers from it, without research", async () => {
+  it("reads a page directly and answers from it, without searching", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const model = scriptedModel([
@@ -1086,21 +1110,19 @@ describe("runInterfaceAgent", () => {
     expect(result.replies).toEqual(["the answer", "done"]);
   });
 
-  it("delivers the post-research answer sent as final prose after an ack reply", async () => {
+  it("delivers the post-search answer sent as final prose after an ack reply", async () => {
     const store = new MemoryStore();
     const sink = collectSink();
     const search = createMemorySearch([
       { title: "Mars", url: "https://ex.com/mars", snippet: "red planet" },
     ]);
-    // Model acks, researches, then answers in its final text. Both are
+    // Model acks, searches, then answers in its final text. Both are
     // messages, in order.
     const model = scriptedModel([
       {
         text: "Searching now...",
-        tools: [{ name: "research", input: { prompt: "distance to Mars" } }],
+        tools: [{ name: "web_search", input: { query: "distance to Mars" } }],
       },
-      { tools: [{ name: "web_search", input: { query: "distance to Mars" } }] },
-      { text: "Mars is far. Source: https://ex.com/mars" },
       { text: "Mars averages 225M km away. Source: https://ex.com/mars" },
     ]);
 

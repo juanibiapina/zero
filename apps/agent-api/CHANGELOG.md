@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-02: When Zero looks something up on the web it now stays with you while it works, telling you what it's checking and answering as it goes, instead of going quiet until the whole search is done.
 - 2026-08-02: What Zero keeps in mind about you at all times is now just who you are. Your addresses, documents, plans and everything else move into their own subjects it looks up when they come up.
 - 2026-08-02: Zero writes plainer replies: no filler, no hedging, shorter words, shorter sentences.
 - 2026-08-02: Zero now knows which country you're in when it answers, so shops, services, holidays and prices match where you are, and it asks instead of guessing when it doesn't know.

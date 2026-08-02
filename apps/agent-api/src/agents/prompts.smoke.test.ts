@@ -28,7 +28,7 @@ describe("knowledge-maintainer prompts", () => {
     expect(prompt).toContain("their projects and where each one stands");
     expect(prompt).toContain("people, companies and organisations in their life");
     expect(prompt).toContain("Leave out what a search would answer the same way");
-    expect(prompt).toContain("record what it meant for the\nuser");
+    expect(prompt).toContain("record what it\nmeant for the user");
   });
 
   // Until 2026-08-02 the learner was told to record generously and to persist

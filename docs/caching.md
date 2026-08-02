@@ -67,7 +67,7 @@ would be wrong. Prompt caching is the right layer.
 1. **Within one run (tool loop).** System, tools, and the initial messages are
    fixed across the loop's steps; only assistant/tool messages append. Every step
    after the first reads the prefix from cache. Biggest win on tool-heavy turns
-   (research, calendar).
+   (web searching, calendar).
 2. **Across users.** `tools` + the static head of every agent's `system` are
    byte-identical for all users, so high traffic keeps this shared prefix warm
    and nearly every call reads it.
@@ -139,11 +139,11 @@ Measured on Anthropic in 2026-07, and the reason the layout is shaped this way
 - Breakpoint **on the last stable block** (this layout): turn 1 write=1611
   read=0; turn 2 write=10 read=1611. Full cross-turn hit.
 
-The research, learning, and onboarding agents run the same `runAgent` machine, so
-they get tiers 1-2 (cached system + tools) for free. They use the single-`prompt`
-path with no caller anchor and no system tail, but the loop's sliding tail
-breakpoint caches their growing message region too: on a multi-step research turn
-each step reads the accumulated context from cache and writes only its delta.
+The learning and onboarding agents run the same `runAgent` machine, so they get
+tiers 1-2 (cached system + tools) for free. They use the single-`prompt` path
+with no caller anchor and no system tail, but the loop's sliding tail breakpoint
+caches their growing message region too: on a multi-step run each step reads the
+accumulated context from cache and writes only its delta.
 
 ## Cache statistics
 
@@ -185,7 +185,7 @@ silently. Concretely:
 `runAgent` returns `usage` (whole-run aggregate) and `stepUsages` (per step).
 Each agent's completion log carries token fields via `usageLogFields`:
 
-- `interface_completed`, `research_completed`, `learn_slice_completed`,
+- `interface_completed`, `learn_slice_completed`,
   `onboarding_completed`: `input_tokens`, `output_tokens`, `cache_read_tokens`,
   `cache_write_tokens`, and a derived `cache_hit_ratio` =
   `cache_read / (cache_read + cache_write + input)`.
@@ -212,8 +212,8 @@ logs, which break tokens and cost down by the `agent` metadata tag.
 
 ### Tier 1 — within one run
 
-- **Scenario:** a multi-step turn (a message that fires `research` or a calendar
-  lookup).
+- **Scenario:** a multi-step turn (a message that sends the agent searching the
+  web, or a calendar lookup).
 - **Pass:** the first step logs `cache_write_tokens > 0`; later steps
   (`interface_step_usage`, or the per-step `cache_stats` lines) log
   `cache_read_tokens` on the order of the system+tools token count.
@@ -272,7 +272,9 @@ Measured in production (`claude-sonnet-4-6`, version `f0ed8d06`).
 ### Tier 1 — within one run (2026-07-21) — PASS
 
 A single "research X" message drove a multi-step turn. Per-step and per-agent
-cache tokens showed the write-then-read pattern on every agent:
+cache tokens showed the write-then-read pattern on every agent. Measured while
+searching still ran in a nested `research` agent (removed on 2026-08-02); that
+loop's steps now run under `interface`, and the pattern is the same:
 
 | agent | steps | write | read | notes |
 | --- | --- | --- | --- | --- |

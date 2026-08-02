@@ -623,7 +623,7 @@ describe("runTurn", () => {
     expect(reportError).not.toHaveBeenCalled();
   });
 
-  it("requests interface and research models from the factory", async () => {
+  it("requests the interface model from the factory", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);
     store.storeMessage(id, "user", "hi");
@@ -647,10 +647,9 @@ describe("runTurn", () => {
       topicId: 0,
     });
 
-    // The interface agent and its research tool each pull a tagged model.
-    expect(requested).toContain("interface");
-    expect(requested).toContain("research");
-    expect(requested).not.toContain("writer");
+    // The turn's only model call is the interface agent's, tagged as such:
+    // there is no nested agent to attribute separately.
+    expect(requested).toEqual(["interface"]);
   });
 
 });

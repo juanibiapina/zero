@@ -1,66 +1,42 @@
-# Research agent
+# Web research
 
-The interface agent has a `research` tool. Calling it instantiates a second
-agent (research-prompted, with read-only topic tools + a `web_search` tool),
-runs its own tool loop, and returns a short sourced findings report as the tool
-result.
+The interface agent investigates the web in its own tool loop. Two tools:
+`web_search(query)` returns title/url/snippet results, and `read_page(url)`
+returns one page as cleaned markdown. There is no separate research agent: until
+2026-08-02 a `research` tool spawned a second, research-prompted agent whose
+final message came back as the tool result. That hop bought a different prompt
+and a read-only toolset, and cost a nested loop, a second step cap, a separate
+gateway tag, an opaque single tool result, and a hop of latency before the user
+saw anything.
 
-Research is for wider investigation across sources. When the user simply hands
-over a web address, the interface agent opens it with its own `read_page` tool
-instead of spawning research.
+Searching in the turn's own loop means the model can say it is looking, search,
+open what it finds, and answer, all as text blocks of one run — the user sees
+progress instead of silence. The investigation rules the research prompt used to
+carry (cast a wide net, stop once further searches stop changing the answer,
+corroborate and prefer primary sources, put a source URL right after each claim,
+say what is uncertain) now live in the interface prompt, which is the only place
+left that can carry them.
 
-The research agent **gathers and reports**: it casts a wide net with web search
-(including opinion sources such as Reddit and Hacker News where the subject
-warrants it), reads related topics when they help, and returns a sourced report
-as its final message, stopping once further searches stop changing the answer.
-It has **no write tools** — the learning agent that runs off the turn path
-decides what, if anything, the report leaves in the knowledge model: what the
-research meant for the user (what they were deciding, what they chose, what they
-will do), never the findings themselves, which are public and findable again.
-Authoring full topic bodies inside the research loop was the dominant cost
-(5-8k output tokens per write, minutes of
-wall clock), so removing the write tools is what makes research fast. Measured
-on the 2026-07-27 17:51:20Z production research turn, the no-write design ran the
-research loop in ~48s over 6 steps (largest single generation 1,115 tokens) and
-the whole turn (interface + research, plus the per-turn writer that still ran then) in ~88s for $0.217, against a
-pre-fix baseline of ~10+ minutes and $3–4 for the one turn when research authored
-bodies in-loop (see `docs/plans/agent-latency-investigation.md` for the sourced
-per-call breakdown). The prompt sets no length target — it asks for a short
-report and lets the question decide the shape — and the persisted tool result
-gives research results a generous 8,000-char ceiling (vs 1,500 chars for every
-other tool), so a normal sourced report reaches the interface agent's reply whole
-rather than truncated mid-claim. The ceiling was raised to fit the report, not
-the report shrunk to fit the ceiling. (The 8,000-char ceiling is code-verified in
-`interface.ts`; it has not
-yet been observed on a real turn, since the measured report above was only 1,115
-tokens.) When the interface passes an existing `topic`, the agent reads it for
-context; that topic is merged into the interface's `accessed` set so learning
-knows it is relevant.
+The agent is prompted to search proactively — whenever the user *mentions* a
+researchable subject (a company, product, technology, person, place, or event)
+or makes a claim worth checking, not only for explicit questions — bounded by a
+restraint clause (skip chit-chat and anything topics or plain reasoning already
+cover). The `searches` rollup on `interface_completed` makes triggering
+observable and tunable; err toward more searching and tune down from logs.
 
-## Proactive triggering
+## Cost of the flat loop
 
-The interface agent is prompted to call `research` proactively — whenever the
-user *mentions* a researchable subject (a company, product, technology, person,
-place, or event) or makes a claim worth checking, not only for explicit
-questions. It acknowledges first (research adds latency), passes the subject's
-existing topic as `topic` when one exists, then references the resulting topic
-in a natural reply. A restraint clause bounds triggering (skip chit-chat,
-acknowledgements, and anything topics or plain reasoning already cover). The
-`research_started` / `research_completed` logs make triggering observable and
-tunable; err toward more triggering and tune down from logs.
+Search results and page contents are persisted tool results in the conversation
+log, so they are re-sent on every later turn of that conversation until
+compaction. The nested agent used to absorb that: only its findings report
+reached the log. The backstops are the size-triggered compaction threshold and
+the history page cap (`docs/topics.md`); watch `context_rendered.total_tokens`
+if conversations start compacting noticeably sooner.
 
-## The tool contract
-
-- **Input:** `{ prompt, topic? }`. `prompt` is what to research; `topic`
-  (optional) names an existing topic the interface already knows is relevant, so
-  the agent reads it for context instead of starting cold.
-- **Output — a findings report.** The tool returns the agent's final sourced
-  report (each claim followed by its inline `Source: <url>`) as the tool result.
-  Research writes nothing; after the turn, learning records what the report meant
-  for the user, not the report.
-- **Accessed.** Topics the research agent **reads** (via `get_topic`) are merged
-  into the interface agent's `accessed` set, which is what the turn's
-  `accessed_count` log line reports (see `docs/topics.md`).
+The learner sees those raw results instead of a report, bounded at 2,000 chars
+each in its rendered log. Its prompt already tells it to record what the
+searching meant for the user, never the findings themselves, which are public
+and findable again.
 
 ## One runner, three agents
 
@@ -73,51 +49,34 @@ runAgent({ model, system, prompt, tools, maxSteps }) →
 
 `runAgent` also applies prompt caching: it sends `system` as a text block with a
 cache breakpoint and marks the last tool with another, and advances a sliding
-breakpoint over the growing message tail before every step, so even the
-prompt-only research and learning agents cache their message region within a run
-(research previously had none). It returns token counts (`usage`, `stepUsages`).
-See [caching.md](./caching.md).
+breakpoint over the growing message tail before every step. It returns token
+counts (`usage`, `stepUsages`). See [caching.md](./caching.md).
 
-The interface agent, the research agent, and the learning agent are the same
-runner with different system prompts and toolsets:
+The interface agent, the learning agent and onboarding are the same runner with
+different system prompts and toolsets:
 
-- **Interface agent** (`agents/interface.ts`): tools are the topic tools +
-  `research` + `read_page` + Google + attachments. `read_page` is registered here
-  too, so a web address the user hands over is opened directly, with no research
-  run. There is no `reply` tool: the model's own text blocks are the messages,
-  delivered as it writes them. `finishReason` is used only to decide the
-  no-silence fallback.
-- **Research agent** (spawned by `tools/research.ts`): tools are the read-only
-  topic tools (`list_topics`, `get_topic`) + `web_search` + `read_page` (no
-  no write tools at all). `web_search` returns snippets;
-  `read_page` fetches the full cleaned content of a chosen result's URL on
-  demand. It returns a compact sourced findings report as the `research` tool
-  result; the tool merges the topics research read into the interface's
-  `accessed` set.
+- **Interface agent** (`agents/interface.ts`): the topic tools + `web_search` +
+  `read_page` + Google + attachments + schedules. There is no `reply` tool: the
+  model's own text blocks are the messages, delivered as it writes them. It runs
+  inline in the turn's DO alarm under the shared step cap `AGENT_MAX_STEPS =
+  200`, a runaway-loop guard rather than an expected stopping point; a searching
+  turn normally finishes in a handful of steps. Since no agent nests inside
+  another, search and page fetches add to the turn's Cloudflare subrequest count
+  rather than multiplying it.
 - **Learning agent** (`agents/learner.ts`): the topic tools only, run off the
   turn path in LearningDO. See `docs/topics.md`.
+- **Onboarding agent** (`agents/onboarding.ts`): topic tools + read-only Gmail.
+  See `docs/onboarding.md`.
 
-The research agent gets its own model from the per-turn factory, tagged
-`agent: "research"` in `cf-aig-metadata` (alongside `user_id`), so the AI Gateway
-attributes its cost/tokens separately from the interface and learning agents while
-keeping per-user attribution. The research loop runs inline in
-the turn's DO alarm (no separate alarm). The interface agent uses the shared
-step cap `AGENT_MAX_STEPS = 200`; the research agent has its own generous bound
-`RESEARCH_MAX_STEPS = 40` (`tools/research.ts`). Both caps are runaway-loop
-guards, not expected stopping points: a normal loop finishes in a handful of
-steps. Research's bound sits well above the observed 20+ steps of a heavy loop
-because hitting the cap returns an empty report; if `finish_reason != "stop"`
-with a high step count shows up in logs, revisit it.
+## Observability
 
-The research tool logs `research_started` (`prompt_len`, `has_topic`) and
-`research_completed` (`steps`, `finish_reason`, `duration_ms`, `report_len`,
-`accessed` — the topics it read, the search rollup below, plus token/cache
-counts); the `web_search` tool logs `web_search_completed` and
-`web_search_failed`; the `read_page` tool logs `read_page_completed`
-(`caller`, `duration_ms`, `content_len`) and `read_page_failed` (`caller`,
-`duration_ms`, `error`) the same way. `caller` is `interface` or `research`, so
-direct reads and research reads are distinguishable; the address itself is never
-logged. No message content is logged (see `log.ts` conventions).
+`interface_completed` carries the turn's search rollup (`searches`,
+`searches_failed`, `searches_empty`, `unique_queries`, `search_ms_total`)
+alongside `steps`, `finish_reason`, `duration_ms` and the token/cache counts.
+The `web_search` tool logs `web_search_completed` and `web_search_failed` per
+call; `read_page` logs `read_page_completed` (`duration_ms`, `content_len`) and
+`read_page_failed` (`duration_ms`, `error`) the same way. The address itself is
+never logged, and no message content is logged (see `log.ts` conventions).
 
 ### Search usage
 
@@ -138,9 +97,10 @@ header is missing or unparseable, so no field is ever `NaN`.
 spent) and `total_duration_ms`.
 
 Per call, `web_search_completed` reports `result_count`, `duration_ms` and
-`repeat` (this run already searched this query). Per run, `research_completed`
-reports `searches`, `searches_failed`, `searches_empty`, `unique_queries` and
-`search_ms_total`. `steps` cannot stand in for these: the loop fans out several
+`repeat` (this turn already searched this query). Per turn,
+`interface_completed` reports `searches`, `searches_failed`, `searches_empty`,
+`unique_queries` and `search_ms_total`. `steps` cannot stand in for these: the
+loop fans out several
 tool calls per step, so steps do not convert into requests.
 
 **No query text is logged.** Every line carries `query_hash` (an 8-hex FNV-1a
@@ -179,8 +139,8 @@ Counting successes is the point.
 `apps/agent-api/src/pagefetch/types.ts` defines the `PageFetcher` port and a
 normalized `PageContent` (`{ url, content }`, cleaned markdown). Search stays
 snippet-only on Brave; depth is a separate, on-demand `read_page` tool. The
-interface agent calls it on an address the user gives; the research agent calls
-it for search results it judges important. Adapters:
+interface agent calls it on an address the user gives and on the search results
+it judges important. Adapters:
 
 - `tavily.ts` — `createTavilyFetcher(apiKey, options?)`, production. Normalizes
   the address first (`normalizeWebAddress`): trims it, adds `https://` to
@@ -214,4 +174,4 @@ gap on demand. The `WebSearch` and `PageFetcher` ports are the swap points:
 ## e2e
 
 The e2e mock LLM returns canned text and never issues tool calls, so
-`research` never fires in e2e and no real search call is made.
+`web_search` never fires in e2e and no real search call is made.

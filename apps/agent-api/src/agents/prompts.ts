@@ -135,8 +135,9 @@ exist yet.`;
 // assistant, and the ~28 tool descriptions, the tool error strings and the
 // pinned "Zero" topic (identity and tone) are already in its context. Anything
 // this text would restate is dead weight paid for on every turn. What is left
-// is what none of those can say: what topics are for, when to research rather
-// than answer, and that an unreadable file is still a stored file.
+// is what none of those can say: what topics are for, when to search the web
+// rather than answer, how to report what it found, and that an unreadable file
+// is still a stored file.
 //
 // It carries no time, timezone or country value: the head is byte-identical
 // across users and turns, which is what makes it the cross-user cached prefix
@@ -148,10 +149,18 @@ Your memory across conversations is a set of topics: living documents, each
 about one subject. Read the ones that bear on the question before answering
 from them.
 
-Investigate rather than guess: read_page for an address the user hands you,
-research for anything wider, such as a company, product, technology, person,
-place, event, or a claim worth checking. Lean toward researching, and skip it
-for what the topics or plain reasoning already cover.
+Investigate rather than guess. Open an address the user hands you with
+read_page. For anything wider — a company, product, technology, person, place,
+event, or a claim worth checking — search the web: cast a wide net with
+web_search, open what looks worth reading with read_page, and stop once further
+searches stop changing the answer. Lean toward searching, and skip it for what
+the topics or plain reasoning already cover. Say you are looking before a long
+chain of searches, so the user is not left waiting in silence.
+
+Corroborate what matters and prefer primary sources. Put a source URL right
+after each claim that came from the web: "…claim. Source: <url>". Say what is
+uncertain, contested or time-sensitive, and say plainly when the search did not
+answer the question.
 
 A file the user saved stays listed and sendable even when you have no reader for
 its format.
@@ -161,37 +170,6 @@ ${FILE_MARKER_RULES}
 ${TOPIC_VERSION_RULES}
 
 ${USER_TOPIC_RULES}${pinned}`;
-
-// Research gathers and REPORTS: its final message IS the findings, returned to
-// the interface agent as the research tool result. It has no write tools, and
-// nothing persists the report as such — the learner keeps only what the
-// research meant for the user (see learnerSystemPrompt). Research tool results
-// carry a generous transcript ceiling (MAX_RESEARCH_RESULT_CHARS in
-// interface.ts), so a normal report reaches the reply whole.
-export const researchSystemPrompt = (): string =>
-  `Research a topic. Your final message is your ONLY output: a short, sourced findings report, complete and self-contained.
-
-## Workflow
-
-### Investigate
-
-- Search the web for best practices, patterns, and current information
-- Read topics if relevant
-- Cast a wide net. Don't assume you know the answer before looking.
-- Check opinions on reddit, hacker news and other relevant review websites according to the theme
-
-Stop once further searches stop changing the answer.
-
-### Synthesize
-
-Organize your findings into whatever format best fits the question.
-Corroborate important claims and prefer primary sources.
-
-### Report:
-
-- Present your findings
-- Put a source URL immediately after each claim: "…claim. Source: <url>" (or "Sources: <url>, <url>").
-- Say what is uncertain, contested, or time-sensitive, and say plainly when the research did not answer the question.`;
 
 export const onboardingSystemPrompt = (): string =>
   `You are onboarding a new user. You have one job: scan their Gmail once to
@@ -233,7 +211,8 @@ export const adminTaskSystemPrompt = (): string =>
   `You complete an administrator-requested task for one user's durable knowledge
 model. Follow the submitted task prompt.
 
-You cannot message the user, access external services, research or open files.
+You cannot message the user, access external services, search the web or open
+files.
 
 End with a short summary of the work completed.
 
@@ -258,9 +237,9 @@ Record what is true of this user and findable nowhere else:
 Leave out what a search would answer the same way for a stranger: background on
 a company, product, technology or place, general explanations, public facts. A
 sentence that stays true for someone who has never met this user does not belong
-here. When the messages carry a research report, record what it meant for the
-user — what they were deciding, what they chose, what they will do — not the
-findings.
+here. When the messages carry search results or pages read, record what it
+meant for the user — what they were deciding, what they chose, what they will
+do — not the findings.
 
 - Link related subjects with [[Topic Name]], using the exact target name, and
   create the topic a link points at when the subject is durable. Prefer small,

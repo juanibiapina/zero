@@ -13,10 +13,9 @@ type ReadPageExecute = (input: {
 
 const run = (
   fetcher: PageFetcher,
-  caller: "interface" | "research",
   url: string,
 ): Promise<PageContent | { error: string }> => {
-  const tool = buildReadPageTool({ fetcher, caller }).read_page;
+  const tool = buildReadPageTool({ fetcher }).read_page;
   return (tool.execute as unknown as ReadPageExecute)({ url });
 };
 
@@ -35,35 +34,33 @@ const logLines = () => {
 };
 
 describe("buildReadPageTool", () => {
-  it("returns the page content and logs the caller, duration and length", async () => {
+  it("returns the page content and logs the duration and length", async () => {
     const lines = logLines();
     const fetcher = createMemoryFetcher({
       "https://ex.com/a": "# Title\n\nBody.",
     });
 
-    const result = await run(fetcher, "interface", "https://ex.com/a");
+    const result = await run(fetcher, "https://ex.com/a");
 
     expect(result).toEqual({
       url: "https://ex.com/a",
       content: "# Title\n\nBody.",
     });
     const done = lines.find((l) => l.msg === "read_page_completed");
-    expect(done).toMatchObject({ caller: "interface", content_len: 14 });
+    expect(done).toMatchObject({ content_len: 14 });
     expect(typeof done?.duration_ms).toBe("number");
   });
 
-  it("returns the failure as data and logs the caller and duration", async () => {
+  it("returns the failure as data and logs the duration", async () => {
     const lines = logLines();
 
     const result = await run(
       failingFetcher("page fetch failed: invalid web address"),
-      "interface",
       "ftp://ex.com",
     );
 
     expect(result).toEqual({ error: "page fetch failed: invalid web address" });
     const failed = lines.find((l) => l.msg === "read_page_failed");
-    expect(failed).toMatchObject({ caller: "interface" });
     expect(typeof failed?.duration_ms).toBe("number");
   });
 
@@ -73,23 +70,11 @@ describe("buildReadPageTool", () => {
       "https://secret.example.com/private": "confidential body",
     });
 
-    await run(fetcher, "research", "https://secret.example.com/private");
-    await run(failingFetcher("boom"), "research", "https://secret.example.com/private");
+    await run(fetcher, "https://secret.example.com/private");
+    await run(failingFetcher("boom"), "https://secret.example.com/private");
 
     const serialized = JSON.stringify(lines);
     expect(serialized).not.toContain("secret.example.com");
     expect(serialized).not.toContain("confidential body");
-  });
-
-  it("distinguishes the interface and research callers", async () => {
-    const lines = logLines();
-    const fetcher = createMemoryFetcher({ "https://ex.com/a": "body" });
-
-    await run(fetcher, "interface", "https://ex.com/a");
-    await run(fetcher, "research", "https://ex.com/a");
-
-    expect(
-      lines.filter((l) => l.msg === "read_page_completed").map((l) => l.caller),
-    ).toEqual(["interface", "research"]);
   });
 });

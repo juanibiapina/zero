@@ -145,7 +145,7 @@ describe("createModel", () => {
 
     const makeModel = await createModelFactory(env, "user_123");
     const a = makeModel("interface");
-    const b = makeModel("research");
+    const b = makeModel("learner");
 
     expect(a).toMatchObject({ modelId: "gpt-5.6-luna" });
     expect(b).toMatchObject({ modelId: "gpt-5.6-luna" });
@@ -200,7 +200,6 @@ describe("the OpenAI request", () => {
   it("asks every agent to reason at high effort", async () => {
     const agents: AgentLabel[] = [
       "interface",
-      "research",
       "learner",
       "compaction",
       "onboarding",
@@ -346,10 +345,6 @@ describe("gatewayMetadata", () => {
     expect(JSON.parse(gatewayMetadata("user_123", "interface"))).toEqual({
       user_id: "user_123",
       agent: "interface",
-    });
-    expect(JSON.parse(gatewayMetadata("user_123", "research"))).toEqual({
-      user_id: "user_123",
-      agent: "research",
     });
     expect(JSON.parse(gatewayMetadata("u", "learner"))).toMatchObject({
       agent: "learner",

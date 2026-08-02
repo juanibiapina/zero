@@ -35,20 +35,20 @@ import type { ScheduleBook } from "../schedules/types";
 export interface TurnInput {
   store: Store;
   // Per-agent model factory. The orchestrator asks it for a tagged model at
-  // each agent boundary (interface, research, writer) so gateway logs attribute
+  // each agent boundary (interface, writer) so gateway logs attribute
   // cost per agent. Tests inject a stub that records the labels requested.
   makeModel: (agent: AgentLabel) => AgentModel;
   send: (text: string) => Promise<void>;
   // Stop the Telegram "typing" chat action. Called the moment the user's reply
-  // has been sent — after the interface phase (including any research it
-  // triggered, which the user genuinely waits on) and before the writer runs,
+  // has been sent — after the interface phase (including any searching it did,
+  // which the user genuinely waits on) and before the writer runs,
   // and on the failure path right after the fallback is sent. The writer is
   // internal topic consolidation the user is not waiting on, so typing must not
   // span it. Idempotent; optional so direct callers and tests can omit it.
   stopTyping?: () => void;
   search: WebSearch;
-  // Page-fetch port for the read_page tool on the interface and research agents
-  // (threaded like `search`).
+  // Page-fetch port for the read_page tool on the interface agent (threaded
+  // like `search`).
   fetcher: PageFetcher;
   // Gmail + Calendar access, built by the DO and forwarded to the interface
   // agent (threaded like `search`).
@@ -220,7 +220,6 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
   try {
     await runInterfaceAgent({
       model: makeModel("interface"),
-      researchModel: makeModel("research"),
       store,
       send,
       // Persist the log as the loop runs: the response before its tools, the

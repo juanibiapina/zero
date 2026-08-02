@@ -17,9 +17,9 @@ import { createOpenAIModel } from "./model-openai";
 export type { AgentLabel } from "./model-options";
 
 // Per-agent model overrides, empty on purpose. Zero runs one model everywhere;
-// this is the lever for the two agents whose quality is hardest to recover if
-// the cheap tier is not good enough — the learner (it writes memory that
-// persists) and research (deep browsing). Adding an entry here is a code change
+// this is the lever for the agent whose quality is hardest to recover if the
+// cheap tier is not good enough — the learner, which writes memory that
+// persists. Adding an entry here is a code change
 // on purpose: it is a quality decision, not an ops toggle.
 export const AGENT_MODEL_OVERRIDES: Partial<Record<AgentLabel, string>> = {};
 

@@ -145,13 +145,12 @@ migration and no per-user seeding.
    - `list_topics`, `get_topic`, `create_topic`, `edit_topic`, `append_topic`,
      `update_topic_metadata`, `list_backlinks` — read/write the knowledge model and its
      `[[Name]]` link graph. Every topic touched is added to an `accessed` set.
-   - `read_page(url)` — open a web address and return its cleaned markdown.
-     Registered here as well as on the research agent, so a link the user hands
-     over is read directly instead of spawning a research run. Full URLs and
-     shorthand (`thing.com/path`) both work; the adapter normalizes them.
+   - `web_search(query)` — search the web; returns title/url/snippet results.
+   - `read_page(url)` — open a web address and return its cleaned markdown,
+     whether the user handed the link over or a search turned it up. Full URLs
+     and shorthand (`thing.com/path`) both work; the adapter normalizes them.
    - `delete_topic` — permanently remove a topic. Interface-agent only (not in
-     the shared `buildTopicTools`, so the learner and research agents cannot
-     delete),
+     the shared `buildTopicTools`, so the learner cannot delete),
      and its tool description gates it on explicit user confirmation. Deleting a topic
      drops its own outbound link rows; inbound links from other bodies keep
      their `[[Name]]` text and become dangling, re-resolving if a topic of that
@@ -161,7 +160,7 @@ migration and no per-user seeding.
    (`buildTopicTools`), reading the raw message log since the last consolidation
    across all of the user's conversations, and it runs in LearningDO on its own
    alarm (see "How a learning job runs"). Durable facts often live in tool
-   results — calendar events, email bodies, research reports — so it reads the
+   results — calendar events, email bodies, search results — so it reads the
    persisted results, not a summary of the turn. For each topic that gained
    durable information it reads the body (`get_topic`), merges new facts under
    sensible sections with `edit_topic` or `append_topic`, and uses
@@ -177,18 +176,18 @@ migration and no per-user seeding.
    Everything a search would answer the same way for a stranger — background on a
    company, product, technology or place, general explanations, public facts —
    is left out. Until 2026-08-02 the prompt said the opposite ("be proactive and
-   generous", ten illustrative categories, research reports persisted verbatim),
+   generous", ten illustrative categories, web findings persisted verbatim),
    and the model filled with encyclopedia content that buried the user's own
    material.
 
-A third agent gathers material for topics: the **research agent** (spawned by
-the interface agent's `research` tool; see `docs/research.md`). It has read-only
-topic tools + `web_search` + `read_page` and **no write tools**; it returns a
-sourced findings report as its tool result rather than writing topics itself. The report is a persisted tool result in the conversation log, so the
-learner reads the real thing rather than a truncated copy — but what it keeps is
-**what the research meant for the user** (what they were deciding, what they
-chose, what they will do), not the findings. A report that changed nothing for
-the user leaves no topic behind.
+Material for topics also arrives from the web: the interface agent searches with
+`web_search` and opens pages with `read_page` in its own loop (see
+`docs/research.md`). Neither tool writes topics. The results and the pages read
+are persisted tool results in the conversation log, so the learner reads the
+real thing rather than a truncated copy — but what it keeps is **what the
+searching meant for the user** (what they were deciding, what they chose, what
+they will do), not the findings. A search that changed nothing for the user
+leaves no topic behind.
 
 The topic tools are shared, and **no tool replaces a complete body**:
 
@@ -488,7 +487,7 @@ recorded). An assistant response with a terminal stop reason and an empty queue
 is idle. A concurrent enqueue arms a fresh alarm, so messages that
 arrive mid-run are picked up on the next fire. A self-rescheduling `setTimeout`
 re-sends the Telegram typing action every 4s across the interface phase
-(including any research the user genuinely waits on) and stops the moment the
+(including any searching the user genuinely waits on) and stops the moment the
 reply (or fallback) is sent (`orchestrator.ts` calls `stopTyping` right after the
 interface phase, which is now the end of the turn). The DO alarm stays dedicated
 to turn scheduling.

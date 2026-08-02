@@ -25,7 +25,7 @@ import type { LearningPort } from "../learning/types";
 export const LEARN_STEPS_PER_SLICE = 12;
 
 // Cap on one tool result inside the rendered raw log. The learner reads real
-// messages, and a research report or a calendar dump would otherwise dominate
+// messages, and a page it read or a calendar dump would otherwise dominate
 // its input.
 const MAX_RENDERED_RESULT_CHARS = 2000;
 

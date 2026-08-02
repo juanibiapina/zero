@@ -1,5 +1,5 @@
 // The one agent machine: model + system + prompt + tools + step cap → final
-// assistant text. The interface agent and the research agent are the same
+// assistant text. The interface, writer and onboarding agents are the same
 // runner instantiated with different system prompts and toolsets. It has no
 // opinion about the output (no fallback); callers decide what the text means.
 //
@@ -26,21 +26,21 @@ import {
 import { cachedSystem, slideMessageBreakpoint } from "./cache";
 import { ExternalCallNotSent } from "./external-call";
 
-// Shared step cap for every agent (interface and research). The cap is a
-// runaway-loop guard, not an expected stopping point: the model normally
-// finishes in a handful of steps. 200 gives generous headroom while still
-// bounding pathological loops.
+// Shared step cap for every agent. The cap is a runaway-loop guard, not an
+// expected stopping point: the model normally finishes in a handful of steps.
+// 200 gives generous headroom while still bounding pathological loops.
 //
 // Tradeoff of a high cap: (a) the Cloudflare subrequest ceiling — 1000
-// subrequests per invocation; each step is >=1 LLM call, research adds search
-// calls, and interface x research nest multiplicatively — and (b) longer
+// subrequests per invocation; each step is >=1 LLM call and a searching turn
+// adds search and page fetches on top (no agent nests inside another, so those
+// costs add rather than multiply) — and (b) longer
 // wall-clock time, which widens the window for mid-run DO eviction. 200 is a
 // safety net; if runaway loops show up in logs (finish_reason != "stop" with a
 // high step count), lower it.
 export const AGENT_MAX_STEPS = 200;
 
 // Durable bookkeeping for calls that cannot be replayed. Implemented by the
-// store; omitted by agents with no external writes (research, writer).
+// store; omitted by agents with no external writes (writer, onboarding).
 export interface ExternalCallGuard {
   begin(
     toolUseId: string,
@@ -66,7 +66,7 @@ export interface RunAgentInput {
   system: string;
   // Either a single user `prompt` string (wrapped into one user message) or a
   // full `messages` array. The interface agent passes structured `messages`
-  // (native user/assistant turns); research, writer, and onboarding pass a
+  // (native user/assistant turns); the writer and onboarding pass a
   // `prompt`. When both are present, `messages` wins.
   prompt?: string;
   messages?: AgentMessage[];

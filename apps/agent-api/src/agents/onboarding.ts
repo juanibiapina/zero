@@ -1,9 +1,9 @@
 // Onboarding agent: a one-shot Gmail scan that seeds the pinned identity topic
 // when a user connects Google. It is the same runAgent machine as the interface
 // and writer agents, given the topic tools plus read-only Gmail (gmail_search,
-// gmail_thread) — no reply, no delivery, no research, no web_search, no calendar.
-// It authors the pinned topic directly (like the research agent authors its
-// topic), so there is no writer pass. Runs off Telegram on the DO alarm.
+// gmail_thread) — no reply, no delivery, no web_search, no calendar.
+// It authors the pinned topic directly, so there is no writer pass. Runs off
+// Telegram on the DO alarm.
 
 import type { AgentModel } from "./protocol";
 import { buildTopicTools } from "../tools/topics";
