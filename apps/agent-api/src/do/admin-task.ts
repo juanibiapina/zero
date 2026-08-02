@@ -5,7 +5,10 @@
 import { fmtErr, logError } from "../log";
 
 export const ADMIN_TASK_KEY = "adminTask";
-export const MAX_ADMIN_TASK_SUMMARY_CHARS = 1000;
+// Bounds one DO storage value, well inside the 128 KB per-value limit. Kept
+// generous because the agent's real answers are markdown documents, and a tight
+// cap truncated them mid-structure.
+export const MAX_ADMIN_TASK_SUMMARY_CHARS = 16_000;
 
 export type AdminTask =
   | { clerkUserId: string; prompt: string; status: "queued" }

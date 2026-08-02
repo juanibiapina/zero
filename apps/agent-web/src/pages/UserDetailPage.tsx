@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { UserButton } from "@clerk/react";
 import { Button } from "@/components/ui/button";
+import { Markdown } from "@/components/Markdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -209,9 +210,19 @@ function AdminTaskCard({ userId }: { userId: string }) {
         {task?.status === "queued" && (
           <p className="text-sm text-muted-foreground">Running task…</p>
         )}
-        {task?.status === "done" && (
-          <p className="text-sm text-green-600">{task.summary || "Task completed."}</p>
-        )}
+        {task?.status === "done" &&
+          (task.summary ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Result</p>
+              {/* Capped height: a long result must not push the sections below
+                  it off the page. */}
+              <div className="max-h-96 overflow-y-auto rounded-md border bg-muted/40 p-3">
+                <Markdown>{task.summary}</Markdown>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Task completed.</p>
+          ))}
         {(task?.status === "failed" || requestFailed) && (
           <p className="text-sm text-destructive">Task failed.</p>
         )}
