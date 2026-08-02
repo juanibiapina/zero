@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildResearchTool, RESEARCH_MAX_STEPS } from "./research";
 import { scriptedModel } from "../agents/mock-model";
 import { MemoryStore } from "../store/memory";
@@ -155,6 +155,44 @@ describe("buildResearchTool", () => {
     // The loop recovered from the fetch error and still produced a report.
     expect(result).toContain("Source: https://ex.com/x");
     expect(store.listTopics()).toHaveLength(0);
+  });
+
+  it("reports what the run's searches cost", async () => {
+    // Brave bills per query and the loop can fan out several tool calls per
+    // step, so `steps` says nothing about spend. This line is what does.
+    const lines: Record<string, unknown>[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args) => {
+      lines.push(args[0] as Record<string, unknown>);
+    });
+
+    const store = new MemoryStore();
+    const model = scriptedModel([
+      { tools: [{ name: "web_search", input: { query: "Mars distance" } }] },
+      { tools: [{ name: "web_search", input: { query: "mars distance" } }] },
+      { tools: [{ name: "web_search", input: { query: "Mars moons" } }] },
+      { text: "- Mars is far. Source: https://ex.com/mars" },
+    ]);
+
+    const tools = buildResearchTool({
+      model,
+      store,
+      search: createMemorySearch([
+        { title: "Mars", url: "https://ex.com/mars", snippet: "far" },
+      ]),
+      fetcher: createMemoryFetcher(),
+      accessed: new Set<string>(),
+    });
+    await runResearch(tools, { prompt: "how far is Mars" });
+
+    expect(lines.find((l) => l.msg === "research_completed")).toMatchObject({
+      searches: 3,
+      searches_failed: 0,
+      searches_empty: 0,
+      // "Mars distance" and "mars distance" are the same search to Brave.
+      unique_queries: 2,
+    });
+
+    vi.restoreAllMocks();
   });
 
   it("uses a generous research step bound, not a tight one", () => {

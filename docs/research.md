@@ -111,13 +111,46 @@ with a high step count shows up in logs, revisit it.
 
 The research tool logs `research_started` (`prompt_len`, `has_topic`) and
 `research_completed` (`steps`, `finish_reason`, `duration_ms`, `report_len`,
-`accessed` — the topics it read, plus token/cache counts); the `web_search` tool
-logs `web_search_failed` (`error`) where search errors are otherwise swallowed
-into the tool result; the `read_page` tool logs `read_page_completed`
+`accessed` — the topics it read, the search rollup below, plus token/cache
+counts); the `web_search` tool logs `web_search_completed` and
+`web_search_failed`; the `read_page` tool logs `read_page_completed`
 (`caller`, `duration_ms`, `content_len`) and `read_page_failed` (`caller`,
 `duration_ms`, `error`) the same way. `caller` is `interface` or `research`, so
 direct reads and research reads are distinguishable; the address itself is never
 logged. No message content is logged (see `log.ts` conventions).
+
+### Search usage
+
+Brave bills per request, and one logical search costs up to 4 of them after
+retries, so requests are counted where they are made: **every HTTP attempt to
+Brave emits one `brave_request` line**, successes included (`websearch/brave.ts`
+is the only code that calls Brave). Fields: `status`, `attempt`, `duration_ms`,
+`upstream_ms` (Brave's own `server-timing`), `result_count` on a 200, and Brave's
+accounting headers split into their two windows — `rate_limit_sec` /
+`rate_limit_month`, `rate_remaining_sec` / `rate_remaining_month`,
+`rate_reset_sec` / `rate_reset_month`. A monthly component of `0` means the plan
+has no monthly cap, not that it is exhausted. A component is omitted when the
+header is missing or unparseable, so no field is ever `NaN`.
+
+`brave_rate_limited` (a retry) and `brave_quota_exhausted` carry the 429 body's
+`plan`, `rate_limit`, `rate_current`, `quota_limit`, `quota_current`.
+`brave_request_failed` closes a search that gave up, with `attempts` (requests
+spent) and `total_duration_ms`.
+
+Per call, `web_search_completed` reports `result_count`, `duration_ms` and
+`repeat` (this run already searched this query). Per run, `research_completed`
+reports `searches`, `searches_failed`, `searches_empty`, `unique_queries` and
+`search_ms_total`. `steps` cannot stand in for these: the loop fans out several
+tool calls per step, so steps do not convert into requests.
+
+**No query text is logged.** Every line carries `query_hash` (an 8-hex FNV-1a
+digest, `query-hash.ts`) and `query_len` instead, which is enough to spot repeats
+and retry storms on a single query without storing content, the same rule
+`read_page` follows for addresses.
+
+This exists because on 2026-08-02 the key burned most of a month's credit in a
+day and the request count had to be reconstructed by arithmetic from failure logs.
+Counting successes is the point.
 
 ## Web search port
 

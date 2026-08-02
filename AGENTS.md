@@ -241,6 +241,11 @@ POST /accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/
 - `$workers.event.scheduledTime` on an alarm is the time it was *scheduled*, not
   when it ran. The gap between the two is how alarm delay is measured.
 
+Brave search spend is countable from Workers Logs: every request to Brave emits
+one `brave_request` (filter on it and split by `status`; `attempt > 0` is retry
+cost), and each research run reports its own `searches` / `unique_queries` on
+`research_completed`. See `docs/research.md` (Search usage).
+
 Per-LLM-call cost, tokens, cache counts and a `metadata.agent` tag live in the
 **AI Gateway** logs instead:
 

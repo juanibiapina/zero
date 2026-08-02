@@ -17,7 +17,7 @@ import { z } from "zod";
 import { runAgent, usageLogFields } from "../agents/run";
 import { researchSystemPrompt } from "../agents/prompts";
 import { buildTopicTools } from "./topics";
-import { buildWebSearchTool } from "./web-search";
+import { buildWebSearchTool, newWebSearchStats } from "./web-search";
 import { buildReadPageTool } from "./read-page";
 import { log } from "../log";
 import type { TopicStore } from "../store/types";
@@ -77,10 +77,14 @@ export const buildResearchTool = (deps: ResearchToolDeps): AgentToolSet => {
           store,
           accessed: read,
         });
+        // Per-run search tally. Brave bills per query and the loop can fan out
+        // 5-8 tool calls per step, so `steps` says nothing about spend; this is
+        // what makes one run's cost readable in the logs.
+        const searchStats = newWebSearchStats();
         const tools = {
           list_topics,
           get_topic,
-          ...buildWebSearchTool({ search }),
+          ...buildWebSearchTool({ search, stats: searchStats }),
           ...buildReadPageTool({ fetcher, caller: "research" }),
         };
 
@@ -108,6 +112,11 @@ export const buildResearchTool = (deps: ResearchToolDeps): AgentToolSet => {
           duration_ms: Date.now() - start,
           report_len: report.length,
           accessed: [...read],
+          searches: searchStats.calls,
+          searches_failed: searchStats.failed,
+          searches_empty: searchStats.empty,
+          unique_queries: searchStats.queries.size,
+          search_ms_total: searchStats.durationMs,
           ...usageLogFields(usage),
         });
 
