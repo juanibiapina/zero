@@ -2,6 +2,7 @@
 // writer contracts are easy to read and adjust together.
 
 import type { Topic } from "../store/types";
+import { countryLabel } from "../country";
 
 // Cap each pinned body rendered into the interface prompt. Pinned topics keep
 // filling as the user interacts, so an uncapped body would grow the prompt
@@ -59,16 +60,32 @@ const formatAnchor = (now: Date, timezone: string): string => {
   return `${weekday}, ${date} ${time} (${timezone}, ${offset})`;
 };
 
-// The volatile per-turn context: current time and the user's timezone. Kept out
-// of the (cached, cross-user) system prompt and prepended to the latest user
-// message instead, so it sits after the cached history prefix and never
-// invalidates it. See docs/caching.md.
+// The volatile per-turn context: current time, the user's timezone and their
+// country code. Kept out of the (cached, cross-user) system prompt and
+// prepended to the latest user message instead, so it sits after the cached
+// history prefix and never invalidates it. See docs/caching.md.
+//
+// The country code is expanded to its English name here so the model does not
+// have to decode ISO alpha-2, and the unset case is stated rather than omitted:
+// a missing clause reads as "country does not matter", while "not set" is a
+// fact the model can act on (ask, or call set_country).
 export const interfaceContext = (
   now: Date = new Date(),
   timezone = "UTC",
-): string =>
-  `Current time: ${formatAnchor(now, timezone)}. Your timezone is ${timezone}; ` +
-  `interpret and express times in it.`;
+  country?: string,
+): string => {
+  const label = country === undefined ? null : countryLabel(country);
+  const countryClause =
+    country === undefined
+      ? "your country code is not set"
+      : label === null
+        ? `your country code is ${country}`
+        : `your country code is ${country} (${label})`;
+  return (
+    `Current time: ${formatAnchor(now, timezone)}. Your timezone is ${timezone} ` +
+    `and ${countryClause}; interpret and express times in the timezone.`
+  );
+};
 
 // Shared write protocol, appended to every prompt whose agent can write topics.
 // Reads carry the knowledge version; writes state the version they were based
@@ -92,12 +109,15 @@ export const interfaceSystemPrompt = (pinned = ""): string =>
   `You are the assistant behind a Telegram chat. You process one conversation
 turn: read the new user message and the history, then respond.
 
-The current time and your timezone are given with the latest user message. Each
-user message in the conversation is prefixed with an absolute timestamp
-[YYYY-MM-DD HH:MM] in the user's timezone; compare it to the current time to
-judge how long ago it was. If the user tells you they are in a different place
-or timezone, call set_timezone to update the timezone and set_country to update
-the country.
+The current time, your timezone and the user's country code are given with the
+latest user message. Each user message in the conversation is prefixed with an
+absolute timestamp [YYYY-MM-DD HH:MM] in the user's timezone; compare it to the
+current time to judge how long ago it was. Let the country shape local answers
+(shops, services, holidays, prices). When the country code is not set, do not
+infer it from the timezone: ask or wait until the user says where they are, then
+call set_country. If the user tells you they are in a different place or
+timezone, call set_timezone to update the timezone and set_country to update the
+country.
 
 You have a durable knowledge model made of topics: living documents each about
 one subject (a project, a person, an ongoing thread). Recall what a topic holds

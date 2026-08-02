@@ -126,6 +126,46 @@ describe("runTurn", () => {
     expect(store.findConversationsWithWork()).toEqual([]);
   });
 
+  // The country is stored and settable, so the only thing that can break is the
+  // hop from the turn input to the message the model actually reads.
+  const lastUserText = async (country?: string): Promise<string> => {
+    const store = new MemoryStore();
+    const id = store.getOrCreateConversation(1, 0);
+    store.storeMessage(id, "user", "where can I buy this?");
+    const requests: string[] = [];
+    const capturing = capturingModel((request) => {
+      const last = request.messages[request.messages.length - 1];
+      requests.push(
+        typeof last.content === "string" ? last.content : JSON.stringify(last.content),
+      );
+      return { content: [{ type: "text", text: "ok" }] };
+    });
+
+    await runTurn({
+      store,
+      makeModel: constModel(capturing),
+      send: collectSink().send,
+      search: createMemorySearch(),
+      fetcher: createMemoryFetcher(),
+      google: createMemoryGoogle(),
+      chatId: 1,
+      topicId: 0,
+      country,
+    });
+
+    return requests[0];
+  };
+
+  it("shows the user's country in the message the model reads", async () => {
+    expect(await lastUserText("BR")).toContain(
+      "your country code is BR (Brazil)",
+    );
+  });
+
+  it("says the country is not set when the user has none", async () => {
+    expect(await lastUserText()).toContain("your country code is not set");
+  });
+
   it("does not resend when the alarm re-fires after a completed turn", async () => {
     const store = new MemoryStore();
     const id = store.getOrCreateConversation(1, 0);

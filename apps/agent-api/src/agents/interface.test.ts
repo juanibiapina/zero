@@ -69,7 +69,14 @@ describe("interfaceSystemPrompt", () => {
     const prompt = interfaceSystemPrompt();
     expect(prompt).not.toContain("Current time:");
     expect(prompt).not.toContain("The user's timezone is");
-    expect(prompt).toContain("given with the latest user message");
+    expect(prompt).not.toContain("your country code is");
+    expect(prompt).toContain("given with the\nlatest user message");
+  });
+
+  it("asks for set_country instead of guessing the country from the timezone", () => {
+    const prompt = interfaceSystemPrompt();
+    expect(prompt).toContain("do not\ninfer it from the timezone");
+    expect(prompt).toContain("call set_country");
   });
 
   it("folds pinned topics onto the tail when present, absent when empty", () => {
@@ -127,6 +134,22 @@ describe("interfaceContext", () => {
       "Current time: Friday, 2026-07-17 09:00 (America/Sao_Paulo, GMT-3).",
     );
     expect(context).toContain("Your timezone is America/Sao_Paulo");
+  });
+
+  it("names the user's country next to the timezone", () => {
+    expect(interfaceContext(NOW, "America/Sao_Paulo", "BR")).toContain(
+      "Your timezone is America/Sao_Paulo and your country code is BR (Brazil)",
+    );
+  });
+
+  it("renders a code with no country name bare", () => {
+    const context = interfaceContext(NOW, "UTC", "QQ");
+    expect(context).toContain("your country code is QQ;");
+    expect(context).not.toContain("QQ (");
+  });
+
+  it("says so when the country is unknown", () => {
+    expect(interfaceContext(NOW)).toContain("your country code is not set");
   });
 });
 

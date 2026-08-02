@@ -94,9 +94,11 @@ blocked cross-user sharing. So we split stable from volatile:
   block; a change to one user's pins re-bills only the pinned block, never the
   shared head. Freeing tools from a breakpoint is what paid for this: the budget
   is still four.
-- **Volatile tail (uncached):** the datetime anchor and timezone
-  (`interfaceContext` in `prompts.ts`) are prepended to the **current** user
-  message, so they sit after the cached history prefix and never invalidate it.
+- **Volatile tail (uncached):** the datetime anchor, timezone and the user's
+  country code with its country name (`interfaceContext` in `prompts.ts`) are
+  prepended to the **current** user message, so they sit after the cached
+  history prefix and never invalidate it. The country is stated as "not set"
+  when unknown, which is also volatile text and costs the cache nothing.
 
 ## The 4-breakpoint layout (interface agent)
 

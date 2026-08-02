@@ -71,7 +71,8 @@ export interface TurnInput {
   timezone?: string;
   // Persist a new user timezone (from the set_timezone tool).
   setTimezone?: (tz: string) => void;
-  // The user's ISO 3166-1 alpha-2 country code, reserved for market-aware tools.
+  // The user's ISO 3166-1 alpha-2 country code, shown to the interface agent in
+  // the per-turn context.
   country?: string;
   // Persist a new user country (from the set_country tool).
   setCountry?: (country: string) => void;
@@ -258,6 +259,7 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       userMessage,
       timezone: input.timezone,
       setTimezone: input.setTimezone,
+      country: input.country,
       setCountry: input.setCountry,
       now: input.now,
     });

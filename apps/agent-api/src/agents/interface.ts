@@ -112,6 +112,9 @@ export interface InterfaceAgentInput {
   // Persist a new user timezone (wired by the orchestrator to user settings).
   // Omitted in tests that don't exercise set_timezone.
   setTimezone?: (tz: string) => void;
+  // The user's ISO 3166-1 alpha-2 country code, rendered into the per-turn
+  // context. Absent when unknown, which the context states explicitly.
+  country?: string;
   // Persist a new user country (wired by the orchestrator to user settings).
   // Omitted in tests that don't exercise set_country.
   setCountry?: (country: string) => void;
@@ -216,7 +219,7 @@ export interface ConversationRender {
   now?: Date;
   timezone?: string;
   summary?: string;
-  // Volatile per-turn context (current time, timezone). Prepended to the user
+  // Volatile per-turn context (current time, timezone, country). Prepended to the user
   // message being answered so it sits after the cached prefix instead of
   // invalidating it.
   context?: string;
@@ -349,9 +352,9 @@ export const runInterfaceAgent = async (
   const start = Date.now();
   const pinned = renderPinnedTopics(input.store.getPinnedTopics());
 
-  // The volatile context (current time + timezone) rides on the user message
-  // being answered, so it sits after the cached history prefix and never
-  // invalidates it.
+  // The volatile context (current time + timezone + country) rides on the user
+  // message being answered, so it sits after the cached history prefix and
+  // never invalidates it.
   const convo = buildConversationMessages({
     history: input.history,
     userMessage: input.userMessage,
@@ -359,7 +362,7 @@ export const runInterfaceAgent = async (
     now,
     timezone,
     summary: input.summary,
-    context: interfaceContext(now, timezone),
+    context: interfaceContext(now, timezone, input.country),
   });
   const lastIdx = convo.length - 1;
   // Cross-turn anchor breakpoint in the messages region. The last stable message

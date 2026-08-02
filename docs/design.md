@@ -130,7 +130,9 @@ real multi-turn conversation (`buildConversationMessages` in
 - **`messages`** carries only the Telegram dialogue: each stored user/assistant
   message as a native turn, ending with the current user message. The tool loop
   appends the assistant response and one `tool_result` turn per step during the
-  run.
+  run. The current user message also carries the volatile per-turn context:
+  current time, timezone, and the user's country code with its country name (or
+  "not set"), which sits after the cache anchor by construction.
 
 Each user message is prefixed with an absolute timestamp `[YYYY-MM-DD HH:MM]` in
 the user's timezone (stable turn-to-turn, cache-friendly); assistant messages are
