@@ -21,6 +21,10 @@ export interface CacheControl {
 export interface TextBlock {
   type: "text";
   text: string;
+  // Assistant text only: whether the model labelled this as intermediate
+  // commentary or its final answer. Recent models degrade when a replayed
+  // assistant message loses its phase, so it is stored and sent back verbatim.
+  phase?: "commentary" | "final_answer";
   cache_control?: CacheControl;
 }
 
@@ -51,14 +55,23 @@ export interface ToolResultBlock {
 }
 
 // The model's reasoning, returned ahead of the text blocks when thinking is on.
-// `thinking` is empty under `display: "omitted"` (what Zero requests); the
-// signature is the encrypted reasoning, and the pair must be round-tripped
-// unmodified or the API rejects the request. Deliberately has no
-// `cache_control`: a breakpoint on a thinking block is invalid.
+// `thinking` is empty when the provider omits the readable reasoning (what Zero
+// requests); the opaque part must be round-tripped unmodified or the API rejects
+// the request. Deliberately has no `cache_control`: a breakpoint on a reasoning
+// block is invalid.
+//
+// The two providers identify reasoning differently, and the fields are named
+// after each: `signature` is Anthropic's, while `id` + `encrypted_content` are
+// the OpenAI reasoning item's. A block carrying the wrong provider's fields is
+// dropped on the way to the model rather than translated — reasoning is never
+// required for correctness, only for quality, so a conversation written under
+// one provider stays usable under the other.
 export interface ThinkingBlock {
   type: "thinking";
   thinking: string;
   signature: string;
+  id?: string;
+  encrypted_content?: string;
 }
 
 // Reasoning the safety system flagged and encrypted wholesale. Opaque, and
@@ -133,57 +146,25 @@ export interface AgentRunUsage extends TokenUsage {
   modelCalls: number;
 }
 
-// What the model reports about this request's prompt-cache prefix relative to
-// the request named by `previousMessageId`. Chain-relative, NOT a cache
-// hit/miss signal: a fully cached request can still report a divergence (see
-// docs/caching.md).
-export type CacheDiagnostic =
-  // Zero passed no previous message id (first call of a run).
-  | { state: "initial" }
-  // A previous id was passed and the prefix matched it.
-  | { state: "no_divergence" }
-  // The comparison had not finished when the response was serialized.
-  | { state: "pending" }
-  | {
-      state:
-        | "model_changed"
-        | "system_changed"
-        | "tools_changed"
-        | "messages_changed"
-        | "previous_message_not_found"
-        | "unavailable";
-      missedInputTokens?: number;
-    };
-
 export interface AgentModelRequest {
   // Top-level system blocks (text only), in order. The last one usually carries
   // the 1h cache breakpoint.
   system: TextBlock[];
   messages: AgentMessage[];
   tools: AgentToolDefinition[];
-  // The id of this client's previous response in the same run, for cache
-  // divergence reporting. `null` opts in with nothing to compare against;
-  // `undefined` opts out entirely.
-  previousMessageId?: string | null;
-  // True when `previousMessageId` names a response from an earlier run of this
-  // conversation (the previous turn, or a run this one resumed) rather than from
-  // this run's own loop. A divergence reported on such a request is a cross-turn
-  // cache break, which has different causes from one inside a run, so the log
-  // line has to distinguish them.
-  crossRun?: boolean;
-  // Zero-based index of this call within the run's tool loop, for per-step cache
-  // diagnostics. Lets the adapter's cache_diagnostic line carry the step so the
-  // write-then-read pattern is readable per agent per call.
+  // Zero-based index of this call within the run's tool loop. Lets the adapter's
+  // cache_stats line carry the step, which is what makes the write-then-read
+  // pattern readable per agent per call.
   step?: number;
 }
 
 export interface AgentModelResponse {
-  // The `msg_...` id, threaded into the next request's diagnostics.
+  // The provider's response id, persisted with the assistant row so a turn can
+  // be traced back to a provider log line.
   id: string;
   content: ContentBlock[];
   stopReason: StopReason | null;
   usage: TokenUsage;
-  diagnostic: CacheDiagnostic;
 }
 
 // The seam every agent runs against. One method: send a request, get a

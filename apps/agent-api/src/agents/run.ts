@@ -23,7 +23,7 @@ import {
   type ToolResultContent,
   type ToolUseBlock,
 } from "./protocol";
-import { cachedSystem, markLastTool, slideMessageBreakpoint } from "./cache";
+import { cachedSystem, slideMessageBreakpoint } from "./cache";
 import { ExternalCallNotSent } from "./external-call";
 
 // Shared step cap for every agent (interface and research). The cap is a
@@ -108,14 +108,12 @@ export interface RunAgentInput {
   // it such a tool is simply run, which is what tests and the read-only agents
   // want.
   externalCalls?: ExternalCallGuard;
-  // The id of the last response this conversation received, from an earlier run.
-  // With an append-only log turn N+1's prefix extends turn N's, so chaining to
-  // it is what makes a cross-turn cache break visible. Null/undefined starts a
-  // fresh chain.
-  previousResponseId?: string | null;
-  // Prompt caching on by default: the system text gets a 1h cache breakpoint
-  // and so does the last tool. Set false to opt out (tests that assert the
-  // plain shape).
+  // Per-user system text appended after the static instructions (the interface
+  // agent's pinned topics). Kept separate so it can carry its own cache
+  // breakpoint instead of invalidating the cross-user prefix.
+  systemTail?: string;
+  // Prompt caching on by default: the system blocks get a 1h cache breakpoint.
+  // Set false to opt out (tests that assert the plain shape).
   cache?: boolean;
 }
 
@@ -317,28 +315,26 @@ export const runAgent = async (
     { role: "user", content: input.prompt ?? "" },
   ];
 
-  // Cache order is tools -> system -> messages. Mark the last tool (which covers
-  // every schema before it) and the system block; both use a 1h TTL because they
-  // are shared across users and stay permanently warm. The messages region gets
-  // a loop-owned sliding breakpoint per step (below); any caller anchor
-  // breakpoint set on an earlier message is preserved.
-  const definitions = toToolDefinitions(tools);
-  const wireTools = cache ? markLastTool(definitions, "1h") : definitions;
+  // Cache order is tools -> system -> messages. The system head's breakpoint
+  // covers the tool schemas rendered before it (tools cannot carry one of their
+  // own) and is byte-identical across users; the optional per-user tail gets its
+  // own. The messages region gets a loop-owned sliding breakpoint per step
+  // (below); any caller anchor breakpoint set on an earlier message is
+  // preserved.
+  const wireTools = toToolDefinitions(tools);
   const system: TextBlock[] = cache
-    ? cachedSystem(input.system, "1h")
-    : [{ type: "text", text: input.system }];
+    ? cachedSystem(input.system, input.systemTail ?? "", "1h")
+    : [
+        { type: "text", text: input.system },
+        ...(input.systemTail
+          ? [{ type: "text" as const, text: input.systemTail }]
+          : []),
+      ];
 
   const messages: AgentMessage[] = [...callerMessages];
   const generated: AgentMessage[] = [];
   const stepUsages: TokenUsage[] = [];
   const maxSteps = input.maxSteps ?? AGENT_MAX_STEPS;
-  // Cache-diagnostic chain: the first request names the conversation's last
-  // response (from an earlier turn) when there is one, and every later one names
-  // this run's previous response. Each step only appends, and so does each turn,
-  // so both comparisons are meaningful (see docs/caching.md).
-  let previousMessageId: string | null = input.previousResponseId ?? null;
-  let crossRun = previousMessageId !== null;
-
   // Resume: the caller's log can end on an assistant response whose tool_use
   // blocks never got results, because a reset landed between persisting the
   // response and persisting its results. The wire format has no valid request in
@@ -372,12 +368,8 @@ export const runAgent = async (
       system,
       messages: requestMessages,
       tools: wireTools,
-      previousMessageId,
-      crossRun,
       step,
     });
-    previousMessageId = response.id;
-    crossRun = false;
     stepUsages.push(response.usage);
 
     // Round-trip the response content verbatim: tool ids, inputs, and block

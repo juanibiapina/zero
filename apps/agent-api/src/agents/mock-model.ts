@@ -44,7 +44,6 @@ const toResponse = (step: ScriptStep, index: number): AgentModelResponse => {
   const base = {
     id: `msg_${index}`,
     usage: MOCK_USAGE,
-    diagnostic: { state: "initial" as const },
   };
   if (!("tools" in step)) {
     return {
@@ -102,7 +101,6 @@ export const capturingModel = (
       content: [{ type: "text", text: "" }],
       stopReason: "end_turn",
       usage: MOCK_USAGE,
-      diagnostic: { state: "initial" },
       ...partial,
     };
   },

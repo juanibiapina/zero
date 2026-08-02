@@ -10,7 +10,7 @@ interface __BaseEnv_Env {
 	TELEGRAM_API_ROOT: "https://api.telegram.org";
 	CLOUDFLARE_ACCOUNT_ID: "4e04b64af4013414441c59014392bea0";
 	CLOUDFLARE_GATEWAY_ID: "zero";
-	MODEL_ID: "claude-sonnet-4-6";
+	MODEL_ID: "gpt-5.6-luna";
 	LLM_BASE_URL_OVERRIDE: "";
 	ADMIN_USER_ID: string;
 	BRAVE_API_KEY: string;

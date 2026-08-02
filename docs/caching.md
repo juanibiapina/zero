@@ -1,5 +1,15 @@
 # Prompt caching
 
+> **Out of date as of 2026-08-02.** Zero moved to `gpt-5.6-luna` on the OpenAI
+> Responses API, whose caching rules differ from what this document describes:
+> breakpoints are explicit (`prompt_cache_options.mode: "explicit"`, marker
+> `prompt_cache_breakpoint`), only input blocks can carry one (so tools no longer
+> do and the anchor sits on the last user message), there is a single 30m TTL,
+> the budget is four cache writes per request, and routing needs a shared
+> `prompt_cache_key`. The divergence diagnostics below are gone; the log line is
+> now `cache_stats`. See `docs/plans/openai-gpt56-luna.md` until this document is
+> rewritten.
+
 Zero caches the stable prefix of every LLM call so Anthropic bills it at ~0.1x
 on reads instead of re-billing the full system prompt, tool schemas, and history
 on every tool-loop step and every turn. This doc explains the three reuse tiers,

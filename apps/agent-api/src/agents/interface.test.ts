@@ -243,18 +243,19 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
     });
   });
 
-  it("marks the last stable message and the current message (sliding window)", async () => {
+  it("marks the last stable input message and the current message (sliding window)", async () => {
     const { messages = [] } = await capturePrompt({
       history: [
         historyMessage("user", "q", iso(5 * 60_000)),
         historyMessage("assistant", "a", iso(4 * 60_000)),
       ],
     });
-    // Last two conversation messages (stable assistant + current user) carry a
-    // breakpoint; earlier messages do not.
+    // The current message carries the sliding breakpoint. The anchor walks back
+    // past the assistant reply, which cannot carry one, onto the previous user
+    // message.
     expect(cc(messages[messages.length - 1])).toBeTruthy();
-    expect(cc(messages[messages.length - 2])).toBeTruthy();
-    expect(cc(messages[0])).toBeFalsy();
+    expect(cc(messages[messages.length - 2])).toBeFalsy();
+    expect(cc(messages[0])).toBeTruthy();
   });
 
   it("collapses to one breakpoint on the current message when history is empty", async () => {

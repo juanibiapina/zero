@@ -18,7 +18,28 @@ interface ModelPricing {
   cacheWrite1hPerMillion: number;
 }
 
+// Standard-tier, short-context list prices. A model missing here records a zero
+// cost with `pricingStatus: "unpriced"` rather than failing, so adding a model
+// (including a per-agent override) means adding a row here in the same change.
+// OpenAI bills one cache tier, so its 1h column is zero and every write lands in
+// the 5m bucket (see agents/openai-wire.ts).
 const PRICING: Record<string, ModelPricing> = {
+  "gpt-5.6-luna": {
+    version: "openai-2026-08-02",
+    inputPerMillion: 0.2,
+    outputPerMillion: 1.2,
+    cacheReadPerMillion: 0.02,
+    cacheWrite5mPerMillion: 0.25,
+    cacheWrite1hPerMillion: 0,
+  },
+  "gpt-5.6-terra": {
+    version: "openai-2026-08-02",
+    inputPerMillion: 2,
+    outputPerMillion: 12,
+    cacheReadPerMillion: 0.2,
+    cacheWrite5mPerMillion: 2.5,
+    cacheWrite1hPerMillion: 0,
+  },
   "claude-sonnet-4-6": {
     version: "anthropic-2026-07-31",
     inputPerMillion: 3,

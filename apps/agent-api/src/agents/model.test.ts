@@ -3,14 +3,16 @@ import {
   createModel,
   createModelFactory,
   gatewayMetadata,
+  providerFor,
   type AgentLabel,
 } from "./model";
+import { promptCacheKey } from "./model-openai";
 import type { AgentModelRequest } from "./protocol";
 import type { Env } from "../types";
 
 const makeEnv = (over: Record<string, unknown> = {}): Env =>
   ({
-    MODEL_ID: "claude-sonnet-4-6",
+    MODEL_ID: "gpt-5.6-luna",
     CLOUDFLARE_GATEWAY_ID: "zero",
     CLOUDFLARE_API_KEY: "cf-key",
     LLM_BASE_URL_OVERRIDE: "",
@@ -23,7 +25,9 @@ const makeEnv = (over: Record<string, unknown> = {}): Env =>
     ...over,
   }) as unknown as Env;
 
-// A canned Messages response, plus a recorder for the request the SDK issued.
+// A canned Responses reply, plus a recorder for the request the SDK issued. The
+// request bytes are what the prompt cache keys on, so they are the thing worth
+// asserting on.
 const transport = (
   body: Record<string, unknown> = {},
 ): {
@@ -45,22 +49,23 @@ const transport = (
     });
     return new Response(
       JSON.stringify({
-        id: "msg_01",
-        type: "message",
-        role: "assistant",
-        model: "claude-sonnet-4-6",
-        content: [{ type: "text", text: "hello" }],
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: {
-          input_tokens: 11,
-          output_tokens: 3,
-          cache_read_input_tokens: 7,
-          cache_creation_input_tokens: 5,
-          cache_creation: {
-            ephemeral_5m_input_tokens: 2,
-            ephemeral_1h_input_tokens: 3,
+        id: "resp_01",
+        object: "response",
+        model: "gpt-5.6-luna",
+        status: "completed",
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            phase: "final_answer",
+            content: [{ type: "output_text", text: "hello" }],
           },
+        ],
+        usage: {
+          input_tokens: 18,
+          output_tokens: 3,
+          input_tokens_details: { cached_tokens: 7, cache_write_tokens: 5 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
         ...body,
       }),
@@ -84,15 +89,34 @@ const request: AgentModelRequest = {
       name: "ping",
       description: "ping",
       input_schema: { type: "object" },
-      cache_control: { type: "ephemeral", ttl: "1h" },
     },
   ],
 };
 
+describe("providerFor", () => {
+  it("routes by model id so MODEL_ID alone picks the provider", () => {
+    expect(providerFor("gpt-5.6-luna")).toBe("openai");
+    expect(providerFor("gpt-5.6-terra")).toBe("openai");
+    expect(providerFor("claude-sonnet-4-6")).toBe("anthropic");
+  });
+});
+
 describe("createModel", () => {
   it("builds a model for the configured MODEL_ID via the gateway", async () => {
+    const getUrl = vi.fn(async () => "https://gw.example/zero/openai");
+    const env = makeEnv({ AI: { gateway: () => ({ getUrl }) } });
+
+    const model = await createModel(env, "user_123");
+
+    expect(model).toMatchObject({ modelId: "gpt-5.6-luna" });
+    expect(getUrl).toHaveBeenCalledWith("openai");
+  });
+
+  // Rollback is a var flip, not a code change.
+  it("falls back to the Anthropic gateway route for a claude model id", async () => {
     const getUrl = vi.fn(async () => "https://gw.example/zero/anthropic");
     const env = makeEnv({
+      MODEL_ID: "claude-sonnet-4-6",
       AI: { gateway: () => ({ getUrl }) },
     });
 
@@ -111,90 +135,69 @@ describe("createModel", () => {
 
     const model = await createModel(env, "user_123");
 
-    expect(model).toMatchObject({ modelId: "claude-sonnet-4-6" });
+    expect(model).toMatchObject({ modelId: "gpt-5.6-luna" });
     expect(getUrl).not.toHaveBeenCalled();
   });
 
   it("resolves the base URL once and tags each agent independently", async () => {
-    const getUrl = vi.fn(async () => "https://gw.example/zero/anthropic");
-    const env = makeEnv({
-      AI: { gateway: () => ({ getUrl }) },
-    });
+    const getUrl = vi.fn(async () => "https://gw.example/zero/openai");
+    const env = makeEnv({ AI: { gateway: () => ({ getUrl }) } });
 
     const makeModel = await createModelFactory(env, "user_123");
     const a = makeModel("interface");
     const b = makeModel("research");
 
-    expect(a).toMatchObject({ modelId: "claude-sonnet-4-6" });
-    expect(b).toMatchObject({ modelId: "claude-sonnet-4-6" });
+    expect(a).toMatchObject({ modelId: "gpt-5.6-luna" });
+    expect(b).toMatchObject({ modelId: "gpt-5.6-luna" });
     // Base URL resolved once for the turn, not per agent.
     expect(getUrl).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("the Anthropic request", () => {
+describe("the OpenAI request", () => {
   const send = async (
     over: Partial<AgentModelRequest> = {},
     responseBody?: Record<string, unknown>,
+    agent: AgentLabel = "interface",
   ) => {
     const { fetchImpl, calls } = transport(responseBody);
-    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/v1" });
-    const model = await createModel(env, "user_123", "interface", fetchImpl);
+    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/openai" });
+    const model = await createModel(env, "user_123", agent, fetchImpl);
     const response = await model.generate({ ...request, ...over });
     return { call: calls[0], response };
   };
 
-  it("posts to the beta Messages endpoint with the cache-diagnosis beta", async () => {
+  it("posts to the Responses endpoint", async () => {
     const { call } = await send();
-    expect(call.url).toBe("https://gw.example/v1/v1/messages?beta=true");
-    expect(call.headers.get("anthropic-beta")).toBe(
-      "cache-diagnosis-2026-04-07",
-    );
+    expect(call.url).toBe("https://gw.example/openai/responses");
   });
 
-  it("carries the gateway headers and never sends an API key", async () => {
+  // Under BYOK the gateway holds the provider key; a client-sent Authorization
+  // header would be used instead of the stored one.
+  it("authenticates to the gateway and sends no provider key", async () => {
     const { call } = await send();
     expect(call.headers.get("cf-aig-authorization")).toBe("Bearer cf-key");
     expect(JSON.parse(call.headers.get("cf-aig-metadata") ?? "{}")).toEqual({
       user_id: "user_123",
       agent: "interface",
     });
-    // Under BYOK the gateway injects the real key; a client key would override it.
-    expect(call.headers.get("x-api-key")).toBeNull();
+    expect(call.headers.get("authorization")).toBeNull();
   });
 
-  it("sends the model, an explicit max_tokens, and the request as given", async () => {
+  it("sends the model, the output ceiling, and stores nothing provider-side", async () => {
     const { call } = await send();
     expect(call.body).toMatchObject({
-      model: "claude-sonnet-4-6",
-      max_tokens: 16000,
-      system: request.system,
-      tools: request.tools,
-      messages: request.messages,
+      model: "gpt-5.6-luna",
+      max_output_tokens: 32000,
+      store: false,
+      include: ["reasoning.encrypted_content"],
+      safety_identifier: "user_123",
     });
   });
 
-  it("asks the model to think, with the reasoning text withheld", async () => {
-    const { call } = await send();
-    expect(call.body.thinking).toEqual({
-      type: "adaptive",
-      display: "omitted",
-    });
-  });
-
-  // Omitting `effort` is the API's `high`, which is where Zero already ran
-  // before thinking was turned on. Sending it would silently change how much
-  // work the model does on everything, including tool calls.
-  it("never sends an effort level", async () => {
-    const { call } = await send();
-    expect(call.body.output_config).toBeUndefined();
-  });
-
-  // Every agent thinks, with no exceptions to remember. The learner and
-  // compaction rewrite what Zero remembers about a user, which is the judgement
-  // call whose mistakes last longest.
-  it("asks every agent to think", async () => {
-    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/v1" });
+  // The family defaults to medium, and Zero's quality case for the cheap tier
+  // rests on high. A silent drop here is a silent quality drop.
+  it("asks every agent to reason at high effort", async () => {
     const agents: AgentLabel[] = [
       "interface",
       "research",
@@ -204,154 +207,137 @@ describe("the Anthropic request", () => {
       "admin_task",
     ];
     for (const agent of agents) {
-      const { fetchImpl, calls } = transport();
-      const model = await createModel(env, "user_123", agent, fetchImpl);
-      await model.generate(request);
-      expect(calls[0].body.thinking).toEqual({
-        type: "adaptive",
-        display: "omitted",
+      const { call } = await send({}, undefined, agent);
+      expect(call.body.reasoning).toEqual({
+        effort: "high",
+        context: "all_turns",
       });
-      expect(calls[0].body.output_config).toBeUndefined();
     }
   });
 
-  it("omits diagnostics unless the caller opted in", async () => {
+  it("caches explicitly, keyed per agent, so the volatile tail is never written", async () => {
     const { call } = await send();
-    expect(call.body.diagnostics).toBeUndefined();
+    expect(call.body.prompt_cache_options).toEqual({ mode: "explicit" });
+    expect(call.body.prompt_cache_key).toBe("zero:interface:v1:0");
   });
 
-  it("threads the previous response id when the caller opts in", async () => {
-    const { call } = await send({ previousMessageId: "msg_00" });
-    expect(call.body.diagnostics).toEqual({ previous_message_id: "msg_00" });
+  it("keys the cache per agent so one agent's prefix cannot shadow another's", () => {
+    expect(promptCacheKey("interface", "user_1")).not.toBe(
+      promptCacheKey("learner", "user_1"),
+    );
+    // Shared across users: the instructions + tools prefix is identical for
+    // everyone, and a per-user key would make it unreusable.
+    expect(promptCacheKey("interface", "user_1")).toBe(
+      promptCacheKey("interface", "user_2"),
+    );
   });
 
-  it("opts in with null on the first request of a run", async () => {
-    const { call } = await send({ previousMessageId: null });
-    expect(call.body.diagnostics).toEqual({ previous_message_id: null });
+  it("translates system, tools and messages into the Responses shapes", async () => {
+    const { call } = await send();
+    expect(call.body.tools).toEqual([
+      {
+        type: "function",
+        name: "ping",
+        description: "ping",
+        parameters: { type: "object" },
+        strict: false,
+      },
+    ]);
+    expect(call.body.input).toEqual([
+      {
+        role: "developer",
+        content: [
+          {
+            type: "input_text",
+            text: "sys",
+            prompt_cache_breakpoint: { mode: "explicit" },
+          },
+        ],
+      },
+      { role: "user", content: [{ type: "input_text", text: "hi" }] },
+    ]);
   });
 });
 
-describe("the Anthropic response", () => {
+describe("the OpenAI response", () => {
   const send = async (
     over: Partial<AgentModelRequest> = {},
     responseBody?: Record<string, unknown>,
   ) => {
     const { fetchImpl } = transport(responseBody);
-    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/v1" });
+    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/openai" });
     const model = await createModel(env, "user_123", "interface", fetchImpl);
     return model.generate({ ...request, ...over });
   };
 
   it("maps id, content, stop reason, and token usage", async () => {
     const response = await send();
-    expect(response.id).toBe("msg_01");
-    expect(response.content).toEqual([{ type: "text", text: "hello" }]);
+    expect(response.id).toBe("resp_01");
+    expect(response.content).toEqual([
+      { type: "text", text: "hello", phase: "final_answer" },
+    ]);
     expect(response.stopReason).toBe("end_turn");
     expect(response.usage).toEqual({
+      // 18 reported input tokens include the 7 that were cache reads.
       inputTokens: 11,
       outputTokens: 3,
       cacheReadTokens: 7,
       cacheWriteTokens: 5,
-      cacheWrite5mTokens: 2,
-      cacheWrite1hTokens: 3,
+      cacheWrite5mTokens: 5,
+      cacheWrite1hTokens: 0,
     });
+  });
+
+  it("reports a tool call as tool_use", async () => {
+    const response = await send({}, {
+      output: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "ping",
+          arguments: "{}",
+        },
+      ],
+    });
+    expect(response.stopReason).toBe("tool_use");
+    expect(response.content).toEqual([
+      { type: "tool_use", id: "call_1", name: "ping", input: {} },
+    ]);
   });
 
   // Reasoning spend is inside output_tokens, so the per-request log line is the
-  // only place it is visible. Without it there is no way to tell a turn that
-  // thought hard from one that barely thought.
-  it("logs the reasoning tokens the call spent", async () => {
+  // only place it is visible. Without it there is no telling a turn that thought
+  // hard from one that barely thought.
+  it("logs cache and reasoning counts for the call", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await send(
-      {},
+      { step: 2 },
       {
         usage: {
-          input_tokens: 11,
+          input_tokens: 1000,
           output_tokens: 300,
-          output_tokens_details: { thinking_tokens: 240 },
+          input_tokens_details: { cached_tokens: 900, cache_write_tokens: 40 },
+          output_tokens_details: { reasoning_tokens: 240 },
         },
       },
     );
-    const events = logSpy.mock.calls.map(
-      (c) => c[0] as { msg: string; thinking_tokens?: number },
-    );
-    expect(events.find((e) => e.msg === "cache_diagnostic")?.thinking_tokens).toBe(
-      240,
-    );
+    const events = logSpy.mock.calls.map((c) => c[0] as Record<string, unknown>);
+    expect(events.find((e) => e.msg === "cache_stats")).toMatchObject({
+      agent: "interface",
+      step: 2,
+      input_tokens: 100,
+      cache_read_tokens: 900,
+      cache_write_tokens: 40,
+      thinking_tokens: 240,
+    });
     logSpy.mockRestore();
   });
 
-  it("logs zero reasoning tokens when the model did not think", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    await send();
-    const events = logSpy.mock.calls.map(
-      (c) => c[0] as { msg: string; thinking_tokens?: number },
-    );
-    expect(events.find((e) => e.msg === "cache_diagnostic")?.thinking_tokens).toBe(
-      0,
-    );
-    logSpy.mockRestore();
-  });
-
-  it("reads a null cache read/write count as zero", async () => {
-    const response = await send(
-      {},
-      {
-        usage: {
-          input_tokens: 4,
-          output_tokens: 1,
-          cache_read_input_tokens: null,
-          cache_creation_input_tokens: null,
-        },
-      },
-    );
+  it("reads a response with no usage as zeros", async () => {
+    const response = await send({}, { usage: null });
     expect(response.usage.cacheReadTokens).toBe(0);
     expect(response.usage.cacheWriteTokens).toBe(0);
-  });
-
-  it("labels a first-of-run response 'initial', not 'no divergence'", async () => {
-    const response = await send({ previousMessageId: null }, {
-      diagnostics: null,
-    });
-    expect(response.diagnostic).toEqual({ state: "initial" });
-  });
-
-  it("labels an unchanged prefix 'no_divergence' once a previous id was sent", async () => {
-    const response = await send({ previousMessageId: "msg_00" }, {
-      diagnostics: null,
-    });
-    expect(response.diagnostic).toEqual({ state: "no_divergence" });
-  });
-
-  it("reports a miss reason with its missed token count", async () => {
-    const response = await send({ previousMessageId: "msg_00" }, {
-      diagnostics: {
-        cache_miss_reason: {
-          type: "system_changed",
-          cache_missed_input_tokens: 940,
-        },
-      },
-    });
-    expect(response.diagnostic).toEqual({
-      state: "system_changed",
-      missedInputTokens: 940,
-    });
-  });
-
-  it("reports a miss reason that carries no token count", async () => {
-    const response = await send({ previousMessageId: "msg_00" }, {
-      diagnostics: { cache_miss_reason: { type: "previous_message_not_found" } },
-    });
-    expect(response.diagnostic).toEqual({
-      state: "previous_message_not_found",
-    });
-  });
-
-  it("reports an unfinished comparison as pending", async () => {
-    const response = await send({ previousMessageId: "msg_00" }, {
-      diagnostics: { cache_miss_reason: null },
-    });
-    expect(response.diagnostic).toEqual({ state: "pending" });
+    expect(response.usage.inputTokens).toBe(0);
   });
 });
 

@@ -19,10 +19,12 @@ alarm), then returns 200 immediately. The alarm runs the turn:
    sending live progress as it works. It tracks every topic it reads or writes.
 2. **Writer agent** consolidates durable knowledge into the accessed topics.
 
-LLM calls go through the Cloudflare AI Gateway (BYOK Anthropic; the gateway
-stores the real key and bills us directly) authenticated with
+LLM calls go through the Cloudflare AI Gateway (BYOK; the gateway stores the
+real provider key and the provider bills us directly) authenticated with
 `cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
-`MODEL_ID` (`claude-sonnet-4-6`). Each completed agent execution writes one
+`MODEL_ID` (`gpt-5.6-luna`, on the OpenAI Responses API at `reasoning.effort:
+"high"`). The provider is derived from the model id, so `MODEL_ID` alone decides
+where traffic goes and a rollback to `claude-sonnet-4-6` needs no code change. Each completed agent execution writes one
 aggregate call/token/cost point to the `AI_USAGE` Analytics Engine dataset,
 indexed by Clerk user and attributed to its agent and conversation when one
 exists. The estimate can be sampled, retains about three months of history, and
@@ -57,7 +59,7 @@ zero/
 | API    | Hono + OpenAPIHono + Zod on Cloudflare Workers |
 | State  | UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) + Workers KV for identity lookups |
 | Agents | Zero-owned tool loop (`agents/run.ts`) over `@anthropic-ai/sdk` |
-| LLM    | Cloudflare AI Gateway → Anthropic (BYOK) — `claude-sonnet-4-6` |
+| LLM    | Cloudflare AI Gateway → OpenAI (BYOK) — `gpt-5.6-luna` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
 | Secrets | Doppler (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
 
@@ -328,8 +330,8 @@ Stored in Doppler (`zero-api`):
   `getMe` call (see [`telegram-webhook.md`](telegram-webhook.md))
 - `TELEGRAM_WEBHOOK_SECRET` — Telegram secret-token for the webhook URL
 - `CLOUDFLARE_API_KEY` — Cloudflare AI Gateway token, sent as
-  `cf-aig-authorization`. The gateway injects the stored Anthropic key (BYOK)
-  upstream, and Anthropic bills the usage directly. The non-secret
+  `cf-aig-authorization`. The gateway injects the stored provider key (BYOK)
+  upstream, and the provider bills the usage directly. The non-secret
   `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_GATEWAY_ID` live in `wrangler.jsonc`
   vars; the `AI` binding resolves the gateway URL.
 - `CLOUDFLARE_ANALYTICS_TOKEN` — a separate Cloudflare token with only Account

@@ -265,17 +265,17 @@ export const buildConversationMessages = (
   return messages;
 };
 
-// The response id this conversation last received, for the cross-turn cache
-// diagnostic chain. Null when the conversation has no persisted response yet (or
-// only pre-1.4 rows, which recorded none).
-const lastResponseId = (
-  history: Message[],
-  trailing: Message[] = [],
-): string | null => {
-  for (const row of [...history, ...trailing].reverse()) {
-    if (row.responseId) return row.responseId;
+// The last message at or before `from` that can carry a cache breakpoint.
+// Assistant messages cannot (a breakpoint only goes on an input block), and the
+// message before the current one is usually the previous turn's assistant reply,
+// so the anchor walks back to the previous user message. The cost is that the
+// last reply falls outside the anchored prefix; the alternative is no cross-turn
+// anchor at all. Returns -1 when nothing before `from` is markable.
+const anchorIndex = (messages: AgentMessage[], from: number): number => {
+  for (let index = from; index >= 0; index--) {
+    if (messages[index].role !== "assistant") return index;
   }
-  return null;
+  return -1;
 };
 
 export const runInterfaceAgent = async (
@@ -363,25 +363,28 @@ export const runInterfaceAgent = async (
   });
   const lastIdx = convo.length - 1;
   // Cross-turn anchor breakpoint in the messages region. The last stable message
-  // (previous turn's final block) is byte-identical next turn, so it is the
-  // write that yields the cross-turn history read. The current message's tail is
-  // marked by the runner's loop-owned sliding breakpoint (see run.ts), so it is
-  // not marked here — that keeps the per-request budget at 4 (tools + system +
-  // anchor + sliding). Empty history has no stable message to anchor, and the
-  // loop's sliding breakpoint covers the single current message.
-  if (lastIdx >= 1) convo[lastIdx - 1] = markCacheBreakpoint(convo[lastIdx - 1]);
+  // is byte-identical next turn, so it is the write that yields the cross-turn
+  // history read. The current message's tail is marked by the runner's
+  // loop-owned sliding breakpoint (see run.ts), so it is not marked here — that
+  // keeps the per-request budget at 4 (system head + system tail + anchor +
+  // sliding). Empty history has no stable message to anchor, and the loop's
+  // sliding breakpoint covers the single current message.
+  const anchor = lastIdx >= 1 ? anchorIndex(convo, lastIdx - 1) : -1;
+  if (anchor >= 0) convo[anchor] = markCacheBreakpoint(convo[anchor]);
 
   await deliverUnclaimed(input.trailing ?? []);
 
   let injectedFollowups = 0;
   const { finishReason, steps, usage, stepUsages } = await runAgent({
     model: input.model,
-    system: interfaceSystemPrompt(pinned),
+    // Static instructions and per-user pinned topics are passed apart so each
+    // gets its own cache breakpoint; concatenated they are the same prompt.
+    system: interfaceSystemPrompt(),
+    systemTail: pinned,
     messages: convo,
     tools,
     maxSteps: input.maxSteps,
     externalCalls: input.externalCalls,
-    previousResponseId: lastResponseId(input.history, input.trailing),
     onAssistant: async (content, stopReason, responseId) =>
       persistAssistant(content, stopReason, responseId),
     onText: deliver,
