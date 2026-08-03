@@ -42,7 +42,7 @@ describe("runAdminTaskAgent", () => {
   it("passes the submitted prompt verbatim to the model", async () => {
     let prompt = "";
     const model = capturingModel((request) => {
-      // The loop wraps the prompt into a text block carrying the sliding cache
+      // The loop wraps the prompt into a text block carrying a cache
       // breakpoint, so read the text out of the block rather than as a string.
       const content = request.messages.at(-1)?.content;
       prompt =

@@ -360,3 +360,96 @@ describe("gatewayMetadata", () => {
     });
   });
 });
+
+// The shared cache policy marks every markable message and sets no TTL, because
+// those are OpenAI's rules. Anthropic caps a request at 4 marked blocks (a fifth
+// is a 400) and takes a TTL per breakpoint, so the adapter is where both apply.
+describe("the Anthropic request", () => {
+  const anthropicTransport = () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const fetchImpl = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      calls.push(
+        JSON.parse(typeof init?.body === "string" ? init.body : "{}") as Record<
+          string,
+          unknown
+        >,
+      );
+      return new Response(
+        JSON.stringify({
+          id: "msg_01",
+          model: "claude-sonnet-4-6",
+          content: [{ type: "text", text: "hi" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    return { fetchImpl: fetchImpl as unknown as typeof fetch, calls };
+  };
+
+  const marked = (text: string) => ({
+    role: "user" as const,
+    content: [
+      {
+        type: "text" as const,
+        text,
+        cache_control: { type: "ephemeral" as const },
+      },
+    ],
+  });
+
+  const send = async (messages: AgentModelRequest["messages"]) => {
+    const { fetchImpl, calls } = anthropicTransport();
+    const env = makeEnv({
+      MODEL_ID: "claude-sonnet-4-6",
+      LLM_BASE_URL_OVERRIDE: "https://gw.example/anthropic",
+    });
+    const model = await createModel(env, "user_123", "interface", fetchImpl);
+    await model.generate({
+      ...request,
+      system: [
+        { type: "text", text: "sys", cache_control: { type: "ephemeral" } },
+      ],
+      messages,
+    });
+    return calls[0];
+  };
+
+  it("gives the system region a 1h ttl and the message region the 5m default", async () => {
+    const body = await send([marked("hi")]);
+    expect(body.system).toEqual([
+      {
+        type: "text",
+        text: "sys",
+        cache_control: { type: "ephemeral", ttl: "1h" },
+      },
+    ]);
+    const messages = body.messages as Array<{
+      content: Array<{ cache_control?: unknown }>;
+    }>;
+    expect(messages[0].content[0].cache_control).toEqual({
+      type: "ephemeral",
+      ttl: "5m",
+    });
+  });
+
+  // Trimmed from the front: the newest prefix is the one a later step reads.
+  it("keeps only the newest marks that fit under Anthropic's cap of 4", async () => {
+    const body = await send([
+      marked("one"),
+      marked("two"),
+      marked("three"),
+      marked("four"),
+      marked("five"),
+    ]);
+    const messages = body.messages as Array<{
+      content: Array<{ cache_control?: unknown }>;
+    }>;
+    const markedIndexes = messages.flatMap((m, i) =>
+      m.content[0].cache_control ? [i] : [],
+    );
+    // One of the four goes to the system block, leaving three for messages.
+    expect(markedIndexes).toEqual([2, 3, 4]);
+  });
+});

@@ -123,9 +123,9 @@ const toWireImage = (
 });
 
 // A tool result's content as input blocks. Always the list form, never the bare
-// string shorthand: the sliding breakpoint sends the same result marked on one
-// step and unmarked on the next, and switching representation between those two
-// would change far more bytes than the marker itself.
+// string shorthand: the marked and unmarked forms of the same result must differ
+// by the marker alone, since switching representation would change far more of
+// the cached prefix than the marker itself.
 const toolResultContent = (
   block: Extract<ContentBlock, { type: "tool_result" }>,
 ): WireInputContent[] => {

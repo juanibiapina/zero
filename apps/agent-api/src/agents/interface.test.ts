@@ -251,30 +251,29 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
     expect(lastUser).toContain("Your timezone is America/Sao_Paulo");
   });
 
-  it("caches the system prompt with a 1h ttl", async () => {
+  it("caches the system prompt", async () => {
     const { system } = await capturePrompt({});
     expect(system?.[system.length - 1].cache_control).toEqual({
       type: "ephemeral",
-      ttl: "1h",
     });
   });
 
-  it("marks the last stable input message and the current message (sliding window)", async () => {
+  // The runner marks every markable message, so the turn's history is marked
+  // without the interface placing an anchor of its own. Assistant replies stay
+  // unmarked: only an input block can carry a breakpoint.
+  it("marks every input message in the conversation", async () => {
     const { messages = [] } = await capturePrompt({
       history: [
         historyMessage("user", "q", iso(5 * 60_000)),
         historyMessage("assistant", "a", iso(4 * 60_000)),
       ],
     });
-    // The current message carries the sliding breakpoint. The anchor walks back
-    // past the assistant reply, which cannot carry one, onto the previous user
-    // message.
-    expect(cc(messages[messages.length - 1])).toBeTruthy();
-    expect(cc(messages[messages.length - 2])).toBeFalsy();
     expect(cc(messages[0])).toBeTruthy();
+    expect(cc(messages[1])).toBeFalsy();
+    expect(cc(messages[messages.length - 1])).toBeTruthy();
   });
 
-  it("collapses to one breakpoint on the current message when history is empty", async () => {
+  it("marks the single current message when history is empty", async () => {
     const { messages = [] } = await capturePrompt({});
     expect(messages).toHaveLength(1);
     expect(cc(messages[0])).toBeTruthy();

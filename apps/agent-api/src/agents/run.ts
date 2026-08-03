@@ -23,7 +23,7 @@ import {
   type ToolResultContent,
   type ToolUseBlock,
 } from "./protocol";
-import { cachedSystem, slideMessageBreakpoint } from "./cache";
+import { cachedSystem, markMessageBreakpoints } from "./cache";
 import { ExternalCallNotSent } from "./external-call";
 
 // Shared step cap for every agent. The cap is a runaway-loop guard, not an
@@ -318,12 +318,10 @@ export const runAgent = async (
   // Cache order is tools -> system -> messages. The system head's breakpoint
   // covers the tool schemas rendered before it (tools cannot carry one of their
   // own) and is byte-identical across users; the optional per-user tail gets its
-  // own. The messages region gets a loop-owned sliding breakpoint per step
-  // (below); any caller anchor breakpoint set on an earlier message is
-  // preserved.
+  // own. Every markable message gets one too (below).
   const wireTools = toToolDefinitions(tools);
   const system: TextBlock[] = cache
-    ? cachedSystem(input.system, input.systemTail ?? "", "1h")
+    ? cachedSystem(input.system, input.systemTail ?? "")
     : [
         { type: "text", text: input.system },
         ...(input.systemTail
@@ -357,12 +355,12 @@ export const runAgent = async (
     for (let step = 0; step < maxSteps; step++) {
       // Snapshot: the loop keeps appending to `messages`, and the request must not
     // mutate under the adapter after it is handed over. When caching is on, the
-    // snapshot also carries the sliding message-region breakpoint on its tail
-    // (5m TTL, the default), advancing to the new last message every step so a
-    // cache write stays within the 20-block lookback of the growing tail. The
-    // persisted `messages` array is never mutated, so no breakpoints accumulate.
+    // snapshot carries a breakpoint on every markable message. That layout is a
+    // pure function of the array, so this step's prefix matches the previous
+    // step's byte for byte and is read back, leaving only the newly appended
+    // messages to write. The persisted `messages` array is never marked.
     const requestMessages = cache
-      ? slideMessageBreakpoint(messages)
+      ? markMessageBreakpoints(messages)
       : [...messages];
     const response = await input.model.generate({
       system,

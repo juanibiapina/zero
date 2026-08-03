@@ -10,10 +10,17 @@ A misplaced breakpoint is silent: the request still succeeds, you just pay full
 price. So caching is only "done" once production telemetry shows the expected
 reads for each tier (see [Production validation](#production-validation)).
 
-Zero runs on `gpt-5.6-luna` (OpenAI Responses API) since 2026-08-02. Everything
-below describes that API. Sections dated before then were measured on
-`claude-sonnet-4-6` and are kept as history, marked where they are no longer
-literally true.
+Zero runs on `gpt-5.6-luna` (OpenAI Responses API) since 2026-08-02, and
+everything below was measured on that API. Anthropic's rules differ in two ways
+that matter (a hard cap of 4 marked blocks per request, and a TTL per
+breakpoint); both live in `agents/model-anthropic.ts` so no shared code carries
+them.
+
+Prices on this model family: reads 0.1x the uncached input rate, **writes
+1.25x**. Writes were free before GPT-5.6, so pre-5.6 habits are actively
+expensive here — an unread write costs more than not caching at all. The AI
+Gateway's own `cost` column still bills Luna at its launch price and reads ~5x
+too high; `agents/ai-usage.ts` holds the current prices and is authoritative.
 
 ## How prompt caching works here
 
@@ -31,18 +38,22 @@ literally true.
 - **Only an input block can carry a breakpoint** — `input_text`, `input_image`,
   `input_file`. Never a tool definition, an assistant message, a function call,
   or a reasoning item. This is why tools carry no marker (the system block's
-  breakpoint covers the tool schemas rendered before it) and why the cross-turn
-  anchor walks back past the previous assistant reply onto the last user message
-  (`anchorIndex` in `agents/interface.ts`, `markCacheBreakpoint` in
-  `agents/cache.ts`).
-- **Budget: 4 cache writes per request.** Breakpoints from earlier turns are
-  read-only — they can match, but the request does not rewrite them. Up to the
-  latest 50 breakpoints in a conversation are considered for reads, and the
-  service reads from the longest matching prefix.
-- **TTL is a single 30m minimum**, set request-wide. There is no per-breakpoint
-  TTL choice, so the `"1h"` argument Zero still passes through `cachedSystem` is
-  inert on this provider (it survives so a rollback to Anthropic keeps its 1h
-  head).
+  breakpoint covers the tool schemas rendered before it) and why an assistant
+  message is skipped by `markCacheBreakpoint` in `agents/cache.ts`.
+- **A marker is part of the cached bytes.** A prefix written while a block
+  carried a marker does not match a later request where that block has none.
+  Marks therefore only ever accumulate; removing one invalidates everything
+  after it. This is the single most expensive thing to get wrong here, and it is
+  why the marking rule is a pure function of the message array.
+- **Marker count is not a budget; writes are.** A request may carry any number of
+  breakpoints. The service writes at most the **latest four** and treats the rest
+  as read-only (they match, they are not re-written), and it considers up to the
+  latest 50-80 of them for reads, reading from the longest matching prefix. There
+  is no content-block lookback limit.
+- **TTL is a single 30m minimum**, set request-wide, and 30m is the only
+  supported value. Nothing in the shared cache policy passes a TTL. Anthropic
+  takes one per breakpoint, so `agents/model-anthropic.ts` applies its own (1h on
+  the system region, the 5m default on messages) on the way out.
 - **Routing needs `prompt_cache_key`.** It is combined with the prefix hash to
   route a request to a machine that may hold the entry, and it is required for
   the reliable matching path. Zero sends `zero:<agent>:v1:<shard>` (see
@@ -51,7 +62,9 @@ literally true.
   change cannot land on a stale route, and sharded because the provider asks for
   roughly <=15 requests/minute per key. Raise `SHARDS` when traffic grows.
 - **Min cacheable length:** 1024 tokens. Shorter prefixes silently no-op, which
-  is why a toy probe shows zero reads and proves nothing.
+  is why a toy probe shows zero reads and proves nothing, and why an agent with a
+  small system prompt (`admin_task`'s head is ~900 tokens) caches nothing until
+  its conversation grows past the minimum.
 - **Scope:** keyed on the provider account. Zero runs one BYOK key through one
   gateway, so an identical prefix is **shared across all users**. Per-user
   attribution lives in `cf-aig-metadata` headers, which are not part of the
@@ -93,15 +106,14 @@ blocked cross-user sharing. So we split stable from volatile:
   static instructions, carrying their own breakpoint (`systemTail` in
   `runAgent`, built by `cachedSystem`). The cross-user share is the instructions
   block; a change to one user's pins re-bills only the pinned block, never the
-  shared head. Freeing tools from a breakpoint is what paid for this: the budget
-  is still four.
+  shared head.
 - **Volatile tail (uncached):** the datetime anchor, timezone and the user's
   country code with its country name (`interfaceContext` in `prompts.ts`) are
   prepended to the **current** user message, so they sit after the cached
   history prefix and never invalidate it. The country is stated as "not set"
   when unknown, which is also volatile text and costs the cache nothing.
 
-## The 4-breakpoint layout (interface agent)
+## The breakpoint layout
 
 In cache order:
 
@@ -110,40 +122,56 @@ In cache order:
    cannot carry a marker of their own). Emitted by `cachedSystem` in `runAgent`.
 2. **Per-user system tail** — the pinned topics. Per-user, stable across turns
    while the pins do not change.
-3. **Cross-turn anchor: last stable history message** — the last message before
-   the current one that can carry a marker, which in a normal turn is the
-   previous **user** message (the assistant reply in between cannot carry one).
-   It is byte-identical next turn, so this is the write that produces the
-   cross-turn history read. Set by `interface.ts`; omitted when history is empty.
-4. **Loop-owned sliding tail** — owned by `runAgent`, not the caller: before
-   every step it marks the tail of a per-request snapshot
-   (`slideMessageBreakpoint` in `cache.ts`), advancing to the new tail as the
-   tool loop appends steps, and walking back if the tail is an assistant message
-   (a resumed run). Step N therefore reads everything through step N-1 and writes
-   only the delta. The persisted messages are never mutated, so no breakpoints
-   accumulate.
+3. **Every markable message** — `markMessageBreakpoints` in `agents/cache.ts`
+   marks the last markable block of every message that can carry one, on a
+   per-request snapshot. Assistant messages get nothing.
 
-Breakpoints 3 and 4 form a **sliding window**. The cross-turn win requires a
-write at a byte-stable end-of-history boundary. A single breakpoint on the
-current message does not do this: that block carries the volatile context and
-mutates every turn (the anchor is stripped when the message becomes history), so
-it is never re-read. The stable-message anchor is what yields the cross-turn
-read; the loop's sliding tail keeps the newest turn (and every appended tool
-step) warm for the within-run loop.
+That is the whole policy, and callers place no breakpoints of their own. Because
+the marks are a pure function of the array, the same messages always render the
+same bytes, which is what buys both reuse tiers at once:
 
-Measured on Anthropic in 2026-07, and the reason the layout is shaped this way
-(the mechanism is prefix matching on both providers):
+- **Within a run:** step N+1 carries every mark step N carried, so it reads the
+  prefix through step N and writes only the newly appended messages.
+- **Across turns:** the persisted log is unmarked and re-marked identically next
+  turn, so turn N+1's prefix matches turn N's history byte for byte.
 
-- Breakpoint **on the volatile current message**: turn 1 write=1613 read=0; turn
-  2 write=4823 read=0. Zero cross-turn reuse.
-- Breakpoint **on the last stable block** (this layout): turn 1 write=1611
-  read=0; turn 2 write=10 read=1611. Full cross-turn hit.
+Measured against the live API on 2026-08-03 with `bin/cache-probe.mjs`, which
+replays a five-step tool loop under each policy (~3k tokens appended per step,
+one `prompt_cache_key` per run). Re-run it after any change to this layout:
 
-The learning and onboarding agents run the same `runAgent` machine, so they get
-tiers 1-2 (cached system + tools) for free. They use the single-`prompt` path
-with no caller anchor and no system tail, but the loop's sliding tail breakpoint
-caches their growing message region too: on a multi-step run each step reads the
-accumulated context from cache and writes only its delta.
+```
+CLOUDFLARE_API_TOKEN=... node bin/cache-probe.mjs accumulate
+CLOUDFLARE_API_TOKEN=... node bin/cache-probe.mjs move
+```
+
+Each row is one request: `input` / `cached` / `write`.
+
+| step | `move` (one marker slides) | `accumulate` (this policy) |
+|---|---|---|
+| 0 | 3094 / 0 / 3083 | 3094 / 0 / 3083 |
+| 1 | 6173 / **0** / 6162 | 6174 / **3083** / 3080 |
+| 2 | 9252 / **0** / 9241 | 9254 / **6163** / 3080 |
+| 3 | 12331 / **0** / 12320 | 12334 / **9243** / 3080 |
+| 4 | 15410 / **0** / 15399 | 15414 / **12323** / 3080 |
+
+Moving one marker per step never reads and re-writes the entire prefix every
+step; accumulating reads the whole prefix and writes only the delta. Dropping
+*any* earlier marker (e.g. keeping only the newest two) collapses back to the
+left column: measured `cached=0, write=8402` at step 2. A request carrying 12
+markers was accepted and kept the right-hand behaviour, so there is no reason to
+economise on markers.
+
+This is what the agent cost before the fix: on 2026-08-02 it wrote 34.4M tokens
+to cache and read back 1.19M (3.4%), and cache writes were $8.60 of a $9.04 day.
+
+The historical alternative — one breakpoint on the static head only, nothing on
+messages — is the probe's `static` policy (`cached` constant, `write` 0). It avoids
+write charges but re-bills the whole growing conversation at full input rate, and
+costs ~1.5x the accumulating layout over a 5-step run.
+
+The learner, onboarding and admin-task agents run the same `runAgent` machine and
+use the single-`prompt` path with no system tail. The prompt is markable, so
+their growing message region caches on exactly the same rule.
 
 ## Cache statistics
 
@@ -238,15 +266,23 @@ logs, which break tokens and cost down by the `agent` metadata tag.
 **Confirmed on OpenAI (2026-08-02, version `dd9afd0c`, first production hours):**
 an interface run's step 1 logged `cache_read_tokens: 6088` against
 `input_tokens: 1628`, i.e. the system head, tools, pinned tail, and history
-prefix all served from cache with only the new tail billed at full price. The
-explicit-breakpoint layout works as designed on this provider.
+prefix served from cache with only the new tail billed at full price.
+
+That read came entirely from the *fixed* breakpoints. The same day's logs also
+showed the message region reading nothing at all: 34.4M tokens written against
+1.19M read, because the message-region marker moved every step (fixed
+2026-08-03). The lesson for this playbook: a healthy-looking `cache_read_tokens`
+proves only that *some* prefix is warm. **The check that matters is that reads
+grow step over step within a run while writes stay near the per-step delta.**
+Constant reads next to large writes is the failure signature.
 
 ### Regression guard
 
 Watch that full-price `input_tokens` drops for tool-heavy and long-conversation
 turns versus the pre-deploy baseline, and that `cache_write_tokens` is not
-dominating (which would mean prefixes are churning, i.e. a breakpoint is
-misplaced). Record observed before/after numbers below so a future prompt or tool
+dominating (which would mean prefixes are churning, i.e. a marker moved or was
+dropped). Writes are billed at 1.25x, so a churning prefix is more expensive than
+no caching at all — this guard is not a tuning nicety. Record observed before/after numbers below so a future prompt or tool
 change that silently breaks a breakpoint is caught.
 
 ## Recorded baselines

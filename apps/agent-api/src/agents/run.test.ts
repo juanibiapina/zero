@@ -42,7 +42,7 @@ const toolResults = (request: AgentModelRequest): ToolResultBlock[] =>
   request.messages
     .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
     .filter((b): b is ToolResultBlock => b.type === "tool_result")
-    // Strip the loop's sliding cache breakpoint (asserted separately) so these
+    // Strip the loop's cache breakpoints (asserted separately) so these
     // assertions stay focused on tool-result pairing and error semantics.
     .map(({ cache_control: _cc, ...rest }) => rest);
 
@@ -218,7 +218,7 @@ describe("runAgent", () => {
   it("sends a single user message equal to the prompt", async () => {
     const { model, requests } = recordingModel([{}]);
 
-    // cache off isolates prompt wrapping from the loop's sliding breakpoint.
+    // cache off isolates prompt wrapping from the loop's breakpoints.
     await runAgent({ model, system: "sys", prompt: "the prompt", cache: false });
 
     expect(requests[0].messages).toEqual([
@@ -226,14 +226,13 @@ describe("runAgent", () => {
     ]);
   });
 
-  it("caches a single-prompt (writer/onboarding) message region on the tail", async () => {
+  it("caches a single-prompt (writer/onboarding) message region", async () => {
     const { model, requests } = recordingModel([{}]);
 
     await runAgent({ model, system: "sys", prompt: "the prompt" });
 
-    // With no caller anchor, the loop supplies the only message breakpoint, on
-    // the tail. This is the fix that makes the writer and onboarding cache
-    // their growing message region.
+    // The writer and onboarding pass one prompt string; it is markable, so it
+    // is marked, and their growing message region caches like any other.
     expect(requests[0].messages).toEqual([
       {
         role: "user",
@@ -274,7 +273,7 @@ describe("runAgent", () => {
     expect(result.text).toBe("");
   });
 
-  it("caches the system block with a 1h ttl and leaves tools unmarked", async () => {
+  it("caches the system block and leaves tools unmarked", async () => {
     const { model, requests } = recordingModel([{}]);
 
     await runAgent({
@@ -299,7 +298,7 @@ describe("runAgent", () => {
       {
         type: "text",
         text: "sys",
-        cache_control: { type: "ephemeral", ttl: "1h" },
+        cache_control: { type: "ephemeral" },
       },
     ]);
     // Tools carry no breakpoint of their own: only an input block can carry
@@ -325,12 +324,12 @@ describe("runAgent", () => {
       {
         type: "text",
         text: "sys",
-        cache_control: { type: "ephemeral", ttl: "1h" },
+        cache_control: { type: "ephemeral" },
       },
       {
         type: "text",
         text: "\n\npinned",
-        cache_control: { type: "ephemeral", ttl: "1h" },
+        cache_control: { type: "ephemeral" },
       },
     ]);
   });
@@ -362,7 +361,7 @@ describe("runAgent", () => {
     });
   });
 
-  it("preserves caller message cache breakpoints", async () => {
+  it("keeps a caller-set breakpoint in place", async () => {
     const { model, requests } = recordingModel([{}]);
 
     await runAgent({
@@ -391,10 +390,14 @@ describe("runAgent", () => {
       return last && "cache_control" in last && last.cache_control ? [i] : [];
     });
 
-  it("slides one message breakpoint to the growing tail each step", async () => {
+  it("marks every markable message and keeps earlier marks as it grows", async () => {
     const { model, requests } = recordingModel([
       {
         content: [{ type: "tool_use", id: "x", name: "ping", input: {} }],
+        stopReason: "tool_use",
+      },
+      {
+        content: [{ type: "tool_use", id: "y", name: "ping", input: {} }],
         stopReason: "tool_use",
       },
       { content: [{ type: "text", text: "done" }], stopReason: "end_turn" },
@@ -403,31 +406,19 @@ describe("runAgent", () => {
     await runAgent({
       model,
       system: "sys",
-      // A caller anchor breakpoint on the first message (the interface agent's
-      // cross-turn history read); the loop must preserve it and add exactly one
-      // sliding breakpoint at the tail.
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "hi", cache_control: { type: "ephemeral" } },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
       tools: pingTool(async () => "pong"),
     });
 
-    // Step 0: one message (the anchor is also the tail) -> single breakpoint.
+    // The marker is part of the cached bytes, so every mark a step carried must
+    // still be there next step: dropping one invalidates the prefix after it and
+    // re-bills the whole request as a cache write. Assistant messages (odd
+    // indexes here) are never marked.
     expect(markedIndexes(requests[0])).toEqual([0]);
-    // Step 1: messages grew to [anchor, assistant, tool_result]. The anchor
-    // stays on index 0 and the sliding breakpoint advanced to the new tail (2).
     expect(requests[1].messages).toHaveLength(3);
     expect(markedIndexes(requests[1])).toEqual([0, 2]);
-    // Never exceeds the 4-breakpoint budget: tools + system + these two.
-    const total = requests[1].messages
-      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
-      .filter((b) => "cache_control" in b && b.cache_control).length;
-    expect(total).toBeLessThanOrEqual(2);
+    expect(requests[2].messages).toHaveLength(5);
+    expect(markedIndexes(requests[2])).toEqual([0, 2, 4]);
   });
 
   it("passes the loop step index to the model each call", async () => {
@@ -489,9 +480,9 @@ describe("runAgent", () => {
     });
   });
 
-  // The sliding breakpoint lands on the last message every step. When a run is
-  // cut off mid-thinking that message ends on a thinking block, which cannot
-  // carry cache_control, so the step must go out unmarked rather than 400.
+  // Every markable message is marked. When a run is cut off mid-thinking, a
+  // message ends on a thinking block, which cannot carry cache_control, so that
+  // message must go out unmarked rather than 400.
   it("sends no breakpoint on a message that ends mid-thinking", async () => {
     const { model, requests } = recordingModel([
       {

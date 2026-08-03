@@ -39,7 +39,6 @@ import {
 } from "./prompts";
 import { runAgent, usageLogFields, type ExternalCallGuard } from "./run";
 import { createDelivery } from "./delivery";
-import { markCacheBreakpoint } from "./cache";
 import { log } from "../log";
 
 // Delivered when the model never produces its intended answer (loop hit the
@@ -265,19 +264,6 @@ export const buildConversationMessages = (
   return messages;
 };
 
-// The last message at or before `from` that can carry a cache breakpoint.
-// Assistant messages cannot (a breakpoint only goes on an input block), and the
-// message before the current one is usually the previous turn's assistant reply,
-// so the anchor walks back to the previous user message. The cost is that the
-// last reply falls outside the anchored prefix; the alternative is no cross-turn
-// anchor at all. Returns -1 when nothing before `from` is markable.
-const anchorIndex = (messages: AgentMessage[], from: number): number => {
-  for (let index = from; index >= 0; index--) {
-    if (messages[index].role !== "assistant") return index;
-  }
-  return -1;
-};
-
 export const runInterfaceAgent = async (
   input: InterfaceAgentInput,
 ): Promise<InterfaceAgentResult> => {
@@ -361,16 +347,10 @@ export const runInterfaceAgent = async (
     summary: input.summary,
     context: interfaceContext(now, timezone, input.country),
   });
-  const lastIdx = convo.length - 1;
-  // Cross-turn anchor breakpoint in the messages region. The last stable message
-  // is byte-identical next turn, so it is the write that yields the cross-turn
-  // history read. The current message's tail is marked by the runner's
-  // loop-owned sliding breakpoint (see run.ts), so it is not marked here — that
-  // keeps the per-request budget at 4 (system head + system tail + anchor +
-  // sliding). Empty history has no stable message to anchor, and the loop's
-  // sliding breakpoint covers the single current message.
-  const anchor = lastIdx >= 1 ? anchorIndex(convo, lastIdx - 1) : -1;
-  if (anchor >= 0) convo[anchor] = markCacheBreakpoint(convo[anchor]);
+  // No cache breakpoint is placed here. The runner marks every markable message
+  // (see cache.ts), which already covers the history this turn replays, so the
+  // cross-turn read comes for free and a caller-placed anchor would only be a
+  // second name for the same mark.
 
   await deliverUnclaimed(input.trailing ?? []);
 

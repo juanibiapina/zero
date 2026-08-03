@@ -18,10 +18,14 @@
 import { Anthropic } from "@anthropic-ai/sdk/client";
 import type { BetaMessageParam } from "@anthropic-ai/sdk/resources/beta";
 import type {
+  AgentMessage,
   AgentModel,
   AgentModelRequest,
   AgentModelResponse,
+  CacheControl,
+  CacheTtl,
   ContentBlock,
+  TextBlock,
   TokenUsage,
 } from "./protocol";
 import { log } from "../log";
@@ -46,6 +50,56 @@ const THINKING = { type: "adaptive", display: "omitted" } as const;
 // stretch a turn indefinitely.
 const REQUEST_TIMEOUT_MS = 300_000;
 const MAX_RETRIES = 2;
+
+// Anthropic's two provider-specific caching rules, which the shared cache
+// policy (agents/cache.ts) deliberately does not know about:
+//
+// - A request may carry at most 4 blocks with `cache_control`; a fifth is a
+//   400. The shared policy marks every markable message, so the marks are
+//   trimmed here to the last ones that fit under the system region's share.
+// - TTL is per breakpoint. The system region is the long-lived, high-reuse
+//   prefix, so it takes 1h; the message region churns and takes the 5m default.
+const MAX_BREAKPOINTS = 4;
+
+type Marked = { cache_control?: CacheControl };
+
+const isMarked = (block: ContentBlock): boolean =>
+  !!(block as Marked).cache_control;
+
+const withTtl = <T extends ContentBlock | TextBlock>(
+  block: T,
+  ttl: CacheTtl,
+): T => {
+  const control = (block as Marked).cache_control;
+  return control ? { ...block, cache_control: { ...control, ttl } } : block;
+};
+
+const unmark = (block: ContentBlock): ContentBlock => {
+  if (!isMarked(block)) return block;
+  const { cache_control: _dropped, ...rest } = block as ContentBlock & Marked;
+  return rest;
+};
+
+// Keep the last `budget` marks in the message region and strip the rest.
+// Trimming from the front rather than the back keeps the newest, growing prefix
+// cached, which is where the within-run reads come from.
+const trimMessageBreakpoints = (
+  messages: AgentMessage[],
+  budget: number,
+): AgentMessage[] => {
+  const marked: number[] = [];
+  messages.forEach((message, index) => {
+    if (Array.isArray(message.content) && message.content.some(isMarked))
+      marked.push(index);
+  });
+  const drop = new Set(marked.slice(0, Math.max(marked.length - budget, 0)));
+  return messages.map((message, index) => {
+    if (!Array.isArray(message.content)) return message;
+    if (drop.has(index))
+      return { ...message, content: message.content.map(unmark) };
+    return { ...message, content: message.content.map((b) => withTtl(b, "5m")) };
+  });
+};
 
 const toUsage = (usage: {
   input_tokens: number;
@@ -90,13 +144,16 @@ export const createAnthropicModel = (options: AdapterOptions): AgentModel => {
       const response = await client.beta.messages.create({
         model: modelId,
         max_tokens: MAX_TOKENS,
-        system: request.system,
+        system: request.system.map((block) => withTtl(block, "1h")),
         tools: request.tools,
         // Cast: the protocol types an image block's media type as a plain
         // string (attachment MIME types come from Telegram at runtime), while
         // the SDK narrows it to the four types the API accepts. An unsupported
         // type is rejected upstream, not here.
-        messages: request.messages as BetaMessageParam[],
+        messages: trimMessageBreakpoints(
+          request.messages,
+          MAX_BREAKPOINTS - request.system.filter(isMarked).length,
+        ) as BetaMessageParam[],
         thinking: THINKING,
       });
       reportedModelId = response.model;
