@@ -96,7 +96,7 @@ export const readPdfText = async (
     }
 
     if (!pages.some((page) => page.text.trim().length > 0)) {
-      throw new PdfReadError("No extractable text was found in these pages. The PDF may be scanned or image-only.");
+      throw new PdfReadError("No extractable text was found in these pages. The PDF may be scanned or image-only, and only its text layer can be read.");
     }
 
     return {

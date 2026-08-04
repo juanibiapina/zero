@@ -47,7 +47,7 @@ const formatPdfText = (filename: string, result: PdfTextResult): string => {
       ? `\n\nMore pages are available. Call read_pdf with start_page=${nextPage}.`
       : "\n\nThe extracted text was truncated at the character limit. Read a smaller page range."
     : "";
-  return `PDF ${JSON.stringify(filename)}, pages ${result.startPage}-${result.endPage} of ${result.totalPages}\n\n${body}${more}`;
+  return `PDF ${JSON.stringify(filename)}, pages ${result.startPage}-${result.endPage} of ${result.totalPages} (text layer only; any images in these pages are not included)\n\n${body}${more}`;
 };
 
 export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
@@ -110,7 +110,7 @@ export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
     view_attachment: viewImage,
     read_pdf: defineTool({
       description:
-        "Read bounded, page-labelled text from a stored PDF by id. Page numbers are one-indexed and each call reads at most 20 pages.",
+        "Read bounded, page-labelled text from a stored PDF by id. Text only: this returns the PDF's text layer and never its images, so it cannot tell you whether the PDF contains a photo or what one shows. Never conclude from this tool that a PDF has no picture. Page numbers are one-indexed and each call reads at most 20 pages.",
       inputSchema: z.object({
         id: z.string(),
         start_page: z.number().int().positive().optional(),
