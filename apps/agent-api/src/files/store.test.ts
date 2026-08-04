@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MemoryStore } from "../store/memory";
 import { createMemoryFileBlobs } from "./memory";
 import { createUserFileStore } from "./store";
-import { FileQuotaExceededError, FileTooLargeError } from "./types";
+import { FileQuotaExceededError, FileTooLargeError, MAX_FILE_BYTES } from "./types";
 
 const make = (user = "user_1") => {
   let tick = 0;
@@ -83,7 +83,7 @@ describe("UserFileStore", () => {
 
   it("rejects oversized files and invalid claimed PDFs", async () => {
     const { files } = make();
-    await expect(files.save({ filename: "big", mimeType: "application/octet-stream", bytes: new Uint8Array(5 * 1024 * 1024 + 1) })).rejects.toBeInstanceOf(FileTooLargeError);
+    await expect(files.save({ filename: "big", mimeType: "application/octet-stream", bytes: new Uint8Array(MAX_FILE_BYTES + 1) })).rejects.toBeInstanceOf(FileTooLargeError);
     await expect(files.save({ filename: "fake.pdf", mimeType: "application/pdf", bytes: bytes(1, 2) })).rejects.toThrow("not a valid PDF");
   });
 

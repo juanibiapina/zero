@@ -1,4 +1,7 @@
-export const MAX_FILE_BYTES = 5 * 1024 * 1024;
+// Telegram's Bot API refuses to serve any file over 20 MB through getFile, so a
+// larger cap here could never be filled from a Telegram attachment.
+export const MAX_FILE_BYTES = 20 * 1024 * 1024;
+export const MAX_FILE_LABEL = `${MAX_FILE_BYTES / (1024 * 1024)} MB`;
 export const MAX_USER_FILE_BYTES = 100 * 1024 * 1024;
 export const MAX_FILE_PAGE_SIZE = 50;
 
@@ -48,7 +51,7 @@ export interface FileBlobStore {
 
 export class FileTooLargeError extends Error {
   constructor() {
-    super("That file is too large (over 5 MB).");
+    super(`That file is too large (over ${MAX_FILE_LABEL}).`);
     this.name = "FileTooLargeError";
   }
 }

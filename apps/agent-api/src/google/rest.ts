@@ -8,7 +8,7 @@
 // means Google isn't connected and surfaces as GoogleNotConnectedError, which
 // the tool layer turns into `{ error }` data.
 
-import { MAX_FILE_BYTES } from "../files/types";
+import { MAX_FILE_BYTES, MAX_FILE_LABEL } from "../files/types";
 import {
   CALENDAR_EVENTS_CAP,
   CALENDAR_PER_LIST_CAP,
@@ -294,7 +294,7 @@ export const createGoogleWorkspace = (
       }
       const declaredSize = part.body?.size ?? 0;
       if (declaredSize > MAX_FILE_BYTES) {
-        throw new Error("That Gmail attachment is too large (over 5 MB).");
+        throw new Error(`That Gmail attachment is too large (over ${MAX_FILE_LABEL}).`);
       }
       let data = part.body?.data;
       if (!data) {
@@ -305,7 +305,7 @@ export const createGoogleWorkspace = (
         );
         const endpointSize = body.size ?? declaredSize;
         if (endpointSize > MAX_FILE_BYTES) {
-          throw new Error("That Gmail attachment is too large (over 5 MB).");
+          throw new Error(`That Gmail attachment is too large (over ${MAX_FILE_LABEL}).`);
         }
         if (endpointSize !== declaredSize) {
           throw new Error("The Gmail attachment size changed while downloading.");
@@ -315,7 +315,7 @@ export const createGoogleWorkspace = (
       if (!data) throw new Error("The Gmail attachment has no downloadable data.");
       const bytes = bytesFromBase64url(data);
       if (bytes.length > MAX_FILE_BYTES) {
-        throw new Error("That Gmail attachment is too large (over 5 MB).");
+        throw new Error(`That Gmail attachment is too large (over ${MAX_FILE_LABEL}).`);
       }
       if (declaredSize !== bytes.length) {
         throw new Error("The Gmail attachment size changed while downloading.");

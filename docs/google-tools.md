@@ -59,7 +59,7 @@ user confirmation of the exact content before either runs.
   RFC-822 `Message-ID` header, headers, decoded body, and named attachment
   summaries (`partId`, filename, MIME type, byte size).
 - `gmail_save_attachment({ messageId, partId })` — re-fetch the canonical MIME
-  part, download up to 5 MB, save it as a user-owned Zero file, and return its
+  part, download up to 20 MB, save it as a user-owned Zero file, and return its
   metadata and stable marker without bytes or base64.
 - `gmail_send({ to, subject, body, cc?, bcc?, replyTo? })` — send or reply.
   `replyTo` is `{ messageIdHeader, threadId }` copied from a `gmail_thread`

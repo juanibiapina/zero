@@ -273,7 +273,7 @@ immediately. The background task:
    supergroup chat to topicId=0; channel posts are dropped.
 2. Resolve `telegramId` → `clerkUserId` (KV cache, `TelegramAccountDO` on a
    miss); drop the message if neither knows it.
-3. For any downloadable file under 5 MB, the route resolves Telegram's file,
+3. For any downloadable file under 20 MB, the route resolves Telegram's file,
    downloads the bytes, and hands canonical metadata plus bytes to UserDO.
 4. `UserDO.enqueueTurn` saves through `UserFileStore`, appends the canonical
    marker, dedupes the update, queues the message, and arms the DO alarm. The
@@ -297,7 +297,7 @@ deduplicates an intact file or repairs a missing object. Migrated `att_*` rows
 retain their old `attachments/{clerkUserId}/...` object keys and get their sizes
 backfilled lazily from R2.
 
-Each file is capped at 5 MB and each user at 100 MB. Filename and MIME
+Each file is capped at 20 MB (Telegram's getFile ceiling) and each user at 100 MB. Filename and MIME
 normalization, PDF signature validation, quota checks, listing, reads, and
 deletion all live behind the same store interface so Telegram and Gmail follow
 the same policy. File bytes never enter SQLite, topic text, durable messages, or

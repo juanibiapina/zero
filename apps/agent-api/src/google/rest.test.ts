@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGoogleWorkspace } from "./rest";
 import { GoogleNotConnectedError } from "./types";
+import { MAX_FILE_BYTES } from "../files/types";
 
 const originalFetch = globalThis.fetch;
 
@@ -174,7 +175,7 @@ describe("createGoogleWorkspace mail", () => {
     const fetchMock = routed([{
       match: "/messages/M7?format=full",
       response: () => json({ id: "M7", payload: { parts: [
-        { partId: "1", filename: "big.bin", body: { size: 6 * 1024 * 1024, attachmentId: "A7" } },
+        { partId: "1", filename: "big.bin", body: { size: MAX_FILE_BYTES + 1, attachmentId: "A7" } },
       ] } }),
     }]);
     globalThis.fetch = fetchMock;

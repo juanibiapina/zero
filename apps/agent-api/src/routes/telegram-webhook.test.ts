@@ -5,6 +5,7 @@ import {
   refineFilename,
   processTelegramMessage,
   createTelegramWebhookRoute,
+  MAX_ATTACHMENT_BYTES,
   type WebhookDeps,
   type EnqueueTurnInput,
 } from "./telegram-webhook";
@@ -257,7 +258,7 @@ describe("processTelegramMessage", () => {
     const download = vi.fn(async () => ({ bytes: new Uint8Array([1]), filePath: "file.bin" }));
     const { deps, enqueued, replies } = makeDeps({ download });
     await processTelegramMessage(deps, topic, {
-      document: { file_id: "d", file_unique_id: "u", file_size: 6 * 1024 * 1024 },
+      document: { file_id: "d", file_unique_id: "u", file_size: MAX_ATTACHMENT_BYTES + 1 },
     }, "1");
     expect(download).not.toHaveBeenCalled();
     expect(enqueued).toEqual([]);
@@ -267,7 +268,7 @@ describe("processTelegramMessage", () => {
   it("skips an oversize image with a notice and no enqueue", async () => {
     const { deps, enqueued, replies } = makeDeps({
       download: vi.fn(async () => ({
-        bytes: new Uint8Array(6 * 1024 * 1024),
+        bytes: new Uint8Array(MAX_ATTACHMENT_BYTES + 1),
         filePath: "photos/file_1.jpg",
       })),
     });
@@ -281,7 +282,7 @@ describe("processTelegramMessage", () => {
   it("processes the caption of an oversize image but drops the image", async () => {
     const { deps, enqueued, replies } = makeDeps({
       download: vi.fn(async () => ({
-        bytes: new Uint8Array(6 * 1024 * 1024),
+        bytes: new Uint8Array(MAX_ATTACHMENT_BYTES + 1),
         filePath: "photos/file_1.jpg",
       })),
     });
@@ -343,7 +344,7 @@ describe("processTelegramMessage", () => {
   });
 
   it("rejects an oversize PDF without storing an attachment row", async () => {
-    const bytes = new Uint8Array(6 * 1024 * 1024);
+    const bytes = new Uint8Array(MAX_ATTACHMENT_BYTES + 1);
     bytes.set(new TextEncoder().encode("%PDF-1.7"));
     const { deps, enqueued, replies } = makeDeps({
       download: vi.fn(async () => ({ bytes, filePath: "documents/report.pdf" })),

@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-04: You can send Zero files up to 20 MB, so phone photos and bigger documents go through instead of being turned away at 5 MB.
 - 2026-08-02: When Zero looks something up on the web it now stays with you while it works, telling you what it's checking and answering as it goes, instead of going quiet until the whole search is done.
 - 2026-08-02: What Zero keeps in mind about you at all times is now just who you are. Your addresses, documents, plans and everything else move into their own subjects it looks up when they come up.
 - 2026-08-02: Zero writes plainer replies: no filler, no hedging, shorter words, shorter sentences.

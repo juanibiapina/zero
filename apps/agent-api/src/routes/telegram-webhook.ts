@@ -27,7 +27,7 @@ import type { Env } from "../types";
 import { sendChatAction } from "../telegram/chat-action";
 import { formatAndSend } from "../telegram/send";
 import { downloadTelegramFile } from "../telegram/files";
-import { MAX_FILE_BYTES } from "../files/types";
+import { MAX_FILE_BYTES, MAX_FILE_LABEL } from "../files/types";
 import { reportError as reportZeroError } from "../reporting/zero-errors";
 import { resolveClerkUserId } from "../telegram/identity";
 
@@ -278,7 +278,7 @@ export interface WebhookDeps {
   reportError?: (err: unknown) => Promise<void>;
 }
 
-const OVERSIZE_NOTICE = "\u26a0\ufe0f That file is too large to save (over 5 MB).";
+const OVERSIZE_NOTICE = `\u26a0\ufe0f That file is too large to save (over ${MAX_FILE_LABEL}).`;
 const INVALID_PDF_NOTICE = "\u26a0\ufe0f That file is not a valid PDF, so I couldn't save it as one.";
 const DOWNLOAD_FAILED_NOTICE = "\u26a0\ufe0f I couldn't download that file, so it wasn't saved.";
 const QUOTA_NOTICE = "\u26a0\ufe0f I couldn't save that file because your 100 MB file storage is full.";
