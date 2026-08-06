@@ -34,20 +34,16 @@ Caps: `limit` maxes at 1000 and truncates silently — a result of exactly 1000 
 cd /home/juan/workspace/juanibiapina/zero && git pull --ff-only 2>&1 | tail -3
 ```
 
-### 2. Set up the query helper and the two windows
+### 2. Fetch both days
+
+`bin/obs-query <msg> <from_ms> <to_ms>` is checked into the repo and prints the
+raw API response. Keep every response in one run-scoped directory so a later
+step never depends on a file another run left behind.
 
 ```bash
-cat > /tmp/q.sh <<'EOF'
-#!/usr/bin/env bash
-# q.sh <msg> <from_ms> <to_ms>
-curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/query" \
-  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"queryId\":\"q\",\"timeframe\":{\"from\":$2,\"to\":$3},
-       \"parameters\":{\"datasets\":[\"cloudflare-workers\"],
-         \"filters\":[{\"key\":\"\$metadata.message\",\"operation\":\"eq\",\"value\":\"$1\",\"type\":\"string\"}]},
-       \"limit\":1000,\"view\":\"events\"}"
-EOF
-chmod +x /tmp/q.sh
+cd /home/juan/workspace/juanibiapina/zero
+RUN=$(mktemp -d -t zero-pulse-XXXXXX)
+echo "run dir: $RUN"
 
 FROM=$(date -u -d 'yesterday 00:00' +%s)000
 TO=$(date -u -d 'today 00:00' +%s)000
@@ -58,28 +54,32 @@ for m in cache_stats interface_completed learn_slice_completed onboarding_comple
          turn_started turn_messages_sent schedule_fired web_search_completed \
          read_page_completed brave_request clerk_signup telegram_linked \
          turn_incomplete turn_reset_retrying turn_delivery_recovered; do
-  /tmp/q.sh $m $FROM $TO > /tmp/z_$m.json
-  /tmp/q.sh $m $PREV_FROM $FROM > /tmp/p_$m.json
+  bin/obs-query $m $FROM $TO > $RUN/z_$m.json
+  bin/obs-query $m $PREV_FROM $FROM > $RUN/p_$m.json
   printf "%-25s %4s (prev %s)\n" $m \
-    "$(jq '.result.events.events|length' /tmp/z_$m.json)" \
-    "$(jq '.result.events.events|length' /tmp/p_$m.json)"
+    "$(jq '.result.events.events|length' $RUN/z_$m.json)" \
+    "$(jq '.result.events.events|length' $RUN/p_$m.json)"
 done
 ```
+
+Every later step reuses `$RUN`. If the shell that set it is gone, re-run this
+block rather than guessing a path. Delete the directory once the summary is
+posted: `rm -rf "$RUN"`.
 
 If `cache_stats` is 0, note that there was no production traffic yesterday and post a brief message saying so.
 
 ### 3. Usage / analytics
 
 ```bash
-echo "users:         $(jq -r '[.result.events.events[].source.clerk_user_id]|unique|length' /tmp/z_turn_started.json)"
-echo "conversations: $(jq -r '[.result.events.events[].source|"\(.chat_id)/\(.topic_id)"]|unique|length' /tmp/z_turn_started.json)"
-echo "turns:         $(jq '.result.events.events|length' /tmp/z_turn_started.json)"
-echo "replies sent:  $(jq '[.result.events.events[].source.count]|add // 0' /tmp/z_turn_messages_sent.json)"
-echo "scheduled:     $(jq '.result.events.events|length' /tmp/z_schedule_fired.json) fired"
+echo "users:         $(jq -r '[.result.events.events[].source.clerk_user_id]|unique|length' $RUN/z_turn_started.json)"
+echo "conversations: $(jq -r '[.result.events.events[].source|"\(.chat_id)/\(.topic_id)"]|unique|length' $RUN/z_turn_started.json)"
+echo "turns:         $(jq '.result.events.events|length' $RUN/z_turn_started.json)"
+echo "replies sent:  $(jq '[.result.events.events[].source.count]|add // 0' $RUN/z_turn_messages_sent.json)"
+echo "scheduled:     $(jq '.result.events.events|length' $RUN/z_schedule_fired.json) fired"
 echo "per-user turns:"
-jq -r '.result.events.events[].source.clerk_user_id' /tmp/z_turn_started.json | sort | uniq -c | sort -rn
+jq -r '.result.events.events[].source.clerk_user_id' $RUN/z_turn_started.json | sort | uniq -c | sort -rn
 echo "hourly turns:"
-jq -r '.result.events.events[].timestamp' /tmp/z_turn_started.json | awk '{print strftime("%H", $1/1000, 1)}' | sort | uniq -c
+jq -r '.result.events.events[].timestamp' $RUN/z_turn_started.json | awk '{print strftime("%H", $1/1000, 1)}' | sort | uniq -c
 ```
 
 Also compute: median/p90 `duration_ms` from `interface_completed`, mean `steps` per run, searches per turn, and how many turns came from schedules vs. real user messages.
@@ -89,7 +89,7 @@ New users: count `clerk_signup` and `telegram_linked`. Reliability: any non-zero
 ### 4. Aggregate tokens by agent
 
 ```bash
-jq -r '.result.events.events[].source | [.agent,.input_tokens,.cache_read_tokens,.cache_write_tokens,.thinking_tokens] | @tsv' /tmp/z_cache_stats.json \
+jq -r '.result.events.events[].source | [.agent,.input_tokens,.cache_read_tokens,.cache_write_tokens,.thinking_tokens] | @tsv' $RUN/z_cache_stats.json \
   | awk -F'\t' '
     {c[$1]++; i[$1]+=$2; r[$1]+=$3; w[$1]+=$4; t[$1]+=$5; C++; I+=$2; R+=$3; W+=$4; T+=$5}
     END {
@@ -102,7 +102,7 @@ Output tokens are **not** on `cache_stats`; sum them from the `*_completed` even
 
 ```bash
 for f in interface_completed learn_slice_completed onboarding_completed; do
-  jq -r --arg n $f '"\($n) out=\([.result.events.events[].source.output_tokens]|add // 0)"' /tmp/z_$f.json
+  jq -r --arg n $f '"\($n) out=\([.result.events.events[].source.output_tokens]|add // 0)"' $RUN/z_$f.json
 done
 ```
 
@@ -114,11 +114,11 @@ done
 - **Cold-prefix calls** (`cache_read_tokens == 0`): count and share of writes. `compaction` calls are cold by design; call out only the interface/learner ones.
 
 ```bash
-jq -r '.result.events.events[].source | [.agent, .cache_read_tokens, .cache_write_tokens] | @tsv' /tmp/z_cache_stats.json \
+jq -r '.result.events.events[].source | [.agent, .cache_read_tokens, .cache_write_tokens] | @tsv' $RUN/z_cache_stats.json \
   | awk -F'\t' '$2==0{cold++; cw+=$3} {total++; W+=$3} END{printf "Cold calls: %d/%d (%.0f%%), cold writes: %dk tokens ($%.3f), %.0f%% of all writes\n", cold, total, cold/total*100, cw/1000, cw*0.25/1e6, cw/W*100}'
 ```
 
-Repeat steps 4–5 against the `/tmp/p_*.json` files for the previous day's comparison line.
+Repeat steps 4–5 against the `$RUN/p_*.json` files for the previous day's comparison line.
 
 ### 6. Post summary to Telegram
 

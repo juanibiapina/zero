@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# Query Workers Logs (observability) for one log message over a time window.
+#
+#   bin/obs-query <msg> <from_ms> <to_ms>
+#
+# Prints the raw API response on stdout. Needs $CLOUDFLARE_API_TOKEN.
+#
+# The `limit` is the API maximum of 1000 and truncates silently: a response with
+# exactly 1000 events is a truncated response, not a busy day. Split the window
+# (per hour) and sum the parts.
+
+set -euo pipefail
+
+ACCOUNT=4e04b64af4013414441c59014392bea0
+
+if [ $# -ne 3 ]; then
+  echo "usage: bin/obs-query <msg> <from_ms> <to_ms>" >&2
+  exit 2
+fi
+
+msg=$1
+from=$2
+to=$3
+
+: "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is not set}"
+
+curl -sf -X POST \
+  "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/observability/telemetry/query" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @- <<JSON
+{
+  "queryId": "obs-query",
+  "timeframe": { "from": $from, "to": $to },
+  "parameters": {
+    "datasets": ["cloudflare-workers"],
+    "filters": [
+      { "key": "\$metadata.message", "operation": "eq", "value": "$msg", "type": "string" }
+    ]
+  },
+  "limit": 1000,
+  "view": "events"
+}
+JSON
