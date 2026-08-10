@@ -13,28 +13,28 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
-    "openai": "^7.3.0",
-    "@clerk/backend": "^3.15.0",
-    "@clerk/hono": "^0.1.59",
+    "openai": "^7.4.0",
+    "@clerk/backend": "^3.16.0",
+    "@clerk/hono": "^0.1.61",
     "@hono/zod-openapi": "^1.5.1",
     "aws4fetch": "^1.0.20",
     "croner": "^10.0.1",
     "do-orm": "github:juanibiapina/do-orm",
     "grammy": "^1.45.1",
-    "hono": "^4.12.33",
-    "jose": "^6.2.6",
-    "marked": "^18.0.7",
+    "hono": "^4.13.0",
+    "jose": "^6.2.8",
+    "marked": "^18.0.9",
     "unpdf": "^1.8.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260801.1",
+    "@cloudflare/workers-types": "^5.20260804.1",
     "@types/node": "^26.1.2",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.8.0",
     "typescript": "6.0.3",
     "vitest": "^4.1.10",
-    "wrangler": "^4.118.0"
+    "wrangler": "^4.119.0"
   }
 }

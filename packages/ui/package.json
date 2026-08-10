@@ -17,18 +17,18 @@
     "@radix-ui/react-slot": "^1.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.28.0",
+    "lucide-react": "^1.29.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0"
   },
   "peerDependencies": {
-    "@clerk/react": "^6.12.10",
+    "@clerk/react": "^6.13.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0"
   },
   "devDependencies": {
-    "@clerk/react": "^6.12.10",
+    "@clerk/react": "^6.13.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@zero/eslint-config": "workspace:*",
