@@ -50,18 +50,45 @@ access to your Gmail, Calendar, and Drive via Clerk's Google OAuth.
 
 ## Scopes requested
 
-The "Connect Google" button is all-or-nothing across three scopes,
+The "Connect Google" button is all-or-nothing across four scopes,
 defined in `apps/agent-web/src/google-scopes.ts`:
 
 | Scope | Lets the bot |
 |-------|--------------|
 | `gmail.modify` | Read your mail, send mail as you, modify labels |
-| `calendar` | Read and write your calendars and events |
+| `calendar.events` | Read and write events on your calendars |
+| `calendar.calendarlist.readonly` | See which calendars you are subscribed to |
 | `drive` | Read and write your Drive files |
 
-If you later add a fourth scope, bump the array and existing users see the
+Each is the narrowest scope covering a tool that exists, because OAuth
+verification demands a justification per scope *and* an explanation of why
+a narrower one will not do. Two traps worth remembering:
+
+- **`calendar.events` does not grant `calendarList.list`.** That call
+  (`rest.ts`, `users/me/calendarList`) accepts only `calendar`,
+  `calendar.readonly`, `calendar.calendarlist`, or
+  `calendar.calendarlist.readonly`, hence the second calendar scope. The
+  Calendar v3 discovery document
+  (`https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest`) is the
+  authoritative per-method scope list; the reference pages are easy to
+  misread.
+- **`gmail.modify` already covers sending.** It is "read, compose, and
+  send", so `gmail_send` needs no separate `gmail.send`.
+
+Scope classification drives the verification burden: `gmail.modify` and
+`drive` are **restricted** (verification plus an annual CASA security
+assessment), while both calendar scopes are merely sensitive.
+
+If you later add a scope, bump the array and existing users see the
 button switch to "Grant required scopes" (driven by the `missingScopes`
 helper) until they re-consent.
+
+`missingScopes` compares scope strings **exactly**, with no notion of one
+scope implying another. So replacing a broad scope with narrower ones is
+not free: a user who granted `calendar` does not thereby satisfy
+`calendar.events`, and the button flips to "Grant access" until they
+re-consent. Their existing broad grant keeps working in the meantime,
+since the token is unaffected.
 
 ## When the user hasn't connected Google
 
