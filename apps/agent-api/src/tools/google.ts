@@ -21,6 +21,7 @@ import {
   CALENDAR_EVENTS_CAP,
   GoogleApiError,
   GoogleNotConnectedError,
+  MAIL_DRAFTS_CAP,
   MAIL_SEARCH_CAP,
   type CreateEventInput,
   type EventDateTime,
@@ -182,6 +183,112 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
       execute: (input) => writeGuard("gmail_send", () => google.mail.send(input)),
       // Irreversible: once the mail leaves there is no unsend, so a resumed turn
       // must never fire this twice (see agents/run.ts).
+      externalWrite: true,
+    }),
+
+    gmail_labels: defineTool({
+      description:
+        "List the user's Gmail labels by name (their own labels, plus INBOX, " +
+        "UNREAD, STARRED, IMPORTANT, SPAM, TRASH). Read-only.",
+      inputSchema: z.object({}),
+      execute: () => guard("gmail_labels", () => google.mail.listLabels()),
+    }),
+
+    gmail_label: defineTool({
+      description:
+        "Create a Gmail label, or rename one by passing newName. Labels are " +
+        "nested with a slash: 'Work/Receipts'.",
+      inputSchema: z.object({
+        name: z.string(),
+        newName: z.string().optional(),
+      }),
+      execute: ({ name, newName }) =>
+        guard("gmail_label", () =>
+          newName === undefined
+            ? google.mail.createLabel(name)
+            : google.mail.renameLabel(name, newName),
+        ),
+    }),
+
+    gmail_modify_thread: defineTool({
+      description:
+        "Change which labels a Gmail thread carries, by label name. This is how " +
+        "you archive (remove INBOX), unarchive (add INBOX), mark read (remove " +
+        "UNREAD) or unread (add UNREAD), star (add STARRED), and file mail " +
+        "under a label (add its name). The label must already exist; create it " +
+        "with gmail_label first. Reversible: call it again with the opposite " +
+        "add/remove.",
+      inputSchema: z.object({
+        threadId: z.string(),
+        add: z.array(z.string()).optional(),
+        remove: z.array(z.string()).optional(),
+      }),
+      execute: ({ threadId, add, remove }) =>
+        guard("gmail_modify_thread", () =>
+          google.mail.modifyThread({ threadId, add, remove }),
+        ),
+    }),
+
+    gmail_trash_thread: defineTool({
+      description:
+        "Move a Gmail thread to the trash, or restore it with restore: true. " +
+        "Gmail keeps trash for 30 days; nothing here deletes mail permanently.",
+      inputSchema: z.object({
+        threadId: z.string(),
+        restore: z.boolean().optional(),
+      }),
+      execute: ({ threadId, restore }) =>
+        guard("gmail_trash_thread", async () => {
+          if (restore) await google.mail.untrashThread(threadId);
+          else await google.mail.trashThread(threadId);
+          return { threadId, trashed: !restore };
+        }),
+    }),
+
+    gmail_drafts: defineTool({
+      description:
+        "List the user's Gmail drafts (draftId, recipient, subject, snippet). " +
+        "Use it to find a draft written earlier. Read-only.",
+      inputSchema: z.object({}),
+      execute: () =>
+        guard("gmail_drafts", async () => {
+          const drafts = await google.mail.listDrafts();
+          return { drafts, truncated: drafts.length >= MAIL_DRAFTS_CAP };
+        }),
+    }),
+
+    gmail_draft: defineTool({
+      description:
+        "Save an email as a draft for the user to look at, instead of sending " +
+        "it. Pass draftId to replace an existing draft: an update REPLACES the " +
+        "whole message, so always pass the complete to/subject/body, never just " +
+        "the part that changed. For a draft reply, pass replyTo with the " +
+        "messageIdHeader and threadId from gmail_thread and a 'Re:' subject, " +
+        "same as gmail_send.",
+      inputSchema: z.object({
+        to: z.string(),
+        subject: z.string(),
+        body: z.string(),
+        cc: z.string().optional(),
+        bcc: z.string().optional(),
+        replyTo: z
+          .object({ messageIdHeader: z.string(), threadId: z.string() })
+          .optional(),
+        draftId: z.string().optional(),
+      }),
+      execute: (input) => guard("gmail_draft", () => google.mail.saveDraft(input)),
+    }),
+
+    gmail_send_draft: defineTool({
+      description:
+        "Send a draft the user has approved. Only call after they confirmed the " +
+        "exact recipients, subject, and body. Sending deletes the draft and " +
+        "creates a sent message, so the draftId stops existing: never call this " +
+        "twice for the same draft.",
+      inputSchema: z.object({ draftId: z.string() }),
+      execute: ({ draftId }) =>
+        writeGuard("gmail_send_draft", () => google.mail.sendDraft(draftId)),
+      // Irreversible, exactly like gmail_send: there is no unsend.
       externalWrite: true,
     }),
 

@@ -868,6 +868,75 @@ describe("runInterfaceAgent", () => {
     ]);
   });
 
+  it("drafts a reply and archives the thread, without sending anything", async () => {
+    const store = new MemoryStore();
+    const sink = collectSink();
+    const google = createMemoryGoogle({
+      labels: ["Receipts"],
+      threadLabels: { T1: ["INBOX", "UNREAD"] },
+      threads: {
+        T1: {
+          threadId: "T1",
+          messages: [
+            {
+              id: "M1",
+              threadId: "T1",
+              messageIdHeader: "<abc@mail>",
+              from: "a@x.com",
+              to: "me@x.com",
+              subject: "Lunch?",
+              date: "today",
+              body: "Want lunch?",
+              attachments: [],
+            },
+          ],
+        },
+      },
+    });
+    const model = scriptedModel([
+      { tools: [{ name: "gmail_thread", input: { threadId: "T1" } }] },
+      {
+        tools: [
+          {
+            name: "gmail_draft",
+            input: {
+              to: "a@x.com",
+              subject: "Re: Lunch?",
+              body: "Yes, Thursday works.",
+              replyTo: { messageIdHeader: "<abc@mail>", threadId: "T1" },
+            },
+          },
+        ],
+      },
+      {
+        tools: [
+          { name: "gmail_modify_thread", input: { threadId: "T1", remove: ["INBOX"] } },
+        ],
+      },
+      { text: "Drafted a reply and archived the thread. Say the word and I'll send it." },
+    ]);
+
+    await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google,
+      fetcher: createMemoryFetcher(),
+      history: [],
+      userMessage: "draft a yes to that lunch mail and get it out of my inbox",
+    });
+
+    expect(google.savedDrafts).toHaveLength(1);
+    expect(google.savedDrafts[0].replyTo?.threadId).toBe("T1");
+    expect(google.modifications).toEqual([
+      { threadId: "T1", add: [], remove: ["INBOX"] },
+    ]);
+    // Drafting is not sending: nothing left the mailbox.
+    expect(google.sentMail).toEqual([]);
+    expect(google.sentDrafts).toEqual([]);
+  });
+
   it("persists the response, then claims the block, then sends it", async () => {
     const store = new MemoryStore();
     const order: string[] = [];

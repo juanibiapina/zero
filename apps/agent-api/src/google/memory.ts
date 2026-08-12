@@ -9,11 +9,18 @@ import type {
   CreateEventInput,
   GoogleWorkspace,
   ListEventsParams,
+  MailDraft,
+  MailDraftSummary,
+  MailLabel,
   MailThread,
   MailThreadSummary,
   SendMailInput,
 } from "./types";
-import { GoogleNotConnectedError } from "./types";
+import {
+  GoogleNotConnectedError,
+  LISTED_SYSTEM_LABELS,
+  UNMODIFIABLE_LABELS,
+} from "./types";
 
 export interface MemoryGoogleSeed {
   threadSummaries?: MailThreadSummary[];
@@ -24,6 +31,11 @@ export interface MemoryGoogleSeed {
     declaredSize?: number;
     bytes: Uint8Array;
   }>;
+  // User labels that already exist. The listed system labels are always there.
+  labels?: string[];
+  // Labels currently on a thread, by threadId.
+  threadLabels?: Record<string, string[]>;
+  drafts?: MailDraftSummary[];
   calendars?: CalendarSummary[];
   events?: CalendarEvent[];
   // When true, every method throws GoogleNotConnectedError (simulates a user
@@ -34,6 +46,12 @@ export interface MemoryGoogleSeed {
 export interface MemoryGoogle extends GoogleWorkspace {
   sentMail: SendMailInput[];
   createdEvents: { event: CreateEventInput; calendarId: string }[];
+  // Every accepted label change, in order, so a test can assert what a turn did
+  // to the mailbox the same way sentMail asserts what it sent.
+  modifications: { threadId: string; add: string[]; remove: string[] }[];
+  trashed: { threadId: string; restore: boolean }[];
+  savedDrafts: (SendMailInput & { draftId: string })[];
+  sentDrafts: string[];
 }
 
 export const createMemoryGoogle = (
@@ -41,14 +59,46 @@ export const createMemoryGoogle = (
 ): MemoryGoogle => {
   const sentMail: SendMailInput[] = [];
   const createdEvents: { event: CreateEventInput; calendarId: string }[] = [];
+  const modifications: { threadId: string; add: string[]; remove: string[] }[] = [];
+  const trashed: { threadId: string; restore: boolean }[] = [];
+  const savedDrafts: (SendMailInput & { draftId: string })[] = [];
+  const sentDrafts: string[] = [];
+  const userLabels = new Set(seed.labels ?? []);
+  const threadLabels = new Map<string, string[]>(
+    Object.entries(seed.threadLabels ?? {}),
+  );
+  const drafts = new Map<string, MailDraftSummary>(
+    (seed.drafts ?? []).map((d) => [d.draftId, d]),
+  );
 
   const guard = () => {
     if (seed.notConnected) throw new GoogleNotConnectedError();
   };
 
+  // Same rules the REST adapter enforces, so a test over the memory adapter
+  // fails where production would.
+  const resolve = (name: string): string => {
+    if ((UNMODIFIABLE_LABELS as readonly string[]).includes(name.toUpperCase()))
+      throw new Error(`Gmail does not allow changing the ${name.toUpperCase()} label.`);
+    if ((LISTED_SYSTEM_LABELS as readonly string[]).includes(name.toUpperCase()))
+      return name.toUpperCase();
+    const match = [...userLabels].find(
+      (l) => l.toLowerCase() === name.toLowerCase(),
+    );
+    if (!match)
+      throw new Error(
+        `No Gmail label named "${name}". Existing labels: ${[...userLabels].join(", ")}.`,
+      );
+    return match;
+  };
+
   return {
     sentMail,
     createdEvents,
+    modifications,
+    trashed,
+    savedDrafts,
+    sentDrafts,
     mail: {
       async search(): Promise<MailThreadSummary[]> {
         guard();
@@ -75,6 +125,83 @@ export const createMemoryGoogle = (
         guard();
         sentMail.push(input);
         return { id: `sent-${sentMail.length}` };
+      },
+
+      async listLabels(): Promise<MailLabel[]> {
+        guard();
+        const system: MailLabel[] = LISTED_SYSTEM_LABELS.map((name) => ({
+          name,
+          type: "system",
+        }));
+        const user: MailLabel[] = [...userLabels].map((name) => ({
+          name,
+          type: "user",
+        }));
+        return [...system, ...user];
+      },
+
+      async createLabel(name: string): Promise<MailLabel> {
+        guard();
+        if (userLabels.has(name)) throw new Error(`A Gmail label named "${name}" already exists.`);
+        userLabels.add(name);
+        return { name, type: "user" };
+      },
+
+      async renameLabel(name: string, newName: string): Promise<MailLabel> {
+        guard();
+        const existing = resolve(name);
+        userLabels.delete(existing);
+        userLabels.add(newName);
+        return { name: newName, type: "user" };
+      },
+
+      async modifyThread({ threadId, add, remove }) {
+        guard();
+        const added = (add ?? []).map(resolve);
+        const removed = (remove ?? []).map(resolve);
+        modifications.push({ threadId, add: added, remove: removed });
+        const current = new Set(threadLabels.get(threadId) ?? []);
+        for (const label of added) current.add(label);
+        for (const label of removed) current.delete(label);
+        const labels = [...current];
+        threadLabels.set(threadId, labels);
+        return { threadId, labels };
+      },
+
+      async trashThread(threadId: string): Promise<void> {
+        guard();
+        trashed.push({ threadId, restore: false });
+      },
+
+      async untrashThread(threadId: string): Promise<void> {
+        guard();
+        trashed.push({ threadId, restore: true });
+      },
+
+      async listDrafts(): Promise<MailDraftSummary[]> {
+        guard();
+        return [...drafts.values()];
+      },
+
+      async saveDraft(input): Promise<MailDraft> {
+        guard();
+        const draftId = input.draftId ?? `draft-${drafts.size + 1}`;
+        savedDrafts.push({ ...input, draftId });
+        drafts.set(draftId, {
+          draftId,
+          to: input.to,
+          subject: input.subject,
+          snippet: input.body.slice(0, 80),
+        });
+        return { draftId, threadId: input.replyTo?.threadId ?? null };
+      },
+
+      async sendDraft(draftId: string): Promise<{ id: string }> {
+        guard();
+        if (!drafts.has(draftId)) throw new Error(`No draft with id ${draftId}.`);
+        drafts.delete(draftId);
+        sentDrafts.push(draftId);
+        return { id: `sent-draft-${sentDrafts.length}` };
       },
     },
     calendar: {

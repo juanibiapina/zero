@@ -11,6 +11,10 @@
 // not follow nextPageToken; the tool layer flags truncation (length >= cap) so
 // the model can narrow the query. Shared here so adapter and tool agree.
 export const MAIL_SEARCH_CAP = 20;
+// drafts.list returns bare ids (no `format` parameter, and the Draft it returns
+// carries only message id/threadId), so filling in To/Subject costs one
+// metadata GET per draft. Same N+1 as search, so the same bound.
+export const MAIL_DRAFTS_CAP = 20;
 export const CALENDAR_EVENTS_CAP = 50;
 // Per-calendar cap for the multi-calendar fan-out in listEvents.
 export const CALENDAR_PER_LIST_CAP = 25;
@@ -96,6 +100,46 @@ export interface SendMailInput {
   replyTo?: MailReplyTo;
 }
 
+// A Gmail label as the model sees it: by NAME. The Gmail id (`Label_12`) never
+// leaves the adapter — a model cannot invent one, and every tool input is a
+// name that a user could have typed.
+export interface MailLabel {
+  name: string;
+  type: "system" | "user";
+}
+
+// A draft in a list. `draftId` is stable across updates; the message inside it
+// is replaced (and re-identified) on every update, which is why no message id
+// is exposed here.
+export interface MailDraftSummary {
+  draftId: string;
+  to: string;
+  subject: string;
+  snippet: string;
+}
+
+export interface MailDraft {
+  draftId: string;
+  threadId: string | null;
+}
+
+// Label names Gmail refuses to add or remove: it answers `400 Invalid label:
+// SENT`, and labels cannot be applied to draft messages at all. Rejected in the
+// adapter so the model gets a reason instead of a Gmail error to work around.
+export const UNMODIFIABLE_LABELS = ["SENT", "DRAFT"] as const;
+
+// The system labels worth showing. A mailbox also carries CATEGORY_*, CHAT and
+// friends; listing all of them would spend context on noise the user never
+// names.
+export const LISTED_SYSTEM_LABELS = [
+  "INBOX",
+  "UNREAD",
+  "STARRED",
+  "IMPORTANT",
+  "SPAM",
+  "TRASH",
+] as const;
+
 // --- Calendar ---
 
 // A calendar from the user's calendarList. Users have several (own, work,
@@ -153,6 +197,31 @@ export interface MailApi {
     bytes: Uint8Array;
   }>;
   send(input: SendMailInput): Promise<{ id: string }>;
+
+  // --- labels ---
+  listLabels(): Promise<MailLabel[]>;
+  createLabel(name: string): Promise<MailLabel>;
+  renameLabel(name: string, newName: string): Promise<MailLabel>;
+
+  // --- thread state ---
+  // Labels by name. Archive is remove INBOX, mark read is remove UNREAD, star
+  // is add STARRED; there is no separate call for any of them.
+  modifyThread(input: {
+    threadId: string;
+    add?: string[];
+    remove?: string[];
+  }): Promise<{ threadId: string; labels: string[] }>;
+  trashThread(threadId: string): Promise<void>;
+  untrashThread(threadId: string): Promise<void>;
+
+  // --- drafts ---
+  listDrafts(): Promise<MailDraftSummary[]>;
+  // Create, or replace the message of an existing draft. Replace, never patch:
+  // Gmail cannot edit a draft's message, only swap it, so a caller that omits a
+  // field drops it.
+  saveDraft(input: SendMailInput & { draftId?: string }): Promise<MailDraft>;
+  // Irreversible. Deletes the draft and returns the id of the sent message.
+  sendDraft(draftId: string): Promise<{ id: string }>;
 }
 
 export interface CalendarApi {

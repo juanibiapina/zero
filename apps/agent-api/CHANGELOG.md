@@ -2,6 +2,8 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-12: Zero can now tidy your inbox: archive a thread, file it under a label, mark it read or unread, star it, or move it to the trash. Ask it to make a label and it will.
+- 2026-08-12: Ask Zero to draft an email instead of sending one. The draft shows up in Gmail, in the right thread, and only goes out when you say so.
 - 2026-08-12: Delete everything Zero knows about you from Settings: your conversations, what it learned about you, your files, your schedules and your Telegram link. It signs you out, and signing in again gives you a fresh, empty Zero.
 - 2026-08-04: When you send a PDF, Zero now says up front that it only reads the words in it, instead of telling you the PDF has no pictures when it does.
 - 2026-08-04: You can send Zero files up to 20 MB, so phone photos and bigger documents go through instead of being turned away at 5 MB.

@@ -55,7 +55,7 @@ defined in `apps/agent-web/src/google-scopes.ts`:
 
 | Scope | Lets the bot |
 |-------|--------------|
-| `gmail.modify` | Read your mail, send mail as you, modify labels |
+| `gmail.modify` | Read your mail, send mail as you, archive, label, star, trash and draft |
 | `calendar.events` | Read and write events on your calendars |
 | `calendar.calendarlist.readonly` | See which calendars you are subscribed to |
 | `drive` | Read and write your Drive files |
@@ -73,7 +73,20 @@ a narrower one will not do. Two traps worth remembering:
   authoritative per-method scope list; the reference pages are easy to
   misread.
 - **`gmail.modify` already covers sending.** It is "read, compose, and
-  send", so `gmail_send` needs no separate `gmail.send`.
+  send", so `gmail_send` needs no separate `gmail.send`. It also covers the
+  whole archive / label / mark-read / star / trash / draft cluster
+  (`threads.modify`, `threads.trash`, `labels.*`, `drafts.*`) and
+  `history.list`, so those tools were added without a new scope or another
+  verification round.
+- **Two Gmail capabilities are deliberately not requested.** Permanent delete
+  (`messages.delete`, `messages.batchDelete`, `threads.delete`) lists only
+  `https://mail.google.com/`, the widest Gmail scope there is, and its only
+  difference from trash is that a mistake cannot be undone. Gmail settings
+  (vacation responder, filters, forwarding, IMAP/POP) need their own
+  `gmail.settings.basic` / `.sharing`. The authoritative per-method scope list
+  is the discovery document
+  (`https://gmail.googleapis.com/$discovery/rest?version=v1`), not the reference
+  pages.
 
 Scope classification drives the verification burden: `gmail.modify` and
 `drive` are **restricted** (verification plus an annual CASA security

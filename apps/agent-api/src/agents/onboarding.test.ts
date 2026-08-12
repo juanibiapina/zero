@@ -54,12 +54,26 @@ describe("runOnboardingAgent", () => {
     seedTopic(store, "User", "identity");
     pinTopic(store, "User", true);
 
-    // The model tries to send mail; the tool does not exist, so nothing is sent.
-    const google = createMemoryGoogle();
+    // The model tries to send mail and to reorganise the mailbox; neither tool
+    // exists here, so nothing happens to the user's Gmail.
+    const google = createMemoryGoogle({ labels: ["Receipts"] });
     const model = scriptedModel([
       {
         tools: [
           { name: "gmail_send", input: { to: "x@y.z", subject: "hi", body: "hi" } },
+        ],
+      },
+      {
+        tools: [
+          {
+            name: "gmail_modify_thread",
+            input: { threadId: "t1", remove: ["INBOX"] },
+          },
+        ],
+      },
+      {
+        tools: [
+          { name: "gmail_trash_thread", input: { threadId: "t1" } },
         ],
       },
       { text: "done" },
@@ -68,5 +82,7 @@ describe("runOnboardingAgent", () => {
     await runOnboardingAgent({ model, store, google, topicName: "User" });
 
     expect(google.sentMail).toEqual([]);
+    expect(google.modifications).toEqual([]);
+    expect(google.trashed).toEqual([]);
   });
 });

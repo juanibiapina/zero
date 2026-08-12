@@ -88,6 +88,160 @@ describe("buildGoogleTools gmail", () => {
   });
 });
 
+describe("buildGoogleTools gmail labels, threads and drafts", () => {
+  const mailbox = () =>
+    createMemoryGoogle({
+      labels: ["Receipts"],
+      threadLabels: { T1: ["INBOX", "UNREAD"] },
+    });
+
+  it("archives a thread and marks it read in one call", async () => {
+    const google = mailbox();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    const res = (await run(tools, "gmail_modify_thread", {
+      threadId: "T1",
+      remove: ["INBOX", "UNREAD"],
+    })) as { labels: string[] };
+
+    expect(res.labels).toEqual([]);
+    expect(google.modifications).toEqual([
+      { threadId: "T1", add: [], remove: ["INBOX", "UNREAD"] },
+    ]);
+  });
+
+  it("files a thread under an existing label, matched case-insensitively", async () => {
+    const google = mailbox();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    const res = (await run(tools, "gmail_modify_thread", {
+      threadId: "T1",
+      add: ["receipts"],
+    })) as { labels: string[] };
+
+    expect(res.labels).toContain("Receipts");
+  });
+
+  it("names the labels that exist when the model invents one", async () => {
+    const tools = buildGoogleTools({ google: mailbox(), timezone: "UTC" });
+
+    const res = (await run(tools, "gmail_modify_thread", {
+      threadId: "T1",
+      add: ["Reciepts"],
+    })) as { error: string };
+
+    expect(res.error).toContain('No Gmail label named "Reciepts"');
+    expect(res.error).toContain("Receipts");
+  });
+
+  it("creating a label then filing under it works in one conversation", async () => {
+    const google = mailbox();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    await run(tools, "gmail_label", { name: "Trips" });
+    const res = (await run(tools, "gmail_modify_thread", {
+      threadId: "T1",
+      add: ["Trips"],
+    })) as { labels: string[] };
+
+    expect(res.labels).toContain("Trips");
+  });
+
+  it("refuses to touch the SENT label", async () => {
+    const google = mailbox();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    const res = (await run(tools, "gmail_modify_thread", {
+      threadId: "T1",
+      remove: ["SENT"],
+    })) as { error: string };
+
+    expect(res.error).toContain("SENT");
+    expect(google.modifications).toEqual([]);
+  });
+
+  it("trashes and restores a thread", async () => {
+    const google = mailbox();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    await run(tools, "gmail_trash_thread", { threadId: "T1" });
+    await run(tools, "gmail_trash_thread", { threadId: "T1", restore: true });
+
+    expect(google.trashed).toEqual([
+      { threadId: "T1", restore: false },
+      { threadId: "T1", restore: true },
+    ]);
+  });
+
+  it("saves a draft, replaces it, and lists what is waiting", async () => {
+    const google = mailbox();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    const saved = (await run(tools, "gmail_draft", {
+      to: "bob@x.com",
+      subject: "Re: Hello",
+      body: "first version",
+      replyTo: { messageIdHeader: "<abc@mail>", threadId: "T1" },
+    })) as { draftId: string; threadId: string | null };
+    expect(saved.threadId).toBe("T1");
+
+    await run(tools, "gmail_draft", {
+      draftId: saved.draftId,
+      to: "bob@x.com",
+      subject: "Re: Hello",
+      body: "second version",
+    });
+
+    const listed = (await run(tools, "gmail_drafts", {})) as {
+      drafts: { draftId: string; subject: string }[];
+      truncated: boolean;
+    };
+    expect(listed.drafts).toEqual([
+      { draftId: saved.draftId, to: "bob@x.com", subject: "Re: Hello", snippet: "second version" },
+    ]);
+    expect(listed.truncated).toBe(false);
+    expect(google.savedDrafts).toHaveLength(2);
+  });
+
+  it("sends a draft once, and the draft is gone afterwards", async () => {
+    const google = mailbox();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+    const saved = (await run(tools, "gmail_draft", {
+      to: "bob@x.com",
+      subject: "Hi",
+      body: "b",
+    })) as { draftId: string };
+
+    const sent = (await run(tools, "gmail_send_draft", {
+      draftId: saved.draftId,
+    })) as { id: string };
+    expect(sent.id).toBe("sent-draft-1");
+
+    // A second send of the same draft must not quietly succeed.
+    await expect(
+      run(tools, "gmail_send_draft", { draftId: saved.draftId }),
+    ).rejects.toThrow("No draft with id");
+  });
+
+  it("surfaces a missing Google connection as { error } on every reversible tool", async () => {
+    const google = createMemoryGoogle({ notConnected: true });
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    const calls: [keyof ReturnType<typeof buildGoogleTools>, unknown][] = [
+      ["gmail_labels", {}],
+      ["gmail_label", { name: "Trips" }],
+      ["gmail_modify_thread", { threadId: "T1", add: ["Receipts"] }],
+      ["gmail_trash_thread", { threadId: "T1" }],
+      ["gmail_drafts", {}],
+      ["gmail_draft", { to: "b@x.com", subject: "s", body: "b" }],
+    ];
+    for (const [name, input] of calls) {
+      const res = (await run(tools, name, input)) as { error: string };
+      expect(res.error).toContain("Google isn't connected");
+    }
+  });
+});
+
 describe("irreversible tools classify their failures", () => {
   // A failing adapter for the two write tools. The tools must not swallow these
   // into { error } data: that is what lets the model retry a send under a new
@@ -99,6 +253,9 @@ describe("irreversible tools classify their failures", () => {
       mail: {
         ...google.mail,
         send: async () => {
+          throw err;
+        },
+        sendDraft: async () => {
           throw err;
         },
       },
@@ -149,6 +306,24 @@ describe("irreversible tools classify their failures", () => {
         ExternalCallNotSent,
       );
     }
+  });
+
+  it("classifies gmail_send_draft the same way: sending is sending", async () => {
+    const rejected = buildGoogleTools({
+      google: failingGoogle(new GoogleApiError(404, "no such draft")),
+      timezone: "UTC",
+    });
+    await expect(
+      run(rejected, "gmail_send_draft", { draftId: "D1" }),
+    ).rejects.toBeInstanceOf(ExternalCallNotSent);
+
+    const ambiguous = buildGoogleTools({
+      google: failingGoogle(new GoogleApiError(500, "backend error")),
+      timezone: "UTC",
+    });
+    await expect(
+      run(ambiguous, "gmail_send_draft", { draftId: "D1" }),
+    ).rejects.not.toBeInstanceOf(ExternalCallNotSent);
   });
 
   it("classifies calendar_create_event the same way", async () => {

@@ -291,6 +291,266 @@ describe("createGoogleWorkspace mail", () => {
   });
 });
 
+describe("createGoogleWorkspace labels and thread state", () => {
+  const labels = () =>
+    json({
+      labels: [
+        { id: "INBOX", name: "INBOX", type: "system" },
+        { id: "UNREAD", name: "UNREAD", type: "system" },
+        { id: "STARRED", name: "STARRED", type: "system" },
+        { id: "CATEGORY_PROMOTIONS", name: "CATEGORY_PROMOTIONS", type: "system" },
+        { id: "CHAT", name: "CHAT", type: "system" },
+        { id: "Label_12", name: "Receipts", type: "user" },
+        { id: "Label_13", name: "Work/Invoices", type: "user" },
+      ],
+    });
+
+  it("lists the user's labels and the system labels worth naming", async () => {
+    globalThis.fetch = routed([{ match: "/labels", response: labels }]);
+
+    const listed = await createGoogleWorkspace(token).mail.listLabels();
+
+    expect(listed).toEqual([
+      { name: "INBOX", type: "system" },
+      { name: "UNREAD", type: "system" },
+      { name: "STARRED", type: "system" },
+      { name: "Receipts", type: "user" },
+      { name: "Work/Invoices", type: "user" },
+    ]);
+  });
+
+  it("archives a thread by name, reporting the labels it now carries", async () => {
+    const fetchMock = routed([
+      { match: "/labels", response: labels },
+      {
+        match: "/threads/T1/modify",
+        response: () => json({ messages: [{ labelIds: ["Label_12"] }] }),
+      },
+    ]);
+    globalThis.fetch = fetchMock;
+
+    const result = await createGoogleWorkspace(token).mail.modifyThread({
+      threadId: "T1",
+      add: ["receipts"], // case-insensitive on purpose
+      remove: ["INBOX"],
+    });
+
+    const modify = fetchMock.mock.calls.find(([url]) =>
+      urlOf(url).includes("/modify"),
+    );
+    expect((modify?.[1] as RequestInit).method).toBe("POST");
+    expect(JSON.parse((modify?.[1] as RequestInit).body as string)).toEqual({
+      addLabelIds: ["Label_12"],
+      removeLabelIds: ["INBOX"],
+    });
+    expect(result).toEqual({ threadId: "T1", labels: ["Receipts"] });
+  });
+
+  it("names the labels that do exist when asked for one that does not", async () => {
+    globalThis.fetch = routed([{ match: "/labels", response: labels }]);
+
+    await expect(
+      createGoogleWorkspace(token).mail.modifyThread({
+        threadId: "T1",
+        add: ["Reciepts"],
+      }),
+    ).rejects.toThrow('No Gmail label named "Reciepts". Existing labels: Receipts, Work/Invoices.');
+  });
+
+  it("refuses SENT and DRAFT without calling Gmail", async () => {
+    const fetchMock = routed([{ match: "/labels", response: labels }]);
+    globalThis.fetch = fetchMock;
+
+    await expect(
+      createGoogleWorkspace(token).mail.modifyThread({
+        threadId: "T1",
+        remove: ["SENT"],
+      }),
+    ).rejects.toThrow("does not allow adding or removing the SENT label");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reads the label list once for two modifies", async () => {
+    const fetchMock = routed([
+      { match: "/labels", response: labels },
+      { match: "/modify", response: () => json({ messages: [] }) },
+    ]);
+    globalThis.fetch = fetchMock;
+
+    const mail = createGoogleWorkspace(token).mail;
+    await mail.modifyThread({ threadId: "T1", add: ["Receipts"] });
+    await mail.modifyThread({ threadId: "T2", add: ["Receipts"] });
+
+    const labelCalls = fetchMock.mock.calls.filter(
+      ([url]) => urlOf(url).endsWith("/labels"),
+    );
+    expect(labelCalls).toHaveLength(1);
+  });
+
+  it("creating a label re-reads the list, so it can be used immediately", async () => {
+    let created = false;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = urlOf(input);
+      if (url.endsWith("/labels") && init?.method === "POST") {
+        created = true;
+        return json({ id: "Label_20", name: "Trips", type: "user" });
+      }
+      if (url.endsWith("/labels")) {
+        return json({
+          labels: created
+            ? [{ id: "Label_20", name: "Trips", type: "user" }]
+            : [],
+        });
+      }
+      return json({ messages: [{ labelIds: ["Label_20"] }] });
+    });
+    globalThis.fetch = fetchMock;
+
+    const mail = createGoogleWorkspace(token).mail;
+    expect(await mail.createLabel("Trips")).toEqual({ name: "Trips", type: "user" });
+    const result = await mail.modifyThread({ threadId: "T1", add: ["Trips"] });
+
+    expect(result.labels).toEqual(["Trips"]);
+  });
+
+  it("renames a label by patching its id", async () => {
+    const fetchMock = routed([
+      { match: "/labels/Label_12", response: () => json({ id: "Label_12", name: "Bills", type: "user" }) },
+      { match: "/labels", response: labels },
+    ]);
+    globalThis.fetch = fetchMock;
+
+    const renamed = await createGoogleWorkspace(token).mail.renameLabel(
+      "Receipts",
+      "Bills",
+    );
+
+    const patch = fetchMock.mock.calls.find(([url]) =>
+      urlOf(url).includes("/labels/Label_12"),
+    );
+    expect((patch?.[1] as RequestInit).method).toBe("PATCH");
+    expect(JSON.parse((patch?.[1] as RequestInit).body as string)).toEqual({
+      name: "Bills",
+    });
+    expect(renamed).toEqual({ name: "Bills", type: "user" });
+  });
+
+  it("trashes and restores a thread", async () => {
+    const fetchMock = routed([{ match: "/threads/", response: () => json({}) }]);
+    globalThis.fetch = fetchMock;
+
+    const mail = createGoogleWorkspace(token).mail;
+    await mail.trashThread("T1");
+    await mail.untrashThread("T1");
+
+    expect(fetchMock.mock.calls.map(([url]) => urlOf(url))).toEqual([
+      expect.stringContaining("/threads/T1/trash"),
+      expect.stringContaining("/threads/T1/untrash"),
+    ]);
+  });
+});
+
+describe("createGoogleWorkspace drafts", () => {
+  it("fills in To/Subject with one metadata read per draft", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.includes("/drafts/D1"))
+        return json({
+          message: {
+            id: "M1",
+            threadId: "T1",
+            snippet: "about the invoice",
+            payload: {
+              headers: [
+                { name: "To", value: "bob@example.com" },
+                { name: "Subject", value: "Re: Invoice" },
+              ],
+            },
+          },
+        });
+      return json({ drafts: [{ id: "D1" }] });
+    });
+    globalThis.fetch = fetchMock;
+
+    const drafts = await createGoogleWorkspace(token).mail.listDrafts();
+
+    expect(drafts).toEqual([
+      {
+        draftId: "D1",
+        to: "bob@example.com",
+        subject: "Re: Invoice",
+        snippet: "about the invoice",
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates a draft reply carrying the same threading headers as a send", async () => {
+    const fetchMock = routed([
+      { match: "/drafts", response: () => json({ id: "D9", message: { threadId: "T1" } }) },
+    ]);
+    globalThis.fetch = fetchMock;
+
+    const saved = await createGoogleWorkspace(token).mail.saveDraft({
+      to: "bob@example.com",
+      subject: "Re: Hello",
+      body: "a draft reply",
+      replyTo: { messageIdHeader: "<abc@mail>", threadId: "T1" },
+    });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body as string) as {
+      message: { raw: string; threadId?: string };
+    };
+    expect(body.message.threadId).toBe("T1");
+    const mime = decodeB64url(body.message.raw);
+    expect(mime).toContain("In-Reply-To: <abc@mail>");
+    expect(mime).toContain("References: <abc@mail>");
+    expect(mime).toContain("Subject: Re: Hello");
+    expect(saved).toEqual({ draftId: "D9", threadId: "T1" });
+  });
+
+  it("updates a draft by replacing the whole message", async () => {
+    const fetchMock = routed([
+      { match: "/drafts/D9", response: () => json({ id: "D9" }) },
+    ]);
+    globalThis.fetch = fetchMock;
+
+    await createGoogleWorkspace(token).mail.saveDraft({
+      draftId: "D9",
+      to: "bob@example.com",
+      subject: "Re: Hello",
+      body: "second version",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(urlOf(url)).toContain("/drafts/D9");
+    expect((init as RequestInit).method).toBe("PUT");
+    const body = JSON.parse((init as RequestInit).body as string) as {
+      message: { raw: string };
+    };
+    const mime = decodeB64url(body.message.raw);
+    const bodyLine = mime.split("\r\n\r\n")[1].replace(/\r\n/g, "");
+    expect(atob(bodyLine)).toBe("second version");
+    expect(mime).toContain("To: bob@example.com");
+  });
+
+  it("sends a draft by id and returns the sent message", async () => {
+    const fetchMock = routed([
+      { match: "/drafts/send", response: () => json({ id: "M-sent" }) },
+    ]);
+    globalThis.fetch = fetchMock;
+
+    const sent = await createGoogleWorkspace(token).mail.sendDraft("D9");
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ id: "D9" });
+    expect(sent).toEqual({ id: "M-sent" });
+  });
+});
+
 describe("createGoogleWorkspace calendar", () => {
   const calendarList = () =>
     json({

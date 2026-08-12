@@ -38,8 +38,8 @@ A `null` token (not connected, or a Clerk outage) makes the adapter throw a type
 model tells the user to connect Google in the Zero app and does not retry. A
 `401` from Google (revoked grant / missing scope) maps to a distinct error.
 
-The two irreversible tools do not use that error-as-data path. `gmail_send` and
-`calendar_create_event` classify a failure instead: a missing connection, or a
+The three irreversible tools do not use that error-as-data path. `gmail_send`,
+`gmail_send_draft` and `calendar_create_event` classify a failure instead: a missing connection, or a
 rejection status that is not a timeout (`408`) or a throttle (`429`), becomes
 `ExternalCallNotSent`, which says the request provably had no effect. Anything
 else — a `5xx`, a dead socket, a response lost while being read — is left
@@ -49,9 +49,10 @@ deliver the same mail twice. See the external-call claim in `docs/topics.md`.
 
 ## Tools
 
-Reads need no confirmation. `gmail_send` and `calendar_create_event` are
-side-effecting and irreversible; their own tool descriptions require explicit
-user confirmation of the exact content before either runs.
+Reads need no confirmation. `gmail_send`, `gmail_send_draft` and
+`calendar_create_event` are side-effecting and irreversible; their own tool
+descriptions require explicit user confirmation of the exact content before any
+of them runs. The label, trash and draft tools are reversible and run freely.
 
 - `gmail_search(query)` — Gmail query syntax; returns thread
   id/date/sender/subject/snippet.
@@ -64,6 +65,18 @@ user confirmation of the exact content before either runs.
 - `gmail_send({ to, subject, body, cc?, bcc?, replyTo? })` — send or reply.
   `replyTo` is `{ messageIdHeader, threadId }` copied from a `gmail_thread`
   result.
+- `gmail_labels()` — the user's labels by name, plus the system labels worth
+  naming (`INBOX`, `UNREAD`, `STARRED`, `IMPORTANT`, `SPAM`, `TRASH`).
+- `gmail_label({ name, newName? })` — create a label, or rename one.
+- `gmail_modify_thread({ threadId, add?, remove? })` — the whole
+  archive/read/star/file cluster in one tool: archive is `remove: ["INBOX"]`,
+  mark read is `remove: ["UNREAD"]`, star is `add: ["STARRED"]`, filing is
+  `add: ["Receipts"]`.
+- `gmail_trash_thread({ threadId, restore? })` — trash or restore. Gmail keeps
+  trash 30 days; this is the strongest deletion Zero has.
+- `gmail_drafts()` — drafts waiting (`draftId`, to, subject, snippet).
+- `gmail_draft({ ..., draftId? })` — save a draft, or replace an existing one.
+- `gmail_send_draft({ draftId })` — send an approved draft.
 - `calendar_list_calendars()` — the user's calendars (`id`, `summary`, whether
   `primary`, `accessRole`).
 - `calendar_list_events({ from, to, query?, calendarIds? })` — agenda over a
@@ -72,8 +85,45 @@ user confirmation of the exact content before either runs.
 - `calendar_create_event({ summary, start, end, description?, location?, attendees?, allDay?, calendarId? })`
   — create on `calendarId` (default `primary`).
 
-Phase-2 (not built): `gmail_modify_labels`, `calendar_update_event`,
-`calendar_delete_event`, `calendar_freebusy`.
+Not built: `calendar_update_event`, `calendar_delete_event`,
+`calendar_freebusy`. Deliberately absent on the Gmail side: permanent delete
+(`messages.delete` needs `https://mail.google.com/`, and its only difference
+from trash is that mistakes cannot be undone), Gmail settings
+(`gmail.settings.*`), per-message label changes, and label deletion.
+`history.list` is in scope and worth having, but only alongside something that
+stores a `historyId` and wakes up to compare it — that belongs with schedules.
+
+## Gmail labels and drafts
+
+**Labels are names, never ids.** The port speaks `Receipts`; the adapter
+resolves it to `Label_12`. System labels are their own id (`INBOX`), user labels
+are `Label_*`-shaped, nesting is spelled `Parent/Child`, and matching is
+case-insensitive. `labels.list` is fetched at most once per adapter instance
+(one per turn), and re-read after a create so a new label is usable immediately.
+A model cannot invent `Label_12`, which is the whole reason ids stay inside.
+
+`gmail_modify_thread` never creates a label: an unknown name fails with an error
+that *lists the labels that exist*, so a typo is visible instead of quietly
+producing "Reciepts". `SENT` and `DRAFT` are refused before the request is
+built — Gmail answers `400 Invalid label: SENT`, and labels cannot be applied to
+drafts at all.
+
+**A draft update replaces the message.** Gmail cannot edit a draft's message,
+only swap it: the `draftId` is stable while the message id inside changes on
+every update. So `gmail_draft` with a `draftId` PUTs a complete new message, and
+its description tells the model to pass the whole thing, never a fragment.
+Sending a draft deletes it and creates a `SENT` message, so a repeated
+`gmail_send_draft` is a 404 rather than a second send. Drafts and sends share
+one MIME builder, which is what keeps a draft reply threaded exactly like a sent
+one.
+
+`drafts.list` returns bare ids (no `format` parameter), so listing drafts costs
+one metadata read per draft — the same N+1 as `gmail_search` — and is bounded by
+`MAIL_DRAFTS_CAP`.
+
+Reversibility decides the failure policy: every new tool except
+`gmail_send_draft` is reversible and reports failures as `{ error }` data.
+`gmail_send_draft` is irreversible and classifies failures like `gmail_send`.
 
 The interface agent is not the only Gmail consumer. The **onboarding agent**
 (`agents/onboarding.ts`, see [`onboarding.md`](onboarding.md)) reuses the same
