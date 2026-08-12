@@ -222,6 +222,7 @@ both are synced on write.
 GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
 POST   /api/telegram-link                — Link via Login Widget payload (Clerk)
 DELETE /api/telegram-id                  — Unlink caller's Telegram id (Clerk)
+DELETE /api/user-data                    — Erase everything stored for the caller (Clerk)
 POST   /api/webhooks/telegram            — Telegram bot webhook (secret-token auth)
 POST   /api/onboarding/google            — Queue the Gmail onboarding scan, 202 (Clerk)
 
@@ -247,6 +248,11 @@ visible as unpriced calls and tokens rather than known zero-cost usage.
 `googleOnboardingStatus` state machine) and returns 202. The scan runs on the DO
 alarm, off Telegram, and seeds the pinned `User` topic. See
 [`onboarding.md`](onboarding.md).
+
+`DELETE /api/user-data` erases the caller across all four Durable Objects, KV
+and R2, leaving the objects empty rather than re-initialised, and the web app
+signs the user out on success. The order the stores are cleared in is the load-
+bearing part; see [`data-deletion.md`](data-deletion.md).
 
 The link route accepts the Login Widget callback payload and verifies its HMAC
 against `TELEGRAM_BOT_TOKEN` (`apps/agent-api/src/telegram-auth.ts`). See

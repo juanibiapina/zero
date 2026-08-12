@@ -18,6 +18,9 @@ import {
   unlinkTelegramAccount,
 } from "../telegram/identity";
 import { isValidCountry, resolveCountry } from "../country";
+import { purgeUserData } from "../do/purge";
+import { getLearningDO } from "../LearningDO/stub";
+import { getScheduleDO } from "../ScheduleDO/stub";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
 import { isValidTimezone } from "../timezone";
@@ -129,6 +132,42 @@ export const createUserSettingsRoutes = () => {
 
     log("telegram_unlinked", { clerk_user_id: clerkUserId });
     return c.json({ telegramId: null }, 200);
+  });
+
+  const deleteDataRoute = createRoute({
+    method: "delete",
+    path: "/api/user-data",
+    tags: ["UserSettings"],
+    summary: "Erase everything Zero stores about the caller",
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: z.object({ deleted: z.boolean() }) },
+        },
+        description: "Data erased",
+      },
+    },
+  });
+
+  // Inline, never on waitUntil: the UI signs the user out on a 200, so a 200
+  // has to mean the data is already gone. A failure surfaces as a 500 and the
+  // user presses the button again — every step of the purge is idempotent.
+  router.openapi(deleteDataRoute, async (c) => {
+    const clerkUserId = c.get("userId");
+    const userDO = getUserDO(c.env, clerkUserId);
+    const telegramId = await userDO.getTelegramId();
+
+    await purgeUserData({
+      telegramId,
+      releaseTelegram: (id) => unlinkTelegramAccount(c.env, id),
+      purgeSchedules: () => getScheduleDO(c.env, clerkUserId).purge(),
+      purgeLearning: () => getLearningDO(c.env, clerkUserId).purge(),
+      purgeUser: () => userDO.deleteAllData(clerkUserId),
+      resetUser: () => userDO.reset(),
+    });
+
+    log("user_data_deleted", { clerk_user_id: clerkUserId });
+    return c.json({ deleted: true }, 200);
   });
 
   const UserSettingsSchema = z.object({

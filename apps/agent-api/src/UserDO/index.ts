@@ -614,6 +614,41 @@ export class UserDO extends DurableObject<Env> {
     }).deleteAll();
   }
 
+  // Erase this user. Everything: topics, conversations, messages, files,
+  // schedules, settings, the Telegram link row, the admin task.
+  //
+  // `clerkUserId` is a parameter, not the stored one, because the R2 sweep is
+  // the one step that reaches a store this wipe cannot: `clerkUserId` in
+  // storage is written by enqueueTurn, and reading it here would silently skip
+  // the sweep for a user whose DO never ran a turn. The caller has the verified
+  // id — it is this object's own name.
+  //
+  // Order matters twice over: the R2 objects are addressed by rows in SQLite,
+  // so they go first; and NOTHING is written afterwards. `deleteAll()` on a
+  // SQLite-backed class removes the whole private database, schema included,
+  // which deallocates the object's storage. Re-running migrations here would
+  // immediately re-allocate it, so the instance is left holding a schema-less
+  // database and the caller drops it with reset() below.
+  async deleteAllData(clerkUserId: string): Promise<void> {
+    await createUserFileStore({
+      clerkUserId,
+      records: this.store,
+      blobs: this.fileBlobs,
+    }).deleteAll();
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+  }
+
+  // Forcibly reset this instance, so the emptied object is not left in memory
+  // with a schema-less database. The next request to this id constructs a fresh
+  // object and migrates from scratch, exactly like a brand-new user.
+  //
+  // This never returns: abort raises an error the caller sees as a rejected
+  // RPC. do/purge.ts expects that and treats it as success.
+  reset(): void {
+    this.ctx.abort("user data deleted");
+  }
+
   getSettings(): {
     onboardingSeen: boolean;
     googleOnboardingStatus: string | null;

@@ -69,6 +69,15 @@ export class ScheduleDO extends DurableObject<Env> {
     await scheduleDeadline(this.ctx.storage, { reason: "reminder", dueAt });
   }
 
+  // Drop every deadline this user has, and the alarm that would fire them.
+  // Called when the user erases their data (see do/purge.ts): a pending
+  // deadline exists only to call back into UserDO, so it must not survive the
+  // object it would call. Leaves the storage empty so the object costs nothing.
+  async purge(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+  }
+
   override async alarm(): Promise<void> {
     const startedAt = Date.now();
     const due = await takeDueDeadlines(this.ctx.storage, startedAt);

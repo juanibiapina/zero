@@ -161,4 +161,20 @@ describe("UserFileStore", () => {
     expect(files.list({}).files).toEqual([]);
     expect(await blobs.get("attachments/user_1/old")).toBeNull();
   });
+
+  // What makes deleteAll a complete erasure rather than a walk of the metadata:
+  // an object whose row was lost (a save that died between put and insert, an
+  // old bug) is invisible to a row-driven loop and would outlive the user.
+  it("deletes objects the metadata no longer knows about", async () => {
+    const { files, blobs } = make();
+    await blobs.put("files/user_1/orphan", bytes(7), "text/plain");
+    await blobs.put("attachments/user_1/orphan", bytes(8), "text/plain");
+    await blobs.put("files/user_2/keep", bytes(9), "text/plain");
+
+    await files.deleteAll();
+
+    expect(await blobs.get("files/user_1/orphan")).toBeNull();
+    expect(await blobs.get("attachments/user_1/orphan")).toBeNull();
+    expect(await blobs.get("files/user_2/keep")).toEqual(bytes(9));
+  });
 });

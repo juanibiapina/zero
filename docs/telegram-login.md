@@ -93,6 +93,11 @@ the caller: it claims the new account, then releases the previous one in both
 stores. To unlink entirely call `DELETE /api/telegram-id`, which releases the
 account and deletes its KV entry.
 
+`DELETE /api/user-data` releases the same two stores as its first step, before
+anything is wiped: while the claim stands, an inbound message still resolves to
+the user being erased and writes rows behind the purge. See
+[`data-deletion.md`](data-deletion.md).
+
 Linking takes effect on the very next message, including for a user who
 messaged the bot before linking.
 

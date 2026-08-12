@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-12: Delete everything Zero knows about you from Settings: your conversations, what it learned about you, your files, your schedules and your Telegram link. It signs you out, and signing in again gives you a fresh, empty Zero.
 - 2026-08-04: When you send a PDF, Zero now says up front that it only reads the words in it, instead of telling you the PDF has no pictures when it does.
 - 2026-08-04: You can send Zero files up to 20 MB, so phone photos and bigger documents go through instead of being turned away at 5 MB.
 - 2026-08-02: When Zero looks something up on the web it now stays with you while it works, telling you what it's checking and answering as it goes, instead of going quiet until the whole search is done.

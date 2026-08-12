@@ -77,6 +77,15 @@ export class LearningDO extends DurableObject<Env> {
     return (await this.ctx.storage.get<LearningState>(JOB_KEY)) ?? EMPTY_STATE;
   }
 
+  // Drop the job state, the wire log and the alarm. Called when the user erases
+  // their data (see do/purge.ts). A slice that is already running is not
+  // stopped by this — it holds its own references and keeps writing over RPC —
+  // which is why the purge runs this twice, before and after UserDO is emptied.
+  async purge(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+  }
+
   // Record a learning request. Short by contract: ScheduleDO calls this and
   // returns, so nothing awaits the learner's model calls.
   async request(

@@ -37,11 +37,26 @@ const fakeKV = (entries: Record<string, string> = {}) => {
   } as unknown as KVNamespace & { _store: Map<string, string> };
 };
 
-type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "getSettings" | "updateSettings" | "setGoogleOnboardingStatus">;
+type UserDOStub = Pick<UserDO, "getTelegramId" | "linkTelegram" | "unlinkTelegram" | "getSettings" | "updateSettings" | "setGoogleOnboardingStatus" | "deleteAllData" | "reset">;
+
+// Stand-in for the ScheduleDO / LearningDO namespaces: both are addressed by
+// Clerk user id and, for deletion, only `purge()` matters.
+const fakeJobNamespace = () => {
+  const calls: string[] = [];
+  const namespace = {
+    idFromName: (name: string) => name,
+    get: (name: string) => ({
+      purge: async () => {
+        calls.push(name);
+      },
+    }),
+  };
+  return { namespace, calls };
+};
 
 const createFakeUserDO = (
   initial?: string,
-): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null; _timezone: string | null; _country: string | null } => {
+): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null; _timezone: string | null; _country: string | null; _deleted: string[] } => {
   let stored: string | null = initial ?? null;
   let onboardingSeen = false;
   let googleOnboardingStatus: string | null = null;
@@ -49,7 +64,25 @@ const createFakeUserDO = (
   let timezone: string | null = null;
   let country: string | null = null;
   let hasRow = false;
+  const deleted: string[] = [];
   return {
+    get _deleted() {
+      return deleted;
+    },
+    deleteAllData: async (clerkUserId: string) => {
+      deleted.push(clerkUserId);
+      stored = null;
+      onboardingSeen = false;
+      googleOnboardingStatus = null;
+      createdAt = null;
+      timezone = null;
+      country = null;
+      hasRow = false;
+    },
+    reset: () => {
+      // The real one aborts the object, which the caller sees as a rejected RPC.
+      throw new Error("user data deleted");
+    },
     get _telegramId() {
       return stored;
     },
@@ -110,6 +143,10 @@ const fakeEnv = (
   userDO?: UserDOStub,
   analytics?: ReturnType<typeof fakeAnalytics>,
   accounts: ReturnType<typeof fakeAccountNamespace> = fakeAccountNamespace(),
+  jobs: { schedules: ReturnType<typeof fakeJobNamespace>; learning: ReturnType<typeof fakeJobNamespace> } = {
+    schedules: fakeJobNamespace(),
+    learning: fakeJobNamespace(),
+  },
 ) => {
   return {
     KV: kv,
@@ -120,6 +157,8 @@ const fakeEnv = (
       get: () => userDO ?? createFakeUserDO(),
     },
     TELEGRAM_ACCOUNT_DO: accounts.namespace,
+    SCHEDULE_DO: jobs.schedules.namespace,
+    LEARNING_DO: jobs.learning.namespace,
   } as unknown as Env;
 };
 
@@ -268,6 +307,66 @@ describe("DELETE /api/telegram-id", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ telegramId: null });
+  });
+});
+
+describe("DELETE /api/user-data", () => {
+  const deleteRequest = { method: "DELETE" };
+
+  it("erases the user's data and frees their Telegram account", async () => {
+    const kv = fakeKV({ "tg:12345": "user_abc" });
+    const userDO = createFakeUserDO("12345");
+    const accounts = fakeAccountNamespace({ "12345": "user_abc" });
+    const jobs = { schedules: fakeJobNamespace(), learning: fakeJobNamespace() };
+    const app = buildApp(fakeEnv(kv, userDO, undefined, accounts, jobs), "user_abc");
+
+    const res = await app.request("/api/user-data", deleteRequest);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true });
+    expect(userDO._deleted).toEqual(["user_abc"]);
+    expect(userDO.getTelegramId()).toBeNull();
+    expect(kv._store.has("tg:12345")).toBe(false);
+    expect(accounts.state.get("12345")).toBeUndefined();
+    expect(jobs.schedules.calls).toEqual(["user_abc", "user_abc"]);
+    expect(jobs.learning.calls).toEqual(["user_abc", "user_abc"]);
+  });
+
+  it("erases a user who never linked Telegram", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    const accounts = fakeAccountNamespace();
+    const app = buildApp(fakeEnv(kv, userDO, undefined, accounts), "user_abc");
+
+    const res = await app.request("/api/user-data", deleteRequest);
+
+    expect(res.status).toBe(200);
+    expect(userDO._deleted).toEqual(["user_abc"]);
+    expect(accounts.calls).toEqual([]);
+  });
+
+  it("erases again when the user asks twice", async () => {
+    const kv = fakeKV({ "tg:12345": "user_abc" });
+    const userDO = createFakeUserDO("12345");
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    await app.request("/api/user-data", deleteRequest);
+    const res = await app.request("/api/user-data", deleteRequest);
+
+    expect(res.status).toBe(200);
+    expect(userDO._deleted).toEqual(["user_abc", "user_abc"]);
+  });
+
+  it("reports failure instead of claiming the data is gone", async () => {
+    const kv = fakeKV();
+    const userDO = createFakeUserDO();
+    userDO.deleteAllData = () => Promise.reject(new Error("storage unavailable"));
+    const app = buildApp(fakeEnv(kv, userDO), "user_abc");
+
+    const res = await app.request("/api/user-data", deleteRequest);
+
+    expect(res.status).toBe(500);
+    expect(await res.text()).not.toContain("deleted");
   });
 });
 
