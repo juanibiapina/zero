@@ -680,3 +680,265 @@ describe("createGoogleWorkspace errors", () => {
     await expect(g.calendar.listCalendars()).rejects.toThrow(/500/);
   });
 });
+
+describe("createGoogleWorkspace drive", () => {
+  it("search excludes trash, escapes quotes, bounds the page, and asks for shared drives", async () => {
+    let requested = "";
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
+      requested = urlOf(input);
+      return json({
+        files: [
+          {
+            id: "F1",
+            name: "quinn's paper",
+            mimeType: "application/pdf",
+            size: "1234",
+            modifiedTime: "2026-08-01T10:00:00.000Z",
+            webViewLink: "https://drive.google.com/file/d/F1",
+          },
+        ],
+      });
+    });
+
+    const g = createGoogleWorkspace(token);
+    const files = await g.drive.search({ query: "quinn's \\ paper" });
+
+    const q = decodeURIComponent(new URL(requested).searchParams.get("q") ?? "");
+    expect(q).toContain("trashed = false");
+    // Both the backslash and the apostrophe are escaped, or the query is malformed.
+    expect(q).toContain("name contains 'quinn\\'s \\\\ paper'");
+    expect(q).toContain("fullText contains");
+    const params = new URL(requested).searchParams;
+    expect(params.get("pageSize")).toBe("20");
+    expect(params.get("supportsAllDrives")).toBe("true");
+    expect(params.get("includeItemsFromAllDrives")).toBe("true");
+    expect(params.get("fields")).toContain("size");
+    expect(files[0]).toEqual({
+      id: "F1",
+      name: "quinn's paper",
+      mimeType: "application/pdf",
+      byteSize: 1234,
+      modifiedAt: "2026-08-01T10:00:00.000Z",
+      webViewLink: "https://drive.google.com/file/d/F1",
+      isFolder: false,
+    });
+  });
+
+  it("search filters by mime type and folder", async () => {
+    let requested = "";
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
+      requested = urlOf(input);
+      return json({ files: [] });
+    });
+
+    const g = createGoogleWorkspace(token);
+    await g.drive.search({ mimeType: "application/pdf", folderId: "FOLDER1" });
+
+    const q = decodeURIComponent(new URL(requested).searchParams.get("q") ?? "");
+    expect(q).toContain("mimeType = 'application/pdf'");
+    expect(q).toContain("'FOLDER1' in parents");
+  });
+
+  it("download follows a shortcut to its target before fetching bytes", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      urls.push(url);
+      if (url.includes("/files/SHORT?")) {
+        return json({
+          id: "SHORT",
+          name: "link to report",
+          mimeType: "application/vnd.google-apps.shortcut",
+          shortcutDetails: { targetId: "REAL", targetMimeType: "application/pdf" },
+        });
+      }
+      if (url.includes("/files/REAL?") && !url.includes("alt=media")) {
+        return json({ id: "REAL", name: "report.pdf", mimeType: "application/pdf", size: "8" });
+      }
+      return new Response(new TextEncoder().encode("%PDF-1.7"), { status: 200 });
+    });
+
+    const g = createGoogleWorkspace(token);
+    const download = await g.drive.download("SHORT");
+
+    expect(download).toMatchObject({ filename: "report.pdf", mimeType: "application/pdf" });
+    expect(new TextDecoder().decode(download.bytes)).toBe("%PDF-1.7");
+    expect(urls.some((u) => u.includes("/files/REAL?alt=media"))).toBe(true);
+  });
+
+  it("download exports a Google Doc as PDF and names it with the extension", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      urls.push(url);
+      if (url.includes("/export")) {
+        return new Response(new TextEncoder().encode("%PDF-1.7 doc"), { status: 200 });
+      }
+      return json({ id: "D1", name: "Report", mimeType: "application/vnd.google-apps.document" });
+    });
+
+    const g = createGoogleWorkspace(token);
+    const download = await g.drive.download("D1");
+
+    expect(urls.some((u) => u.includes("/export?mimeType=application%2Fpdf"))).toBe(true);
+    expect(download).toMatchObject({ filename: "Report.pdf", mimeType: "application/pdf" });
+    // A native file has no bytes to fetch with alt=media.
+    expect(urls.some((u) => u.includes("alt=media"))).toBe(false);
+  });
+
+  it("download exports a Sheet as CSV", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
+      const url = urlOf(input);
+      if (url.includes("/export")) {
+        expect(url).toContain("mimeType=text%2Fcsv");
+        return new Response(new TextEncoder().encode("a,b\n1,2"), { status: 200 });
+      }
+      return json({ id: "S1", name: "Budget", mimeType: "application/vnd.google-apps.spreadsheet" });
+    });
+
+    const g = createGoogleWorkspace(token);
+    expect(await g.drive.download("S1")).toMatchObject({
+      filename: "Budget.csv",
+      mimeType: "text/csv",
+    });
+  });
+
+  it("refuses an oversize file from its declared size, before fetching bytes", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      json({
+        id: "BIG",
+        name: "huge.zip",
+        mimeType: "application/zip",
+        size: String(MAX_FILE_BYTES + 1),
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const g = createGoogleWorkspace(token);
+    await expect(g.drive.download("BIG")).rejects.toThrow(/too large/);
+    expect(fetchMock.mock.calls.every(([u]) => !urlOf(u).includes("alt=media"))).toBe(true);
+  });
+
+  it("refuses an oversize export once the bytes arrive, since Google declares no size", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) =>
+      urlOf(input).includes("/export")
+        ? new Response(new Uint8Array(MAX_FILE_BYTES + 1), { status: 200 })
+        : json({ id: "D1", name: "Report", mimeType: "application/vnd.google-apps.document" }),
+    );
+
+    const g = createGoogleWorkspace(token);
+    await expect(g.drive.download("D1")).rejects.toThrow(/too large/);
+  });
+
+  it("says a download is blocked when the owner disabled it", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
+      json({
+        id: "R1",
+        name: "locked.pdf",
+        mimeType: "application/pdf",
+        size: "10",
+        capabilities: { canDownload: false },
+      }),
+    );
+
+    const g = createGoogleWorkspace(token);
+    await expect(g.drive.download("R1")).rejects.toThrow(/disabled downloading/);
+  });
+
+  it("reports Google's own 10 MB export limit as its own failure, not as too large", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) =>
+      urlOf(input).includes("/export")
+        ? new Response(JSON.stringify({ error: { errors: [{ reason: "exportSizeLimitExceeded" }] } }), { status: 403 })
+        : json({ id: "D1", name: "Report", mimeType: "application/vnd.google-apps.document" }),
+    );
+
+    const g = createGoogleWorkspace(token);
+    await expect(g.drive.download("D1")).rejects.toThrow(/Google's own 10 MB export limit/);
+  });
+
+  it("upload opens a resumable session and PUTs the bytes to it", async () => {
+    const calls: { url: string; method?: string; body?: unknown }[] = [];
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
+      const url = urlOf(input);
+      calls.push({ url, method: init?.method, body: init?.body });
+      if (url.includes("uploadType=resumable")) {
+        return new Response(null, {
+          status: 200,
+          headers: { location: "https://upload.example/session-1" },
+        });
+      }
+      return json({ id: "U1", name: "notes.txt", mimeType: "text/plain", size: "5" });
+    });
+
+    const g = createGoogleWorkspace(token);
+    const uploaded = await g.drive.upload({
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      bytes: new TextEncoder().encode("hello"),
+      folderId: "FOLDER1",
+    });
+
+    expect(calls[0].method).toBe("POST");
+    expect(JSON.parse(calls[0].body as string)).toEqual({
+      name: "notes.txt",
+      mimeType: "text/plain",
+      parents: ["FOLDER1"],
+    });
+    expect(calls[1]).toMatchObject({
+      url: "https://upload.example/session-1",
+      method: "PUT",
+    });
+    expect(uploaded).toMatchObject({ id: "U1", name: "notes.txt", byteSize: 5 });
+  });
+
+  it("createFolder creates a folder inside its parent", async () => {
+    let posted: unknown;
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
+      expect(urlOf(input)).toContain("/drive/v3/files?");
+      posted = JSON.parse((init as RequestInit).body as string);
+      return json({
+        id: "FOLDER2",
+        name: "Receipts",
+        mimeType: "application/vnd.google-apps.folder",
+      });
+    });
+
+    const g = createGoogleWorkspace(token);
+    const folder = await g.drive.createFolder({ name: "Receipts", parentId: "FOLDER1" });
+
+    expect(posted).toEqual({
+      name: "Receipts",
+      mimeType: "application/vnd.google-apps.folder",
+      parents: ["FOLDER1"],
+    });
+    expect(folder).toMatchObject({ id: "FOLDER2", isFolder: true, byteSize: null });
+  });
+
+  it("trash and restore patch the trashed flag, never deleting", async () => {
+    const seen: { method?: string; body?: unknown }[] = [];
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
+      seen.push({ method: init?.method, body: init?.body });
+      expect(urlOf(input)).toContain("/files/F1?");
+      return json({ id: "F1", name: "old.pdf", mimeType: "application/pdf", size: "3" });
+    });
+
+    const g = createGoogleWorkspace(token);
+    await g.drive.trash("F1");
+    await g.drive.trash("F1", true);
+
+    expect(seen.map((s) => s.method)).toEqual(["PATCH", "PATCH"]);
+    expect(seen.map((s) => JSON.parse(s.body as string) as unknown)).toEqual([
+      { trashed: true },
+      { trashed: false },
+    ]);
+  });
+
+  it("mints no token and throws when Google isn't connected", async () => {
+    globalThis.fetch = vi.fn<typeof fetch>();
+    const g = createGoogleWorkspace(async () => null);
+    await expect(g.drive.search({ query: "x" })).rejects.toBeInstanceOf(
+      GoogleNotConnectedError,
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+});

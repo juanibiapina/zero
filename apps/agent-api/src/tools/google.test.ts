@@ -411,3 +411,204 @@ describe("buildGoogleTools calendar", () => {
     });
   });
 });
+
+describe("buildGoogleTools drive", () => {
+  const pdfBytes = new TextEncoder().encode("%PDF-1.7 drive");
+
+  const driveGoogle = () =>
+    createMemoryGoogle({
+      driveFiles: [
+        {
+          id: "F1",
+          name: "report.pdf",
+          mimeType: "application/pdf",
+          byteSize: pdfBytes.length,
+          modifiedAt: "2026-08-01T10:00:00.000Z",
+          webViewLink: "https://drive.google.com/file/d/F1",
+          isFolder: false,
+        },
+        {
+          id: "S1",
+          name: "Budget",
+          mimeType: "application/vnd.google-apps.spreadsheet",
+          byteSize: null,
+          modifiedAt: "2026-08-02T10:00:00.000Z",
+          webViewLink: null,
+          isFolder: false,
+        },
+      ],
+      driveBytes: { F1: pdfBytes },
+    });
+
+  const newFileStore = () =>
+    createUserFileStore({
+      clerkUserId: "user_1",
+      records: new MemoryStore(),
+      blobs: createMemoryFileBlobs(),
+    });
+
+  it("drive_search returns files with a truncated flag", async () => {
+    const tools = buildGoogleTools({ google: driveGoogle(), timezone: "UTC" });
+    const res = (await run(tools, "drive_search", { query: "report" })) as {
+      files: { id: string }[];
+      truncated: boolean;
+    };
+    expect(res.files.map((f) => f.id)).toEqual(["F1", "S1"]);
+    expect(res.truncated).toBe(false);
+  });
+
+  it("drive_import stores the file, returns a marker, and does not store it twice", async () => {
+    const files = newFileStore();
+    const tools = buildGoogleTools({ google: driveGoogle(), timezone: "UTC", files });
+
+    const first = await run(tools, "drive_import", { fileId: "F1" });
+    const second = await run(tools, "drive_import", { fileId: "F1" });
+
+    expect(second).toEqual(first);
+    expect(first).toMatchObject({
+      file: { filename: "report.pdf", mimeType: "application/pdf", byteSize: pdfBytes.length },
+    });
+    const serialized = JSON.stringify(first);
+    expect(serialized).toContain("[file id=file_");
+    expect(serialized).not.toContain("JVBER");
+    expect(files.list({}).files).toHaveLength(1);
+  });
+
+  it("drive_import reports missing file storage as data, since onboarding has none", async () => {
+    const tools = buildGoogleTools({ google: driveGoogle(), timezone: "UTC" });
+    expect(await run(tools, "drive_import", { fileId: "F1" })).toEqual({
+      error: "File storage is unavailable.",
+    });
+  });
+
+  it("drive_import surfaces a bad export as data rather than crashing", async () => {
+    // The store refuses bytes that claim to be a PDF but are not.
+    const google = createMemoryGoogle({
+      driveFiles: [
+        {
+          id: "D1",
+          name: "Report.pdf",
+          mimeType: "application/pdf",
+          byteSize: 4,
+          modifiedAt: "2026-08-01T10:00:00.000Z",
+          webViewLink: null,
+          isFolder: false,
+        },
+      ],
+      driveBytes: { D1: new TextEncoder().encode("nope") },
+    });
+    const tools = buildGoogleTools({ google, timezone: "UTC", files: newFileStore() });
+    expect(await run(tools, "drive_import", { fileId: "D1" })).toMatchObject({
+      error: expect.stringContaining("not a valid PDF") as unknown,
+    });
+  });
+
+  it("drive_create_folder and drive_trash record reversible changes", async () => {
+    const google = driveGoogle();
+    const tools = buildGoogleTools({ google, timezone: "UTC" });
+
+    const folder = (await run(tools, "drive_create_folder", { name: "Receipts" })) as {
+      id: string;
+      isFolder: boolean;
+    };
+    expect(folder.isFolder).toBe(true);
+    expect(google.createdFolders).toEqual([{ name: "Receipts", parentId: undefined }]);
+
+    expect(await run(tools, "drive_trash", { fileId: "F1" })).toMatchObject({ trashed: true });
+    expect(await run(tools, "drive_trash", { fileId: "F1", restore: true })).toMatchObject({
+      trashed: false,
+    });
+    expect(google.trashedFiles).toEqual([
+      { fileId: "F1", restore: false },
+      { fileId: "F1", restore: true },
+    ]);
+  });
+
+  it("drive_upload sends a stored Zero file to Drive", async () => {
+    const google = driveGoogle();
+    const files = newFileStore();
+    const stored = await files.save({
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      bytes: new TextEncoder().encode("hello"),
+    });
+    const tools = buildGoogleTools({ google, timezone: "UTC", files });
+
+    await run(tools, "drive_upload", { fileId: stored.id, folderId: "FOLDER1" });
+
+    expect(google.uploadedFiles).toHaveLength(1);
+    expect(google.uploadedFiles[0]).toMatchObject({
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      folderId: "FOLDER1",
+    });
+  });
+
+  it("drive_upload reports an unknown file as provably not sent", async () => {
+    const tools = buildGoogleTools({
+      google: driveGoogle(),
+      timezone: "UTC",
+      files: newFileStore(),
+    });
+    await expect(
+      run(tools, "drive_upload", { fileId: "file_missing" }),
+    ).rejects.toBeInstanceOf(ExternalCallNotSent);
+  });
+
+  it("drive_upload classifies its failures like every other irreversible tool", async () => {
+    const files = newFileStore();
+    const stored = await files.save({
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      bytes: new TextEncoder().encode("hello"),
+    });
+    const failing = (err: Error) => {
+      const google = driveGoogle();
+      return {
+        ...google,
+        drive: {
+          ...google.drive,
+          upload: async () => {
+            throw err;
+          },
+        },
+      };
+    };
+
+    const rejected = buildGoogleTools({
+      google: failing(new GoogleApiError(403, "read-only shared drive")),
+      timezone: "UTC",
+      files,
+    });
+    await expect(
+      run(rejected, "drive_upload", { fileId: stored.id }),
+    ).rejects.toBeInstanceOf(ExternalCallNotSent);
+
+    const ambiguous = buildGoogleTools({
+      google: failing(new GoogleApiError(500, "backend error")),
+      timezone: "UTC",
+      files,
+    });
+    await expect(
+      run(ambiguous, "drive_upload", { fileId: stored.id }),
+    ).rejects.not.toBeInstanceOf(ExternalCallNotSent);
+  });
+
+  it("surfaces GoogleNotConnectedError as { error } for reads and as not-sent for upload", async () => {
+    const google = createMemoryGoogle({ notConnected: true });
+    const files = newFileStore();
+    const stored = await files.save({
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      bytes: new TextEncoder().encode("hello"),
+    });
+    const tools = buildGoogleTools({ google, timezone: "UTC", files });
+
+    expect(await run(tools, "drive_search", { query: "x" })).toMatchObject({
+      error: expect.stringContaining("Google isn't connected") as unknown,
+    });
+    await expect(
+      run(tools, "drive_upload", { fileId: stored.id }),
+    ).rejects.toBeInstanceOf(ExternalCallNotSent);
+  });
+});

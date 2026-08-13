@@ -3,9 +3,9 @@
 The Zero web app has a "Connect Google" button that grants the bot
 access to your Gmail, Calendar, and Drive via Clerk's Google OAuth.
 
-> **Status: wired (Gmail + Calendar).** The interface agent has in-Worker
-> Gmail and Calendar tools that call Google's REST APIs (`gmail/v1`,
-> `calendar/v3`) directly with a bearer token — no container, no CLIs. The
+> **Status: wired (Gmail + Calendar + Drive).** The interface agent has in-Worker
+> Gmail, Calendar and Drive tools that call Google's REST APIs (`gmail/v1`,
+> `calendar/v3`, `drive/v3`) directly with a bearer token — no container, no CLIs. The
 > old per-user container (`gmcli`/`gccli`/`gdcli` behind a secret proxy)
 > was removed with the container runtime (see `docs/design.md`) and
 > replaced by plain `fetch` adapters. See `docs/google-tools.md` for the
@@ -23,14 +23,14 @@ access to your Gmail, Calendar, and Drive via Clerk's Google OAuth.
 > round-trip. REST calls use `users/me` (Gmail) and `calendarList` +
 > `calendars/{id}/events` (Calendar), so no account email is needed;
 > `primary` is the default write target. `getGoogleAccountEmail` remains
-> **unused** (available if a `From:` display is ever wanted). Drive is
-> still unwired.
+> **unused** (available if a `From:` display is ever wanted). Drive uses
+> `files.list/get/export/create/update`; `files.delete` is never called.
 >
 > **Confirmation policy.** Reads (`gmail_search`, `gmail_thread`,
-> `calendar_list_calendars`, `calendar_list_events`) run freely; the
-> side-effecting `gmail_send` and `calendar_create_event` require explicit
-> user confirmation of the exact content first (enforced by the interface
-> prompt, not a hard guard — an accepted v1 risk).
+> `calendar_list_calendars`, `calendar_list_events`, `drive_search`) run freely; the side-effecting `gmail_send`,
+> `calendar_create_event` and `drive_upload` require explicit user
+> confirmation of the exact content first (enforced by the tool
+> descriptions, not a hard guard — an accepted v1 risk).
 
 ## How connecting works
 
@@ -59,6 +59,12 @@ defined in `apps/agent-web/src/google-scopes.ts`:
 | `calendar.events` | Read and write events on your calendars |
 | `calendar.calendarlist.readonly` | See which calendars you are subscribed to |
 | `drive` | Read and write your Drive files |
+
+The `drive` scope covers every method the Drive tools call
+(`files.list/get/export/create/update`), verified against the discovery
+document. The narrower `drive.file` covers all of them **except** finding files
+the user already has, since it only ever sees files this app created — which is
+why the broad scope stays.
 
 Each is the narrowest scope covering a tool that exists, because OAuth
 verification demands a justification per scope *and* an explanation of why

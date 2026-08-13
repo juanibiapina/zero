@@ -1,5 +1,7 @@
-// Telegram's Bot API refuses to serve any file over 20 MB through getFile, so a
-// larger cap here could never be filled from a Telegram attachment.
+// Zero's one file-size cap, shared by every path a file can take: Telegram
+// uploads, Gmail attachments, Drive imports and uploads, and the store itself.
+// Telegram's Bot API refuses to serve any file over 20 MB through getFile,
+// which is why the cap is not higher; Drive could hand over more.
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 export const MAX_FILE_LABEL = `${MAX_FILE_BYTES / (1024 * 1024)} MB`;
 export const MAX_USER_FILE_BYTES = 100 * 1024 * 1024;

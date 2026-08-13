@@ -1,14 +1,15 @@
-# Gmail & Calendar tools
+# Gmail, Calendar & Drive tools
 
-The interface agent has in-Worker tools to read/send the user's Gmail and
-read/write their Google Calendar. They call Google's REST APIs (`gmail/v1`,
-`calendar/v3`) directly with a bearer token — no container, no CLIs. See
-`docs/google-workspace.md` for the OAuth/connect plumbing.
+The interface agent has in-Worker tools to read/send the user's Gmail,
+read/write their Google Calendar, and read/write their Google Drive. They call
+Google's REST APIs (`gmail/v1`, `calendar/v3`, `drive/v3`) directly with a
+bearer token — no container, no CLIs. See `docs/google-workspace.md` for the
+OAuth/connect plumbing.
 
 ## Port and adapters
 
-A single `GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`) groups two
-sub-APIs, `mail` and `calendar`, and normalizes payloads to small flat shapes so
+A single `GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`) groups three
+sub-APIs, `mail`, `calendar` and `drive`, and normalizes payloads to small flat shapes so
 a field the model never needs never reaches it and a provider swap stays local.
 It mirrors the WebSearch seam:
 
@@ -38,8 +39,8 @@ A `null` token (not connected, or a Clerk outage) makes the adapter throw a type
 model tells the user to connect Google in the Zero app and does not retry. A
 `401` from Google (revoked grant / missing scope) maps to a distinct error.
 
-The three irreversible tools do not use that error-as-data path. `gmail_send`,
-`gmail_send_draft` and `calendar_create_event` classify a failure instead: a missing connection, or a
+The four irreversible tools do not use that error-as-data path. `gmail_send`,
+`gmail_send_draft`, `calendar_create_event` and `drive_upload` classify a failure instead: a missing connection, or a
 rejection status that is not a timeout (`408`) or a throttle (`429`), becomes
 `ExternalCallNotSent`, which says the request provably had no effect. Anything
 else — a `5xx`, a dead socket, a response lost while being read — is left
@@ -84,6 +85,13 @@ of them runs. The label, trash and draft tools are reversible and run freely.
   calendar), or a subset via `calendarIds`.
 - `calendar_create_event({ summary, start, end, description?, location?, attendees?, allDay?, calendarId? })`
   — create on `calendarId` (default `primary`).
+- `drive_search({ query?, mimeType?, folderId? })` — find Drive files by name or
+  full text; trashed files excluded.
+- `drive_import({ fileId })` — save a Drive file as a user-owned Zero file.
+- `drive_create_folder({ name, parentId? })`.
+- `drive_trash({ fileId, restore? })` — trash or restore.
+- `drive_upload({ fileId, name?, folderId? })` — put a stored Zero file into
+  Drive. `fileId` here is a **Zero** file id, not a Drive one.
 
 Not built: `calendar_update_event`, `calendar_delete_event`,
 `calendar_freebusy`. Deliberately absent on the Gmail side: permanent delete
@@ -92,6 +100,61 @@ from trash is that mistakes cannot be undone), Gmail settings
 (`gmail.settings.*`), per-message label changes, and label deletion.
 `history.list` is in scope and worth having, but only alongside something that
 stores a `historyId` and wakes up to compare it — that belongs with schedules.
+
+## Drive
+
+**Drive is addressed by id, Gmail labels by name — on purpose.** A model cannot
+invent `Label_12`, so labels stay human. Drive is the opposite case: names are
+not unique, a user has three files called "Invoice", so a name-addressed
+`drive_trash` would be ambiguous in a way the model cannot see. Every Drive id
+the model uses comes out of a prior `drive_search`.
+
+**Native files have no bytes.** `files.get?alt=media` answers
+`403 fileNotDownloadable` for a Doc/Sheet/Slides; those go through
+`files/{id}/export`:
+
+| Drive type | `drive_import` saves |
+|---|---|
+| Document | `application/pdf` |
+| Presentation | `application/pdf` |
+| Spreadsheet | `text/csv` (first sheet only) |
+| Drawing | `application/pdf` |
+| anything else | the bytes as they are |
+
+**There is one way in: import.** An earlier design also had a `drive_read` that
+returned a document's text inline without storing it; it was dropped, so
+reading a Drive document is always import-then-read. Docs and Slides therefore
+import as PDF, not text, because `read_pdf` is already paginated and can page
+through them. A spreadsheet exports as CSV carrying **only its first sheet** —
+and note that nothing currently reads a stored CSV back, so an imported Sheet
+can be sent to the user but not read by the agent.
+
+**Caps.** `DRIVE_SEARCH_CAP` (20) bounds a search and `nextPageToken` is not
+followed, same as Gmail/Calendar; the tool sets `truncated`. File size uses the **one** cap Zero has, `MAX_FILE_BYTES` (20 MB) — there is no
+Drive-specific size constant. Google's own 10 MB export limit sits under it and
+gets its own message, because telling a user to shrink a file to fit a limit
+they cannot see is useless advice.
+
+**Query building stays inside the adapter.** The model never writes a raw `q`.
+`files.list` returns trashed files *by default*, so every query states
+`trashed = false`; `'` and `\` inside a term are escaped or the query is
+malformed; `supportsAllDrives` + `includeItemsFromAllDrives` + `corpora=allDrives`
+are always set, or a user's work files are invisible. A shortcut
+(`...apps.shortcut`) is resolved to its target only when bytes or text are
+wanted — never per search hit, since `shortcutDetails` already rides along in
+the list response.
+
+**Uploads are resumable, not multipart.** Google documents multipart for files
+of 5 MB or less and a Zero file can be 20 MB, so `drive_upload` opens a session
+(`uploadType=resumable`) and PUTs the bytes to the returned `Location`. Note the
+discovery document's `/resumable/upload/...` path is not a URL you call.
+
+Not built on the Drive side: sharing (`permissions.create` changes who can see
+data and needs its own confirmation policy), permanent delete (`files.delete`;
+trash is enough and is undoable), moving files between folders
+(`addParents`/`removeParents`), revisions, comments, and change-watching
+(`changes.list` has the same "needs to store a token and wake up" problem as
+Gmail's `history.list`).
 
 ## Gmail labels and drafts
 
@@ -203,9 +266,21 @@ the query. Caps live in `google/types.ts` (`MAIL_SEARCH_CAP`,
 - `google/rest.test.ts` — mocks global `fetch`; asserts request shape, multipart
   decode, case-insensitive/recursive header lookup, non-ASCII send round-trip,
   reply threading, calendar fan-out/tag/merge/skip, `{ dateTime, timeZone }`
-  create, and the `401`/`500`/null-token error paths.
+  create, and the `401`/`500`/null-token error paths. On the Drive side: `q`
+  construction (trash excluded, quotes and backslashes escaped, shared drives
+  included), shortcut resolution, binary download vs native export, oversize
+  rejection before *and* after the bytes arrive, Google's export limit reported
+  as its own failure, the resumable upload's two
+  requests, and trash/restore patching `trashed` rather than deleting.
 - `tools/google.test.ts` — memory adapter; asserts each tool's shape, wall-clock
   → zone stamping, `calendarId` default vs override, and that
-  `GoogleNotConnectedError` surfaces as `{ error }` data.
-- `agents/interface.test.ts` — a scripted run reads a Gmail thread then replies.
+  `GoogleNotConnectedError` surfaces as `{ error }` data. For Drive: the
+  `drive_import` deduplicating a repeat import and never
+  returning bytes, a bad export surfacing as data, and `drive_upload`
+  classifying failures like every other irreversible tool.
+- `agents/interface.test.ts` — scripted runs: one reads a Gmail thread then
+  replies, one finds a Drive file, imports it, and proves the saved bytes are a
+  PDF `read_pdf` can page through.
+- `agents/onboarding.test.ts` — onboarding has no Drive tool at all: a model
+  that tries to search, read, or trash Drive changes nothing.
 - `google-token.test.ts` — `memoizeTokenProvider` mints once and caches `null`.

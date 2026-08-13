@@ -21,6 +21,8 @@ import { createMemoryGoogle } from "../google/memory";
 import { createMemoryFetcher } from "../pagefetch/memory";
 import { createMemoryFileBlobs } from "../files/memory";
 import { createUserFileStore } from "../files/store";
+import { readPdfText } from "../files/pdf";
+import { readFile } from "node:fs/promises";
 import { historyMessage, pinTopic, seedTopic, setBody } from "../store/test-support";
 
 const collectSink = () => {
@@ -1272,6 +1274,59 @@ describe("runInterfaceAgent", () => {
     });
 
     expect(result.replies).toEqual(["It's a cat."]);
+  });
+
+  it("finds a Drive file, saves it, and reads its text", async () => {
+    const store = new MemoryStore();
+    const pdfBytes = new Uint8Array(
+      await readFile(new URL("../files/fixtures/multi-page.pdf", import.meta.url).pathname),
+    );
+    const files = createUserFileStore({
+      clerkUserId: "user_1",
+      records: store,
+      blobs: createMemoryFileBlobs(),
+    });
+    const sink = collectSink();
+    const google = createMemoryGoogle({
+      driveFiles: [
+        {
+          id: "F1",
+          name: "handbook.pdf",
+          mimeType: "application/pdf",
+          byteSize: pdfBytes.length,
+          modifiedAt: "2026-08-01T10:00:00.000Z",
+          webViewLink: null,
+          isFolder: false,
+        },
+      ],
+      driveBytes: { F1: pdfBytes },
+    });
+    const model = scriptedModel([
+      { tools: [{ name: "drive_search", input: { query: "handbook" } }] },
+      { tools: [{ name: "drive_import", input: { fileId: "F1" } }] },
+      { text: "The handbook is saved and says what you asked." },
+    ]);
+
+    const result = await runInterfaceAgent({
+      model,
+      store,
+      send: sink.send,
+      search: createMemorySearch(),
+      google,
+      fetcher: createMemoryFetcher(),
+      files,
+      history: [],
+      userMessage: "what does the handbook in my drive say?",
+    });
+
+    expect(result.replies).toEqual([
+      "The handbook is saved and says what you asked.",
+    ]);
+    // The imported bytes are a real PDF, so read_pdf can page through them.
+    const stored = files.list({}).files;
+    expect(stored.map((f) => f.filename)).toEqual(["handbook.pdf"]);
+    const text = await readPdfText((await files.read(stored[0].id))!);
+    expect(text.totalPages).toBeGreaterThan(1);
   });
 
   it("does not track a topic that was not found", async () => {

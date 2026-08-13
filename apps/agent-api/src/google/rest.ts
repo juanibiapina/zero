@@ -12,6 +12,7 @@ import { MAX_FILE_BYTES, MAX_FILE_LABEL } from "../files/types";
 import {
   CALENDAR_EVENTS_CAP,
   CALENDAR_PER_LIST_CAP,
+  DRIVE_SEARCH_CAP,
   GoogleApiError,
   GoogleNotConnectedError,
   LISTED_SYSTEM_LABELS,
@@ -22,6 +23,11 @@ import {
   type CalendarEvent,
   type CalendarSummary,
   type CreateEventInput,
+  type DriveApi,
+  type DriveDownload,
+  type DriveFile,
+  type DriveSearchParams,
+  type DriveUploadInput,
   type EventDateTime,
   type GoogleWorkspace,
   type ListEventsParams,
@@ -37,6 +43,19 @@ import {
 
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 const CALENDAR_BASE = "https://www.googleapis.com/calendar/v3";
+const DRIVE_BASE = "https://www.googleapis.com/drive/v3";
+// Uploads go to a different host path; the discovery document's
+// "/resumable/upload/..." path is not a URL you call.
+const DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3";
+
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+const SHORTCUT_MIME = "application/vnd.google-apps.shortcut";
+const NATIVE_PREFIX = "application/vnd.google-apps.";
+
+// Everything the port needs off a Drive file, in one `fields` mask. The default
+// response carries only kind/id/name/mimeType, so this is not optional.
+const DRIVE_FILE_FIELDS =
+  "id,name,mimeType,size,modifiedTime,webViewLink,shortcutDetails,capabilities/canDownload";
 
 export type TokenProvider = () => Promise<string | null>;
 
@@ -232,6 +251,96 @@ const startInstant = (e: CalendarEvent): number => {
   const iso = "date" in s ? s.date : s.dateTime;
   const t = Date.parse(iso);
   return Number.isNaN(t) ? 0 : t;
+};
+
+// --- Drive helpers ---
+
+interface RawDriveFile {
+  id?: string;
+  name?: string;
+  mimeType?: string;
+  size?: string;
+  modifiedTime?: string;
+  webViewLink?: string;
+  shortcutDetails?: { targetId?: string; targetMimeType?: string };
+  capabilities?: { canDownload?: boolean };
+}
+
+const toDriveFile = (raw: RawDriveFile): DriveFile => ({
+  id: raw.id ?? "",
+  name: raw.name ?? "(untitled)",
+  mimeType: raw.mimeType ?? "application/octet-stream",
+  // Google-native files report no size at all; a missing size is "unknown",
+  // not zero.
+  byteSize: raw.size === undefined ? null : Number(raw.size),
+  modifiedAt: raw.modifiedTime ?? "",
+  webViewLink: raw.webViewLink ?? null,
+  isFolder: raw.mimeType === FOLDER_MIME,
+});
+
+// A search term goes inside single quotes in the `q` expression, so both the
+// quote and the backslash have to be escaped or the query is malformed (or,
+// worse, silently different).
+const escapeQueryTerm = (value: string): string =>
+  value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+// files.list returns trashed files by default, so `trashed` is always stated.
+const buildDriveQuery = (params: DriveSearchParams): string => {
+  const clauses = [`trashed = ${params.trashed ? "true" : "false"}`];
+  if (params.query) {
+    const term = escapeQueryTerm(params.query);
+    clauses.push(`(name contains '${term}' or fullText contains '${term}')`);
+  }
+  if (params.mimeType) {
+    clauses.push(`mimeType = '${escapeQueryTerm(params.mimeType)}'`);
+  }
+  if (params.folderId) {
+    clauses.push(`'${escapeQueryTerm(params.folderId)}' in parents`);
+  }
+  return clauses.join(" and ");
+};
+
+const isNative = (mimeType: string): boolean =>
+  mimeType.startsWith(NATIVE_PREFIX);
+
+// How a Google-native document leaves Drive. Docs and Slides become PDFs so
+// read_pdf can page through them; a Sheet has no PDF worth reading, so it
+// becomes CSV. Everything else (Forms, Sites, Vids, ...) has no useful export.
+const EXPORT_AS_BYTES: Record<string, string> = {
+  "application/vnd.google-apps.document": "application/pdf",
+  "application/vnd.google-apps.presentation": "application/pdf",
+  "application/vnd.google-apps.drawing": "application/pdf",
+  "application/vnd.google-apps.spreadsheet": "text/csv",
+};
+
+const EXTENSIONS: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "text/csv": ".csv",
+  "text/plain": ".txt",
+};
+
+const withExtension = (name: string, mimeType: string): string => {
+  const ext = EXTENSIONS[mimeType];
+  if (!ext) return name;
+  return name.toLowerCase().endsWith(ext) ? name : `${name}${ext}`;
+};
+
+// Google's own export limits are not caps Zero chooses, so they get their own
+// message: telling a user to shrink a file to fit a 10 MB export limit they
+// cannot see would be useless advice.
+const describeExportFailure = (error: unknown, name: string): unknown => {
+  if (!(error instanceof GoogleApiError)) return error;
+  if (error.message.includes("exportSizeLimitExceeded")) {
+    return new Error(
+      `Google could not export "${name}": it is over Google's own 10 MB export limit. Ask for a smaller part of it.`,
+    );
+  }
+  if (error.message.includes("fileNotExportable")) {
+    return new Error(
+      `Google does not allow exporting "${name}" (Google Vids files, for example), so Zero cannot read it.`,
+    );
+  }
+  return error;
 };
 
 export const createGoogleWorkspace = (
@@ -630,7 +739,183 @@ export const createGoogleWorkspace = (
     },
   };
 
-  return { mail, calendar };
+  // --- Drive ---
+
+  const driveFileParams = (extra: Record<string, string> = {}) =>
+    new URLSearchParams({
+      fields: DRIVE_FILE_FIELDS,
+      supportsAllDrives: "true",
+      ...extra,
+    }).toString();
+
+  const rawDriveFile = (fileId: string): Promise<RawDriveFile> =>
+    getJson<RawDriveFile>(
+      `${DRIVE_BASE}/files/${encodeURIComponent(fileId)}?${driveFileParams()}`,
+    );
+
+  // A shortcut is a file whose content lives elsewhere. Resolving it costs one
+  // request, so it happens only when the bytes or the text are actually wanted
+  // — never per search hit, where shortcutDetails already rides along.
+  const resolveTarget = async (fileId: string): Promise<RawDriveFile> => {
+    const raw = await rawDriveFile(fileId);
+    const targetId = raw.shortcutDetails?.targetId;
+    if (raw.mimeType === SHORTCUT_MIME && targetId) {
+      return rawDriveFile(targetId);
+    }
+    return raw;
+  };
+
+  const exportBytes = async (
+    raw: RawDriveFile,
+    exportMime: string,
+  ): Promise<Uint8Array> => {
+    const url =
+      `${DRIVE_BASE}/files/${encodeURIComponent(raw.id ?? "")}/export` +
+      `?mimeType=${encodeURIComponent(exportMime)}`;
+    let res: Response;
+    try {
+      res = await authFetch(url);
+    } catch (error) {
+      throw describeExportFailure(error, raw.name ?? "that file");
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // Exports declare no size up front, so this is the only size check there is.
+    if (bytes.length > MAX_FILE_BYTES) {
+      throw new Error(`That Drive file is too large (over ${MAX_FILE_LABEL}).`);
+    }
+    return bytes;
+  };
+
+  const mediaBytes = async (raw: RawDriveFile): Promise<Uint8Array> => {
+    if (raw.capabilities?.canDownload === false) {
+      throw new Error(
+        `The owner of "${raw.name ?? "that file"}" has disabled downloading it.`,
+      );
+    }
+    const declared = raw.size === undefined ? 0 : Number(raw.size);
+    if (declared > MAX_FILE_BYTES) {
+      throw new Error(`That Drive file is too large (over ${MAX_FILE_LABEL}).`);
+    }
+    const res = await authFetch(
+      `${DRIVE_BASE}/files/${encodeURIComponent(raw.id ?? "")}?alt=media&supportsAllDrives=true`,
+    );
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length > MAX_FILE_BYTES) {
+      throw new Error(`That Drive file is too large (over ${MAX_FILE_LABEL}).`);
+    }
+    return bytes;
+  };
+
+  const drive: DriveApi = {
+    async search(params: DriveSearchParams): Promise<DriveFile[]> {
+      const query = new URLSearchParams({
+        q: buildDriveQuery(params),
+        pageSize: String(DRIVE_SEARCH_CAP),
+        orderBy: "modifiedTime desc",
+        fields: `files(${DRIVE_FILE_FIELDS})`,
+        // Without both of these a user's shared-drive files are invisible.
+        supportsAllDrives: "true",
+        includeItemsFromAllDrives: "true",
+        corpora: "allDrives",
+      });
+      const data = await getJson<{ files?: RawDriveFile[] }>(
+        `${DRIVE_BASE}/files?${query.toString()}`,
+      );
+      // nextPageToken is deliberately not followed: same bounded-list policy as
+      // Gmail search and Calendar events.
+      return (data.files ?? []).slice(0, DRIVE_SEARCH_CAP).map(toDriveFile);
+    },
+
+    async get(fileId: string): Promise<DriveFile> {
+      return toDriveFile(await resolveTarget(fileId));
+    },
+
+    async download(fileId: string): Promise<DriveDownload> {
+      const raw = await resolveTarget(fileId);
+      const file = toDriveFile(raw);
+      if (file.isFolder) {
+        throw new Error(`"${file.name}" is a folder, not a file.`);
+      }
+      if (isNative(file.mimeType)) {
+        const exportMime = EXPORT_AS_BYTES[file.mimeType];
+        if (!exportMime) {
+          throw new Error(
+            `Google does not allow exporting "${file.name}" (${file.mimeType}).`,
+          );
+        }
+        return {
+          filename: withExtension(file.name, exportMime),
+          mimeType: exportMime,
+          bytes: await exportBytes(raw, exportMime),
+        };
+      }
+      return {
+        filename: file.name,
+        mimeType: file.mimeType,
+        bytes: await mediaBytes(raw),
+      };
+    },
+
+    async upload(input: DriveUploadInput): Promise<DriveFile> {
+      // Resumable, not multipart: Google documents multipart for files of 5 MB
+      // or less, and a Zero file can be 20 MB. Two requests for any size.
+      const metadata = {
+        name: input.filename,
+        mimeType: input.mimeType,
+        ...(input.folderId ? { parents: [input.folderId] } : {}),
+      };
+      const start = await authFetch(
+        `${DRIVE_UPLOAD_BASE}/files?uploadType=resumable&${driveFileParams()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(metadata),
+        },
+      );
+      const session = start.headers.get("location");
+      if (!session) {
+        throw new Error("Drive did not open an upload session.");
+      }
+      const res = await authFetch(session, {
+        method: "PUT",
+        headers: { "Content-Type": input.mimeType },
+        body: input.bytes,
+      });
+      const created = await readJson<RawDriveFile>(res);
+      return toDriveFile({ ...metadata, ...created });
+    },
+
+    async createFolder({ name, parentId }): Promise<DriveFile> {
+      const res = await authFetch(
+        `${DRIVE_BASE}/files?${driveFileParams()}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            mimeType: FOLDER_MIME,
+            ...(parentId ? { parents: [parentId] } : {}),
+          }),
+        },
+      );
+      return toDriveFile(await readJson<RawDriveFile>(res));
+    },
+
+    async trash(fileId: string, restore = false): Promise<DriveFile> {
+      // files.delete is permanent and is deliberately never called.
+      const res = await authFetch(
+        `${DRIVE_BASE}/files/${encodeURIComponent(fileId)}?${driveFileParams()}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trashed: !restore }),
+        },
+      );
+      return toDriveFile(await readJson<RawDriveFile>(res));
+    },
+  };
+
+  return { mail, calendar, drive };
 };
 
 // One events.list against a single calendar. Always singleEvents=true +

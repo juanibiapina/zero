@@ -4,8 +4,8 @@
 // are normalized to small flat shapes so a field the model never needs never
 // reaches it, and a provider swap stays local.
 //
-// Two sub-APIs are grouped under one GoogleWorkspace: `mail` (Gmail) and
-// `calendar`. See docs/google-tools.md.
+// Three sub-APIs are grouped under one GoogleWorkspace: `mail` (Gmail),
+// `calendar` and `drive`. See docs/google-tools.md.
 
 // Result caps. The adapter bounds every list to a most-recent slice and does
 // not follow nextPageToken; the tool layer flags truncation (length >= cap) so
@@ -18,6 +18,7 @@ export const MAIL_DRAFTS_CAP = 20;
 export const CALENDAR_EVENTS_CAP = 50;
 // Per-calendar cap for the multi-calendar fan-out in listEvents.
 export const CALENDAR_PER_LIST_CAP = 25;
+export const DRIVE_SEARCH_CAP = 20;
 
 // Thrown by the REST adapter when the token provider yields null (Google not
 // connected, or a Clerk outage). The tool layer converts it to `{ error }` data
@@ -233,7 +234,58 @@ export interface CalendarApi {
   ): Promise<CalendarEvent>;
 }
 
+// --- Drive ---
+
+// A Drive file as the model sees it. Unlike Gmail labels (spoken by name
+// because a model cannot invent "Label_12"), Drive is addressed by ID: names
+// are not unique, so "the invoice" is ambiguous in a way the model cannot see.
+// Every id the model uses comes from a prior drive_search result.
+export interface DriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  // null for Google-native files (Docs/Sheets/Slides), which have no bytes.
+  byteSize: number | null;
+  modifiedAt: string;
+  webViewLink: string | null;
+  isFolder: boolean;
+}
+
+export interface DriveSearchParams {
+  // Matched against both the file name and its full text.
+  query?: string;
+  mimeType?: string;
+  folderId?: string;
+  trashed?: boolean;
+}
+
+export interface DriveDownload {
+  filename: string;
+  mimeType: string;
+  bytes: Uint8Array;
+}
+
+export interface DriveUploadInput {
+  filename: string;
+  mimeType: string;
+  bytes: Uint8Array;
+  folderId?: string;
+}
+
+export interface DriveApi {
+  search(params: DriveSearchParams): Promise<DriveFile[]>;
+  get(fileId: string): Promise<DriveFile>;
+  // Bytes for the Zero file store: binary files as they are, Google-native
+  // files exported (Docs/Slides as PDF, Sheets as CSV).
+  download(fileId: string): Promise<DriveDownload>;
+  upload(input: DriveUploadInput): Promise<DriveFile>;
+  createFolder(input: { name: string; parentId?: string }): Promise<DriveFile>;
+  // Reversible. Drive's permanent delete is deliberately not exposed.
+  trash(fileId: string, restore?: boolean): Promise<DriveFile>;
+}
+
 export interface GoogleWorkspace {
   mail: MailApi;
   calendar: CalendarApi;
+  drive: DriveApi;
 }

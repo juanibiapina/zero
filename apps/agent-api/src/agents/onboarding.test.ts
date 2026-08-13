@@ -85,4 +85,37 @@ describe("runOnboardingAgent", () => {
     expect(google.modifications).toEqual([]);
     expect(google.trashed).toEqual([]);
   });
+
+  it("does not expose any Drive tool", async () => {
+    const store = new MemoryStore();
+    seedTopic(store, "User", "identity");
+    pinTopic(store, "User", true);
+
+    // Onboarding gets read-only Gmail and nothing else: it must not be able to
+    // read, save, or change anything in the user's Drive.
+    const google = createMemoryGoogle({
+      driveFiles: [
+        {
+          id: "F1",
+          name: "passwords.txt",
+          mimeType: "text/plain",
+          byteSize: 10,
+          modifiedAt: "2026-08-01T10:00:00.000Z",
+          webViewLink: null,
+          isFolder: false,
+        },
+      ],
+    });
+    const model = scriptedModel([
+      { tools: [{ name: "drive_search", input: { query: "passwords" } }] },
+      { tools: [{ name: "drive_import", input: { fileId: "F1" } }] },
+      { tools: [{ name: "drive_trash", input: { fileId: "F1" } }] },
+      { text: "done" },
+    ]);
+
+    await runOnboardingAgent({ model, store, google, topicName: "User" });
+
+    expect(google.trashedFiles).toEqual([]);
+    expect(store.getTopic("User")?.body ?? "").not.toContain("passwords.txt");
+  });
 });

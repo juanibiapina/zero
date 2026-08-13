@@ -7,6 +7,10 @@ import type {
   CalendarEvent,
   CalendarSummary,
   CreateEventInput,
+  DriveDownload,
+  DriveFile,
+  DriveSearchParams,
+  DriveUploadInput,
   GoogleWorkspace,
   ListEventsParams,
   MailDraft,
@@ -38,6 +42,10 @@ export interface MemoryGoogleSeed {
   drafts?: MailDraftSummary[];
   calendars?: CalendarSummary[];
   events?: CalendarEvent[];
+  // Drive files the user already has, by id.
+  driveFiles?: DriveFile[];
+  // Bytes download returns, by file id.
+  driveBytes?: Record<string, Uint8Array>;
   // When true, every method throws GoogleNotConnectedError (simulates a user
   // who hasn't connected Google).
   notConnected?: boolean;
@@ -52,6 +60,9 @@ export interface MemoryGoogle extends GoogleWorkspace {
   trashed: { threadId: string; restore: boolean }[];
   savedDrafts: (SendMailInput & { draftId: string })[];
   sentDrafts: string[];
+  uploadedFiles: DriveUploadInput[];
+  createdFolders: { name: string; parentId?: string }[];
+  trashedFiles: { fileId: string; restore: boolean }[];
 }
 
 export const createMemoryGoogle = (
@@ -63,6 +74,12 @@ export const createMemoryGoogle = (
   const trashed: { threadId: string; restore: boolean }[] = [];
   const savedDrafts: (SendMailInput & { draftId: string })[] = [];
   const sentDrafts: string[] = [];
+  const uploadedFiles: DriveUploadInput[] = [];
+  const createdFolders: { name: string; parentId?: string }[] = [];
+  const trashedFiles: { fileId: string; restore: boolean }[] = [];
+  const driveFiles = new Map<string, DriveFile>(
+    (seed.driveFiles ?? []).map((f) => [f.id, f]),
+  );
   const userLabels = new Set(seed.labels ?? []);
   const threadLabels = new Map<string, string[]>(
     Object.entries(seed.threadLabels ?? {}),
@@ -99,6 +116,9 @@ export const createMemoryGoogle = (
     trashed,
     savedDrafts,
     sentDrafts,
+    uploadedFiles,
+    createdFolders,
+    trashedFiles,
     mail: {
       async search(): Promise<MailThreadSummary[]> {
         guard();
@@ -227,6 +247,69 @@ export const createMemoryGoogle = (
           id: `evt-${createdEvents.length}`,
           calendarId,
         };
+      },
+    },
+    drive: {
+      async search(params: DriveSearchParams): Promise<DriveFile[]> {
+        guard();
+        const all = [...driveFiles.values()];
+        if (!params.mimeType) return all;
+        return all.filter((f) => f.mimeType === params.mimeType);
+      },
+      async get(fileId: string): Promise<DriveFile> {
+        guard();
+        const file = driveFiles.get(fileId);
+        if (!file) throw new Error(`No Drive file with id ${fileId}.`);
+        return file;
+      },
+      async download(fileId: string): Promise<DriveDownload> {
+        guard();
+        const file = driveFiles.get(fileId);
+        if (!file) throw new Error(`No Drive file with id ${fileId}.`);
+        const bytes = seed.driveBytes?.[fileId];
+        if (!bytes) throw new Error(`"${file.name}" has no downloadable content.`);
+        return {
+          filename: file.name,
+          mimeType: file.mimeType,
+          bytes: bytes.slice(),
+        };
+      },
+      async upload(input: DriveUploadInput): Promise<DriveFile> {
+        guard();
+        uploadedFiles.push(input);
+        const file: DriveFile = {
+          id: `drive-${uploadedFiles.length}`,
+          name: input.filename,
+          mimeType: input.mimeType,
+          byteSize: input.bytes.length,
+          modifiedAt: "2026-01-01T00:00:00.000Z",
+          webViewLink: null,
+          isFolder: false,
+        };
+        driveFiles.set(file.id, file);
+        return file;
+      },
+      async createFolder({ name, parentId }): Promise<DriveFile> {
+        guard();
+        createdFolders.push({ name, parentId });
+        const folder: DriveFile = {
+          id: `folder-${createdFolders.length}`,
+          name,
+          mimeType: "application/vnd.google-apps.folder",
+          byteSize: null,
+          modifiedAt: "2026-01-01T00:00:00.000Z",
+          webViewLink: null,
+          isFolder: true,
+        };
+        driveFiles.set(folder.id, folder);
+        return folder;
+      },
+      async trash(fileId: string, restore = false): Promise<DriveFile> {
+        guard();
+        const file = driveFiles.get(fileId);
+        if (!file) throw new Error(`No Drive file with id ${fileId}.`);
+        trashedFiles.push({ fileId, restore });
+        return file;
       },
     },
   };

@@ -303,9 +303,10 @@ deduplicates an intact file or repairs a missing object. Migrated `att_*` rows
 retain their old `attachments/{clerkUserId}/...` object keys and get their sizes
 backfilled lazily from R2.
 
-Each file is capped at 20 MB (Telegram's getFile ceiling) and each user at 100 MB. Filename and MIME
+Each file is capped at 20 MB (Telegram's getFile ceiling is why it is not higher)
+and each user at 100 MB. Filename and MIME
 normalization, PDF signature validation, quota checks, listing, reads, and
-deletion all live behind the same store interface so Telegram and Gmail follow
+deletion all live behind the same store interface so Telegram, Gmail and Drive follow
 the same policy. File bytes never enter SQLite, topic text, durable messages, or
 ordinary tool results.
 

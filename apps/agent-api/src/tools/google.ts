@@ -1,8 +1,9 @@
-// Gmail + Calendar tools for the interface agent, built over the GoogleWorkspace
-// port. Reads need no confirmation; gmail_send and calendar_create_event are
-// side-effecting and gated by the prompt's confirmation policy. Failures come
-// back as `{ error }` data (never thrown) so the model can react — a
-// GoogleNotConnectedError becomes the "connect it in the Zero app" message.
+// Gmail, Calendar and Drive tools for the interface agent, built over the
+// GoogleWorkspace port. Reads need no confirmation; gmail_send,
+// calendar_create_event and drive_upload are side-effecting and gated by the
+// prompt's confirmation policy. Failures come back as `{ error }` data (never
+// thrown) so the model can react — a GoogleNotConnectedError becomes the
+// "connect it in the Zero app" message.
 //
 // Calendar tools close over the user's IANA timezone (already threaded to the
 // interface agent) so the model supplies local wall-clock times and the tool
@@ -19,6 +20,7 @@ import {
 } from "../agents/external-call";
 import {
   CALENDAR_EVENTS_CAP,
+  DRIVE_SEARCH_CAP,
   GoogleApiError,
   GoogleNotConnectedError,
   MAIL_DRAFTS_CAP,
@@ -363,6 +365,119 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
           return google.calendar.createEvent(event, calendarId);
         }),
       // Irreversible: a duplicate event is visible to every attendee.
+      externalWrite: true,
+    }),
+
+    drive_search: defineTool({
+      description:
+        "Find files in the user's Google Drive by name or content. Returns each " +
+        "file's id, name, type, size, and when it changed. Trashed files are " +
+        "excluded. Use the returned id with the other drive tools: Drive names " +
+        "are not unique, so never guess an id. Read-only.",
+      inputSchema: z.object({
+        query: z.string().optional(),
+        mimeType: z.string().optional(),
+        folderId: z.string().optional(),
+      }),
+      execute: ({ query, mimeType, folderId }) =>
+        guard("drive_search", async () => {
+          const files = await google.drive.search({ query, mimeType, folderId });
+          return { files, truncated: files.length >= DRIVE_SEARCH_CAP };
+        }),
+    }),
+
+    drive_import: defineTool({
+      description:
+        "Save a Drive file into the user's Zero files by file id, so it can be " +
+        "viewed, read with read_pdf, or sent. Google Docs and Slides are saved " +
+        "as PDF, Sheets as CSV. Returns metadata and a stable marker, never " +
+        "bytes. Saving the same file twice does not store it twice.",
+      inputSchema: z.object({ fileId: z.string() }),
+      execute: ({ fileId }) =>
+        guard("drive_import", async () => {
+          if (!files) throw new Error("File storage is unavailable.");
+          const download = await google.drive.download(fileId);
+          const file = await files.save({
+            filename: download.filename,
+            mimeType: download.mimeType,
+            bytes: download.bytes,
+          });
+          log("file_imported", {
+            source: "drive",
+            byte_count: file.byteSize ?? download.bytes.length,
+            mime_major: file.mimeType.split("/")[0],
+          });
+          return {
+            file: {
+              id: file.id,
+              filename: file.filename,
+              mimeType: file.mimeType,
+              byteSize: file.byteSize,
+              marker: renderFileMarker(file),
+            },
+          };
+        }),
+    }),
+
+    drive_create_folder: defineTool({
+      description:
+        "Create a folder in the user's Drive, optionally inside parentId. " +
+        "Returns the new folder's id, which drive_upload takes as folderId.",
+      inputSchema: z.object({
+        name: z.string(),
+        parentId: z.string().optional(),
+      }),
+      execute: ({ name, parentId }) =>
+        guard("drive_create_folder", () =>
+          google.drive.createFolder({ name, parentId }),
+        ),
+    }),
+
+    drive_trash: defineTool({
+      description:
+        "Move a Drive file to the trash, or restore it with restore: true. " +
+        "Reversible: nothing here deletes a Drive file permanently.",
+      inputSchema: z.object({
+        fileId: z.string(),
+        restore: z.boolean().optional(),
+      }),
+      execute: ({ fileId, restore }) =>
+        guard("drive_trash", async () => {
+          const file = await google.drive.trash(fileId, restore);
+          return { file, trashed: !restore };
+        }),
+    }),
+
+    drive_upload: defineTool({
+      description:
+        "Upload one of the user's stored Zero files to their Google Drive. " +
+        "fileId is a ZERO file id (from list_files or an import), not a Drive " +
+        "id. Only call after the user confirms which file and where it goes; " +
+        "uploading twice leaves two copies in their Drive.",
+      inputSchema: z.object({
+        fileId: z.string(),
+        name: z.string().optional(),
+        folderId: z.string().optional(),
+      }),
+      execute: ({ fileId, name, folderId }) =>
+        writeGuard("drive_upload", async () => {
+          // A missing file provably sent nothing, so it is reported as a
+          // completed non-effect rather than an unknown outcome.
+          if (!files) throw new ExternalCallNotSent("File storage is unavailable.");
+          const file = files.get(fileId);
+          if (!file) throw new ExternalCallNotSent(`No file found for id ${fileId}.`);
+          const bytes = await files.read(fileId);
+          if (!bytes) throw new ExternalCallNotSent(`No file found for id ${fileId}.`);
+          const uploaded = await google.drive.upload({
+            filename: name ?? file.filename,
+            mimeType: file.mimeType,
+            bytes,
+            folderId,
+          });
+          return { uploaded };
+        }),
+      // Irreversible in the sense that matters: a retry creates a second copy
+      // in the user's Drive, which only they can clean up.
       externalWrite: true,
     }),
   };
