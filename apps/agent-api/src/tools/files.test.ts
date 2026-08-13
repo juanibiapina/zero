@@ -60,14 +60,17 @@ describe("file tools", () => {
     const { files } = setup();
     const original = new Uint8Array(VIEW_IMAGE_RESIZE_THRESHOLD_BYTES + 1).fill(7);
     const saved = await files.save({ filename: "big.png", mimeType: "image/png", bytes: original });
-    const resize = vi.fn(async () => ({ bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" }));
+    const resize = vi.fn(async (_input: { bytes: Uint8Array; maxEdge: number }) => ({
+      bytes: new Uint8Array([1, 2, 3]),
+      mimeType: "image/jpeg",
+    }));
     const tool = buildFileTools({ files, resizer: { resize } }).view_image;
 
     const output = await tool.execute({ id: saved.id });
 
     // Compared by length, not by value: a deep equality over a megabyte of
     // bytes costs seconds and times the test out.
-    const call = resize.mock.calls[0]?.[0] as { bytes: Uint8Array; maxEdge: number };
+    const [call] = resize.mock.calls[0];
     expect(call.bytes.length).toBe(original.length);
     expect(call.maxEdge).toBe(VIEW_IMAGE_MAX_EDGE);
     expect(tool.toContent?.(output)).toEqual({ content: [{
