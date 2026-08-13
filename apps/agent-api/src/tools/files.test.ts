@@ -65,7 +65,11 @@ describe("file tools", () => {
 
     const output = await tool.execute({ id: saved.id });
 
-    expect(resize).toHaveBeenCalledWith({ bytes: original, maxEdge: VIEW_IMAGE_MAX_EDGE });
+    // Compared by length, not by value: a deep equality over a megabyte of
+    // bytes costs seconds and times the test out.
+    const call = resize.mock.calls[0]?.[0] as { bytes: Uint8Array; maxEdge: number };
+    expect(call.bytes.length).toBe(original.length);
+    expect(call.maxEdge).toBe(VIEW_IMAGE_MAX_EDGE);
     expect(tool.toContent?.(output)).toEqual({ content: [{
       type: "image",
       source: { type: "base64", media_type: "image/jpeg", data: "AQID" },
