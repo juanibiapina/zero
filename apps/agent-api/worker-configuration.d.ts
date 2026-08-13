@@ -7,6 +7,7 @@ interface __BaseEnv_Env {
 	ANALYTICS: AnalyticsEngineDataset;
 	AI_USAGE: AnalyticsEngineDataset;
 	AI: Ai;
+	IMAGES: ImagesBinding;
 	TELEGRAM_API_ROOT: "https://api.telegram.org";
 	CLOUDFLARE_ACCOUNT_ID: "4e04b64af4013414441c59014392bea0";
 	CLOUDFLARE_GATEWAY_ID: "zero";

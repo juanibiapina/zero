@@ -3,7 +3,13 @@ import { MemoryStore } from "../store/memory";
 import { createMemoryFileBlobs } from "../files/memory";
 import { createUserFileStore } from "../files/store";
 import { ExternalCallNotSent } from "../agents/external-call";
-import { buildFileTools, TelegramFileSendError } from "./files";
+import {
+  buildFileTools,
+  MAX_VIEW_IMAGE_BYTES,
+  TelegramFileSendError,
+  VIEW_IMAGE_MAX_EDGE,
+  VIEW_IMAGE_RESIZE_THRESHOLD_BYTES,
+} from "./files";
 
 const setup = () => {
   const files = createUserFileStore({
@@ -48,6 +54,57 @@ describe("file tools", () => {
       type: "image",
       source: { type: "base64", media_type: "image/png", data: "AQID" },
     }] });
+  });
+
+  it("view_image resizes an image too large to store, and shows the model what it stores", async () => {
+    const { files } = setup();
+    const original = new Uint8Array(VIEW_IMAGE_RESIZE_THRESHOLD_BYTES + 1).fill(7);
+    const saved = await files.save({ filename: "big.png", mimeType: "image/png", bytes: original });
+    const resize = vi.fn(async () => ({ bytes: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" }));
+    const tool = buildFileTools({ files, resizer: { resize } }).view_image;
+
+    const output = await tool.execute({ id: saved.id });
+
+    expect(resize).toHaveBeenCalledWith({ bytes: original, maxEdge: VIEW_IMAGE_MAX_EDGE });
+    expect(tool.toContent?.(output)).toEqual({ content: [{
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data: "AQID" },
+    }] });
+  });
+
+  it("view_image leaves a small image alone", async () => {
+    const { files } = setup();
+    const saved = await files.save({ filename: "small.png", mimeType: "image/png", bytes: new Uint8Array([1, 2, 3]) });
+    const resize = vi.fn();
+    const output = await execute(buildFileTools({ files, resizer: { resize } }), "view_image", { id: saved.id });
+    expect(resize).not.toHaveBeenCalled();
+    expect(output).toEqual({ data: "AQID", mediaType: "image/png" });
+  });
+
+  it("view_image reports a failed resize instead of returning an unstorable image", async () => {
+    const { files } = setup();
+    const bytes = new Uint8Array(VIEW_IMAGE_RESIZE_THRESHOLD_BYTES + 1).fill(7);
+    const saved = await files.save({ filename: "big.png", mimeType: "image/png", bytes });
+    const resizer = { resize: async () => { throw new Error("decode failed"); } };
+    const output = await execute(buildFileTools({ files, resizer }), "view_image", { id: saved.id });
+    expect(output).toEqual({ error: `Image ${saved.id} is too large to look at (1 MB) and could not be resized.` });
+  });
+
+  it("view_image refuses a large image when no resizer is wired", async () => {
+    const { files } = setup();
+    const bytes = new Uint8Array(VIEW_IMAGE_RESIZE_THRESHOLD_BYTES + 1).fill(7);
+    const saved = await files.save({ filename: "big.png", mimeType: "image/png", bytes });
+    const output = await execute(buildFileTools({ files }), "view_image", { id: saved.id });
+    expect(output).toEqual({ error: `Image ${saved.id} is too large to look at (1 MB) and could not be resized.` });
+  });
+
+  it("view_image refuses when even the resized image is too large to store", async () => {
+    const { files } = setup();
+    const bytes = new Uint8Array(VIEW_IMAGE_RESIZE_THRESHOLD_BYTES + 1).fill(7);
+    const saved = await files.save({ filename: "big.png", mimeType: "image/png", bytes });
+    const resizer = { resize: async () => ({ bytes: new Uint8Array(MAX_VIEW_IMAGE_BYTES + 1), mimeType: "image/jpeg" }) };
+    const output = await execute(buildFileTools({ files, resizer }), "view_image", { id: saved.id });
+    expect(output).toEqual({ error: `Image ${saved.id} is too large to look at (1 MB) and could not be resized.` });
   });
 
   it("send_file sends original metadata and classifies definite rejection", async () => {

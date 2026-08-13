@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-13: Send Zero a big photo and it looks at it instead of going silent. Large pictures used to leave your messages unanswered.
 - 2026-08-13: Zero now works with your Google Drive: it finds a file by name or by what's inside it, saves one so it can read it to you or send it on, puts a file of yours into a folder in your Drive, and moves things to the trash (never deletes them for good).
 - 2026-08-12: Zero can now tidy your inbox: archive a thread, file it under a label, mark it read or unread, star it, or move it to the trash. Ask it to make a label and it will.
 - 2026-08-12: Ask Zero to draft an email instead of sending one. The draft shows up in Gmail, in the right thread, and only goes out when you say so.

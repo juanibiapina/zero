@@ -28,6 +28,7 @@ import { TelegramFileSendError } from "../tools/files";
 import { createModel, createModelFactory } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
 import { createTavilyFetcher } from "../pagefetch/tavily";
+import { createCloudflareImageResizer } from "../images/cloudflare";
 import { createGoogleWorkspace } from "../google/rest";
 import { getGoogleAccessToken, memoizeTokenProvider } from "../google-token";
 import { runTurn as orchestrateTurn } from "../agents/orchestrator";
@@ -377,6 +378,7 @@ export class UserDO extends DurableObject<Env> {
     );
     const search = createBraveSearch(this.env.BRAVE_API_KEY);
     const fetcher = createTavilyFetcher(this.env.TAVILY_API_KEY);
+    const resizer = createCloudflareImageResizer(this.env.IMAGES);
     // Memoized Google token provider: the first Google tool call mints a token
     // via Clerk and caches the promise for the turn; turns that never touch
     // Google make zero Clerk calls. A ~1h token outlives any turn.
@@ -463,6 +465,7 @@ export class UserDO extends DurableObject<Env> {
         google,
         files,
         sendFile,
+        resizer,
         schedules,
         onScheduleChanged,
         chatId,

@@ -31,6 +31,7 @@ import type { WebSearch } from "../websearch/types";
 import type { PageFetcher } from "../pagefetch/types";
 import type { GoogleWorkspace } from "../google/types";
 import type { StoredFile, UserFileStore } from "../files/types";
+import type { ImageResizer } from "../images/types";
 import type { ScheduleBook } from "../schedules/types";
 import {
   interfaceContext,
@@ -118,6 +119,7 @@ export interface InterfaceAgentInput {
   // when these are absent so the cached tool schema stays stable.
   files?: UserFileStore;
   sendFile?: (file: StoredFile, bytes: Uint8Array) => Promise<void>;
+  resizer?: ImageResizer;
   // What the user has asked to happen later, bound to this conversation. Tools
   // stay registered when it is absent so the cached tool schema stays stable.
   schedules?: ScheduleBook;
@@ -318,6 +320,7 @@ export const runInterfaceAgent = async (
     ...buildFileTools({
       files: input.files,
       sendFile: input.sendFile,
+      resizer: input.resizer,
     }),
     // Registered unconditionally, same reason. Given to the interface agent
     // only: the writer agent cannot message the user, so it must not be able

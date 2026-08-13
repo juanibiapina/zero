@@ -1,12 +1,30 @@
 import { z } from "zod";
 import { defineTool, type AgentToolSet } from "../agents/protocol";
 import { ExternalCallNotSent, isProvableRejection } from "../agents/external-call";
-import { fmtErr, logError } from "../log";
+import { fmtErr, log, logError } from "../log";
+import type { ImageResizer } from "../images/types";
 import { readPdfText, type PdfTextResult } from "../files/pdf";
 import { renderFileMarker } from "../files/marker";
 import type { StoredFile, UserFileStore } from "../files/types";
 
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+// A tool result is stored verbatim and replayed verbatim on every later turn,
+// and a Durable Object SQLite row holds at most 2 MB, so an image the model
+// sees must be an image the row can carry. `view_image` therefore hands over a
+// viewing copy, not the original: anything above the threshold is resized, and
+// what the model sees is exactly what gets stored.
+//
+// A 6.3 MB photo used to become ~8.4 MB of base64, which SQLite rejected with
+// SQLITE_TOOBIG and killed every turn in the thread (2026-08-12). The original
+// file is untouched and `send_file` still sends it at full size.
+export const VIEW_IMAGE_RESIZE_THRESHOLD_BYTES = 1024 * 1024;
+// Models downscale above ~1568 px on the long edge anyway, so anything larger
+// costs bytes and tokens without adding detail.
+export const VIEW_IMAGE_MAX_EDGE = 1568;
+// Hard ceiling on what may leave this tool, base64 included (~4/3 of this),
+// with generous headroom under the 2 MB row limit.
+export const MAX_VIEW_IMAGE_BYTES = 1024 * 1024;
 
 export class TelegramFileSendError extends Error {
   constructor(readonly status: number, message: string) {
@@ -19,6 +37,9 @@ export interface FileToolDeps {
   files?: UserFileStore;
   readPdf?: typeof readPdfText;
   sendFile?: (file: StoredFile, bytes: Uint8Array) => Promise<void>;
+  // Absent in tests and wherever the Images binding is unavailable; a large
+  // image is then refused rather than returned in a form nothing can store.
+  resizer?: ImageResizer;
 }
 
 const metadata = (file: StoredFile) => ({
@@ -30,11 +51,20 @@ const metadata = (file: StoredFile) => ({
   marker: renderFileMarker(file),
 });
 
+// Chunked on purpose: appending one character at a time builds a multi-megabyte
+// string byte by byte, which is real memory pressure inside a Durable Object.
+const BASE64_CHUNK = 8192;
+
 const toBase64 = (bytes: Uint8Array): string => {
   let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK));
+  }
   return btoa(binary);
 };
+
+const megabytes = (bytes: number): number =>
+  Math.round((bytes / (1024 * 1024)) * 10) / 10;
 
 type ViewOutput = { data: string; mediaType: string } | { error: string };
 type PdfOutput = { text: string } | { error: string };
@@ -51,7 +81,7 @@ const formatPdfText = (filename: string, result: PdfTextResult): string => {
 };
 
 export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
-  const { files, readPdf = readPdfText, sendFile } = deps;
+  const { files, readPdf = readPdfText, sendFile, resizer } = deps;
 
   const viewImage = defineTool({
     description:
@@ -66,7 +96,45 @@ export const buildFileTools = (deps: FileToolDeps): AgentToolSet => {
       }
       const bytes = await files?.read(id);
       if (!bytes) return { error: `No file found for id ${id}.` };
-      return { data: toBase64(bytes), mediaType: file.mimeType };
+      if (bytes.length <= VIEW_IMAGE_RESIZE_THRESHOLD_BYTES) {
+        return { data: toBase64(bytes), mediaType: file.mimeType };
+      }
+      const tooLarge: ViewOutput = {
+        error: `Image ${id} is too large to look at (${megabytes(bytes.length)} MB) and could not be resized.`,
+      };
+      if (!resizer) {
+        logError("image_resize_failed", {
+          reason: "resizer_unwired",
+          byte_count: bytes.length,
+        });
+        return tooLarge;
+      }
+      const started = Date.now();
+      try {
+        const resized = await resizer.resize({ bytes, maxEdge: VIEW_IMAGE_MAX_EDGE });
+        if (resized.bytes.length > MAX_VIEW_IMAGE_BYTES) {
+          logError("image_resize_failed", {
+            reason: "still_too_large",
+            byte_count: bytes.length,
+            resized_byte_count: resized.bytes.length,
+          });
+          return tooLarge;
+        }
+        log("image_resized", {
+          byte_count: bytes.length,
+          resized_byte_count: resized.bytes.length,
+          duration_ms: Date.now() - started,
+        });
+        return { data: toBase64(resized.bytes), mediaType: resized.mimeType };
+      } catch (error) {
+        logError("image_resize_failed", {
+          reason: "resizer_threw",
+          byte_count: bytes.length,
+          duration_ms: Date.now() - started,
+          error: fmtErr(error),
+        });
+        return tooLarge;
+      }
     },
     toContent: (raw: unknown) => {
       const output = raw as ViewOutput;

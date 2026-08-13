@@ -57,6 +57,11 @@
   "ai": {
     "binding": "AI"
   },
+  // Resizes a photo down to a viewing copy small enough to store in a
+  // conversation row before the model ever sees it (see tools/files.ts).
+  "images": {
+    "binding": "IMAGES"
+  },
   "upload_source_maps": true,
   "kv_namespaces": [
     {
