@@ -264,7 +264,12 @@ describe("Read and resolve API", () => {
   /** Ingest one error under `orgId` via the API key and return the issue id. */
   async function seedIssue(
     key: string,
-    body: { project: string; message: string; stack?: string },
+    body: {
+      project: string;
+      message: string;
+      stack?: string;
+      context?: Record<string, unknown>;
+    },
   ): Promise<string> {
     const res = await SELF.default.fetch(
       "https://api.zeroapps.dev/errors/v1/errors",
@@ -397,6 +402,54 @@ describe("Read and resolve API", () => {
       typedEnv,
     );
     expect(res.status).toBe(400);
+  });
+
+  it("returns issue detail over /v1 with the API key", async () => {
+    const key = await putKey("org_v1_detail", "u");
+    const id = await seedIssue(key, {
+      project: "web",
+      message: "v1 detail",
+      stack: "E\n    at d (/d:1:1)",
+      context: { route: "/api/trips/1" },
+    });
+
+    const res = await SELF.default.fetch(
+      `https://api.zeroapps.dev/errors/v1/issues/${id}`,
+      authed(key),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      issue: { id: string; title: string; count: number };
+      events: { context: Record<string, unknown> | null }[];
+    };
+    expect(body.issue.id).toBe(id);
+    expect(body.issue.title).toBe("v1 detail");
+    expect(body.events[0]?.context).toEqual({ route: "/api/trips/1" });
+  });
+
+  it("404s an unknown issue detail over /v1", async () => {
+    const key = await putKey("org_v1_detail_missing", "u");
+    const res = await SELF.default.fetch(
+      "https://api.zeroapps.dev/errors/v1/issues/nope",
+      authed(key),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("cannot read another org's issue detail over /v1", async () => {
+    const keyA = await putKey("org_v1_detail_a", "ua");
+    const keyB = await putKey("org_v1_detail_b", "ub");
+    const id = await seedIssue(keyA, {
+      project: "web",
+      message: "A only detail",
+      stack: "E\n    at a (/a:1:1)",
+    });
+
+    const res = await SELF.default.fetch(
+      `https://api.zeroapps.dev/errors/v1/issues/${id}`,
+      authed(keyB),
+    );
+    expect(res.status).toBe(404);
   });
 
   it("resolves and reopens an issue over /v1 with the API key", async () => {

@@ -3,9 +3,9 @@
  * Issue Routes (read + resolve + delete)
  * ============================================================================
  *
- * List and delete are exposed on both /v1 (API key) and /api (Clerk session).
- * Detail and status changes are dashboard-only (/api). The org is resolved by
- * the app middleware; handlers only touch the org's ErrorsDO.
+ * Every read and write here is exposed on both /v1 (API key) and /api (Clerk
+ * session), so the CLI never has to send a user to the browser. The org is
+ * resolved by the app middleware; handlers only touch the org's ErrorsDO.
  */
 
 import { Hono, type Context } from "hono";
@@ -60,17 +60,11 @@ export const createIssuesRouter = () => {
     return c.json({ issue }, 200);
   };
 
-  app.get("/errors/v1/issues", list);
-  app.get("/api/errors/issues", list);
-
-  app.delete("/errors/v1/issues/:id", (c) => remove(c, c.req.param("id")));
-  app.delete("/api/errors/issues/:id", (c) => remove(c, c.req.param("id")));
-
-  app.patch("/errors/v1/issues/:id", (c) => setStatus(c, c.req.param("id")));
-  app.patch("/api/errors/issues/:id", (c) => setStatus(c, c.req.param("id")));
-
-  app.get("/api/errors/issues/:id", async (c) => {
-    const result = await getErrorsDO(c).getIssue(c.req.param("id"));
+  const detail = async (
+    c: Context<{ Bindings: Env; Variables: Variables }>,
+    id: string,
+  ) => {
+    const result = await getErrorsDO(c).getIssue(id);
     if (!result) {
       return c.json({ error: "Issue not found" }, 404);
     }
@@ -78,7 +72,19 @@ export const createIssuesRouter = () => {
       { issue: result.issue, events: result.events.map(toEventSummary) },
       200,
     );
-  });
+  };
+
+  app.get("/errors/v1/issues", list);
+  app.get("/api/errors/issues", list);
+
+  app.get("/errors/v1/issues/:id", (c) => detail(c, c.req.param("id")));
+  app.get("/api/errors/issues/:id", (c) => detail(c, c.req.param("id")));
+
+  app.delete("/errors/v1/issues/:id", (c) => remove(c, c.req.param("id")));
+  app.delete("/api/errors/issues/:id", (c) => remove(c, c.req.param("id")));
+
+  app.patch("/errors/v1/issues/:id", (c) => setStatus(c, c.req.param("id")));
+  app.patch("/api/errors/issues/:id", (c) => setStatus(c, c.req.param("id")));
 
   return app;
 };
