@@ -165,9 +165,13 @@ export class UserDO extends DurableObject<Env> {
     // it at a safe point, so a message arriving while the agent is mid-run is
     // never spliced into a request the model is already answering.
     this.store.enqueuePendingMessage(conversationId, text);
-    if ((await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now());
-    }
+    // Always arm the alarm when a new message arrives: a new message means the
+    // user is active and the turn should run now. Setting the alarm to Date.now()
+    // overrides any stale backoff that was scheduled further in the future, and
+    // is a no-op relative to an alarm that is already due. This also recovers
+    // from phantom alarms (getAlarm() returns non-null but the alarm never fires)
+    // which can happen after a DO migration during a deploy.
+    await this.ctx.storage.setAlarm(Date.now());
     // The conversation is active again: push its idle-learning deadline out to
     // now + 1h. After the durable enqueue, never after the turn — an LLM failure
     // must not make an active conversation look idle. Best-effort: a schedule
