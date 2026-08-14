@@ -35,6 +35,11 @@ jobs:
   build:
     name: Build & Validate
     runs-on: ubuntu-latest
+    # The job proves its own identity to ZeroVault instead of holding a key.
+    # `zero ci trust list` shows what this repository is allowed to do.
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -52,8 +57,6 @@ jobs:
 
       - name: Fetch secrets from ZeroVault
         run: bin/fetch-secrets
-        env:
-          ZERO_API_KEY: ${{ secrets.ZERO_API_KEY }}
 
       - name: Build application
         run: pnpm run build
