@@ -1,7 +1,7 @@
 name: Publish CLI
 
 # The filename is load-bearing: npm's trusted publisher entry for
-# zerovault-cli names `publish-cli.yml`. Renaming this file breaks publishing.
+# @zeroapps/cli names `publish-cli.yml`. Renaming this file breaks publishing.
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish zerovault-cli
+    name: Publish @zeroapps/cli
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -33,7 +33,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Publish
-        working-directory: packages/zerovault-cli
+        working-directory: packages/zero-cli
         run: |
           pkg=$(node -p "require('./package.json').version")
           [ "$pkg" = "${GITHUB_REF_NAME#v}" ] \

@@ -1,16 +1,16 @@
 {
-  "name": "zerovault-cli",
-  "version": "0.2.3",
-  "description": "CLI for ZeroVault secrets manager",
+  "name": "@zeroapps/cli",
+  "version": "0.3.0",
+  "description": "CLI for Zero: ZeroVault secrets and ZeroErrors issues",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/juanibiapina/zero",
-    "directory": "packages/zerovault-cli"
+    "url": "git+https://github.com/juanibiapina/zero.git",
+    "directory": "packages/zero-cli"
   },
   "bin": {
-    "zv": "./dist/index.js"
+    "zero": "dist/index.js"
   },
   "files": [
     "dist",

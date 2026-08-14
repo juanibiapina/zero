@@ -30,5 +30,5 @@ project and are synced with `bin/sync-secrets-to-cloudflare`.
 The old `zeroerrors-api` Worker, its `ErrorsDO` class, and its custom domains
 are retired. The unified dashboard Worker owns the active Errors Durable Object.
 
-`vault.apps.juanibiapina.dev` is retired. Use `zerovault-cli@0.2.2` or later,
-which defaults to `api.zeroapps.dev/vault`.
+`vault.apps.juanibiapina.dev` is retired. Use `@zeroapps/cli` (command `zero`),
+which defaults to the `api.zeroapps.dev` origin and appends `/vault/v1` itself.

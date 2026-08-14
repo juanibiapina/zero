@@ -12,7 +12,7 @@
  * (production) and the in-memory fake (tests) are the two adapters.
  */
 
-import { ApiError } from "./client.js";
+import { ApiError } from "./clients/http.js";
 
 export interface VaultExport {
   version: 1;

@@ -1,0 +1,104 @@
+---
+title: Zero CLI
+description: Install the zero CLI, authenticate it, and manage API keys from your terminal.
+---
+
+`zero` is one command line for every Zero product, published as `@zeroapps/cli`
+on npm:
+
+- `zero vault …` — [projects, environments and secrets](/vault/cli/)
+- `zero errors …` — [error reports and issues](/errors/cli/)
+- `zero keys …` — the organization-scoped API key both products accept
+
+## Run it
+
+The current published version is `0.3.0`. Run it without installing:
+
+```bash
+pnpm dlx @zeroapps/cli@0.3.0 --help
+```
+
+Install it globally to drop the `pnpm dlx` prefix and run `zero …` directly:
+
+```bash
+npm i -g @zeroapps/cli@0.3.0
+```
+
+## Authenticate
+
+The CLI needs an API key. Create one in the dashboard under **API keys** (see
+[API keys](/account/api-keys/)) and copy it. The simplest way to pass it is an
+environment variable:
+
+```bash
+export ZERO_API_KEY=zv_your_key_here
+zero whoami
+```
+
+`whoami` prints your user and organization IDs, which confirms the key works:
+
+```
+User ID: user_…
+Org ID: org_…
+```
+
+The key is resolved in this order, first match wins:
+
+1. `--api-key` flag
+2. a directory-bound context (see below)
+3. the `ZERO_API_KEY` environment variable
+
+The API base URL defaults to `https://api.zeroapps.dev`. It is a bare origin: the
+CLI appends `/vault/v1` or `/errors/v1` itself. Override it with `--base-url` or
+`ZERO_API_URL` only if you target a different instance, and leave off any product
+path.
+
+### Contexts (optional)
+
+If you juggle several keys or organizations, save them as named contexts instead
+of exporting the variable. Contexts live in `~/.config/zero/config.json`
+(mode 0600, since it holds plaintext keys).
+
+```bash
+zero context add work --api-key zv_your_key_here
+zero context use work        # binds the current directory to this context
+zero context current         # prints the active context name
+zero context list
+```
+
+`zero context use` binds the directory you run it in (and its subdirectories) to
+that context, so `zero` there uses that key without the environment variable.
+
+## Manage API keys
+
+Once authenticated, the CLI creates and revokes the same organization-scoped keys
+as the dashboard. Your first key still has to come from the dashboard, since
+`zero keys` needs a key to authenticate with.
+
+```bash
+zero keys create -l ci            # prints the new key once; save it
+zero keys list                    # id, prefix, label, created date
+zero keys revoke <id>             # revoke by id from the list
+```
+
+A created key is shown once, same as in the dashboard. Save it immediately; if you
+lose it, revoke it and create another.
+
+## Upgrading from `zv`
+
+`zero` replaces the old `zv` CLI outright. There is no alias and nothing carries
+over:
+
+- Vault commands moved under `zero vault` (`zv secrets list` is now
+  `zero vault secrets list`). Flags are unchanged.
+- `ZEROVAULT_API_KEY` and `ZEROVAULT_API_URL` are not read. Export `ZERO_API_KEY`
+  and `ZERO_API_URL` instead.
+- `ZERO_API_URL` takes a bare origin. A `zv`-era value ending in `/vault` will
+  produce 404s.
+- Contexts saved in `~/.config/zerovault/config.json` are not read. Re-add them
+  with `zero context add`.
+
+## Next
+
+- [Vault commands](/vault/cli/) for projects, environments and secrets.
+- [Errors commands](/errors/cli/) for reports and issues.

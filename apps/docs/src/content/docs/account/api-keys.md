@@ -29,26 +29,26 @@ only keeps the first and last few characters so you can tell your keys apart.
 
 ## Use a key
 
-Most tools read the key from the `ZEROVAULT_API_KEY` environment variable:
+Most tools read the key from the `ZERO_API_KEY` environment variable:
 
 ```bash
-export ZEROVAULT_API_KEY=zv_your_key_here
+export ZERO_API_KEY=zv_your_key_here
 ```
 
 The API takes it as a bearer token:
 
 ```bash
 curl -sS https://api.zeroapps.dev/vault/v1/projects \
-  -H "authorization: Bearer $ZEROVAULT_API_KEY"
+  -H "authorization: Bearer $ZERO_API_KEY"
 ```
 
 From there:
 
-- [Load secrets](/vault/loading-secrets/) into a process or CI job with the `zv`
-  CLI.
+- [Load secrets](/vault/loading-secrets/) into a process or CI job with the
+  `zero` CLI.
 - [Send an error report](/errors/getting-started/) to the ZeroErrors ingest
   endpoint.
-- [Use the CLI](/vault/cli/), which also accepts `--api-key` or a
+- [Use the CLI](/cli/overview/), which also accepts `--api-key` or a
   directory-bound context instead of the environment variable.
 
 ## Rotate or revoke a key
@@ -63,13 +63,13 @@ a key you lost.
 
 ## Manage keys from the CLI
 
-Once you have one key, `zv` creates and revokes the rest:
+Once you have one key, `zero` creates and revokes the rest:
 
 ```bash
-zv keys create -l ci     # prints the new key once; save it
-zv keys list             # id, prefix, label, created date
-zv keys revoke <id>      # revoke by id from the list
+zero keys create -l ci     # prints the new key once; save it
+zero keys list             # id, prefix, label, created date
+zero keys revoke <id>      # revoke by id from the list
 ```
 
-Your first key still has to come from the dashboard, because `zv keys` needs a
-key to authenticate with. See the [CLI reference](/vault/cli/).
+Your first key still has to come from the dashboard, because `zero keys` needs a
+key to authenticate with. See the [CLI reference](/cli/overview/).

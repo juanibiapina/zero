@@ -13,12 +13,12 @@ with the [CLI](/vault/cli/) and hand the result to `wrangler`.
 Download the environment as JSON and pipe it into `wrangler secret bulk`:
 
 ```bash
-zv secrets download -p demo -e production -f json -o secrets.json
+zero vault secrets download -p demo -e production -f json -o secrets.json
 npx wrangler secret bulk secrets.json
 rm secrets.json
 ```
 
-`zv secrets download -f json` emits a flat `{ "KEY": "VALUE" }` object, which is
+`zero vault secrets download -f json` emits a flat `{ "KEY": "VALUE" }` object, which is
 exactly the shape `wrangler secret bulk` reads. Delete the file afterward; it
 holds plaintext secrets.
 

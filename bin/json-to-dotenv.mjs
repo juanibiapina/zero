@@ -7,7 +7,7 @@
 //   - multiline values  -> double-quoted with \n/\r escapes (single line)
 //   - everything else    -> raw, unquoted (preserves JSON like {"id":1})
 //
-// Used by bin/fetch-secrets: `zv ... --format json | bin/json-to-dotenv.mjs`.
+// Used by bin/fetch-secrets: `zero vault secrets download ... --format json | bin/json-to-dotenv.mjs`.
 
 let input = "";
 process.stdin.setEncoding("utf8");

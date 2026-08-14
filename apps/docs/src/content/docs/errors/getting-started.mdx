@@ -16,7 +16,7 @@ One key authorizes both ZeroErrors and ZeroVault. See
 [API keys](/account/api-keys/) for scope, rotation, and revoking.
 
 ```bash
-export ZEROVAULT_API_KEY=zv_your_key_here
+export ZERO_API_KEY=zv_your_key_here
 ```
 
 ## 2. Send your first error
@@ -25,7 +25,7 @@ POST a report to the ingest endpoint:
 
 ```bash
 curl -sS -X POST https://api.zeroapps.dev/errors/v1/errors \
-  -H "authorization: Bearer $ZEROVAULT_API_KEY" \
+  -H "authorization: Bearer $ZERO_API_KEY" \
   -H "content-type: application/json" \
   -d '{"project":"docs-demo","message":"Hello from getting-started","level":"info"}'
 ```
@@ -57,10 +57,10 @@ Over the API, list the project to get the id, then delete it:
 
 ```bash
 curl -sS "https://api.zeroapps.dev/errors/v1/issues?project=docs-demo" \
-  -H "authorization: Bearer $ZEROVAULT_API_KEY"
+  -H "authorization: Bearer $ZERO_API_KEY"
 
 curl -sS -X DELETE https://api.zeroapps.dev/errors/v1/issues/$ISSUE_ID \
-  -H "authorization: Bearer $ZEROVAULT_API_KEY"
+  -H "authorization: Bearer $ZERO_API_KEY"
 ```
 
 The delete returns `204` with an empty body. Since `docs-demo` had only this one

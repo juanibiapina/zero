@@ -18,11 +18,11 @@ let dir: string;
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "zv-config-"));
-  process.env.ZEROVAULT_CONFIG = path.join(dir, "config.json");
+  process.env.ZERO_CONFIG = path.join(dir, "config.json");
 });
 
 afterEach(() => {
-  delete process.env.ZEROVAULT_CONFIG;
+  delete process.env.ZERO_CONFIG;
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -46,12 +46,12 @@ describe("loadConfig / saveConfig", () => {
 
   it("writes the file with mode 0600", () => {
     saveConfig(addContext(loadConfig(), "work", { apiKey: "zv_work" }));
-    const mode = fs.statSync(process.env.ZEROVAULT_CONFIG!).mode & 0o777;
+    const mode = fs.statSync(process.env.ZERO_CONFIG!).mode & 0o777;
     expect(mode).toBe(0o600);
   });
 
   it("throws a clear error on malformed JSON", () => {
-    fs.writeFileSync(process.env.ZEROVAULT_CONFIG!, "{ not json");
+    fs.writeFileSync(process.env.ZERO_CONFIG!, "{ not json");
     expect(() => loadConfig()).toThrow(/malformed config/i);
   });
 });
@@ -183,14 +183,27 @@ describe("resolveAuth precedence", () => {
     expect(resolveAuth({ flags: {}, env: {}, context: null, defaultBaseUrl: DEFAULT })).toBeNull();
   });
 
-  it("defaults to the canonical console host when nothing overrides it", () => {
-    expect(DEFAULT_BASE_URL).toBe("https://api.zeroapps.dev/vault");
+  it("defaults to the product-neutral API origin when nothing overrides it", () => {
+    expect(DEFAULT_BASE_URL).toBe("https://api.zeroapps.dev");
     const auth = resolveAuth({
       flags: {},
       env: { apiKey: "env_key" },
       context: null,
       defaultBaseUrl: DEFAULT_BASE_URL,
     });
-    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://api.zeroapps.dev/vault" });
+    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://api.zeroapps.dev" });
+  });
+
+  it("passes a /vault-suffixed base URL through verbatim", () => {
+    // The CLI deliberately does not rewrite base URLs: a `zv`-era
+    // `https://api.zeroapps.dev/vault` is a user error that shows up as 404s,
+    // not something to paper over.
+    const auth = resolveAuth({
+      flags: {},
+      env: { apiKey: "env_key", apiUrl: "https://api.zeroapps.dev/vault" },
+      context: null,
+      defaultBaseUrl: DEFAULT_BASE_URL,
+    });
+    expect(auth?.baseUrl).toBe("https://api.zeroapps.dev/vault");
   });
 });

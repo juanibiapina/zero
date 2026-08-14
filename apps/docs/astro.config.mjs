@@ -12,11 +12,15 @@ export default defineConfig({
       plugins: [starlightLlmsTxt(), starlightPageActions()],
       sidebar: [
         {
+          label: "CLI",
+          items: [{ label: "Overview", slug: "cli/overview" }],
+        },
+        {
           label: "ZeroVault",
           items: [
             { label: "Overview", slug: "vault/overview" },
             { label: "Getting started", slug: "vault/getting-started" },
-            { label: "CLI", slug: "vault/cli" },
+            { label: "Vault commands", slug: "vault/cli" },
             { label: "Loading secrets", slug: "vault/loading-secrets" },
             { label: "Cloudflare Workers", slug: "vault/workers" },
           ],
@@ -26,6 +30,7 @@ export default defineConfig({
           items: [
             { label: "Overview", slug: "errors/overview" },
             { label: "Getting started", slug: "errors/getting-started" },
+            { label: "Errors commands", slug: "errors/cli" },
             { label: "Reporter", slug: "errors/reporter" },
             { label: "Cloudflare Workers", slug: "errors/worker-integration" },
           ],

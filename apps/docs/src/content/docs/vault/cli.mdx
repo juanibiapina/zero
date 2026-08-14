@@ -1,98 +1,46 @@
 ---
-title: ZeroVault CLI
-description: Install and use the zv CLI to manage secrets from your terminal.
+title: Vault commands
+description: Manage projects, environments and secrets from your terminal with zero vault.
 ---
 
-`zv` is the ZeroVault command-line tool, published as `zerovault-cli` on npm. It
-manages projects, environments, secrets, and API keys. It talks to ZeroVault
-only; ZeroErrors has no CLI.
+`zero vault …` manages projects, environments and secrets. Install the CLI and
+set up your key first: see [Zero CLI](/cli/overview/).
 
-## Run it
-
-The current published version is `0.2.3`. Run it without installing:
-
-```bash
-pnpm dlx zerovault-cli@0.2.3 --help
-```
-
-The command is `zv`. Install it globally to drop the `pnpm dlx` prefix and run
-`zv …` directly:
-
-```bash
-npm i -g zerovault-cli@0.2.3
-```
-
-## Authenticate
-
-The CLI needs an API key. Create one in the dashboard under **API keys** (see
-[API keys](/account/api-keys/)) and copy it. The simplest way to pass it is an
-environment variable:
-
-```bash
-export ZEROVAULT_API_KEY=zv_your_key_here
-zv whoami
-```
-
-`whoami` prints your user and organization IDs, which confirms the key works:
-
-```
-User ID: user_…
-Org ID: org_…
-```
-
-The key is resolved in this order, first match wins:
-
-1. `--api-key` flag
-2. a directory-bound context (see below)
-3. the `ZEROVAULT_API_KEY` environment variable
-
-The API base URL defaults to `https://api.zeroapps.dev/vault`. Override it with
-`--base-url` or `ZEROVAULT_API_URL` only if you target a different instance.
-
-### Contexts (optional)
-
-If you juggle several keys or organizations, save them as named contexts instead
-of exporting the variable. Contexts live in `~/.config/zerovault/config.json`
-(mode 0600, since it holds plaintext keys).
-
-```bash
-zv context add work --api-key zv_your_key_here
-zv context use work        # binds the current directory to this context
-zv context current         # prints the active context name
-zv context list
-```
-
-`zv context use` binds the directory you run it in (and its subdirectories) to
-that context, so `zv` there uses that key without the environment variable.
-
-## Manage secrets
+## Projects and environments
 
 Projects start with `development` and `production` environments.
 
 ```bash
-zv projects create demo
-zv projects list
+zero vault projects create demo
+zero vault projects list
 
-zv secrets set API_TOKEN=abc123 -p demo -e development
-zv secrets list  -p demo -e development     # values shown masked
-zv secrets get   API_TOKEN -p demo -e development   # prints the value
+zero vault env list -p demo
+zero vault env create staging -p demo
 ```
 
-`zv secrets set` is create-or-update; run it again with the same key to change
-the value. Set several at once by passing more `KEY=VALUE` pairs. Delete a secret
-with:
+## Manage secrets
 
 ```bash
-zv secrets delete API_TOKEN -p demo -e development
+zero vault secrets set API_TOKEN=abc123 -p demo -e development
+zero vault secrets list  -p demo -e development     # values shown masked
+zero vault secrets get   API_TOKEN -p demo -e development   # prints the value
+```
+
+`zero vault secrets set` is create-or-update; run it again with the same key to
+change the value. Set several at once by passing more `KEY=VALUE` pairs. Delete a
+secret with:
+
+```bash
+zero vault secrets delete API_TOKEN -p demo -e development
 ```
 
 ## Download secrets
 
-`zv secrets download` writes an environment's secrets in the format you ask for
-(`env`, `json`, `yaml`, or `shell`), to stdout or a file with `-o`.
+`zero vault secrets download` writes an environment's secrets in the format you
+ask for (`env`, `json`, `yaml`, or `shell`), to stdout or a file with `-o`.
 
 ```bash
-zv secrets download -p demo -e development -f env
+zero vault secrets download -p demo -e development -f env
 ```
 
 ```
@@ -105,29 +53,14 @@ flat `{ "KEY": "VALUE" }` object, and `-f yaml` a `KEY: "VALUE"` list. See
 [Loading secrets](/vault/loading-secrets/) for pulling an environment into a
 process or CI job.
 
-## Manage API keys
-
-Once authenticated, the CLI creates and revokes the same organization-scoped keys
-as the dashboard. Your first key still has to come from the dashboard, since
-`zv keys` needs a key to authenticate with.
-
-```bash
-zv keys create -l ci            # prints the new key once; save it
-zv keys list                    # id, prefix, label, created date
-zv keys revoke <id>             # revoke by id from the list
-```
-
-A created key is shown once, same as in the dashboard. Save it immediately; if you
-lose it, revoke it and create another.
-
 ## Back up the whole vault
 
-`zv export` dumps every project and secret across your organization as plaintext
-JSON, and `zv import <file>` restores it. Because the file is plaintext, delete
-it as soon as you are done.
+`zero vault export` dumps every project and secret across your organization as
+plaintext JSON, and `zero vault import <file>` restores it. Because the file is
+plaintext, delete it as soon as you are done.
 
 ```bash
-zv export -o vault-backup.json
+zero vault export -o vault-backup.json
 ```
 
 ## Next

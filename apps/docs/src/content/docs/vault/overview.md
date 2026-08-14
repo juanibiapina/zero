@@ -5,7 +5,7 @@ description: The ZeroVault object model and where things live.
 
 ZeroVault stores secrets for your applications and serves them to any process, CI
 job, or platform at deploy and runtime. You read and write them from the
-dashboard, the API, or the `zv` CLI.
+dashboard, the API, or the `zero` CLI.
 
 ## Object model
 
@@ -34,12 +34,12 @@ Organization
   [API keys](/account/api-keys/).
 - **Public API:** `https://api.zeroapps.dev/vault/v1`, Bearer-authenticated with
   a `zv_…` key.
-- **CLI:** `zv`, published as `zerovault-cli` on npm.
+- **CLI:** `zero vault …`, published as `@zeroapps/cli` on npm.
 
 ## Next
 
 - [Getting started](/vault/getting-started/): the dashboard walkthrough.
-- [CLI](/vault/cli/): install `zv` and script your secrets.
+- [Vault commands](/vault/cli/): script your secrets with `zero vault`.
 - [Loading secrets](/vault/loading-secrets/): pull secrets into any process or CI
   job.
 - [Cloudflare Workers](/vault/workers/): pull secrets into a Worker deploy.

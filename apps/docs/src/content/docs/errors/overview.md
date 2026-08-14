@@ -51,7 +51,7 @@ Over the API:
 
 ```bash
 curl -sS -X DELETE https://api.zeroapps.dev/errors/v1/issues/$ISSUE_ID \
-  -H "authorization: Bearer $ZEROVAULT_API_KEY"
+  -H "authorization: Bearer $ZERO_API_KEY"
 ```
 
 You get `204` with an empty body. An id that does not exist, including one you
@@ -63,7 +63,7 @@ the listing:
 
 ```bash
 curl -sS "https://api.zeroapps.dev/errors/v1/issues?project=docs-demo" \
-  -H "authorization: Bearer $ZEROVAULT_API_KEY"
+  -H "authorization: Bearer $ZERO_API_KEY"
 ```
 
 Two things to know before you delete:

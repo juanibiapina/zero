@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-08-14: The command line tool is now `zero` and covers both products: `zero vault ...` for secrets, `zero errors ...` for issues (report an error, list, inspect, resolve, reopen or delete an issue), and `zero keys` for the one key that works everywhere. Install it with `npx @zeroapps/cli`. This replaces `zv`, which is gone: the old command, its `ZEROVAULT_API_KEY` and `ZEROVAULT_API_URL` variables, and its saved contexts no longer work, so export `ZERO_API_KEY` (and `ZERO_API_URL` without the `/vault` suffix if you set one) and re-add any contexts with `zero context add`.
+
 - 2026-08-14: You can now mark a ZeroErrors issue resolved, or reopen it, with your API key instead of only from the dashboard, so a script or a deploy step can close out a bug it just fixed. Resolved issues keep their history and counts, drop off the open list, and come back on their own if the same error is reported again.
 
 - 2026-07-28: The zeroapps.dev home page is now plain black on white, the same as the dashboard: the orange is gone, there is one clear "Create an API key" button instead of two, and each product is just its name, what it does, and where to go next. It also loads a little lighter, and its text now meets contrast requirements everywhere.

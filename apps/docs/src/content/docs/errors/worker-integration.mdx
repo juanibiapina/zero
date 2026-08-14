@@ -46,7 +46,7 @@ immediately while the report finishes in the background:
 ```ts
 app.onError((err, c) => {
   c.executionCtx.waitUntil(
-    reportError(c.env.ZEROVAULT_API_KEY, "my-app", err, { path: c.req.path }),
+    reportError(c.env.ZERO_API_KEY, "my-app", err, { path: c.req.path }),
   );
   return c.json({ error: "Internal error" }, 500);
 });
@@ -58,14 +58,14 @@ users.
 
 ## Store the key as a secret
 
-The reporter reads its key from `c.env.ZEROVAULT_API_KEY`. Store it as a Worker
+The reporter reads its key from `c.env.ZERO_API_KEY`. Store it as a Worker
 secret rather than committing it, and gate the deploy so a missing key fails
 loudly:
 
 ```jsonc
 {
   "secrets": {
-    "required": ["ZEROVAULT_API_KEY"]
+    "required": ["ZERO_API_KEY"]
   }
 }
 ```

@@ -26,10 +26,10 @@ trap cleanup EXIT
 
 echo "=== Preparing secrets ==="
 # Regenerate .dev.vars from ZeroVault (json -> dotenv) and restore on exit.
-# Requires ZEROVAULT_API_KEY and ZEROVAULT_API_URL.
-ZV="pnpm dlx zerovault-cli@0.2.2"
+# Requires ZERO_API_KEY. ZERO_API_URL is optional.
+ZERO="pnpm dlx @zeroapps/cli@0.3.0"
 cp apps/agent-api/.dev.vars apps/agent-api/.dev.vars.bak
-$ZV secrets download -p zero-api -e development --format json \
+$ZERO vault secrets download -p zero-api -e development --format json \
   | node bin/json-to-dotenv.mjs > apps/agent-api/.dev.vars
 echo "=== Starting mock Telegram API on :3501 ==="
 pnpm exec tsx packages/agent-e2e/src/mock-telegram.ts &
@@ -69,7 +69,7 @@ pnpm --dir apps/agent-api exec wrangler kv key put \
   "tg:12345" "user_test" || echo "WARN: KV seed may have failed"
 
 echo "=== Running E2E tests ==="
-( eval "$($ZV secrets download -p zero-api -e development --format shell)"
+( eval "$($ZERO vault secrets download -p zero-api -e development --format shell)"
   pnpm --dir packages/agent-e2e exec vitest run )
 
 echo "=== E2E tests passed ==="

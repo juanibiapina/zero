@@ -147,7 +147,7 @@ export default function KeysPage() {
         {({ keys }) =>
           keys.length === 0 ? (
             <p className="text-muted-foreground">
-              No API keys yet. A key authorizes the <code>zv</code> CLI, your apps, and
+              No API keys yet. A key authorizes the <code>zero</code> CLI, your apps, and
               error reporting. See{" "}
               <a href={loadingSecretsUrl} target="_blank" rel="noreferrer" className={linkClass}>
                 loading secrets
@@ -203,7 +203,7 @@ export default function KeysPage() {
             if (!open) setRevoking(null);
           }}
           title="Revoke this API key?"
-          description={`Key ${revoking.prefix}${revoking.suffix} stops working immediately. This cannot be undone here. Anything using it, including the zv CLI, your apps, and error reporting, needs a new key.`}
+          description={`Key ${revoking.prefix}${revoking.suffix} stops working immediately. This cannot be undone here. Anything using it, including the zero CLI, your apps, and error reporting, needs a new key.`}
           confirmLabel="Revoke key"
           onConfirm={confirmRevoke}
           onError={(error) =>

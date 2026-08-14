@@ -1,19 +1,23 @@
 /**
  * ============================================================================
- * ZeroVault CLI — local config & named contexts
+ * Zero CLI — local config & named contexts
  * ============================================================================
  *
  * Owns persistence and resolution of named contexts and their per-directory
  * bindings. A context maps a name to an API key (and optional base URL); the
  * file also records which context each project directory is bound to. Running
- * `zv` in a bound directory (or a subdirectory) uses that context. This is the
- * single seam for reading/writing that state — `getClient()` and the
- * `zv context` commands are its only callers.
+ * `zero` in a bound directory (or a subdirectory) uses that context. This is
+ * the single seam for reading/writing that state — `auth.ts` and the
+ * `zero context` commands are its only callers.
  *
- * The file lives at `~/.config/zerovault/config.json` (override with the
- * `ZEROVAULT_CONFIG` env var) and holds plaintext API keys, so it is always
+ * The file lives at `~/.config/zero/config.json` (override with the
+ * `ZERO_CONFIG` env var) and holds plaintext API keys, so it is always
  * written mode 0600 inside a 0700 directory — same tradeoff as `kubectl` /
  * `aws` credentials.
+ *
+ * There is no migration from the old `~/.config/zerovault/config.json` written
+ * by the `zv` CLI: that file is never read, and a user re-runs
+ * `zero context add`.
  */
 
 import fs from "node:fs";
@@ -35,14 +39,14 @@ export interface Config {
 }
 
 /**
- * Resolve the config file path. Reads `ZEROVAULT_CONFIG` (used by tests to
- * point at a temp file) and otherwise defaults under the home directory.
- * Kept in one place so every caller agrees on the location.
+ * Resolve the config file path. Reads `ZERO_CONFIG` (used by tests to point at
+ * a temp file) and otherwise defaults under the home directory. Kept in one
+ * place so every caller agrees on the location.
  */
 export function configPath(): string {
-  const override = process.env.ZEROVAULT_CONFIG;
+  const override = process.env.ZERO_CONFIG;
   if (override) return override;
-  return path.join(os.homedir(), ".config", "zerovault", "config.json");
+  return path.join(os.homedir(), ".config", "zero", "config.json");
 }
 
 /**
@@ -104,7 +108,7 @@ export function resolveContextForDir(config: Config, cwd: string): Context | nul
 }
 
 // ----------------------------------------------------------------------------
-// In-memory mutations used by the `zv context` commands. Each returns the
+// In-memory mutations used by the `zero context` commands. Each returns the
 // mutated config; the caller persists with saveConfig.
 // ----------------------------------------------------------------------------
 
@@ -150,9 +154,13 @@ export function unbindContext(config: Config, dir: string): boolean {
 // ----------------------------------------------------------------------------
 
 /**
- * Canonical public Vault API base URL when no flag/context/env overrides it.
+ * Canonical public API origin when no flag/context/env overrides it. It is
+ * product-neutral on purpose: each client appends its own product prefix
+ * (`/vault/v1`, `/errors/v1`), so one base URL serves the whole CLI. A value
+ * carrying a `/vault` suffix is passed through verbatim — the CLI does not
+ * rewrite it — and will produce 404s.
  */
-export const DEFAULT_BASE_URL = "https://api.zeroapps.dev/vault";
+export const DEFAULT_BASE_URL = "https://api.zeroapps.dev";
 
 export interface ResolvedAuth {
   apiKey: string;

@@ -1,0 +1,57 @@
+---
+title: Errors commands
+description: Report errors and manage issues from your terminal with zero errors.
+---
+
+`zero errors …` reports errors and works through issues without opening the
+dashboard. Install the CLI and set up your key first: see
+[Zero CLI](/cli/overview/).
+
+## Report an error
+
+```bash
+zero errors report -p web -m "Checkout failed" --level warning
+```
+
+Options: `-p/--project` (required), `-m/--message` (required),
+`-l/--level` (`error`, `warning` or `info`, default `error`),
+`-s/--stack` (pass `-` to read the stack from stdin), and `-c/--context` with a
+JSON object.
+
+```bash
+node app.js 2>&1 | zero errors report -p web -m "Worker crashed" -s -
+```
+
+The issue ID goes to stdout, so it can be captured; whether the report created a
+new issue or grouped into an existing one is printed to stderr.
+
+Reporting from inside an application is usually a plain HTTPS POST instead. See
+[Reporter](/errors/reporter/).
+
+## Work through issues
+
+```bash
+zero errors issues list                    # every issue
+zero errors issues list -p web -s open     # filter by project and status
+zero errors issues get <id>                # the issue plus its recent events
+```
+
+`--json` on `list` and `get` prints the raw API response for scripting.
+
+## Resolve, reopen, delete
+
+```bash
+zero errors issues resolve <id>
+zero errors issues reopen <id>
+zero errors issues delete <id>
+```
+
+Resolving keeps the issue's history and counts and drops it off the open list; if
+the same error is reported again the issue reopens by itself. Deleting removes
+the issue and its stored events, with no undo, and a later report of the same
+error comes back as a new issue with a fresh count.
+
+## Next
+
+- [Reporter](/errors/reporter/) to send reports from your application.
+- [Overview](/errors/overview/) for how reports group into issues.

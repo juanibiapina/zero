@@ -43,7 +43,7 @@ export async function reportError(
 try {
   await handleRequest(req);
 } catch (err) {
-  await reportError(process.env.ZEROVAULT_API_KEY!, "my-app", err, { path: req.url });
+  await reportError(process.env.ZERO_API_KEY!, "my-app", err, { path: req.url });
   throw err;
 }
 ```

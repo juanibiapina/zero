@@ -68,19 +68,19 @@ inline support, etc.). The value is not secret — it's the public
 `getMe` response — but we keep it in ZeroVault for consistency.
 
 ```bash
-ZV="pnpm dlx zerovault-cli@0.1.0"
-TOKEN=$($ZV secrets get TELEGRAM_BOT_TOKEN -p zero-api -e production)
+ZERO="pnpm dlx @zeroapps/cli@0.3.0"
+TOKEN=$($ZERO vault secrets get TELEGRAM_BOT_TOKEN -p zero-api -e production)
 BOT_INFO=$(curl -s "https://api.telegram.org/bot${TOKEN}/getMe" | jq -c .result)
 
-$ZV secrets set TELEGRAM_BOT_INFO="$BOT_INFO" -p zero-api -e production
-$ZV secrets set TELEGRAM_BOT_INFO="$BOT_INFO" -p zero-api -e development
+$ZERO vault secrets set TELEGRAM_BOT_INFO="$BOT_INFO" -p zero-api -e production
+$ZERO vault secrets set TELEGRAM_BOT_INFO="$BOT_INFO" -p zero-api -e development
 bin/sync-secrets-to-cloudflare
 ```
 
 ## Inspect or remove the webhook
 
 ```bash
-TOKEN=$(pnpm dlx zerovault-cli@0.1.0 secrets get TELEGRAM_BOT_TOKEN -p zero-api -e production)
+TOKEN=$(pnpm dlx @zeroapps/cli@0.3.0 vault secrets get TELEGRAM_BOT_TOKEN -p zero-api -e production)
 
 # Inspect
 curl -s "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" | jq

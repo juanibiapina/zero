@@ -164,9 +164,9 @@ teardown behavior on deploy).
 ### CLI releases
 
 The Deployment section above covers Workers only. The npm package
-`zerovault-cli` releases separately: pushing a `v*` tag publishes it from GitHub
-Actions via npm trusted publishing (OIDC), no token involved. See
-`docs/cli-releases.md` for the release steps and constraints.
+`@zeroapps/cli` (command `zero`) releases separately: pushing a `v*` tag
+publishes it from GitHub Actions via npm trusted publishing (OIDC), no token
+involved. See `docs/cli-releases.md` for the release steps and constraints.
 
 npm binds that trust to the workflow **filename**
 `.github/workflows/publish-cli.yml`. Renaming or moving the file breaks
@@ -187,7 +187,7 @@ Packages:
 - **Dashboard frontend:** `apps/dashboard-web` (`@zero/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
 - **Landing site:** `apps/landing` (`@zero/landing`) is a static Astro site served by the asset-only Worker `zero-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
 - **Docs site:** `apps/docs` (`@zero/docs`) is a static Astro + Starlight site served by the asset-only Worker `zero-docs` for `docs.zeroapps.dev`. It documents ZeroVault and ZeroErrors and ships per-page raw-markdown twins (bare `<page>.md`, e.g. `/vault/overview.md`) with a Copy Markdown button, plus `/llms.txt`, `/llms-full.txt`, `/llms-small.txt`. Unknown paths get a real 404 (`not_found_handling: 404-page`). Unlike landing it ships Starlight's own theme JS and a Pagefind search index (the zero-JS invariant is landing-only). The content is real and the site is indexable: no page carries a `noindex` or `nofollow` directive, `robots.txt` is `Allow: /` and declares `https://docs.zeroapps.dev/sitemap-index.xml`, and that sitemap lists exactly the HTML pages, never the `.md` twins or the `llms*.txt` files. It is submitted to Google Search Console under the `sc-domain:zeroapps.dev` property, which covers both `zeroapps.dev` and `docs.zeroapps.dev`. No runtime secrets or API. Build/deploy are package-scoped (`pnpm -F @zero/docs ...`), never the whole-repo build. Auto-deploys on push to `main` via its own Workers Builds connector.
-- **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `zerovault-cli` (`packages/zerovault-cli`, npm name unchanged).
+- **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `@zeroapps/cli` (`packages/zero-cli`), whose command is `zero`: `zero vault ...` for secrets, `zero errors ...` for issues, `zero keys` for the org-scoped key both products accept. It replaced `zv` outright, with no alias and no config or env-var migration.
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
 
@@ -296,7 +296,7 @@ Then start the dev server again with `pnpm turbo dev`.
 
 ## Secrets
 
-When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx zerovault-cli@0.2.2` and needs only the `ZEROVAULT_API_KEY` env var; `ZEROVAULT_API_URL` is optional and defaults to `https://api.zeroapps.dev/vault` (set it only to target another instance).
+When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx @zeroapps/cli@0.3.0` and needs only the `ZERO_API_KEY` env var; `ZERO_API_URL` is optional and defaults to `https://api.zeroapps.dev` (set it only to target another instance). It is a bare origin: the CLI appends `/vault/v1` or `/errors/v1` itself, so a `/vault` suffix left over from the `zv` era produces 404s.
 
 ZeroVault projects (each with `development` and `production` environments):
 - `zero-api` — Worker backend secrets (also used by `bin/e2e-test`)

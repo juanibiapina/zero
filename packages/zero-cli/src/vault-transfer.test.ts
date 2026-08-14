@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ApiError } from "./client.js";
+import { ApiError } from "./clients/http.js";
 import {
   exportVault,
   importVault,
