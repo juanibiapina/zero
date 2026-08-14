@@ -3,28 +3,28 @@ title: GitHub Actions without an API key
 description: Let a GitHub Actions workflow read ZeroVault secrets by trusting the repository instead of storing a key.
 ---
 
-A workflow can read your secrets without you storing a Zero API key in GitHub.
-GitHub already mints a signed token describing each job; you tell Zero which
-repository to trust, and the job trades that token for a credential that lives
-15 minutes and never leaves the runner.
+Your workflow can read secrets without a `ZERO_API_KEY` in GitHub. GitHub signs
+a token that says which repository and job is running. You tell Zero to trust
+that repository, and the job swaps the token for access that expires after 15
+minutes.
 
-That removes the credential most likely to leak: a long-lived, organization-wide
-key sitting in a repository's secret store, readable by every workflow in the
-repo and rotated by hand.
+An API key in GitHub is the easiest one to lose: it never expires, it opens
+every project in your organization, any workflow in the repository can read it,
+and you have to rotate it by hand.
 
 ## Set it up
 
-Trust the repository once, from a terminal that is already authenticated:
+Trust the repository once, from a terminal where `zero` is already signed in:
 
 ```bash
 zero ci trust add --repo octo-org/octo-repo
 ```
 
-Then give the job permission to mint its token, and drop the secret:
+Then let the job ask GitHub for its token, and delete the secret:
 
 ```yaml
 permissions:
-  id-token: write        # required; without it the job has no identity
+  id-token: write        # without this, the job has no identity
 
 jobs:
   build:
@@ -34,76 +34,77 @@ jobs:
       - run: npx @zeroapps/cli@0.5.0 vault secrets download -p demo -e production -f env -o .env
 ```
 
-No `ZERO_API_KEY`, no `secrets.*` entry. `zero whoami` inside the job prints
-`Credential: github actions`.
+There is no `ZERO_API_KEY` and no `secrets.*` line. Run `zero whoami` in the job
+and it prints `Credential: github actions`.
 
-Allow up to a minute after `zero ci trust add` before the first run can
-authenticate.
+Wait a minute after `zero ci trust add` before the first run. Until then it is
+refused.
 
 ## Private repositories
 
-`zero ci trust add` looks the repository's numeric ids up through GitHub's public
-API, which cannot see private repositories. Either export a `GITHUB_TOKEN` that
-can read it, or pass the ids yourself:
+`zero ci trust add` reads the repository's numeric ids from GitHub's public API,
+which cannot see private repositories. Set a `GITHUB_TOKEN` that can read it, or
+pass the ids yourself:
 
 ```bash
 zero ci trust add --repo octo-org/private-repo --owner-id 65 --repo-id 74
 ```
 
-A failed exchange also prints both ids, so you can copy them out of the run that
-just failed.
+A refused run prints both ids too, so you can copy them from the failure.
 
-## Narrowing what is trusted
+## Trust less than the whole repository
 
-Trust covers the whole organization's secrets, so narrow it to the jobs that
-need it:
+A trusted workflow reads every secret in your organization. Limit it to the runs
+that need to:
 
 ```bash
 zero ci trust add --repo octo-org/octo-repo --ref refs/heads/main
 zero ci trust add --repo octo-org/octo-repo --environment production
 ```
 
-`--ref` matches the git ref of the run, `--environment` the job's `environment:`.
+`--ref` must match the run's git ref. `--environment` must match the job's
+`environment:`.
 
-## Pull requests are refused by default
+## Pull requests are refused
 
-Three triggers are refused unless you opt in, because they run with your
-repository's identity on code or input from outside it:
+Three triggers are refused unless you allow them, because they run as your
+repository but on code from outside it:
 
-| Trigger | Why it is refused |
+| Trigger | Why |
 |---|---|
-| `pull_request` | A fork's PR gets no token at all, but a branch PR does, and PR branches are not reviewed yet |
-| `pull_request_target` | Runs privileged **on a fork's pull request**, with your repository's identity |
-| `workflow_run` | Runs privileged after another workflow, including one a PR triggered |
+| `pull_request` | Runs code from a branch nobody has reviewed yet |
+| `pull_request_target` | Runs with your secrets on a pull request from a fork |
+| `workflow_run` | Runs with your secrets after another workflow, including one a pull request started |
 
 ```bash
 zero ci trust add --repo octo-org/octo-repo --allow-event pull_request
 ```
 
-Opting into one does not open the others. Think twice before allowing
-`pull_request_target` or `workflow_run` on a repository whose workflows check
-out pull request code: anyone who can open a pull request can then run code in a
-job holding your secrets.
+Allowing one does not allow the others.
 
-A `--ref` constraint does **not** protect you here. A `pull_request_target` run
-reports `ref: refs/heads/main`, so it satisfies a main-only rule; only the event
-rule stops it.
+Be careful with `pull_request_target` and `workflow_run` if your workflows check
+out pull request code. Anyone who can open a pull request can then run their own
+code in a job that holds your secrets.
+
+`--ref` does not help here. A `pull_request_target` run reports
+`ref: refs/heads/main`, so a main-only rule still lets it through. Only the
+trigger rule stops it.
 
 ## Managing trust
 
 ```bash
-zero ci trust list           # id, repository, and any constraints
+zero ci trust list           # id, repository, and any limits
 zero ci trust rm <id>        # stop trusting it
 ```
 
-Removing a trust stops new exchanges. A credential already minted keeps working
-until it expires, which is at most 15 minutes.
+Removing trust stops the next run. Access a job already has keeps working until
+it expires, so at most 15 minutes.
 
-## What it is not
+## Where you still need a key
 
-- **Not for other CI providers yet.** GitLab, CircleCI and Buildkite issue
-  similar tokens, but Zero only accepts GitHub's today. Use an API key there.
-- **Not for servers or containers.** They have no identity provider to vouch for
-  them. Use an API key, ideally one per host.
-- **Not narrower than an organization.** A trusted workflow reaches every project
-  in the organization, exactly like a key does.
+- **Other CI.** GitLab, CircleCI and Buildkite sign similar tokens, but Zero
+  only accepts GitHub's for now.
+- **Servers and containers.** Nothing signs a token for them. Use a key, one per
+  host if you can.
+- **Smaller than an organization.** Trust cannot be limited to one project. A
+  trusted workflow reads everything in the organization, same as a key.

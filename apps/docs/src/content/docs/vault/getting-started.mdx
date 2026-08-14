@@ -31,26 +31,25 @@ values are stored for that one environment.
 
 ## 4. Read it from your terminal
 
-Sign the CLI in with the same account. No key to copy:
+Sign the CLI in with the same account. There is no key to copy:
 
 ```bash
 npx @zeroapps/cli@0.5.0 login
 npx @zeroapps/cli@0.5.0 vault secrets list -p my-app -e development
 ```
 
-`login` opens your browser and asks which organization to use. The sign-in stays
-on that machine and `zero logout` ends it.
+`login` opens your browser and asks which organization to use. It signs in that
+one machine, and `zero logout` signs it out.
 
-## 5. When you need a key instead
+## 5. When you need a key
 
-A browser sign-in covers your own machine, and a
-[trusted GitHub Actions workflow](/vault/github-actions/) needs no credential at
-all. For anything else that runs unattended — a server, a container, another CI
-provider — create an API key:
+Signing in covers your own machine, and a
+[GitHub Actions workflow](/vault/github-actions/) you trust needs nothing at all.
+Anything else that runs on its own, like a server or a container, needs a key.
 
-Open **API keys** in the sidebar, below the product list, optionally give the key
-a label, and click **Create**. Or, from a signed-in terminal, run
-`zero keys create`.
+Open **API keys** in the sidebar, below the product list, add a label if you want
+one, and click **Create**. From a signed-in terminal, `zero keys create` does the
+same thing.
 
 The full key (`zv_…`) is shown once, right after you create it, with a copy
 button. Copy it now; it is not shown again. If you lose it, revoke it and create a

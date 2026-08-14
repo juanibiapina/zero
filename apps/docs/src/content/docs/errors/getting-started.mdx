@@ -6,16 +6,16 @@ description: Get a key, send your first error, and see it grouped into an issue.
 By the end you have sent an error report and watched it show up as an issue in the
 dashboard.
 
-## 1. Get a credential
+## 1. Get a key
 
-Reports come from running code, which usually means an API key: sign in at
+Reports come from running code, so you usually need a key. Sign in at
 [dash.zeroapps.dev](https://dash.zeroapps.dev), open **API keys** in the sidebar,
 below the product list, and click **Create**. Copy the key when it is shown; it is
 shown once.
 
-One credential authorizes both ZeroErrors and ZeroVault. From your own terminal
-`zero login` works instead, and in GitHub Actions a
-[trusted workflow](/vault/github-actions/) needs no credential at all. See
+The same key works for ZeroErrors and ZeroVault. From your own terminal you can
+use `zero login` instead, and in GitHub Actions a
+[trusted workflow](/vault/github-actions/) needs neither. See
 [API keys](/account/api-keys/) for scope, rotation, and revoking.
 
 ```bash

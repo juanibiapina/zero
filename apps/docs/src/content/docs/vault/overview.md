@@ -22,9 +22,9 @@ Organization
   automatically gives it two environments, `development` and `production`. You can
   add or delete more.
 - An **environment** holds a flat set of key/value secrets.
-- **Credentials are organization-scoped.** A browser sign-in (`zero login`), an
-  API key, and a trusted GitHub Actions workflow all reach every project and
-  environment in one organization, and all of them authorize ZeroErrors too.
+- **Access is organization-wide.** Signing in with `zero login`, using an API
+  key, or trusting a GitHub Actions workflow all reach every project and
+  environment in one organization, and all of them work for ZeroErrors too.
 
 ## Where things live
 
