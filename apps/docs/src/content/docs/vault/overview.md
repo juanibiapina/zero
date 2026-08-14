@@ -22,8 +22,9 @@ Organization
   automatically gives it two environments, `development` and `production`. You can
   add or delete more.
 - An **environment** holds a flat set of key/value secrets.
-- **API keys are organization-scoped.** One key reaches every project and
-  environment in your organization, and the same key also authorizes ZeroErrors.
+- **Credentials are organization-scoped.** A browser sign-in (`zero login`), an
+  API key, and a trusted GitHub Actions workflow all reach every project and
+  environment in one organization, and all of them authorize ZeroErrors too.
 
 ## Where things live
 
@@ -33,7 +34,8 @@ Organization
   either product, since one key authorizes both. See
   [API keys](/account/api-keys/).
 - **Public API:** `https://api.zeroapps.dev/vault/v1`, Bearer-authenticated with
-  a `zv_…` key.
+  a `zv_…` key or a token from `zero login` or a
+  [trusted workflow](/vault/github-actions/).
 - **CLI:** `zero vault …`, published as `@zeroapps/cli` on npm.
 
 ## Next
