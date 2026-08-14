@@ -174,7 +174,9 @@ export interface ResolvedAuth {
   apiKey: string;
   baseUrl: string;
   /** Which credential answered. `whoami` reports it; nothing else branches. */
-  via: "api_key" | "login";
+  via: "api_key" | "login" | "ci";
+  /** Set for `via: "ci"`: the org the workflow's token was exchanged for. */
+  orgId?: string;
   /** Present for `via: "login"`, so a caller can refresh and name the user. */
   login?: Login;
 }
@@ -182,6 +184,9 @@ export interface ResolvedAuth {
 /**
  * Pure key-resolution precedence, first match wins:
  *   flag > per-dir context > env > stored login > (none → null).
+ * A GitHub Actions sign-in sits between the env var and the stored login, but
+ * it costs a network round trip, so `auth.ts` inserts it rather than this
+ * function: `logins` is simply omitted when the caller wants to try CI first.
  * A directory binding is a deliberate per-project choice, so it beats the
  * ambient env var; a `--api-key` flag still overrides everything. A `zero
  * login` sits last because it is the most ambient of all: machine-wide state
@@ -190,6 +195,22 @@ export interface ResolvedAuth {
  * since a login is only valid for the origin that issued it. Kept pure (no
  * process/env/fs) so precedence is directly testable.
  */
+/**
+ * Where requests go, decided independently of which credential is used:
+ * flag > context > env > default. A login and a CI exchange are both bound to
+ * one origin, so the origin has to be known before either is looked up.
+ */
+export function resolveBaseUrl(input: {
+  flags: { baseUrl?: string };
+  env: { apiUrl?: string };
+  context: Context | null;
+  defaultBaseUrl: string;
+}): string {
+  return (
+    input.flags.baseUrl ?? input.context?.baseUrl ?? input.env.apiUrl ?? input.defaultBaseUrl
+  );
+}
+
 export function resolveAuth(input: {
   flags: { apiKey?: string; baseUrl?: string };
   env: { apiKey?: string; apiUrl?: string };
@@ -199,7 +220,7 @@ export function resolveAuth(input: {
 }): ResolvedAuth | null {
   const { flags, env, context, logins, defaultBaseUrl } = input;
 
-  const baseUrl = flags.baseUrl ?? context?.baseUrl ?? env.apiUrl ?? defaultBaseUrl;
+  const baseUrl = resolveBaseUrl({ flags, env, context, defaultBaseUrl });
 
   const apiKey = flags.apiKey ?? context?.apiKey ?? env.apiKey;
   if (apiKey) return { apiKey, baseUrl, via: "api_key" };

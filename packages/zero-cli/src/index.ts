@@ -10,7 +10,8 @@
  * org-scoped API key that authorizes both.
  *
  * Auth (first match wins): --api-key flag > context bound to the current
- * directory (see `zero context`) > ZERO_API_KEY env > `zero login`. The base URL resolves the
+ * directory (see `zero context`) > ZERO_API_KEY env > GitHub Actions OIDC >
+ * `zero login`. The base URL resolves the
  * same way (--base-url > context.baseUrl > ZERO_API_URL > default) and is a
  * bare origin; each client appends its own product prefix.
  */
@@ -19,6 +20,8 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { ApiError } from "./clients/http.js";
 import { getVaultClient, requireAuth, type AuthFlags } from "./auth.js";
+import type { ResolvedAuth } from "./config.js";
+import * as ciCommands from "./commands/ci.js";
 import * as contextCommands from "./commands/context.js";
 import * as loginCommands from "./commands/login.js";
 import * as errorsCommands from "./commands/errors.js";
@@ -31,6 +34,15 @@ import * as vaultCommands from "./commands/vault.js";
 const { version } = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as { version: string };
+
+/** How `whoami` names the credential that answered. */
+function describeCredential(auth: ResolvedAuth): string {
+  if (auth.via === "login") {
+    return `signed in as ${auth.login?.email ?? auth.login?.userId}`;
+  }
+  if (auth.via === "ci") return "github actions";
+  return "api key";
+}
 
 const program = new Command();
 
@@ -54,14 +66,11 @@ program
     // Which credential answered, because a stale ZERO_API_KEY silently
     // shadows a fresh `zero login` and nothing else would say so.
     const auth = await requireAuth(program.opts<AuthFlags>());
-    console.log(
-      auth.via === "login"
-        ? `Credential: signed in as ${auth.login?.email ?? auth.login?.userId}`
-        : "Credential: api key",
-    );
+    console.log(`Credential: ${describeCredential(auth)}`);
   });
 
 loginCommands.register(program);
+ciCommands.register(program);
 contextCommands.register(program);
 keysCommands.register(program);
 vaultCommands.register(program);

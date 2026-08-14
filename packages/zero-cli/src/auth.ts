@@ -7,7 +7,12 @@
  * precedence, so every command agrees on which key and origin it uses:
  *
  *   --api-key flag > directory context (`zero context`) > ZERO_API_KEY env
- *   > `zero login` on this machine
+ *   > GitHub Actions OIDC > `zero login` on this machine
+ *
+ * Inside a workflow that declares `permissions: id-token: write`, the CLI
+ * authenticates itself with no secret at all. That sits below the env var so a
+ * repository can still pin a key during a migration, and above a stored login
+ * because a runner has no browser.
  *
  * The base URL resolves the same way (--base-url > context.baseUrl >
  * ZERO_API_URL > default) and is product-neutral; each client appends its own
@@ -17,9 +22,16 @@
 import { ErrorsClient } from "./clients/errors.js";
 import { VaultClient } from "./clients/vault.js";
 import {
+  actionsEnvironment,
+  exchangeCiToken,
+  requestOidcToken,
+  ZERO_OIDC_AUDIENCE,
+} from "./ci-oidc.js";
+import {
   loadConfig,
   resolveContextForDir,
   resolveAuth,
+  resolveBaseUrl,
   saveConfig,
   DEFAULT_BASE_URL,
   type ResolvedAuth,
@@ -38,10 +50,37 @@ export interface AuthFlags {
  */
 export async function requireAuth(flags: AuthFlags): Promise<ResolvedAuth> {
   const config = loadConfig();
+  const env = { apiKey: process.env.ZERO_API_KEY, apiUrl: process.env.ZERO_API_URL };
+  const context = resolveContextForDir(config, process.cwd());
+
+  // Explicit credentials first, with no network call and no logins considered.
+  const explicit = resolveAuth({ flags, env, context, defaultBaseUrl: DEFAULT_BASE_URL });
+  if (explicit) return explicit;
+
+  const actions = actionsEnvironment(process.env);
+  if (actions) {
+    const baseUrl = resolveBaseUrl({ flags, env, context, defaultBaseUrl: DEFAULT_BASE_URL });
+    try {
+      const oidcToken = await requestOidcToken(actions, ZERO_OIDC_AUDIENCE);
+      const exchanged = await exchangeCiToken({
+        baseUrl,
+        oidcToken,
+        ...(process.env.ZERO_ORG && { orgId: process.env.ZERO_ORG }),
+      });
+      return { apiKey: exchanged.accessToken, baseUrl, via: "ci", orgId: exchanged.orgId };
+    } catch (err) {
+      // Being in Actions with id-token: write is a deliberate choice, so a
+      // failure here is a misconfiguration to report, not something to fall
+      // back from silently.
+      console.error(`Error: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
+
   const auth = resolveAuth({
     flags,
-    env: { apiKey: process.env.ZERO_API_KEY, apiUrl: process.env.ZERO_API_URL },
-    context: resolveContextForDir(config, process.cwd()),
+    env,
+    context,
     logins: config.logins,
     defaultBaseUrl: DEFAULT_BASE_URL,
   });
@@ -49,7 +88,8 @@ export async function requireAuth(flags: AuthFlags): Promise<ResolvedAuth> {
     console.error(
       "Error: no credentials. Run `zero login`, set ZERO_API_KEY, pass " +
         "--api-key, or bind this directory to a context with " +
-        "`zero context use`. " +
+        "`zero context use`. In GitHub Actions, add `permissions: id-token: " +
+        "write` to the job. " +
         "See https://docs.zeroapps.dev/account/api-keys/ to create a key.",
     );
     process.exit(1);

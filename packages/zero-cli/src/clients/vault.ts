@@ -50,6 +50,42 @@ export class VaultClient {
     return this.http.request<void>(`${P}/keys/${id}`, { method: "DELETE" });
   }
 
+  // CI trusts
+  async addCiTrust(input: {
+    ownerId: string;
+    repoId: string;
+    repository: string;
+    ref?: string;
+    environment?: string;
+    allowedEvents?: string[];
+    label?: string;
+  }) {
+    return this.http.request<{ id: number; createdAt: string }>(`${P}/ci/trusts`, {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  async listCiTrusts() {
+    return this.http.request<{
+      trusts: {
+        id: number;
+        repository: string;
+        ownerId: string;
+        repoId: string;
+        ref: string | null;
+        environment: string | null;
+        allowedEvents: string[];
+        label?: string;
+        createdAt: string;
+      }[];
+    }>(`${P}/ci/trusts`);
+  }
+
+  async removeCiTrust(id: string) {
+    return this.http.request<void>(`${P}/ci/trusts/${id}`, { method: "DELETE" });
+  }
+
   // Projects
   async listProjects() {
     return this.http.request<{
