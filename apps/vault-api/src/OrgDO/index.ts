@@ -134,6 +134,11 @@ export class OrgDO extends DurableObject<Env> {
    * Trust a GitHub repository to exchange its OIDC token for a credential in
    * this org. The KV index is what the (unauthenticated) exchange endpoint
    * reads, so it never has to guess which org a workflow belongs to.
+   *
+   * Idempotent: trusting the same repository again rewrites its constraints
+   * rather than failing. "Trust this repo with these rules" is the intent, and
+   * a second `zero ci trust add` should tighten a ref or add an event, not
+   * force the user to delete a record first.
    */
   async addCiTrust(input: {
     ownerId: string;
@@ -146,6 +151,26 @@ export class OrgDO extends DurableObject<Env> {
     orgId: string;
   }): Promise<{ id: number; createdAt: string }> {
     const createdAt = new Date().toISOString();
+
+    const existing = this.db.selectOne(ciTrustsTable, ["id"], {
+      where: and(eq("owner_id", input.ownerId), eq("repo_id", input.repoId)),
+    });
+
+    if (existing) {
+      this.db.update(
+        ciTrustsTable,
+        {
+          repository: input.repository,
+          ref: input.ref ?? null,
+          environment: input.environment ?? null,
+          allowed_events: (input.allowedEvents ?? []).join(","),
+          label: input.label ?? null,
+        },
+        { where: eq("id", existing.id) },
+      );
+      await this.indexCiTrust(input.ownerId, input.repoId, input.orgId);
+      return { id: existing.id, createdAt };
+    }
 
     const result = this.db.insertReturning(
       ciTrustsTable,

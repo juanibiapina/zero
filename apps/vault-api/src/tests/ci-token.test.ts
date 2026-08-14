@@ -66,8 +66,15 @@ async function trustRepo(orgId: string, overrides: Record<string, unknown> = {})
   });
 }
 
+/** Durable Objects outlive a test, so each one starts from no trust at all. */
 beforeEach(async () => {
   await typedEnv.APIKEYS.delete(ciTrustIndexKey(OWNER_ID, REPO_ID));
+  for (const orgId of [ORG, "org_ci_other", "org_not_trusting"]) {
+    const org = typedEnv.ORGDO.get(typedEnv.ORGDO.idFromName(orgId));
+    for (const trust of await org.listCiTrusts()) {
+      await org.removeCiTrust(trust.id, orgId);
+    }
+  }
 });
 
 describe("POST /vault/v1/ci/token", () => {
@@ -258,5 +265,17 @@ describe("trust management", () => {
     );
 
     expect((await exchange(app)).status).toBe(403);
+  });
+});
+
+describe("trusting a repository twice", () => {
+  it("updates the record instead of failing", async () => {
+    const app = appWith(() => Promise.resolve({ ...claims, eventName: "pull_request" }));
+    await trustRepo(ORG);
+    expect((await exchange(app)).status).toBe(403);
+
+    await trustRepo(ORG, { allowedEvents: ["pull_request"] });
+
+    expect((await exchange(app)).status).toBe(200);
   });
 });
