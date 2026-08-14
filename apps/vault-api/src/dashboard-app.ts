@@ -1,6 +1,7 @@
 import { clerkMiddleware, getAuth } from "@clerk/hono";
 import {
   authenticate,
+  createCiTokenSigner,
   createClerkOAuthVerifier,
   verifyGithubOidcToken,
   type OAuthTokenVerifier,
@@ -101,11 +102,13 @@ export const createDashboardApp = (env: Env, options: CreateDashboardAppOptions 
     ),
   );
 
+  const ciTokens = createCiTokenSigner(env.MASTER_KEY);
+
   for (const path of ["/vault/v1/*", "/errors/v1/*"]) {
     app.use(path, publicCors);
     app.use(path, async (c, next) => {
       const outcome = await authenticate(
-        { apikeys: env.APIKEYS, verifyOAuthToken },
+        { apikeys: env.APIKEYS, verifyOAuthToken, verifyCiToken: (token) => ciTokens.verify(token) },
         c.req.header("Authorization"),
       );
       if (!outcome.ok) {

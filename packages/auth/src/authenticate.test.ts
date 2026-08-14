@@ -116,16 +116,16 @@ describe("authenticate", () => {
 });
 
 describe("authenticate with a CI token", () => {
-  it("accepts a zci_ token minted for a workflow", async () => {
-    const apikeys = await kvWithKey("zci_ephemeral", {
-      v: 2,
-      orgId: "org_ci",
-      userId: "ci:github:777",
-    });
+  const verifyCiToken = vi.fn((token: string) =>
+    Promise.resolve(
+      token === "zci_signed" ? { orgId: "org_ci", userId: "ci:github:777" } : null,
+    ),
+  );
 
+  it("accepts a zci_ token minted for a workflow", async () => {
     const result = await authenticate(
-      { apikeys, verifyOAuthToken: noOAuth },
-      "Bearer zci_ephemeral",
+      { apikeys: kv({}), verifyOAuthToken: noOAuth, verifyCiToken },
+      "Bearer zci_signed",
     );
 
     expect(result).toEqual({
@@ -137,14 +137,26 @@ describe("authenticate with a CI token", () => {
   it("never sends a zci_ token to the OAuth verifier", async () => {
     const verifyOAuthToken = vi.fn(() => Promise.resolve(null));
 
-    await authenticate({ apikeys: kv({}), verifyOAuthToken }, "Bearer zci_unknown");
+    await authenticate(
+      { apikeys: kv({}), verifyOAuthToken, verifyCiToken },
+      "Bearer zci_unknown",
+    );
 
     expect(verifyOAuthToken).not.toHaveBeenCalled();
   });
 
-  it("treats an expired CI token as invalid, since KV has already dropped it", async () => {
+  it("never reads KV for a CI token, since the signature is the whole check", async () => {
+    const get = vi.fn(() => Promise.resolve(null));
+    const apikeys = { get } as unknown as KVNamespace;
+
+    await authenticate({ apikeys, verifyOAuthToken: noOAuth, verifyCiToken }, "Bearer zci_signed");
+
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("treats a CI token the verifier rejects as invalid", async () => {
     const result = await authenticate(
-      { apikeys: kv({}), verifyOAuthToken: noOAuth },
+      { apikeys: kv({}), verifyOAuthToken: noOAuth, verifyCiToken },
       "Bearer zci_expired",
     );
 

@@ -87,6 +87,7 @@ describe("POST /vault/v1/ci/token", () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { accessToken: string; orgId: string };
     expect(body.accessToken).toMatch(/^zci_/);
+    // Signed, so it carries its own proof: nothing was written to KV for it.
     expect(body.orgId).toBe(ORG);
   });
 

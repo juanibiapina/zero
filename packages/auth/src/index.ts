@@ -79,19 +79,30 @@ export type AuthOutcome =
  * and cannot cost a network round trip.
  */
 export async function authenticate(
-  deps: { apikeys: KVNamespace; verifyOAuthToken: OAuthTokenVerifier },
+  deps: {
+    apikeys: KVNamespace;
+    verifyOAuthToken: OAuthTokenVerifier;
+    /** Verifies a signed CI token. Absent means CI tokens are not accepted. */
+    verifyCiToken?: (token: string) => Promise<{ orgId: string; userId: string } | null>;
+  },
   authHeader: string | undefined,
 ): Promise<AuthOutcome> {
   const token = authHeader?.replace("Bearer ", "").trim();
   if (!token) return { ok: false, reason: "missing" };
 
-  // Both credential types live in the same KV store and differ only in origin
-  // and lifetime: `zv_` is a key someone created, `zci_` was minted for one CI
-  // job and expires on its own. Same lookup, different `via`.
-  if (token.startsWith("zv_") || token.startsWith("zci_")) {
-    const via = token.startsWith("zci_") ? "ci" : "api_key";
+  // A CI token is signed rather than stored, so it needs no KV read: the job
+  // uses it milliseconds after the exchange mints it, and KV is eventually
+  // consistent, which made that read fail in production.
+  if (token.startsWith("zci_")) {
+    const auth = deps.verifyCiToken ? await deps.verifyCiToken(token) : null;
+    return auth ? { ok: true, auth: { ...auth, via: "ci" } } : { ok: false, reason: "invalid" };
+  }
+
+  if (token.startsWith("zv_")) {
     const auth = await lookupToken(deps.apikeys, token);
-    return auth ? { ok: true, auth: { ...auth, via } } : { ok: false, reason: "invalid" };
+    return auth
+      ? { ok: true, auth: { ...auth, via: "api_key" } }
+      : { ok: false, reason: "invalid" };
   }
 
   const verified = await deps.verifyOAuthToken(token);
@@ -150,6 +161,8 @@ async function lookupToken(
 }
 
 export { createClerkOAuthVerifier, frontendApiUrl } from "./clerk-oauth";
+
+export { createCiTokenSigner, type CiTokenSigner } from "./ci-token";
 
 export {
   verifyGithubOidcToken,

@@ -14,7 +14,7 @@
  * already knows about itself.
  */
 
-import { trustAllows, type GithubActionsClaims } from "@zero/auth";
+import { createCiTokenSigner, trustAllows, type GithubActionsClaims } from "@zero/auth";
 import { Hono } from "hono";
 import { ciTrustIndexKey } from "../OrgDO";
 import type { Env } from "../types";
@@ -26,6 +26,7 @@ export type GithubTokenVerifier = (token: string) => Promise<GithubActionsClaims
 
 export const createCiTokenRoute = (env: Env, verifyGithubToken: GithubTokenVerifier) => {
   const app = new Hono<{ Bindings: Env }>();
+  const signer = createCiTokenSigner(env.MASTER_KEY);
 
   app.post("/vault/v1/ci/token", async (c) => {
     const body = await c.req
@@ -109,7 +110,9 @@ export const createCiTokenRoute = (env: Env, verifyGithubToken: GithubTokenVerif
       return c.json({ error: refusalMessage(decision.reason, claims) }, 403);
     }
 
-    const minted = await org.mintCiToken({
+    // Signed, not stored: the job uses this token immediately, and a KV write
+    // is not readable that fast.
+    const minted = await signer.mint({
       orgId,
       repoId: claims.repositoryId,
       ttlSeconds: TOKEN_TTL_SECONDS,

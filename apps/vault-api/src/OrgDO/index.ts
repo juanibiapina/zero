@@ -258,33 +258,6 @@ export class OrgDO extends DurableObject<Env> {
     if (row) await this.unindexCiTrust(row.owner_id, row.repo_id, orgId);
   }
 
-  /**
-   * Mints the short-lived credential a verified workflow gets. Same KV shape as
-   * an API key, so the request path is unchanged, but it expires on its own and
-   * has no row anywhere: nothing to revoke, nothing to leak.
-   */
-  async mintCiToken(input: {
-    orgId: string;
-    repoId: string;
-    ttlSeconds: number;
-  }): Promise<{ token: string; expiresIn: number }> {
-    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    const token = `zci_${randomHex}`;
-
-    const kvValue: ApiKeyKVValue = {
-      v: 2,
-      orgId: input.orgId,
-      userId: `ci:github:${input.repoId}`,
-    };
-    await this.env.APIKEYS.put(await hashApiKey(token), JSON.stringify(kvValue), {
-      expirationTtl: input.ttlSeconds,
-    });
-
-    return { token, expiresIn: input.ttlSeconds };
-  }
-
   private async indexCiTrust(ownerId: string, repoId: string, orgId: string): Promise<void> {
     const key = ciTrustIndexKey(ownerId, repoId);
     const raw = await this.env.APIKEYS.get(key);
