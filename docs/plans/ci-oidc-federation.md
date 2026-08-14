@@ -270,8 +270,13 @@ steps:
    key", CLI page and API-keys page updated, `docs/console-auth.md` records the
    design and the measured facts, `zero-skills` teaches the workflow, root
    `CHANGELOG.md` entry, CLI 0.5.0.
-5. **Dogfood:** migrate this repo's own workflows and Cragstronauts off their
-   `ZERO_API_KEY` secrets, then delete the secrets and revoke the keys.
+5. ~~**Dogfood**~~ **Done.** `juanibiapina/zero` and `cgcess/cragstronauts`
+   both build with no `ZERO_API_KEY` secret; both secrets are deleted.
+   Cragstronauts now has **no API keys at all** (its CI key is revoked, humans
+   use `zero login`). The two repos needed different trust rules, which is the
+   lesson worth keeping: `zero` is private, so it allows `pull_request` because
+   opening one already requires access; `cragstronauts` is public, so it trusts
+   `refs/heads/main` only and its pull request checks build without secrets.
 6. **Later, not now:** dashboard UI for trusts, GitLab/Buildkite issuers,
    per-project scoping, `jti` replay cache.
 
