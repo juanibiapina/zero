@@ -78,6 +78,12 @@ obvious from the code:
 - The repository→org index lives in KV (`ci:github:<owner_id>/<repo_id>`), which
   is eventually consistent: a run seconds after `zero ci trust add` can still be
   refused. The CLI says so; the docs say so.
+- The minted `zci_` token is **signed, not stored**: payload plus HMAC, with the
+  key derived from `MASTER_KEY` by HKDF. The first version put a random token in
+  KV, and a job read it back milliseconds later — that read missed in production
+  and the build failed with "Invalid API key". Verification is now local, so the
+  request path has no KV read and no race. The trade is that a CI token cannot be
+  revoked before it expires, which the KV version could not do either.
 - The endpoint is unauthenticated, so it is rate limited by connecting IP
   (`CI_TOKEN_RATE_LIMITER`). Limiting by the repository ids in the body would be
   useless: they are attacker-chosen until the signature is checked.
