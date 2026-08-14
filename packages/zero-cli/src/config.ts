@@ -23,6 +23,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Login } from "./oauth.js";
 
 export interface Context {
   apiKey: string;
@@ -36,6 +37,12 @@ export interface Config {
   /** Absolute directory path → context name. A binding applies to subdirs. */
   dirContexts?: Record<string, string>;
   contexts: Record<string, Context>;
+  /**
+   * Browser sign-ins, keyed by the API origin they authorize. Keyed by origin
+   * because a login is only valid for the instance that issued it, and because
+   * `--base-url` must be able to select one.
+   */
+  logins?: Record<string, Login>;
 }
 
 /**
@@ -163,30 +170,42 @@ export function unbindContext(config: Config, dir: string): boolean {
 export const DEFAULT_BASE_URL = "https://api.zeroapps.dev";
 
 export interface ResolvedAuth {
+  /** Bearer credential: a `zv_` key, or a login's OAuth access token. */
   apiKey: string;
   baseUrl: string;
+  /** Which credential answered. `whoami` reports it; nothing else branches. */
+  via: "api_key" | "login";
+  /** Present for `via: "login"`, so a caller can refresh and name the user. */
+  login?: Login;
 }
 
 /**
  * Pure key-resolution precedence, first match wins:
- *   flag > per-dir context > env > (none → null).
+ *   flag > per-dir context > env > stored login > (none → null).
  * A directory binding is a deliberate per-project choice, so it beats the
- * ambient env var; a `--api-key` flag still overrides everything. `baseUrl`
- * resolves independently with the same precedence, defaulting to
- * `defaultBaseUrl` when no source supplies it. Kept pure (no process/env/fs)
- * so precedence is directly testable.
+ * ambient env var; a `--api-key` flag still overrides everything. A `zero
+ * login` sits last because it is the most ambient of all: machine-wide state
+ * the user set once, which must never silently shadow a key they just exported.
+ * `baseUrl` resolves first and independently (flag > context > env > default),
+ * since a login is only valid for the origin that issued it. Kept pure (no
+ * process/env/fs) so precedence is directly testable.
  */
 export function resolveAuth(input: {
   flags: { apiKey?: string; baseUrl?: string };
   env: { apiKey?: string; apiUrl?: string };
   context: Context | null;
+  logins?: Record<string, Login>;
   defaultBaseUrl: string;
 }): ResolvedAuth | null {
-  const { flags, env, context, defaultBaseUrl } = input;
-
-  const apiKey = flags.apiKey ?? context?.apiKey ?? env.apiKey;
-  if (!apiKey) return null;
+  const { flags, env, context, logins, defaultBaseUrl } = input;
 
   const baseUrl = flags.baseUrl ?? context?.baseUrl ?? env.apiUrl ?? defaultBaseUrl;
-  return { apiKey, baseUrl };
+
+  const apiKey = flags.apiKey ?? context?.apiKey ?? env.apiKey;
+  if (apiKey) return { apiKey, baseUrl, via: "api_key" };
+
+  const login = logins?.[baseUrl];
+  if (login) return { apiKey: login.accessToken, baseUrl, via: "login", login };
+
+  return null;
 }

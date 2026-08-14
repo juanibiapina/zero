@@ -35,7 +35,7 @@ export function register(program: Command): void {
     .command("list")
     .description("List all projects")
     .action(async () => {
-      const { projects: list } = await client().listProjects();
+      const { projects: list } = await (await client()).listProjects();
       if (list.length === 0) {
         console.log("No projects");
         return;
@@ -50,7 +50,7 @@ export function register(program: Command): void {
     .argument("<name>", "Project name")
     .description("Create a new project")
     .action(async (name: string) => {
-      const project = await client().createProject(name);
+      const project = await (await client()).createProject(name);
       console.log(`Created project: ${project.name}`);
       console.log(`Environments: ${project.environments.map((e) => e.name).join(", ")}`);
     });
@@ -60,7 +60,7 @@ export function register(program: Command): void {
     .argument("<name>", "Project name")
     .description("Delete a project")
     .action(async (name: string) => {
-      await client().deleteProject(name);
+      await (await client()).deleteProject(name);
       console.log(`Deleted project: ${name}`);
     });
 
@@ -77,7 +77,7 @@ export function register(program: Command): void {
     .requiredOption("-p, --project <name>", "Project name")
     .description("List environments")
     .action(async (opts: { project: string }) => {
-      const { environments } = await client().listEnvironments(opts.project);
+      const { environments } = await (await client()).listEnvironments(opts.project);
       if (environments.length === 0) {
         console.log("No environments");
         return;
@@ -93,7 +93,7 @@ export function register(program: Command): void {
     .requiredOption("-p, --project <name>", "Project name")
     .description("Create an environment")
     .action(async (name: string, opts: { project: string }) => {
-      await client().createEnvironment(opts.project, name);
+      await (await client()).createEnvironment(opts.project, name);
       console.log(`Created environment: ${name}`);
     });
 
@@ -103,7 +103,7 @@ export function register(program: Command): void {
     .requiredOption("-p, --project <name>", "Project name")
     .description("Delete an environment")
     .action(async (name: string, opts: { project: string }) => {
-      await client().deleteEnvironment(opts.project, name);
+      await (await client()).deleteEnvironment(opts.project, name);
       console.log(`Deleted environment: ${name}`);
     });
 
@@ -121,7 +121,7 @@ export function register(program: Command): void {
     .requiredOption("-e, --env <name>", "Environment name")
     .description("List secret keys (values masked)")
     .action(async (opts: ProjectEnvOpts) => {
-      const { secrets: list } = await client().getSecrets(opts.project, opts.env);
+      const { secrets: list } = await (await client()).getSecrets(opts.project, opts.env);
       if (list.length === 0) {
         console.log("No secrets");
         return;
@@ -138,7 +138,7 @@ export function register(program: Command): void {
     .requiredOption("-e, --env <name>", "Environment name")
     .description("Get a single secret value")
     .action(async (key: string, opts: ProjectEnvOpts) => {
-      const { secrets: list } = await client().getSecrets(opts.project, opts.env);
+      const { secrets: list } = await (await client()).getSecrets(opts.project, opts.env);
       const entry = list.find((s) => s.key === key);
       if (!entry) {
         console.error(`Secret '${key}' not found`);
@@ -163,7 +163,7 @@ export function register(program: Command): void {
         return { key: pair.slice(0, eq), value: pair.slice(eq + 1) };
       });
 
-      await client().patchSecrets(opts.project, opts.env, entries);
+      await (await client()).patchSecrets(opts.project, opts.env, entries);
       console.log(`Set ${entries.length} secret(s)`);
     });
 
@@ -174,7 +174,7 @@ export function register(program: Command): void {
     .requiredOption("-e, --env <name>", "Environment name")
     .description("Delete a secret")
     .action(async (key: string, opts: ProjectEnvOpts) => {
-      await client().patchSecrets(opts.project, opts.env, [{ key, value: null }]);
+      await (await client()).patchSecrets(opts.project, opts.env, [{ key, value: null }]);
       console.log(`Deleted secret: ${key}`);
     });
 
@@ -186,7 +186,7 @@ export function register(program: Command): void {
     .option("-o, --output <file>", "Write to file instead of stdout")
     .description("Download all secrets")
     .action(async (opts: ProjectEnvOpts & { format: string; output?: string }) => {
-      const { secrets: list } = await client().getSecrets(opts.project, opts.env);
+      const { secrets: list } = await (await client()).getSecrets(opts.project, opts.env);
       const sorted = list.sort((a, b) => a.key.localeCompare(b.key));
 
       let output: string;
@@ -232,7 +232,7 @@ export function register(program: Command): void {
         "values — delete the file after use.",
     )
     .action(async (opts: { output?: string }) => {
-      const data = await exportVault(client());
+      const data = await exportVault(await client());
       const json = JSON.stringify(data, null, 2);
 
       if (opts.output) {
@@ -259,7 +259,7 @@ export function register(program: Command): void {
     .action(async (file: string) => {
       const fs = await import("fs");
       const data = JSON.parse(fs.readFileSync(file, "utf8")) as VaultExport;
-      await importVault(client(), data);
+      await importVault(await client(), data);
       console.error(`Imported ${data.projects.length} project(s)`);
     });
 }

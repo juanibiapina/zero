@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-08-14: You can now sign in to the command line with your browser: run `zero login`, approve in your Zero account, pick the organization you want, and every `zero` command works on that machine without setting `ZERO_API_KEY`. The sign-in belongs to you and that machine, so `zero logout` ends it everywhere without disturbing anyone else's access, and `zero whoami` now says which credential answered. API keys keep working exactly as before, still win over a sign-in when you set one, and remain the way to authenticate CI and servers, which have no browser. On a machine with no browser, `zero login --port 8976` works over an SSH-forwarded port.
+
 - 2026-08-14: The command line tool is now `zero` and covers both products: `zero vault ...` for secrets, `zero errors ...` for issues (report an error, list, inspect, resolve, reopen or delete an issue), and `zero keys` for the one key that works everywhere. Install it with `npx @zeroapps/cli`. This replaces `zv`, which is gone: the old command, its `ZEROVAULT_API_KEY` and `ZEROVAULT_API_URL` variables, and its saved contexts no longer work, so export `ZERO_API_KEY` (and `ZERO_API_URL` without the `/vault` suffix if you set one) and re-add any contexts with `zero context add`.
 
 - 2026-08-14: You can now mark a ZeroErrors issue resolved, or reopen it, with your API key instead of only from the dashboard, so a script or a deploy step can close out a bug it just fixed. Resolved issues keep their history and counts, drop off the open list, and come back on their own if the same error is reported again.

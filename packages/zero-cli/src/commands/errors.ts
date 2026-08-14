@@ -85,7 +85,7 @@ export function register(program: Command): void {
 
         const stack = opts.stack === "-" ? await readStdin() : opts.stack;
 
-        const result = await client().report({
+        const result = await (await client()).report({
           project: opts.project,
           message: opts.message,
           ...(stack ? { stack } : {}),
@@ -112,7 +112,7 @@ export function register(program: Command): void {
     .description("List issues")
     .action(async (opts: { project?: string; status?: string; json?: boolean }) => {
       const status = parseStatus(opts.status);
-      const result = await client().listIssues({
+      const result = await (await client()).listIssues({
         ...(opts.project ? { project: opts.project } : {}),
         ...(status ? { status } : {}),
       });
@@ -135,7 +135,7 @@ export function register(program: Command): void {
     .description("Show an issue and its recent events")
     .action(async (id: string, opts: { json?: boolean }) => {
       await withNotFound(id, async () => {
-        const result = await client().getIssue(id);
+        const result = await (await client()).getIssue(id);
 
         if (opts.json) {
           console.log(JSON.stringify(result, null, 2));
@@ -159,7 +159,7 @@ export function register(program: Command): void {
     .description("Mark an issue resolved")
     .action(async (id: string) => {
       await withNotFound(id, async () => {
-        await client().setIssueStatus(id, "resolved");
+        await (await client()).setIssueStatus(id, "resolved");
         console.log(`Resolved issue ${id}`);
       });
     });
@@ -170,7 +170,7 @@ export function register(program: Command): void {
     .description("Reopen a resolved issue")
     .action(async (id: string) => {
       await withNotFound(id, async () => {
-        await client().setIssueStatus(id, "open");
+        await (await client()).setIssueStatus(id, "open");
         console.log(`Reopened issue ${id}`);
       });
     });
@@ -181,7 +181,7 @@ export function register(program: Command): void {
     .description("Delete an issue and its stored events (no undo)")
     .action(async (id: string) => {
       await withNotFound(id, async () => {
-        await client().deleteIssue(id);
+        await (await client()).deleteIssue(id);
         console.log(`Deleted issue ${id}`);
       });
     });

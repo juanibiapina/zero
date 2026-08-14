@@ -19,7 +19,7 @@ export function register(program: Command): void {
     .option("-l, --label <name>", "Key label")
     .description("Create a new API key")
     .action(async (opts: { label?: string }) => {
-      const client = getVaultClient(program.opts<AuthFlags>());
+      const client = await getVaultClient(program.opts<AuthFlags>());
       const result = await client.createKey(opts.label);
       console.log(`API Key: ${result.key}`);
       console.log(`ID: ${result.id}`);
@@ -31,7 +31,7 @@ export function register(program: Command): void {
     .command("list")
     .description("List API keys")
     .action(async () => {
-      const client = getVaultClient(program.opts<AuthFlags>());
+      const client = await getVaultClient(program.opts<AuthFlags>());
       const { keys: list } = await client.listKeys();
       if (list.length === 0) {
         console.log("No API keys");
@@ -48,7 +48,7 @@ export function register(program: Command): void {
     .argument("<id>", "Key ID")
     .description("Revoke an API key")
     .action(async (id: string) => {
-      const client = getVaultClient(program.opts<AuthFlags>());
+      const client = await getVaultClient(program.opts<AuthFlags>());
       await client.revokeKey(parseInt(id, 10));
       console.log(`Revoked key ${id}`);
     });

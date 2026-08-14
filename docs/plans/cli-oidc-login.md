@@ -271,8 +271,12 @@ Each is a separate commit; 1-2 can land before any CLI work is visible.
    verifier so route tests need no Clerk. Verified with a real token from the
    live instance: `{ok:true, auth:{orgId, userId, via:"oauth"}}`, second call
    served from cache.
-3. **CLI:** `zero login` / `logout`, storage, refresh, precedence, and `whoami`
-   reporting the credential in use.
+3. ~~**CLI**~~ **Done.** `zero login` / `zero logout`, tokens stored per API
+   origin in the 0600 config, refresh-before-expiry that persists the rotated
+   pair, precedence with the login last, and `whoami` naming the credential.
+   Proven end to end against the live instance: a real `zero login --port 8976`
+   signed in as juanibiapina@gmail.com and wrote the org-scoped pair. Requests
+   with it 401 until phase 2 is deployed.
 4. **Docs + skills:** `apps/docs/src/content/docs/cli/overview.mdx` gains a
    "Sign in" section ahead of the API-key section; `account/api-keys.md` stops
    claiming the first key must come from the dashboard; `docs/console-auth.md`

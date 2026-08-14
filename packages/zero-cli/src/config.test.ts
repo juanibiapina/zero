@@ -141,7 +141,7 @@ describe("resolveAuth precedence", () => {
       context,
       defaultBaseUrl: DEFAULT,
     });
-    expect(auth).toEqual({ apiKey: "flag_key", baseUrl: "https://flag" });
+    expect(auth).toEqual({ apiKey: "flag_key", baseUrl: "https://flag", via: "api_key" });
   });
 
   it("context wins over env", () => {
@@ -151,7 +151,7 @@ describe("resolveAuth precedence", () => {
       context,
       defaultBaseUrl: DEFAULT,
     });
-    expect(auth).toEqual({ apiKey: "ctx_key", baseUrl: "https://ctx" });
+    expect(auth).toEqual({ apiKey: "ctx_key", baseUrl: "https://ctx", via: "api_key" });
   });
 
   it("falls back to env when no context is set", () => {
@@ -161,12 +161,12 @@ describe("resolveAuth precedence", () => {
       context: null,
       defaultBaseUrl: DEFAULT,
     });
-    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://env" });
+    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://env", via: "api_key" });
   });
 
   it("uses context when neither flag nor env is set", () => {
     const auth = resolveAuth({ flags: {}, env: {}, context, defaultBaseUrl: DEFAULT });
-    expect(auth).toEqual({ apiKey: "ctx_key", baseUrl: "https://ctx" });
+    expect(auth).toEqual({ apiKey: "ctx_key", baseUrl: "https://ctx", via: "api_key" });
   });
 
   it("falls back to the default base url when no source supplies one", () => {
@@ -176,7 +176,7 @@ describe("resolveAuth precedence", () => {
       context: null,
       defaultBaseUrl: DEFAULT,
     });
-    expect(auth).toEqual({ apiKey: "env_key", baseUrl: DEFAULT });
+    expect(auth).toEqual({ apiKey: "env_key", baseUrl: DEFAULT, via: "api_key" });
   });
 
   it("returns null when no source supplies an api key", () => {
@@ -191,7 +191,7 @@ describe("resolveAuth precedence", () => {
       context: null,
       defaultBaseUrl: DEFAULT_BASE_URL,
     });
-    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://api.zeroapps.dev" });
+    expect(auth).toEqual({ apiKey: "env_key", baseUrl: "https://api.zeroapps.dev", via: "api_key" });
   });
 
   it("passes a /vault-suffixed base URL through verbatim", () => {
@@ -205,5 +205,67 @@ describe("resolveAuth precedence", () => {
       defaultBaseUrl: DEFAULT_BASE_URL,
     });
     expect(auth?.baseUrl).toBe("https://api.zeroapps.dev/vault");
+  });
+});
+
+describe("resolveAuth with a stored login", () => {
+  const DEFAULT = "https://default";
+  const stored = {
+    accessToken: "at_stored",
+    refreshToken: "rt_stored",
+    expiresAt: Date.now() + 3_600_000,
+    userId: "user_1",
+    orgId: "org_1",
+    email: "dev@example.com",
+    issuer: "https://clerk.example.dev",
+    clientId: "client_1",
+  };
+
+  it("uses the login for the resolved base url when nothing more explicit is set", () => {
+    const auth = resolveAuth({
+      flags: {},
+      env: {},
+      context: null,
+      logins: { [DEFAULT]: stored },
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toEqual({ apiKey: "at_stored", baseUrl: DEFAULT, via: "login", login: stored });
+  });
+
+  it("lets an explicit env key win, since a login is ambient machine state", () => {
+    const auth = resolveAuth({
+      flags: {},
+      env: { apiKey: "env_key" },
+      context: null,
+      logins: { [DEFAULT]: stored },
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toMatchObject({ apiKey: "env_key", via: "api_key" });
+  });
+
+  it("ignores a login stored for a different origin", () => {
+    const auth = resolveAuth({
+      flags: {},
+      env: {},
+      context: null,
+      logins: { "https://other": stored },
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toBeNull();
+  });
+
+  it("follows --base-url to the login for that origin", () => {
+    const auth = resolveAuth({
+      flags: { baseUrl: "https://other" },
+      env: {},
+      context: null,
+      logins: { "https://other": stored, [DEFAULT]: { ...stored, accessToken: "at_default" } },
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toMatchObject({ apiKey: "at_stored", baseUrl: "https://other" });
   });
 });
