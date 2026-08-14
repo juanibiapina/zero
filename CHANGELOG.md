@@ -4,6 +4,8 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
+- 2026-08-14: You can now mark a ZeroErrors issue resolved, or reopen it, with your API key instead of only from the dashboard, so a script or a deploy step can close out a bug it just fixed. Resolved issues keep their history and counts, drop off the open list, and come back on their own if the same error is reported again.
+
 - 2026-07-28: The zeroapps.dev home page is now plain black on white, the same as the dashboard: the orange is gone, there is one clear "Create an API key" button instead of two, and each product is just its name, what it does, and where to go next. It also loads a little lighter, and its text now meets contrast requirements everywhere.
 
 - 2026-07-28: Deleting a project or an environment in ZeroVault, and revoking an API key, now ask for confirmation in the same in-app dialog the rest of the console uses instead of a plain browser popup. The dialog names what is about to be removed and spells out what is lost, tells you when it worked, and if the request fails it stays open and says why instead of failing silently.

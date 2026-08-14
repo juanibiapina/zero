@@ -399,6 +399,84 @@ describe("Read and resolve API", () => {
     expect(res.status).toBe(400);
   });
 
+  it("resolves and reopens an issue over /v1 with the API key", async () => {
+    const key = await putKey("org_v1_resolve", "u");
+    const id = await seedIssue(key, {
+      project: "web",
+      message: "resolve me over v1",
+      stack: "E\n    at v (/v:1:1)",
+    });
+
+    const patch = (status: string) =>
+      SELF.default.fetch(
+        `https://api.zeroapps.dev/errors/v1/issues/${id}`,
+        authed(key, { method: "PATCH", body: JSON.stringify({ status }) }),
+      );
+
+    const resolved = await patch("resolved");
+    expect(resolved.status).toBe(200);
+    expect(((await resolved.json()) as { issue: { status: string } }).issue.status).toBe(
+      "resolved",
+    );
+
+    const open = await SELF.default.fetch(
+      "https://api.zeroapps.dev/errors/v1/issues?status=open",
+      authed(key),
+    );
+    expect(((await open.json()) as { issues: unknown[] }).issues).toHaveLength(0);
+
+    const reopened = await patch("open");
+    expect(((await reopened.json()) as { issue: { status: string } }).issue.status).toBe("open");
+  });
+
+  it("rejects an invalid status over /v1 (400)", async () => {
+    const key = await putKey("org_v1_badpatch", "u");
+    const id = await seedIssue(key, {
+      project: "web",
+      message: "bad status",
+      stack: "E\n    at b (/b:1:1)",
+    });
+
+    const res = await SELF.default.fetch(
+      `https://api.zeroapps.dev/errors/v1/issues/${id}`,
+      authed(key, { method: "PATCH", body: JSON.stringify({ status: "wontfix" }) }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("404s resolving an unknown issue over /v1", async () => {
+    const key = await putKey("org_v1_missing", "u");
+    const res = await SELF.default.fetch(
+      "https://api.zeroapps.dev/errors/v1/issues/nope",
+      authed(key, { method: "PATCH", body: JSON.stringify({ status: "resolved" }) }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("cannot resolve another org's issue over /v1", async () => {
+    const keyA = await putKey("org_v1_res_a", "ua");
+    const keyB = await putKey("org_v1_res_b", "ub");
+    const id = await seedIssue(keyA, {
+      project: "web",
+      message: "A only",
+      stack: "E\n    at a (/a:1:1)",
+    });
+
+    const res = await SELF.default.fetch(
+      `https://api.zeroapps.dev/errors/v1/issues/${id}`,
+      authed(keyB, { method: "PATCH", body: JSON.stringify({ status: "resolved" }) }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects resolving without an API key (401)", async () => {
+    const res = await SELF.default.fetch("https://api.zeroapps.dev/errors/v1/issues/any", {
+      method: "PATCH",
+      body: JSON.stringify({ status: "resolved" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
   it("isolates the list per org", async () => {
     const keyA = await putKey("org_list_a", "ua");
     const keyB = await putKey("org_list_b", "ub");

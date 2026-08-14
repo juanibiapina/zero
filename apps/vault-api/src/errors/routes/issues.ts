@@ -43,11 +43,31 @@ export const createIssuesRouter = () => {
     return new Response(null, { status: 204 });
   };
 
+  const setStatus = async (
+    c: Context<{ Bindings: Env; Variables: Variables }>,
+    id: string,
+  ) => {
+    const raw: unknown = await c.req.json().catch(() => null);
+    const parsed = patchSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid status" }, 400);
+    }
+
+    const issue = await getErrorsDO(c).setStatus(id, parsed.data.status);
+    if (!issue) {
+      return c.json({ error: "Issue not found" }, 404);
+    }
+    return c.json({ issue }, 200);
+  };
+
   app.get("/errors/v1/issues", list);
   app.get("/api/errors/issues", list);
 
   app.delete("/errors/v1/issues/:id", (c) => remove(c, c.req.param("id")));
   app.delete("/api/errors/issues/:id", (c) => remove(c, c.req.param("id")));
+
+  app.patch("/errors/v1/issues/:id", (c) => setStatus(c, c.req.param("id")));
+  app.patch("/api/errors/issues/:id", (c) => setStatus(c, c.req.param("id")));
 
   app.get("/api/errors/issues/:id", async (c) => {
     const result = await getErrorsDO(c).getIssue(c.req.param("id"));
@@ -58,23 +78,6 @@ export const createIssuesRouter = () => {
       { issue: result.issue, events: result.events.map(toEventSummary) },
       200,
     );
-  });
-
-  app.patch("/api/errors/issues/:id", async (c) => {
-    const raw: unknown = await c.req.json().catch(() => null);
-    const parsed = patchSchema.safeParse(raw);
-    if (!parsed.success) {
-      return c.json({ error: "Invalid status" }, 400);
-    }
-
-    const issue = await getErrorsDO(c).setStatus(
-      c.req.param("id"),
-      parsed.data.status,
-    );
-    if (!issue) {
-      return c.json({ error: "Issue not found" }, 404);
-    }
-    return c.json({ issue }, 200);
   });
 
   return app;

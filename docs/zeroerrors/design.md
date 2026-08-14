@@ -13,6 +13,7 @@ package `@zero/dashboard-api`), alongside Vault. The dashboard SPA is
 - Public ingest: `POST https://api.zeroapps.dev/errors/v1/errors`
 - Public issue list: `GET https://api.zeroapps.dev/errors/v1/issues`
 - Public issue delete: `DELETE https://api.zeroapps.dev/errors/v1/issues/{id}`
+- Public issue status: `PATCH https://api.zeroapps.dev/errors/v1/issues/{id}`
 - Dashboard list/detail/status/delete: `/api/errors/issues/*` on `dash.zeroapps.dev`
 - Shared types and fingerprinting: `packages/errors-core`
 
@@ -69,3 +70,15 @@ clears the active tables, not every trace of the issue. `LogNotifier` writes the
 issue id, project, title, level, and count to Workers Logs on a new or regressed
 issue (retained up to 7 days), and the Durable Object's point-in-time recovery
 can restore the store to any moment in the past 30 days.
+
+## Resolving an issue
+
+`PATCH /errors/v1/issues/{id}` (API key) and `PATCH /api/errors/issues/{id}`
+(Clerk session) share one handler. The body is `{"status":"open"|"resolved"}`;
+anything else is `400 {"error":"Invalid status"}`. The response is
+`200 {"issue": ...}` with the updated issue, or `404 {"error":"Issue not found"}`
+when the id is unknown in the caller's org — including an id belonging to another
+org, since both surfaces reach only `ERRORSDO.idFromName(orgId)`.
+
+Resolving is not a tombstone: a new event for a resolved issue reopens it and
+counts as a regression for notification purposes.
