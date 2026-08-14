@@ -9,7 +9,7 @@ set -euo pipefail
 
 URL="https://zero.juanibiapina.dev/api/webhooks/telegram"
 
-ZERO="pnpm dlx @zeroapps/cli@0.3.0"
+ZERO="pnpm dlx @zeroapps/cli@0.3.1"
 TOKEN=$($ZERO vault secrets get TELEGRAM_BOT_TOKEN       -p zero-api -e production)
 SECRET=$($ZERO vault secrets get TELEGRAM_WEBHOOK_SECRET -p zero-api -e production)
 

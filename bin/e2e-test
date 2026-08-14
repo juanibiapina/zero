@@ -27,7 +27,7 @@ trap cleanup EXIT
 echo "=== Preparing secrets ==="
 # Regenerate .dev.vars from ZeroVault (json -> dotenv) and restore on exit.
 # Requires ZERO_API_KEY. ZERO_API_URL is optional.
-ZERO="pnpm dlx @zeroapps/cli@0.3.0"
+ZERO="pnpm dlx @zeroapps/cli@0.3.1"
 cp apps/agent-api/.dev.vars apps/agent-api/.dev.vars.bak
 $ZERO vault secrets download -p zero-api -e development --format json \
   | node bin/json-to-dotenv.mjs > apps/agent-api/.dev.vars

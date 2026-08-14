@@ -21,7 +21,7 @@ bin/fetch-secrets
 bin/sync-secrets-to-cloudflare
 ```
 
-The CLI is `pnpm dlx @zeroapps/cli@0.3.0`, command `zero` (secrets live under
+The CLI is `pnpm dlx @zeroapps/cli@0.3.1`, command `zero` (secrets live under
 `zero vault ...`). The public dashboard is `https://dash.zeroapps.dev/vault`; CLI
 traffic uses the API host, not the browser origin.
 

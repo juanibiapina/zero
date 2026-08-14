@@ -42,7 +42,7 @@ Each Worker needs these secrets in its own ZeroVault project, for both
 For the dashboard:
 
 ```bash
-ZERO="pnpm dlx @zeroapps/cli@0.3.0"
+ZERO="pnpm dlx @zeroapps/cli@0.3.1"
 $ZERO vault secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zerovault -e development
 $ZERO vault secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zerovault -e production
 $ZERO vault secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zerovault -e development

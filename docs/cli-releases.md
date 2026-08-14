@@ -49,9 +49,15 @@ workflow file requires editing it.**
 Trusted publishing cannot bootstrap a package: npm's `npm trust` prerequisites
 state the package "must already exist on the npm registry", and configuring a
 trusted publisher is only possible after that. `@zeroapps/cli@0.3.0` was
-therefore published by hand from a logged-in machine (account 2FA required),
-after which the trusted publisher was attached and every later version shipped
-from the tag workflow.
+therefore published by hand from a logged-in machine, after which the trusted
+publisher was attached and `0.3.1` shipped from the tag workflow, proving the
+config. Every version since goes through the tag.
+
+On a passkey-only account, that manual publish needs `npm publish
+--auth-type=web` run under a pty (`script -qec "npm publish --auth-type=web"
+/dev/null`): npm prints an approval URL, and it redacts that URL in both piped
+output and its debug log, so a plain `npm publish` in a script is a dead end.
+`--otp` only helps with an authenticator app.
 
 Expect the same dance for any future rename or new publishable package:
 
