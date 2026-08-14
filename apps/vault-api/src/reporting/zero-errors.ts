@@ -5,7 +5,7 @@
 // `executionCtx.waitUntil` from an HTTP handler without ever disturbing the
 // caller's error path.
 //
-// ZEROVAULT_API_KEY is a required secret (see wrangler.jsonc secrets.required):
+// ZERO_API_KEY is a required secret (see wrangler.jsonc secrets.required):
 // the same `zv_` org key that unlocks ZeroVault also authorizes ZeroErrors
 // ingest, since both validate against the shared APIKEYS store. There is no
 // missing-key branch here — a missing key is a deploy-time failure, not a
@@ -23,7 +23,7 @@ function extract(err: unknown): { message: string; stack?: string } {
 }
 
 export async function reportError(
-  env: { ZEROVAULT_API_KEY: string },
+  env: { ZERO_API_KEY: string },
   err: unknown,
   context: Record<string, unknown> = {},
   fetchImpl: typeof fetch = fetch,
@@ -34,7 +34,7 @@ export async function reportError(
     await fetchImpl(ENDPOINT, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${env.ZEROVAULT_API_KEY}`,
+        authorization: `Bearer ${env.ZERO_API_KEY}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({

@@ -13,7 +13,7 @@
       "DISCORD_SIGNUP_WEBHOOK_URL",
       "ENVIRONMENT",
       "MASTER_KEY",
-      "ZEROVAULT_API_KEY"
+      "ZERO_API_KEY"
     ]
   },
   "observability": { "enabled": true },

@@ -9,7 +9,7 @@ describe("reportError", () => {
     const fetchFn = okFetch();
 
     await reportError(
-      { ZEROVAULT_API_KEY: "zv_test" },
+      { ZERO_API_KEY: "zv_test" },
       new Error("boom"),
       { site: "http", path: "/v1/secrets" },
       fetchFn,
@@ -39,7 +39,7 @@ describe("reportError", () => {
   it("uses String(err) for non-Error values", async () => {
     const fetchFn = okFetch();
 
-    await reportError({ ZEROVAULT_API_KEY: "zv_test" }, "plain failure", {}, fetchFn);
+    await reportError({ ZERO_API_KEY: "zv_test" }, "plain failure", {}, fetchFn);
 
     const init = fetchFn.mock.calls[0][1];
     const body = JSON.parse(init?.body as string) as { message: string };
@@ -53,7 +53,7 @@ describe("reportError", () => {
 
     await expect(
       reportError(
-        { ZEROVAULT_API_KEY: "zv_test" },
+        { ZERO_API_KEY: "zv_test" },
         new Error("boom"),
         {},
         fetchFn,
@@ -68,7 +68,7 @@ describe("reportError", () => {
 
     await expect(
       reportError(
-        { ZEROVAULT_API_KEY: "zv_test" },
+        { ZERO_API_KEY: "zv_test" },
         new Error("boom"),
         {},
         fetchFn,

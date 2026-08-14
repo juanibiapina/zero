@@ -6,7 +6,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const PROD = { ZEROVAULT_API_KEY: "zv_test", ENVIRONMENT: "production" };
+const PROD = { ZERO_API_KEY: "zv_test", ENVIRONMENT: "production" };
 
 const mockFetch = (status = 202) => {
   const fn = vi.fn(
@@ -85,7 +85,7 @@ describe("reportError", () => {
       const fetchFn = mockFetch();
 
       await reportError(
-        { ZEROVAULT_API_KEY: "zv_test", ...(environment ? { ENVIRONMENT: environment } : {}) },
+        { ZERO_API_KEY: "zv_test", ...(environment ? { ENVIRONMENT: environment } : {}) },
         new Error("boom"),
       );
 

@@ -12,7 +12,7 @@ interface __BaseEnv_Env {
 	DISCORD_SIGNUP_WEBHOOK_URL: string;
 	ENVIRONMENT: string;
 	MASTER_KEY: string;
-	ZEROVAULT_API_KEY: string;
+	ZERO_API_KEY: string;
 	ORGDO: DurableObjectNamespace<import("./src/index").OrgDO>;
 	PROJECTVAULTDO: DurableObjectNamespace<import("./src/index").ProjectVaultDO>;
 	ERRORSDO: DurableObjectNamespace<import("./src/index").ErrorsDO>;
@@ -29,7 +29,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "CLERK_PUBLISHABLE_KEY" | "CLERK_SECRET_KEY" | "CLERK_WEBHOOK_SIGNING_SECRET" | "DISCORD_SIGNUP_WEBHOOK_URL" | "ENVIRONMENT" | "MASTER_KEY" | "ZEROVAULT_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "CLERK_PUBLISHABLE_KEY" | "CLERK_SECRET_KEY" | "CLERK_WEBHOOK_SIGNING_SECRET" | "DISCORD_SIGNUP_WEBHOOK_URL" | "ENVIRONMENT" | "MASTER_KEY" | "ZERO_API_KEY">> {}
 }
 declare module "*.sql" {
 	const value: string;

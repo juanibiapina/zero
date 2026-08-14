@@ -28,7 +28,7 @@ interface __BaseEnv_Env {
 	TELEGRAM_BOT_INFO: string;
 	TELEGRAM_BOT_TOKEN: string;
 	TELEGRAM_WEBHOOK_SECRET: string;
-	ZEROVAULT_API_KEY: string;
+	ZERO_API_KEY: string;
 	USER_DO: DurableObjectNamespace<import("./src/index").UserDO>;
 	SCHEDULE_DO: DurableObjectNamespace<import("./src/index").ScheduleDO>;
 	LEARNING_DO: DurableObjectNamespace<import("./src/index").LearningDO>;
@@ -46,7 +46,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "TELEGRAM_API_ROOT" | "CLOUDFLARE_ACCOUNT_ID" | "CLOUDFLARE_GATEWAY_ID" | "MODEL_ID" | "LLM_BASE_URL_OVERRIDE" | "ADMIN_USER_ID" | "BRAVE_API_KEY" | "CLERK_PUBLISHABLE_KEY" | "CLERK_SECRET_KEY" | "CLERK_WEBHOOK_SIGNING_SECRET" | "CLOUDFLARE_API_KEY" | "CLOUDFLARE_ANALYTICS_TOKEN" | "DISCORD_SIGNUP_WEBHOOK_URL" | "ENVIRONMENT" | "GITHUB_APP_ID" | "GITHUB_APP_PRIVATE_KEY" | "TAVILY_API_KEY" | "TELEGRAM_BOT_INFO" | "TELEGRAM_BOT_TOKEN" | "TELEGRAM_WEBHOOK_SECRET" | "ZEROVAULT_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "TELEGRAM_API_ROOT" | "CLOUDFLARE_ACCOUNT_ID" | "CLOUDFLARE_GATEWAY_ID" | "MODEL_ID" | "LLM_BASE_URL_OVERRIDE" | "ADMIN_USER_ID" | "BRAVE_API_KEY" | "CLERK_PUBLISHABLE_KEY" | "CLERK_SECRET_KEY" | "CLERK_WEBHOOK_SIGNING_SECRET" | "CLOUDFLARE_API_KEY" | "CLOUDFLARE_ANALYTICS_TOKEN" | "DISCORD_SIGNUP_WEBHOOK_URL" | "ENVIRONMENT" | "GITHUB_APP_ID" | "GITHUB_APP_PRIVATE_KEY" | "TAVILY_API_KEY" | "TELEGRAM_BOT_INFO" | "TELEGRAM_BOT_TOKEN" | "TELEGRAM_WEBHOOK_SECRET" | "ZERO_API_KEY">> {}
 }
 declare module "*.sql" {
 	const value: string;

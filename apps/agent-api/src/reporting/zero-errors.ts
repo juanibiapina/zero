@@ -1,14 +1,14 @@
 // ZeroErrors reporting.
 //
 // Fire-and-forget exception reporting to ZeroErrors, dogfooding the suite's own
-// error tracker. ZEROVAULT_API_KEY is a required secret (the deploy fails loud
+// error tracker. ZERO_API_KEY is a required secret (the deploy fails loud
 // if it is unset), so reporting is always configured. The try/catch is runtime
 // resilience against a ZeroErrors outage, not an opt-out: the returned promise
 // never rejects, so it can be awaited in a Durable Object alarm or handed to
 // `executionCtx.waitUntil` from an HTTP handler without ever disturbing the
 // caller's error path.
 //
-// The suite uses a single `zv_` key (ZEROVAULT_API_KEY) for everything: the
+// The suite uses a single `zv_` key (ZERO_API_KEY) for everything: the
 // same org key that unlocks ZeroVault also authorizes ZeroErrors ingest, since
 // both validate against the shared APIKEYS store. Ingest matches the
 // /v1/errors contract in @zero/errors-core.
@@ -29,7 +29,7 @@ export interface ReportOptions {
 }
 
 export interface ReportEnv {
-  ZEROVAULT_API_KEY: string;
+  ZERO_API_KEY: string;
   // Only "production" reports. Local dev and tests must never write into the
   // production issue list. `.dev.vars` sets "development"; the deployed Worker
   // gets "production" from its secret (declared in wrangler.jsonc's
@@ -65,7 +65,7 @@ export async function reportError(
     const res = await fetch(ENDPOINT, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${env.ZEROVAULT_API_KEY}`,
+        authorization: `Bearer ${env.ZERO_API_KEY}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({

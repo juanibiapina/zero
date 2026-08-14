@@ -27,7 +27,7 @@
       "TELEGRAM_BOT_INFO",
       "TELEGRAM_BOT_TOKEN",
       "TELEGRAM_WEBHOOK_SECRET",
-      "ZEROVAULT_API_KEY"
+      "ZERO_API_KEY"
     ]
   },
   "assets": {
