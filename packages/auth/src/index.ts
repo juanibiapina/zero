@@ -44,7 +44,7 @@ export async function hashApiKey(key: string): Promise<string> {
 export type AuthContext = {
   orgId: string;
   userId: string;
-  via: "api_key" | "oauth";
+  via: "api_key" | "oauth" | "ci";
 };
 
 /**
@@ -85,9 +85,13 @@ export async function authenticate(
   const token = authHeader?.replace("Bearer ", "").trim();
   if (!token) return { ok: false, reason: "missing" };
 
-  if (token.startsWith("zv_")) {
-    const auth = await validateApiKey(deps.apikeys, token);
-    return auth ? { ok: true, auth: { ...auth, via: "api_key" } } : { ok: false, reason: "invalid" };
+  // Both credential types live in the same KV store and differ only in origin
+  // and lifetime: `zv_` is a key someone created, `zci_` was minted for one CI
+  // job and expires on its own. Same lookup, different `via`.
+  if (token.startsWith("zv_") || token.startsWith("zci_")) {
+    const via = token.startsWith("zci_") ? "ci" : "api_key";
+    const auth = await lookupToken(deps.apikeys, token);
+    return auth ? { ok: true, auth: { ...auth, via } } : { ok: false, reason: "invalid" };
   }
 
   const verified = await deps.verifyOAuthToken(token);
@@ -117,6 +121,18 @@ export async function validateApiKey(
 
   if (!key.startsWith("zv_")) return null;
 
+  return lookupToken(apikeys, key);
+}
+
+/**
+ * The KV read both credential types share: hash the token, read the record,
+ * reject anything that is not a v2 org-scoped value. Knows nothing about
+ * prefixes, so the caller stays responsible for deciding what it just resolved.
+ */
+async function lookupToken(
+  apikeys: KVNamespace,
+  key: string,
+): Promise<{ orgId: string; userId: string } | null> {
   const keyHash = await hashApiKey(key);
   const raw = await apikeys.get(keyHash);
 
@@ -134,3 +150,11 @@ export async function validateApiKey(
 }
 
 export { createClerkOAuthVerifier, frontendApiUrl } from "./clerk-oauth";
+
+export {
+  verifyGithubOidcToken,
+  trustAllows,
+  type CiTrust,
+  type GithubActionsClaims,
+  type TrustDecision,
+} from "./github-oidc";

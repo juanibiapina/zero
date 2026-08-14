@@ -1,5 +1,10 @@
 import { clerkMiddleware, getAuth } from "@clerk/hono";
-import { authenticate, createClerkOAuthVerifier, type OAuthTokenVerifier } from "@zero/auth";
+import {
+  authenticate,
+  createClerkOAuthVerifier,
+  verifyGithubOidcToken,
+  type OAuthTokenVerifier,
+} from "@zero/auth";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
@@ -8,6 +13,8 @@ import type { Notifier } from "./errors/notify/notifier";
 import { createErrorsRouter } from "./errors/routes/errors";
 import { createIssuesRouter } from "./errors/routes/issues";
 import { reportError } from "./reporting/zero-errors";
+import { createCiTokenRoute, type GithubTokenVerifier } from "./routes/ci-token";
+import { createCiTrustsRouter } from "./routes/ci-trusts";
 import { createClerkWebhookRoute } from "./routes/clerk-webhook";
 import { createEnvironmentsRouter } from "./routes/environments";
 import { createKeysRouter } from "./routes/keys";
@@ -28,7 +35,18 @@ interface CreateDashboardAppOptions {
    * can be exercised without a live Clerk instance or a real login.
    */
   verifyOAuthToken?: OAuthTokenVerifier;
+  /**
+   * Stand-in for GitHub's OIDC verification, for the same reason: exercising
+   * the exchange must not need a workflow run.
+   */
+  verifyGithubToken?: GithubTokenVerifier;
 }
+
+/**
+ * The audience a workflow must request its OIDC token for. Requiring ours stops
+ * a token minted for another provider from being replayed here.
+ */
+const CI_TOKEN_AUDIENCE = "https://api.zeroapps.dev";
 
 const publicCors = cors({
   origin: "*",
@@ -66,6 +84,22 @@ export const createDashboardApp = (env: Env, options: CreateDashboardAppOptions 
       publishableKey: env.CLERK_PUBLISHABLE_KEY,
       cache: env.APIKEYS,
     });
+
+  // Mounted BEFORE the auth middleware on purpose: this endpoint issues a
+  // credential, so it cannot require one. Moving it below the loop would make
+  // every CI exchange fail with "Invalid API key".
+  app.route(
+    "/",
+    createCiTokenRoute(
+      env,
+      options.verifyGithubToken ??
+        ((token) =>
+          verifyGithubOidcToken(token, {
+            audience: CI_TOKEN_AUDIENCE,
+            cache: env.APIKEYS,
+          })),
+    ),
+  );
 
   for (const path of ["/vault/v1/*", "/errors/v1/*"]) {
     app.use(path, publicCors);
@@ -126,6 +160,7 @@ export const createDashboardApp = (env: Env, options: CreateDashboardAppOptions 
   });
 
   app.route("/", createKeysRouter(env));
+  app.route("/", createCiTrustsRouter(env));
   app.route("/", createProjectsRouter(env));
   app.route("/", createEnvironmentsRouter(env));
   app.route("/", createSecretsRouter(env));

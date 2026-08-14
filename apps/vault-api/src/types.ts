@@ -16,5 +16,11 @@ export interface Env {
   APIKEYS: KVNamespace;
   VAULT_RATE_LIMITER: RateLimit;
   ERRORS_RATE_LIMITER: RateLimit;
+  /**
+   * Guards the unauthenticated CI exchange. Keyed by client IP: the repository
+   * ids in an unverified token are attacker-chosen, so limiting by them limits
+   * nothing.
+   */
+  CI_TOKEN_RATE_LIMITER: RateLimit;
   ASSETS: { fetch(request: Request): Promise<Response> };
 }
