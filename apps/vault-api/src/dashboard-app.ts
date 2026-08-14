@@ -1,5 +1,5 @@
 import { clerkMiddleware, getAuth } from "@clerk/hono";
-import { validateApiKey } from "@zero/auth";
+import { authenticate, createClerkOAuthVerifier, type OAuthTokenVerifier } from "@zero/auth";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
@@ -23,6 +23,11 @@ type Variables = {
 interface CreateDashboardAppOptions {
   testUserId?: string;
   notifier?: Notifier;
+  /**
+   * Stand-in for Clerk's `/oauth/userinfo`. Tests inject it so the OAuth path
+   * can be exercised without a live Clerk instance or a real login.
+   */
+  verifyOAuthToken?: OAuthTokenVerifier;
 }
 
 const publicCors = cors({
@@ -55,11 +60,32 @@ export const createDashboardApp = (env: Env, options: CreateDashboardAppOptions 
 
   app.get("/ping", (c) => c.json({ ok: true }));
 
+  const verifyOAuthToken =
+    options.verifyOAuthToken ??
+    createClerkOAuthVerifier({
+      publishableKey: env.CLERK_PUBLISHABLE_KEY,
+      cache: env.APIKEYS,
+    });
+
   for (const path of ["/vault/v1/*", "/errors/v1/*"]) {
     app.use(path, publicCors);
     app.use(path, async (c, next) => {
-      const auth = await validateApiKey(env.APIKEYS, c.req.header("Authorization"));
-      if (!auth) return c.json({ error: "Invalid API key" }, 401);
+      const outcome = await authenticate(
+        { apikeys: env.APIKEYS, verifyOAuthToken },
+        c.req.header("Authorization"),
+      );
+      if (!outcome.ok) {
+        // A signed-in user whose token carries no org is the one failure a
+        // correct client hits, so it names the fix instead of saying "invalid".
+        if (outcome.reason === "no_org") {
+          return c.json(
+            { error: "Token has no organization. Run `zero login` again and select an organization." },
+            401,
+          );
+        }
+        return c.json({ error: "Invalid API key" }, 401);
+      }
+      const auth = outcome.auth;
 
       c.set("userId", auth.userId);
       c.set("orgId", auth.orgId);

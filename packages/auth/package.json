@@ -14,13 +14,15 @@
   ],
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260801.1",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.8.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "^4.1.10"
   }
 }
