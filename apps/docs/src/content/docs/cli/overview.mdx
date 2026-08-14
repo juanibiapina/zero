@@ -12,16 +12,16 @@ on npm:
 
 ## Run it
 
-The current published version is `0.4.0`. Run it without installing:
+The current published version is `0.4.1`. Run it without installing:
 
 ```bash
-pnpm dlx @zeroapps/cli@0.4.0 --help
+pnpm dlx @zeroapps/cli@0.4.1 --help
 ```
 
 Install it globally to drop the `pnpm dlx` prefix and run `zero …` directly:
 
 ```bash
-npm i -g @zeroapps/cli@0.4.0
+npm i -g @zeroapps/cli@0.4.1
 ```
 
 ## Sign in
@@ -121,6 +121,17 @@ zero keys revoke <id>             # revoke by id from the list
 
 A created key is shown once, same as in the dashboard. Save it immediately; if you
 lose it, revoke it and create another.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | The command did what you asked |
+| 1 | The API refused: bad credential, missing project, conflict |
+| 75 | The API was unreachable or failing — a retry may work |
+
+Failures print one line on stderr, so stdout stays clean for pipes. Set
+`ZERO_DEBUG=1` to add the stack trace when you are chasing a bug.
 
 ## Upgrading from `zv`
 

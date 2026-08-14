@@ -17,6 +17,7 @@
 
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
+import { ApiError } from "./clients/http.js";
 import { getVaultClient, requireAuth, type AuthFlags } from "./auth.js";
 import * as contextCommands from "./commands/context.js";
 import * as loginCommands from "./commands/login.js";
@@ -66,4 +67,40 @@ keysCommands.register(program);
 vaultCommands.register(program);
 errorsCommands.register(program);
 
-program.parse();
+/**
+ * Exit codes, per the Unix convention the docs promise:
+ *   1  the API refused the request (bad credential, missing project, conflict)
+ *   75 the API could not answer (unreachable, 5xx) — a retry may work
+ *
+ * A failed request is an ordinary outcome for a CLI, so it prints one line on
+ * stderr. The stack is still there under ZERO_DEBUG, where a real bug needs it.
+ */
+function reportFailure(err: unknown): never {
+  const debug = Boolean(process.env.ZERO_DEBUG);
+
+  if (err instanceof ApiError) {
+    console.error(`Error: ${err.message}`);
+    if (err.status === 401) {
+      console.error(
+        "Run `zero login`, or set ZERO_API_KEY to a valid key " +
+          "(https://docs.zeroapps.dev/account/api-keys/).",
+      );
+    }
+    if (debug) console.error(err.stack);
+    process.exit(err.status >= 500 ? 75 : 1);
+  }
+
+  // fetch() rejects with a TypeError for DNS, connection refused and TLS
+  // failures alike: the API never answered, so it is the retryable case.
+  if (err instanceof TypeError) {
+    console.error(`Error: could not reach the Zero API: ${err.message}`);
+    if (debug) console.error(err.stack);
+    process.exit(75);
+  }
+
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+  if (debug && err instanceof Error) console.error(err.stack);
+  process.exit(1);
+}
+
+program.parseAsync().catch(reportFailure);
