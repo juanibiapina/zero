@@ -12,16 +12,16 @@ on npm:
 
 ## Run it
 
-The current published version is `0.4.1`. Run it without installing:
+The current published version is `0.5.0`. Run it without installing:
 
 ```bash
-pnpm dlx @zeroapps/cli@0.4.1 --help
+pnpm dlx @zeroapps/cli@0.5.0 --help
 ```
 
 Install it globally to drop the `pnpm dlx` prefix and run `zero …` directly:
 
 ```bash
-npm i -g @zeroapps/cli@0.4.1
+npm i -g @zeroapps/cli@0.5.0
 ```
 
 ## Sign in
@@ -63,9 +63,16 @@ zero login --port 8976
 
 Unattended machines have no browser at all. Use an API key there.
 
+## In GitHub Actions, use no credential at all
+
+A workflow proves its own identity: trust the repository once with `zero ci
+trust add --repo owner/repo`, give the job `permissions: id-token: write`, and
+drop the `ZERO_API_KEY` secret. See
+[GitHub Actions without an API key](/vault/github-actions/).
+
 ## Authenticate with an API key
 
-CI, servers and scripts use a key. Create one in the dashboard under **API keys**
+Servers, containers and other CI providers use a key. Create one in the dashboard under **API keys**
 (see [API keys](/account/api-keys/)), or from an already signed-in terminal with
 `zero keys create`.
 
@@ -79,8 +86,11 @@ Credentials are resolved in this order, first match wins:
 1. `--api-key` flag
 2. a directory-bound context (see below)
 3. the `ZERO_API_KEY` environment variable
-4. a `zero login` sign-in for this machine
+4. a GitHub Actions job's own identity (see above)
+5. a `zero login` sign-in for this machine
 
+A workflow's identity sits below the environment variable so a repository can
+pin a key while migrating, and above a sign-in because a runner has no browser.
 A sign-in comes last because it is the most ambient: it is set once and applies
 everywhere, so an exported key still wins. `zero whoami` prints a `Credential:`
 line naming which one answered, which is how you catch a stale `ZERO_API_KEY`

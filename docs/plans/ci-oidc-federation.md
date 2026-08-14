@@ -259,13 +259,17 @@ steps:
    `pull_request_target`. An `environment:` job carries an `environment` claim
    and its `sub` switches to the `:environment:NAME` form, dropping the ref
    entirely — so a trust record must match on the claims, never on `sub`.
-2. **Server:** `ci_trusts` table + migration, KV index, the exchange endpoint,
-   the `zci_` branch in `packages/auth`, rate limiting. Tests as below.
-3. **CLI:** `zero ci trust …`, the Actions auto-detect path, precedence, and
-   `zero whoami` reporting `Credential: github actions (owner/repo)`.
-4. **Docs + skills:** `apps/docs` CLI page gains a "GitHub Actions" section;
-   `docs/console-auth.md` or a new `docs/ci-federation.md` records the design;
-   `juanibiapina/zero-skills` gains the workflow snippet; root `CHANGELOG.md`.
+2. ~~**Server**~~ **Done** (PR #47). Verified in production with a real
+   workflow: exchange returned an org-scoped token, `whoami` reported
+   `ci:github:<repo_id>`, and the job listed 13 projects with no secret set.
+3. ~~**CLI**~~ **Done.** `zero ci trust add/list/rm`, Actions auto-detect,
+   precedence (key still wins), and `whoami` reporting `github actions`. Found
+   in production: the KV trust index is eventually consistent, so the command
+   now warns that the first run may need a minute.
+4. ~~**Docs + skills**~~ **Done.** New docs page "GitHub Actions without an API
+   key", CLI page and API-keys page updated, `docs/console-auth.md` records the
+   design and the measured facts, `zero-skills` teaches the workflow, root
+   `CHANGELOG.md` entry, CLI 0.5.0.
 5. **Dogfood:** migrate this repo's own workflows and Cragstronauts off their
    `ZERO_API_KEY` secrets, then delete the secrets and revoke the keys.
 6. **Later, not now:** dashboard UI for trusts, GitLab/Buildkite issuers,

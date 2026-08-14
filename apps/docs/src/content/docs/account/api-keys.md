@@ -16,8 +16,11 @@ that is active in the switcher at the top right.
 Treat a key like a password. Anyone holding it can read your secrets and write
 error reports.
 
-On your own machine you do not need a key at all: `zero login` signs the CLI in
-with your browser. Keys are for CI, servers and anything unattended. See the
+You may not need a key at all. On your own machine, `zero login` signs the CLI in
+with your browser. In GitHub Actions, trusting the repository lets a workflow
+authenticate as itself — see
+[GitHub Actions without an API key](/vault/github-actions/). Keys are for
+servers, containers, and CI that Zero cannot verify directly. See the
 [CLI reference](/cli/overview/).
 
 ## Create a key

@@ -1,6 +1,6 @@
 {
   "name": "@zeroapps/cli",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "CLI for Zero: ZeroVault secrets and ZeroErrors issues",
   "type": "module",
   "license": "MIT",

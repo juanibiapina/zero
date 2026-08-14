@@ -53,6 +53,35 @@ an OAuth token (cached 60s in the `APIKEYS` KV). A Clerk outage fails requests
 made with a sign-in; requests made with a `zv_` key are unaffected, since those
 never leave the Worker.
 
+## CI federation (GitHub Actions)
+
+`POST /vault/v1/ci/token` trades a GitHub Actions OIDC token for a 15-minute
+`zci_` credential, so a workflow needs no API key. Design notes that are not
+obvious from the code:
+
+- The route is mounted **before** the `/vault/v1/*` auth middleware in
+  `dashboard-app.ts`. It issues a credential, so it cannot require one; moving
+  it below the middleware would make every exchange fail with "Invalid API key".
+- Trust binds to GitHub's numeric `repository_id` / `repository_owner_id`, never
+  `sub`. Repos created after 2026-07-15 emit
+  `repo:OWNER@OWNER-ID/REPO@REPO-ID:…`, older ones keep the old shape, and a
+  rename moves a repo between them.
+- Tokens must carry `aud: https://api.zeroapps.dev`. GitHub's default audience
+  is the owner URL, and the audience is caller-chosen, so this only stops replay
+  of a token minted for another provider — the trust record is the real check.
+- `pull_request`, `pull_request_target` and `workflow_run` need an explicit
+  opt-in per event. Measured 2026-08-14: a fork's `pull_request` gets no token,
+  but its `pull_request_target` gets one with the **base** repo's ids and
+  `ref: refs/heads/main`, so a ref constraint does not contain it.
+- Measured token facts: 5-minute lifetime, `nbf` backdated 5 minutes, so only
+  `exp` needs a skew allowance.
+- The repository→org index lives in KV (`ci:github:<owner_id>/<repo_id>`), which
+  is eventually consistent: a run seconds after `zero ci trust add` can still be
+  refused. The CLI says so; the docs say so.
+- The endpoint is unauthenticated, so it is rate limited by connecting IP
+  (`CI_TOKEN_RATE_LIMITER`). Limiting by the repository ids in the body would be
+  useless: they are attacker-chosen until the signature is checked.
+
 ## Signup webhook
 
 In the dashboard Clerk instance, add a webhook endpoint for dashboard account

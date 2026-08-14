@@ -1,0 +1,109 @@
+---
+title: GitHub Actions without an API key
+description: Let a GitHub Actions workflow read ZeroVault secrets by trusting the repository instead of storing a key.
+---
+
+A workflow can read your secrets without you storing a Zero API key in GitHub.
+GitHub already mints a signed token describing each job; you tell Zero which
+repository to trust, and the job trades that token for a credential that lives
+15 minutes and never leaves the runner.
+
+That removes the credential most likely to leak: a long-lived, organization-wide
+key sitting in a repository's secret store, readable by every workflow in the
+repo and rotated by hand.
+
+## Set it up
+
+Trust the repository once, from a terminal that is already authenticated:
+
+```bash
+zero ci trust add --repo octo-org/octo-repo
+```
+
+Then give the job permission to mint its token, and drop the secret:
+
+```yaml
+permissions:
+  id-token: write        # required; without it the job has no identity
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx @zeroapps/cli@0.5.0 vault secrets download -p demo -e production -f env -o .env
+```
+
+No `ZERO_API_KEY`, no `secrets.*` entry. `zero whoami` inside the job prints
+`Credential: github actions`.
+
+Allow up to a minute after `zero ci trust add` before the first run can
+authenticate.
+
+## Private repositories
+
+`zero ci trust add` looks the repository's numeric ids up through GitHub's public
+API, which cannot see private repositories. Either export a `GITHUB_TOKEN` that
+can read it, or pass the ids yourself:
+
+```bash
+zero ci trust add --repo octo-org/private-repo --owner-id 65 --repo-id 74
+```
+
+A failed exchange also prints both ids, so you can copy them out of the run that
+just failed.
+
+## Narrowing what is trusted
+
+Trust covers the whole organization's secrets, so narrow it to the jobs that
+need it:
+
+```bash
+zero ci trust add --repo octo-org/octo-repo --ref refs/heads/main
+zero ci trust add --repo octo-org/octo-repo --environment production
+```
+
+`--ref` matches the git ref of the run, `--environment` the job's `environment:`.
+
+## Pull requests are refused by default
+
+Three triggers are refused unless you opt in, because they run with your
+repository's identity on code or input from outside it:
+
+| Trigger | Why it is refused |
+|---|---|
+| `pull_request` | A fork's PR gets no token at all, but a branch PR does, and PR branches are not reviewed yet |
+| `pull_request_target` | Runs privileged **on a fork's pull request**, with your repository's identity |
+| `workflow_run` | Runs privileged after another workflow, including one a PR triggered |
+
+```bash
+zero ci trust add --repo octo-org/octo-repo --allow-event pull_request
+```
+
+Opting into one does not open the others. Think twice before allowing
+`pull_request_target` or `workflow_run` on a repository whose workflows check
+out pull request code: anyone who can open a pull request can then run code in a
+job holding your secrets.
+
+A `--ref` constraint does **not** protect you here. A `pull_request_target` run
+reports `ref: refs/heads/main`, so it satisfies a main-only rule; only the event
+rule stops it.
+
+## Managing trust
+
+```bash
+zero ci trust list           # id, repository, and any constraints
+zero ci trust rm <id>        # stop trusting it
+```
+
+Removing a trust stops new exchanges. A credential already minted keeps working
+until it expires, which is at most 15 minutes.
+
+## What it is not
+
+- **Not for other CI providers yet.** GitLab, CircleCI and Buildkite issue
+  similar tokens, but Zero only accepts GitHub's today. Use an API key there.
+- **Not for servers or containers.** They have no identity provider to vouch for
+  them. Use an API key, ideally one per host.
+- **Not narrower than an organization.** A trusted workflow reaches every project
+  in the organization, exactly like a key does.
