@@ -114,3 +114,40 @@ describe("authenticate", () => {
     expect(verifyOAuthToken).not.toHaveBeenCalled();
   });
 });
+
+describe("authenticate with a CI token", () => {
+  it("accepts a zci_ token minted for a workflow", async () => {
+    const apikeys = await kvWithKey("zci_ephemeral", {
+      v: 2,
+      orgId: "org_ci",
+      userId: "ci:github:777",
+    });
+
+    const result = await authenticate(
+      { apikeys, verifyOAuthToken: noOAuth },
+      "Bearer zci_ephemeral",
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      auth: { orgId: "org_ci", userId: "ci:github:777", via: "ci" },
+    });
+  });
+
+  it("never sends a zci_ token to the OAuth verifier", async () => {
+    const verifyOAuthToken = vi.fn(() => Promise.resolve(null));
+
+    await authenticate({ apikeys: kv({}), verifyOAuthToken }, "Bearer zci_unknown");
+
+    expect(verifyOAuthToken).not.toHaveBeenCalled();
+  });
+
+  it("treats an expired CI token as invalid, since KV has already dropped it", async () => {
+    const result = await authenticate(
+      { apikeys: kv({}), verifyOAuthToken: noOAuth },
+      "Bearer zci_expired",
+    );
+
+    expect(result).toEqual({ ok: false, reason: "invalid" });
+  });
+});

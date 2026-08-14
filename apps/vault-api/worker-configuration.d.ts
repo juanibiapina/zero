@@ -5,6 +5,7 @@ interface __BaseEnv_Env {
 	APIKEYS: KVNamespace;
 	VAULT_RATE_LIMITER: RateLimit;
 	ERRORS_RATE_LIMITER: RateLimit;
+	CI_TOKEN_RATE_LIMITER: RateLimit;
 	ASSETS: Fetcher;
 	CLERK_PUBLISHABLE_KEY: string;
 	CLERK_SECRET_KEY: string;

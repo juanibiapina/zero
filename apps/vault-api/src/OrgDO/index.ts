@@ -11,11 +11,20 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
-import { createDb, migrate, eq, type Database } from "do-orm";
+import { createDb, migrate, eq, and, type Database } from "do-orm";
 import { migrations } from "./db/migrations";
-import { projectsTable, apiKeysTable } from "./db/schema";
+import { projectsTable, apiKeysTable, ciTrustsTable } from "./db/schema";
 import type { Env } from "../types";
-import { hashApiKey, type ApiKeyKVValue } from "@zero/auth";
+import { hashApiKey, type ApiKeyKVValue, type CiTrust } from "@zero/auth";
+
+/**
+ * KV key for the repository → orgs index. The exchange endpoint is
+ * unauthenticated and has no org in hand, so this is what turns a verified
+ * token into the org (or orgs) that trust it, without scanning every OrgDO.
+ */
+export function ciTrustIndexKey(ownerId: string, repoId: string): string {
+  return `ci:github:${ownerId}/${repoId}`;
+}
 
 export class OrgDO extends DurableObject<Env> {
   db: Database;
@@ -115,6 +124,182 @@ export class OrgDO extends DurableObject<Env> {
     }
 
     this.db.delete(apiKeysTable, { where: eq("id", id) });
+  }
+
+  // ============================================================================
+  // CI Trust Operations
+  // ============================================================================
+
+  /**
+   * Trust a GitHub repository to exchange its OIDC token for a credential in
+   * this org. The KV index is what the (unauthenticated) exchange endpoint
+   * reads, so it never has to guess which org a workflow belongs to.
+   *
+   * Idempotent: trusting the same repository again rewrites its constraints
+   * rather than failing. "Trust this repo with these rules" is the intent, and
+   * a second `zero ci trust add` should tighten a ref or add an event, not
+   * force the user to delete a record first.
+   */
+  async addCiTrust(input: {
+    ownerId: string;
+    repoId: string;
+    repository: string;
+    ref?: string | null;
+    environment?: string | null;
+    allowedEvents?: string[];
+    label?: string;
+    orgId: string;
+  }): Promise<{ id: number; createdAt: string }> {
+    const createdAt = new Date().toISOString();
+
+    const existing = this.db.selectOne(ciTrustsTable, ["id"], {
+      where: and(eq("owner_id", input.ownerId), eq("repo_id", input.repoId)),
+    });
+
+    if (existing) {
+      this.db.update(
+        ciTrustsTable,
+        {
+          repository: input.repository,
+          ref: input.ref ?? null,
+          environment: input.environment ?? null,
+          allowed_events: (input.allowedEvents ?? []).join(","),
+          label: input.label ?? null,
+        },
+        { where: eq("id", existing.id) },
+      );
+      await this.indexCiTrust(input.ownerId, input.repoId, input.orgId);
+      return { id: existing.id, createdAt };
+    }
+
+    const result = this.db.insertReturning(
+      ciTrustsTable,
+      {
+        provider: "github",
+        owner_id: input.ownerId,
+        repo_id: input.repoId,
+        repository: input.repository,
+        ref: input.ref ?? null,
+        environment: input.environment ?? null,
+        allowed_events: (input.allowedEvents ?? []).join(","),
+        label: input.label ?? null,
+        created_at: createdAt,
+      },
+      ["id"],
+    );
+
+    await this.indexCiTrust(input.ownerId, input.repoId, input.orgId);
+
+    console.log({
+      event: "org.ci_trust_added",
+      orgId: input.orgId,
+      repository: input.repository,
+      repoId: input.repoId,
+    });
+
+    return { id: result.id, createdAt };
+  }
+
+  listCiTrusts(): (CiTrust & {
+    id: number;
+    repository: string;
+    label?: string;
+    createdAt: string;
+  })[] {
+    const rows = this.db.select(ciTrustsTable, [
+      "id",
+      "owner_id",
+      "repo_id",
+      "repository",
+      "ref",
+      "environment",
+      "allowed_events",
+      "label",
+      "created_at",
+    ]);
+
+    return rows.map((r) => ({
+      id: r.id,
+      ownerId: r.owner_id,
+      repoId: r.repo_id,
+      repository: r.repository,
+      ref: r.ref,
+      environment: r.environment,
+      allowedEvents: r.allowed_events ? r.allowed_events.split(",") : [],
+      createdAt: r.created_at,
+      ...(r.label && { label: r.label }),
+    }));
+  }
+
+  /** The trust record for a repository, or null when this org trusts none. */
+  findCiTrust(ownerId: string, repoId: string): CiTrust | null {
+    const row = this.db.selectOne(
+      ciTrustsTable,
+      ["owner_id", "repo_id", "ref", "environment", "allowed_events"],
+      { where: and(eq("owner_id", ownerId), eq("repo_id", repoId)) },
+    );
+    if (!row) return null;
+
+    return {
+      ownerId: row.owner_id,
+      repoId: row.repo_id,
+      ref: row.ref,
+      environment: row.environment,
+      allowedEvents: row.allowed_events ? row.allowed_events.split(",") : [],
+    };
+  }
+
+  async removeCiTrust(id: number, orgId: string): Promise<void> {
+    const row = this.db.selectOne(ciTrustsTable, ["owner_id", "repo_id"], {
+      where: eq("id", id),
+    });
+    this.db.delete(ciTrustsTable, { where: eq("id", id) });
+
+    if (row) await this.unindexCiTrust(row.owner_id, row.repo_id, orgId);
+  }
+
+  /**
+   * Mints the short-lived credential a verified workflow gets. Same KV shape as
+   * an API key, so the request path is unchanged, but it expires on its own and
+   * has no row anywhere: nothing to revoke, nothing to leak.
+   */
+  async mintCiToken(input: {
+    orgId: string;
+    repoId: string;
+    ttlSeconds: number;
+  }): Promise<{ token: string; expiresIn: number }> {
+    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const token = `zci_${randomHex}`;
+
+    const kvValue: ApiKeyKVValue = {
+      v: 2,
+      orgId: input.orgId,
+      userId: `ci:github:${input.repoId}`,
+    };
+    await this.env.APIKEYS.put(await hashApiKey(token), JSON.stringify(kvValue), {
+      expirationTtl: input.ttlSeconds,
+    });
+
+    return { token, expiresIn: input.ttlSeconds };
+  }
+
+  private async indexCiTrust(ownerId: string, repoId: string, orgId: string): Promise<void> {
+    const key = ciTrustIndexKey(ownerId, repoId);
+    const raw = await this.env.APIKEYS.get(key);
+    const orgIds = raw ? (JSON.parse(raw) as string[]) : [];
+    if (!orgIds.includes(orgId)) orgIds.push(orgId);
+    await this.env.APIKEYS.put(key, JSON.stringify(orgIds));
+  }
+
+  private async unindexCiTrust(ownerId: string, repoId: string, orgId: string): Promise<void> {
+    const key = ciTrustIndexKey(ownerId, repoId);
+    const raw = await this.env.APIKEYS.get(key);
+    if (!raw) return;
+    const orgIds = (JSON.parse(raw) as string[]).filter((id) => id !== orgId);
+    if (orgIds.length === 0) await this.env.APIKEYS.delete(key);
+    else await this.env.APIKEYS.put(key, JSON.stringify(orgIds));
   }
 
   // ============================================================================
