@@ -53,7 +53,8 @@ jobs:
       - name: Fetch secrets from ZeroVault
         run: bin/fetch-secrets
         env:
-          ZEROVAULT_API_KEY: ${{ secrets.ZEROVAULT_API_KEY }}
+          # The repository secret keeps its old name; the CLI reads ZERO_API_KEY.
+          ZERO_API_KEY: ${{ secrets.ZEROVAULT_API_KEY }}
 
       - name: Build application
         run: pnpm run build
