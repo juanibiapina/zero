@@ -118,6 +118,9 @@ set lives in one JSON blob under the `deadlines` key, keyed by
 `${reason}:${conversationId ?? ""}`, which is why `reminder:` is a single slot
 per user and why the caller must always pass the earliest due time.
 
+The hourly poll for replies on watched email threads is another reason,
+`mailwatch`, on the same mechanism (see `docs/mail-watch.md`).
+
 `ScheduleDO/dispatch.ts` maps each reason to one RPC, as a
 `Record<ScheduleReason, Handler>`. It is total on purpose: adding a reason
 without a handler is a compile error, rather than falling through to whichever

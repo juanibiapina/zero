@@ -28,6 +28,7 @@ import type { GoogleWorkspace } from "../google/types";
 import type { StoredFile, UserFileStore } from "../files/types";
 import type { ImageResizer } from "../images/types";
 import type { ScheduleBook } from "../schedules/types";
+import type { MailWatchBook } from "../mail-watch/types";
 
 // No history window: the conversation is rendered as `summary + messages after
 // the compaction boundary`, and what bounds it is size-triggered compaction, not
@@ -63,6 +64,8 @@ export interface TurnInput {
   // the callback that re-arms their timer after a change.
   schedules?: ScheduleBook;
   onScheduleChanged?: () => void;
+  mailWatch?: MailWatchBook;
+  onWatchChanged?: () => void;
   chatId: number;
   topicId: number;
   // Test override for how many rows one context read pages in; production uses
@@ -257,6 +260,8 @@ export const runTurn = async (input: TurnInput): Promise<void> => {
       resizer: input.resizer,
       schedules: input.schedules,
       onScheduleChanged: input.onScheduleChanged,
+      mailWatch: input.mailWatch,
+      onWatchChanged: input.onWatchChanged,
       history,
       summary: context.summary ?? undefined,
       userMessage,

@@ -188,6 +188,23 @@ export interface ListEventsParams {
   calendarIds?: string[];
 }
 
+// The mailbox history watermark: an opaque, monotonic sequence number for the
+// WHOLE mailbox (not per thread), used to ask Gmail "what arrived since?".
+export interface MailWatermark {
+  historyId: string;
+}
+
+// What changed since a watermark. `added` carries thread ids only, because a
+// history record's messages "will typically only have id and threadId fields
+// populated" (Gmail docs) — anything richer would cost a fetch per message.
+//
+// `expired` is a first-class outcome, not an error: Gmail keeps history records
+// "typically at least a week, in rare cases only a few hours", and answers 404
+// once a watermark falls outside that window. The caller re-baselines.
+export type MailHistory =
+  | { ok: true; historyId: string; threadIds: string[] }
+  | { ok: false; reason: "expired" };
+
 export interface MailApi {
   search(query: string): Promise<MailThreadSummary[]>;
   getThread(threadId: string): Promise<MailThread>;
@@ -197,7 +214,18 @@ export interface MailApi {
     declaredSize: number;
     bytes: Uint8Array;
   }>;
-  send(input: SendMailInput): Promise<{ id: string }>;
+  // The sent message's own id and the thread it landed in, so a caller can
+  // watch that thread for the reply without a second lookup.
+  send(input: SendMailInput): Promise<{ id: string; threadId: string }>;
+
+  // --- watching for replies ---
+  // The mailbox's current watermark. Used to start watching from "now" rather
+  // than replaying history nobody asked for.
+  getWatermark(): Promise<MailWatermark>;
+  // Threads that gained an INBOX message since `startHistoryId`. Filtered
+  // server-side to messageAdded + INBOX, so the user's own replies and drafts
+  // (never labelled INBOX) never come back.
+  listChangedThreads(startHistoryId: string): Promise<MailHistory>;
 
   // --- labels ---
   listLabels(): Promise<MailLabel[]>;
@@ -221,8 +249,8 @@ export interface MailApi {
   // Gmail cannot edit a draft's message, only swap it, so a caller that omits a
   // field drops it.
   saveDraft(input: SendMailInput & { draftId?: string }): Promise<MailDraft>;
-  // Irreversible. Deletes the draft and returns the id of the sent message.
-  sendDraft(draftId: string): Promise<{ id: string }>;
+  // Irreversible. Deletes the draft and returns the sent message and its thread.
+  sendDraft(draftId: string): Promise<{ id: string; threadId: string }>;
 }
 
 export interface CalendarApi {

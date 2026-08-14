@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-14: When someone answers an email Zero sent for you, Zero tells you within the hour and picks up where the thread left off. Ask it to keep an eye on any other thread you're waiting on, and it watches that one too.
 - 2026-08-14: Zero now reliably replies after a new message even if a previous turn was interrupted mid-flight.
 - 2026-08-13: Send Zero a big photo and it looks at it instead of going silent. Large pictures used to leave your messages unanswered.
 - 2026-08-13: Zero now works with your Google Drive: it finds a file by name or by what's inside it, saves one so it can read it to you or send it on, puts a file of yours into a folder in your Drive, and moves things to the trash (never deletes them for good).

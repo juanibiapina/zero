@@ -65,7 +65,8 @@ of them runs. The label, trash and draft tools are reversible and run freely.
   metadata and stable marker without bytes or base64.
 - `gmail_send({ to, subject, body, cc?, bcc?, replyTo? })` — send or reply.
   `replyTo` is `{ messageIdHeader, threadId }` copied from a `gmail_thread`
-  result.
+  result. The thread it lands in is then watched for a reply automatically (see
+  `docs/mail-watch.md`).
 - `gmail_labels()` — the user's labels by name, plus the system labels worth
   naming (`INBOX`, `UNREAD`, `STARRED`, `IMPORTANT`, `SPAM`, `TRASH`).
 - `gmail_label({ name, newName? })` — create a label, or rename one.
@@ -77,7 +78,12 @@ of them runs. The label, trash and draft tools are reversible and run freely.
   trash 30 days; this is the strongest deletion Zero has.
 - `gmail_drafts()` — drafts waiting (`draftId`, to, subject, snippet).
 - `gmail_draft({ ..., draftId? })` — save a draft, or replace an existing one.
-- `gmail_send_draft({ draftId })` — send an approved draft.
+- `gmail_send_draft({ draftId })` — send an approved draft. Watches its thread,
+  same as `gmail_send`.
+- `track_email_thread({ threadId })` / `list_email_threads()` /
+  `untrack_email_thread({ threadId })` — watch a thread the user is waiting on
+  for a reply, see what is watched in this chat, or stop. See
+  `docs/mail-watch.md`.
 - `calendar_list_calendars()` — the user's calendars (`id`, `summary`, whether
   `primary`, `accessRole`).
 - `calendar_list_events({ from, to, query?, calendarIds? })` — agenda over a

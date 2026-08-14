@@ -4,7 +4,14 @@ import type { Env } from "../types";
 
 // Every reason a deadline can carry. Written out rather than derived from the
 // table, so this list is what fails when a reason is added without a handler.
-const REASONS = ["idle", "size", "onboarding", "admin_task", "reminder"] as const;
+const REASONS = [
+  "idle",
+  "size",
+  "onboarding",
+  "admin_task",
+  "reminder",
+  "mailwatch",
+] as const;
 
 // A fake env whose namespaces hand back a recording stub, so a dispatch can be
 // followed to the object and method it calls without a Durable Object.
@@ -62,6 +69,12 @@ describe("dispatchFor", () => {
     const { calls, env } = fakeEnv();
     await dispatchFor("reminder")!({ env, clerkUserId: "user_1" });
     expect(calls).toEqual(["UserDO.runDueSchedules()"]);
+  });
+
+  it("sends the mail poll to UserDO, which only queues what it finds", async () => {
+    const { calls, env } = fakeEnv();
+    await dispatchFor("mailwatch")!({ env, clerkUserId: "user_1" });
+    expect(calls).toEqual(["UserDO.checkTrackedMail()"]);
   });
 
   it("sends the user-wide jobs to their own UserDO entry points", async () => {

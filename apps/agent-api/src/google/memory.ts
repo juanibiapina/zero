@@ -16,8 +16,10 @@ import type {
   MailDraft,
   MailDraftSummary,
   MailLabel,
+  MailHistory,
   MailThread,
   MailThreadSummary,
+  MailWatermark,
   SendMailInput,
 } from "./types";
 import {
@@ -46,6 +48,13 @@ export interface MemoryGoogleSeed {
   driveFiles?: DriveFile[];
   // Bytes download returns, by file id.
   driveBytes?: Record<string, Uint8Array>;
+  // The mailbox history watermark getWatermark reports and listChangedThreads
+  // returns as its new watermark.
+  historyId?: string;
+  // Threads listChangedThreads reports as having new inbox mail.
+  changedThreadIds?: string[];
+  // When true, listChangedThreads reports the watermark as expired (Gmail 404).
+  historyExpired?: boolean;
   // When true, every method throws GoogleNotConnectedError (simulates a user
   // who hasn't connected Google).
   notConnected?: boolean;
@@ -60,6 +69,8 @@ export interface MemoryGoogle extends GoogleWorkspace {
   trashed: { threadId: string; restore: boolean }[];
   savedDrafts: (SendMailInput & { draftId: string })[];
   sentDrafts: string[];
+  // Watermarks listChangedThreads was called with, in order.
+  historyCalls: string[];
   uploadedFiles: DriveUploadInput[];
   createdFolders: { name: string; parentId?: string }[];
   trashedFiles: { fileId: string; restore: boolean }[];
@@ -74,6 +85,10 @@ export const createMemoryGoogle = (
   const trashed: { threadId: string; restore: boolean }[] = [];
   const savedDrafts: (SendMailInput & { draftId: string })[] = [];
   const sentDrafts: string[] = [];
+  const historyCalls: string[] = [];
+  // Thread a draft replies into, so sending it reports the same thread.
+  const draftThreads = new Map<string, string>();
+  const watermark = seed.historyId ?? "1000";
   const uploadedFiles: DriveUploadInput[] = [];
   const createdFolders: { name: string; parentId?: string }[] = [];
   const trashedFiles: { fileId: string; restore: boolean }[] = [];
@@ -116,6 +131,7 @@ export const createMemoryGoogle = (
     trashed,
     savedDrafts,
     sentDrafts,
+    historyCalls,
     uploadedFiles,
     createdFolders,
     trashedFiles,
@@ -141,10 +157,30 @@ export const createMemoryGoogle = (
           bytes: attachment.bytes.slice(),
         };
       },
-      async send(input: SendMailInput): Promise<{ id: string }> {
+      async send(input: SendMailInput): Promise<{ id: string; threadId: string }> {
         guard();
         sentMail.push(input);
-        return { id: `sent-${sentMail.length}` };
+        return {
+          id: `sent-${sentMail.length}`,
+          // A reply stays in the thread it answers; a fresh mail starts one.
+          threadId: input.replyTo?.threadId ?? `thread-sent-${sentMail.length}`,
+        };
+      },
+
+      async getWatermark(): Promise<MailWatermark> {
+        guard();
+        return { historyId: watermark };
+      },
+
+      async listChangedThreads(startHistoryId: string): Promise<MailHistory> {
+        guard();
+        if (seed.historyExpired) return { ok: false, reason: "expired" };
+        historyCalls.push(startHistoryId);
+        return {
+          ok: true,
+          historyId: watermark,
+          threadIds: [...(seed.changedThreadIds ?? [])],
+        };
       },
 
       async listLabels(): Promise<MailLabel[]> {
@@ -207,6 +243,7 @@ export const createMemoryGoogle = (
         guard();
         const draftId = input.draftId ?? `draft-${drafts.size + 1}`;
         savedDrafts.push({ ...input, draftId });
+        if (input.replyTo) draftThreads.set(draftId, input.replyTo.threadId);
         drafts.set(draftId, {
           draftId,
           to: input.to,
@@ -216,12 +253,16 @@ export const createMemoryGoogle = (
         return { draftId, threadId: input.replyTo?.threadId ?? null };
       },
 
-      async sendDraft(draftId: string): Promise<{ id: string }> {
+      async sendDraft(draftId: string): Promise<{ id: string; threadId: string }> {
         guard();
         if (!drafts.has(draftId)) throw new Error(`No draft with id ${draftId}.`);
         drafts.delete(draftId);
         sentDrafts.push(draftId);
-        return { id: `sent-draft-${sentDrafts.length}` };
+        return {
+          id: `sent-draft-${sentDrafts.length}`,
+          threadId:
+            draftThreads.get(draftId) ?? `thread-draft-${sentDrafts.length}`,
+        };
       },
     },
     calendar: {

@@ -18,6 +18,7 @@ import type {
   ConversationStore,
   ExternalCallClaim,
   LearningMessage,
+  MailThreadRecord,
   Message,
   MessageContent,
   MessageKind,
@@ -39,6 +40,8 @@ interface SettingsRow {
   timezone: string | null;
   country: string | null;
   firstContactAt: string | null;
+  mailHistoryId: string | null;
+  lastActiveAt: string | null;
 }
 
 interface ConvRow {
@@ -104,6 +107,8 @@ export class MemoryStore implements Store {
   private files = new Map<string, StoredFileRecord>();
   // Schedule rows in creation order, mirroring the schedules table.
   private schedules: ScheduleRecord[] = [];
+  // Watched Gmail threads, mirroring the mail_threads table.
+  private mailThreads: MailThreadRecord[] = [];
   private settingsRow: SettingsRow | null = null;
   private telegramId: string | null = null;
   private processed = new Set<string>();
@@ -422,6 +427,10 @@ export class MemoryStore implements Store {
     // Schedules deliver into this thread and have no other one to speak in, so
     // a reset takes them with it (DbStore also needs this for FK ordering).
     this.schedules = this.schedules.filter((s) => s.conversationId !== conv.id);
+    // Same for watched mail threads: a reply has nowhere to be announced.
+    this.mailThreads = this.mailThreads.filter(
+      (t) => t.conversationId !== conv.id,
+    );
     this.convs = this.convs.filter((c) => c.id !== conv.id);
   }
 
@@ -676,6 +685,53 @@ export class MemoryStore implements Store {
     return due.length === 0 ? null : Math.min(...due);
   }
 
+  // --- watched mail threads ---
+
+  trackMailThread(input: {
+    threadId: string;
+    conversationId: string;
+  }): MailThreadRecord {
+    const existing = this.mailThreads.find((t) => t.threadId === input.threadId);
+    if (existing) {
+      existing.conversationId = input.conversationId;
+      existing.status = "active";
+      return { ...existing };
+    }
+    const record: MailThreadRecord = {
+      threadId: input.threadId,
+      conversationId: input.conversationId,
+      status: "active",
+      createdAt: this.now(),
+      lastNotifiedAt: null,
+    };
+    this.mailThreads.push(record);
+    return { ...record };
+  }
+
+  untrackMailThread(threadId: string): boolean {
+    const record = this.mailThreads.find((t) => t.threadId === threadId);
+    if (!record || record.status !== "active") return false;
+    record.status = "stopped";
+    return true;
+  }
+
+  listMailThreads(conversationId?: string): MailThreadRecord[] {
+    return this.mailThreads
+      .filter(
+        (t) =>
+          t.status === "active" &&
+          (conversationId === undefined || t.conversationId === conversationId),
+      )
+      .map((t) => ({ ...t }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  markMailThreadsNotified(threadIds: string[], notifiedAt: string): void {
+    for (const record of this.mailThreads) {
+      if (threadIds.includes(record.threadId)) record.lastNotifiedAt = notifiedAt;
+    }
+  }
+
   // --- settings ---
 
   // Update the given columns on the settings row, seeding it with defaults if
@@ -688,6 +744,8 @@ export class MemoryStore implements Store {
       timezone: string;
       country: string;
       firstContactAt: string;
+      mailHistoryId: string;
+      lastActiveAt: string;
     }>,
   ): SettingsRow {
     if (this.settingsRow) {
@@ -706,6 +764,12 @@ export class MemoryStore implements Store {
       if (columns.firstContactAt !== undefined) {
         this.settingsRow.firstContactAt = columns.firstContactAt;
       }
+      if (columns.mailHistoryId !== undefined) {
+        this.settingsRow.mailHistoryId = columns.mailHistoryId;
+      }
+      if (columns.lastActiveAt !== undefined) {
+        this.settingsRow.lastActiveAt = columns.lastActiveAt;
+      }
       return this.settingsRow;
     }
     this.settingsRow = {
@@ -715,6 +779,8 @@ export class MemoryStore implements Store {
       timezone: columns.timezone ?? null,
       country: columns.country ?? null,
       firstContactAt: columns.firstContactAt ?? null,
+      mailHistoryId: columns.mailHistoryId ?? null,
+      lastActiveAt: columns.lastActiveAt ?? null,
     };
     return this.settingsRow;
   }
@@ -728,6 +794,8 @@ export class MemoryStore implements Store {
         createdAt: seeded.createdAt ?? null,
         timezone: seeded.timezone ?? null,
         country: seeded.country ?? null,
+        mailHistoryId: seeded.mailHistoryId ?? null,
+        lastActiveAt: seeded.lastActiveAt ?? null,
         isNewUser: true,
       };
     }
@@ -737,6 +805,8 @@ export class MemoryStore implements Store {
       createdAt: this.settingsRow.createdAt ?? null,
       timezone: this.settingsRow.timezone ?? null,
       country: this.settingsRow.country ?? null,
+      mailHistoryId: this.settingsRow.mailHistoryId ?? null,
+      lastActiveAt: this.settingsRow.lastActiveAt ?? null,
       isNewUser: false,
     };
   }
@@ -745,17 +815,23 @@ export class MemoryStore implements Store {
     onboardingSeen?: boolean;
     timezone?: string;
     country?: string;
+    mailHistoryId?: string;
+    lastActiveAt?: string;
   }): void {
     const columns: Partial<{
       onboardingSeen: number;
       timezone: string;
       country: string;
+      mailHistoryId: string;
+      lastActiveAt: string;
     }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
     }
     if (patch.timezone !== undefined) columns.timezone = patch.timezone;
     if (patch.country !== undefined) columns.country = patch.country;
+    if (patch.mailHistoryId !== undefined) columns.mailHistoryId = patch.mailHistoryId;
+    if (patch.lastActiveAt !== undefined) columns.lastActiveAt = patch.lastActiveAt;
     this.upsertSettings(columns);
   }
 

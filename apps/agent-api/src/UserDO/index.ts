@@ -22,7 +22,7 @@ import { createBot } from "../telegram/bot";
 import { createR2FileBlobs } from "../files/r2";
 import { createUserFileStore } from "../files/store";
 import { renderFileMarker } from "../files/marker";
-import { composeTurnText, FIRST_CONTACT_NOTE, SCHEDULE_NOTE } from "./turn-text";
+import { composeMailNoteText, composeTurnText, FIRST_CONTACT_NOTE, SCHEDULE_NOTE } from "./turn-text";
 import type { FileBlobStore } from "../files/types";
 import { TelegramFileSendError } from "../tools/files";
 import { createModel, createModelFactory } from "../agents/model";
@@ -49,11 +49,14 @@ import { notifyDiscord } from "../discord";
 import { getScheduleDO } from "../ScheduleDO/stub";
 import {
   requestLearnSafely,
+  requestMailWatchSafely,
   requestReminderSafely,
   touchScheduleSafely,
 } from "../do/schedule";
 import { fireDueSchedules } from "../do/schedules";
+import { MAIL_WATCH_INTERVAL_MS, runMailWatch } from "../do/mail-watch";
 import { createScheduleBook } from "../schedules/book";
+import { createMailWatchBook } from "../mail-watch/book";
 import { nextRun } from "../schedules/recurrence";
 import type { Env } from "../types";
 import { USER_TOPIC, USER_TOPIC_DESCRIPTION } from "../user-topic";
@@ -165,6 +168,9 @@ export class UserDO extends DurableObject<Env> {
     // it at a safe point, so a message arriving while the agent is mid-run is
     // never spliced into a request the model is already answering.
     this.store.enqueuePendingMessage(conversationId, text);
+    // The user is active now. The mail poll reads this to decide whether an
+    // account is still worth polling every hour.
+    this.store.updateSettings({ lastActiveAt: new Date().toISOString() });
     // Always arm the alarm when a new message arrives: a new message means the
     // user is active and the turn should run now. Setting the alarm to Date.now()
     // overrides any stale backoff that was scheduled further in the future, and
@@ -188,6 +194,11 @@ export class UserDO extends DurableObject<Env> {
       input.clerkUserId,
       this.store.earliestScheduleDueAt(),
     );
+    // Same healing for the mail poll, which is also how a user who was away
+    // for over a week starts being polled again.
+    if (this.store.listMailThreads().length > 0) {
+      await this.armMailWatch(input.clerkUserId);
+    }
     return true;
   }
 
@@ -315,6 +326,44 @@ export class UserDO extends DurableObject<Env> {
     }
   }
 
+  // The hourly "did anyone reply?" pass. Called by ScheduleDO when this user's
+  // single mailwatch deadline comes due.
+  //
+  // No model runs here: a reply queues a pending message and the turn happens
+  // on this DO's own alarm, like any other message. The pass re-arms itself for
+  // an hour's time unless it decided this user is not worth polling (nothing
+  // watched, away for a week, Google not connected), in which case their next
+  // message arms it again.
+  async checkTrackedMail(): Promise<void> {
+    const clerkUserId = await this.ctx.storage.get<string>("clerkUserId");
+    if (!clerkUserId) return;
+    const getToken = memoizeTokenProvider(() =>
+      getGoogleAccessToken(this.env, clerkUserId),
+    );
+    const google = createGoogleWorkspace(getToken);
+    const outcome = await runMailWatch({
+      store: this.store,
+      mail: google.mail,
+      now: Date.now(),
+      composeText: composeMailNoteText,
+    });
+    if (outcome.status === "checked" && outcome.notified > 0) {
+      if ((await this.ctx.storage.getAlarm()) === null) {
+        await this.ctx.storage.setAlarm(Date.now());
+      }
+    }
+    if (outcome.status !== "disarmed") await this.armMailWatch(clerkUserId);
+  }
+
+  // Hold this user's mail poll an hour out, best-effort.
+  private async armMailWatch(clerkUserId: string): Promise<void> {
+    await requestMailWatchSafely(
+      getScheduleDO(this.env, clerkUserId),
+      clerkUserId,
+      Date.now() + MAIL_WATCH_INTERVAL_MS,
+    );
+  }
+
   // Queue Google onboarding: set status `queued` and arm the alarm. Idempotent
   // by default — once the status leaves `null` (queued/done/failed) this
   // no-ops, so the web app's fire-once effect onboards a user at most once.
@@ -432,6 +481,17 @@ export class UserDO extends DurableObject<Env> {
       store: this.store,
       conversationId,
     });
+    // Bound to this conversation too: a reply is announced in the chat the
+    // thread was watched from.
+    const mailWatch = createMailWatchBook({
+      store: this.store,
+      conversationId,
+    });
+    // Watching a thread is what arms the hourly poll; re-arming here also
+    // heals a deadline that was lost.
+    const onWatchChanged = () => {
+      void this.armMailWatch(clerkUserId);
+    };
     // Re-arm the user's timer after a create or cancel, best-effort and off the
     // reply path.
     const onScheduleChanged = () => {
@@ -472,6 +532,8 @@ export class UserDO extends DurableObject<Env> {
         resizer,
         schedules,
         onScheduleChanged,
+        mailWatch,
+        onWatchChanged,
         chatId,
         topicId,
         clerkUserId,

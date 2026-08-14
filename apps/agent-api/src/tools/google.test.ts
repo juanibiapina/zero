@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildGoogleTools } from "./google";
+import { createMailWatchBook } from "../mail-watch/book";
+import { MAX_WATCHED_THREADS } from "../do/mail-watch";
 import { createMemoryGoogle } from "../google/memory";
 import { GoogleApiError, GoogleNotConnectedError } from "../google/types";
 import { ExternalCallNotSent } from "../agents/external-call";
@@ -76,6 +78,72 @@ describe("buildGoogleTools gmail", () => {
         replyTo: { messageIdHeader: "<abc@mail>", threadId: "T1" },
       },
     ]);
+  });
+
+  it("gmail_send watches the thread it landed in, so the reply is noticed", async () => {
+    const google = createMemoryGoogle();
+    const store = new MemoryStore(() => "2026-02-10T12:00:00.000Z");
+    const conversationId = store.getOrCreateConversation(1, 0);
+    const onWatchChanged = vi.fn();
+    const tools = buildGoogleTools({
+      google,
+      timezone: "UTC",
+      mailWatch: createMailWatchBook({ store, conversationId }),
+      onWatchChanged,
+    });
+
+    await run(tools, "gmail_send", {
+      to: "bob@x.com",
+      subject: "Re: Hi",
+      body: "reply",
+      replyTo: { messageIdHeader: "<abc@mail>", threadId: "T1" },
+    });
+
+    expect(store.listMailThreads().map((t) => t.threadId)).toEqual(["T1"]);
+    expect(onWatchChanged).toHaveBeenCalledOnce();
+  });
+
+  it("gmail_send_draft watches the thread too", async () => {
+    const google = createMemoryGoogle();
+    const store = new MemoryStore(() => "2026-02-10T12:00:00.000Z");
+    const conversationId = store.getOrCreateConversation(1, 0);
+    const tools = buildGoogleTools({
+      google,
+      timezone: "UTC",
+      mailWatch: createMailWatchBook({ store, conversationId }),
+    });
+
+    const saved = (await run(tools, "gmail_draft", {
+      to: "bob@x.com",
+      subject: "Re: Hi",
+      body: "b",
+      replyTo: { messageIdHeader: "<abc@mail>", threadId: "T7" },
+    })) as { draftId: string };
+    await run(tools, "gmail_send_draft", { draftId: saved.draftId });
+
+    expect(store.listMailThreads().map((t) => t.threadId)).toEqual(["T7"]);
+  });
+
+  it("a send still succeeds when the watch cap is full", async () => {
+    const google = createMemoryGoogle();
+    const store = new MemoryStore(() => "2026-02-10T12:00:00.000Z");
+    const conversationId = store.getOrCreateConversation(1, 0);
+    for (let i = 0; i < MAX_WATCHED_THREADS; i++) {
+      store.trackMailThread({ threadId: `full-${i}`, conversationId });
+    }
+    const tools = buildGoogleTools({
+      google,
+      timezone: "UTC",
+      mailWatch: createMailWatchBook({ store, conversationId }),
+    });
+
+    const sent = (await run(tools, "gmail_send", {
+      to: "bob@x.com",
+      subject: "Hi",
+      body: "b",
+    })) as { id: string };
+    expect(sent.id).toBe("sent-1");
+    expect(store.listMailThreads()).toHaveLength(MAX_WATCHED_THREADS);
   });
 
   it("surfaces GoogleNotConnectedError as { error } data, not a throw", async () => {

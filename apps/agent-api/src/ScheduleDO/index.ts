@@ -69,6 +69,14 @@ export class ScheduleDO extends DurableObject<Env> {
     await scheduleDeadline(this.ctx.storage, { reason: "reminder", dueAt });
   }
 
+  // Hold this user's mail poll at `dueAt`. One deadline per user, replaced by
+  // key: the poll re-arms itself every hour, and a user's message re-arms it
+  // after a gap, so a second entry must never accumulate.
+  async requestMailWatchAt(clerkUserId: string, dueAt: number): Promise<void> {
+    await this.ctx.storage.put("clerkUserId", clerkUserId);
+    await scheduleDeadline(this.ctx.storage, { reason: "mailwatch", dueAt });
+  }
+
   // Drop every deadline this user has, and the alarm that would fire them.
   // Called when the user erases their data (see do/purge.ts): a pending
   // deadline exists only to call back into UserDO, so it must not survive the

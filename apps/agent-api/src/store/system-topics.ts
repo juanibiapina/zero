@@ -17,6 +17,7 @@ import type {
   ConversationStore,
   ExternalCallClaim,
   LearningMessage,
+  MailThreadRecord,
   Message,
   MessageContent,
   MessageKind,
@@ -397,6 +398,27 @@ export class SystemTopicStore implements Store {
     return this.inner.earliestScheduleDueAt();
   }
 
+  // --- watched mail threads (delegate verbatim) ---
+
+  trackMailThread(input: {
+    threadId: string;
+    conversationId: string;
+  }): MailThreadRecord {
+    return this.inner.trackMailThread(input);
+  }
+
+  untrackMailThread(threadId: string): boolean {
+    return this.inner.untrackMailThread(threadId);
+  }
+
+  listMailThreads(conversationId?: string): MailThreadRecord[] {
+    return this.inner.listMailThreads(conversationId);
+  }
+
+  markMailThreadsNotified(threadIds: string[], notifiedAt: string): void {
+    this.inner.markMailThreadsNotified(threadIds, notifiedAt);
+  }
+
   // --- settings / link / idempotency (delegate verbatim) ---
 
   getSettings(): UserSettings {
@@ -407,6 +429,8 @@ export class SystemTopicStore implements Store {
     onboardingSeen?: boolean;
     timezone?: string;
     country?: string;
+    mailHistoryId?: string;
+    lastActiveAt?: string;
   }): void {
     this.inner.updateSettings(patch);
   }

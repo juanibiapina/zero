@@ -18,7 +18,8 @@ export type ScheduleReason =
   | "size"
   | "onboarding"
   | "admin_task"
-  | "reminder";
+  | "reminder"
+  | "mailwatch";
 
 export interface Deadline {
   reason: ScheduleReason;
@@ -192,6 +193,7 @@ export interface ScheduleTarget {
     conversationId?: string,
   ): Promise<void>;
   requestReminderAt(clerkUserId: string, dueAt: number): Promise<void>;
+  requestMailWatchAt(clerkUserId: string, dueAt: number): Promise<void>;
 }
 
 // Push a conversation's idle deadline out, best-effort. A schedule that is
@@ -239,6 +241,22 @@ export const requestReminderSafely = async (
     await schedule.requestReminderAt(clerkUserId, dueAt);
   } catch (err) {
     logError("schedule_reminder_failed", { error: fmtErr(err) });
+  }
+};
+
+// Hold the user's mail poll at `dueAt`, best-effort. One deadline per user,
+// replaced by key, so an hourly poll that re-arms itself never accumulates.
+// Best-effort for the same reason as the others: a timer that cannot be armed
+// must not fail the turn that set it, and the user's next message re-arms it.
+export const requestMailWatchSafely = async (
+  schedule: ScheduleTarget,
+  clerkUserId: string,
+  dueAt: number,
+): Promise<void> => {
+  try {
+    await schedule.requestMailWatchAt(clerkUserId, dueAt);
+  } catch (err) {
+    logError("schedule_mailwatch_failed", { error: fmtErr(err) });
   }
 };
 

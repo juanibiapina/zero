@@ -10,6 +10,7 @@ import {
   externalCalls,
   knowledge,
   learningJobs,
+  mailThreads,
   messages,
   pendingMessages,
   processedUpdates,
@@ -35,6 +36,8 @@ import type {
   ConversationContext,
   ExternalCallClaim,
   LearningMessage,
+  MailThreadRecord,
+  MailThreadStatus,
   Message,
   MessageContent,
   MessageKind,
@@ -57,6 +60,8 @@ interface SettingsRow {
   timezone: string | null;
   country: string | null;
   firstContactAt: string | null;
+  mailHistoryId: string | null;
+  lastActiveAt: string | null;
 }
 
 export class DbStore implements Store {
@@ -462,6 +467,9 @@ export class DbStore implements Store {
     // it too. Resetting a thread cancels what was scheduled in it: the record
     // has no other thread to speak in.
     this.db.delete(schedules, { where: eq("conversationId", conv.id) });
+    // Watched mail threads are bound to this conversation the same way: a
+    // reply has nowhere to be announced once the chat is gone.
+    this.db.delete(mailThreads, { where: eq("conversationId", conv.id) });
     this.db.delete(conversations, { where: eq("id", conv.id) });
   }
 
@@ -795,6 +803,66 @@ export class DbStore implements Store {
     return due.length === 0 ? null : Math.min(...due);
   }
 
+  // --- watched mail threads ---
+
+  trackMailThread(input: {
+    threadId: string;
+    conversationId: string;
+  }): MailThreadRecord {
+    const existing = this.db.get(mailThreads, {
+      where: eq("threadId", input.threadId),
+    });
+    if (existing) {
+      // Re-watching moves the thread to the conversation asking for it: "watch
+      // this here" must always mean here, not wherever it was first seen.
+      this.db.update(
+        mailThreads,
+        { conversationId: input.conversationId, status: "active" },
+        { where: eq("threadId", input.threadId) },
+      );
+      return toMailThread(this.db.get(mailThreads, {
+        where: eq("threadId", input.threadId),
+      })!);
+    }
+    const row = {
+      threadId: input.threadId,
+      conversationId: input.conversationId,
+      status: "active" as const,
+      createdAt: this.nowIso(),
+      lastNotifiedAt: null,
+    };
+    this.db.insert(mailThreads, row);
+    return row;
+  }
+
+  untrackMailThread(threadId: string): boolean {
+    const existing = this.db.get(mailThreads, { where: eq("threadId", threadId) });
+    if (!existing || existing.status !== "active") return false;
+    this.db.update(mailThreads, { status: "stopped" }, { where: eq("threadId", threadId) });
+    return true;
+  }
+
+  listMailThreads(conversationId?: string): MailThreadRecord[] {
+    const where =
+      conversationId === undefined
+        ? eq("status", "active")
+        : and(eq("status", "active"), eq("conversationId", conversationId));
+    return this.db
+      .all(mailThreads, { where })
+      .map(toMailThread)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  markMailThreadsNotified(threadIds: string[], notifiedAt: string): void {
+    for (const threadId of threadIds) {
+      this.db.update(
+        mailThreads,
+        { lastNotifiedAt: notifiedAt },
+        { where: eq("threadId", threadId) },
+      );
+    }
+  }
+
   // --- settings ---
 
   // Get the single settings row, updating the given columns if it exists or
@@ -808,6 +876,8 @@ export class DbStore implements Store {
       timezone: string;
       country: string;
       firstContactAt: string;
+      mailHistoryId: string;
+      lastActiveAt: string;
     }>,
   ): SettingsRow {
     const existing = this.db.get(userSettings);
@@ -838,6 +908,8 @@ export class DbStore implements Store {
         createdAt: seeded.createdAt ?? null,
         timezone: seeded.timezone ?? null,
         country: seeded.country ?? null,
+        mailHistoryId: seeded.mailHistoryId ?? null,
+        lastActiveAt: seeded.lastActiveAt ?? null,
         isNewUser: true,
       };
     }
@@ -847,6 +919,8 @@ export class DbStore implements Store {
       createdAt: row.createdAt ?? null,
       timezone: row.timezone ?? null,
       country: row.country ?? null,
+      mailHistoryId: row.mailHistoryId ?? null,
+      lastActiveAt: row.lastActiveAt ?? null,
       isNewUser: false,
     };
   }
@@ -855,17 +929,23 @@ export class DbStore implements Store {
     onboardingSeen?: boolean;
     timezone?: string;
     country?: string;
+    mailHistoryId?: string;
+    lastActiveAt?: string;
   }): void {
     const columns: Partial<{
       onboardingSeen: number;
       timezone: string;
       country: string;
+      mailHistoryId: string;
+      lastActiveAt: string;
     }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
     }
     if (patch.timezone !== undefined) columns.timezone = patch.timezone;
     if (patch.country !== undefined) columns.country = patch.country;
+    if (patch.mailHistoryId !== undefined) columns.mailHistoryId = patch.mailHistoryId;
+    if (patch.lastActiveAt !== undefined) columns.lastActiveAt = patch.lastActiveAt;
     this.upsertSettings(columns);
   }
 
@@ -960,6 +1040,20 @@ function toSchedule(s: {
     nextDueAt: s.nextDueAt ?? null,
     status: s.status as ScheduleStatus,
     lastFiredAt: s.lastFiredAt ?? null,
+  };
+}
+
+function toMailThread(t: {
+  threadId: string;
+  conversationId: string;
+  status: string;
+  createdAt: string;
+  lastNotifiedAt: string | null;
+}): MailThreadRecord {
+  return {
+    ...t,
+    status: t.status as MailThreadStatus,
+    lastNotifiedAt: t.lastNotifiedAt ?? null,
   };
 }
 

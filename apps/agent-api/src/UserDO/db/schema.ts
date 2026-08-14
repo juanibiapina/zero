@@ -17,6 +17,12 @@ export const userSettings = table("user_settings", {
   country: column.text(),
   // When Zero first introduced itself. Set exactly once, by claimFirstContact.
   firstContactAt: column.text(),
+  // Gmail's mailbox history watermark: where the next poll for replies on
+  // watched threads starts. One per user, not per thread (see mail_threads).
+  mailHistoryId: column.text(),
+  // Last time the user sent anything. The mail poll stops re-arming once this
+  // is a week old, so idle accounts cost nothing.
+  lastActiveAt: column.text(),
 });
 
 // Topics: the durable knowledge model. `id` is a stable surrogate key so a
@@ -161,6 +167,17 @@ export const schedules = table("schedules", {
   status: column.text().notNull().default("active"),
   createdAt: column.text().notNull(),
   lastFiredAt: column.text(),
+});
+
+// Gmail threads Zero watches for replies, each bound to the conversation the
+// notification lands in. No historyId here: the watermark is per mailbox and
+// lives on user_settings (see migration 0034).
+export const mailThreads = table("mail_threads", {
+  threadId: column.text().notNull().primaryKey(),
+  conversationId: column.text().notNull().references(ref(conversations, "id")),
+  status: column.text().notNull().default("active"),
+  createdAt: column.text().notNull(),
+  lastNotifiedAt: column.text(),
 });
 
 // Webhook idempotency: dedupe fully re-delivered Telegram updates.

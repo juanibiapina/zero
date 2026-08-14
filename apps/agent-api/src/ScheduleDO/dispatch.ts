@@ -39,6 +39,11 @@ const DISPATCH: Record<
     getUserDO(env, clerkUserId).runQueuedOnboarding(),
   admin_task: ({ env, clerkUserId }) =>
     getUserDO(env, clerkUserId).runQueuedAdminTask(),
+  // The hourly poll for replies on watched mail threads. Like a due schedule,
+  // it only queues work on UserDO and returns: the turn a reply books runs on
+  // UserDO's own alarm.
+  mailwatch: ({ env, clerkUserId }) =>
+    getUserDO(env, clerkUserId).checkTrackedMail(),
 };
 
 // The handler for a persisted deadline, or null when nothing claims it.

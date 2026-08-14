@@ -27,6 +27,20 @@ export const FIRST_CONTACT_NOTE =
 export const SCHEDULE_NOTE =
   "[Scheduled: the user set this up earlier and is not waiting on a question right now. What follows is the instruction you left yourself. Do the work it asks for, using your tools, and send the result as a message in this chat. If it is a plain reminder, send one short message and nothing else. Do not ask whether to proceed, and do not mention that a schedule triggered you.]";
 
+// A reply landed on a Gmail thread being watched in this chat. Like a
+// schedule, nobody asked anything right now, so the note says so; unlike a
+// schedule there is no stored instruction, because the thread and this chat
+// already hold why it is being watched.
+//
+// Only the thread id travels: Gmail's history carries no sender, subject or
+// snippet, and fetching them here would spend a call per message on context
+// the model can read itself with gmail_thread.
+export const MAIL_NOTE =
+  "[New mail: a message arrived in a Gmail thread you are watching for this user. They did not ask you anything right now. Read the thread with gmail_thread first, then tell them what came in, in one short message, and carry on with whatever the thread was for. If it needs a reply, propose one and wait for their confirmation before sending. If the new message turns out to be irrelevant to them, say nothing and call untrack_email_thread instead.]";
+
+export const composeMailNoteText = (threadId: string): string =>
+  composeTurnText({ note: MAIL_NOTE, text: `Gmail threadId: ${threadId}` });
+
 export const composeTurnText = (input: {
   note?: string;
   text: string;

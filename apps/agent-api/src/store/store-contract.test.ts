@@ -798,6 +798,8 @@ describe("Store contract: settings", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       timezone: null,
       country: null,
+      mailHistoryId: null,
+      lastActiveAt: null,
       isNewUser: true,
     });
   });
@@ -1078,5 +1080,90 @@ describe("Store contract: schedules", () => {
     s.resetConversation(1, 0);
     expect(s.getSchedule("here")).toBeNull();
     expect(s.listSchedules().map((r) => r.id)).toEqual(["there"]);
+  });
+});
+
+describe("Store contract: watched mail threads", () => {
+  it("trackMailThread stores an active row bound to the conversation", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    expect(s.trackMailThread({ threadId: "t1", conversationId: c })).toMatchObject({
+      threadId: "t1",
+      conversationId: c,
+      status: "active",
+      lastNotifiedAt: null,
+    });
+    expect(s.listMailThreads().map((t) => t.threadId)).toEqual(["t1"]);
+  });
+
+  it("tracking the same thread again moves it to the asking conversation", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    const b = s.getOrCreateConversation(2, 0);
+    s.trackMailThread({ threadId: "t1", conversationId: a });
+    s.trackMailThread({ threadId: "t1", conversationId: b });
+    expect(s.listMailThreads()).toHaveLength(1);
+    expect(s.listMailThreads(b).map((t) => t.threadId)).toEqual(["t1"]);
+    expect(s.listMailThreads(a)).toEqual([]);
+  });
+
+  it("untrackMailThread stops the row once and reports whether it did", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    s.trackMailThread({ threadId: "t1", conversationId: c });
+    expect(s.untrackMailThread("t1")).toBe(true);
+    expect(s.untrackMailThread("t1")).toBe(false);
+    expect(s.untrackMailThread("nope")).toBe(false);
+    expect(s.listMailThreads()).toEqual([]);
+  });
+
+  it("re-tracking a stopped thread watches it again", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    s.trackMailThread({ threadId: "t1", conversationId: c });
+    s.untrackMailThread("t1");
+    s.trackMailThread({ threadId: "t1", conversationId: c });
+    expect(s.listMailThreads().map((t) => t.threadId)).toEqual(["t1"]);
+  });
+
+  it("listMailThreads scopes to one conversation when asked", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    const b = s.getOrCreateConversation(2, 0);
+    s.trackMailThread({ threadId: "here", conversationId: a });
+    s.trackMailThread({ threadId: "there", conversationId: b });
+    expect(s.listMailThreads(a).map((t) => t.threadId)).toEqual(["here"]);
+    expect(s.listMailThreads().map((t) => t.threadId).sort()).toEqual(["here", "there"]);
+  });
+
+  it("markMailThreadsNotified stamps only the named rows", () => {
+    const s = makeStore();
+    const c = s.getOrCreateConversation(1, 0);
+    s.trackMailThread({ threadId: "t1", conversationId: c });
+    s.trackMailThread({ threadId: "t2", conversationId: c });
+    s.markMailThreadsNotified(["t1"], "2026-02-02T00:00:00.000Z");
+    const byId = Object.fromEntries(s.listMailThreads().map((t) => [t.threadId, t]));
+    expect(byId.t1?.lastNotifiedAt).toBe("2026-02-02T00:00:00.000Z");
+    expect(byId.t2?.lastNotifiedAt).toBeNull();
+  });
+
+  it("resetConversation takes its watched threads with it", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    const b = s.getOrCreateConversation(2, 0);
+    s.trackMailThread({ threadId: "here", conversationId: a });
+    s.trackMailThread({ threadId: "there", conversationId: b });
+    s.resetConversation(1, 0);
+    expect(s.listMailThreads().map((t) => t.threadId)).toEqual(["there"]);
+  });
+
+  it("settings carry the mail watermark and last activity", () => {
+    const s = makeStore();
+    expect(s.getSettings()).toMatchObject({ mailHistoryId: null, lastActiveAt: null });
+    s.updateSettings({ mailHistoryId: "12345", lastActiveAt: "2026-02-02T00:00:00.000Z" });
+    expect(s.getSettings()).toMatchObject({
+      mailHistoryId: "12345",
+      lastActiveAt: "2026-02-02T00:00:00.000Z",
+    });
   });
 });

@@ -23,6 +23,7 @@ import { buildReadPageTool } from "../tools/read-page";
 import { buildTimezoneTool } from "../tools/timezone";
 import { buildCountryTool } from "../tools/country";
 import { buildScheduleTools } from "../tools/schedules";
+import { buildMailWatchTools } from "../tools/mail-watch";
 import { buildGoogleTools } from "../tools/google";
 import { buildFileTools } from "../tools/files";
 import { messageText, toBlocks } from "../store/messages";
@@ -33,6 +34,7 @@ import type { GoogleWorkspace } from "../google/types";
 import type { StoredFile, UserFileStore } from "../files/types";
 import type { ImageResizer } from "../images/types";
 import type { ScheduleBook } from "../schedules/types";
+import type { MailWatchBook } from "../mail-watch/types";
 import {
   interfaceContext,
   interfaceSystemPrompt,
@@ -125,6 +127,11 @@ export interface InterfaceAgentInput {
   schedules?: ScheduleBook;
   // Re-arm the user's schedule timer after a create or cancel. Fire-and-forget.
   onScheduleChanged?: () => void;
+  // Gmail threads being watched for replies, bound to this conversation. Tools
+  // stay registered when it is absent so the cached tool schema stays stable.
+  mailWatch?: MailWatchBook;
+  // Re-arm the user's mail poll after a change. Fire-and-forget.
+  onWatchChanged?: () => void;
   // Absolute reference time for the date anchor and relative message ages.
   // Defaults to now; injected in tests for deterministic rendering.
   now?: Date;
@@ -314,6 +321,9 @@ export const runInterfaceAgent = async (
       google: input.google,
       timezone: input.timezone ?? "UTC",
       files: input.files,
+      // Mail Zero sends is watched for a reply without being asked.
+      mailWatch: input.mailWatch,
+      onWatchChanged: input.onWatchChanged,
     }),
     // Registered unconditionally so the tool schema is byte-identical across
     // users and turns. Unwired storage returns normal tool errors.
@@ -329,6 +339,13 @@ export const runInterfaceAgent = async (
       schedules: input.schedules,
       timezone,
       onScheduleChanged: input.onScheduleChanged,
+    }),
+    // Same posture as the schedule tools, and for the same reason: watching a
+    // thread books a future turn that messages the user, which only the
+    // interface agent may do.
+    ...buildMailWatchTools({
+      mailWatch: input.mailWatch,
+      onWatchChanged: input.onWatchChanged,
     }),
   };
 

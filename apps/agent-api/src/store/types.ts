@@ -379,6 +379,36 @@ export interface ScheduleRecordStore {
   earliestScheduleDueAt(): number | null;
 }
 
+// A watched Gmail thread: Zero notices replies on it and says so in the
+// conversation it is bound to. There is no stored "why": the chat and the
+// thread itself already hold that, and a third copy would go stale.
+export interface MailThreadRecord {
+  threadId: string;
+  conversationId: string;
+  status: MailThreadStatus;
+  createdAt: string;
+  lastNotifiedAt: string | null;
+}
+
+// `active` is watched; `stopped` is what the user asked Zero to forget.
+export type MailThreadStatus = "active" | "stopped";
+
+// Watched-thread rows, backed by the current user's DO SQLite (hence
+// synchronous, like ScheduleRecordStore). This port knows nothing about Gmail:
+// the mailbox watermark it stores is an opaque string it never interprets.
+export interface MailThreadStore {
+  // Idempotent: watching an already-watched thread re-activates it and moves
+  // it to the conversation given, so "watch this here" always means here.
+  trackMailThread(input: { threadId: string; conversationId: string }): MailThreadRecord;
+  // True when an active row existed and is now stopped.
+  untrackMailThread(threadId: string): boolean;
+  // Active rows only, newest first. Scoped to one conversation when given,
+  // else every active row for the user (which is what the cap counts).
+  listMailThreads(conversationId?: string): MailThreadRecord[];
+  // Stamp the rows a notification was just queued for.
+  markMailThreadsNotified(threadIds: string[], notifiedAt: string): void;
+}
+
 // The per-user settings row, as reported to callers. Nullable columns come
 // through as null; `isNewUser` marks the access that seeded the row.
 export interface UserSettings {
@@ -387,6 +417,11 @@ export interface UserSettings {
   createdAt: string | null;
   timezone: string | null;
   country: string | null;
+  // Gmail's mailbox history watermark, or null when no thread has ever been
+  // watched. See MailThreadStore.
+  mailHistoryId: string | null;
+  // ISO timestamp of the user's last message, or null before their first.
+  lastActiveAt: string | null;
   // True only on the access that seeded the row (first-ever getSettings).
   isNewUser: boolean;
 }
@@ -400,6 +435,8 @@ export interface SettingsStore {
     onboardingSeen?: boolean;
     timezone?: string;
     country?: string;
+    mailHistoryId?: string;
+    lastActiveAt?: string;
   }): void;
   setGoogleOnboardingStatus(status: string): void;
 
@@ -424,4 +461,5 @@ export type Store = TopicStore &
   ExternalCallStore &
   FileRecordStore &
   ScheduleRecordStore &
+  MailThreadStore &
   SettingsStore;

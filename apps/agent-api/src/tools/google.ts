@@ -29,12 +29,19 @@ import {
   type EventDateTime,
   type GoogleWorkspace,
 } from "../google/types";
+import type { MailWatchBook } from "../mail-watch/types";
 
 export interface GoogleToolsDeps {
   google: GoogleWorkspace;
   // The user's IANA timezone; calendar tools stamp it onto wall-clock times.
   timezone: string;
   files?: UserFileStore;
+  // Watched-thread book for this chat. Mail Zero sends is watched for a reply
+  // without the user asking, because "tell me when they answer" is the whole
+  // reason it was sent. Absent in contexts without user storage.
+  mailWatch?: MailWatchBook;
+  // Re-arm the mail poll after a change, best-effort and off the reply path.
+  onWatchChanged?: () => void;
 }
 
 // Run an adapter call, converting a not-connected error into a friendly message
@@ -106,7 +113,17 @@ const toRfc3339 = (value: string, timeZone: string, endOfDay: boolean): string =
 };
 
 export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
-  const { google, timezone, files } = deps;
+  const { google, timezone, files, mailWatch, onWatchChanged } = deps;
+
+  // Watch the thread a send landed in, so its reply is noticed. Never fails the
+  // send: mail that is out cannot be unsent, and a watch that could not be
+  // recorded is a smaller loss than an error the model reads as "not sent".
+  const watchSent = (threadId: string): void => {
+    if (!mailWatch) return;
+    const result = mailWatch.watch(threadId);
+    if ("error" in result) return;
+    onWatchChanged?.();
+  };
 
   return {
     gmail_search: defineTool({
@@ -182,7 +199,11 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
           .object({ messageIdHeader: z.string(), threadId: z.string() })
           .optional(),
       }),
-      execute: (input) => writeGuard("gmail_send", () => google.mail.send(input)),
+      execute: async (input) => {
+        const sent = await writeGuard("gmail_send", () => google.mail.send(input));
+        watchSent(sent.threadId);
+        return sent;
+      },
       // Irreversible: once the mail leaves there is no unsend, so a resumed turn
       // must never fire this twice (see agents/run.ts).
       externalWrite: true,
@@ -288,8 +309,13 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
         "creates a sent message, so the draftId stops existing: never call this " +
         "twice for the same draft.",
       inputSchema: z.object({ draftId: z.string() }),
-      execute: ({ draftId }) =>
-        writeGuard("gmail_send_draft", () => google.mail.sendDraft(draftId)),
+      execute: async ({ draftId }) => {
+        const sent = await writeGuard("gmail_send_draft", () =>
+          google.mail.sendDraft(draftId),
+        );
+        watchSent(sent.threadId);
+        return sent;
+      },
       // Irreversible, exactly like gmail_send: there is no unsend.
       externalWrite: true,
     }),

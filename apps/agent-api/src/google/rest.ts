@@ -9,6 +9,7 @@
 // the tool layer turns into `{ error }` data.
 
 import { MAX_FILE_BYTES, MAX_FILE_LABEL } from "../files/types";
+import { log } from "../log";
 import {
   CALENDAR_EVENTS_CAP,
   CALENDAR_PER_LIST_CAP,
@@ -37,7 +38,9 @@ import {
   type MailLabel,
   type MailMessage,
   type MailThread,
+  type MailHistory,
   type MailThreadSummary,
+  type MailWatermark,
   type SendMailInput,
 } from "./types";
 
@@ -182,6 +185,17 @@ interface GmailLabel {
   name: string;
   type?: string;
 }
+
+// One page of users.history.list. The messages inside a history record carry
+// only id and threadId, which is all this adapter reads.
+interface GmailHistoryPage {
+  history?: { messagesAdded?: { message?: { threadId?: string } }[] }[];
+  nextPageToken?: string;
+  historyId?: string;
+}
+
+// Bound on how many history pages one poll follows. See listChangedThreads.
+const HISTORY_PAGE_LIMIT = 10;
 
 // Case-insensitive header lookup. Gmail returns `Message-ID` (capital ID) but
 // casing varies by sender (`Message-Id`), so never match on exact case.
@@ -519,7 +533,7 @@ export const createGoogleWorkspace = (
       };
     },
 
-    async send(input: SendMailInput): Promise<{ id: string }> {
+    async send(input: SendMailInput): Promise<{ id: string; threadId: string }> {
       const body = rawMessage(input);
 
       const res = await authFetch(`${GMAIL_BASE}/messages/send`, {
@@ -527,8 +541,57 @@ export const createGoogleWorkspace = (
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const sent = await readJson<{ id: string }>(res);
-      return { id: sent.id };
+      const sent = await readJson<{ id: string; threadId: string }>(res);
+      return { id: sent.id, threadId: sent.threadId };
+    },
+
+    async getWatermark(): Promise<MailWatermark> {
+      const profile = await getJson<{ historyId: string }>(`${GMAIL_BASE}/profile`);
+      return { historyId: profile.historyId };
+    },
+
+    async listChangedThreads(startHistoryId: string): Promise<MailHistory> {
+      const threadIds = new Set<string>();
+      let historyId = startHistoryId;
+      let pageToken: string | undefined;
+      // Gmail pages history at 100 records by default. With the messageAdded +
+      // INBOX filter an hour of real mail is far under one page, but ignoring
+      // nextPageToken would silently drop changes, so pages are followed to a
+      // bound. Hitting the bound is logged, never silent.
+      for (let page = 0; page < HISTORY_PAGE_LIMIT; page++) {
+        const url = new URL(`${GMAIL_BASE}/history`);
+        url.searchParams.set("startHistoryId", startHistoryId);
+        url.searchParams.set("historyTypes", "messageAdded");
+        // Server-side filter: only changes to messages carrying INBOX. The
+        // user's own replies and Zero's sends are SENT/DRAFT, never INBOX, so
+        // they never reach us and no client-side label logic is needed.
+        url.searchParams.set("labelId", "INBOX");
+        if (pageToken) url.searchParams.set("pageToken", pageToken);
+        let data: GmailHistoryPage;
+        try {
+          data = await getJson<GmailHistoryPage>(url.toString());
+        } catch (error) {
+          // 404 means the watermark fell outside Gmail's retention window.
+          // That is an expected outcome of a long gap, not a failure.
+          if (error instanceof GoogleApiError && error.status === 404) {
+            return { ok: false, reason: "expired" };
+          }
+          throw error;
+        }
+        for (const record of data.history ?? []) {
+          for (const added of record.messagesAdded ?? []) {
+            const threadId = added.message?.threadId;
+            if (threadId) threadIds.add(threadId);
+          }
+        }
+        historyId = data.historyId ?? historyId;
+        if (!data.nextPageToken) break;
+        pageToken = data.nextPageToken;
+        if (page === HISTORY_PAGE_LIMIT - 1) {
+          log("mail_history_pages_capped", { pages: HISTORY_PAGE_LIMIT });
+        }
+      }
+      return { ok: true, historyId, threadIds: [...threadIds] };
     },
 
     async listLabels(): Promise<MailLabel[]> {
@@ -639,14 +702,14 @@ export const createGoogleWorkspace = (
       return { draftId: draft.id, threadId: draft.message?.threadId ?? null };
     },
 
-    async sendDraft(draftId: string): Promise<{ id: string }> {
+    async sendDraft(draftId: string): Promise<{ id: string; threadId: string }> {
       const res = await authFetch(`${GMAIL_BASE}/drafts/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: draftId }),
       });
-      const sent = await readJson<{ id: string }>(res);
-      return { id: sent.id };
+      const sent = await readJson<{ id: string; threadId: string }>(res);
+      return { id: sent.id, threadId: sent.threadId };
     },
   };
 

@@ -551,6 +551,94 @@ describe("createGoogleWorkspace drafts", () => {
   });
 });
 
+describe("createGoogleWorkspace mail history", () => {
+  it("send reports the thread the message landed in", async () => {
+    globalThis.fetch = routed([
+      { match: "/messages/send", response: () => json({ id: "M9", threadId: "T9" }) },
+    ]);
+    const google = createGoogleWorkspace(token);
+    await expect(
+      google.mail.send({ to: "a@b.c", subject: "hi", body: "there" }),
+    ).resolves.toEqual({ id: "M9", threadId: "T9" });
+  });
+
+  it("getWatermark reads the mailbox history id from the profile", async () => {
+    globalThis.fetch = routed([
+      { match: "/profile", response: () => json({ historyId: "4242" }) },
+    ]);
+    const google = createGoogleWorkspace(token);
+    await expect(google.mail.getWatermark()).resolves.toEqual({ historyId: "4242" });
+  });
+
+  it("listChangedThreads asks only for inbox message additions and dedupes threads", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn<typeof fetch>(async (input) => {
+      urls.push(urlOf(input));
+      return json({
+        history: [
+          { messagesAdded: [{ message: { id: "M1", threadId: "T1" } }] },
+          {
+            messagesAdded: [
+              { message: { id: "M2", threadId: "T1" } },
+              { message: { id: "M3", threadId: "T2" } },
+            ],
+          },
+        ],
+        historyId: "5000",
+      });
+    });
+    const google = createGoogleWorkspace(token);
+    const result = await google.mail.listChangedThreads("4000");
+    expect(result).toEqual({ ok: true, historyId: "5000", threadIds: ["T1", "T2"] });
+    expect(urls[0]).toContain("startHistoryId=4000");
+    expect(urls[0]).toContain("historyTypes=messageAdded");
+    expect(urls[0]).toContain("labelId=INBOX");
+  });
+
+  it("listChangedThreads follows pages and merges them", async () => {
+    let call = 0;
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
+      call++;
+      return call === 1
+        ? json({
+            history: [{ messagesAdded: [{ message: { threadId: "T1" } }] }],
+            nextPageToken: "p2",
+            historyId: "5000",
+          })
+        : json({
+            history: [{ messagesAdded: [{ message: { threadId: "T2" } }] }],
+            historyId: "5001",
+          });
+    });
+    const google = createGoogleWorkspace(token);
+    await expect(google.mail.listChangedThreads("4000")).resolves.toEqual({
+      ok: true,
+      historyId: "5001",
+      threadIds: ["T1", "T2"],
+    });
+    expect(call).toBe(2);
+  });
+
+  it("listChangedThreads reports an out-of-range watermark as expired, not an error", async () => {
+    globalThis.fetch = routed([
+      { match: "/history", response: () => json({ error: "gone" }, 404) },
+    ]);
+    const google = createGoogleWorkspace(token);
+    await expect(google.mail.listChangedThreads("1")).resolves.toEqual({
+      ok: false,
+      reason: "expired",
+    });
+  });
+
+  it("listChangedThreads still throws on other Gmail failures", async () => {
+    globalThis.fetch = routed([
+      { match: "/history", response: () => json({ error: "boom" }, 500) },
+    ]);
+    const google = createGoogleWorkspace(token);
+    await expect(google.mail.listChangedThreads("1")).rejects.toThrow(/500/);
+  });
+});
+
 describe("createGoogleWorkspace calendar", () => {
   const calendarList = () =>
     json({
