@@ -16,6 +16,10 @@ that is active in the switcher at the top right.
 Treat a key like a password. Anyone holding it can read your secrets and write
 error reports.
 
+On your own machine you do not need a key at all: `zero login` signs the CLI in
+with your browser. Keys are for CI, servers and anything unattended. See the
+[CLI reference](/cli/overview/).
+
 ## Create a key
 
 1. Sign in at [dash.zeroapps.dev](https://dash.zeroapps.dev).
@@ -71,5 +75,5 @@ zero keys list             # id, prefix, label, created date
 zero keys revoke <id>      # revoke by id from the list
 ```
 
-Your first key still has to come from the dashboard, because `zero keys` needs a
-key to authenticate with. See the [CLI reference](/cli/overview/).
+Your first key can come from the terminal too: run `zero login`, then
+`zero keys create`. See the [CLI reference](/cli/overview/).

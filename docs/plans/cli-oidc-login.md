@@ -277,11 +277,13 @@ Each is a separate commit; 1-2 can land before any CLI work is visible.
    Proven end to end against the live instance: a real `zero login --port 8976`
    signed in as juanibiapina@gmail.com and wrote the org-scoped pair. Requests
    with it 401 until phase 2 is deployed.
-4. **Docs + skills:** `apps/docs/src/content/docs/cli/overview.mdx` gains a
-   "Sign in" section ahead of the API-key section; `account/api-keys.md` stops
-   claiming the first key must come from the dashboard; `docs/console-auth.md`
-   records the OAuth app; both `zero-skills` files updated; root `CHANGELOG.md`
-   entry.
+4. ~~**Docs + skills**~~ **Done.** `cli/overview.mdx` leads with "Sign in";
+   `account/api-keys.md` points at `zero login` and no longer claims the first
+   key must come from the dashboard; `docs/console-auth.md` records the OAuth
+   app, the measured token facts and the degradation mode; both `zero-skills`
+   files updated; root `CHANGELOG.md` entry landed with phase 3. CLI version
+   bumped to 0.4.0 (docs and skills pin it), so the release tag must follow the
+   deploy.
 
 ## Test strategy
 

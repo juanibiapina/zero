@@ -12,41 +12,79 @@ on npm:
 
 ## Run it
 
-The current published version is `0.3.1`. Run it without installing:
+The current published version is `0.4.0`. Run it without installing:
 
 ```bash
-pnpm dlx @zeroapps/cli@0.3.1 --help
+pnpm dlx @zeroapps/cli@0.4.0 --help
 ```
 
 Install it globally to drop the `pnpm dlx` prefix and run `zero …` directly:
 
 ```bash
-npm i -g @zeroapps/cli@0.3.1
+npm i -g @zeroapps/cli@0.4.0
 ```
 
-## Authenticate
+## Sign in
 
-The CLI needs an API key. Create one in the dashboard under **API keys** (see
-[API keys](/account/api-keys/)) and copy it. The simplest way to pass it is an
-environment variable:
+On your own machine, sign in with your browser instead of handling a key:
+
+```bash
+zero login
+zero whoami
+```
+
+`zero login` opens your browser, asks you to approve and to pick an
+organization, then stores the sign-in for this machine. Every `zero` command
+works from then on with nothing exported.
+
+```
+User ID: user_…
+Org ID: org_…
+Credential: signed in as you@example.com
+```
+
+Pick the organization carefully: the sign-in reaches exactly that one. Run
+`zero login` again to switch.
+
+The sign-in belongs to you and to this machine, so ending it disturbs no one
+else:
+
+```bash
+zero logout
+```
+
+If your browser cannot open — an SSH session, a container, a CI runner — forward
+the callback port and pin it:
+
+```bash
+ssh -L 8976:127.0.0.1:8976 you@host
+zero login --port 8976
+```
+
+Unattended machines have no browser at all. Use an API key there.
+
+## Authenticate with an API key
+
+CI, servers and scripts use a key. Create one in the dashboard under **API keys**
+(see [API keys](/account/api-keys/)), or from an already signed-in terminal with
+`zero keys create`.
 
 ```bash
 export ZERO_API_KEY=zv_your_key_here
 zero whoami
 ```
 
-`whoami` prints your user and organization IDs, which confirms the key works:
-
-```
-User ID: user_…
-Org ID: org_…
-```
-
-The key is resolved in this order, first match wins:
+Credentials are resolved in this order, first match wins:
 
 1. `--api-key` flag
 2. a directory-bound context (see below)
 3. the `ZERO_API_KEY` environment variable
+4. a `zero login` sign-in for this machine
+
+A sign-in comes last because it is the most ambient: it is set once and applies
+everywhere, so an exported key still wins. `zero whoami` prints a `Credential:`
+line naming which one answered, which is how you catch a stale `ZERO_API_KEY`
+shadowing a fresh sign-in.
 
 The API base URL defaults to `https://api.zeroapps.dev`. It is a bare origin: the
 CLI appends `/vault/v1` or `/errors/v1` itself. Override it with `--base-url` or
@@ -57,7 +95,7 @@ path.
 
 If you juggle several keys or organizations, save them as named contexts instead
 of exporting the variable. Contexts live in `~/.config/zero/config.json`
-(mode 0600, since it holds plaintext keys).
+(mode 0600, since it holds plaintext keys and any sign-in this machine has).
 
 ```bash
 zero context add work --api-key zv_your_key_here
@@ -72,8 +110,8 @@ that context, so `zero` there uses that key without the environment variable.
 ## Manage API keys
 
 Once authenticated, the CLI creates and revokes the same organization-scoped keys
-as the dashboard. Your first key still has to come from the dashboard, since
-`zero keys` needs a key to authenticate with.
+as the dashboard. After `zero login` that includes your first key, so a new
+machine never needs the dashboard for one.
 
 ```bash
 zero keys create -l ci            # prints the new key once; save it
