@@ -63,12 +63,12 @@ zero login --port 8976
 
 Unattended machines have no browser at all. Use an API key there.
 
-## In GitHub Actions, use no key
+## In GitHub Actions, use OIDC
 
-Trust the repository once with `zero ci trust add --repo owner/repo`, give the
-job `permissions: id-token: write`, and delete the `ZERO_API_KEY` secret. The job
-then reads secrets as itself. See
-[GitHub Actions without an API key](/vault/github-actions/).
+Record the repository with `zero ci trust add --repo owner/repo`, give the job
+`permissions: id-token: write`, and delete the `ZERO_API_KEY` secret. The CLI
+then exchanges the job's OIDC token for API access that expires in 15 minutes.
+See [GitHub Actions with OIDC](/vault/github-actions/).
 
 ## Authenticate with an API key
 
@@ -86,13 +86,12 @@ Credentials are resolved in this order, first match wins:
 1. `--api-key` flag
 2. a directory-bound context (see below)
 3. the `ZERO_API_KEY` environment variable
-4. a GitHub Actions job's own identity (see above)
+4. a GitHub Actions OIDC token (see above)
 5. a `zero login` sign-in for this machine
 
-A workflow comes after the environment variable, so you can still pin a key
-while you migrate, and before a sign-in, because a runner has no browser. A
-sign-in comes last: you set it once and it applies everywhere, so a key you
-exported still wins. `zero whoami` prints a `Credential:`
+OIDC comes after the environment variable, so you can pin a key during a
+migration. It comes before a sign-in, because a runner has no browser. A sign-in
+is last, because it applies to every directory on the machine. `zero whoami` prints a `Credential:`
 line naming which one answered, which is how you catch a stale `ZERO_API_KEY`
 shadowing a fresh sign-in.
 

@@ -22,9 +22,9 @@ Organization
   automatically gives it two environments, `development` and `production`. You can
   add or delete more.
 - An **environment** holds a flat set of key/value secrets.
-- **Access is organization-wide.** Signing in with `zero login`, using an API
-  key, or trusting a GitHub Actions workflow all reach every project and
-  environment in one organization, and all of them work for ZeroErrors too.
+- **Access is organization-wide.** An API key, a `zero login` sign-in, and a
+  GitHub Actions OIDC token each reach every project and environment in one
+  organization. All three also work for ZeroErrors.
 
 ## Where things live
 
@@ -33,9 +33,9 @@ Organization
 - **API keys:** [dash.zeroapps.dev/keys](https://dash.zeroapps.dev/keys), outside
   either product, since one key authorizes both. See
   [API keys](/account/api-keys/).
-- **Public API:** `https://api.zeroapps.dev/vault/v1`, Bearer-authenticated with
-  a `zv_…` key or a token from `zero login` or a
-  [trusted workflow](/vault/github-actions/).
+- **Public API:** `https://api.zeroapps.dev/vault/v1`. It takes a bearer token:
+  a `zv_…` key, a token from `zero login`, or a token from an
+  [OIDC exchange](/vault/github-actions/).
 - **CLI:** `zero vault …`, published as `@zeroapps/cli` on npm.
 
 ## Next

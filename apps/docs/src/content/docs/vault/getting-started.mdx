@@ -43,9 +43,9 @@ one machine, and `zero logout` signs it out.
 
 ## 5. When you need a key
 
-Signing in covers your own machine, and a
-[GitHub Actions workflow](/vault/github-actions/) you trust needs nothing at all.
-Anything else that runs on its own, like a server or a container, needs a key.
+`zero login` covers your own machine. A GitHub Actions job can use
+[its OIDC token](/vault/github-actions/). A server or a container has neither, so
+it needs a key.
 
 Open **API keys** in the sidebar, below the product list, add a label if you want
 one, and click **Create**. From a signed-in terminal, `zero keys create` does the
@@ -62,7 +62,7 @@ environment in your organization, and it also authorizes ZeroErrors. See
 ## Next
 
 - [Use the CLI](/vault/cli/) to script secrets from your terminal.
-- [Read secrets in GitHub Actions](/vault/github-actions/) without storing a key.
+- [Read secrets in GitHub Actions](/vault/github-actions/) with an OIDC token.
 - [Load secrets into a process or CI job](/vault/loading-secrets/) with the CLI.
 - [Pull secrets into a Cloudflare Worker](/vault/workers/) at deploy time.
 - [Send your first error](/errors/getting-started/) with the same credential.

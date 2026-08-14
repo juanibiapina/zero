@@ -13,10 +13,10 @@ Reports come from running code, so you usually need a key. Sign in at
 below the product list, and click **Create**. Copy the key when it is shown; it is
 shown once.
 
-The same key works for ZeroErrors and ZeroVault. From your own terminal you can
-use `zero login` instead, and in GitHub Actions a
-[trusted workflow](/vault/github-actions/) needs neither. See
-[API keys](/account/api-keys/) for scope, rotation, and revoking.
+The same key works for ZeroErrors and ZeroVault. On your own machine you can use
+`zero login` instead. In GitHub Actions you can use the job's
+[OIDC token](/vault/github-actions/). See [API keys](/account/api-keys/) for
+scope, rotation, and revoking.
 
 ```bash
 export ZERO_API_KEY=zv_your_key_here

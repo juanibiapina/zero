@@ -1,30 +1,33 @@
 ---
-title: GitHub Actions without an API key
-description: Let a GitHub Actions workflow read ZeroVault secrets by trusting the repository instead of storing a key.
+title: GitHub Actions with OIDC
+description: A GitHub Actions job reads ZeroVault secrets with an OIDC token instead of an API key.
 ---
 
-Your workflow can read secrets without a `ZERO_API_KEY` in GitHub. GitHub signs
-a token that says which repository and job is running. You tell Zero to trust
-that repository, and the job swaps the token for access that expires after 15
-minutes.
+GitHub Actions can give a job an OIDC token. The token is a JWT that GitHub
+signs. It names the repository, the git ref, the event, and the environment of
+the job.
 
-An API key in GitHub is the easiest one to lose: it never expires, it opens
-every project in your organization, any workflow in the repository can read it,
-and you have to rotate it by hand.
+ZeroVault accepts that token in place of an API key. You record which repository
+you trust. The job sends its OIDC token to ZeroVault and gets back a token for
+the ZeroVault API. That token is valid for 15 minutes.
+
+An API key does not expire, reaches every project in the organization, and is
+readable by every workflow in the repository.
 
 ## Set it up
 
-Trust the repository once, from a terminal where `zero` is already signed in:
+Add the trust record from a terminal where `zero` is signed in:
 
 ```bash
 zero ci trust add --repo octo-org/octo-repo
 ```
 
-Then let the job ask GitHub for its token, and delete the secret:
+Then give the job the `id-token: write` permission and delete the
+`ZERO_API_KEY` secret:
 
 ```yaml
 permissions:
-  id-token: write        # without this, the job has no identity
+  id-token: write        # GitHub gives no OIDC token without this
 
 jobs:
   build:
@@ -34,77 +37,77 @@ jobs:
       - run: npx @zeroapps/cli@0.5.0 vault secrets download -p demo -e production -f env -o .env
 ```
 
-There is no `ZERO_API_KEY` and no `secrets.*` line. Run `zero whoami` in the job
-and it prints `Credential: github actions`.
+The CLI reads the two `ACTIONS_ID_TOKEN_REQUEST_*` variables, requests an OIDC
+token with the audience `https://api.zeroapps.dev`, and exchanges it. In the
+job, `zero whoami` prints `Credential: github actions`.
 
-Wait a minute after `zero ci trust add` before the first run. Until then it is
-refused.
+The trust record is stored in a key-value store that is eventually consistent.
+A run in the first minute after `zero ci trust add` can fail.
 
 ## Private repositories
 
-`zero ci trust add` reads the repository's numeric ids from GitHub's public API,
-which cannot see private repositories. Set a `GITHUB_TOKEN` that can read it, or
-pass the ids yourself:
+ZeroVault matches the numeric owner id and repository id from the token. It does
+not match the repository name, because a name can move to a different
+repository.
+
+`zero ci trust add` reads those ids from the GitHub API without a token, so it
+cannot read a private repository. Set `GITHUB_TOKEN`, or pass the ids:
 
 ```bash
 zero ci trust add --repo octo-org/private-repo --owner-id 65 --repo-id 74
 ```
 
-A refused run prints both ids too, so you can copy them from the failure.
+A refused run prints both ids in the error.
 
-## Trust less than the whole repository
+## Limits on a trust record
 
-A trusted workflow reads every secret in your organization. Limit it to the runs
-that need to:
+A trusted workflow reads every secret in the organization. To make the trust
+smaller, add a condition:
 
 ```bash
 zero ci trust add --repo octo-org/octo-repo --ref refs/heads/main
 zero ci trust add --repo octo-org/octo-repo --environment production
 ```
 
-`--ref` must match the run's git ref. `--environment` must match the job's
-`environment:`.
+`--ref` must equal the `ref` claim of the token. `--environment` must equal the
+`environment` claim.
 
-## Pull requests are refused
+## Refused events
 
-Three triggers are refused unless you allow them, because they run as your
-repository but on code from outside it:
+ZeroVault refuses three events unless the trust record allows them:
 
-| Trigger | Why |
+| Event | Claim in the token |
 |---|---|
-| `pull_request` | Runs code from a branch nobody has reviewed yet |
-| `pull_request_target` | Runs with your secrets on a pull request from a fork |
-| `workflow_run` | Runs with your secrets after another workflow, including one a pull request started |
+| `pull_request` | The job runs code from a branch that nobody reviewed |
+| `pull_request_target` | The job runs with the base repository's identity while a fork's pull request is open |
+| `workflow_run` | The job runs with the repository's identity after another workflow |
 
 ```bash
 zero ci trust add --repo octo-org/octo-repo --allow-event pull_request
 ```
 
-Allowing one does not allow the others.
+One `--allow-event` flag allows one event. The other two stay refused.
 
-Be careful with `pull_request_target` and `workflow_run` if your workflows check
-out pull request code. Anyone who can open a pull request can then run their own
-code in a job that holds your secrets.
+A fork's `pull_request` run gets no OIDC token, because GitHub makes the
+permissions of such a run read-only. A fork's `pull_request_target` run does get
+a token. That token contains the base repository's ids and `ref:
+refs/heads/main`, so a `--ref refs/heads/main` condition matches it. Only the
+event rule refuses it.
 
-`--ref` does not help here. A `pull_request_target` run reports
-`ref: refs/heads/main`, so a main-only rule still lets it through. Only the
-trigger rule stops it.
-
-## Managing trust
+## Manage trust records
 
 ```bash
-zero ci trust list           # id, repository, and any limits
-zero ci trust rm <id>        # stop trusting it
+zero ci trust list           # id, repository, and conditions
+zero ci trust rm <id>        # delete the record
 ```
 
-Removing trust stops the next run. Access a job already has keeps working until
-it expires, so at most 15 minutes.
+After you delete a record, the next exchange fails. A token from an earlier
+exchange stays valid until it expires, for at most 15 minutes.
 
-## Where you still need a key
+## Where an API key is still necessary
 
-- **Other CI.** GitLab, CircleCI and Buildkite sign similar tokens, but Zero
-  only accepts GitHub's for now.
-- **Servers and containers.** Nothing signs a token for them. Use a key, one per
-  host if you can.
-- **Smaller than an organization.** Trust cannot be limited to one project. A
-  trusted workflow reads everything in the organization, same as a key.
+- GitLab, CircleCI, and Buildkite sign OIDC tokens too, but ZeroVault accepts
+  only GitHub's.
+- A server or a container has no OIDC issuer. Use an API key.
+- A trust record cannot name one project. It gives access to the whole
+  organization, the same as an API key.

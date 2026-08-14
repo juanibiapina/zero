@@ -17,9 +17,9 @@ Treat a key like a password. Anyone holding it can read your secrets and write
 error reports.
 
 You may not need a key. On your own machine, `zero login` signs the CLI in with
-your browser. In GitHub Actions, a repository you trust needs no key at all: see
-[GitHub Actions without an API key](/vault/github-actions/). Keys are for servers,
-containers, and CI that Zero cannot check for itself. See the
+your browser. In GitHub Actions, a job can use its OIDC token instead: see
+[GitHub Actions with OIDC](/vault/github-actions/). A key is for a server, a
+container, or CI that ZeroVault cannot verify. See the
 [CLI reference](/cli/overview/).
 
 ## Create a key

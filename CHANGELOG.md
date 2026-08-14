@@ -4,7 +4,7 @@ User-facing changes to Zero Vault and Zero Errors (the console), most recent fir
 
 Agent (Zero assistant) changes live in `apps/agent-api/CHANGELOG.md`, which ships in-product as Zero's Changelog topic.
 
-- 2026-08-14: Your GitHub Actions workflows can read secrets without a `ZERO_API_KEY` in GitHub. Run `zero ci trust add --repo owner/repo` once, add `permissions: id-token: write` to the job, and delete the secret. The job then uses the token GitHub signs for it, and the access it gets expires after 15 minutes. You can limit trust to one branch or one environment. Pull request triggers are refused unless you allow them, because they run code from outside your repository. See "GitHub Actions without an API key" in the docs.
+- 2026-08-14: A GitHub Actions job can now read your secrets with its OIDC token, so the repository stores no `ZERO_API_KEY`. Run `zero ci trust add --repo owner/repo`, add `permissions: id-token: write` to the job, and delete the secret. The exchanged token expires after 15 minutes. A trust record can require a git ref or an environment. The `pull_request`, `pull_request_target` and `workflow_run` events are refused unless you allow each one, because they run code that nobody reviewed. See "GitHub Actions with OIDC" in the docs.
 
 - 2026-08-14: When a `zero` command fails, you get one line saying why instead of a page of stack trace, and a rejected key or sign-in tells you how to fix it. The exit code is 75 when the API was down or unreachable and 1 when it refused you, so a script can tell "try again later" apart from "this will never work". Set `ZERO_DEBUG=1` if you want the stack trace.
 

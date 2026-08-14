@@ -22,7 +22,7 @@ export default defineConfig({
             { label: "Getting started", slug: "vault/getting-started" },
             { label: "Vault commands", slug: "vault/cli" },
             { label: "Loading secrets", slug: "vault/loading-secrets" },
-            { label: "GitHub Actions", slug: "vault/github-actions" },
+            { label: "GitHub Actions (OIDC)", slug: "vault/github-actions" },
             { label: "Cloudflare Workers", slug: "vault/workers" },
           ],
         },

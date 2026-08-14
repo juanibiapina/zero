@@ -58,8 +58,8 @@ const jsonLd = {
 
     <main id="main">
       <section class="hero" aria-labelledby="page-title">
-        <h1 id="page-title">One account.<br />Every Zero product.</h1>
-        <p class="lede">Sign in from your terminal. In GitHub Actions, no key needed. For indie developers and small teams.</p>
+        <h1 id="page-title">Secrets and errors.<br />One account.</h1>
+        <p class="lede">For indie developers and small teams. Sign in from the terminal with a browser, or from GitHub Actions with OIDC.</p>
         <div class="hero-actions">
           <a class="button" href={dashUrl}>Open the dashboard</a>
         </div>
@@ -70,7 +70,7 @@ const jsonLd = {
           <h2>Vault</h2>
           <div class="product-copy">
             <p class="product-statement">Secrets by product and environment.</p>
-            <p class="product-description">Store and update values from the dashboard or CLI. GitHub Actions can read them without a key.</p>
+            <p class="product-description">Store and update values from the dashboard or CLI. A GitHub Actions job reads them with its OIDC token, so the repository stores no API key.</p>
             <div class="product-links">
               <a href={vaultUrl}>Open Vault</a>
               <a class="product-doc" href={vaultDocsUrl}>Setup guide</a>
