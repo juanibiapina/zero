@@ -90,6 +90,10 @@ export function register(program: Command): void {
       console.error(
         "Add `permissions: id-token: write` to the job; no ZERO_API_KEY is needed.",
       );
+      // Measured: a workflow run seconds later can still be refused. The trust
+      // index is in KV, which is eventually consistent, so say so rather than
+      // letting the first run look like a broken feature.
+      console.error("Allow up to a minute before the first run can authenticate.");
     });
 
   trust
