@@ -45,6 +45,13 @@ export const UNSAFE_ENV_NAMES = [
   "WINDIR",
 ] as const;
 
+/**
+ * How long to wait after serving one payload before offering the pipe again.
+ * Covers the gap between our close and the reader's return; see the comment
+ * on `settle` below.
+ */
+const REOPEN_DELAY_MS = 25;
+
 export class RunError extends Error {}
 
 export interface RunOptions {
@@ -112,9 +119,26 @@ async function runWithMount(options: RunOptions, mount: string): Promise<number>
   mkfifoSync(mount, 0o600);
 
   let serving = true;
+
+  /**
+   * A reader sees end of file when the last writer closes, so it is still
+   * attached for the moment between our close and its own return. Reopening
+   * the write end inside that moment hides the end of file, and the reader
+   * gets two payloads in one read. Waiting closes that window.
+   *
+   * Do not probe for a reader with a non-blocking write open instead: the
+   * probe attaches a writer and closing it hands the *next* reader an empty
+   * read, which is a worse failure than the one it prevents.
+   */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, REOPEN_DELAY_MS));
+
   const serve = async (): Promise<void> => {
+    let served = false;
     while (serving) {
       try {
+        if (served) await settle();
+        if (!serving) return;
+        served = true;
         await new Promise<void>((resolve, reject) => {
           // Opening a FIFO for writing blocks until a reader opens it, so this
           // loop costs nothing while the child is not reading.

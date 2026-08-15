@@ -231,6 +231,30 @@ describe("zero vault run --mount", () => {
     `const fs=require('fs');let out=[];for(let i=0;i<${times};i++)out.push(fs.readFileSync('${file}','utf8'));process.stdout.write(JSON.stringify(out))`,
   ];
 
+  it("serves one clean payload per read, back to back", async () => {
+    // Regression: reopening the write end while the reader was still draining
+    // merged two payloads into one read. A tight loop is what exposed it.
+    const { stdout, code } = await run([
+      "vault",
+      "run",
+      "-p",
+      "demo",
+      "-e",
+      "production",
+      "--mount",
+      ".tight.vars",
+      "--",
+      ...readMount(".tight.vars", 20),
+    ]);
+
+    expect(code).toBe(0);
+    const reads = JSON.parse(stdout) as string[];
+    expect(reads).toHaveLength(20);
+    for (const read of reads) {
+      expect(read.split("\n").filter(Boolean)).toHaveLength(2);
+    }
+  });
+
   it("serves the same payload on every read", async () => {
     const { stdout, code } = await run([
       "vault",
