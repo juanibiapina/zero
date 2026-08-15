@@ -22,6 +22,7 @@
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import { mkfifoSync } from "./mkfifo.js";
 import { formatEnv, type Secret } from "./formats.js";
@@ -139,14 +140,18 @@ async function runWithMount(options: RunOptions, mount: string): Promise<number>
         if (served) await settle();
         if (!serving) return;
         served = true;
-        await new Promise<void>((resolve, reject) => {
-          // Opening a FIFO for writing blocks until a reader opens it, so this
-          // loop costs nothing while the child is not reading.
-          const stream = fs.createWriteStream(mount);
-          stream.on("open", () => stream.end(payload));
-          stream.on("close", () => resolve());
-          stream.on("error", (err) => reject(err));
-        });
+        // O_WRONLY without O_CREAT. Opening a FIFO for writing blocks until a
+        // reader opens it, so this loop costs nothing while the child is not
+        // reading. It must never create anything: after cleanup unlinks the
+        // pipe, a creating open (fs.createWriteStream) would put a plain file
+        // full of secrets at this path and leave it there.
+        const fd = await fsp.open(mount, fs.constants.O_WRONLY);
+        try {
+          if (!serving) continue;
+          await fd.write(payload);
+        } finally {
+          await fd.close();
+        }
       } catch {
         // The pipe is gone (cleanup) or the reader vanished mid-write. Either
         // way there is nothing to recover: stop serving.
@@ -170,6 +175,14 @@ async function runWithMount(options: RunOptions, mount: string): Promise<number>
       fs.unlinkSync(mount);
     } catch {
       // Already gone.
+    }
+    // Nothing must survive at that path, whatever happened above.
+    if (fs.existsSync(mount)) {
+      try {
+        fs.rmSync(mount, { force: true });
+      } catch {
+        // Nothing else to try; the next run refuses to reuse the path.
+      }
     }
   };
 

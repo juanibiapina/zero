@@ -242,9 +242,9 @@ describe("zero vault run --mount", () => {
       "-e",
       "production",
       "--mount",
-      ".tight.vars",
+      "tight.vars",
       "--",
-      ...readMount(".tight.vars", 20),
+      ...readMount("tight.vars", 20),
     ]);
 
     expect(code).toBe(0);
@@ -264,9 +264,9 @@ describe("zero vault run --mount", () => {
       "-e",
       "production",
       "--mount",
-      ".dev.vars",
+      "repeat.vars",
       "--",
-      ...readMount(".dev.vars", 3),
+      ...readMount("repeat.vars", 3),
     ]);
 
     expect(code).toBe(0);
@@ -285,9 +285,9 @@ describe("zero vault run --mount", () => {
       "-e",
       "production",
       "--mount",
-      ".dev.vars",
+      "multiline.vars",
       "--",
-      ...readMount(".dev.vars", 1),
+      ...readMount("multiline.vars", 1),
     ]);
 
     const [payload] = JSON.parse(stdout) as string[];
@@ -304,7 +304,7 @@ describe("zero vault run --mount", () => {
       "-e",
       "production",
       "--mount",
-      ".dev.vars",
+      "env-free.vars",
       "--",
       ...printEnv("API_TOKEN"),
     ]);
@@ -416,5 +416,32 @@ describe("zero vault run --mount, wrong path", () => {
 
     expect(code).toBe(1);
     expect(stderr).toContain("does not exist");
+  });
+});
+
+describe("zero vault run --mount, cleanup", () => {
+  it("never leaves a readable file behind, even when the child reads late", async () => {
+    // Regression: the serving loop used a creating open, so once cleanup had
+    // unlinked the pipe the next loop turn wrote the secrets into a plain file
+    // at the same path and left it there.
+    const mount = path.join(workDir, "late.vars");
+
+    const { code } = await run([
+      "vault",
+      "run",
+      "-p",
+      "demo",
+      "-e",
+      "production",
+      "--mount",
+      mount,
+      "--",
+      "node",
+      "-e",
+      `const fs=require('fs');fs.readFileSync('${mount}','utf8');setTimeout(()=>process.exit(0),50)`,
+    ]);
+
+    expect(code).toBe(0);
+    expect(fs.existsSync(mount)).toBe(false);
   });
 });
