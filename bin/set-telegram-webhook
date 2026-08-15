@@ -9,7 +9,7 @@ set -euo pipefail
 
 URL="https://zero.juanibiapina.dev/api/webhooks/telegram"
 
-exec pnpm dlx @zeroapps/cli@0.6.0 vault run -p zero-api -e production -- bash -euo pipefail -c '
+exec pnpm dlx @zeroapps/cli@0.6.1 vault run -p zero-api -e production -- bash -euo pipefail -c '
 URL="$1"
 
 echo "=== Bot identity ==="

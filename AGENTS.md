@@ -302,7 +302,7 @@ Then start the dev server again with `pnpm turbo dev`.
 
 ## Secrets
 
-When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. No secret is written to disk: `zero vault run -p <project> -e <env> -- <command>` gives a command its secrets, and `--mount <path>` serves them through a named pipe for tools that read a dotenv file (`wrangler` reading `.dev.vars`). The CLI runs via `pnpm dlx @zeroapps/cli@0.6.0` and needs only the `ZERO_API_KEY` env var; `ZERO_API_URL` is optional and defaults to `https://api.zeroapps.dev` (set it only to target another instance). It is a bare origin: the CLI appends `/vault/v1` or `/errors/v1` itself, so a `/vault` suffix left over from the `zv` era produces 404s.
+When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. No secret is written to disk: `zero vault run -p <project> -e <env> -- <command>` gives a command its secrets, and `--mount <path>` serves them through a named pipe for tools that read a dotenv file (`wrangler` reading `.dev.vars`). The CLI runs via `pnpm dlx @zeroapps/cli@0.6.1` and needs only the `ZERO_API_KEY` env var; `ZERO_API_URL` is optional and defaults to `https://api.zeroapps.dev` (set it only to target another instance). It is a bare origin: the CLI appends `/vault/v1` or `/errors/v1` itself, so a `/vault` suffix left over from the `zv` era produces 404s.
 
 ZeroVault projects (each with `development` and `production` environments):
 - `zero-api` — Worker backend secrets (also used by `bin/e2e-test`)

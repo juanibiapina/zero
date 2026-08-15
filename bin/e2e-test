@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 # Secrets come from ZeroVault and never touch the disk. Requires a credential
 # (ZERO_API_KEY or `zero login`); ZERO_API_URL is optional.
-ZERO="pnpm dlx @zeroapps/cli@0.6.0"
+ZERO="pnpm dlx @zeroapps/cli@0.6.1"
 
 echo "=== Starting mock Telegram API on :3501 ==="
 pnpm exec tsx packages/agent-e2e/src/mock-telegram.ts &

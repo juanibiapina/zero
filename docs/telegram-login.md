@@ -52,7 +52,7 @@ The widget script tag needs the bot's username at render time. Set it
 in `zero-web` (both environments use the same bot today):
 
 ```bash
-ZERO="pnpm dlx @zeroapps/cli@0.6.0"
+ZERO="pnpm dlx @zeroapps/cli@0.6.1"
 $ZERO vault secrets set VITE_TELEGRAM_BOT_USERNAME=getzerobot -p zero-web -e production
 $ZERO vault secrets set VITE_TELEGRAM_BOT_USERNAME=getzerobot -p zero-web -e development
 ```

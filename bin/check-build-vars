@@ -18,7 +18,7 @@ set -euo pipefail
 
 ACCOUNT_ID="4e04b64af4013414441c59014392bea0"
 # ZERO_CLI overrides the CLI, e.g. to test against a local build.
-ZERO="${ZERO_CLI:-pnpm dlx @zeroapps/cli@0.6.0}"
+ZERO="${ZERO_CLI:-pnpm dlx @zeroapps/cli@0.6.1}"
 
 : "${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN}"
 
