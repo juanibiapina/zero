@@ -57,8 +57,9 @@ than at any one call site. Skipped reports log `error_report_skipped`.
 Nothing is sent unless `env.ENVIRONMENT === "production"`, so local runs, unit
 tests and `bin/e2e-test` cannot write into the production issue list.
 
-- Local: `apps/agent-api/.dev.vars` carries `ENVIRONMENT=development`, generated
-  by `bin/fetch-secrets` from ZeroVault `zero-api/development`.
+- Local: the `dev` script mounts `ENVIRONMENT=development` from ZeroVault
+  `zero-api/development` at `apps/agent-api/.dev.vars`, for as long as
+  `wrangler dev` runs.
 - Production: `ENVIRONMENT=production` lives in ZeroVault `zero-api/production`
   and reaches the Worker through `bin/sync-secrets-to-cloudflare`. It is listed
   in `secrets.required` in `apps/agent-api/wrangler.jsonc`, so a deploy without

@@ -1,11 +1,21 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["GITHUB_TOKEN", "CLOUDFLARE_API_TOKEN", "CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY", "VITE_CLERK_PUBLISHABLE_KEY"],
+  "globalEnv": [
+    "GITHUB_TOKEN",
+    "CLOUDFLARE_API_TOKEN",
+    "CLERK_PUBLISHABLE_KEY",
+    "CLERK_SECRET_KEY",
+    "VITE_CLERK_PUBLISHABLE_KEY",
+    "VITE_TELEGRAM_BOT_USERNAME"
+  ],
+  // A `dev` task fetches its own secrets with `zero vault run`, so the CLI's
+  // credential has to survive strict mode. These are passed through, not
+  // hashed: they change nothing about a task's output.
+  "globalPassThroughEnv": ["ZERO_API_KEY", "ZERO_API_URL"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.local", ".env.production", ".env.production.local", ".dev.vars"]
+      "outputs": ["dist/**"]
     },
     "lint": { "outputs": [] },
     "typecheck": { "dependsOn": ["^typecheck"] },

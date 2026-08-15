@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-
-set -e
-
-bin/fetch-secrets
-pnpm --filter @zero/agent-api run cf-typegen
-pnpm --filter @zero/dashboard-api run cf-typegen
-pnpm run deploy

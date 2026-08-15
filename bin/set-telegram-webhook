@@ -4,28 +4,28 @@ set -euo pipefail
 
 # Register the Telegram bot webhook against the production worker.
 # Reads TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_SECRET from ZeroVault
-# (zero-api/production). Requires ZERO_API_KEY. ZERO_API_URL is optional.
+# (zero-api/production) and never writes them to disk.
 # See docs/telegram-webhook.md for the full operational notes.
 
 URL="https://zero.juanibiapina.dev/api/webhooks/telegram"
 
-ZERO="pnpm dlx @zeroapps/cli@0.3.1"
-TOKEN=$($ZERO vault secrets get TELEGRAM_BOT_TOKEN       -p zero-api -e production)
-SECRET=$($ZERO vault secrets get TELEGRAM_WEBHOOK_SECRET -p zero-api -e production)
+exec pnpm dlx @zeroapps/cli@0.6.0 vault run -p zero-api -e production -- bash -euo pipefail -c '
+URL="$1"
 
 echo "=== Bot identity ==="
-curl -fsS "https://api.telegram.org/bot${TOKEN}/getMe" \
-  | jq '{id: .result.id, username: .result.username}'
+curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe" \
+  | jq "{id: .result.id, username: .result.username}"
 
 echo
 echo "=== Setting webhook to ${URL} ==="
-curl -fsS -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg url "$URL" --arg secret "$SECRET" \
-        '{url: $url, secret_token: $secret, drop_pending_updates: true}')" \
+curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d "$(jq -n --arg url "$URL" --arg secret "$TELEGRAM_WEBHOOK_SECRET" \
+        "{url: \$url, secret_token: \$secret, drop_pending_updates: true}")" \
   | jq
 
 echo
 echo "=== Current webhook ==="
-curl -fsS "https://api.telegram.org/bot${TOKEN}/getWebhookInfo" \
-  | jq '.result | {url, pending_update_count, last_error_date, last_error_message, ip_address}'
+curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo" \
+  | jq ".result | {url, pending_update_count, last_error_date, last_error_message, ip_address}"
+' bash "$URL"

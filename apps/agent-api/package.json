@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8790 --inspector-port 9232",
+    "dev": "zero vault run -p zero-api -e development --mount .dev.vars -- wrangler dev --port 8790 --inspector-port 9232",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",
     "lint": "eslint .",

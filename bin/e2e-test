@@ -17,20 +17,13 @@ cleanup() {
   lsof -ti :3502 | xargs -r kill -9 2>/dev/null || true
   lsof -ti :8791 | xargs -r kill -9 2>/dev/null || true
   lsof -ti :9233 | xargs -r kill -9 2>/dev/null || true
-  # Restore original .dev.vars
-  if [ -f apps/agent-api/.dev.vars.bak ]; then
-    mv apps/agent-api/.dev.vars.bak apps/agent-api/.dev.vars
-  fi
 }
 trap cleanup EXIT
 
-echo "=== Preparing secrets ==="
-# Regenerate .dev.vars from ZeroVault (json -> dotenv) and restore on exit.
-# Requires ZERO_API_KEY. ZERO_API_URL is optional.
-ZERO="pnpm dlx @zeroapps/cli@0.3.1"
-cp apps/agent-api/.dev.vars apps/agent-api/.dev.vars.bak
-$ZERO vault secrets download -p zero-api -e development --format json \
-  | node bin/json-to-dotenv.mjs > apps/agent-api/.dev.vars
+# Secrets come from ZeroVault and never touch the disk. Requires a credential
+# (ZERO_API_KEY or `zero login`); ZERO_API_URL is optional.
+ZERO="pnpm dlx @zeroapps/cli@0.6.0"
+
 echo "=== Starting mock Telegram API on :3501 ==="
 pnpm exec tsx packages/agent-e2e/src/mock-telegram.ts &
 PIDS+=($!)
@@ -40,10 +33,14 @@ pnpm exec tsx packages/agent-e2e/src/mock-openai.ts &
 PIDS+=($!)
 
 echo "=== Starting wrangler dev (test config) on :8791 ==="
-pnpm --dir apps/agent-api exec wrangler dev \
-  --config wrangler.test.jsonc \
-  --port 8791 \
-  --inspector-port 9233 &
+# The mount path is relative to this script's working directory (the repo root),
+# and must land next to the wrangler config, which is where wrangler looks for
+# .dev.vars. The pipe disappears when the command exits.
+$ZERO vault run -p zero-api -e development --mount apps/agent-api/.dev.vars -- \
+  pnpm --dir apps/agent-api exec wrangler dev \
+    --config wrangler.test.jsonc \
+    --port 8791 \
+    --inspector-port 9233 &
 PIDS+=($!)
 
 echo "=== Waiting for ports ==="
@@ -69,7 +66,7 @@ pnpm --dir apps/agent-api exec wrangler kv key put \
   "tg:12345" "user_test" || echo "WARN: KV seed may have failed"
 
 echo "=== Running E2E tests ==="
-( eval "$($ZERO vault secrets download -p zero-api -e development --format shell)"
-  pnpm --dir packages/agent-e2e exec vitest run )
+$ZERO vault run -p zero-api -e development -- \
+  pnpm --dir packages/agent-e2e exec vitest run
 
 echo "=== E2E tests passed ==="

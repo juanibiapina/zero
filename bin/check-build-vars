@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Compare the build-time values Cloudflare uses against ZeroVault.
+#
+# The web apps read two public values at build time (a Clerk publishable key and
+# the Telegram bot username). ZeroVault holds them for local builds; the
+# Workers Builds connectors hold their own copy for production builds, because a
+# Cloudflare build has no ZeroVault credential and should not need one.
+#
+# Two copies drift. This script is the check. Run it before a release, or after
+# rotating a key.
+#
+# Needs CLOUDFLARE_API_TOKEN and a ZeroVault credential (ZERO_API_KEY or
+# `zero login`). A value stored as a build *secret* reads back as null from the
+# Cloudflare API and cannot be compared, so keep these two as plain variables.
+
+ACCOUNT_ID="4e04b64af4013414441c59014392bea0"
+ZERO="pnpm dlx @zeroapps/cli@0.6.0"
+
+: "${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN}"
+
+status=0
+
+check_worker() {
+  local worker="$1" project="$2"
+
+  echo "=== ${worker} (vault project ${project}) ==="
+
+  local script_tag
+  script_tag=$(curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+    "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/services/${worker}" \
+    | jq -r '.result.default_environment.script_tag')
+
+  local connector
+  connector=$(curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+    "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/builds/workers/${script_tag}" \
+    | jq -r '.result.production_settings.environment_variables // {}')
+
+  local vault
+  vault=$($ZERO vault secrets download -p "${project}" -e production --format json)
+
+  local names
+  names=$(jq -r 'keys[]' <<<"${connector}")
+
+  if [ -z "${names}" ]; then
+    echo "  no build variables set on the connector"
+    return
+  fi
+
+  local name connector_value vault_value
+  while read -r name; do
+    connector_value=$(jq -r --arg n "${name}" '.[$n].value // "«secret, cannot read»"' <<<"${connector}")
+    vault_value=$(jq -r --arg n "${name}" '.[$n] // "«missing»"' <<<"${vault}")
+
+    if [ "${connector_value}" = "${vault_value}" ]; then
+      echo "  ok      ${name}"
+    else
+      echo "  DRIFT   ${name}: cloudflare=${connector_value} vault=${vault_value}"
+      status=1
+    fi
+  done <<<"${names}"
+}
+
+check_worker zero-api zero-web
+check_worker zerovault-api zerovault-web
+
+if [ "${status}" -ne 0 ]; then
+  echo
+  echo "Build variables differ from the vault. Update the connector in the"
+  echo "Cloudflare dashboard, or the vault, so both agree."
+fi
+
+exit "${status}"

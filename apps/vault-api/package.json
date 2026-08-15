@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8792 --inspector-port 9233",
+    "dev": "zero vault run -p zerovault -e development --mount .dev.vars -- wrangler dev --port 8792 --inspector-port 9233",
     "dev:local": "wrangler dev --local --port 8792 --inspector-port 9233",
     "deploy": "wrangler deploy",
     "cf-typegen": "wrangler types",

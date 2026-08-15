@@ -13,7 +13,7 @@ or the GitHub Actions CI workflow. Regressions in the full webhook → turn →
 reply pipeline are only caught when someone runs it manually.
 
 **Why it's like this:** the script needs ZeroVault credentials
-(`ZERO_API_KEY` / `ZERO_API_URL`) to regenerate `.dev.vars`, and
+(`ZERO_API_KEY` / `ZERO_API_URL`) to serve the worker's secrets, and
 it spins up several background processes and ports. That's awkward to run
 per-PR in CI.
 

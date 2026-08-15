@@ -143,10 +143,16 @@ extend that Worker's include list too, or it will silently stop redeploying on
 changes to that dependency (a missed include is worse than an over-broad one, so
 prefer slightly broader paths).
 
-To deploy manually (e.g. from a branch, without pushing):
+To deploy manually (e.g. from a branch, without pushing), one Worker at a time.
+Each command wraps the build in `zero vault run`, because the web bundle needs
+its build-time values and nothing writes them to disk:
 ```bash
-gob run bin/deploy
+gob run pnpm run deploy:agent      # zero-api
+gob run pnpm run deploy:dashboard  # zerovault-api
+gob run pnpm run deploy:sites      # landing + docs
 ```
+There is no root `deploy` script: an unwrapped whole-repo deploy would ship a
+web bundle built with no values in it.
 
 A deploy reassigns `UserDO` instances to the new Worker version, which resets any
 DO mid-turn ("Durable Object reset because its code was updated") and aborts the
@@ -296,7 +302,7 @@ Then start the dev server again with `pnpm turbo dev`.
 
 ## Secrets
 
-When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. The CLI runs via `pnpm dlx @zeroapps/cli@0.3.1` and needs only the `ZERO_API_KEY` env var; `ZERO_API_URL` is optional and defaults to `https://api.zeroapps.dev` (set it only to target another instance). It is a bare origin: the CLI appends `/vault/v1` or `/errors/v1` itself, so a `/vault` suffix left over from the `zv` era produces 404s.
+When you need to manage secrets (environment variables, API keys, etc.), refer to `docs/secrets.md` for instructions on how to use ZeroVault. No secret is written to disk: `zero vault run -p <project> -e <env> -- <command>` gives a command its secrets, and `--mount <path>` serves them through a named pipe for tools that read a dotenv file (`wrangler` reading `.dev.vars`). The CLI runs via `pnpm dlx @zeroapps/cli@0.6.0` and needs only the `ZERO_API_KEY` env var; `ZERO_API_URL` is optional and defaults to `https://api.zeroapps.dev` (set it only to target another instance). It is a bare origin: the CLI appends `/vault/v1` or `/errors/v1` itself, so a `/vault` suffix left over from the `zv` era produces 404s.
 
 ZeroVault projects (each with `development` and `production` environments):
 - `zero-api` — Worker backend secrets (also used by `bin/e2e-test`)

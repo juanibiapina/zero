@@ -2,17 +2,38 @@
 
 set -e
 
+# Local CI gate. Mirrors .github/workflows/ci.yml, and adds the two production
+# web builds that CI cannot do (CI holds no ZeroVault credential).
+#
+# The order is load-bearing:
+#   - the plain build skips the two web apps, because building them without
+#     production values would leave dummy values in their dist/;
+#   - the deploy dry run pulls those web builds back in through dependsOn, so
+#     it runs before the wrapped ones;
+#   - the wrapped production builds run last, leaving a prod-identical bundle.
+
 echo "=== Running Local CI Pipeline ==="
 
 pnpm install
-bin/fetch-secrets
 pnpm --filter @zero/agent-api run cf-typegen
 pnpm --filter @zero/dashboard-api run cf-typegen
+
 # Order matches .github/workflows/ci.yml: lint first, then typecheck.
 pnpm run lint -- --fix
 pnpm run typecheck
-pnpm run build
+
+# Same placeholders CI uses. Real values come from ZeroVault below.
+export VITE_CLERK_PUBLISHABLE_KEY="pk_test_ci"
+export VITE_TELEGRAM_BOT_USERNAME="ci-bot"
+
+pnpm exec turbo run build --filter='!@zero/agent-web' --filter='!@zero/dashboard-web'
 pnpm run test
-pnpm run deploy -- --dry-run
+# The `--` is required. `turbo run deploy --dry-run` is turbo's own dry run and
+# would execute nothing at all.
+pnpm exec turbo run deploy -- --dry-run
+
+echo "=== Building the web apps with production values ==="
+pnpm run build:agent
+pnpm run build:dashboard
 
 echo "=== All CI checks passed ==="

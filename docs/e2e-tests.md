@@ -43,9 +43,10 @@ bin/e2e-test
 
 The script (`bin/e2e-test`) orchestrates everything:
 
-1. Regenerates `apps/agent-api/.dev.vars` from ZeroVault (`zero-api/development`)
-   and restores the original on exit. Requires `ZERO_API_KEY`; `ZERO_API_URL`
-   is optional.
+1. Serves `zero-api/development` secrets to `wrangler dev` through a named pipe
+   at `apps/agent-api/.dev.vars` (`zero vault run --mount`), so no plaintext
+   file is written and nothing has to be restored afterwards. Requires a
+   ZeroVault credential; `ZERO_API_URL` is optional.
 2. Starts mock Telegram (:3501), mock OpenAI (:3502), and
    `wrangler dev --config wrangler.test.jsonc` (:8791).
 3. Seeds KV so `tg:12345 → user_test`.
