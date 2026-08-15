@@ -9,8 +9,13 @@
 import { spawn } from "node:child_process";
 import type { Command } from "commander";
 import {
+  addContext,
+  contextLogin,
   DEFAULT_BASE_URL,
+  isLoginContext,
   loadConfig,
+  loginKey,
+  resolveContextEntryForDir,
   resolveContextForDir,
   saveConfig,
 } from "../config.js";
@@ -20,6 +25,7 @@ import { DEFAULT_CLIENT_ID, DEFAULT_ISSUER, revokeLogin } from "../oauth.js";
 interface LoginFlags {
   baseUrl?: string;
   port?: string;
+  context?: string;
 }
 
 /** The API origin a login authorizes: flag > context > env > default. */
@@ -50,6 +56,11 @@ export function register(program: Command): void {
     .command("login")
     .description("Sign in with a browser (no API key needed)")
     .option("--port <port>", "fixed callback port (for `ssh -L` forwarding)")
+    .option(
+      "--context <name>",
+      "store this sign-in as a named context instead of the machine default, " +
+        "so `zero context use <name>` can bind a directory to its organization",
+    )
     .action(async (flags: LoginFlags) => {
       const baseUrl = resolveBaseUrl({
         baseUrl: program.opts<{ baseUrl?: string }>().baseUrl ?? flags.baseUrl,
@@ -92,19 +103,55 @@ export function register(program: Command): void {
       }
 
       const config = loadConfig();
-      config.logins = { ...config.logins, [baseUrl]: login };
-      saveConfig(config);
+
+      if (!flags.context) {
+        config.logins = { ...config.logins, [baseUrl]: login };
+        saveConfig(config);
+        console.log(`Signed in as ${login.email ?? login.userId} (org ${login.orgId}).`);
+        return;
+      }
+
+      // The consent screen hands out the session's active organization, so a
+      // second sign-in can silently repeat the first one. Say so: the whole
+      // point of a named context is that it carries a different org.
+      const machineLogin = config.logins?.[baseUrl];
+      if (machineLogin?.orgId === login.orgId) {
+        console.error(
+          `Warning: that sign-in carries org ${login.orgId}, the same org as ` +
+            "your default sign-in. Switch the active organization at " +
+            "https://dash.zeroapps.dev and run the command again.",
+        );
+      }
+
+      config.logins = { ...config.logins, [loginKey(baseUrl, login.orgId)]: login };
+      saveConfig(
+        addContext(config, flags.context, {
+          login: { orgId: login.orgId },
+          ...(baseUrl !== DEFAULT_BASE_URL ? { baseUrl } : {}),
+        }),
+      );
 
       console.log(`Signed in as ${login.email ?? login.userId} (org ${login.orgId}).`);
+      console.log(`Added context: ${flags.context}`);
+      console.log(`Run \`zero context use ${flags.context}\` in the project directory.`);
     });
 
   program
     .command("logout")
-    .description("Revoke this machine's sign-in")
+    .description("Revoke the sign-in this directory uses (or this machine's)")
     .action(async () => {
       const baseUrl = resolveBaseUrl(program.opts<{ baseUrl?: string }>());
       const config = loadConfig();
-      const login = config.logins?.[baseUrl];
+
+      // In a directory bound to a sign-in, that is the credential the user has
+      // been running with, so it is the one `logout` must end.
+      const entry = resolveContextEntryForDir(config, process.cwd());
+      const bound =
+        entry && isLoginContext(entry.context)
+          ? contextLogin({ context: entry.context, baseUrl, logins: config.logins })
+          : null;
+      const key = bound?.key ?? baseUrl;
+      const login = bound ? bound.login : config.logins?.[baseUrl];
 
       if (!login) {
         console.error(`Not signed in to ${baseUrl}.`);
@@ -112,9 +159,13 @@ export function register(program: Command): void {
       }
 
       await revokeLogin(login);
-      delete config.logins?.[baseUrl];
+      delete config.logins?.[key];
       saveConfig(config);
 
-      console.log(`Signed out of ${baseUrl}.`);
+      console.log(
+        bound
+          ? `Signed out of ${baseUrl} (context ${entry!.name}, org ${login.orgId}).`
+          : `Signed out of ${baseUrl}.`,
+      );
     });
 }

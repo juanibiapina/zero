@@ -40,6 +40,26 @@ beforeAll(async () => {
       return;
     }
 
+    // The token endpoint hands out a rotated pair only for the refresh token a
+    // test opts in with, so the "expired sign-in" case still sees a refusal.
+    if (req.url === "/oauth/token") {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const form = new URLSearchParams(Buffer.concat(chunks).toString());
+        const rotates = form.get("refresh_token") === "rt_rotate";
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify(
+            rotates
+              ? { access_token: "at_rotated", refresh_token: "rt_rotated", expires_in: 3600 }
+              : { error: "invalid_grant" },
+          ),
+        );
+      });
+      return;
+    }
+
     const body = req.url?.startsWith("/vault/v1/projects")
       ? { projects: [] }
       : req.url?.startsWith("/errors/v1/issues")
@@ -86,13 +106,21 @@ function writeLogin(overrides: Record<string, unknown> = {}) {
   );
 }
 
-async function run(args: string[], env: Record<string, string> = {}) {
+async function run(args: string[], env: Record<string, string> = {}, cwd?: string) {
   const clean = { ...process.env };
   delete clean.ZERO_API_KEY;
   return execFileAsync(tsx, [entry, "--base-url", baseUrl, ...args], {
     encoding: "utf8",
     env: { ...clean, ZERO_CONFIG: configFile, ...env },
+    ...(cwd ? { cwd } : {}),
   });
+}
+
+function readConfig() {
+  return JSON.parse(fs.readFileSync(configFile, "utf8")) as {
+    logins?: Record<string, { accessToken: string; refreshToken: string }>;
+    contexts?: Record<string, unknown>;
+  };
 }
 
 describe("a signed-in machine", () => {
@@ -148,6 +176,131 @@ describe("zero logout", () => {
     fs.writeFileSync(configFile, JSON.stringify({ contexts: {} }));
 
     await expect(run(["logout"])).rejects.toThrow(/Not signed in/);
+  });
+});
+
+describe("a directory bound to its own sign-in", () => {
+  let projectDir: string;
+
+  /**
+   * A machine signed in to org_a, plus a context holding a sign-in to org_b
+   * bound to one project directory — the setup the feature exists for.
+   */
+  function writeBoundProject(orgLogin: Record<string, unknown> = {}) {
+    projectDir = fs.mkdtempSync(path.join(tmpDir, "project-"));
+    fs.mkdirSync(path.join(projectDir, "apps", "api"), { recursive: true });
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify({
+        contexts: { cragstronauts: { login: { orgId: "org_b" } } },
+        dirContexts: { [fs.realpathSync(projectDir)]: "cragstronauts" },
+        logins: {
+          [baseUrl]: storedLogin({ accessToken: "at_machine", orgId: "org_a" }),
+          [`${baseUrl}#org_b`]: storedLogin({
+            accessToken: "at_org_b",
+            orgId: "org_b",
+            ...orgLogin,
+          }),
+        },
+      }),
+      { mode: 0o600 },
+    );
+  }
+
+  it("uses the directory's organization, not the machine's", async () => {
+    writeBoundProject();
+
+    await run(["vault", "projects", "list"], {}, projectDir);
+
+    expect(requests[0].auth).toBe("Bearer at_org_b");
+  });
+
+  it("applies in subdirectories too", async () => {
+    writeBoundProject();
+
+    await run(["vault", "projects", "list"], {}, path.join(projectDir, "apps", "api"));
+
+    expect(requests[0].auth).toBe("Bearer at_org_b");
+  });
+
+  it("leaves every other directory on the machine sign-in", async () => {
+    writeBoundProject();
+
+    await run(["vault", "projects", "list"], {}, tmpDir);
+
+    expect(requests[0].auth).toBe("Bearer at_machine");
+  });
+
+  it("is not overridden by an ambient ZERO_API_KEY", async () => {
+    writeBoundProject();
+
+    const { stdout } = await run(["whoami"], { ZERO_API_KEY: "zv_env" }, projectDir);
+
+    expect(requests[0].auth).toBe("Bearer at_org_b");
+    expect(stdout).toContain("Credential: signed in as dev@example.com (context cragstronauts)");
+  });
+
+  it("is still overridden by an explicit --api-key flag", async () => {
+    writeBoundProject();
+
+    await run(["--api-key", "zv_flag", "vault", "projects", "list"], {}, projectDir);
+
+    expect(requests[0].auth).toBe("Bearer zv_flag");
+  });
+
+  it("stops with the fix when the sign-in is gone, instead of using another org", async () => {
+    writeBoundProject();
+    const config = readConfig();
+    delete config.logins![`${baseUrl}#org_b`];
+    fs.writeFileSync(configFile, JSON.stringify(config));
+
+    await expect(run(["vault", "projects", "list"], {}, projectDir)).rejects.toThrow(
+      /context "cragstronauts" has no sign-in.*zero login --context cragstronauts/s,
+    );
+  });
+
+  it("writes a rotated token pair back to its own entry, never over the machine's", async () => {
+    writeBoundProject({ expiresAt: Date.now() - 1000, refreshToken: "rt_rotate" });
+
+    await run(["vault", "projects", "list"], {}, projectDir);
+
+    const saved = readConfig();
+    expect(saved.logins![`${baseUrl}#org_b`]).toMatchObject({
+      accessToken: "at_rotated",
+      refreshToken: "rt_rotated",
+    });
+    expect(saved.logins![baseUrl]).toMatchObject({ accessToken: "at_machine" });
+  });
+
+  it("logs out of the directory's sign-in and keeps the machine's", async () => {
+    writeBoundProject();
+
+    const { stdout } = await run(["logout"], {}, projectDir);
+
+    expect(stdout).toContain("context cragstronauts");
+    const saved = readConfig();
+    expect(saved.logins![`${baseUrl}#org_b`]).toBeUndefined();
+    expect(saved.logins![baseUrl]).toBeDefined();
+    expect(requests[0]).toMatchObject({ method: "POST", url: "/oauth/token/revoke" });
+  });
+
+  it("names the credential each context carries", async () => {
+    writeBoundProject();
+
+    const { stdout } = await run(["context", "list"], {}, projectDir);
+
+    expect(stdout).toContain("* cragstronauts");
+    expect(stdout).toContain("login dev@example.com (org org_b)");
+  });
+
+  it("revokes the sign-in when its context is removed", async () => {
+    writeBoundProject();
+
+    const { stdout } = await run(["context", "remove", "cragstronauts"], {}, projectDir);
+
+    expect(stdout).toContain("signed out of org org_b");
+    expect(readConfig().logins![`${baseUrl}#org_b`]).toBeUndefined();
+    expect(requests.some((r) => r.url === "/oauth/token/revoke")).toBe(true);
   });
 });
 

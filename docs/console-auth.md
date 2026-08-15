@@ -34,6 +34,15 @@ its settings:
 selector in front of the user and the resulting `org_id` in the token, and
 ZeroVault cannot route a request without an org.
 
+A token's org is fixed at sign-in and cannot be re-scoped, so reaching a second
+organization means a second sign-in. The CLI therefore stores logins keyed by
+origin **plus org** (`https://api.zeroapps.dev#org_…`), with the bare origin key
+still holding the machine-wide sign-in. A named context can point at one of
+them, which is how a project directory runs against another organization
+(`zero login --context <name>`). Because the consent screen offers the session's
+active organization, a repeat sign-in can return the same org; the CLI reports
+that rather than storing a duplicate silently.
+
 The create call returned a client secret. Nothing uses it — the CLI is a public
 client and the Worker verifies tokens through `/oauth/userinfo`, which takes no
 client credentials. Rotate it if anything ever adopts `/oauth/token_info`, which

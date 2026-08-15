@@ -25,7 +25,8 @@ import os from "node:os";
 import path from "node:path";
 import type { Login } from "./oauth.js";
 
-export interface Context {
+/** A context that carries an API key. */
+export interface KeyContext {
   apiKey: string;
   /** Optional per-context base URL; falls back to env/default when absent. */
   baseUrl?: string;
@@ -33,16 +34,44 @@ export interface Context {
   orgId?: string;
 }
 
+/**
+ * A context that carries a browser sign-in instead of a key. The credential
+ * itself lives in `logins` (one entry per origin + org), because a login
+ * rotates on refresh and several contexts may name the same one; the context
+ * only records which org to look up.
+ */
+export interface LoginContext {
+  login: { orgId: string };
+  baseUrl?: string;
+}
+
+export type Context = KeyContext | LoginContext;
+
+export function isLoginContext(context: Context): context is LoginContext {
+  return "login" in context;
+}
+
 export interface Config {
   /** Absolute directory path → context name. A binding applies to subdirs. */
   dirContexts?: Record<string, string>;
   contexts: Record<string, Context>;
   /**
-   * Browser sign-ins, keyed by the API origin they authorize. Keyed by origin
+   * Browser sign-ins, keyed by `loginKey`: the API origin they authorize, plus
+   * the org for a sign-in a directory picked deliberately. Keyed by origin
    * because a login is only valid for the instance that issued it, and because
-   * `--base-url` must be able to select one.
+   * `--base-url` must be able to select one; keyed by org too so one machine
+   * can hold a sign-in per organization at the same origin.
    */
   logins?: Record<string, Login>;
+}
+
+/**
+ * Where a login is stored. Without an org it is the machine-wide sign-in for
+ * that origin — the key `zero login` has always written, so old config files
+ * keep resolving with no migration.
+ */
+export function loginKey(baseUrl: string, orgId?: string): string {
+  return orgId ? `${baseUrl}#${orgId}` : baseUrl;
 }
 
 /**
@@ -103,11 +132,26 @@ export function saveConfig(config: Config): void {
  * git/direnv.
  */
 export function resolveContextForDir(config: Config, cwd: string): Context | null {
+  return resolveContextEntryForDir(config, cwd)?.context ?? null;
+}
+
+/**
+ * Same lookup, keeping the context's name. Commands that report which context
+ * answered (`whoami`, `context current`) need the name, and a name cannot be
+ * recovered from the context object once two contexts hold equal values.
+ */
+export function resolveContextEntryForDir(
+  config: Config,
+  cwd: string,
+): { name: string; context: Context } | null {
   const bindings = config.dirContexts ?? {};
   let dir = path.resolve(cwd);
   for (;;) {
     const name = bindings[dir];
-    if (name) return config.contexts[name] ?? null;
+    if (name) {
+      const context = config.contexts[name];
+      return context ? { name, context } : null;
+    }
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -179,11 +223,20 @@ export interface ResolvedAuth {
   orgId?: string;
   /** Present for `via: "login"`, so a caller can refresh and name the user. */
   login?: Login;
+  /**
+   * Present for `via: "login"`: where that login is stored. A refresh rotates
+   * the token pair and the provider treats a replay as theft, so the rotated
+   * pair must be written back to the exact key it came from — never assumed to
+   * be the bare origin.
+   */
+  loginKey?: string;
+  /** Name of the directory context that answered, when one did. */
+  contextName?: string;
 }
 
 /**
  * Pure key-resolution precedence, first match wins:
- *   flag > per-dir context > env > stored login > (none → null).
+ *   flag > per-dir context (key or sign-in) > env > machine sign-in > (none → null).
  * A GitHub Actions sign-in sits between the env var and the stored login, but
  * it costs a network round trip, so `auth.ts` inserts it rather than this
  * function: `logins` is simply omitted when the caller wants to try CI first.
@@ -211,6 +264,22 @@ export function resolveBaseUrl(input: {
   );
 }
 
+/**
+ * The sign-in a login context points at, or null when this machine holds none
+ * for that org. A caller must report the null rather than resolving on: falling
+ * back to the machine-wide sign-in would run the command against a different
+ * organization than the directory asked for, which is the whole point of the
+ * binding.
+ */
+export function contextLogin(input: {
+  context: LoginContext;
+  baseUrl: string;
+  logins?: Record<string, Login>;
+}): { key: string; login: Login | undefined } {
+  const key = loginKey(input.baseUrl, input.context.login.orgId);
+  return { key, login: input.logins?.[key] };
+}
+
 export function resolveAuth(input: {
   flags: { apiKey?: string; baseUrl?: string };
   env: { apiKey?: string; apiUrl?: string };
@@ -222,11 +291,22 @@ export function resolveAuth(input: {
 
   const baseUrl = resolveBaseUrl({ flags, env, context, defaultBaseUrl });
 
-  const apiKey = flags.apiKey ?? context?.apiKey ?? env.apiKey;
+  if (flags.apiKey) return { apiKey: flags.apiKey, baseUrl, via: "api_key" };
+
+  // A login context is a per-project choice, so it answers here — above the
+  // env var — exactly like a context's API key. When its sign-in is missing
+  // this returns null: the caller reports it and stops.
+  if (context && isLoginContext(context)) {
+    const { key, login } = contextLogin({ context, baseUrl, logins });
+    if (!login) return null;
+    return { apiKey: login.accessToken, baseUrl, via: "login", login, loginKey: key };
+  }
+
+  const apiKey = context?.apiKey ?? env.apiKey;
   if (apiKey) return { apiKey, baseUrl, via: "api_key" };
 
   const login = logins?.[baseUrl];
-  if (login) return { apiKey: login.accessToken, baseUrl, via: "login", login };
+  if (login) return { apiKey: login.accessToken, baseUrl, via: "login", login, loginKey: baseUrl };
 
   return null;
 }

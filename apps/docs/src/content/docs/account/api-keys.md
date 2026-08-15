@@ -17,7 +17,9 @@ Treat a key like a password. Anyone holding it can read your secrets and write
 error reports.
 
 You may not need a key. On your own machine, `zero login` signs the CLI in with
-your browser. In GitHub Actions, a job can use its OIDC token instead: see
+your browser, and `zero login --context <name>` gives one project directory its
+own organization, so a second organization needs no second key. In GitHub
+Actions, a job can use its OIDC token instead: see
 [GitHub Actions with OIDC](/vault/github-actions/). A key is for a server, a
 container, or CI that ZeroVault cannot verify. See the
 [CLI reference](/cli/overview/).

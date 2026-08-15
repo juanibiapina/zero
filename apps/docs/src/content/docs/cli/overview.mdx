@@ -44,7 +44,9 @@ Credential: signed in as you@example.com
 ```
 
 Pick the organization carefully: the sign-in reaches exactly that one. Run
-`zero login` again to switch.
+`zero login` again to switch the machine default, or give one project directory
+its own organization (see [A directory with its own
+organization](#a-directory-with-its-own-organization)).
 
 The sign-in belongs to you and to this machine, so ending it disturbs no one
 else:
@@ -52,6 +54,9 @@ else:
 ```bash
 zero logout
 ```
+
+`zero logout` ends the sign-in the current directory uses: the machine default,
+or the directory's own one when it has one.
 
 If your browser cannot open — an SSH session, a container, a CI runner — forward
 the callback port and pin it:
@@ -72,7 +77,11 @@ See [GitHub Actions with OIDC](/vault/github-actions/).
 
 ## Authenticate with an API key
 
-Servers, containers and other CI providers use a key. Create one in the dashboard under **API keys**
+Servers, containers and other CI providers use a key: they have no browser and
+no config file. On your own machine, prefer `zero login` — the environment
+variable is a fallback, not the normal path.
+
+Create one in the dashboard under **API keys**
 (see [API keys](/account/api-keys/)), or from an already signed-in terminal with
 `zero keys create`.
 
@@ -84,16 +93,18 @@ zero whoami
 Credentials are resolved in this order, first match wins:
 
 1. `--api-key` flag
-2. a directory-bound context (see below)
+2. a directory-bound context — an API key or a sign-in (see below)
 3. the `ZERO_API_KEY` environment variable
 4. a GitHub Actions OIDC token (see above)
 5. a `zero login` sign-in for this machine
 
-OIDC comes after the environment variable, so you can pin a key during a
-migration. It comes before a sign-in, because a runner has no browser. A sign-in
-is last, because it applies to every directory on the machine. `zero whoami` prints a `Credential:`
-line naming which one answered, which is how you catch a stale `ZERO_API_KEY`
-shadowing a fresh sign-in.
+A context beats the environment variable because you chose it for that
+directory, while the variable is ambient: a stale `ZERO_API_KEY` in your shell
+must not redirect a project's commands to another organization. OIDC comes after
+the variable, so you can pin a key during a migration, and before a sign-in,
+because a runner has no browser. A sign-in is last, because it applies to every
+directory on the machine. `zero whoami` prints a `Credential:` line naming which
+one answered.
 
 The API base URL defaults to `https://api.zeroapps.dev`. It is a bare origin: the
 CLI appends `/vault/v1` or `/errors/v1` itself. Override it with `--base-url` or
@@ -102,19 +113,60 @@ path.
 
 ### Contexts (optional)
 
-If you juggle several keys or organizations, save them as named contexts instead
-of exporting the variable. Contexts live in `~/.config/zero/config.json`
-(mode 0600, since it holds plaintext keys and any sign-in this machine has).
+If you juggle several organizations, save them as named contexts instead of
+exporting the variable. A context holds one credential — an API key or a
+browser sign-in — and binds to directories. Contexts live in
+`~/.config/zero/config.json` (mode 0600, since it holds plaintext keys and every
+sign-in this machine has).
 
 ```bash
 zero context add work --api-key zv_your_key_here
 zero context use work        # binds the current directory to this context
-zero context current         # prints the active context name
-zero context list
+zero context current         # prints the bound context name
+zero context list            # every context, and what it carries
 ```
 
 `zero context use` binds the directory you run it in (and its subdirectories) to
-that context, so `zero` there uses that key without the environment variable.
+that context, so `zero` there uses that credential without the environment
+variable.
+
+### A directory with its own organization
+
+To keep one project on a different organization than the rest of the machine,
+sign in again and store it as a context:
+
+```bash
+cd ~/work/cragstronauts
+zero login --context cragstronauts   # pick the project's organization
+zero context use cragstronauts
+```
+
+```
+Signed in as you@example.com (org org_…).
+Added context: cragstronauts
+Run `zero context use cragstronauts` in the project directory.
+```
+
+From then on, that directory and its subdirectories use that organization, and
+every other directory keeps the machine sign-in:
+
+```bash
+zero whoami          # inside the project: the project's org
+cd ~ && zero whoami  # everywhere else: the machine's org
+```
+
+Both sign-ins are yours and live side by side. Notes:
+
+- The consent screen offers the organization your Clerk session is currently in.
+  If the second sign-in comes back with the same organization as your default,
+  the CLI says so; switch the active organization at
+  [dash.zeroapps.dev](https://dash.zeroapps.dev) and run it again.
+- If that sign-in is revoked or removed, commands in the directory stop with
+  `context "…" has no sign-in on this machine`. They never fall back to another
+  organization.
+- `zero context remove <name>` drops the binding and signs out of that
+  organization. `zero context unset` removes only the binding for the current
+  directory.
 
 ## Manage API keys
 

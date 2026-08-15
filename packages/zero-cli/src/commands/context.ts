@@ -6,22 +6,54 @@ import type { Command } from "commander";
 import {
   loadConfig,
   saveConfig,
-  resolveContextForDir,
+  resolveContextEntryForDir,
   addContext,
   removeContext,
   bindContext,
   unbindContext,
   configPath,
+  isLoginContext,
+  resolveBaseUrl,
+  loginKey,
+  DEFAULT_BASE_URL,
+  type Config,
+  type Context,
 } from "../config.js";
+import { revokeLogin } from "../oauth.js";
 import type { AuthFlags } from "../auth.js";
+
+/**
+ * Where a context's credential lives: the same resolution every command uses,
+ * so `--base-url` selects the same instance here as it does for a request.
+ */
+function contextBaseUrl(context: Context, flagBaseUrl?: string): string {
+  return resolveBaseUrl({
+    flags: { ...(flagBaseUrl ? { baseUrl: flagBaseUrl } : {}) },
+    env: { ...(process.env.ZERO_API_URL ? { apiUrl: process.env.ZERO_API_URL } : {}) },
+    context,
+    defaultBaseUrl: DEFAULT_BASE_URL,
+  });
+}
+
+/** How `list` names what a context carries. */
+function describeContext(context: Context, config: Config, flagBaseUrl?: string): string {
+  if (!isLoginContext(context)) return "api key";
+  const baseUrl = contextBaseUrl(context, flagBaseUrl);
+  const login = config.logins?.[loginKey(baseUrl, context.login.orgId)];
+  const who = login?.email ?? login?.userId;
+  const suffix = login ? "" : " — no sign-in on this machine";
+  return `login ${who ?? "?"} (org ${context.login.orgId})${suffix}`;
+}
 
 export function register(program: Command): void {
   const context = program
     .command("context")
     .description(
       `Manage named contexts and per-directory bindings (config: ${configPath()}). ` +
-        "Each context maps a name to an API key and optional base URL; a key is " +
-        "the org binding, so contexts let one machine target several orgs. " +
+        "Each context maps a name to a credential and optional base URL: an API " +
+        "key (`zero context add --api-key`) or a browser sign-in (`zero login " +
+        "--context <name>`). Either one carries the org, so contexts let one " +
+        "machine target several orgs. " +
         "`use` binds the current directory to a context; a binding applies to " +
         "subdirectories too.",
     );
@@ -36,10 +68,16 @@ export function register(program: Command): void {
         console.log("(none)");
         return;
       }
-      const current = resolveContextForDir(config, process.cwd());
+      const current = resolveContextEntryForDir(config, process.cwd());
       for (const name of names) {
-        const marker = current === config.contexts[name] ? "*" : " ";
-        console.log(`${marker} ${name}`);
+        const marker = current?.name === name ? "*" : " ";
+        console.log(
+          `${marker} ${name}\t${describeContext(
+            config.contexts[name],
+            config,
+            program.opts<AuthFlags>().baseUrl,
+          )}`,
+        );
       }
     });
 
@@ -48,13 +86,12 @@ export function register(program: Command): void {
     .description("Print the context bound to the current directory")
     .action(() => {
       const config = loadConfig();
-      const current = resolveContextForDir(config, process.cwd());
+      const current = resolveContextEntryForDir(config, process.cwd());
       if (!current) {
         console.error("No context bound to the current directory");
         process.exit(1);
       }
-      const name = Object.keys(config.contexts).find((n) => config.contexts[n] === current);
-      console.log(name);
+      console.log(current.name);
     });
 
   context
@@ -114,13 +151,40 @@ export function register(program: Command): void {
     .command("remove")
     .argument("<name>", "Context name")
     .description("Remove a context (also drops any directory bindings to it)")
-    .action((name: string) => {
+    .action(async (name: string) => {
       const config = loadConfig();
-      if (!config.contexts[name]) {
+      const context = config.contexts[name];
+      if (!context) {
         console.error(`Error: no such context: ${name}`);
         process.exit(1);
       }
+
+      // A context's sign-in is reachable only through that context, so leaving
+      // it behind would strand a live credential nobody can use or see.
+      let signedOut: string | null = null;
+      if (isLoginContext(context)) {
+        const baseUrl = contextBaseUrl(context, program.opts<AuthFlags>().baseUrl);
+        const key = loginKey(baseUrl, context.login.orgId);
+        const stillUsed = Object.entries(config.contexts).some(
+          ([other, value]) =>
+            other !== name &&
+            isLoginContext(value) &&
+            value.login.orgId === context.login.orgId &&
+            contextBaseUrl(value, program.opts<AuthFlags>().baseUrl) === baseUrl,
+        );
+        const login = config.logins?.[key];
+        if (login && !stillUsed) {
+          await revokeLogin(login);
+          delete config.logins?.[key];
+          signedOut = context.login.orgId;
+        }
+      }
+
       saveConfig(removeContext(config, name));
-      console.log(`Removed context: ${name}`);
+      console.log(
+        signedOut
+          ? `Removed context: ${name} (signed out of org ${signedOut})`
+          : `Removed context: ${name}`,
+      );
     });
 }

@@ -11,6 +11,8 @@ import {
   bindContext,
   unbindContext,
   resolveAuth,
+  resolveContextEntryForDir,
+  loginKey,
   DEFAULT_BASE_URL,
 } from "./config.js";
 
@@ -230,7 +232,13 @@ describe("resolveAuth with a stored login", () => {
       defaultBaseUrl: DEFAULT,
     });
 
-    expect(auth).toEqual({ apiKey: "at_stored", baseUrl: DEFAULT, via: "login", login: stored });
+    expect(auth).toEqual({
+      apiKey: "at_stored",
+      baseUrl: DEFAULT,
+      via: "login",
+      login: stored,
+      loginKey: DEFAULT,
+    });
   });
 
   it("lets an explicit env key win, since a login is ambient machine state", () => {
@@ -267,5 +275,107 @@ describe("resolveAuth with a stored login", () => {
     });
 
     expect(auth).toMatchObject({ apiKey: "at_stored", baseUrl: "https://other" });
+  });
+});
+
+describe("a directory bound to a sign-in", () => {
+  const DEFAULT = "https://default";
+  const orgLogin = {
+    accessToken: "at_org_b",
+    refreshToken: "rt_org_b",
+    expiresAt: Date.now() + 3_600_000,
+    userId: "user_1",
+    orgId: "org_b",
+    email: "dev@example.com",
+    issuer: "https://clerk.example.dev",
+    clientId: "client_1",
+  };
+  const machineLogin = { ...orgLogin, accessToken: "at_machine", orgId: "org_a" };
+  const context = { login: { orgId: "org_b" } };
+  const logins = { [DEFAULT]: machineLogin, [loginKey(DEFAULT, "org_b")]: orgLogin };
+
+  it("stores a per-org sign-in beside the machine-wide one", () => {
+    expect(loginKey(DEFAULT)).toBe(DEFAULT);
+    expect(loginKey(DEFAULT, "org_b")).toBe("https://default#org_b");
+  });
+
+  it("uses the org's sign-in, not the machine's", () => {
+    const auth = resolveAuth({ flags: {}, env: {}, context, logins, defaultBaseUrl: DEFAULT });
+
+    expect(auth).toEqual({
+      apiKey: "at_org_b",
+      baseUrl: DEFAULT,
+      via: "login",
+      login: orgLogin,
+      loginKey: "https://default#org_b",
+    });
+  });
+
+  it("beats an ambient env key, like any other directory binding", () => {
+    const auth = resolveAuth({
+      flags: {},
+      env: { apiKey: "env_key" },
+      context,
+      logins,
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toMatchObject({ apiKey: "at_org_b", via: "login" });
+  });
+
+  it("still loses to an explicit --api-key flag", () => {
+    const auth = resolveAuth({
+      flags: { apiKey: "flag_key" },
+      env: {},
+      context,
+      logins,
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toMatchObject({ apiKey: "flag_key", via: "api_key" });
+  });
+
+  it("resolves nothing when the org's sign-in is gone, rather than another org's", () => {
+    const auth = resolveAuth({
+      flags: {},
+      env: { apiKey: "env_key" },
+      context,
+      logins: { [DEFAULT]: machineLogin },
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toBeNull();
+  });
+
+  it("looks the sign-in up at the context's own base url", () => {
+    const auth = resolveAuth({
+      flags: {},
+      env: {},
+      context: { login: { orgId: "org_b" }, baseUrl: "https://other" },
+      logins: { [loginKey("https://other", "org_b")]: orgLogin },
+      defaultBaseUrl: DEFAULT,
+    });
+
+    expect(auth).toMatchObject({ apiKey: "at_org_b", baseUrl: "https://other" });
+  });
+});
+
+describe("resolveContextEntryForDir", () => {
+  it("reports the bound context's name", () => {
+    let config = addContext(loadConfig(), "work", { apiKey: "zv_work" });
+    config = bindContext(config, "/projects/app", "work");
+
+    expect(resolveContextEntryForDir(config, "/projects/app/sub")).toEqual({
+      name: "work",
+      context: { apiKey: "zv_work" },
+    });
+  });
+
+  it("returns null when the binding points at a removed context", () => {
+    let config = addContext(loadConfig(), "work", { apiKey: "zv_work" });
+    config = bindContext(config, "/projects/app", "work");
+    delete config.contexts.work;
+
+    expect(resolveContextEntryForDir(config, "/projects/app")).toBeNull();
   });
 });

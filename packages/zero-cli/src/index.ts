@@ -10,7 +10,8 @@
  * org-scoped API key that authorizes both.
  *
  * Auth (first match wins): --api-key flag > context bound to the current
- * directory (see `zero context`) > ZERO_API_KEY env > GitHub Actions OIDC >
+ * directory (see `zero context`; an API key or a browser sign-in) >
+ * ZERO_API_KEY env > GitHub Actions OIDC >
  * `zero login`. The base URL resolves the
  * same way (--base-url > context.baseUrl > ZERO_API_URL > default) and is a
  * bare origin; each client appends its own product prefix.
@@ -37,11 +38,12 @@ const { version } = JSON.parse(
 
 /** How `whoami` names the credential that answered. */
 function describeCredential(auth: ResolvedAuth): string {
+  const context = auth.contextName ? ` (context ${auth.contextName})` : "";
   if (auth.via === "login") {
-    return `signed in as ${auth.login?.email ?? auth.login?.userId}`;
+    return `signed in as ${auth.login?.email ?? auth.login?.userId}${context}`;
   }
   if (auth.via === "ci") return "github actions";
-  return "api key";
+  return `api key${context}`;
 }
 
 const program = new Command();

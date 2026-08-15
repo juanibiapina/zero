@@ -6,8 +6,13 @@
  * Single place that reads flags / env / config and applies the auth
  * precedence, so every command agrees on which key and origin it uses:
  *
- *   --api-key flag > directory context (`zero context`) > ZERO_API_KEY env
- *   > GitHub Actions OIDC > `zero login` on this machine
+ *   --api-key flag > directory context (`zero context`, an API key or a
+ *   browser sign-in) > ZERO_API_KEY env > GitHub Actions OIDC > `zero login`
+ *   on this machine
+ *
+ * A directory bound to a sign-in resolves before all of that and never falls
+ * back: the binding names one organization, and silently answering with
+ * another one is the failure it exists to prevent.
  *
  * Inside a workflow that declares `permissions: id-token: write`, the CLI
  * authenticates itself with no secret at all. That sits below the env var so a
@@ -28,8 +33,10 @@ import {
   ZERO_OIDC_AUDIENCE,
 } from "./ci-oidc.js";
 import {
+  contextLogin,
+  isLoginContext,
   loadConfig,
-  resolveContextForDir,
+  resolveContextEntryForDir,
   resolveAuth,
   resolveBaseUrl,
   saveConfig,
@@ -51,11 +58,40 @@ export interface AuthFlags {
 export async function requireAuth(flags: AuthFlags): Promise<ResolvedAuth> {
   const config = loadConfig();
   const env = { apiKey: process.env.ZERO_API_KEY, apiUrl: process.env.ZERO_API_URL };
-  const context = resolveContextForDir(config, process.cwd());
+  const entry = resolveContextEntryForDir(config, process.cwd());
+  const context = entry?.context ?? null;
+
+  // A directory bound to a sign-in is answered here, before CI and before any
+  // fallback: the binding names one organization, so a missing sign-in has to
+  // stop the command rather than quietly resolve to a different org.
+  if (context && isLoginContext(context) && !flags.apiKey) {
+    const baseUrl = resolveBaseUrl({ flags, env, context, defaultBaseUrl: DEFAULT_BASE_URL });
+    const { login } = contextLogin({ context, baseUrl, logins: config.logins });
+    if (!login) {
+      console.error(
+        `Error: context "${entry!.name}" has no sign-in on this machine. ` +
+          `Run \`zero login --context ${entry!.name}\`.`,
+      );
+      process.exit(1);
+    }
+    return withFreshLogin({
+      ...resolveAuth({
+        flags,
+        env,
+        context,
+        logins: config.logins,
+        defaultBaseUrl: DEFAULT_BASE_URL,
+      })!,
+      contextName: entry!.name,
+    });
+  }
 
   // Explicit credentials first, with no network call and no logins considered.
   const explicit = resolveAuth({ flags, env, context, defaultBaseUrl: DEFAULT_BASE_URL });
-  if (explicit) return explicit;
+  if (explicit) {
+    const fromContext = !flags.apiKey && context !== null && !isLoginContext(context);
+    return fromContext ? { ...explicit, contextName: entry!.name } : explicit;
+  }
 
   const actions = actionsEnvironment(process.env);
   if (actions) {
@@ -95,14 +131,22 @@ export async function requireAuth(flags: AuthFlags): Promise<ResolvedAuth> {
     process.exit(1);
   }
 
+  return withFreshLogin(auth);
+}
+
+/**
+ * Swap a stored sign-in for a usable one. An access token lives a day, so most
+ * commands refresh nothing; when one does, the rotated pair is written back to
+ * the key it came from, before it is used.
+ */
+async function withFreshLogin(auth: ResolvedAuth): Promise<ResolvedAuth> {
   if (auth.via !== "login" || !auth.login) return auth;
 
-  // An access token lives a day, so most commands refresh nothing; when one
-  // does, the rotated pair is written before it is used.
+  const key = auth.loginKey ?? auth.baseUrl;
   const fresh = await freshAccessToken(auth.login, {
     save: (login) => {
       const latest = loadConfig();
-      latest.logins = { ...latest.logins, [auth.baseUrl]: login };
+      latest.logins = { ...latest.logins, [key]: login };
       saveConfig(latest);
     },
   });

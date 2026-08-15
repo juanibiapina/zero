@@ -27,6 +27,12 @@ zero login          # or export ZERO_API_KEY
 pnpm turbo dev
 ```
 
+`zero login` is the normal path on a dev box; `ZERO_API_KEY` is the fallback for
+machines with no browser (containers, unattended boxes). If this repo's vault
+lives in a different organization than your default sign-in, bind the checkout to
+its own one instead of exporting a key — `zero login --context zero` then
+`zero context use zero` — since a directory binding beats the env var.
+
 With no network, those commands exit with status 75 and the app does not start.
 
 The two Worker `dev` scripts use `--mount`:
