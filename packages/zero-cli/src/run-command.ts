@@ -22,6 +22,7 @@
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import { mkfifoSync } from "./mkfifo.js";
 import { formatEnv, type Secret } from "./formats.js";
 
@@ -85,6 +86,17 @@ async function runWithMount(options: RunOptions, mount: string): Promise<number>
   if (fs.existsSync(mount)) {
     throw new RunError(
       `${mount} already exists. Remove it first: run refuses to replace a path it did not create.`,
+    );
+  }
+
+  // A relative --mount is resolved against this process's working directory,
+  // which is easy to get wrong from a package script or a repo-root script.
+  // Say so here instead of letting mkfifo report a bare ENOENT.
+  const parent = path.dirname(path.resolve(mount));
+  if (!fs.existsSync(parent)) {
+    throw new RunError(
+      `cannot mount at ${mount}: the directory ${parent} does not exist. ` +
+        "A relative path is resolved from the current directory.",
     );
   }
 

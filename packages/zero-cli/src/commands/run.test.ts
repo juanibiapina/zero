@@ -372,3 +372,25 @@ describe("zero vault run --mount", () => {
     expect(JSON.parse(payload)).toMatchObject({ API_TOKEN: "t0ken" });
   });
 });
+
+describe("zero vault run --mount, wrong path", () => {
+  it("says which directory is missing instead of reporting a raw mkfifo failure", async () => {
+    const { code, stderr } = await run([
+      "vault",
+      "run",
+      "-p",
+      "demo",
+      "-e",
+      "production",
+      "--mount",
+      "no/such/dir/.dev.vars",
+      "--",
+      "node",
+      "-e",
+      "process.stdout.write('ran')",
+    ]);
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("does not exist");
+  });
+});
