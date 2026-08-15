@@ -34,6 +34,19 @@ secret with:
 zero vault secrets delete API_TOKEN -p demo -e development
 ```
 
+## Run a command with the secrets
+
+`zero vault run` starts a command with the environment's secrets and writes no
+file to disk. Use it instead of downloading a file.
+
+```bash
+zero vault run -p demo -e production -- node server.js
+zero vault run -p demo -e development --mount .dev.vars -- wrangler dev
+```
+
+`--mount` serves the secrets through a named pipe for tools that read a dotenv
+file. See [Loading secrets](/vault/loading-secrets/).
+
 ## Download secrets
 
 `zero vault secrets download` writes an environment's secrets in the format you

@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npx @zeroapps/cli@0.5.0 vault secrets download -p demo -e production -f env -o .env
+      - run: npx @zeroapps/cli@0.6.0 vault run -p demo -e production -- ./build.sh
 ```
 
 The CLI reads the two `ACTIONS_ID_TOKEN_REQUEST_*` variables, requests an OIDC

@@ -10,6 +10,8 @@
 import type { Command } from "commander";
 import { getVaultClient, type AuthFlags } from "../auth.js";
 import { exportVault, importVault, type VaultExport } from "../vault-transfer.js";
+import { formatSecrets, isSecretFormat, SECRET_FORMATS } from "../formats.js";
+import { runWithSecrets, RunError } from "../run-command.js";
 
 interface ProjectEnvOpts {
   project: string;
@@ -187,28 +189,11 @@ export function register(program: Command): void {
     .description("Download all secrets")
     .action(async (opts: ProjectEnvOpts & { format: string; output?: string }) => {
       const { secrets: list } = await (await client()).getSecrets(opts.project, opts.env);
-      const sorted = list.sort((a, b) => a.key.localeCompare(b.key));
-
-      let output: string;
-      switch (opts.format) {
-        case "json":
-          output = JSON.stringify(
-            Object.fromEntries(sorted.map((s) => [s.key, s.value])),
-            null,
-            2,
-          );
-          break;
-        case "yaml":
-          output = sorted.map((s) => `${s.key}: "${s.value.replace(/"/g, '\\"')}"`).join("\n");
-          break;
-        case "shell":
-          output = sorted.map((s) => `export ${s.key}="${s.value.replace(/"/g, '\\"')}"`).join("\n");
-          break;
-        case "env":
-        default:
-          output = sorted.map((s) => `${s.key}=${s.value}`).join("\n");
-          break;
+      if (!isSecretFormat(opts.format)) {
+        console.error(`Unknown format: ${opts.format} (expected ${SECRET_FORMATS.join("|")})`);
+        process.exit(1);
       }
+      const output = formatSecrets(list, opts.format);
 
       if (opts.output) {
         const fs = await import("fs");
@@ -218,6 +203,58 @@ export function register(program: Command): void {
         console.log(output);
       }
     });
+
+  // --------------------------------------------------------------------------
+  // run
+  // --------------------------------------------------------------------------
+
+  vault
+    .command("run")
+    .requiredOption("-p, --project <name>", "Project name")
+    .requiredOption("-e, --env <name>", "Environment name")
+    .option(
+      "--mount <path>",
+      "Serve the secrets as a named pipe at this path instead of setting " +
+        "environment variables. Use it for tools that read a dotenv file, such " +
+        "as wrangler reading .dev.vars.",
+    )
+    .option("--mount-format <format>", "Pipe content format (env|json)", "env")
+    .argument("<command...>", "Command to run, after --")
+    .description(
+      "Run a command with an environment's secrets, writing no file to disk. " +
+        "This is the preferred way to load secrets.",
+    )
+    .action(
+      async (
+        argv: string[],
+        opts: ProjectEnvOpts & { mount?: string; mountFormat: string },
+      ) => {
+        const [command, ...args] = argv;
+        if (opts.mountFormat !== "env" && opts.mountFormat !== "json") {
+          console.error(`Unknown mount format: ${opts.mountFormat} (expected env|json)`);
+          process.exit(1);
+        }
+
+        const { secrets } = await (await client()).getSecrets(opts.project, opts.env);
+
+        try {
+          const code = await runWithSecrets({
+            secrets,
+            command: command,
+            args,
+            mount: opts.mount,
+            mountFormat: opts.mountFormat,
+          });
+          process.exit(code);
+        } catch (err) {
+          if (err instanceof RunError) {
+            console.error(`Error: ${err.message}`);
+            process.exit(1);
+          }
+          throw err;
+        }
+      },
+    );
 
   // --------------------------------------------------------------------------
   // export / import
