@@ -73,4 +73,8 @@ Stored in the `zero-api` ZeroVault project:
   issues a PKCS#1 key (`BEGIN RSA PRIVATE KEY`); it must be converted with
   `openssl pkcs8 -topk8 -nocrypt` because the Workers runtime (Web Crypto /
   `jose`) only imports PKCS#8.
-- `GITHUB_WEBHOOK_SECRET` — provisioned; webhooks are not yet wired up.
+There is no webhook secret. One was provisioned before any webhook code
+existed, went unread for months, and was removed. When webhooks are wired up,
+generate a fresh secret in the GitHub App settings, store it as
+`GITHUB_WEBHOOK_SECRET` in both environments, and add it to `secrets.required`
+in `apps/agent-api/wrangler.jsonc` so a deploy without it fails.
