@@ -479,7 +479,9 @@ now, which calls `UserDO.runQueuedAdminTask` / `runQueuedOnboarding` when due.
 A schedule the user set (see `schedules.md`) arrives the same way: ScheduleDO
 calls `UserDO.runDueSchedules`, which queues the schedule's prompt as a pending
 message, so a scheduled task is an ordinary turn and runs behind whatever the
-user has already sent. "Owes work" is read from the protocol, not from the tail's
+user has already sent. A wake for a user who went quiet for a week arrives the
+same way: ScheduleDO calls `UserDO.wakeSleeper`, which queues the `WAKE_NOTE`
+into the most recently active topic (see `docs/wake-sleepers.md`). "Owes work" is read from the protocol, not from the tail's
 role: a conversation has work when messages are queued, when the tail is a user
 message or a tool result awaiting a model response, or when the last assistant
 response stopped for a non-terminal reason (`tool_use`, `pause_turn`, or none

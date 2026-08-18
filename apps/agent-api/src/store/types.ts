@@ -235,6 +235,12 @@ export interface ConversationStore {
     input: { throughMessageId: number; summary: string },
   ): void;
   resetConversation(chatId: number, topicId: number): void;
+  // The conversation of the newest message row of any kind, or null when the
+  // user has no messages. This is the most recently active topic, not
+  // necessarily where the human last typed: injected notes (schedule,
+  // mailwatch, wake) drain as user rows too, so a role filter would not isolate
+  // genuine speech. Used to pick the topic to re-open when waking a sleeper.
+  getMostRecentConversation(): Thread | null;
   // Queue a Telegram message for this conversation. It enters the transcript
   // only when a turn drains the queue, so a message arriving mid-run is never
   // spliced into a request the model is already answering.
@@ -422,6 +428,9 @@ export interface UserSettings {
   mailHistoryId: string | null;
   // ISO timestamp of the user's last message, or null before their first.
   lastActiveAt: string | null;
+  // ISO timestamp Zero last woke this sleeper, or null if never. Compared with
+  // lastActiveAt to send at most one wake per sleep episode.
+  wokeAt: string | null;
   // True only on the access that seeded the row (first-ever getSettings).
   isNewUser: boolean;
 }
@@ -437,6 +446,7 @@ export interface SettingsStore {
     country?: string;
     mailHistoryId?: string;
     lastActiveAt?: string;
+    wokeAt?: string;
   }): void;
   setGoogleOnboardingStatus(status: string): void;
 

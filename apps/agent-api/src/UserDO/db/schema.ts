@@ -23,6 +23,9 @@ export const userSettings = table("user_settings", {
   // Last time the user sent anything. The mail poll stops re-arming once this
   // is a week old, so idle accounts cost nothing.
   lastActiveAt: column.text(),
+  // When Zero last woke this sleeper. Null until the first wake; compared with
+  // lastActiveAt to send one message per sleep episode (see docs/wake-sleepers.md).
+  wokeAt: column.text(),
 });
 
 // Topics: the durable knowledge model. `id` is a stable surrogate key so a

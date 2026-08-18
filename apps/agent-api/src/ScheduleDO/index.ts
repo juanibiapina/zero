@@ -77,6 +77,14 @@ export class ScheduleDO extends DurableObject<Env> {
     await scheduleDeadline(this.ctx.storage, { reason: "mailwatch", dueAt });
   }
 
+  // Hold this user's wake deadline at `dueAt`. One per user, replaced by key:
+  // every message re-arms it a week out, so a talking user is never woken, and a
+  // second entry must never accumulate (see docs/wake-sleepers.md).
+  async requestWakeAt(clerkUserId: string, dueAt: number): Promise<void> {
+    await this.ctx.storage.put("clerkUserId", clerkUserId);
+    await scheduleDeadline(this.ctx.storage, { reason: "wake", dueAt });
+  }
+
   // Drop every deadline this user has, and the alarm that would fire them.
   // Called when the user erases their data (see do/purge.ts): a pending
   // deadline exists only to call back into UserDO, so it must not survive the

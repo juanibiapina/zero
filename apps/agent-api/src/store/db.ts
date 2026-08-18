@@ -62,6 +62,7 @@ interface SettingsRow {
   firstContactAt: string | null;
   mailHistoryId: string | null;
   lastActiveAt: string | null;
+  wokeAt: string | null;
 }
 
 export class DbStore implements Store {
@@ -473,6 +474,16 @@ export class DbStore implements Store {
     this.db.delete(conversations, { where: eq("id", conv.id) });
   }
 
+  getMostRecentConversation(): Thread | null {
+    const newest = this.db.get(messages, { orderBy: desc("id") });
+    if (!newest) return null;
+    const conv = this.db.get(conversations, {
+      where: eq("id", newest.conversationId),
+    });
+    if (!conv) return null;
+    return { id: conv.id, chatId: conv.chatId, topicId: conv.topicId };
+  }
+
   // --- pending queue ---
 
   enqueuePendingMessage(conversationId: string, content: string): void {
@@ -878,6 +889,7 @@ export class DbStore implements Store {
       firstContactAt: string;
       mailHistoryId: string;
       lastActiveAt: string;
+      wokeAt: string;
     }>,
   ): SettingsRow {
     const existing = this.db.get(userSettings);
@@ -910,6 +922,7 @@ export class DbStore implements Store {
         country: seeded.country ?? null,
         mailHistoryId: seeded.mailHistoryId ?? null,
         lastActiveAt: seeded.lastActiveAt ?? null,
+        wokeAt: seeded.wokeAt ?? null,
         isNewUser: true,
       };
     }
@@ -921,6 +934,7 @@ export class DbStore implements Store {
       country: row.country ?? null,
       mailHistoryId: row.mailHistoryId ?? null,
       lastActiveAt: row.lastActiveAt ?? null,
+      wokeAt: row.wokeAt ?? null,
       isNewUser: false,
     };
   }
@@ -931,6 +945,7 @@ export class DbStore implements Store {
     country?: string;
     mailHistoryId?: string;
     lastActiveAt?: string;
+    wokeAt?: string;
   }): void {
     const columns: Partial<{
       onboardingSeen: number;
@@ -938,6 +953,7 @@ export class DbStore implements Store {
       country: string;
       mailHistoryId: string;
       lastActiveAt: string;
+      wokeAt: string;
     }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
@@ -946,6 +962,7 @@ export class DbStore implements Store {
     if (patch.country !== undefined) columns.country = patch.country;
     if (patch.mailHistoryId !== undefined) columns.mailHistoryId = patch.mailHistoryId;
     if (patch.lastActiveAt !== undefined) columns.lastActiveAt = patch.lastActiveAt;
+    if (patch.wokeAt !== undefined) columns.wokeAt = patch.wokeAt;
     this.upsertSettings(columns);
   }
 

@@ -44,6 +44,10 @@ const DISPATCH: Record<
   // UserDO's own alarm.
   mailwatch: ({ env, clerkUserId }) =>
     getUserDO(env, clerkUserId).checkTrackedMail(),
+  // A week of silence came due. Like a due schedule, it only queues work on
+  // UserDO and returns: the re-engagement turn runs on UserDO's own alarm.
+  wake: ({ env, clerkUserId }) =>
+    getUserDO(env, clerkUserId).wakeSleeper(),
 };
 
 // The handler for a persisted deadline, or null when nothing claims it.

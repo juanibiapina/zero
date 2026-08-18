@@ -41,6 +41,18 @@ export const MAIL_NOTE =
 export const composeMailNoteText = (threadId: string): string =>
   composeTurnText({ note: MAIL_NOTE, text: `Gmail threadId: ${threadId}` });
 
+// The user has gone quiet for about a week. Nobody asked anything right now, so
+// the note says so, like SCHEDULE_NOTE and MAIL_NOTE: this is an instruction to
+// the model, not user-facing copy. Re-engage in ONE short message, offering help
+// with exactly one thing in order of preference. gmail_search is always
+// registered but errors when Google is not connected, so the note tries it and
+// falls through on failure rather than assuming the tool is absent.
+export const WAKE_NOTE =
+  "[Wake: this person has not messaged for about a week, and nobody is asking you anything right now. Re-engage warmly in ONE short message. Offer to help with exactly one of the following, in this order of preference: (a) one of their latest unread emails — call gmail_search(\"is:unread in:inbox\"), and if it errors because Google is not connected, fall through to the next option; (b) a topic in their knowledge worth picking up — check list_topics or a recent topic and name one concretely; (c) a plain, friendly general offer of help. Pick the single most relevant and send no more than one message. Do not mention that a timer, schedule or backfill triggered you. If nothing fits, a short friendly check-in is fine.]";
+
+export const composeWakeNoteText = (): string =>
+  composeTurnText({ note: WAKE_NOTE, text: "" });
+
 export const composeTurnText = (input: {
   note?: string;
   text: string;

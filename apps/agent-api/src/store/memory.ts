@@ -42,6 +42,7 @@ interface SettingsRow {
   firstContactAt: string | null;
   mailHistoryId: string | null;
   lastActiveAt: string | null;
+  wokeAt: string | null;
 }
 
 interface ConvRow {
@@ -434,6 +435,14 @@ export class MemoryStore implements Store {
     this.convs = this.convs.filter((c) => c.id !== conv.id);
   }
 
+  getMostRecentConversation(): Thread | null {
+    if (this.msgs.length === 0) return null;
+    const newest = this.msgs.reduce((a, b) => (b.id > a.id ? b : a));
+    const conv = this.convs.find((c) => c.id === newest.conversationId);
+    if (!conv) return null;
+    return { id: conv.id, chatId: conv.chatId, topicId: conv.topicId };
+  }
+
   // --- pending queue ---
 
   enqueuePendingMessage(conversationId: string, content: string): void {
@@ -746,6 +755,7 @@ export class MemoryStore implements Store {
       firstContactAt: string;
       mailHistoryId: string;
       lastActiveAt: string;
+      wokeAt: string;
     }>,
   ): SettingsRow {
     if (this.settingsRow) {
@@ -770,6 +780,9 @@ export class MemoryStore implements Store {
       if (columns.lastActiveAt !== undefined) {
         this.settingsRow.lastActiveAt = columns.lastActiveAt;
       }
+      if (columns.wokeAt !== undefined) {
+        this.settingsRow.wokeAt = columns.wokeAt;
+      }
       return this.settingsRow;
     }
     this.settingsRow = {
@@ -781,6 +794,7 @@ export class MemoryStore implements Store {
       firstContactAt: columns.firstContactAt ?? null,
       mailHistoryId: columns.mailHistoryId ?? null,
       lastActiveAt: columns.lastActiveAt ?? null,
+      wokeAt: columns.wokeAt ?? null,
     };
     return this.settingsRow;
   }
@@ -796,6 +810,7 @@ export class MemoryStore implements Store {
         country: seeded.country ?? null,
         mailHistoryId: seeded.mailHistoryId ?? null,
         lastActiveAt: seeded.lastActiveAt ?? null,
+        wokeAt: seeded.wokeAt ?? null,
         isNewUser: true,
       };
     }
@@ -807,6 +822,7 @@ export class MemoryStore implements Store {
       country: this.settingsRow.country ?? null,
       mailHistoryId: this.settingsRow.mailHistoryId ?? null,
       lastActiveAt: this.settingsRow.lastActiveAt ?? null,
+      wokeAt: this.settingsRow.wokeAt ?? null,
       isNewUser: false,
     };
   }
@@ -817,6 +833,7 @@ export class MemoryStore implements Store {
     country?: string;
     mailHistoryId?: string;
     lastActiveAt?: string;
+    wokeAt?: string;
   }): void {
     const columns: Partial<{
       onboardingSeen: number;
@@ -824,6 +841,7 @@ export class MemoryStore implements Store {
       country: string;
       mailHistoryId: string;
       lastActiveAt: string;
+      wokeAt: string;
     }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
@@ -832,6 +850,7 @@ export class MemoryStore implements Store {
     if (patch.country !== undefined) columns.country = patch.country;
     if (patch.mailHistoryId !== undefined) columns.mailHistoryId = patch.mailHistoryId;
     if (patch.lastActiveAt !== undefined) columns.lastActiveAt = patch.lastActiveAt;
+    if (patch.wokeAt !== undefined) columns.wokeAt = patch.wokeAt;
     this.upsertSettings(columns);
   }
 

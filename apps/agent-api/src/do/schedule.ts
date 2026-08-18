@@ -19,7 +19,8 @@ export type ScheduleReason =
   | "onboarding"
   | "admin_task"
   | "reminder"
-  | "mailwatch";
+  | "mailwatch"
+  | "wake";
 
 export interface Deadline {
   reason: ScheduleReason;
@@ -61,6 +62,11 @@ export const DEADLINES_KEY = "deadlines";
 
 // A conversation is considered idle one hour after its last accepted message.
 export const IDLE_LEARN_MS = 60 * 60 * 1000;
+
+// A user is a sleeper one week after their last message. Armed on every message
+// at now + this, it keeps moving out while they talk and fires once after a week
+// of silence (see docs/wake-sleepers.md).
+export const WAKE_INACTIVE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const deadlineKey = (
   reason: ScheduleReason,
@@ -194,6 +200,7 @@ export interface ScheduleTarget {
   ): Promise<void>;
   requestReminderAt(clerkUserId: string, dueAt: number): Promise<void>;
   requestMailWatchAt(clerkUserId: string, dueAt: number): Promise<void>;
+  requestWakeAt(clerkUserId: string, dueAt: number): Promise<void>;
 }
 
 // Push a conversation's idle deadline out, best-effort. A schedule that is
@@ -257,6 +264,23 @@ export const requestMailWatchSafely = async (
     await schedule.requestMailWatchAt(clerkUserId, dueAt);
   } catch (err) {
     logError("schedule_mailwatch_failed", { error: fmtErr(err) });
+  }
+};
+
+// Hold this user's wake deadline at `dueAt`, best-effort. One deadline per user,
+// replaced by key, so ordinary activity keeps pushing it out and never
+// accumulates a second entry. Best-effort for the same reason as the others: a
+// timer that cannot be armed must not fail the turn that set it, and the user's
+// next message re-arms it.
+export const requestWakeSafely = async (
+  schedule: ScheduleTarget,
+  clerkUserId: string,
+  dueAt: number,
+): Promise<void> => {
+  try {
+    await schedule.requestWakeAt(clerkUserId, dueAt);
+  } catch (err) {
+    logError("schedule_wake_failed", { error: fmtErr(err) });
   }
 };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { composeTurnText, FIRST_CONTACT_NOTE } from "./turn-text";
+import { composeTurnText, composeWakeNoteText, FIRST_CONTACT_NOTE, WAKE_NOTE } from "./turn-text";
 
 // The offer is prompt text, so these assertions are what stops a later edit
 // from silently dropping it or turning it into an auto-created schedule.
@@ -24,6 +24,28 @@ describe("FIRST_CONTACT_NOTE", () => {
   it("requires the stored prompt to carry content", () => {
     expect(FIRST_CONTACT_NOTE).toContain("create_schedule");
     expect(FIRST_CONTACT_NOTE).toContain("due or unresolved today");
+  });
+});
+
+// WAKE_NOTE is prompt text: these assertions stop a later edit from dropping
+// the one-message rule, the try-then-fallback ordering, or the do-not-reveal
+// constraint.
+describe("WAKE_NOTE", () => {
+  it("re-engages in a single short message without revealing the trigger", () => {
+    expect(WAKE_NOTE).toContain("ONE short message");
+    expect(WAKE_NOTE).toContain("no more than one message");
+    expect(WAKE_NOTE).toContain("Do not mention that a timer");
+  });
+
+  it("offers help in order: unread email, then a topic, then a general offer", () => {
+    expect(WAKE_NOTE).toContain("gmail_search");
+    expect(WAKE_NOTE).toContain("fall through");
+    expect(WAKE_NOTE).toContain("list_topics");
+    expect(WAKE_NOTE).toContain("general offer of help");
+  });
+
+  it("composeWakeNoteText carries the note with no user text", () => {
+    expect(composeWakeNoteText()).toBe(WAKE_NOTE);
   });
 });
 

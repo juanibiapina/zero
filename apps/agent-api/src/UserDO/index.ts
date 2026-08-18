@@ -22,7 +22,7 @@ import { createBot } from "../telegram/bot";
 import { createR2FileBlobs } from "../files/r2";
 import { createUserFileStore } from "../files/store";
 import { renderFileMarker } from "../files/marker";
-import { composeMailNoteText, composeTurnText, FIRST_CONTACT_NOTE, SCHEDULE_NOTE } from "./turn-text";
+import { composeMailNoteText, composeTurnText, composeWakeNoteText, FIRST_CONTACT_NOTE, SCHEDULE_NOTE } from "./turn-text";
 import type { FileBlobStore } from "../files/types";
 import { TelegramFileSendError } from "../tools/files";
 import { createModel, createModelFactory } from "../agents/model";
@@ -51,10 +51,13 @@ import {
   requestLearnSafely,
   requestMailWatchSafely,
   requestReminderSafely,
+  requestWakeSafely,
   touchScheduleSafely,
+  WAKE_INACTIVE_MS,
 } from "../do/schedule";
 import { fireDueSchedules } from "../do/schedules";
 import { MAIL_WATCH_INTERVAL_MS, runMailWatch } from "../do/mail-watch";
+import { runWake } from "../do/wake";
 import { createScheduleBook } from "../schedules/book";
 import { createMailWatchBook } from "../mail-watch/book";
 import { nextRun } from "../schedules/recurrence";
@@ -199,6 +202,15 @@ export class UserDO extends DurableObject<Env> {
     if (this.store.listMailThreads().length > 0) {
       await this.armMailWatch(input.clerkUserId);
     }
+    // Push the wake deadline a week out. Armed unconditionally — every user,
+    // mail or not, should be woken after a week of silence. Ordinary activity
+    // keeps moving it out, so a talking user never fires, and this is the only
+    // arm point: it also heals a lost deadline.
+    await requestWakeSafely(
+      getScheduleDO(this.env, input.clerkUserId),
+      input.clerkUserId,
+      Date.now() + WAKE_INACTIVE_MS,
+    );
     return true;
   }
 
@@ -362,6 +374,25 @@ export class UserDO extends DurableObject<Env> {
       clerkUserId,
       Date.now() + MAIL_WATCH_INTERVAL_MS,
     );
+  }
+
+  // Re-engage a user who has gone quiet for about a week. Reached by the `wake`
+  // deadline and by the admin backfill; the `wokeAt` marker makes it self-dedupe
+  // regardless of trigger, so one message is sent per sleep episode. Does NOT
+  // re-arm the wake deadline: the user's next message re-arms it. See
+  // docs/wake-sleepers.md.
+  async wakeSleeper(): Promise<void> {
+    const clerkUserId = await this.ctx.storage.get<string>("clerkUserId");
+    if (!clerkUserId) return;
+    const outcome = runWake({
+      store: this.store,
+      now: Date.now(),
+      composeText: composeWakeNoteText,
+    });
+    // A wake queued a pending message: run it on our own alarm, like a mail hit.
+    if (outcome.status === "woken" && (await this.ctx.storage.getAlarm()) === null) {
+      await this.ctx.storage.setAlarm(Date.now());
+    }
   }
 
   // Queue Google onboarding: set status `queued` and arm the alarm. Idempotent

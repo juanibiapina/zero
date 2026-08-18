@@ -355,5 +355,50 @@ export const createAdminRoutes = () => {
     return c.json(status, 200);
   });
 
+  // POST /api/admin/wake-sleepers — one-time backfill to reach users who were
+  // already inactive at deploy time (nothing arms their wake deadline until they
+  // message again). Enumerates every user and calls the same guarded
+  // wakeSleeper() on each; the guard, not the enumeration, decides who is
+  // messaged, so this is idempotent and safe to re-run. Returns 202 and fans out
+  // on waitUntil with bounded concurrency.
+  const wakeSleepersRoute = createRoute({
+    method: "post",
+    path: "/api/admin/wake-sleepers",
+    tags: ["Admin"],
+    summary: "Wake already-inactive users once (one-time backfill)",
+    responses: {
+      202: { description: "Backfill started" },
+    },
+  });
+
+  router.openapi(wakeSleepersRoute, async (c) => {
+    const env = c.env;
+    c.executionCtx.waitUntil(
+      (async () => {
+        const users = await listClerkUsers(env);
+        const CONCURRENCY = 10;
+        let woken = 0;
+        for (let i = 0; i < users.length; i += CONCURRENCY) {
+          const batch = users.slice(i, i + CONCURRENCY);
+          await Promise.all(
+            batch.map(async (u) => {
+              try {
+                await getUserDO(env, u.clerkUserId).wakeSleeper();
+                woken++;
+              } catch (error) {
+                logError("wake_backfill_user_failed", {
+                  clerk_user_id: u.clerkUserId,
+                  error: fmtErr(error),
+                });
+              }
+            }),
+          );
+        }
+        log("wake_backfill_finished", { users: users.length, dispatched: woken });
+      })(),
+    );
+    return c.body(null, 202);
+  });
+
   return router;
 };

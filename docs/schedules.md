@@ -119,7 +119,9 @@ set lives in one JSON blob under the `deadlines` key, keyed by
 per user and why the caller must always pass the earliest due time.
 
 The hourly poll for replies on watched email threads is another reason,
-`mailwatch`, on the same mechanism (see `docs/mail-watch.md`).
+`mailwatch`, on the same mechanism (see `docs/mail-watch.md`). Waking a user who
+has gone quiet for a week is a third, `wake`, armed on every message at
+`now + 7d` and fired once per sleep episode (see `docs/wake-sleepers.md`).
 
 `ScheduleDO/dispatch.ts` maps each reason to one RPC, as a
 `Record<ScheduleReason, Handler>`. It is total on purpose: adding a reason

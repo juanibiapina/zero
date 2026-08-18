@@ -9,6 +9,7 @@ import {
   setDeadline,
   takeDueDeadlines,
   requestLearnSafely,
+  requestWakeSafely,
   retryDeadline,
   retryDispatch,
   RETRY_BASE_MS,
@@ -55,6 +56,15 @@ describe("deadline set", () => {
     d = setDeadline(d, { reason: "size", conversationId: "c1", dueAt: 50 });
     expect(Object.keys(d)).toHaveLength(3);
     expect(earliestDueAt(d)).toBe(50);
+  });
+
+  it("holds one wake deadline per user, replaced by key, and races the earliest", () => {
+    let d: Deadlines = {};
+    d = setDeadline(d, { reason: "wake", dueAt: 1_000 });
+    d = setDeadline(d, { reason: "wake", dueAt: 2_000 });
+    expect(Object.keys(d)).toHaveLength(1);
+    d = setDeadline(d, { reason: "reminder", dueAt: 500 });
+    expect(earliestDueAt(d)).toBe(500);
   });
 
   it("has no earliest deadline when empty", () => {
@@ -200,6 +210,7 @@ describe("best-effort scheduling from the turn path", () => {
       requestLearn: async () => {},
       requestReminderAt: async () => {},
       requestMailWatchAt: async () => {},
+      requestWakeAt: async () => {},
     };
     await expect(
       touchScheduleSafely(schedule, "user_1", "c1"),
@@ -216,6 +227,7 @@ describe("best-effort scheduling from the turn path", () => {
       },
       requestReminderAt: async () => {},
       requestMailWatchAt: async () => {},
+      requestWakeAt: async () => {},
     };
     await requestLearnSafely(schedule, "user_1", "size", "c1");
     expect(calls).toEqual([["user_1", "size", "c1"]]);
@@ -227,9 +239,39 @@ describe("best-effort scheduling from the turn path", () => {
       },
       requestReminderAt: async () => {},
       requestMailWatchAt: async () => {},
+      requestWakeAt: async () => {},
     };
     await expect(
       requestLearnSafely(broken, "user_1", "size", "c1"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("passes the wake arm through and swallows a schedule that cannot be reached", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const calls: Array<[string, number]> = [];
+    const schedule = {
+      touch: async () => {},
+      requestLearn: async () => {},
+      requestReminderAt: async () => {},
+      requestMailWatchAt: async () => {},
+      requestWakeAt: async (user: string, dueAt: number) => {
+        calls.push([user, dueAt]);
+      },
+    };
+    await requestWakeSafely(schedule, "user_1", 7_000);
+    expect(calls).toEqual([["user_1", 7_000]]);
+
+    const broken = {
+      touch: async () => {},
+      requestLearn: async () => {},
+      requestReminderAt: async () => {},
+      requestMailWatchAt: async () => {},
+      requestWakeAt: async () => {
+        throw new Error("do unreachable");
+      },
+    };
+    await expect(
+      requestWakeSafely(broken, "user_1", 7_000),
     ).resolves.toBeUndefined();
   });
 });

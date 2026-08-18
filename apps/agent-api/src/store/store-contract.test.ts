@@ -433,6 +433,20 @@ describe("Store contract: conversations", () => {
     expect(s.getFile("att_reset")).not.toBeNull();
   });
 
+  it("getMostRecentConversation is null on an empty store", () => {
+    expect(makeStore().getMostRecentConversation()).toBeNull();
+  });
+
+  it("getMostRecentConversation returns the conversation of the newest message", () => {
+    const s = makeStore();
+    const a = s.getOrCreateConversation(1, 0);
+    const b = s.getOrCreateConversation(2, 5);
+    s.storeMessage(a, "user", "first");
+    s.storeMessage(b, "user", "second");
+    s.storeMessage(a, "assistant", "reply in a");
+    expect(s.getMostRecentConversation()).toEqual({ id: a, chatId: 1, topicId: 0 });
+  });
+
 });
 
 describe("Store contract: conversations with work", () => {
@@ -800,8 +814,16 @@ describe("Store contract: settings", () => {
       country: null,
       mailHistoryId: null,
       lastActiveAt: null,
+      wokeAt: null,
       isNewUser: true,
     });
+  });
+
+  it("wokeAt round-trips through updateSettings and getSettings", () => {
+    const s = makeStore();
+    expect(s.getSettings().wokeAt).toBeNull();
+    s.updateSettings({ wokeAt: "2026-02-02T00:00:00.000Z" });
+    expect(s.getSettings().wokeAt).toBe("2026-02-02T00:00:00.000Z");
   });
 
   it("getSettings on a seeded row reports isNewUser false and same createdAt", () => {

@@ -11,6 +11,7 @@ const REASONS = [
   "admin_task",
   "reminder",
   "mailwatch",
+  "wake",
 ] as const;
 
 // A fake env whose namespaces hand back a recording stub, so a dispatch can be
@@ -75,6 +76,12 @@ describe("dispatchFor", () => {
     const { calls, env } = fakeEnv();
     await dispatchFor("mailwatch")!({ env, clerkUserId: "user_1" });
     expect(calls).toEqual(["UserDO.checkTrackedMail()"]);
+  });
+
+  it("sends the wake deadline to UserDO, which only queues the re-engagement", async () => {
+    const { calls, env } = fakeEnv();
+    await dispatchFor("wake")!({ env, clerkUserId: "user_1" });
+    expect(calls).toEqual(["UserDO.wakeSleeper()"]);
   });
 
   it("sends the user-wide jobs to their own UserDO entry points", async () => {

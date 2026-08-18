@@ -376,3 +376,64 @@ describe("admin task", () => {
     });
   });
 });
+
+describe("POST /api/admin/wake-sleepers", () => {
+  const path = "/api/admin/wake-sleepers";
+  const users = [
+    { clerkUserId: "user_a", email: null, username: null, createdAt: "2025-01-01T00:00:00Z" },
+    { clerkUserId: "user_b", email: null, username: null, createdAt: "2025-02-01T00:00:00Z" },
+  ];
+
+  // Pass a fake executionCtx so waitUntil's promise can be awaited in the test.
+  const buildAppWithCtx = (env: Env, userId: string) => {
+    const tasks: Promise<unknown>[] = [];
+    const app = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
+    app.use("/api/*", async (c, next) => {
+      c.set("userId", userId);
+      await next();
+    });
+    app.route("/", createAdminRoutes());
+    const ctx = { waitUntil: (p: Promise<unknown>) => tasks.push(p), passThroughOnException: () => {} };
+    return {
+      request: (p: string, init?: RequestInit) =>
+        app.request(p, init, env, ctx as unknown as ExecutionContext),
+      settle: () => Promise.all(tasks),
+    };
+  };
+
+  it("returns 403 for non-admin users", async () => {
+    const app = buildApp(fakeEnv("admin_1"), "other_user");
+    const res = await app.request(path, { method: "POST" });
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 202 and wakes every user; the guard decides who is messaged", async () => {
+    vi.mocked(listClerkUsers).mockResolvedValue(users);
+    const wakeSleeper = vi.fn(async () => {});
+    getUserDO.mockReturnValue({ wakeSleeper });
+    const app = buildAppWithCtx(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request(path, { method: "POST" });
+    expect(res.status).toBe(202);
+    await app.settle();
+    expect(getUserDO).toHaveBeenCalledWith(expect.anything(), "user_a");
+    expect(getUserDO).toHaveBeenCalledWith(expect.anything(), "user_b");
+    expect(wakeSleeper).toHaveBeenCalledTimes(2);
+  });
+
+  it("one failing user does not abort the backfill", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(listClerkUsers).mockResolvedValue(users);
+    const wakeSleeper = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("do down"))
+      .mockResolvedValueOnce(undefined);
+    getUserDO.mockReturnValue({ wakeSleeper });
+    const app = buildAppWithCtx(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request(path, { method: "POST" });
+    expect(res.status).toBe(202);
+    await app.settle();
+    expect(wakeSleeper).toHaveBeenCalledTimes(2);
+  });
+});

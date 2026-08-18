@@ -274,6 +274,10 @@ export class SystemTopicStore implements Store {
     this.inner.resetConversation(chatId, topicId);
   }
 
+  getMostRecentConversation(): Thread | null {
+    return this.inner.getMostRecentConversation();
+  }
+
   enqueuePendingMessage(conversationId: string, content: string): void {
     this.inner.enqueuePendingMessage(conversationId, content);
   }
