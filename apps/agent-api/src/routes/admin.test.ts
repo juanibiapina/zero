@@ -236,6 +236,7 @@ describe("GET /api/admin/users/{userId}", () => {
         onboardingSeen: true,
         googleOnboardingStatus: "done",
         createdAt: "2025-01-01T00:00:00Z",
+        braveKeyPaid: true,
         isNewUser: false,
       }),
     });
@@ -247,7 +248,43 @@ describe("GET /api/admin/users/{userId}", () => {
       clerkUserId: "user_a", email: "a@example.com", username: "alice",
       createdAt: "2025-01-01T00:00:00Z",
       telegramId: "12345", googleOnboardingStatus: "done", onboardingSeen: true,
+      braveKeyPaid: true,
     });
+  });
+});
+
+describe("PUT /api/admin/users/{userId}/brave-plan", () => {
+  const path = "/api/admin/users/user_a/brave-plan";
+  const put = (paid: boolean) => ({
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paid }),
+  });
+
+  it("returns 403 for non-admin users", async () => {
+    const app = buildApp(fakeEnv("admin_1"), "other_user");
+    expect((await app.request(path, put(true))).status).toBe(403);
+  });
+
+  it("returns 404 when Clerk does not know the user", async () => {
+    vi.mocked(getClerkUser).mockResolvedValue(null);
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+    expect((await app.request(path, put(true))).status).toBe(404);
+  });
+
+  it("sets the flag via UserDO and echoes it back", async () => {
+    vi.mocked(getClerkUser).mockResolvedValue({
+      clerkUserId: "user_a", email: null, username: null,
+      createdAt: "2025-01-01T00:00:00Z",
+    });
+    const setBravePaid = vi.fn(async () => {});
+    getUserDO.mockReturnValue({ setBravePaid });
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+
+    const res = await app.request(path, put(true));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ clerkUserId: "user_a", paid: true });
+    expect(setBravePaid).toHaveBeenCalledWith(true);
   });
 });
 

@@ -63,6 +63,7 @@ interface SettingsRow {
   mailHistoryId: string | null;
   lastActiveAt: string | null;
   wokeAt: string | null;
+  braveKeyPaid: number;
 }
 
 export class DbStore implements Store {
@@ -890,6 +891,7 @@ export class DbStore implements Store {
       mailHistoryId: string;
       lastActiveAt: string;
       wokeAt: string;
+      braveKeyPaid: number;
     }>,
   ): SettingsRow {
     const existing = this.db.get(userSettings);
@@ -923,6 +925,7 @@ export class DbStore implements Store {
         mailHistoryId: seeded.mailHistoryId ?? null,
         lastActiveAt: seeded.lastActiveAt ?? null,
         wokeAt: seeded.wokeAt ?? null,
+        braveKeyPaid: !!seeded.braveKeyPaid,
         isNewUser: true,
       };
     }
@@ -935,6 +938,7 @@ export class DbStore implements Store {
       mailHistoryId: row.mailHistoryId ?? null,
       lastActiveAt: row.lastActiveAt ?? null,
       wokeAt: row.wokeAt ?? null,
+      braveKeyPaid: !!row.braveKeyPaid,
       isNewUser: false,
     };
   }
@@ -946,6 +950,7 @@ export class DbStore implements Store {
     mailHistoryId?: string;
     lastActiveAt?: string;
     wokeAt?: string;
+    braveKeyPaid?: boolean;
   }): void {
     const columns: Partial<{
       onboardingSeen: number;
@@ -954,6 +959,7 @@ export class DbStore implements Store {
       mailHistoryId: string;
       lastActiveAt: string;
       wokeAt: string;
+      braveKeyPaid: number;
     }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
@@ -963,6 +969,9 @@ export class DbStore implements Store {
     if (patch.mailHistoryId !== undefined) columns.mailHistoryId = patch.mailHistoryId;
     if (patch.lastActiveAt !== undefined) columns.lastActiveAt = patch.lastActiveAt;
     if (patch.wokeAt !== undefined) columns.wokeAt = patch.wokeAt;
+    if (patch.braveKeyPaid !== undefined) {
+      columns.braveKeyPaid = patch.braveKeyPaid ? 1 : 0;
+    }
     this.upsertSettings(columns);
   }
 

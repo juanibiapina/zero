@@ -43,6 +43,7 @@ interface SettingsRow {
   mailHistoryId: string | null;
   lastActiveAt: string | null;
   wokeAt: string | null;
+  braveKeyPaid: number;
 }
 
 interface ConvRow {
@@ -756,6 +757,7 @@ export class MemoryStore implements Store {
       mailHistoryId: string;
       lastActiveAt: string;
       wokeAt: string;
+      braveKeyPaid: number;
     }>,
   ): SettingsRow {
     if (this.settingsRow) {
@@ -783,6 +785,9 @@ export class MemoryStore implements Store {
       if (columns.wokeAt !== undefined) {
         this.settingsRow.wokeAt = columns.wokeAt;
       }
+      if (columns.braveKeyPaid !== undefined) {
+        this.settingsRow.braveKeyPaid = columns.braveKeyPaid;
+      }
       return this.settingsRow;
     }
     this.settingsRow = {
@@ -795,6 +800,7 @@ export class MemoryStore implements Store {
       mailHistoryId: columns.mailHistoryId ?? null,
       lastActiveAt: columns.lastActiveAt ?? null,
       wokeAt: columns.wokeAt ?? null,
+      braveKeyPaid: columns.braveKeyPaid ?? 0,
     };
     return this.settingsRow;
   }
@@ -811,6 +817,7 @@ export class MemoryStore implements Store {
         mailHistoryId: seeded.mailHistoryId ?? null,
         lastActiveAt: seeded.lastActiveAt ?? null,
         wokeAt: seeded.wokeAt ?? null,
+        braveKeyPaid: !!seeded.braveKeyPaid,
         isNewUser: true,
       };
     }
@@ -823,6 +830,7 @@ export class MemoryStore implements Store {
       mailHistoryId: this.settingsRow.mailHistoryId ?? null,
       lastActiveAt: this.settingsRow.lastActiveAt ?? null,
       wokeAt: this.settingsRow.wokeAt ?? null,
+      braveKeyPaid: !!this.settingsRow.braveKeyPaid,
       isNewUser: false,
     };
   }
@@ -834,6 +842,7 @@ export class MemoryStore implements Store {
     mailHistoryId?: string;
     lastActiveAt?: string;
     wokeAt?: string;
+    braveKeyPaid?: boolean;
   }): void {
     const columns: Partial<{
       onboardingSeen: number;
@@ -842,6 +851,7 @@ export class MemoryStore implements Store {
       mailHistoryId: string;
       lastActiveAt: string;
       wokeAt: string;
+      braveKeyPaid: number;
     }> = {};
     if (patch.onboardingSeen !== undefined) {
       columns.onboardingSeen = patch.onboardingSeen ? 1 : 0;
@@ -851,6 +861,9 @@ export class MemoryStore implements Store {
     if (patch.mailHistoryId !== undefined) columns.mailHistoryId = patch.mailHistoryId;
     if (patch.lastActiveAt !== undefined) columns.lastActiveAt = patch.lastActiveAt;
     if (patch.wokeAt !== undefined) columns.wokeAt = patch.wokeAt;
+    if (patch.braveKeyPaid !== undefined) {
+      columns.braveKeyPaid = patch.braveKeyPaid ? 1 : 0;
+    }
     this.upsertSettings(columns);
   }
 

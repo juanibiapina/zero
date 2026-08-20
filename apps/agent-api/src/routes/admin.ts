@@ -38,6 +38,7 @@ const AdminUserDetailSchema = z.object({
   telegramId: z.string().nullable(),
   googleOnboardingStatus: z.string().nullable(),
   onboardingSeen: z.boolean(),
+  braveKeyPaid: z.boolean(),
 });
 
 const UsageTotalsSchema = z.object({
@@ -211,6 +212,7 @@ export const createAdminRoutes = () => {
       telegramId,
       googleOnboardingStatus: settings.googleOnboardingStatus,
       onboardingSeen: settings.onboardingSeen,
+      braveKeyPaid: settings.braveKeyPaid,
     }, 200);
   });
 
@@ -398,6 +400,49 @@ export const createAdminRoutes = () => {
       })(),
     );
     return c.body(null, 202);
+  });
+
+  // PUT /api/admin/users/{userId}/brave-plan — flip a user's paid-Brave-key
+  // canary flag live (no redeploy). The flag routes that user's web searches to
+  // the paid key; see docs/plans/brave-paid-canary.md.
+  const bravePlanRoute = createRoute({
+    method: "put",
+    path: "/api/admin/users/{userId}/brave-plan",
+    tags: ["Admin"],
+    summary: "Set a user's paid-Brave-key canary flag",
+    request: {
+      params: z.object({ userId: z.string().min(1) }),
+      body: {
+        content: {
+          "application/json": { schema: z.object({ paid: z.boolean() }) },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": {
+            schema: z.object({ clerkUserId: z.string(), paid: z.boolean() }),
+          },
+        },
+        description: "Updated canary flag",
+      },
+      404: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "Unknown user",
+      },
+    },
+  });
+
+  router.openapi(bravePlanRoute, async (c) => {
+    const { userId } = c.req.valid("param");
+    const { paid } = c.req.valid("json");
+    if (!(await getClerkUser(c.env, userId))) {
+      return c.json({ error: "Unknown user" }, 404);
+    }
+    await getUserDO(c.env, userId).setBravePaid(paid);
+    log("admin_brave_plan_set", { clerk_user_id: userId, paid });
+    return c.json({ clerkUserId: userId, paid }, 200);
   });
 
   return router;

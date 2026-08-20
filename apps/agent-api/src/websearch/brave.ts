@@ -56,6 +56,10 @@ export interface BraveSearchOptions {
   sleep?: (ms: number) => Promise<void>;
   maxRetries?: number;
   defaultDelayMs?: number;
+  // Which key cohort this adapter uses ("paid" | "free"), tagged onto every
+  // Brave log line so paid-plan spend is countable per cohort. Omitted when not
+  // supplied. See docs/plans/brave-paid-canary.md.
+  cohort?: string;
 }
 
 const realSleep = (ms: number): Promise<void> =>
@@ -112,7 +116,13 @@ export const createBraveSearch = (
     async search(query: string): Promise<SearchResult[]> {
       const url = `${ENDPOINT}?q=${encodeURIComponent(query)}&count=${DEFAULT_COUNT}`;
       const hash = queryHash(query);
-      const queryFields = { query_hash: hash, query_len: query.length };
+      // `cohort` is spread into every Brave log line via queryFields; omitted
+      // when not supplied so existing callers/log shapes are unchanged.
+      const queryFields = {
+        query_hash: hash,
+        query_len: query.length,
+        ...(options.cohort !== undefined ? { cohort: options.cohort } : {}),
+      };
       const started = Date.now();
 
       for (let attempt = 0; ; attempt++) {

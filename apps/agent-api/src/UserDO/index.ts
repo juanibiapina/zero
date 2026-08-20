@@ -27,6 +27,7 @@ import type { FileBlobStore } from "../files/types";
 import { TelegramFileSendError } from "../tools/files";
 import { createModel, createModelFactory } from "../agents/model";
 import { createBraveSearch } from "../websearch/brave";
+import { selectBraveKey } from "../websearch/brave-key";
 import { createTavilyFetcher } from "../pagefetch/tavily";
 import { createCloudflareImageResizer } from "../images/cloudflare";
 import { createGoogleWorkspace } from "../google/rest";
@@ -460,7 +461,16 @@ export class UserDO extends DurableObject<Env> {
       undefined,
       { conversationId, chatId, topicId },
     );
-    const search = createBraveSearch(this.env.BRAVE_API_KEY);
+    const settings = this.store.getSettings();
+    // Canary routing: flagged users search on the paid Brave key, everyone else
+    // on the free one. The cohort tags every Brave log line so paid spend is
+    // countable per cohort (see docs/plans/brave-paid-canary.md).
+    const braveKey = selectBraveKey({
+      paid: settings.braveKeyPaid,
+      freeKey: this.env.BRAVE_API_KEY,
+      paidKey: this.env.BRAVE_API_KEY_PAID,
+    });
+    const search = createBraveSearch(braveKey.apiKey, { cohort: braveKey.cohort });
     const fetcher = createTavilyFetcher(this.env.TAVILY_API_KEY);
     const resizer = createCloudflareImageResizer(this.env.IMAGES);
     // Memoized Google token provider: the first Google tool call mints a token
@@ -470,7 +480,6 @@ export class UserDO extends DurableObject<Env> {
       getGoogleAccessToken(this.env, clerkUserId),
     );
     const google = createGoogleWorkspace(getToken);
-    const settings = this.store.getSettings();
     const timezone = settings.timezone ?? undefined;
     const country = settings.country ?? undefined;
     const setTimezone = (tz: string) =>
@@ -755,9 +764,17 @@ export class UserDO extends DurableObject<Env> {
     createdAt: string | null;
     timezone: string | null;
     country: string | null;
+    braveKeyPaid: boolean;
     isNewUser: boolean;
   } {
     return this.store.getSettings();
+  }
+
+  // Flip this user's paid-Brave-key canary flag. Admin-only entry point (see
+  // routes/admin.ts); the next turn routes search on the selected key.
+  setBravePaid(paid: boolean): void {
+    this.store.updateSettings({ braveKeyPaid: paid });
+    log("brave_plan_set", { paid });
   }
 
   updateSettings(patch: {

@@ -26,6 +26,9 @@ export const userSettings = table("user_settings", {
   // When Zero last woke this sleeper. Null until the first wake; compared with
   // lastActiveAt to send one message per sleep episode (see docs/wake-sleepers.md).
   wokeAt: column.text(),
+  // Canary flag: 1 routes this user's web searches to the paid Brave key (see
+  // docs/plans/brave-paid-canary.md). 0/off by default.
+  braveKeyPaid: column.integer().notNull().default(0),
 });
 
 // Topics: the durable knowledge model. `id` is a stable surrogate key so a

@@ -116,9 +116,9 @@ const createFakeUserDO = (
       if (!hasRow) {
         createdAt = new Date().toISOString();
         hasRow = true;
-        return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, country, isNewUser: true };
+        return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, country, braveKeyPaid: false, isNewUser: true };
       }
-      return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, country, isNewUser: false };
+      return { onboardingSeen, googleOnboardingStatus, createdAt, timezone, country, braveKeyPaid: false, isNewUser: false };
     },
     updateSettings: (patch: { onboardingSeen?: boolean; timezone?: string; country?: string }) => {
       if (patch.onboardingSeen !== undefined) onboardingSeen = patch.onboardingSeen;

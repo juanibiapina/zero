@@ -108,6 +108,19 @@ digest, `query-hash.ts`) and `query_len` instead, which is enough to spot repeat
 and retry storms on a single query without storing content, the same rule
 `read_page` follows for addresses.
 
+**Paid-key canary and the `cohort` tag.** The paid Brave key is rolled out per
+user, gated by the `braveKeyPaid` flag on `user_settings` (see
+`docs/plans/brave-paid-canary.md`). `UserDO.runTurn` picks the key with
+`selectBraveKey` (`websearch/brave-key.ts`) and passes a `cohort` of `"paid"` or
+`"free"`, which rides on `queryFields` and so tags every Brave log line
+(`brave_request`, `brave_rate_limited`, `brave_request_failed`,
+`brave_quota_exhausted`). The paid cohort's spend is then a filtered version of
+the success count above: count `cohort: "paid"` with `status: 200`. An admin
+flips a user's flag live with `PUT /api/admin/users/{userId}/brave-plan`
+(`{ "paid": true|false }`), no redeploy; the flag is also shown in the
+`GET /api/admin/users/{userId}` detail. A flagged user whose paid key is somehow
+missing falls back to the free key, tagged `cohort: "free"`.
+
 This exists because on 2026-08-02 the key burned most of a month's credit in a
 day and the request count had to be reconstructed by arithmetic from failure logs.
 Counting successes is the point.

@@ -431,6 +431,8 @@ export interface UserSettings {
   // ISO timestamp Zero last woke this sleeper, or null if never. Compared with
   // lastActiveAt to send at most one wake per sleep episode.
   wokeAt: string | null;
+  // Canary flag: when true, this user's web searches use the paid Brave key.
+  braveKeyPaid: boolean;
   // True only on the access that seeded the row (first-ever getSettings).
   isNewUser: boolean;
 }
@@ -447,6 +449,7 @@ export interface SettingsStore {
     mailHistoryId?: string;
     lastActiveAt?: string;
     wokeAt?: string;
+    braveKeyPaid?: boolean;
   }): void;
   setGoogleOnboardingStatus(status: string): void;
 

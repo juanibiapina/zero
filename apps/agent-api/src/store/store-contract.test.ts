@@ -815,8 +815,18 @@ describe("Store contract: settings", () => {
       mailHistoryId: null,
       lastActiveAt: null,
       wokeAt: null,
+      braveKeyPaid: false,
       isNewUser: true,
     });
+  });
+
+  it("braveKeyPaid defaults false and round-trips through updateSettings", () => {
+    const s = makeStore();
+    expect(s.getSettings().braveKeyPaid).toBe(false);
+    s.updateSettings({ braveKeyPaid: true });
+    expect(s.getSettings().braveKeyPaid).toBe(true);
+    s.updateSettings({ braveKeyPaid: false });
+    expect(s.getSettings().braveKeyPaid).toBe(false);
   });
 
   it("wokeAt round-trips through updateSettings and getSettings", () => {

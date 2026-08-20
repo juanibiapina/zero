@@ -227,6 +227,33 @@ describe("createBraveSearch", () => {
       expect(typeof requests[0].duration_ms).toBe("number");
     });
 
+    it("omits cohort when not supplied", async () => {
+      const lines = logLines();
+      globalThis.fetch = vi.fn<typeof fetch>(async () => okResponse());
+
+      await createBraveSearch("k").search("hello");
+
+      const req = lines.find((l) => l.msg === "brave_request");
+      expect(req).toBeDefined();
+      expect(req).not.toHaveProperty("cohort");
+    });
+
+    it("tags cohort on every Brave line: success, retry, and give-up", async () => {
+      const lines = logLines();
+      // 429 (retry) then a persistent 429 that exhausts retries (give-up).
+      globalThis.fetch = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(rateLimited("1, 1270434"));
+
+      await expect(
+        createBraveSearch("k", { sleep: async () => {}, cohort: "paid" }).search("q"),
+      ).rejects.toThrow();
+
+      expect(lines.find((l) => l.msg === "brave_request")?.cohort).toBe("paid");
+      expect(lines.find((l) => l.msg === "brave_rate_limited")?.cohort).toBe("paid");
+      expect(lines.find((l) => l.msg === "brave_request_failed")?.cohort).toBe("paid");
+    });
+
     it("reports a zero-result search", async () => {
       const lines = logLines();
       globalThis.fetch = vi.fn<typeof fetch>(
