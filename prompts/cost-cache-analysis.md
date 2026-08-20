@@ -8,6 +8,7 @@ Analyse yesterday's production AI cost, caching and usage metrics for the zero p
 - Observability endpoint: `https://api.cloudflare.com/client/v4/accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/query`
 - Auth: `$CLOUDFLARE_API_TOKEN`
 - Current model: `gpt-5.6-luna` (OpenAI). Pricing from `apps/agent-api/src/agents/ai-usage.ts`: input $0.20/M, output $1.20/M, cache_read $0.02/M, cache_write $0.25/M (all writes go to the 5m bucket for OpenAI)
+- Brave search: most users are on the **free** plan (1 req/s, throttled). A per-user canary routes some users to the **paid** plan ($5 per 1,000 requests, billed on `status:200`; first ~1,000/month free). Every `brave_request` line carries a `cohort` field (`paid`｜`free`); the paid cohort's bill is its `status:200` count × $5/1000. See `docs/plans/brave-paid-canary.md` and `docs/research.md` (Search usage).
 
 Events used:
 
@@ -20,7 +21,7 @@ Events used:
 | `turn_started` | turn | `clerk_user_id`, `chat_id`, `topic_id`, `history_len` |
 | `turn_messages_sent` | turn | `count` (replies delivered) |
 | `schedule_fired` | schedule run | `reason`, `late_ms`, `has_conversation` |
-| `web_search_completed`, `read_page_completed`, `brave_request` | tool call | research volume / Brave spend |
+| `web_search_completed`, `read_page_completed`, `brave_request` | tool call | research volume / Brave spend; `brave_request` carries `status`, `attempt`, `cohort` (`paid`｜`free`) |
 | `clerk_signup`, `telegram_linked`, `onboarding_started` | signup funnel | new users |
 | `turn_incomplete`, `turn_reset_retrying`, `turn_delivery_recovered` | failure | reliability flags |
 
@@ -120,6 +121,26 @@ jq -r '.result.events.events[].source | [.agent, .cache_read_tokens, .cache_writ
 
 Repeat steps 4–5 against the `$RUN/p_*.json` files for the previous day's comparison line.
 
+### 5b. Brave search spend by cohort
+
+Split `brave_request` by `cohort` and status. The paid cohort's bill is its
+`status:200` count × $5/1000. A `429` is throttling (not billed) and only appears
+on the free cohort; retries show as `attempt > 0`.
+
+```bash
+echo "Brave by cohort (status: count):"
+jq -r '.result.events.events[].source | "\(.cohort // "free") \(.status)"' $RUN/z_brave_request.json \
+  | sort | uniq -c | sort -rn
+PAID200=$(jq -r '[.result.events.events[].source | select((.cohort=="paid") and (.status==200))] | length' $RUN/z_brave_request.json)
+echo "paid 200s: $PAID200  -> \$$(echo "scale=4; $PAID200*5/1000" | bc)"
+echo "paid-cohort users active yesterday:"
+jq -r '.result.events.events[].source.clerk_user_id' $RUN/z_turn_started.json | sort -u > $RUN/active_users.txt
+# The canary members (from the admin user-detail flag); list them here as they are enabled.
+echo "  enabled: juanibiapina@gmail.com, negraiamaria@gmail.com"
+```
+
+If `PAID200` is zero, note the paid canary saw no billed searches yesterday.
+
 ### 6. Post summary to Telegram
 
 Post a compact message with:
@@ -128,6 +149,7 @@ Post a compact message with:
 - Hit ratio, total cost, cost per turn, cost per user
 - Cold-prefix anomaly count
 - Research volume (searches, page reads, Brave 200s)
+- **Brave paid canary**: paid-cohort `status:200` count and its $ (× $5/1000), and free-cohort 200s for contrast. One line; flag if paid spend is trending toward the ~$5/month (~1,000 requests) free-credit ceiling or if a single canary user dominates it.
 - One-line comparison to the previous day for users, turns, hit ratio and cost
 - One observation or flag if anything looks wrong: hit ratio below 50%, cost spiked >2x, cost per turn above ~$0.05, many cold calls, any reliability event, or usage concentrated in a single user
 
