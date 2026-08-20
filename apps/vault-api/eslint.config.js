@@ -4,7 +4,7 @@ export default [
   { ignores: [".wrangler/**"] },
   ...base,
   {
-    // Tests run under vitest-pool-workers. A monorepo-hoisted `@types/jsdom`
+    // Tests run under @cloudflare/vitest-plugin. A monorepo-hoisted `@types/jsdom`
     // (pulled by the mobile app's jest) leaks `lib.dom` into eslint's
     // projectService program, so `Response.json()` types as DOM's `any`. tsc
     // (correctly) sees `unknown`, so the tests' `as`-narrowing is required — but

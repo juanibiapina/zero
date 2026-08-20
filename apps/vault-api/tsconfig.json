@@ -1,7 +1,7 @@
 {
   "extends": "@zero/typescript-config/worker.json",
   "compilerOptions": {
-    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-pool-workers/types"],
+    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"],
     "resolveJsonModule": true
   },
   "include": ["src/**/*.ts", "worker-configuration.d.ts"]
