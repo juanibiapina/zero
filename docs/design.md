@@ -100,7 +100,7 @@ zero/
 │  │      (consolidation happens later, in LearningDO)             │
 │  └─ send: grammY bot.api.sendMessage(…, { message_thread_id })   │
 │                                                                  │
-│  LLM: POST {AI Gateway}/anthropic/v1/messages                    │
+│  LLM: pi-ai → {AI Gateway}/openai/responses (BYOK)               │
 │    cf-aig-authorization: Bearer <CLOUDFLARE_API_KEY>             │
 │    cf-aig-metadata: {"user_id": <clerkUserId>}                   │
 └──────────────────────────────────────────────────────────────────┘
@@ -397,5 +397,7 @@ documented in [caching.md](./caching.md).
 - Generalise off-Telegram agent runs (crons, workflows, email triggers) once the
   shapes are known; Google onboarding is the first, deliberately minimal, one
   (see [`onboarding.md`](onboarding.md)).
-- Per-user model preference + a switching API.
+- Per-user model/effort preference: the decision point already exists
+  (`resolveModelSpec`), so this is a policy + a switching API on top of it, not a
+  new seam.
 - Surface topic/conversation history in the web UI for browsing/export.
