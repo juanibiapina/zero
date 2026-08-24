@@ -537,6 +537,7 @@ describe("runAgent", () => {
       cacheWriteTokens: 8,
       cacheWrite5mTokens: 2,
       cacheWrite1hTokens: 6,
+      costUsd: 0,
       modelCalls: 2,
     });
   });

@@ -362,6 +362,7 @@ describe("toTokenUsage", () => {
       cacheWriteTokens: 5,
       cacheWrite5mTokens: 5,
       cacheWrite1hTokens: 0,
+      costUsd: 0,
     });
   });
 
@@ -370,6 +371,22 @@ describe("toTokenUsage", () => {
       cacheWrite5mTokens: 3,
       cacheWrite1hTokens: 2,
     });
+  });
+
+  it("carries the provider-reported dollar cost", () => {
+    expect(
+      toTokenUsage(
+        usage({
+          cost: {
+            input: 0.01,
+            output: 0.02,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0.03,
+          },
+        }),
+      ).costUsd,
+    ).toBe(0.03);
   });
 });
 

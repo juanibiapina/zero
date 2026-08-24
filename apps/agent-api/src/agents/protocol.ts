@@ -138,11 +138,17 @@ export interface TokenUsage {
   cacheWriteTokens: number;
   cacheWrite5mTokens?: number;
   cacheWrite1hTokens?: number;
+  // Dollar cost of this one call, as reported by the provider layer (pi-ai's
+  // `usage.cost.total`). Optional because a mock or a model with no catalog
+  // price leaves it unset; readers treat missing as zero.
+  costUsd?: number;
 }
 
 export interface AgentRunUsage extends TokenUsage {
   cacheWrite5mTokens: number;
   cacheWrite1hTokens: number;
+  // Summed `costUsd` across every call in the run.
+  costUsd: number;
   modelCalls: number;
 }
 

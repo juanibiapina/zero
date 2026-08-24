@@ -406,6 +406,8 @@ export const toTokenUsage = (usage: Usage): TokenUsage => ({
   // Anthropic reports `cacheWrite1h`, and the rest is 5m.
   cacheWrite5mTokens: usage.cacheWrite - (usage.cacheWrite1h ?? 0),
   cacheWrite1hTokens: usage.cacheWrite1h ?? 0,
+  // Provider-reported dollar cost of this call; no hand-kept price table.
+  costUsd: usage.cost.total,
 });
 
 export const createPiModel = (options: PiAdapterOptions): AgentModel => {
@@ -480,6 +482,15 @@ export const createPiModel = (options: PiAdapterOptions): AgentModel => {
         agent,
         attribution: options.attribution,
         usage,
+        cost: {
+          estimatedCostUsd: usage.costUsd,
+          // The catalog carries real per-token rates for a priced model; a model
+          // with no rate records tokens without a fake zero-dollar cost.
+          pricingStatus:
+            base.cost.input > 0 || base.cost.output > 0 ? "priced" : "unpriced",
+          // Catalog sentinel: models.dev prices move with no stable version.
+          pricingVersion: base.id,
+        },
       }),
   };
 };

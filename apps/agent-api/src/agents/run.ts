@@ -146,6 +146,7 @@ const ZERO_USAGE: RunAgentUsage = {
   cacheWriteTokens: 0,
   cacheWrite5mTokens: 0,
   cacheWrite1hTokens: 0,
+  costUsd: 0,
   modelCalls: 0,
 };
 
@@ -158,6 +159,7 @@ const sumUsage = (usages: TokenUsage[]): RunAgentUsage => {
       cacheWriteTokens: acc.cacheWriteTokens + u.cacheWriteTokens,
       cacheWrite5mTokens: acc.cacheWrite5mTokens + (u.cacheWrite5mTokens ?? 0),
       cacheWrite1hTokens: acc.cacheWrite1hTokens + (u.cacheWrite1hTokens ?? 0),
+      costUsd: acc.costUsd + (u.costUsd ?? 0),
       modelCalls: acc.modelCalls + 1,
     }),
     ZERO_USAGE,
