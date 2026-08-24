@@ -56,9 +56,11 @@ describe("rate limit", () => {
 
     // 3. Poll for the reply. The worker's OpenAI client retries the 429
     // twice (maxRetries: 2) with backoff before surfacing, so allow extra time
-    // over hello.test.ts.
+    // over hello.test.ts. The whole suite runs ~32s cold on macOS and this
+    // poll flaked at 30s on a cold/slow first run, so give it 60s: a flaky
+    // gate cannot certify "green after every commit".
     const message = await pollForMessage(MOCK_TELEGRAM_URL, {
-      timeoutMs: 30_000,
+      timeoutMs: 60_000,
       intervalMs: 1_000,
     });
 
