@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Prod smoke test: sends a real Telegram message as the test user and asserts
+# the deployed bot replies. Hits Telegram, the Cloudflare AI Gateway, and OpenAI
+# for real. Run on demand, not on every commit.
+#
+# See docs/integration-tests.md for one-time setup (Telegram API creds, a gramjs
+# session string, and the test supergroup/topic).
+#
+# Loads test config from ZeroVault (zero-tests/development) via the CLI, which
+# injects the TG_TEST_* secrets as env vars without touching disk. Needs
+# ZERO_API_KEY (ZERO_API_URL optional).
+
+exec pnpm dlx @zeroapps/cli@0.7.0 vault run -p zero-tests -e development -- \
+  pnpm --filter @zero/integration-tests run test:integration
