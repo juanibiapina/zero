@@ -22,9 +22,13 @@ alarm), then returns 200 immediately. The alarm runs the turn:
 LLM calls go through the Cloudflare AI Gateway (BYOK; the gateway stores the
 real provider key and the provider bills us directly) authenticated with
 `cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
-`MODEL_ID` (`gpt-5.6-luna`, on the OpenAI Responses API at `reasoning.effort:
-"high"`). The provider is derived from the model id, so `MODEL_ID` alone decides
-where traffic goes and a rollback to `claude-sonnet-4-6` needs no code change. Each completed agent execution writes one
+`MODEL_ID` (`gpt-5.6-luna`, on the OpenAI Responses API). The model and its
+reasoning effort resolve together in one place (`resolveModelSpec`), on pi-ai's
+provider-neutral effort scale (default `high`). pi-ai's built-in
+`cloudflare-ai-gateway` provider owns the transport and routes by the model's own
+`api`, so `MODEL_ID` alone decides where traffic goes and a rollback to a
+Cloudflare-gateway catalog id such as `claude-sonnet-4.6` (dotted, Anthropic
+Messages wire) needs no code change. Each completed agent execution writes one
 aggregate call/token/cost point to the `AI_USAGE` Analytics Engine dataset,
 indexed by Clerk user and attributed to its agent and conversation when one
 exists. The estimate can be sampled, retains about three months of history, and
@@ -58,8 +62,8 @@ zero/
 | Frontend | React 19, Tailwind v4, shadcn/ui primitives |
 | API    | Hono + OpenAPIHono + Zod on Cloudflare Workers |
 | State  | UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) + Workers KV for identity lookups |
-| Agents | Zero-owned tool loop (`agents/run.ts`) over `@anthropic-ai/sdk` |
-| LLM    | Cloudflare AI Gateway → OpenAI (BYOK) — `gpt-5.6-luna` |
+| Agents | Zero-owned tool loop (`agents/run.ts`) over [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) behind the `AgentModel` seam (`agents/model-pi.ts`) |
+| LLM    | Cloudflare AI Gateway (BYOK) via pi-ai's built-in `cloudflare-ai-gateway` provider — `gpt-5.6-luna`; model + effort resolve together in `resolveModelSpec` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
 | Secrets | Doppler (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
 

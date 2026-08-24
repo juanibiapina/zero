@@ -1,5 +1,19 @@
 # Prompt caching
 
+> **Update (pi-ai adapter):** cache placement is now delegated to
+> `@earendil-works/pi-ai`, not hand-marked by Zero. The adapter
+> (`agents/model-pi.ts`) sets a per-agent `sessionId`
+> (`zero:<agent>:v1:<shard>`, still the OpenAI `prompt_cache_key`) and
+> `cacheRetention: 'long'` (OpenAI `prompt_cache_retention: "24h"`), and pi-ai
+> owns where breakpoints go. gpt-5.6-luna has no explicit-cache-mode support in
+> the catalog, so caching is **implicit** now (Zero no longer sends
+> `prompt_cache_options: { mode: "explicit" }` or per-block breakpoints). The
+> `cache_control` marking in `agents/cache.ts` is inert on this path (the adapter
+> ignores it) and is removed in a follow-up. The tier/breakpoint detail below
+> describes the pre-pi-ai hand-marked scheme and is retained for background until
+> that cleanup lands; `agents/model-anthropic.ts` and `agents/openai-wire.ts` no
+> longer exist.
+
 Zero caches the stable prefix of every LLM call so the provider bills it at a
 fraction of the input price on reads, instead of re-billing the full system
 prompt, tool schemas, and history on every tool-loop step and every turn. This

@@ -1,342 +1,104 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createModel,
   createModelFactory,
   gatewayMetadata,
   providerFor,
-  type AgentLabel,
+  resolveModelSpec,
+  AGENT_MODEL_OVERRIDES,
 } from "./model";
-import { promptCacheKey } from "./model-openai";
-import type { AgentModelRequest } from "./protocol";
+import {
+  promptCacheKey,
+  toContext,
+  fromAssistant,
+  toTokenUsage,
+  toStopReason,
+} from "./model-pi";
+import type {
+  AgentModelRequest,
+  ContentBlock,
+  ThinkingBlock,
+} from "./protocol";
+import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import type { Env } from "../types";
 
 const makeEnv = (over: Record<string, unknown> = {}): Env =>
   ({
     MODEL_ID: "gpt-5.6-luna",
     CLOUDFLARE_GATEWAY_ID: "zero",
+    CLOUDFLARE_ACCOUNT_ID: "acct",
     CLOUDFLARE_API_KEY: "cf-key",
     LLM_BASE_URL_OVERRIDE: "",
-    AI: {
-      gateway: (id: string) => ({
-        getUrl: async (provider: string) =>
-          `https://gw.example/${id}/${provider}`,
-      }),
-    },
     ...over,
   }) as unknown as Env;
 
-// A canned Responses reply, plus a recorder for the request the SDK issued. The
-// request bytes are what the prompt cache keys on, so they are the thing worth
-// asserting on.
-const transport = (
-  body: Record<string, unknown> = {},
-): {
-  fetchImpl: typeof fetch;
-  calls: Array<{ url: string; headers: Headers; body: Record<string, unknown> }>;
-} => {
-  const calls: Array<{
-    url: string;
-    headers: Headers;
-    body: Record<string, unknown>;
-  }> = [];
-  const fetchImpl = vi.fn(async (input: unknown, init?: RequestInit) => {
-    calls.push({
-      url: String(input),
-      headers: new Headers(init?.headers as HeadersInit),
-      body: JSON.parse(
-        typeof init?.body === "string" ? init.body : "{}",
-      ) as Record<string, unknown>,
-    });
-    return new Response(
-      JSON.stringify({
-        id: "resp_01",
-        object: "response",
-        model: "gpt-5.6-luna",
-        status: "completed",
-        output: [
-          {
-            type: "message",
-            role: "assistant",
-            phase: "final_answer",
-            content: [{ type: "output_text", text: "hello" }],
-          },
-        ],
-        usage: {
-          input_tokens: 18,
-          output_tokens: 3,
-          input_tokens_details: { cached_tokens: 7, cache_write_tokens: 5 },
-          output_tokens_details: { reasoning_tokens: 0 },
-        },
-        ...body,
-      }),
-      { status: 200, headers: { "content-type": "application/json" } },
-    );
-  });
-  return { fetchImpl: fetchImpl, calls };
-};
-
-const request: AgentModelRequest = {
-  system: [
-    {
-      type: "text",
-      text: "sys",
-      cache_control: { type: "ephemeral", ttl: "1h" },
-    },
-  ],
+const request = (over: Partial<AgentModelRequest> = {}): AgentModelRequest => ({
+  system: [{ type: "text", text: "sys" }],
   messages: [{ role: "user", content: "hi" }],
-  tools: [
-    {
-      name: "ping",
-      description: "ping",
-      input_schema: { type: "object" },
-    },
-  ],
-};
+  tools: [{ name: "ping", description: "ping", input_schema: { type: "object" } }],
+  ...over,
+});
 
 describe("providerFor", () => {
   it("routes by model id so MODEL_ID alone picks the provider", () => {
     expect(providerFor("gpt-5.6-luna")).toBe("openai");
     expect(providerFor("gpt-5.6-terra")).toBe("openai");
-    expect(providerFor("claude-sonnet-4-6")).toBe("anthropic");
+    expect(providerFor("claude-sonnet-4.6")).toBe("anthropic");
+  });
+});
+
+describe("resolveModelSpec", () => {
+  it("returns the configured MODEL_ID at the default high effort", () => {
+    expect(
+      resolveModelSpec(makeEnv(), { agent: "interface", clerkUserId: "u" }),
+    ).toEqual({ modelId: "gpt-5.6-luna", effort: "high" });
+  });
+
+  it("honors a per-agent override for that agent only", () => {
+    (AGENT_MODEL_OVERRIDES as Record<string, string>).learner =
+      "claude-sonnet-4.6";
+    try {
+      expect(
+        resolveModelSpec(makeEnv(), { agent: "learner", clerkUserId: "u" })
+          .modelId,
+      ).toBe("claude-sonnet-4.6");
+      expect(
+        resolveModelSpec(makeEnv(), { agent: "interface", clerkUserId: "u" })
+          .modelId,
+      ).toBe("gpt-5.6-luna");
+    } finally {
+      delete (AGENT_MODEL_OVERRIDES as Record<string, string>).learner;
+    }
   });
 });
 
 describe("createModel", () => {
-  it("builds a model for the configured MODEL_ID via the gateway", async () => {
-    const getUrl = vi.fn(async () => "https://gw.example/zero/openai");
-    const env = makeEnv({ AI: { gateway: () => ({ getUrl }) } });
-
-    const model = await createModel(env, "user_123");
-
+  it("builds a model tagged with the configured MODEL_ID", async () => {
+    const model = await createModel(makeEnv(), "user_123");
     expect(model).toMatchObject({ modelId: "gpt-5.6-luna" });
-    expect(getUrl).toHaveBeenCalledWith("openai");
   });
 
-  // Rollback is a var flip, not a code change.
-  it("falls back to the Anthropic gateway route for a claude model id", async () => {
-    const getUrl = vi.fn(async () => "https://gw.example/zero/anthropic");
-    const env = makeEnv({
-      MODEL_ID: "claude-sonnet-4-6",
-      AI: { gateway: () => ({ getUrl }) },
-    });
-
-    const model = await createModel(env, "user_123");
-
-    expect(model).toMatchObject({ modelId: "claude-sonnet-4-6" });
-    expect(getUrl).toHaveBeenCalledWith("anthropic");
-  });
-
-  it("honors LLM_BASE_URL_OVERRIDE and skips the gateway lookup", async () => {
-    const getUrl = vi.fn(async () => "unused");
-    const env = makeEnv({
-      LLM_BASE_URL_OVERRIDE: "https://override.example/v1",
-      AI: { gateway: () => ({ getUrl }) },
-    });
-
-    const model = await createModel(env, "user_123");
-
-    expect(model).toMatchObject({ modelId: "gpt-5.6-luna" });
-    expect(getUrl).not.toHaveBeenCalled();
-  });
-
-  it("resolves the base URL once and tags each agent independently", async () => {
-    const getUrl = vi.fn(async () => "https://gw.example/zero/openai");
-    const env = makeEnv({ AI: { gateway: () => ({ getUrl }) } });
-
-    const makeModel = await createModelFactory(env, "user_123");
-    const a = makeModel("interface");
-    const b = makeModel("learner");
-
-    expect(a).toMatchObject({ modelId: "gpt-5.6-luna" });
-    expect(b).toMatchObject({ modelId: "gpt-5.6-luna" });
-    // Base URL resolved once for the turn, not per agent.
-    expect(getUrl).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("the OpenAI request", () => {
-  const send = async (
-    over: Partial<AgentModelRequest> = {},
-    responseBody?: Record<string, unknown>,
-    agent: AgentLabel = "interface",
-  ) => {
-    const { fetchImpl, calls } = transport(responseBody);
-    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/openai" });
-    const model = await createModel(env, "user_123", agent, fetchImpl);
-    const response = await model.generate({ ...request, ...over });
-    return { call: calls[0], response };
-  };
-
-  it("posts to the Responses endpoint", async () => {
-    const { call } = await send();
-    expect(call.url).toBe("https://gw.example/openai/responses");
-  });
-
-  // Under BYOK the gateway holds the provider key; a client-sent Authorization
-  // header would be used instead of the stored one.
-  it("authenticates to the gateway and sends no provider key", async () => {
-    const { call } = await send();
-    expect(call.headers.get("cf-aig-authorization")).toBe("Bearer cf-key");
-    expect(JSON.parse(call.headers.get("cf-aig-metadata") ?? "{}")).toEqual({
-      user_id: "user_123",
-      agent: "interface",
-    });
-    expect(call.headers.get("authorization")).toBeNull();
-  });
-
-  it("sends the model, the output ceiling, and stores nothing provider-side", async () => {
-    const { call } = await send();
-    expect(call.body).toMatchObject({
-      model: "gpt-5.6-luna",
-      max_output_tokens: 32000,
-      store: false,
-      include: ["reasoning.encrypted_content"],
-      safety_identifier: "user_123",
-    });
-  });
-
-  // The family defaults to medium, and Zero's quality case for the cheap tier
-  // rests on high. A silent drop here is a silent quality drop.
-  it("asks every agent to reason at high effort", async () => {
-    const agents: AgentLabel[] = [
-      "interface",
-      "learner",
-      "compaction",
-      "onboarding",
-      "admin_task",
-    ];
-    for (const agent of agents) {
-      const { call } = await send({}, undefined, agent);
-      expect(call.body.reasoning).toEqual({
-        effort: "high",
-        context: "all_turns",
-      });
-    }
-  });
-
-  it("caches explicitly, keyed per agent, so the volatile tail is never written", async () => {
-    const { call } = await send();
-    expect(call.body.prompt_cache_options).toEqual({ mode: "explicit" });
-    expect(call.body.prompt_cache_key).toBe("zero:interface:v1:0");
-  });
-
-  it("keys the cache per agent so one agent's prefix cannot shadow another's", () => {
-    expect(promptCacheKey("interface", "user_1")).not.toBe(
-      promptCacheKey("learner", "user_1"),
+  // Rollback is a var flip, not a code change: the gateway catalog holds the
+  // claude models (dotted id, e.g. `claude-sonnet-4.6`) and routes them to the
+  // Anthropic wire by the model's own `api`.
+  it("builds a claude model id from the same catalog for rollback", async () => {
+    const model = await createModel(
+      makeEnv({ MODEL_ID: "claude-sonnet-4.6" }),
+      "user_123",
     );
-    // Shared across users: the instructions + tools prefix is identical for
-    // everyone, and a per-user key would make it unreusable.
-    expect(promptCacheKey("interface", "user_1")).toBe(
-      promptCacheKey("interface", "user_2"),
-    );
+    expect(model).toMatchObject({ modelId: "claude-sonnet-4.6" });
   });
 
-  it("translates system, tools and messages into the Responses shapes", async () => {
-    const { call } = await send();
-    expect(call.body.tools).toEqual([
-      {
-        type: "function",
-        name: "ping",
-        description: "ping",
-        parameters: { type: "object" },
-        strict: false,
-      },
-    ]);
-    expect(call.body.input).toEqual([
-      {
-        role: "developer",
-        content: [
-          {
-            type: "input_text",
-            text: "sys",
-            prompt_cache_breakpoint: { mode: "explicit" },
-          },
-        ],
-      },
-      { role: "user", content: [{ type: "input_text", text: "hi" }] },
-    ]);
-  });
-});
-
-describe("the OpenAI response", () => {
-  const send = async (
-    over: Partial<AgentModelRequest> = {},
-    responseBody?: Record<string, unknown>,
-  ) => {
-    const { fetchImpl } = transport(responseBody);
-    const env = makeEnv({ LLM_BASE_URL_OVERRIDE: "https://gw.example/openai" });
-    const model = await createModel(env, "user_123", "interface", fetchImpl);
-    return model.generate({ ...request, ...over });
-  };
-
-  it("maps id, content, stop reason, and token usage", async () => {
-    const response = await send();
-    expect(response.id).toBe("resp_01");
-    expect(response.content).toEqual([
-      { type: "text", text: "hello", phase: "final_answer" },
-    ]);
-    expect(response.stopReason).toBe("end_turn");
-    expect(response.usage).toEqual({
-      // 18 reported input tokens include the 7 that were cache reads.
-      inputTokens: 11,
-      outputTokens: 3,
-      cacheReadTokens: 7,
-      cacheWriteTokens: 5,
-      cacheWrite5mTokens: 5,
-      cacheWrite1hTokens: 0,
-    });
+  it("tags each agent independently off one factory", async () => {
+    const makeModel = await createModelFactory(makeEnv(), "user_123");
+    expect(makeModel("interface")).toMatchObject({ modelId: "gpt-5.6-luna" });
+    expect(makeModel("learner")).toMatchObject({ modelId: "gpt-5.6-luna" });
   });
 
-  it("reports a tool call as tool_use", async () => {
-    const response = await send({}, {
-      output: [
-        {
-          type: "function_call",
-          call_id: "call_1",
-          name: "ping",
-          arguments: "{}",
-        },
-      ],
-    });
-    expect(response.stopReason).toBe("tool_use");
-    expect(response.content).toEqual([
-      { type: "tool_use", id: "call_1", name: "ping", input: {} },
-    ]);
-  });
-
-  // Reasoning spend is inside output_tokens, so the per-request log line is the
-  // only place it is visible. Without it there is no telling a turn that thought
-  // hard from one that barely thought.
-  it("logs cache and reasoning counts for the call", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    await send(
-      { step: 2 },
-      {
-        usage: {
-          input_tokens: 1000,
-          output_tokens: 300,
-          input_tokens_details: { cached_tokens: 900, cache_write_tokens: 40 },
-          output_tokens_details: { reasoning_tokens: 240 },
-        },
-      },
-    );
-    const events = logSpy.mock.calls.map((c) => c[0] as Record<string, unknown>);
-    expect(events.find((e) => e.msg === "cache_stats")).toMatchObject({
-      agent: "interface",
-      step: 2,
-      input_tokens: 100,
-      cache_read_tokens: 900,
-      cache_write_tokens: 40,
-      thinking_tokens: 240,
-    });
-    logSpy.mockRestore();
-  });
-
-  it("reads a response with no usage as zeros", async () => {
-    const response = await send({}, { usage: null });
-    expect(response.usage.cacheReadTokens).toBe(0);
-    expect(response.usage.cacheWriteTokens).toBe(0);
-    expect(response.usage.inputTokens).toBe(0);
+  it("throws for a model id absent from the gateway catalog", async () => {
+    await expect(
+      createModel(makeEnv({ MODEL_ID: "no-such-model" }), "user_123"),
+    ).rejects.toThrow(/catalog/);
   });
 });
 
@@ -349,107 +111,272 @@ describe("gatewayMetadata", () => {
     expect(JSON.parse(gatewayMetadata("u", "learner"))).toMatchObject({
       agent: "learner",
     });
-    expect(JSON.parse(gatewayMetadata("u", "compaction"))).toMatchObject({
-      agent: "compaction",
+  });
+});
+
+describe("promptCacheKey", () => {
+  it("keys the cache per agent so one agent's prefix cannot shadow another's", () => {
+    expect(promptCacheKey("interface", "user_1")).not.toBe(
+      promptCacheKey("learner", "user_1"),
+    );
+    // Shared across users: the instructions + tools prefix is identical for
+    // everyone, and a per-user key would make it unreusable.
+    expect(promptCacheKey("interface", "user_1")).toBe(
+      promptCacheKey("interface", "user_2"),
+    );
+  });
+});
+
+// The translation is the whole adapter and the main risk surface. The live gate
+// (a real gateway call proving store:false, encrypted-reasoning replay, cf-aig
+// headers and BYOK) is the spike + bin/e2e-test; these unit tests pin the pure
+// protocol <-> pi-ai Context translation in both directions.
+describe("toContext (request translation)", () => {
+  it("joins system blocks into the system prompt and passes tool schemas through", () => {
+    const ctx = toContext(
+      request({
+        system: [
+          { type: "text", text: "one" },
+          { type: "text", text: "two" },
+        ],
+      }),
+      "gpt-5.6-luna",
+      "openai-responses",
+    );
+    expect(ctx.systemPrompt).toBe("one\n\ntwo");
+    expect(ctx.tools).toEqual([
+      { name: "ping", description: "ping", parameters: { type: "object" } },
+    ]);
+  });
+
+  it("splits a user turn's tool results out of the surrounding text", () => {
+    const ctx = toContext(
+      request({
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "before" },
+              { type: "tool_result", tool_use_id: "call_1", content: "ok" },
+              { type: "text", text: "after" },
+            ],
+          },
+        ],
+      }),
+      "gpt-5.6-luna",
+      "openai-responses",
+    );
+    expect(ctx.messages.map((m) => m.role)).toEqual([
+      "user",
+      "toolResult",
+      "user",
+    ]);
+    const toolResult = ctx.messages[1];
+    expect(toolResult).toMatchObject({
+      role: "toolResult",
+      toolCallId: "call_1",
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
     });
-    expect(JSON.parse(gatewayMetadata("u", "onboarding"))).toMatchObject({
-      agent: "onboarding",
+  });
+
+  it("maps an image block to pi-ai's image content", () => {
+    const ctx = toContext(
+      request({
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: "image/png",
+                  data: "XYZ",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      "gpt-5.6-luna",
+      "openai-responses",
+    );
+    expect(ctx.messages[0].content).toEqual([
+      { type: "image", data: "XYZ", mimeType: "image/png" },
+    ]);
+  });
+
+  it("rebuilds an OpenAI reasoning item and stamps the assistant api", () => {
+    const ctx = toContext(
+      request({
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "",
+                signature: "",
+                id: "rs_1",
+                encrypted_content: "enc",
+              },
+              { type: "text", text: "hi", phase: "final_answer" },
+              { type: "tool_use", id: "call_9", name: "ping", input: { a: 1 } },
+            ],
+          },
+        ],
+      }),
+      "gpt-5.6-luna",
+      "openai-responses",
+    );
+    const assistant = ctx.messages[0];
+    expect(assistant).toMatchObject({ role: "assistant", api: "openai-responses" });
+    const [thinking, text, tool] = (
+      assistant as AssistantMessage
+    ).content;
+    expect(JSON.parse((thinking as { thinkingSignature: string }).thinkingSignature)).toEqual({
+      type: "reasoning",
+      id: "rs_1",
+      summary: [],
+      encrypted_content: "enc",
     });
-    expect(JSON.parse(gatewayMetadata("u", "admin_task"))).toMatchObject({
-      agent: "admin_task",
+    expect(text).toMatchObject({ type: "text", text: "hi" });
+    expect(tool).toMatchObject({
+      type: "toolCall",
+      id: "call_9",
+      name: "ping",
+      arguments: { a: 1 },
+    });
+  });
+
+  it("infers the anthropic api from a signature-only thinking block", () => {
+    const ctx = toContext(
+      request({
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "reason", signature: "sig123" },
+            ],
+          },
+        ],
+      }),
+      "claude-sonnet-4.6",
+      "anthropic-messages",
+    );
+    expect(ctx.messages[0]).toMatchObject({ api: "anthropic-messages" });
+  });
+});
+
+describe("fromAssistant (response translation)", () => {
+  it("maps text with phase, decodes an OpenAI reasoning item, and splits a tool id", () => {
+    const content: AssistantMessage["content"] = [
+      {
+        type: "thinking",
+        thinking: "",
+        thinkingSignature: JSON.stringify({
+          type: "reasoning",
+          id: "rs_1",
+          summary: [],
+          encrypted_content: "enc",
+        }),
+      },
+      {
+        type: "text",
+        text: "hi",
+        textSignature: JSON.stringify({ v: 1, id: "", phase: "final_answer" }),
+      },
+      { type: "toolCall", id: "call_9|item_2", name: "ping", arguments: { a: 1 } },
+    ];
+    expect(fromAssistant(content)).toEqual([
+      {
+        type: "thinking",
+        thinking: "",
+        signature: "",
+        id: "rs_1",
+        encrypted_content: "enc",
+      },
+      { type: "text", text: "hi", phase: "final_answer" },
+      { type: "tool_use", id: "call_9", name: "ping", input: { a: 1 } },
+    ]);
+  });
+
+  it("keeps an opaque anthropic signature verbatim", () => {
+    const content: AssistantMessage["content"] = [
+      { type: "thinking", thinking: "reason", thinkingSignature: "sig123" },
+    ];
+    expect(fromAssistant(content)).toEqual([
+      { type: "thinking", thinking: "reason", signature: "sig123" },
+    ]);
+  });
+});
+
+describe("thinking round-trip", () => {
+  const roundTrip = (block: ThinkingBlock): ContentBlock[] => {
+    const ctx = toContext(
+      request({ messages: [{ role: "assistant", content: [block] }] }),
+      "gpt-5.6-luna",
+      "openai-responses",
+    );
+    return fromAssistant((ctx.messages[0] as AssistantMessage).content);
+  };
+
+  it("preserves an OpenAI encrypted reasoning block across the round-trip", () => {
+    const block: ThinkingBlock = {
+      type: "thinking",
+      thinking: "",
+      signature: "",
+      id: "rs_1",
+      encrypted_content: "enc",
+    };
+    expect(roundTrip(block)).toEqual([block]);
+  });
+
+  it("preserves an Anthropic signed reasoning block across the round-trip", () => {
+    const block: ThinkingBlock = {
+      type: "thinking",
+      thinking: "reason",
+      signature: "sig123",
+    };
+    expect(roundTrip(block)).toEqual([block]);
+  });
+});
+
+describe("toTokenUsage", () => {
+  const usage = (over: Partial<Usage> = {}): Usage => ({
+    input: 11,
+    output: 3,
+    cacheRead: 7,
+    cacheWrite: 5,
+    totalTokens: 26,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    ...over,
+  });
+
+  it("maps pi-ai usage, folding the whole write into the 5m bucket for OpenAI", () => {
+    expect(toTokenUsage(usage())).toEqual({
+      inputTokens: 11,
+      outputTokens: 3,
+      cacheReadTokens: 7,
+      cacheWriteTokens: 5,
+      cacheWrite5mTokens: 5,
+      cacheWrite1hTokens: 0,
+    });
+  });
+
+  it("splits the 1h write bucket when Anthropic reports it", () => {
+    expect(toTokenUsage(usage({ cacheWrite: 5, cacheWrite1h: 2 }))).toMatchObject({
+      cacheWrite5mTokens: 3,
+      cacheWrite1hTokens: 2,
     });
   });
 });
 
-// The shared cache policy marks every markable message and sets no TTL, because
-// those are OpenAI's rules. Anthropic caps a request at 4 marked blocks (a fifth
-// is a 400) and takes a TTL per breakpoint, so the adapter is where both apply.
-describe("the Anthropic request", () => {
-  const anthropicTransport = () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const fetchImpl = vi.fn(async (_input: unknown, init?: RequestInit) => {
-      calls.push(
-        JSON.parse(typeof init?.body === "string" ? init.body : "{}") as Record<
-          string,
-          unknown
-        >,
-      );
-      return new Response(
-        JSON.stringify({
-          id: "msg_01",
-          model: "claude-sonnet-4-6",
-          content: [{ type: "text", text: "hi" }],
-          stop_reason: "end_turn",
-          usage: { input_tokens: 1, output_tokens: 1 },
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    });
-    return { fetchImpl: fetchImpl as unknown as typeof fetch, calls };
-  };
-
-  const marked = (text: string) => ({
-    role: "user" as const,
-    content: [
-      {
-        type: "text" as const,
-        text,
-        cache_control: { type: "ephemeral" as const },
-      },
-    ],
-  });
-
-  const send = async (messages: AgentModelRequest["messages"]) => {
-    const { fetchImpl, calls } = anthropicTransport();
-    const env = makeEnv({
-      MODEL_ID: "claude-sonnet-4-6",
-      LLM_BASE_URL_OVERRIDE: "https://gw.example/anthropic",
-    });
-    const model = await createModel(env, "user_123", "interface", fetchImpl);
-    await model.generate({
-      ...request,
-      system: [
-        { type: "text", text: "sys", cache_control: { type: "ephemeral" } },
-      ],
-      messages,
-    });
-    return calls[0];
-  };
-
-  it("gives the system region a 1h ttl and the message region the 5m default", async () => {
-    const body = await send([marked("hi")]);
-    expect(body.system).toEqual([
-      {
-        type: "text",
-        text: "sys",
-        cache_control: { type: "ephemeral", ttl: "1h" },
-      },
-    ]);
-    const messages = body.messages as Array<{
-      content: Array<{ cache_control?: unknown }>;
-    }>;
-    expect(messages[0].content[0].cache_control).toEqual({
-      type: "ephemeral",
-      ttl: "5m",
-    });
-  });
-
-  // Trimmed from the front: the newest prefix is the one a later step reads.
-  it("keeps only the newest marks that fit under Anthropic's cap of 4", async () => {
-    const body = await send([
-      marked("one"),
-      marked("two"),
-      marked("three"),
-      marked("four"),
-      marked("five"),
-    ]);
-    const messages = body.messages as Array<{
-      content: Array<{ cache_control?: unknown }>;
-    }>;
-    const markedIndexes = messages.flatMap((m, i) =>
-      m.content[0].cache_control ? [i] : [],
-    );
-    // One of the four goes to the system block, leaving three for messages.
-    expect(markedIndexes).toEqual([2, 3, 4]);
+describe("toStopReason", () => {
+  it("maps pi-ai stop reasons to the protocol's", () => {
+    expect(toStopReason("toolUse")).toBe("tool_use");
+    expect(toStopReason("length")).toBe("max_tokens");
+    expect(toStopReason("stop")).toBe("end_turn");
   });
 });
