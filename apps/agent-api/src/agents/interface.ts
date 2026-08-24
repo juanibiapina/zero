@@ -367,18 +367,13 @@ export const runInterfaceAgent = async (
     summary: input.summary,
     context: interfaceContext(now, timezone, input.country),
   });
-  // No cache breakpoint is placed here. The runner marks every markable message
-  // (see cache.ts), which already covers the history this turn replays, so the
-  // cross-turn read comes for free and a caller-placed anchor would only be a
-  // second name for the same mark.
-
   await deliverUnclaimed(input.trailing ?? []);
 
   let injectedFollowups = 0;
   const { finishReason, steps, usage, stepUsages } = await runAgent({
     model: input.model,
-    // Static instructions and per-user pinned topics are passed apart so each
-    // gets its own cache breakpoint; concatenated they are the same prompt.
+    // Static instructions and per-user pinned topics are passed apart as two
+    // system blocks; concatenated they are the same prompt.
     system: interfaceSystemPrompt(),
     systemTail: pinned,
     messages: convo,

@@ -41,10 +41,7 @@ const recordingModel = (steps: Array<Partial<{ content: ContentBlock[]; stopReas
 const toolResults = (request: AgentModelRequest): ToolResultBlock[] =>
   request.messages
     .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
-    .filter((b): b is ToolResultBlock => b.type === "tool_result")
-    // Strip the loop's cache breakpoints (asserted separately) so these
-    // assertions stay focused on tool-result pairing and error semantics.
-    .map(({ cache_control: _cc, ...rest }) => rest);
+    .filter((b): b is ToolResultBlock => b.type === "tool_result");
 
 describe("runAgent", () => {
   it("executes tool calls then returns the final text", async () => {
@@ -218,32 +215,10 @@ describe("runAgent", () => {
   it("sends a single user message equal to the prompt", async () => {
     const { model, requests } = recordingModel([{}]);
 
-    // cache off isolates prompt wrapping from the loop's breakpoints.
-    await runAgent({ model, system: "sys", prompt: "the prompt", cache: false });
+    await runAgent({ model, system: "sys", prompt: "the prompt" });
 
     expect(requests[0].messages).toEqual([
       { role: "user", content: "the prompt" },
-    ]);
-  });
-
-  it("caches a single-prompt (writer/onboarding) message region", async () => {
-    const { model, requests } = recordingModel([{}]);
-
-    await runAgent({ model, system: "sys", prompt: "the prompt" });
-
-    // The writer and onboarding pass one prompt string; it is markable, so it
-    // is marked, and their growing message region caches like any other.
-    expect(requests[0].messages).toEqual([
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "the prompt",
-            cache_control: { type: "ephemeral" },
-          },
-        ],
-      },
     ]);
   });
 
@@ -273,7 +248,7 @@ describe("runAgent", () => {
     expect(result.text).toBe("");
   });
 
-  it("caches the system block and leaves tools unmarked", async () => {
+  it("sends the static system block with no caller-placed cache marks", async () => {
     const { model, requests } = recordingModel([{}]);
 
     await runAgent({
@@ -294,23 +269,16 @@ describe("runAgent", () => {
       },
     });
 
-    expect(requests[0].system).toEqual([
-      {
-        type: "text",
-        text: "sys",
-        cache_control: { type: "ephemeral" },
-      },
-    ]);
-    // Tools carry no breakpoint of their own: only an input block can carry
-    // one, and tools are rendered into the prefix ahead of the system block, so
-    // the system breakpoint already covers every schema.
+    // The runner no longer places breakpoints (pi-ai owns caching); it just
+    // assembles the content.
+    expect(requests[0].system).toEqual([{ type: "text", text: "sys" }]);
     expect(requests[0].tools.map((t) => t.name)).toEqual(["a", "b"]);
     expect(requests[0].tools.every((t) => t.cache_control === undefined)).toBe(
       true,
     );
   });
 
-  it("gives the per-user system tail its own breakpoint", async () => {
+  it("sends the per-user system tail as its own block", async () => {
     const { model, requests } = recordingModel([{}]);
 
     await runAgent({
@@ -321,16 +289,8 @@ describe("runAgent", () => {
     });
 
     expect(requests[0].system).toEqual([
-      {
-        type: "text",
-        text: "sys",
-        cache_control: { type: "ephemeral" },
-      },
-      {
-        type: "text",
-        text: "\n\npinned",
-        cache_control: { type: "ephemeral" },
-      },
+      { type: "text", text: "sys" },
+      { type: "text", text: "\n\npinned" },
     ]);
   });
 
@@ -361,66 +321,6 @@ describe("runAgent", () => {
     });
   });
 
-  it("keeps a caller-set breakpoint in place", async () => {
-    const { model, requests } = recordingModel([{}]);
-
-    await runAgent({
-      model,
-      system: "sys",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "hi", cache_control: { type: "ephemeral" } },
-          ],
-        },
-      ],
-    });
-
-    expect(requests[0].messages[0].content).toEqual([
-      { type: "text", text: "hi", cache_control: { type: "ephemeral" } },
-    ]);
-  });
-
-  // A message is marked when its last content block carries a breakpoint.
-  const markedIndexes = (request: AgentModelRequest): number[] =>
-    request.messages.flatMap((m, i) => {
-      if (!Array.isArray(m.content)) return [];
-      const last = m.content[m.content.length - 1];
-      return last && "cache_control" in last && last.cache_control ? [i] : [];
-    });
-
-  it("marks every markable message and keeps earlier marks as it grows", async () => {
-    const { model, requests } = recordingModel([
-      {
-        content: [{ type: "tool_use", id: "x", name: "ping", input: {} }],
-        stopReason: "tool_use",
-      },
-      {
-        content: [{ type: "tool_use", id: "y", name: "ping", input: {} }],
-        stopReason: "tool_use",
-      },
-      { content: [{ type: "text", text: "done" }], stopReason: "end_turn" },
-    ]);
-
-    await runAgent({
-      model,
-      system: "sys",
-      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-      tools: pingTool(async () => "pong"),
-    });
-
-    // The marker is part of the cached bytes, so every mark a step carried must
-    // still be there next step: dropping one invalidates the prefix after it and
-    // re-bills the whole request as a cache write. Assistant messages (odd
-    // indexes here) are never marked.
-    expect(markedIndexes(requests[0])).toEqual([0]);
-    expect(requests[1].messages).toHaveLength(3);
-    expect(markedIndexes(requests[1])).toEqual([0, 2]);
-    expect(requests[2].messages).toHaveLength(5);
-    expect(markedIndexes(requests[2])).toEqual([0, 2, 4]);
-  });
-
   it("passes the loop step index to the model each call", async () => {
     const { model, requests } = recordingModel([
       {
@@ -438,14 +338,6 @@ describe("runAgent", () => {
     });
 
     expect(requests.map((r) => r.step)).toEqual([0, 1]);
-  });
-
-  it("passes the plain shape when cache is disabled", async () => {
-    const { model, requests } = recordingModel([{}]);
-
-    await runAgent({ model, system: "sys", prompt: "q", cache: false });
-
-    expect(requests[0].system).toEqual([{ type: "text", text: "sys" }]);
   });
 
   // The signature is the encrypted reasoning: modify it and the next request is
@@ -478,43 +370,6 @@ describe("runAgent", () => {
       role: "assistant",
       content: [thinking, call],
     });
-  });
-
-  // Every markable message is marked. When a run is cut off mid-thinking, a
-  // message ends on a thinking block, which cannot carry cache_control, so that
-  // message must go out unmarked rather than 400.
-  it("sends no breakpoint on a message that ends mid-thinking", async () => {
-    const { model, requests } = recordingModel([
-      {
-        content: [
-          { type: "thinking", thinking: "", signature: "sig" },
-          { type: "tool_use", id: "toolu_1", name: "ping", input: {} },
-        ],
-        stopReason: "tool_use",
-      },
-      {
-        content: [{ type: "thinking", thinking: "", signature: "sig-2" }],
-        stopReason: "max_tokens",
-      },
-    ]);
-
-    await runAgent({
-      model,
-      system: "sys",
-      prompt: "q",
-      tools: pingTool(async () => "pong"),
-    });
-
-    // Nothing in either request carries a breakpoint on a thinking block.
-    for (const request of requests) {
-      for (const message of request.messages) {
-        if (!Array.isArray(message.content)) continue;
-        for (const block of message.content) {
-          if (block.type === "thinking" || block.type === "redacted_thinking")
-            expect(block).not.toHaveProperty("cache_control");
-        }
-      }
-    }
   });
 
   it("sums token counts across steps and reports them per step", async () => {

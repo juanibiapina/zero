@@ -94,14 +94,6 @@ export type ContentBlock =
   | ThinkingBlock
   | RedactedThinkingBlock;
 
-// Blocks that may carry a `cache_control` breakpoint. Thinking blocks may not:
-// Anthropic rejects a breakpoint on one (they are cached implicitly, with the
-// prefix around them).
-export const isCacheable = (
-  block: ContentBlock,
-): block is TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock =>
-  block.type !== "thinking" && block.type !== "redacted_thinking";
-
 export interface AgentMessage {
   role: "user" | "assistant";
   content: string | ContentBlock[];

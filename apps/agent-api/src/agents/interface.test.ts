@@ -12,7 +12,6 @@ import {
   renderPinnedTopics,
 } from "./prompts";
 import { capturingModel, scriptedModel } from "./mock-model";
-import { isCacheable } from "./protocol";
 import type { AgentMessage, ContentBlock, TextBlock } from "./protocol";
 import type { Topic } from "../store/types";
 import { MemoryStore } from "../store/memory";
@@ -233,14 +232,6 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
     return captured;
   };
 
-  // A message is marked when its last content block carries a breakpoint.
-  // Thinking blocks have no `cache_control` field at all, which is the point.
-  const cc = (m: AgentMessage | undefined) => {
-    if (!m || typeof m.content === "string") return undefined;
-    const last = m.content[m.content.length - 1];
-    return last && isCacheable(last) ? last.cache_control : undefined;
-  };
-
   it("puts the current time and timezone on the latest user message, not the system prompt", async () => {
     const { system, messages } = await capturePrompt({
       timezone: "America/Sao_Paulo",
@@ -253,32 +244,9 @@ describe("runInterfaceAgent prompt shape (caching)", () => {
     expect(lastUser).toContain("Your timezone is America/Sao_Paulo");
   });
 
-  it("caches the system prompt", async () => {
-    const { system } = await capturePrompt({});
-    expect(system?.[system.length - 1].cache_control).toEqual({
-      type: "ephemeral",
-    });
-  });
-
-  // The runner marks every markable message, so the turn's history is marked
-  // without the interface placing an anchor of its own. Assistant replies stay
-  // unmarked: only an input block can carry a breakpoint.
-  it("marks every input message in the conversation", async () => {
-    const { messages = [] } = await capturePrompt({
-      history: [
-        historyMessage("user", "q", iso(5 * 60_000)),
-        historyMessage("assistant", "a", iso(4 * 60_000)),
-      ],
-    });
-    expect(cc(messages[0])).toBeTruthy();
-    expect(cc(messages[1])).toBeFalsy();
-    expect(cc(messages[messages.length - 1])).toBeTruthy();
-  });
-
-  it("marks the single current message when history is empty", async () => {
+  it("sends the single current message when history is empty", async () => {
     const { messages = [] } = await capturePrompt({});
     expect(messages).toHaveLength(1);
-    expect(cc(messages[0])).toBeTruthy();
   });
 });
 

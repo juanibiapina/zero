@@ -23,7 +23,6 @@ import {
   type ToolResultContent,
   type ToolUseBlock,
 } from "./protocol";
-import { cachedSystem, markMessageBreakpoints } from "./cache";
 import { ExternalCallNotSent } from "./external-call";
 
 // Shared step cap for every agent. The cap is a runaway-loop guard, not an
@@ -109,12 +108,8 @@ export interface RunAgentInput {
   // want.
   externalCalls?: ExternalCallGuard;
   // Per-user system text appended after the static instructions (the interface
-  // agent's pinned topics). Kept separate so it can carry its own cache
-  // breakpoint instead of invalidating the cross-user prefix.
+  // agent's pinned topics). Kept as a separate block from the static head.
   systemTail?: string;
-  // Prompt caching on by default: the system blocks get a 1h cache breakpoint.
-  // Set false to opt out (tests that assert the plain shape).
-  cache?: boolean;
 }
 
 // Token counts and successful model-call count for one agent execution.
@@ -311,25 +306,22 @@ const runTool = async (
 export const runAgent = async (
   input: RunAgentInput,
 ): Promise<RunAgentResult> => {
-  const cache = input.cache ?? true;
   const tools = input.tools ?? {};
   const callerMessages: AgentMessage[] = input.messages ?? [
     { role: "user", content: input.prompt ?? "" },
   ];
 
-  // Cache order is tools -> system -> messages. The system head's breakpoint
-  // covers the tool schemas rendered before it (tools cannot carry one of their
-  // own) and is byte-identical across users; the optional per-user tail gets its
-  // own. Every markable message gets one too (below).
+  // The system region is the static instructions followed by the optional
+  // per-user tail (the interface agent's pinned topics). Prompt caching is the
+  // model adapter's job now (pi-ai keys it on a per-agent sessionId), so the
+  // runner no longer places breakpoints; it just assembles the content.
   const wireTools = toToolDefinitions(tools);
-  const system: TextBlock[] = cache
-    ? cachedSystem(input.system, input.systemTail ?? "")
-    : [
-        { type: "text", text: input.system },
-        ...(input.systemTail
-          ? [{ type: "text" as const, text: input.systemTail }]
-          : []),
-      ];
+  const system: TextBlock[] = [
+    { type: "text", text: input.system },
+    ...(input.systemTail
+      ? [{ type: "text" as const, text: input.systemTail }]
+      : []),
+  ];
 
   const messages: AgentMessage[] = [...callerMessages];
   const generated: AgentMessage[] = [];
@@ -355,15 +347,9 @@ export const runAgent = async (
 
   try {
     for (let step = 0; step < maxSteps; step++) {
-      // Snapshot: the loop keeps appending to `messages`, and the request must not
-    // mutate under the adapter after it is handed over. When caching is on, the
-    // snapshot carries a breakpoint on every markable message. That layout is a
-    // pure function of the array, so this step's prefix matches the previous
-    // step's byte for byte and is read back, leaving only the newly appended
-    // messages to write. The persisted `messages` array is never marked.
-    const requestMessages = cache
-      ? markMessageBreakpoints(messages)
-      : [...messages];
+      // Snapshot: the loop keeps appending to `messages`, and the request must
+    // not mutate under the adapter after it is handed over.
+    const requestMessages = [...messages];
     const response = await input.model.generate({
       system,
       messages: requestMessages,
