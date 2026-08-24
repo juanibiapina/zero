@@ -1,7 +1,8 @@
 // Mock OpenAI Responses API server.
-// Returns a canned non-streaming response in the shape the worker's OpenAI SDK
-// client posts to and parses, so the e2e suite exercises the real adapter and
-// the real wire translation without reaching the network.
+// Streams a canned Server-Sent-Events response in the shape the worker's LLM
+// layer (@earendil-works/pi-ai, which posts `stream: true`) parses, so the e2e
+// suite exercises the real adapter and the real wire translation without
+// reaching the network.
 
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
@@ -10,18 +11,30 @@ const CANNED_TEXT = "Hi there!";
 
 let responseCounter = 0;
 
-// A complete Response object, trimmed to the fields the worker reads. The
-// `output` array is what the adapter translates back into content blocks, and
-// `status: "completed"` with no function_call is what makes it a final answer.
-function buildResponse(text: string): Record<string, unknown> {
-  return {
-    id: `resp_test_${++responseCounter}`,
-    object: "response",
-    model: "gpt-5.6-luna",
-    status: "completed",
-    incomplete_details: null,
-    output: [
-      {
+// One SSE event: an `event:` line plus a `data:` JSON line, terminated by a
+// blank line, which is what the OpenAI SDK's stream parser reads.
+function sse(type: string, payload: Record<string, unknown>): string {
+  return `event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`;
+}
+
+// A minimal Responses stream that yields one final-answer text item. pi-ai needs
+// `response.created` (for the response id), `response.output_item.done` (the
+// message item, which it turns into a text block), and `response.completed`
+// (status + usage, which finalize stop reason and token counts).
+function buildStream(text: string): string {
+  const id = `resp_test_${++responseCounter}`;
+  const usage = {
+    input_tokens: 10,
+    output_tokens: 5,
+    input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+    output_tokens_details: { reasoning_tokens: 0 },
+    total_tokens: 15,
+  };
+  return (
+    sse("response.created", { response: { id } }) +
+    sse("response.output_item.done", {
+      output_index: 0,
+      item: {
         id: `msg_test_${responseCounter}`,
         type: "message",
         role: "assistant",
@@ -29,15 +42,11 @@ function buildResponse(text: string): Record<string, unknown> {
         phase: "final_answer",
         content: [{ type: "output_text", text, annotations: [] }],
       },
-    ],
-    usage: {
-      input_tokens: 10,
-      output_tokens: 5,
-      input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
-      output_tokens_details: { reasoning_tokens: 0 },
-      total_tokens: 15,
-    },
-  };
+    }) +
+    sse("response.completed", {
+      response: { id, status: "completed", incomplete_details: null, output: [], usage },
+    })
+  );
 }
 
 const app = new Hono();
@@ -77,7 +86,14 @@ app.post("/responses", (c) => {
       },
     );
   }
-  return c.json(buildResponse(CANNED_TEXT));
+  return new Response(buildStream(CANNED_TEXT), {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 });
 
 const PORT = Number(process.env.MOCK_OPENAI_PORT ?? 3502);

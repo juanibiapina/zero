@@ -115,6 +115,14 @@ export interface PiAdapterOptions {
 // pi-ai's `completeSimple` resolves with an assistant message carrying
 // `stopReason: "error"` instead of throwing; the runner and llm-error.ts expect
 // a thrown error with a `.status` (429/529 => rate limit). Rebuild that.
+// pi-ai puts the HTTP status in its error text (e.g. "... error (429): ..."), so
+// recover it when the response hook did not capture one; llm-error.ts keys the
+// rate-limit path off `.status`.
+const statusFromMessage = (message: string | undefined): number | undefined => {
+  const match = message?.match(/\((\d{3})\)/);
+  return match ? Number(match[1]) : undefined;
+};
+
 const llmError = (
   message: string | undefined,
   status: number | undefined,
@@ -122,7 +130,8 @@ const llmError = (
   const err = new Error(message ?? "LLM request failed") as Error & {
     status?: number;
   };
-  if (status !== undefined) err.status = status;
+  const resolved = status ?? statusFromMessage(message);
+  if (resolved !== undefined) err.status = resolved;
   return err;
 };
 
