@@ -33,6 +33,33 @@ locally (pnpm isolated installs keep them scoped to this app):
   the repo's eslint 10.
 - **TypeScript**: extends `expo/tsconfig.base`, not `@zero/typescript-config`.
 
+## Styling and UI
+
+The app styles with **NativeWind v4** (Tailwind for React Native), matching the
+web packages (`agent-web`, `dashboard-web`, `landing`), which use Tailwind +
+shadcn. You write `className="..."` on React Native components.
+
+- **Tailwind version**: NativeWind v4 pairs with **Tailwind CSS v3**, so this app
+  pins its own `tailwindcss@3` devDep, separate from the web packages on
+  Tailwind 4. NativeWind v5 (Tailwind 4) is still preview — do not adopt it here.
+- **Config files**: `babel.config.js` (NativeWind JSX runtime + preset),
+  `metro.config.js` (`withNativeWind`, CSS entry `./global.css`),
+  `tailwind.config.js` (design tokens live in `theme.extend`), `global.css`
+  (Tailwind directives, imported once in `src/app/_layout.tsx`),
+  `nativewind-env.d.ts` (types for `className` + the CSS side-effect import).
+- **pnpm note**: `react-native-css-interop` (NativeWind's engine) is listed as a
+  direct dependency so Metro can resolve it under pnpm's strict `node_modules`.
+  Without it, bundling fails with `Unable to resolve module
+  react-native-css-interop/jsx-runtime`.
+- **No native module**: NativeWind adds no native code, so changing styles never
+  needs an EAS rebuild — only `expo start --clear`.
+- **Components**: shared UI lives in `src/components/ui/` (e.g. `Button`,
+  `Text`), composed with the `cn()` helper in `src/lib/cn.ts` (clsx +
+  tailwind-merge), the same pattern as the web shadcn components.
+- **Verify a bundle without a device**: `pnpm exec expo export --platform android
+  --output-dir /tmp/x` compiles through Metro + Babel and surfaces NativeWind
+  wiring errors that typecheck alone misses.
+
 ## Authentication and environment
 
 The app signs in with **Clerk**, against the **same Clerk instance as the web

@@ -1,7 +1,9 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
 import { fetchUserSettings, type UserSettings } from '@/lib/api';
 
 export default function HomeScreen() {
@@ -25,53 +27,22 @@ export default function HomeScreen() {
   }, [getToken]);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Zero Agent</Text>
+    <View className="flex-1 items-center justify-center gap-4 px-6">
+      <Text variant="title">Zero Agent</Text>
       {settings ? (
-        <Text style={styles.status}>
+        <Text variant="subtitle">
           Signed in. Onboarding {settings.onboardingSeen ? 'done' : 'pending'}.
         </Text>
       ) : error ? (
-        <Text style={styles.error}>{error}</Text>
+        <Text variant="error">{error}</Text>
       ) : (
-        <Text style={styles.status}>Loading your account…</Text>
+        <Text variant="subtitle">Loading your account…</Text>
       )}
-      <Pressable style={styles.button} onPress={() => void signOut()}>
-        <Text style={styles.buttonText}>Sign out</Text>
-      </Pressable>
+      <Button
+        variant="secondary"
+        label="Sign out"
+        onPress={() => void signOut()}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  status: {
-    fontSize: 16,
-    color: '#444',
-  },
-  error: {
-    fontSize: 14,
-    color: '#b00020',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-  button: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: '#eee',
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-});

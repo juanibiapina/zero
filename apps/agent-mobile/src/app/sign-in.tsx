@@ -3,7 +3,10 @@ import * as AuthSession from 'expo-auth-session';
 import { Redirect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
+
+import { Button } from '@/components/ui/button';
+import { Text } from '@/components/ui/text';
 
 // Dismisses the web browser once the OAuth redirect completes.
 WebBrowser.maybeCompleteAuthSession();
@@ -70,67 +73,22 @@ export default function SignInScreen() {
   const e2e = process.env.EXPO_PUBLIC_E2E === '1';
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Zero Agent</Text>
-      <Text style={styles.subtitle}>Sign in with your Zero account.</Text>
-      <Pressable
-        style={[styles.button, busy && styles.buttonDisabled]}
+    <View className="flex-1 items-center justify-center gap-4 px-6">
+      <Text variant="title">Zero Agent</Text>
+      <Text variant="subtitle">Sign in with your Zero account.</Text>
+      <Button
+        label={busy ? 'Signing in…' : 'Continue with Google'}
         disabled={busy}
         onPress={() => void onSignInPress()}
-      >
-        <Text style={styles.buttonText}>
-          {busy ? 'Signing in…' : 'Continue with Google'}
-        </Text>
-      </Pressable>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      />
+      {error ? <Text variant="error">{error}</Text> : null}
       {e2e ? (
-        <Pressable style={styles.probeButton} onPress={() => void onProbePress()}>
-          <Text style={styles.buttonText}>Run redirect probe</Text>
-        </Pressable>
+        <Button
+          variant="secondary"
+          label="Run redirect probe"
+          onPress={() => void onProbePress()}
+        />
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#444',
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    backgroundColor: '#208AEF',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  probeButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: '#888',
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  error: {
-    fontSize: 14,
-    color: '#b00020',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-});
