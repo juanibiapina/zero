@@ -191,3 +191,14 @@ export const processedUpdates = table("processed_updates", {
   updateId: column.text().notNull().primaryKey(),
   createdAt: column.text().notNull(),
 });
+
+// Todos: the capture list for the parallel todo app (the Todoist replacement).
+// Deliberately standalone from the agent's tables and Store; it has its own
+// DbTodoStore. No done/scheduled-date/order columns yet — later increments add
+// them. `id` is a client-independent UUID; `createdAt` is the capture time and
+// the list order.
+export const todos = table("todos", {
+  id: column.text().notNull().primaryKey(),
+  text: column.text().notNull(),
+  createdAt: column.text().notNull(),
+});

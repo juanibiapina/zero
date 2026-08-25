@@ -37,3 +37,45 @@ export async function fetchUserSettings(
   }
   return (await res.json()) as UserSettings;
 }
+
+export type Todo = {
+  id: string;
+  text: string;
+  createdAt: string;
+};
+
+// The caller's open todo list, oldest first.
+export async function fetchTodos(
+  getToken: TokenGetter,
+  baseUrl: string = API_BASE_URL,
+): Promise<Todo[]> {
+  const res = await apiFetch(getToken, '/api/todos', {}, baseUrl);
+  if (!res.ok) {
+    throw new Error(`GET /api/todos failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { todos: Todo[] };
+  return body.todos;
+}
+
+// Capture a new todo; returns the created row (with its server id).
+export async function addTodo(
+  getToken: TokenGetter,
+  text: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Todo> {
+  const res = await apiFetch(
+    getToken,
+    '/api/todos',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/todos failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { todo: Todo };
+  return body.todo;
+}
