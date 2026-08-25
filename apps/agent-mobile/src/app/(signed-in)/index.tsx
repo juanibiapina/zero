@@ -13,6 +13,7 @@ export default function HomeScreen() {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -25,6 +26,8 @@ export default function HomeScreen() {
         }
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (active) setLoading(false);
       }
     })();
     return () => {
@@ -74,7 +77,9 @@ export default function HomeScreen() {
       {error ? <Text variant="error">{error}</Text> : null}
 
       <ScrollView className="flex-1">
-        {todos.length === 0 ? (
+        {loading ? (
+          <Text variant="subtitle">Loading your todos…</Text>
+        ) : todos.length === 0 ? (
           <Text variant="subtitle">No todos yet. Add one above.</Text>
         ) : (
           todos.map((item) => (

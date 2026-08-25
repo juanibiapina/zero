@@ -26,6 +26,31 @@ const todo = (id: string, text: string): Todo => ({
 });
 
 describe('HomeScreen', () => {
+  it('shows a loading state until the first fetch settles', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    let resolveFetch!: (todos: Todo[]) => void;
+    mockFetchTodos.mockReturnValue(
+      new Promise<Todo[]>((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    const { getByText, queryByText } = await render(<HomeScreen />);
+
+    // Fetch is still pending: loading shown, empty message NOT shown.
+    expect(getByText('Loading your todos…')).toBeTruthy();
+    expect(queryByText('No todos yet. Add one above.')).toBeNull();
+
+    await act(async () => {
+      resolveFetch([]);
+    });
+
+    await waitFor(() =>
+      expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
+    );
+    expect(queryByText('Loading your todos…')).toBeNull();
+  });
+
   it('shows the fetched todos', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTodos.mockResolvedValue([todo('1', 'buy milk')]);
