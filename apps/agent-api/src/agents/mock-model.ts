@@ -21,8 +21,7 @@ export type ScriptStep =
 let callCounter = 0;
 
 // Canned non-zero usage (with cache details) so tests can assert the token
-// counts flow through runAgent's result. No real caching happens here — the
-// mock ignores cache_control on the request.
+// counts flow through runAgent's result. No real caching happens here.
 export const MOCK_USAGE = {
   inputTokens: 20,
   outputTokens: 5,
@@ -86,8 +85,7 @@ export const scriptedModel = (steps: ScriptStep[]): AgentModel => {
 };
 
 // Build a model from a handler over the raw request. Use for request-shape
-// assertions (cache breakpoints, system text, tool schemas) and for failure
-// injection.
+// assertions (system text, tool schemas) and for failure injection.
 export const capturingModel = (
   handler: (
     request: AgentModelRequest,

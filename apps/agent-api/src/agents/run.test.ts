@@ -273,9 +273,6 @@ describe("runAgent", () => {
     // assembles the content.
     expect(requests[0].system).toEqual([{ type: "text", text: "sys" }]);
     expect(requests[0].tools.map((t) => t.name)).toEqual(["a", "b"]);
-    expect(requests[0].tools.every((t) => t.cache_control === undefined)).toBe(
-      true,
-    );
   });
 
   it("sends the per-user system tail as its own block", async () => {

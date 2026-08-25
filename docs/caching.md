@@ -85,7 +85,10 @@ cost down by the `agent` metadata tag.
   logs `cache_read_tokens` on its first step without a preceding write in that
   turn, because the shared prefix was already warm under the same `sessionId`.
 
-> Cache economics moved from Zero's byte-exact breakpoints to pi-ai's managed
-> policy at the migration. Watch the AI Gateway cost trend across the cutover for
-> a regression; `sessionId` preserves the OpenAI prefix key, so the shared-prefix
-> read should persist.
+> Cache placement is fully delegated to pi-ai; Zero deliberately owns no custom
+> cache machinery any more (the old hand-marked breakpoint scheme and its probe
+> were removed). Zero controls exactly two levers — the `sessionId` routing key
+> and `cacheRetention: 'long'` — and reads the token logs above to see the result.
+> Early production data shows the expected write-then-read accumulation (writes
+> shrink to the per-step delta while reads grow), so the automatic policy tracks
+> what the old hand-tuned one did.

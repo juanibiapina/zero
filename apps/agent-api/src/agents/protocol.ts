@@ -1,22 +1,15 @@
 // The agent protocol: the message, tool, and model shapes every agent speaks.
-// Deliberately Zero-owned and dependency-free — the runner (run.ts), the tools,
-// and the prompt-cache helpers depend on this module, never on an SDK. The
-// official Anthropic SDK is confined to the adapter in model.ts, which
-// translates these shapes to and from the wire.
+// Deliberately Zero-owned and dependency-free — the runner (run.ts) and the
+// tools depend on this module, never on an SDK. @earendil-works/pi-ai is
+// confined to the adapter in model-pi.ts, which translates these shapes to and
+// from the wire.
 //
-// The shapes mirror the Anthropic Messages wire format closely (snake_case
-// block fields, `cache_control` in place) because that is what the prompt cache
-// keys on: an intermediate representation would put a translation layer between
-// the code that decides what to cache and the bytes that get cached.
+// The shapes mirror the Anthropic Messages wire format closely (snake_case block
+// fields), which keeps the durable message format stable and provider-neutral.
+// Prompt caching is the model layer's job (pi-ai keys it on a per-agent
+// sessionId), so these blocks carry no cache-control markers.
 
 import { z } from "zod";
-
-export type CacheTtl = "5m" | "1h";
-
-export interface CacheControl {
-  type: "ephemeral";
-  ttl?: CacheTtl;
-}
 
 export interface TextBlock {
   type: "text";
@@ -25,13 +18,11 @@ export interface TextBlock {
   // commentary or its final answer. Recent models degrade when a replayed
   // assistant message loses its phase, so it is stored and sent back verbatim.
   phase?: "commentary" | "final_answer";
-  cache_control?: CacheControl;
 }
 
 export interface ImageBlock {
   type: "image";
   source: { type: "base64"; media_type: string; data: string };
-  cache_control?: CacheControl;
 }
 
 export interface ToolUseBlock {
@@ -39,7 +30,6 @@ export interface ToolUseBlock {
   id: string;
   name: string;
   input: unknown;
-  cache_control?: CacheControl;
 }
 
 // What a tool hands back to the model. A string is the common case; the block
@@ -51,14 +41,12 @@ export interface ToolResultBlock {
   tool_use_id: string;
   content: ToolResultContent;
   is_error?: boolean;
-  cache_control?: CacheControl;
 }
 
 // The model's reasoning, returned ahead of the text blocks when thinking is on.
 // `thinking` is empty when the provider omits the readable reasoning (what Zero
 // requests); the opaque part must be round-tripped unmodified or the API rejects
-// the request. Deliberately has no `cache_control`: a breakpoint on a reasoning
-// block is invalid.
+// the request.
 //
 // The two providers identify reasoning differently, and the fields are named
 // after each: `signature` is Anthropic's, while `id` + `encrypted_content` are
@@ -84,8 +72,8 @@ export interface RedactedThinkingBlock {
 // The blocks Zero produces or reads. Model responses may still contain types
 // Zero does not model (server tool use); those are round-tripped verbatim into
 // the next request rather than reserialized, so they need no type here.
-// Thinking is modelled because Zero has to *recognize* it: it must never carry a
-// cache breakpoint and must never be rendered as prose.
+// Thinking is modelled because Zero has to *recognize* it: it must never be
+// rendered as prose.
 export type ContentBlock =
   | TextBlock
   | ImageBlock
@@ -106,7 +94,6 @@ export interface AgentToolDefinition {
   name: string;
   description: string;
   input_schema: { type: "object" } & Record<string, unknown>;
-  cache_control?: CacheControl;
 }
 
 // Anthropic's stop reasons, verbatim. `null` is a real wire value.
@@ -121,8 +108,7 @@ export type StopReason =
   | "model_context_window_exceeded";
 
 // Token counts for one model call. `inputTokens` is the uncached, full-price
-// input; cache read/write are billed separately by Anthropic. See
-// docs/caching.md for how these validate each caching tier.
+// input; cache read/write are billed separately. See docs/caching.md.
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
@@ -145,8 +131,8 @@ export interface AgentRunUsage extends TokenUsage {
 }
 
 export interface AgentModelRequest {
-  // Top-level system blocks (text only), in order. The last one usually carries
-  // the 1h cache breakpoint.
+  // Top-level system blocks (text only), in order: the static head then the
+  // optional per-user tail.
   system: TextBlock[];
   messages: AgentMessage[];
   tools: AgentToolDefinition[];
