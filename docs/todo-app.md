@@ -157,10 +157,60 @@ acceptance criteria: matched by the ordered increments below
 #   inc 1 add + list todos ...... DONE  commit 82dc1e7 (works on phone)
 #   loading-state fix ........... DONE  commit c46319d (works on phone)
 #   UI: Todoist-style quick add . DONE  (branch ui-quick-add; device-verified)
+#   Upgrade mobile deps ......... TODO (do FIRST, unblocks Clerk Core 3; see note)
+#   UI: Clerk user button ....... TODO (after the dep upgrade; see note below)
 #   inc 2 mark done ............. after
 #   inc 3 scheduled date ........ todo
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
+#
+# TODO — Upgrade all mobile deps to latest (do this FIRST):
+#   - Goal: bring apps/agent-mobile up to the latest Expo SDK and latest of every
+#     dependency, so we build on current everything and unblock Clerk Core 3
+#     (needed for the native UserButton, see the next item).
+#   - Current baseline: Expo SDK 57 (RN 0.86, React 19.2), @clerk/clerk-expo
+#     2.19.31 (Core 2). expo start already nags "57.0.9 -> ~57.0.16" and "10
+#     other packages may need updating" (run `npx expo install --check`).
+#   - The big one is Clerk: @clerk/clerk-expo (Core 2) -> @clerk/expo (Core 3).
+#     That is a PACKAGE RENAME + a Core 2->3 upgrade (hybrid client/session token
+#     model, breaking API changes) that touches sign-in, useSSO / the
+#     sso-callback route, and the token cache (@clerk/expo/token-cache). Re-verify
+#     Google OAuth end-to-end on device after.
+#   - Method: prefer `npx expo install --check` / `expo install` so versions stay
+#     within the SDK's supported matrix, rather than blind "@latest" bumps that
+#     can outrun the RN/Expo peer ranges. Do a matching Expo SDK bump if a newer
+#     SDK is out. Read each package's changelog for breaking changes.
+#   - Native modules in play (react-native-keyboard-controller, safe-area-context,
+#     reanimated, gesture-handler, Clerk native) => this needs a NEW EAS
+#     dev-client build to test on device, like the keyboard-controller change.
+#   - Verify: pnpm --filter @zero/agent-mobile typecheck|lint|test, expo export,
+#     then a dev-client build + on-device smoke (sign in with Google, add a todo).
+#   - Ship as its own slice/PR BEFORE the Clerk user button, since the native
+#     UserButton depends on Core 3 landing here.
+#
+# TODO — UI: Clerk user button (AFTER the dep upgrade; replace "Sign out"):
+#   - Today the home header has a plain secondary "Sign out" Button. Replace it
+#     with a proper Clerk user control: the user's avatar that, when tapped,
+#     opens the Clerk account actions (manage account, sign out, etc.).
+#   - CORRECTION to an earlier note: Clerk's <UserButton> is NOT web-only. Clerk
+#     ships NATIVE components (AuthView, UserButton, UserProfileView) in
+#     @clerk/expo/native (Core 3, SwiftUI/Jetpack Compose, Beta as of 2026-08,
+#     needs Expo SDK 53+ and a dev build). Our OLD @clerk/clerk-expo 2.19.31
+#     (Core 2) has no ./native export, which is why the drop-in wasn't available
+#     -- the dep-upgrade step above (to @clerk/expo v3) unlocks it.
+#   - Option B (preferred once on Core 3): use <UserButton> from
+#     @clerk/expo/native. Size it via the parent's width/height/borderRadius/
+#     overflow; tapping opens the native UserProfileView (manage account,
+#     security, sign out) with almost no code -- exactly "the Clerk actions that
+#     come with it".
+#   - Option A (fallback, no migration): build a custom circle avatar from
+#     useUser() (imageUrl / initials) in a Pressable + a menu (reuse the
+#     quick-add backdrop card, or @gorhom/bottom-sheet); signOut() from
+#     useClerk(); "manage account" via expo-web-browser to the Clerk Account
+#     Portal or a custom screen. Kept only if we decide NOT to move to Core 3.
+#   - Avatar shape: circle (matches the "Person" entity avatar in the vision).
+#   - Sources: Clerk "Set up Clerk with Expo Router" article, Expo "Using Clerk"
+#     guide, clerk/clerk-expo-quickstart (@clerk/expo/native components).
 #
 # DONE — UI: Todoist-style quick add (branch ui-quick-add):
 #   - Replaced the top inline "Input + Add" row with a circular + FAB (new
