@@ -461,10 +461,14 @@ they hot-reload with no EAS build.
   Likely react-native-reanimated (already a dep) for the entrance/translate, kept
   in sync with the keyboard height (react-native-keyboard-controller already
   tracks it).
-- Add flow — confirm discard. Tapping outside the open quick-add (the backdrop)
-  when there is unsaved text should show a confirm popup ("Discard this todo?"
-  keep / discard), like Todoist, instead of silently clearing and closing. With
-  empty text it just closes (current behavior). Needs a small dialog/action-sheet.
+- Add flow — confirm discard. Any dismissal of the open quick-add while there is
+  unsaved text should show a confirm popup ("Discard this todo?" keep / discard),
+  like Todoist, instead of silently clearing and closing. Both dismissal paths
+  trigger it: tapping outside (the backdrop) AND pressing the Android hardware /
+  navigation back button while typing. With empty text it just closes (current
+  behavior). Needs a small dialog/action-sheet plus a back-handler
+  (BackHandler / navigation beforeRemove) that intercepts back while the bar is
+  open with text.
 - Done flow — fade out done items. Marking a todo done should fade/animate the row
   out (like Todoist) rather than removing it instantly. Today onDone does an
   optimistic hard remove. Add an exit animation (reanimated layout/exiting) before
