@@ -18,60 +18,53 @@ import Animated, {
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
-import { addTodo, fetchTodos, markTodoDone, type Todo } from '@/lib/api';
+import { type Todo } from '@/lib/api';
+import { useAddTodo, useMarkTodoDone, useTodos } from '@/lib/todos';
+
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export default function HomeScreen() {
   const { getToken } = useAuth();
-  const [todos, setTodos] = useState<Todo[]>([]);
+
+  // Server state via React Query: retry/backoff, refetch-on-reconnect and
+  // refetch-on-focus (AppState) come from the QueryClient; the resume-time
+  // "stuck error" is handled there, not by hand.
+  const todosQuery = useTodos(getToken);
+  const addMutation = useAddTodo(getToken);
+  const doneMutation = useMarkTodoDone(getToken);
+
+  const todos = todosQuery.data ?? [];
+  const loading = todosQuery.isPending;
+  const busy = addMutation.isPending;
+  // A mutation the user just triggered wins; otherwise show a load error only
+  // when there's nothing on screen, so a failed background refetch stays silent
+  // behind the last-good list.
+  const error = addMutation.error
+    ? messageOf(addMutation.error)
+    : doneMutation.error
+      ? messageOf(doneMutation.error)
+      : todos.length === 0 && todosQuery.error
+        ? messageOf(todosQuery.error)
+        : null;
+
   const [text, setText] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const list = await fetchTodos(getToken);
-        if (active) {
-          setTodos(list);
-          setError(null);
-        }
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [getToken]);
-
-  const onAdd = useCallback(async () => {
+  const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
       // Submitting an empty input closes the quick-add bar.
       setAdding(false);
       return;
     }
-    if (busy) return;
-    setBusy(true);
-    try {
-      const todo = await addTodo(getToken, trimmed);
-      setTodos((prev) => [...prev, todo]);
-      setText('');
-      setError(null);
-      // Keep the bar open and cleared for rapid, repeated capture.
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [text, busy, getToken]);
+    if (addMutation.isPending) return;
+    // Keep the bar open and cleared for rapid, repeated capture.
+    addMutation.mutate(trimmed, { onSuccess: () => setText('') });
+  }, [text, addMutation]);
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -131,18 +124,11 @@ export default function HomeScreen() {
   }, [adding, confirmingDiscard, text, closeAdd]);
 
   const onDone = useCallback(
-    async (item: Todo) => {
-      // Optimistic: drop it now, restore on failure.
-      setTodos((prev) => prev.filter((t) => t.id !== item.id));
-      try {
-        await markTodoDone(getToken, item.id);
-        setError(null);
-      } catch (err) {
-        setTodos((prev) => [...prev, item]);
-        setError(err instanceof Error ? err.message : String(err));
-      }
+    (item: Todo) => {
+      // Optimistic remove + rollback live in the mutation hook.
+      doneMutation.mutate(item.id);
     },
-    [getToken],
+    [doneMutation],
   );
 
   return (

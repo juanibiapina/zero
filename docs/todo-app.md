@@ -463,6 +463,34 @@ Fixes to make the capture + done flows feel like Todoist. Not planned yet;
 plan each before building. All mobile-only (apps/agent-mobile), pure JS, so
 they hot-reload with no EAS build.
 
+- [DONE] Bug — stuck "Unable to resolve host" on resume. Returning to the app
+  sometimes showed a permanent `java.net.UnknownHostException` for
+  `zero.juanibiapina.dev`, cleared only by a manual reload. INVESTIGATION ruled
+  out a real DNS outage (host resolves), `getToken` identity churn (Clerk
+  memoizes it on the stable client singleton, so `useEffect([getToken])` does not
+  re-fire on resume), any AppState/focus/interval refetch (none in `src`), and
+  StrictMode. Named cause class: a transient network failure at resume (Android
+  keeps the radio asleep in the background, so the first request after wake can
+  fail DNS once) hit the todos load, which set a permanent error with NO retry.
+  The exact resume-fetch trigger (warm refetch vs Android cold-killing and
+  remounting the process) was not pinned from the dev box; next probe is a build
+  that logs the load effect + AppState across a background/foreground cycle read
+  via `adb logcat`. FIX (best practice, chosen after research over a hand-rolled
+  retry loop, an AppState-only refresh, or hiding the banner): adopt **TanStack
+  Query (React Query)** for the todos server state instead of hand-rolled
+  `useEffect`/`useState` fetching. It brings retry+exponential-backoff,
+  refetch-on-reconnect, and refetch-on-focus — the documented React Native answer
+  to this exact "refetch at the right time" problem. Wiring: `@tanstack/react-
+  query` (pure JS, NO new EAS build); `QueryClientProvider` at the root;
+  `focusManager` bridged to RN `AppState` ('active' => refetch on foreground) in
+  `src/lib/query-client.ts`; the todos query + add/mark-done mutations (optimistic
+  done + rollback) in `src/lib/todos.ts`; the home screen consumes those hooks.
+  A load error now surfaces only when there's nothing to show, so a failed
+  background refetch stays silent behind the last-good list. DEFERRED: NetInfo ->
+  `onlineManager` for true "refetch the instant internet returns" (also covers
+  wifi dropping mid-use), which needs a native module + EAS build. Tests wrap the
+  screen in a QueryClient (retry off, gcTime 0). Pure JS, hot-reloads.
+
 - [DONE] Add flow — animate the quick-add input. The plus FAB and the quick-add
   bar now cross-fade as the bar opens/closes and the bar rises with the keyboard,
   replacing the instant swap. ARCHITECTURE (per "treat them individually,

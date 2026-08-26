@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { View } from 'react-native';
@@ -39,6 +40,24 @@ const todo = (id: string, text: string): Todo => ({
   doneAt: null,
 });
 
+// Render the screen inside a fresh QueryClient with retries off, so a rejected
+// query fails fast and deterministically instead of retrying with backoff.
+const renderScreen = () => {
+  const client = new QueryClient({
+    defaultOptions: {
+      // retry off = deterministic failures; gcTime 0 = no lingering gc timer
+      // that would keep jest from exiting.
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <HomeScreen />
+    </QueryClientProvider>,
+  );
+};
+
 describe('HomeScreen', () => {
   it('shows a loading state until the first fetch settles', async () => {
     mockGetToken.mockResolvedValue('tok');
@@ -49,7 +68,7 @@ describe('HomeScreen', () => {
       }),
     );
 
-    const { getByText, queryByText } = await render(<HomeScreen />);
+    const { getByText, queryByText } = await renderScreen();
 
     // Fetch is still pending: loading shown, empty message NOT shown.
     expect(getByText('Loading your todos…')).toBeTruthy();
@@ -69,17 +88,28 @@ describe('HomeScreen', () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTodos.mockResolvedValue([]);
 
-    const { getByLabelText, queryByText } = await render(<HomeScreen />);
+    const { getByLabelText, queryByText } = await renderScreen();
 
     expect(getByLabelText('Account')).toBeTruthy();
     expect(queryByText('Sign out')).toBeNull();
+  });
+
+  it('surfaces a load error when there is nothing to show', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockRejectedValue(new Error('java.net.UnknownHostException'));
+
+    const { getByText } = await renderScreen();
+
+    await waitFor(() =>
+      expect(getByText(/UnknownHostException/)).toBeTruthy(),
+    );
   });
 
   it('shows the fetched todos', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTodos.mockResolvedValue([todo('1', 'buy milk')]);
 
-    const { getByText } = await render(<HomeScreen />);
+    const { getByText } = await renderScreen();
 
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
   });
@@ -92,9 +122,7 @@ describe('HomeScreen', () => {
       doneAt: '2023-01-02T00:00:00.000Z',
     });
 
-    const { getByText, getByLabelText, queryByText } = await render(
-      <HomeScreen />,
-    );
+    const { getByText, getByLabelText, queryByText } = await renderScreen();
 
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
 
@@ -111,9 +139,7 @@ describe('HomeScreen', () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTodos.mockResolvedValue([]);
 
-    const { getByLabelText, queryByPlaceholderText } = await render(
-      <HomeScreen />,
-    );
+    const { getByLabelText, queryByPlaceholderText } = await renderScreen();
 
     await waitFor(() =>
       expect(queryByPlaceholderText('Add a todo')).toBeNull(),
@@ -131,9 +157,7 @@ describe('HomeScreen', () => {
     mockFetchTodos.mockResolvedValue([]);
     mockAddTodo.mockResolvedValue(todo('2', 'call mom'));
 
-    const { getByText, getByLabelText, getByPlaceholderText } = await render(
-      <HomeScreen />,
-    );
+    const { getByText, getByLabelText, getByPlaceholderText } = await renderScreen();
 
     // Let the initial (empty) load settle before typing, else it can clobber
     // the just-added item.
@@ -167,7 +191,7 @@ describe('HomeScreen', () => {
     mockFetchTodos.mockResolvedValue([]);
 
     const { getByLabelText, getByText, getByPlaceholderText, queryByText } =
-      await render(<HomeScreen />);
+      await renderScreen();
 
     await waitFor(() =>
       expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
@@ -202,7 +226,7 @@ describe('HomeScreen', () => {
     mockFetchTodos.mockResolvedValue([]);
 
     const { getByLabelText, getByText, getByPlaceholderText, queryByPlaceholderText } =
-      await render(<HomeScreen />);
+      await renderScreen();
 
     await waitFor(() =>
       expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
@@ -229,7 +253,7 @@ describe('HomeScreen', () => {
     mockFetchTodos.mockResolvedValue([]);
 
     const { getByLabelText, getByText, getByPlaceholderText, queryByPlaceholderText } =
-      await render(<HomeScreen />);
+      await renderScreen();
 
     await waitFor(() =>
       expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
@@ -254,9 +278,7 @@ describe('HomeScreen', () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTodos.mockResolvedValue([]);
 
-    const { getByLabelText, getByText, getByPlaceholderText } = await render(
-      <HomeScreen />,
-    );
+    const { getByLabelText, getByText, getByPlaceholderText } = await renderScreen();
 
     await waitFor(() =>
       expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
@@ -285,7 +307,7 @@ describe('HomeScreen', () => {
     mockFetchTodos.mockResolvedValue([]);
 
     const { getByLabelText, getByText, queryByText, queryByPlaceholderText } =
-      await render(<HomeScreen />);
+      await renderScreen();
 
     await waitFor(() =>
       expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
