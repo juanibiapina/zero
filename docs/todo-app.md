@@ -168,10 +168,17 @@ acceptance criteria: matched by the ordered increments below
 #   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
 #                                 Pixel 7 over USB; see note; waits for the device)
 #   do-orm isNull pre-step ...... DONE  do-orm 0.2.0 (8c77381); zero 007412b
-#   inc 2 mark done ............. DONE  (doneAt column + isNull open-list filter;
-#                                 POST /api/todos/{id}/done; leftside done circle
-#                                 per row, optimistic remove. agent-api 934 tests,
-#                                 mobile 21, expo bundles. NOT yet device-verified)
+#   inc 2 mark done ............. DONE  commit ec43e75 (doneAt column + isNull
+#                                 open-list filter; POST /api/todos/{id}/done;
+#                                 leftside done circle per row, optimistic remove.
+#                                 agent-api 934 tests, mobile 21, expo bundles.
+#                                 DEVICE-VERIFIED on the phone via Metro hot-reload
+#                                 over Tailscale, no new EAS build (pure JS change).
+#                                 Gotcha: styles rendered unstyled until Metro was
+#                                 restarted with --clear -- a stale bundler cache
+#                                 dropped the NativeWind transform, so rows showed
+#                                 as plain text with an invisible zero-size done
+#                                 circle. `expo start --dev-client --clear` fixed it.)
 #   inc 3 scheduled date ........ NEXT
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
