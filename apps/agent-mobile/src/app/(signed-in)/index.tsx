@@ -7,7 +7,7 @@ import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { Fab } from '@/components/ui/fab';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
-import { addTodo, fetchTodos, type Todo } from '@/lib/api';
+import { addTodo, fetchTodos, markTodoDone, type Todo } from '@/lib/api';
 
 export default function HomeScreen() {
   const { getToken } = useAuth();
@@ -65,6 +65,21 @@ export default function HomeScreen() {
     setAdding(false);
   }, []);
 
+  const onDone = useCallback(
+    async (item: Todo) => {
+      // Optimistic: drop it now, restore on failure.
+      setTodos((prev) => prev.filter((t) => t.id !== item.id));
+      try {
+        await markTodoDone(getToken, item.id);
+        setError(null);
+      } catch (err) {
+        setTodos((prev) => [...prev, item]);
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [getToken],
+  );
+
   return (
     <View className="flex-1 px-6 pt-16">
       <View className="mb-4 flex-row items-center justify-between">
@@ -84,8 +99,19 @@ export default function HomeScreen() {
           <Text variant="subtitle">No todos yet. Add one above.</Text>
         ) : (
           todos.map((item) => (
-            <View key={item.id} className="border-b border-neutral-200 py-3">
-              <Text>{item.text}</Text>
+            <View
+              key={item.id}
+              className="flex-row items-center gap-3 border-b border-neutral-200 py-3"
+            >
+              {/* Leftside done control: a tappable circle, matching the
+                  Person-avatar motif. Tap completes the item. */}
+              <Pressable
+                accessibilityLabel={`Mark "${item.text}" done`}
+                className="h-6 w-6 rounded-full border-2 border-neutral-400"
+                hitSlop={8}
+                onPress={() => void onDone(item)}
+              />
+              <Text className="flex-1">{item.text}</Text>
             </View>
           ))
         )}

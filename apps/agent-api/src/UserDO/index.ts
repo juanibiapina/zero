@@ -129,6 +129,10 @@ export class UserDO extends DurableObject<Env> {
     return this.todos.list();
   }
 
+  markTodoDone(id: string): Todo | null {
+    return this.todos.markDone(id);
+  }
+
   // --- Conversations and messages ---
 
   resetConversation(chatId: number, topicId: number): void {

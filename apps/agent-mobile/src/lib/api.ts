@@ -42,6 +42,8 @@ export type Todo = {
   id: string;
   text: string;
   createdAt: string;
+  // Null while open; an ISO timestamp once marked done.
+  doneAt: string | null;
 };
 
 // The caller's open todo list, oldest first.
@@ -75,6 +77,25 @@ export async function addTodo(
   );
   if (!res.ok) {
     throw new Error(`POST /api/todos failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { todo: Todo };
+  return body.todo;
+}
+
+// Mark a todo done; returns the updated row. The open list excludes it after.
+export async function markTodoDone(
+  getToken: TokenGetter,
+  id: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Todo> {
+  const res = await apiFetch(
+    getToken,
+    `/api/todos/${id}/done`,
+    { method: 'POST' },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/todos/${id}/done failed: ${res.status}`);
   }
   const body = (await res.json()) as { todo: Todo };
   return body.todo;

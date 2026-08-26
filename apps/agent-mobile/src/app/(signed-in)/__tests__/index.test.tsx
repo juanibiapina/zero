@@ -21,9 +21,13 @@ jest.mock('@clerk/expo/native', () => ({
 const mockFetchTodos = jest.fn<(getToken: unknown) => Promise<Todo[]>>();
 const mockAddTodo =
   jest.fn<(getToken: unknown, text: string) => Promise<Todo>>();
+const mockMarkTodoDone =
+  jest.fn<(getToken: unknown, id: string) => Promise<Todo>>();
 jest.mock('@/lib/api', () => ({
   fetchTodos: (getToken: unknown) => mockFetchTodos(getToken),
   addTodo: (getToken: unknown, text: string) => mockAddTodo(getToken, text),
+  markTodoDone: (getToken: unknown, id: string) =>
+    mockMarkTodoDone(getToken, id),
 }));
 
 import HomeScreen from '../index';
@@ -32,6 +36,7 @@ const todo = (id: string, text: string): Todo => ({
   id,
   text,
   createdAt: '2023-01-01T00:00:00.000Z',
+  doneAt: null,
 });
 
 describe('HomeScreen', () => {
@@ -77,6 +82,29 @@ describe('HomeScreen', () => {
     const { getByText } = await render(<HomeScreen />);
 
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+  });
+
+  it('marks a todo done, removing it from the list', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([todo('1', 'buy milk')]);
+    mockMarkTodoDone.mockResolvedValue({
+      ...todo('1', 'buy milk'),
+      doneAt: '2023-01-02T00:00:00.000Z',
+    });
+
+    const { getByText, getByLabelText, queryByText } = await render(
+      <HomeScreen />,
+    );
+
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Mark "buy milk" done'));
+    });
+
+    await waitFor(() => expect(queryByText('buy milk')).toBeNull());
+    expect(mockMarkTodoDone).toHaveBeenCalledTimes(1);
+    expect(mockMarkTodoDone.mock.calls[0][1]).toBe('1');
   });
 
   it('opens the quick-add input only after tapping the add button', async () => {

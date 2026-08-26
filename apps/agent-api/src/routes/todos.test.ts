@@ -15,12 +15,19 @@ const fakeUserDO = (seed: Todo[] = []) => {
         id: `id-${++n}`,
         text,
         createdAt: new Date(1700000000000 + n).toISOString(),
+        doneAt: null,
       };
       todos.push(todo);
       return todo;
     },
     listTodos(): Todo[] {
-      return todos;
+      return todos.filter((t) => t.doneAt === null);
+    },
+    markTodoDone(id: string): Todo | null {
+      const todo = todos.find((t) => t.id === id);
+      if (!todo) return null;
+      todo.doneAt = new Date(1700000000000).toISOString();
+      return todo;
     },
     _todos: todos,
   };
@@ -53,7 +60,12 @@ const buildApp = (env: Env, userId: string) => {
 describe("GET /api/todos", () => {
   it("returns the user's todos", async () => {
     const userDO = fakeUserDO([
-      { id: "id-1", text: "buy milk", createdAt: "2023-11-14T22:13:20.001Z" },
+      {
+        id: "id-1",
+        text: "buy milk",
+        createdAt: "2023-11-14T22:13:20.001Z",
+        doneAt: null,
+      },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
@@ -62,7 +74,12 @@ describe("GET /api/todos", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       todos: [
-        { id: "id-1", text: "buy milk", createdAt: "2023-11-14T22:13:20.001Z" },
+        {
+          id: "id-1",
+          text: "buy milk",
+          createdAt: "2023-11-14T22:13:20.001Z",
+          doneAt: null,
+        },
       ],
     });
   });
@@ -105,5 +122,51 @@ describe("POST /api/todos", () => {
 
     expect(res.status).toBe(400);
     expect(userDO._todos).toEqual([]);
+  });
+});
+
+describe("POST /api/todos/{id}/done", () => {
+  it("marks a todo done and returns it", async () => {
+    const userDO = fakeUserDO([
+      {
+        id: "id-1",
+        text: "buy milk",
+        createdAt: "2023-11-14T22:13:20.001Z",
+        doneAt: null,
+      },
+    ]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/todos/id-1/done", { method: "POST" });
+
+    expect(res.status).toBe(200);
+    const body: { todo: Todo } = await res.json();
+    expect(body.todo.id).toBe("id-1");
+    expect(body.todo.doneAt).toBeTruthy();
+  });
+
+  it("removes the done todo from a following list", async () => {
+    const userDO = fakeUserDO([
+      {
+        id: "id-1",
+        text: "buy milk",
+        createdAt: "2023-11-14T22:13:20.001Z",
+        doneAt: null,
+      },
+    ]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    await app.request("/api/todos/id-1/done", { method: "POST" });
+    const res = await app.request("/api/todos");
+
+    expect(await res.json()).toEqual({ todos: [] });
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+
+    const res = await app.request("/api/todos/nope/done", { method: "POST" });
+
+    expect(res.status).toBe(404);
   });
 });

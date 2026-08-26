@@ -17,6 +17,7 @@ const TodoSchema = z.object({
   id: z.string(),
   text: z.string(),
   createdAt: z.string(),
+  doneAt: z.string().nullable(),
 });
 
 export const createTodosRoutes = () => {
@@ -83,6 +84,42 @@ export const createTodosRoutes = () => {
     const todo = await userDO.addTodo(text);
     log("todo_added", { clerk_user_id: userId });
     return c.json({ todo }, 201);
+  });
+
+  const doneRoute = createRoute({
+    method: "post",
+    path: "/api/todos/{id}/done",
+    tags: ["Todos"],
+    summary: "Mark a todo done",
+    request: {
+      params: z.object({ id: z.string() }),
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: z.object({ todo: TodoSchema }) },
+        },
+        description: "The todo, now done",
+      },
+      404: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "No todo with that id",
+      },
+    },
+  });
+
+  router.openapi(doneRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const userDO = getUserDO(c.env, userId);
+    const todo = await userDO.markTodoDone(id);
+    if (!todo) {
+      return c.json({ error: "todo not found" }, 404);
+    }
+    log("todo_done", { clerk_user_id: userId });
+    return c.json({ todo }, 200);
   });
 
   return router;

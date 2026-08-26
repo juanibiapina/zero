@@ -201,4 +201,7 @@ export const todos = table("todos", {
   id: column.text().notNull().primaryKey(),
   text: column.text().notNull(),
   createdAt: column.text().notNull(),
+  // Completion timestamp. Null while open; set to an ISO time when marked done.
+  // The open list is the rows where doneAt IS NULL.
+  doneAt: column.text(),
 });

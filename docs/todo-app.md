@@ -168,9 +168,11 @@ acceptance criteria: matched by the ordered increments below
 #   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
 #                                 Pixel 7 over USB; see note; waits for the device)
 #   do-orm isNull pre-step ...... DONE  do-orm 0.2.0 (8c77381); zero 007412b
-#   inc 2 mark done ............. NEXT (plan below; do-orm pre-step DONE, so
-#                                 start at the migration/store steps)
-#   inc 3 scheduled date ........ todo
+#   inc 2 mark done ............. DONE  (doneAt column + isNull open-list filter;
+#                                 POST /api/todos/{id}/done; leftside done circle
+#                                 per row, optimistic remove. agent-api 934 tests,
+#                                 mobile 21, expo bundles. NOT yet device-verified)
+#   inc 3 scheduled date ........ NEXT
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
 #
@@ -429,7 +431,8 @@ build order (capture point):
   1. [DONE, on main, commit 82dc1e7] Walking skeleton: signed-in user adds a text
      item on mobile; it persists in agent-api (per-user store) and shows in a
      list. No done/dates/order yet. Verified on the phone.
-  2. Mark done: tap done -> vanishes from list, still stored.
+  2. [DONE] Mark done: tap the leftside circle -> vanishes from list, still
+     stored (doneAt timestamp; open list = doneAt IS NULL).
   3. Scheduled date + today view: optional show-up date on add; list shows
      scheduled<=today + undated; future-dated hidden until their day.
   4. Postpone to tomorrow: one-tap reschedule.

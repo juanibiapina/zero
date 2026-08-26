@@ -32,4 +32,31 @@ describe("DbTodoStore", () => {
   it("starts empty", () => {
     expect(makeStore().list()).toEqual([]);
   });
+
+  it("adds todos open (doneAt is null)", () => {
+    const store = makeStore();
+
+    const todo = store.add("open item");
+
+    expect(todo.doneAt).toBeNull();
+  });
+
+  it("drops a done todo from the list but keeps the others", () => {
+    const store = makeStore();
+    const first = store.add("first");
+    const second = store.add("second");
+
+    const done = store.markDone(first.id);
+
+    expect(done?.id).toBe(first.id);
+    expect(done?.doneAt).toBeTruthy();
+    expect(store.list()).toEqual([second]);
+  });
+
+  it("returns null when marking an unknown id done", () => {
+    const store = makeStore();
+    store.add("only");
+
+    expect(store.markDone("nope")).toBeNull();
+  });
 });

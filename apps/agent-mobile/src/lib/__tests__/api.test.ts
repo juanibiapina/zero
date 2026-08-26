@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
-import { addTodo, apiFetch, fetchTodos, type Todo } from '../api';
+import {
+  addTodo,
+  apiFetch,
+  fetchTodos,
+  markTodoDone,
+  type Todo,
+} from '../api';
 
 type TokenGetter = () => Promise<string | null>;
 
@@ -45,7 +51,12 @@ describe('fetchTodos', () => {
 
   it('GETs /api/todos and returns the list', async () => {
     const todos: Todo[] = [
-      { id: '1', text: 'buy milk', createdAt: '2023-01-01T00:00:00.000Z' },
+      {
+        id: '1',
+        text: 'buy milk',
+        createdAt: '2023-01-01T00:00:00.000Z',
+        doneAt: null,
+      },
     ];
     jest
       .spyOn(globalThis, 'fetch')
@@ -68,6 +79,7 @@ describe('addTodo', () => {
       id: '1',
       text: 'call mom',
       createdAt: '2023-01-01T00:00:00.000Z',
+      doneAt: null,
     };
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')
@@ -81,5 +93,33 @@ describe('addTodo', () => {
     expect(url).toBe('https://example.test/api/todos');
     expect(init.method).toBe('POST');
     expect(JSON.parse(String(init.body))).toEqual({ text: 'call mom' });
+  });
+});
+
+describe('markTodoDone', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('POSTs to /api/todos/{id}/done with the Bearer token', async () => {
+    const todo: Todo = {
+      id: 'abc',
+      text: 'buy milk',
+      createdAt: '2023-01-01T00:00:00.000Z',
+      doneAt: '2023-01-02T00:00:00.000Z',
+    };
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ todo }), { status: 200 }));
+    const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
+
+    const result = await markTodoDone(getToken, 'abc', 'https://example.test');
+
+    expect(result).toEqual(todo);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.test/api/todos/abc/done');
+    expect(init.method).toBe('POST');
+    const headers = new Headers(init.headers);
+    expect(headers.get('Authorization')).toBe('Bearer tok');
   });
 });
