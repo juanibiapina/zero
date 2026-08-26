@@ -167,7 +167,9 @@ acceptance criteria: matched by the ordered increments below
 #                                 sign-in regression, add-a-todo.
 #   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
 #                                 Pixel 7 over USB; see note; waits for the device)
-#   inc 2 mark done ............. NEXT (plan below: "Plan: increment 2")
+#   do-orm isNull pre-step ...... DONE  do-orm 0.2.0 (8c77381); zero 007412b
+#   inc 2 mark done ............. NEXT (plan below; do-orm pre-step DONE, so
+#                                 start at the migration/store steps)
 #   inc 3 scheduled date ........ todo
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
@@ -669,37 +671,33 @@ SQL. The real `db.ts` just concatenates a condition's `toSql().sql` fragment and
 spreads its params, so an `IS NULL` fragment with empty params is safe on real
 SQLite; only do-orm's in-memory mock matcher needs a new branch.
 
-### Pre-step: add `isNull` / `isNotNull` to do-orm
+### Pre-step: add `isNull` / `isNotNull` to do-orm — [DONE 2026-08-26]
 
-do-orm lives in its own repo (`juanibiapina/do-orm`); zero depends on it as an
-unpinned `github:juanibiapina/do-orm` spec whose commit hash is carried in
-`pnpm-lock.yaml`. This is a commit there, then a version bump here. Add both
-`isNull` and `isNotNull` (isNotNull is cheap and rounds out the primitive even
-though this increment only needs isNull).
+DONE. do-orm `0.2.0` (repo `juanibiapina/do-orm`, commit `8c77381`, tag
+`v0.2.0`) exports `isNull(column)` / `isNotNull(column)`, emitting `"col" IS
+NULL` / `IS NOT NULL` with no bindings. zero re-pinned to that commit in
+`pnpm-lock.yaml` (both workspace entries) via `pnpm update do-orm` +
+`pnpm install`, committed `007412b` and pushed to `main`. `@zero/agent-api`
+typecheck confirms the export resolves; no agent-api code uses it yet.
 
-In `juanibiapina/do-orm` (clone via the workspace skill):
-1. `src/conditions.ts`: add a `NullCondition` class whose `toSql()` returns
-   `{ sql: `"${col}" IS NULL`, params: [] }` (and the `IS NOT NULL` variant),
-   plus exported `isNull(column)` and `isNotNull(column)`. Export both from
-   `src/index.ts`.
-2. `src/test-utils.ts`: extend the WHERE matcher. It currently only scans
-   `"(\w+)" (=|!=|<=|>=|<|>) \?` and advances a param index per match; add a
-   branch matching `"(\w+)" IS NULL` / `"(\w+)" IS NOT NULL` (no `?`, consumes no
-   binding) that checks `row[col] == null` / `!= null`. Keep param-index
-   bookkeeping correct so a mixed `and(eq(...), isNull(...))` still aligns.
-3. Tests in do-orm: `isNull`/`isNotNull` in a `where` select against mock storage
-   return the right rows; a mixed `and(eq(...), isNull(...))` keeps param
-   alignment.
-4. Run do-orm's own checks, commit, push to its default branch.
+What shipped in do-orm (for history):
+- `src/conditions.ts`: `NullCondition` class (`toSql()` -> `{ sql: '"col" IS
+  NULL', params: [] }`, plus the `IS NOT NULL` variant) + exported
+  `isNull`/`isNotNull`; re-exported from `src/index.ts`.
+- `src/test-utils.ts`: the mock WHERE matcher gained an `IS (NOT )?NULL` branch
+  that consumes no param binding, so a mixed `and(eq(...), isNull(...))` keeps
+  param alignment (the null check runs before the `"col" op ?` scan and never
+  advances the param index).
+- Tests (`src/db.test.ts`): isNull, isNotNull, and mixed-alignment — 60 pass
+  (was 57), typecheck clean. README Conditions table + usage, new `CHANGELOG.md`,
+  version 0.1.0 -> 0.2.0.
 
-In `juanibiapina/zero`:
-5. `pnpm update do-orm` to re-resolve the github spec to the new HEAD commit
-   (updates the pinned tarball hash in `pnpm-lock.yaml` for both workspace
-   entries). Confirm the new `isNull` export resolves from `apps/agent-api`.
+Gotcha confirmed while building: `eq("doneAt", null)` emits `"doneAt" = ?`, which
+never matches in SQLite — that is exactly why `isNull` was needed. The JS-filter
+fallback is now moot.
 
-Fallback if the do-orm change stalls: keep `list()` filtering `doneAt === null`
-in JS (short list, acceptable). The pre-step is the preferred path (correct
-primitive; requested).
+Remaining increment-2 backend/mobile work below can call `isNull("doneAt")`
+directly.
 
 ### Backend (apps/agent-api)
 
@@ -777,8 +775,8 @@ primitive; requested).
 
 ### Acceptance criteria
 
-- do-orm exports `isNull` + `isNotNull`; real + mock storage honor them; zero
-  pins the new commit.
+- [DONE] do-orm exports `isNull` + `isNotNull`; real + mock storage honor them;
+  zero pins the new commit (do-orm 0.2.0 / `8c77381`; zero `007412b`).
 - `POST /api/todos/{id}/done` sets `doneAt` and returns the todo; unknown id ->
   404.
 - `GET /api/todos` excludes done todos; done rows stay in the DB.
@@ -790,8 +788,8 @@ primitive; requested).
 - Done control shape: leftside tappable circle per row (alt was swipe).
 - One-way only this increment (no un-done); the `doneAt` timestamp leaves the
   door open for undo/completed views later with no further migration.
-- do-orm bump via `pnpm update do-orm` against HEAD of its default branch (spec
-  is unpinned; the lockfile carries the hash).
+- [DONE] do-orm bump via `pnpm update do-orm` against HEAD of its default branch
+  (spec is unpinned; the lockfile carries the hash). Landed as 0.2.0.
 
 ---
 
