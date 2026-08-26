@@ -2,6 +2,7 @@ import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { Stack } from 'expo-router';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 
@@ -24,6 +25,9 @@ export default function RootLayout() {
       tokenCache={tokenCache}
     >
       <KeyboardProvider>
+        {/* Honor the OS "reduce motion" setting: disable animations when the
+            user asks, keep them otherwise. */}
+        <ReducedMotionConfig mode={ReduceMotion.System} />
         <Stack screenOptions={{ headerShown: false }} />
       </KeyboardProvider>
     </ClerkProvider>

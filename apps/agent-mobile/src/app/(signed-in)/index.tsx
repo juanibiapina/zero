@@ -12,6 +12,11 @@ import {
   KeyboardEvents,
   KeyboardStickyView,
 } from 'react-native-keyboard-controller';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+} from 'react-native-reanimated';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
@@ -158,8 +163,14 @@ export default function HomeScreen() {
           <Text variant="subtitle">No todos yet. Add one above.</Text>
         ) : (
           todos.map((item) => (
-            <View
+            // Animated row: marking done fades + collapses it out (exiting) and
+            // the rows below slide up (layout); an error re-insert fades back in
+            // (entering). onDone keeps its optimistic-remove contract.
+            <Animated.View
               key={item.id}
+              entering={FadeIn.duration(150)}
+              exiting={FadeOut.duration(200)}
+              layout={LinearTransition.duration(200)}
               className="flex-row items-center gap-3 border-b border-neutral-200 py-3"
             >
               {/* Leftside done control: a tappable circle, matching the
@@ -171,7 +182,7 @@ export default function HomeScreen() {
                 onPress={() => void onDone(item)}
               />
               <Text className="flex-1">{item.text}</Text>
-            </View>
+            </Animated.View>
           ))
         )}
       </ScrollView>

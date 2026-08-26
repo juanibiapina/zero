@@ -9,5 +9,9 @@ module.exports = function (api) {
       ['babel-preset-expo', { jsxImportSource: 'nativewind' }],
       'nativewind/babel',
     ],
+    // Reanimated 4 runs animated styles / layout animations through worklets,
+    // which this plugin compiles. It must be listed last. Renamed from
+    // `react-native-reanimated/plugin` in v4.
+    plugins: ['react-native-worklets/plugin'],
   };
 };
