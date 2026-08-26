@@ -167,7 +167,7 @@ acceptance criteria: matched by the ordered increments below
 #                                 sign-in regression, add-a-todo.
 #   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
 #                                 Pixel 7 over USB; see note; waits for the device)
-#   inc 2 mark done ............. NEXT
+#   inc 2 mark done ............. NEXT (plan below: "Plan: increment 2")
 #   inc 3 scheduled date ........ todo
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
@@ -648,6 +648,153 @@ Open decision to confirm before building:
   and todos land in the same production UserDO as the agent. Acceptable given
   the "additive in the same DO" decision; flag if you'd rather point the app at
   a separate/staging URL.
+## Plan: increment 2 — mark a todo done (with a do-orm pre-step)
+
+Self-contained plan for a fresh agent. Assume only this doc.
+
+Goal: a signed-in user taps a done control on a todo; it vanishes from the list
+instantly but stays stored. Matches the spec rule "Mark an item done -> vanishes
+from the list instantly (still stored)".
+
+Data model: add a nullable `doneAt TEXT` column to `todos` (ISO timestamp).
+`null` = open, a timestamp = done. Chosen over a boolean `done` flag so *when* it
+was completed is kept for free, which later increments (history, triage into
+Projects, an undo / "completed today" view) will want. The open list = rows where
+`doneAt IS NULL`.
+
+do-orm gotcha (verified): do-orm has no null-comparison builder, and
+`eq("doneAt", null)` emits `"doneAt" = ?`, which is never true in SQLite. So the
+pre-step adds real `IS NULL` support to do-orm and `list()` filters open todos in
+SQL. The real `db.ts` just concatenates a condition's `toSql().sql` fragment and
+spreads its params, so an `IS NULL` fragment with empty params is safe on real
+SQLite; only do-orm's in-memory mock matcher needs a new branch.
+
+### Pre-step: add `isNull` / `isNotNull` to do-orm
+
+do-orm lives in its own repo (`juanibiapina/do-orm`); zero depends on it as an
+unpinned `github:juanibiapina/do-orm` spec whose commit hash is carried in
+`pnpm-lock.yaml`. This is a commit there, then a version bump here. Add both
+`isNull` and `isNotNull` (isNotNull is cheap and rounds out the primitive even
+though this increment only needs isNull).
+
+In `juanibiapina/do-orm` (clone via the workspace skill):
+1. `src/conditions.ts`: add a `NullCondition` class whose `toSql()` returns
+   `{ sql: `"${col}" IS NULL`, params: [] }` (and the `IS NOT NULL` variant),
+   plus exported `isNull(column)` and `isNotNull(column)`. Export both from
+   `src/index.ts`.
+2. `src/test-utils.ts`: extend the WHERE matcher. It currently only scans
+   `"(\w+)" (=|!=|<=|>=|<|>) \?` and advances a param index per match; add a
+   branch matching `"(\w+)" IS NULL` / `"(\w+)" IS NOT NULL` (no `?`, consumes no
+   binding) that checks `row[col] == null` / `!= null`. Keep param-index
+   bookkeeping correct so a mixed `and(eq(...), isNull(...))` still aligns.
+3. Tests in do-orm: `isNull`/`isNotNull` in a `where` select against mock storage
+   return the right rows; a mixed `and(eq(...), isNull(...))` keeps param
+   alignment.
+4. Run do-orm's own checks, commit, push to its default branch.
+
+In `juanibiapina/zero`:
+5. `pnpm update do-orm` to re-resolve the github spec to the new HEAD commit
+   (updates the pinned tarball hash in `pnpm-lock.yaml` for both workspace
+   entries). Confirm the new `isNull` export resolves from `apps/agent-api`.
+
+Fallback if the do-orm change stalls: keep `list()` filtering `doneAt === null`
+in JS (short list, acceptable). The pre-step is the preferred path (correct
+primitive; requested).
+
+### Backend (apps/agent-api)
+
+6. Migration `db/migrations/0038_todo_done.sql`:
+   `ALTER TABLE "todos" ADD COLUMN "doneAt" TEXT;`. Register `m0038` in
+   `db/migrations.ts` (import + add to the `migrations` object). Auto-applies on
+   next DO wake.
+7. `UserDO/db/schema.ts`: add `doneAt: column.text()` (nullable) to `todos`.
+8. `store/todos.ts`:
+   - Extend `Todo` with `doneAt: string | null`.
+   - `add`: set `doneAt: null` explicitly in the inserted object (do not rely on
+     omitted-column insert behavior).
+   - `list()`:
+     `this.db.all(todos, { where: isNull("doneAt"), orderBy: asc("createdAt") })`.
+   - `markDone(id): Todo | null`: `db.update(todos, { doneAt:
+     new Date().toISOString() }, { where: eq("id", id) })`, return the updated row
+     or `null` when no row has that id.
+9. `UserDO/index.ts`: RPC `markTodoDone(id: string): Todo | null` delegating to
+   the store.
+10. `routes/todos.ts`: `POST /api/todos/{id}/done` -> `200 { todo }`, `404
+    { error }` for unknown id. Add `doneAt: z.string().nullable()` to
+    `TodoSchema`. Log `todo_done`.
+
+### Mobile (apps/agent-mobile)
+
+11. `src/lib/api.ts`: add `doneAt: string | null` to `Todo`;
+    `markTodoDone(getToken, id, baseUrl?)` -> `POST /api/todos/{id}/done`.
+12. `src/app/(signed-in)/index.tsx`: a leftside circular done control per row
+    (`Pressable`, bordered `rounded-full`, matching the Person-circle motif),
+    `accessibilityLabel={`Mark "${item.text}" done`}`. On tap: optimistic remove
+    from `todos`, call `markTodoDone`; on error re-insert the item and show
+    `error`. No un-done this increment (not in spec).
+
+### Tests (TDD)
+
+- do-orm: the `isNull`/`isNotNull` tests above.
+- store `store/todos.test.ts`: `markDone` on the first of two -> `list()` returns
+  only the second; the returned todo has a non-null `doneAt`; `markDone("nope")`
+  -> `null`.
+- route `routes/todos.test.ts`: extend the fake UserDO with `markTodoDone`;
+  `POST .../done` -> 200 + todo, a following `GET` excludes it, unknown id ->
+  404. Update existing `Todo` fixtures in this file for the new `doneAt` field.
+- mobile api `src/lib/__tests__/api.test.ts`: `markTodoDone` hits
+  `POST /api/todos/{id}/done` with the Bearer token.
+- mobile screen `(signed-in)/__tests__/index.test.tsx`: seed a list, tap done on
+  one -> it disappears and `markTodoDone` was called. Use the
+  `await act(async () => { fireEvent... })` wrapper (async onPress; increment-1
+  learning).
+
+### Docs / changelog
+
+- User-facing bullet in `apps/agent-api/CHANGELOG.md`: you can now mark a todo
+  done and it leaves the list.
+- Update the PROGRESS block + build order above: `inc 2 mark done` -> DONE with
+  the commit, `inc 3 scheduled date` -> NEXT. Note the do-orm `isNull` addition.
+
+### Verification (this box: no workerd, no emulator)
+
+- do-orm: its own `pnpm test|typecheck` in the clone.
+- `pnpm --filter @zero/agent-api test|typecheck|lint`.
+- `pnpm --filter @zero/agent-mobile test|typecheck|lint` + `expo export
+  --platform android`.
+- Device: land backend on `main` first (the phone hits the deployed worker; no
+  local worker here), then tap done -> item vanishes -> relaunch -> still gone.
+
+### Skills to use
+
+- workspace — cloning/editing the do-orm repo.
+- development-guidelines — throughout.
+- tdd — do-orm conditions, store `markDone`, route, mobile api, screen;
+  test-first.
+- typescript-strict — the nullable `doneAt` threading.
+- react-testing / front-end-testing — the screen test.
+- changelog — the entry. git-commit — commits (two repos). open-pr — if PRs.
+
+### Acceptance criteria
+
+- do-orm exports `isNull` + `isNotNull`; real + mock storage honor them; zero
+  pins the new commit.
+- `POST /api/todos/{id}/done` sets `doneAt` and returns the todo; unknown id ->
+  404.
+- `GET /api/todos` excludes done todos; done rows stay in the DB.
+- On the phone: tap done -> item leaves instantly; relaunch -> still gone.
+- All checks green across do-orm, agent-api, mobile; `expo export` bundles.
+
+### Decisions locked
+
+- Done control shape: leftside tappable circle per row (alt was swipe).
+- One-way only this increment (no un-done); the `doneAt` timestamp leaves the
+  door open for undo/completed views later with no further migration.
+- do-orm bump via `pnpm update do-orm` against HEAD of its default branch (spec
+  is unpinned; the lockfile carries the hash).
+
+---
+
 candidate terms:
   - Entity-as-block: each entity type must define its interactions with all app systems
   - Slot: a capacity limit on active projects, possibly a teaching mechanic
