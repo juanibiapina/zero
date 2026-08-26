@@ -498,8 +498,13 @@ they hot-reload with no EAS build.
   (existing) and `QuickAddBar` (`src/components/quick-add-bar.tsx`, input + Add
   button, no animation/keyboard logic) — plus a decoupled transition layer
   `QuickAdd` (`src/components/quick-add.tsx`) that owns ONLY the motion (cross-
-  fade the two, keyboard-follow via `useReanimatedKeyboardAnimation` whose height
-  is negative-on-open so it maps straight to translateY) and the backdrop. The
+  fade the two + keyboard-follow) and the backdrop. KEYBOARD-FOLLOW FIX
+  (device-found): the first cut hand-rolled `translateY: useReanimatedKeyboard
+  Animation().height`, which misaligned on Android edge-to-edge and left the bar/
+  plus floating up where the keyboard had been when it dismissed — the exact trap
+  the increment already knew about. Reverted to wrapping the open bar in
+  `KeyboardStickyView` (tracks the keyboard + handles insets); the collapsed FAB
+  is a separate absolute bottom-right view. The
   home screen owns state (adding/text/discard) and passes handlers down; the
   elements know nothing about the animation. RESEARCH: Todoist Android's quick-add
   is a bottom sheet off the FAB = Material's container-transform pattern (300ms,
