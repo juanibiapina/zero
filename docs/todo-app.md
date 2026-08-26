@@ -157,36 +157,85 @@ acceptance criteria: matched by the ordered increments below
 #   inc 1 add + list todos ...... DONE  commit 82dc1e7 (works on phone)
 #   loading-state fix ........... DONE  commit c46319d (works on phone)
 #   UI: Todoist-style quick add . DONE  (branch ui-quick-add; device-verified)
-#   Upgrade mobile deps ......... TODO (do FIRST, unblocks Clerk Core 3; see note)
-#   UI: Clerk user button ....... TODO (after the dep upgrade; see note below)
+#   Upgrade mobile deps ......... DONE code+checks (branch upgrade-mobile-deps);
+#                                 needs a new EAS dev build + on-device OAuth smoke
+#   UI: Clerk user button ....... TODO (unblocked: @clerk/expo/native now available)
+#   Agent-driven mobile verify .. TODO (dev-infra; see note; do before/with inc 2)
 #   inc 2 mark done ............. after
 #   inc 3 scheduled date ........ todo
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
 #
-# TODO — Upgrade all mobile deps to latest (do this FIRST):
-#   - Goal: bring apps/agent-mobile up to the latest Expo SDK and latest of every
-#     dependency, so we build on current everything and unblock Clerk Core 3
-#     (needed for the native UserButton, see the next item).
-#   - Current baseline: Expo SDK 57 (RN 0.86, React 19.2), @clerk/clerk-expo
-#     2.19.31 (Core 2). expo start already nags "57.0.9 -> ~57.0.16" and "10
-#     other packages may need updating" (run `npx expo install --check`).
-#   - The big one is Clerk: @clerk/clerk-expo (Core 2) -> @clerk/expo (Core 3).
-#     That is a PACKAGE RENAME + a Core 2->3 upgrade (hybrid client/session token
-#     model, breaking API changes) that touches sign-in, useSSO / the
-#     sso-callback route, and the token cache (@clerk/expo/token-cache). Re-verify
-#     Google OAuth end-to-end on device after.
-#   - Method: prefer `npx expo install --check` / `expo install` so versions stay
-#     within the SDK's supported matrix, rather than blind "@latest" bumps that
-#     can outrun the RN/Expo peer ranges. Do a matching Expo SDK bump if a newer
-#     SDK is out. Read each package's changelog for breaking changes.
-#   - Native modules in play (react-native-keyboard-controller, safe-area-context,
-#     reanimated, gesture-handler, Clerk native) => this needs a NEW EAS
-#     dev-client build to test on device, like the keyboard-controller change.
-#   - Verify: pnpm --filter @zero/agent-mobile typecheck|lint|test, expo export,
-#     then a dev-client build + on-device smoke (sign in with Google, add a todo).
-#   - Ship as its own slice/PR BEFORE the Clerk user button, since the native
-#     UserButton depends on Core 3 landing here.
+# DONE — Upgrade all mobile deps + Clerk Core 3 (branch upgrade-mobile-deps):
+#   - Expo stayed on SDK 57 (57.0.16 is the latest SDK; no newer one exists), so
+#     this was within-matrix patch bumps via `expo install`, not an SDK jump.
+#     `expo install --check` bumped 11 packages (expo, expo-router, expo-image,
+#     jest-expo, etc.); RN stayed 0.86 (do NOT bump to 0.87 -- outside SDK 57).
+#   - Clerk: @clerk/clerk-expo@2.20.0 (DEPRECATED) -> @clerk/expo@^4.6.0. NOTE:
+#     the successor package is v4, NOT "v3" -- "Core 3" is Clerk's internal core
+#     version, not the npm semver. This was the earlier note's mistake.
+#   - Surface touched: swapped the import in _layout.tsx (+ token-cache path
+#     @clerk/expo/token-cache), sign-in.tsx, both (signed-in) files, api.ts
+#     comment, and the two jest.mock('@clerk/clerk-expo') strings -> '@clerk/expo'.
+#     Ran `pnpm dlx @clerk/upgrade` guidance but the edits were small enough to do
+#     by hand.
+#   - Core 3 gotcha hit: ClerkProvider's `publishableKey` is now a REQUIRED
+#     string. A module-level `if (!KEY) throw` does NOT narrow the JSX usage, so
+#     tsc failed; fixed by narrowing inside RootLayout (local const + throw).
+#   - Our Google OAuth uses `useSSO({ strategy: 'oauth_google' })` (Custom Tab +
+#     sso-callback deep link), NOT the native `useSignInWithGoogle`, so Core 3's
+#     "native Google sign-in moved to @clerk/expo-google-signin" does NOT apply:
+#     no new package, no new config plugin. Base @clerk/expo needs no app.json
+#     plugin either.
+#   - Other Core 3 behavior change to remember (not exercised now): getToken()
+#     throws ClerkOfflineError when offline (was null); still returns null when
+#     signed out. Wrap with ClerkOfflineError.is(err) from @clerk/expo/errors if
+#     offline resilience is ever wanted.
+#   - Checks green: typecheck, lint (0 errors), 18 tests, expo export bundles.
+#   - STILL PENDING: a NEW EAS dev-client build (native Clerk + bumped native
+#     Expo modules) + on-device smoke (sign in with Google end-to-end, add a
+#     todo, relaunch persists). Not runnable on this box (no emulator).
+#
+# TODO — Agent-driven mobile verification (dev-infra, HIGH priority):
+#   - PROBLEM: today the only way the agent proves a mobile change runs is to cut
+#     an EAS APK and have the human install + click it. Feedback loop is far too
+#     slow, and broken builds reach the human. We want the AGENT to bring the app
+#     up, SEE it render, and INTERACT with the specific feature it added, via a
+#     few simple commands, on THIS dev box. The human still gets an APK to eyeball
+#     the real thing -- but should stop receiving broken versions.
+#   - GOAL (acceptance): a documented one-liner (e.g. `bin/mobile-verify` or a
+#     turbo/pnpm script) that boots the app headless, drives a scripted flow
+#     (open app -> reach the feature -> tap/type -> assert something visible), and
+#     leaves a SCREENSHOT + pass/fail the agent can read without a phone. Must run
+#     on this NixOS box (no KVM, no local Android emulator, workerd can't run).
+#   - AUTH: the flow needs to get past Clerk sign-in. Support BOTH: (a) a bypass/
+#     mocked-auth mode for fast feature checks (a fake session / test JWT, or an
+#     EXPO_PUBLIC_E2E flag that stubs useAuth -- note sign-in.tsx already has an
+#     EXPO_PUBLIC_E2E probe branch), and (b) an occasional REAL Google login path
+#     for auth-touching changes. Real OAuth needs a browser + Google account, so
+#     it likely stays manual/CI, while the bypass path is the agent's default.
+#   - CONSTRAINTS / what exists:
+#     * No local emulator here. Options to evaluate: (1) render the app on the WEB
+#       target (`expo start --web`, react-native-web is already a dep) and drive
+#       it with the `browse` skill (Chrome CLI screenshots) -- fastest, but native
+#       modules (react-native-keyboard-controller, Clerk native, expo-glass) may
+#       not run on web and need mocking/guards; (2) a cloud/CI emulator the agent
+#       triggers and reads artifacts from -- the Mobile E2E workflow already boots
+#       an emulator + Maestro and uploads screenshot/logcat/ui.xml, so extending
+#       those Maestro flows per feature is the lowest-new-infra path, but it runs
+#       in GitHub Actions, not locally (slower loop); (3) a hosted device farm.
+#     * Metro runs locally ONLY with EXPO_UNSTABLE_HEADLESS=1 on this box (the CLI
+#       otherwise crashes installing the React Native DevTools binary: "NixOS
+#       cannot run dynamically linked executables", exit 127). Whatever harness we
+#       pick must set that flag.
+#     * Keep the APK path (EAS preview/dev build) for human visual verification;
+#       this task is ADDITIVE -- a fast agent loop, not a replacement.
+#   - DELIVERABLE OF THE SETUP TASK: pick one primary approach (lean toward the
+#     web-target + browse-skill loop for speed, with Maestro/CI as the on-device
+#     backstop), wire the auth bypass, add the one-liner + a README section, and
+#     prove it by having the agent verify an existing feature (add-a-todo) end to
+#     end with a screenshot. After this lands, EVERY mobile-touching task must run
+#     it and paste the screenshot/result before calling the work done.
 #
 # TODO — UI: Clerk user button (AFTER the dep upgrade; replace "Sign out"):
 #   - Today the home header has a plain secondary "Sign out" Button. Replace it
@@ -195,9 +244,9 @@ acceptance criteria: matched by the ordered increments below
 #   - CORRECTION to an earlier note: Clerk's <UserButton> is NOT web-only. Clerk
 #     ships NATIVE components (AuthView, UserButton, UserProfileView) in
 #     @clerk/expo/native (Core 3, SwiftUI/Jetpack Compose, Beta as of 2026-08,
-#     needs Expo SDK 53+ and a dev build). Our OLD @clerk/clerk-expo 2.19.31
-#     (Core 2) has no ./native export, which is why the drop-in wasn't available
-#     -- the dep-upgrade step above (to @clerk/expo v3) unlocks it.
+#     needs Expo SDK 53+ and a dev build). Our OLD @clerk/clerk-expo (Core 2) had
+#     no ./native export, which is why the drop-in wasn't available -- the
+#     dep-upgrade step above (now on @clerk/expo v4) unlocks it.
 #   - Option B (preferred once on Core 3): use <UserButton> from
 #     @clerk/expo/native. Size it via the parent's width/height/borderRadius/
 #     overflow; tapping opens the native UserProfileView (manage account,

@@ -1,5 +1,5 @@
-import { ClerkProvider } from '@clerk/clerk-expo';
-import { tokenCache } from '@clerk/clerk-expo/token-cache';
+import { ClerkProvider } from '@clerk/expo';
+import { tokenCache } from '@clerk/expo/token-cache';
 import { Stack } from 'expo-router';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
@@ -9,16 +9,18 @@ import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 // styles for every className in the app.
 import '../../global.css';
 
-if (!CLERK_PUBLISHABLE_KEY) {
-  throw new Error(
-    'Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in the environment (see apps/agent-mobile/README.md).',
-  );
-}
-
 export default function RootLayout() {
+  // Core 3 requires a non-optional `publishableKey`. Narrow here so the throw
+  // also satisfies the type (a module-level check doesn't narrow the usage).
+  const publishableKey = CLERK_PUBLISHABLE_KEY;
+  if (!publishableKey) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in the environment (see apps/agent-mobile/README.md).',
+    );
+  }
   return (
     <ClerkProvider
-      publishableKey={CLERK_PUBLISHABLE_KEY}
+      publishableKey={publishableKey}
       tokenCache={tokenCache}
     >
       <KeyboardProvider>

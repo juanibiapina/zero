@@ -5,7 +5,7 @@ import SignedInLayout from '../(signed-in)/_layout';
 
 const mockUseAuth = jest.fn();
 
-jest.mock('@clerk/clerk-expo', () => ({
+jest.mock('@clerk/expo', () => ({
   useAuth: () => mockUseAuth(),
 }));
 

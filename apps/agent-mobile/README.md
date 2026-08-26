@@ -68,6 +68,12 @@ screen: signed-out users see "Continue with Google" (Google OAuth via Clerk's
 `useSSO`); after signing in they reach the home screen. The Clerk session is
 persisted in `expo-secure-store`, so it survives app restarts.
 
+The Clerk SDK is **`@clerk/expo` v4 (Core 3)**. The old `@clerk/clerk-expo`
+(Core 2) is deprecated. Google sign-in goes through `useSSO` (a Custom Tab +
+`sso-callback` deep link), **not** the native `useSignInWithGoogle`, so the
+optional `@clerk/expo-google-signin` package and its config plugin are not
+needed. Core 3 also exposes native components under `@clerk/expo/native`.
+
 Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
 
 | Variable                            | Required | Default                          | Purpose                                             |
@@ -90,7 +96,7 @@ Native sign-in needs two one-time settings in the Clerk dashboard, under
 **Configure → Native applications** (production instance):
 
 1. **Enable Native API** — toggle it on and click **Save** in the "Unsaved
-   changes" bar. `@clerk/clerk-expo` fails to initialise without it (the app
+   changes" bar. `@clerk/expo` fails to initialise without it (the app
    hangs on a loading spinner, and the Frontend API returns
    `native_api_disabled`).
 2. **Allowlist the SSO redirects** — add both `zeroagent://` and
@@ -120,6 +126,17 @@ After a fresh install, clear the Metro cache once:
 The app uses the **default** `expo/metro-config` — no custom monorepo Metro
 config is needed (SDK 52+ auto-detects the workspace, SDK 54+ supports pnpm
 isolated installs).
+
+**NixOS dev box:** `expo start` crashes on this machine while auto-installing the
+React Native DevTools binary (`NixOS cannot run dynamically linked executables`,
+exit 127). Start it headless to skip that step:
+`EXPO_UNSTABLE_HEADLESS=1 pnpm --filter @zero/agent-mobile exec expo start`.
+Headless prints no QR, so connect the dev client by entering the URL manually
+(`exp://<LAN-IP>:8081`). After a dependency upgrade, also pass `--clear`, or Metro
+serves a stale transform cache and the app red-boxes with a native/JS mismatch
+(e.g. `Cannot read property 'EventEmitter' of undefined`) — which also means the
+installed dev client must be rebuilt (new versionCode) to match bumped native
+modules.
 
 ## Checks
 

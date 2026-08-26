@@ -5,7 +5,7 @@ import type { Todo } from '@/lib/api';
 
 const mockGetToken = jest.fn<() => Promise<string | null>>();
 const mockSignOut = jest.fn();
-jest.mock('@clerk/clerk-expo', () => ({
+jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: mockGetToken, signOut: mockSignOut }),
 }));
 

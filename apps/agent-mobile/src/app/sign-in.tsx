@@ -1,4 +1,4 @@
-import { useAuth, useSSO } from '@clerk/clerk-expo';
+import { useAuth, useSSO } from '@clerk/expo';
 import * as AuthSession from 'expo-auth-session';
 import { Redirect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';

@@ -1,7 +1,7 @@
 import { API_BASE_URL } from './env';
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
-// shape of `getToken` from `@clerk/clerk-expo`'s `useAuth()`.
+// shape of `getToken` from `@clerk/expo`'s `useAuth()`.
 export type TokenGetter = () => Promise<string | null>;
 
 // Authenticated fetch against the worker API. Prefixes the base URL and attaches
