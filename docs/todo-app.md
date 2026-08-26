@@ -159,8 +159,10 @@ acceptance criteria: matched by the ordered increments below
 #   UI: Todoist-style quick add . DONE  (branch ui-quick-add; device-verified)
 #   Upgrade mobile deps ......... DONE code+checks (branch upgrade-mobile-deps);
 #                                 needs a new EAS dev build + on-device OAuth smoke
-#   UI: Clerk user button ....... DONE code+checks (Option B, native <UserButton>);
-#                                 needs a NEW EAS dev build + on-device smoke
+#   UI: Clerk user button ....... DONE (Option B, native <UserButton>); on main
+#                                 commit d386b6c, device-verified on EAS build 11
+#                                 (avatar renders centered). Tap/sign-out/OAuth
+#                                 regression not yet re-smoked.
 #   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
 #                                 Pixel 7 over USB; see note; waits for the device)
 #   inc 2 mark done ............. after
@@ -337,9 +339,14 @@ acceptance criteria: matched by the ordered increments below
 #     AND defer the reference (UserButton: () => mockUserButton()), because ES
 #     import hoisting evaluates the factory before the const is assigned.
 #   - Checks green: 19 mobile tests, typecheck, lint (0 errors), expo export
-#     bundles. STILL PENDING: a new EAS dev build (versionCode bump) + on-device
-#     smoke (avatar shows, tap opens profile, sign out returns to sign-in, Google
-#     sign-in still works, add-a-todo still works).
+#     bundles. EAS dev build 11 (versionCode 11) built + installed; the native
+#     module linked fine. Device-verified: the avatar renders in the header.
+#   - UI fix after first device look: DO NOT wrap <UserButton> in an
+#     overflow-hidden rounded-full View — it clips the already-circular native
+#     avatar off-center. Render <UserButton /> bare. This was a JS-only fix,
+#     hot-reloaded on build 11 (no rebuild).
+#   - Still to re-smoke on device: tap opens the native profile, sign out returns
+#     to sign-in, Google sign-in still works, add-a-todo still works.
 #   - Optional follow-up: pass a theme JSON to the plugin to tint the native
 #     surface to primary #208AEF (see Clerk "Theming Expo native components").
 #
