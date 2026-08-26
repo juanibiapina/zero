@@ -1,12 +1,21 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { View } from 'react-native';
 
 import type { Todo } from '@/lib/api';
 
 const mockGetToken = jest.fn<() => Promise<string | null>>();
-const mockSignOut = jest.fn();
 jest.mock('@clerk/expo', () => ({
-  useAuth: () => ({ getToken: mockGetToken, signOut: mockSignOut }),
+  useAuth: () => ({ getToken: mockGetToken }),
+}));
+
+// The native Clerk button renders a platform view via requireNativeView, which
+// is unavailable under jest. Stub it with a queryable element. The component is
+// defined at module scope (mock-prefixed) so the jest.mock factory needs no
+// createElement/JSX, which NativeWind's babel transform would reject inside it.
+const mockUserButton = () => <View accessibilityLabel="Account" />;
+jest.mock('@clerk/expo/native', () => ({
+  UserButton: () => mockUserButton(),
 }));
 
 const mockFetchTodos = jest.fn<(getToken: unknown) => Promise<Todo[]>>();
@@ -49,6 +58,16 @@ describe('HomeScreen', () => {
       expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
     );
     expect(queryByText('Loading your todos…')).toBeNull();
+  });
+
+  it('shows the account button instead of a sign-out button', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([]);
+
+    const { getByLabelText, queryByText } = await render(<HomeScreen />);
+
+    expect(getByLabelText('Account')).toBeTruthy();
+    expect(queryByText('Sign out')).toBeNull();
   });
 
   it('shows the fetched todos', async () => {

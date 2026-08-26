@@ -1,16 +1,16 @@
 import { useAuth } from '@clerk/expo';
+import { UserButton } from '@clerk/expo/native';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
-import { Button } from '@/components/ui/button';
 import { Fab } from '@/components/ui/fab';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { addTodo, fetchTodos, type Todo } from '@/lib/api';
 
 export default function HomeScreen() {
-  const { getToken, signOut } = useAuth();
+  const { getToken } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +69,10 @@ export default function HomeScreen() {
     <View className="flex-1 px-6 pt-16">
       <View className="mb-4 flex-row items-center justify-between">
         <Text variant="title">Todos</Text>
-        <Button
-          variant="secondary"
-          label="Sign out"
-          onPress={() => void signOut()}
-        />
+        {/* Native Clerk avatar (already a 36px circle); tapping opens the
+            profile (manage account, security, sign out). No wrapper clip — an
+            extra rounded-full/overflow-hidden mask crops the avatar off-center. */}
+        <UserButton />
       </View>
 
       {error ? <Text variant="error">{error}</Text> : null}

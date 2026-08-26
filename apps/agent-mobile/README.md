@@ -74,6 +74,23 @@ The Clerk SDK is **`@clerk/expo` v4 (Core 3)**. The old `@clerk/clerk-expo`
 optional `@clerk/expo-google-signin` package and its config plugin are not
 needed. Core 3 also exposes native components under `@clerk/expo/native`.
 
+The home header uses one of these: `<UserButton />` from `@clerk/expo/native` —
+a circular avatar that opens the native profile (manage account, security, sign
+out). It renders a real native view (Jetpack Compose on Android) and is **Beta**,
+so expect occasional API changes. Two consequences:
+
+- The `@clerk/expo` **config plugin** is now in `app.json` (`["@clerk/expo",
+  { "appleSignIn": false }]`; Apple sign-in off since the app is Android-only).
+  It autolinks the native module and adds Android packaging tweaks. Because it is
+  a native module, it needs a **new EAS dev build** to run on the phone — a JS
+  hot-reload alone will not add it.
+- Do **not** hot-reload the `UserButton` JS onto an older dev client that lacks
+  the native view: it resolves `requireNativeView('ClerkUserButtonView')` and the
+  home screen crashes. Rebuild the dev client first, then reload JS as usual.
+
+To theme the native surface toward the app's brand later, pass a `theme` JSON
+path to the plugin (see Clerk's "Theming Expo native components").
+
 Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
 
 | Variable                            | Required | Default                          | Purpose                                             |

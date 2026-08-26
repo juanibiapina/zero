@@ -159,7 +159,8 @@ acceptance criteria: matched by the ordered increments below
 #   UI: Todoist-style quick add . DONE  (branch ui-quick-add; device-verified)
 #   Upgrade mobile deps ......... DONE code+checks (branch upgrade-mobile-deps);
 #                                 needs a new EAS dev build + on-device OAuth smoke
-#   UI: Clerk user button ....... TODO (unblocked: @clerk/expo/native now available)
+#   UI: Clerk user button ....... DONE code+checks (Option B, native <UserButton>);
+#                                 needs a NEW EAS dev build + on-device smoke
 #   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
 #                                 Pixel 7 over USB; see note; waits for the device)
 #   inc 2 mark done ............. after
@@ -310,6 +311,39 @@ acceptance criteria: matched by the ordered increments below
 #     device-independent prep (nix toolchain, EXPO_PUBLIC_E2E auth bypass, the
 #     bin/mobile-verify script + add-a-todo Maestro flow) can proceed beforehand.
 #
+# DONE (code + local checks) — UI: Clerk user button (Option B, native):
+#   - Replaced the home-header "Sign out" Button with <UserButton> from
+#     @clerk/expo/native, wrapped in a 36px circle (h-9 w-9 overflow-hidden
+#     rounded-full). Tapping it opens the native profile (manage account,
+#     security, sign out); signOut dropped from useAuth (getToken kept).
+#   - Added the @clerk/expo config plugin to app.json as
+#     ["@clerk/expo", { "appleSignIn": false }] (Android-only app). Native module,
+#     so it needs a NEW EAS dev build; JS alone won't add it.
+#   - HAZARD (verified in source): the native button calls
+#     requireNativeView('ClerkUserButtonView'); the guard checks only Platform.OS,
+#     not view registration, so rendering this JS on a dev client WITHOUT the
+#     native module CRASHES the home screen ("Cannot read properties of undefined
+#     (reading 'displayName')"). Ship JS + native build together; never hot-reload
+#     this change onto the old client. Web renders null (safe); we export
+#     android-only anyway.
+#   - Why Option B over the pure-JS avatar (Option A): the doc preferred B once on
+#     Core 3, and @clerk/expo v4 is on main. Trade-off accepted: native components
+#     are Clerk public Beta (minor breaking changes expected before GA) and B
+#     couples to a new EAS build. Option A stays the fallback if the native view
+#     misbehaves.
+#   - jest gotcha: mock '@clerk/expo/native' but keep element creation OUT of the
+#     jest.mock factory (NativeWind's babel transform injects _ReactNativeCSSInterop,
+#     which the factory rejects as out-of-scope). Define the stub at module scope
+#     AND defer the reference (UserButton: () => mockUserButton()), because ES
+#     import hoisting evaluates the factory before the const is assigned.
+#   - Checks green: 19 mobile tests, typecheck, lint (0 errors), expo export
+#     bundles. STILL PENDING: a new EAS dev build (versionCode bump) + on-device
+#     smoke (avatar shows, tap opens profile, sign out returns to sign-in, Google
+#     sign-in still works, add-a-todo still works).
+#   - Optional follow-up: pass a theme JSON to the plugin to tint the native
+#     surface to primary #208AEF (see Clerk "Theming Expo native components").
+#
+# (original TODO kept for context)
 # TODO — UI: Clerk user button (AFTER the dep upgrade; replace "Sign out"):
 #   - Today the home header has a plain secondary "Sign out" Button. Replace it
 #     with a proper Clerk user control: the user's avatar that, when tapped,

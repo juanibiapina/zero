@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-27: The Zero app header now shows your profile picture. Tap it to manage your account or sign out.
 - 2026-08-26: Adding a to-do in the Zero app is faster: tap the round + button in the corner and the keyboard pops up right away. Type a task, hit enter, and the box stays open so you can add several in a row. Tap outside to close it.
 - 2026-08-26: The Zero app now has a to-do list: type a task, tap Add, and it shows up and stays saved. This is the first piece of a bigger app coming to your phone.
 - 2026-08-17: If you go quiet for about a week, Zero now checks in once — offering to pick up an unread email, a topic you were working on, or just to help.
