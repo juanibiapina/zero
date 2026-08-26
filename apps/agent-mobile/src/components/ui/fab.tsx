@@ -7,16 +7,18 @@ export type FabProps = Omit<PressableProps, 'children'> & {
   className?: string;
 };
 
-// Floating action button: a circular primary Pressable showing a "+" glyph.
-// `label` is the accessibility label (no icon library yet). Pin it with a
-// positioning className from the caller (e.g. absolute bottom-6 right-6).
-export function Fab({ label, className, ...props }: FabProps) {
+// Square primary action button showing a "+" glyph. `label` is the
+// accessibility label (no icon library yet). Pin it with a positioning
+// className from the caller (e.g. absolute bottom-6 right-6).
+export function Fab({ label, className, disabled, ...props }: FabProps) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      disabled={disabled}
       className={cn(
-        'h-14 w-14 items-center justify-center rounded-full bg-primary shadow-lg',
+        'h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg',
+        disabled && 'opacity-60',
         className,
       )}
       {...props}

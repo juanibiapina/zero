@@ -112,7 +112,12 @@ export default function HomeScreen() {
                 returnKeyType="done"
                 autoFocus
               />
-              <Button label="Add" disabled={busy} onPress={() => void onAdd()} />
+              <Fab
+                label="Add todo"
+                className="h-12 w-12"
+                disabled={busy}
+                onPress={() => void onAdd()}
+              />
             </View>
           </KeyboardStickyView>
         </>
