@@ -157,15 +157,17 @@ acceptance criteria: matched by the ordered increments below
 #   inc 1 add + list todos ...... DONE  commit 82dc1e7 (works on phone)
 #   loading-state fix ........... DONE  commit c46319d (works on phone)
 #   UI: Todoist-style quick add . DONE  (branch ui-quick-add; device-verified)
-#   Upgrade mobile deps ......... DONE code+checks (branch upgrade-mobile-deps);
-#                                 needs a new EAS dev build + on-device OAuth smoke
-#   UI: Clerk user button ....... DONE (Option B, native <UserButton>); on main
-#                                 commit d386b6c, device-verified on EAS build 11
-#                                 (avatar renders centered). Tap/sign-out/OAuth
-#                                 regression not yet re-smoked.
+#   Upgrade mobile deps ......... DONE  commit c215de9 (SDK 57 + Clerk Core 3);
+#                                 device-verified via EAS build 11 (app runs,
+#                                 todos load, sign-in session persists)
+#   UI: Clerk user button ....... DONE  commit d386b6c (Option B, native
+#                                 <UserButton>); device-verified on EAS build 11,
+#                                 avatar renders centered. Not yet re-smoked:
+#                                 tapping opens the profile, sign-out, Google
+#                                 sign-in regression, add-a-todo.
 #   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
 #                                 Pixel 7 over USB; see note; waits for the device)
-#   inc 2 mark done ............. after
+#   inc 2 mark done ............. NEXT
 #   inc 3 scheduled date ........ todo
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
@@ -196,9 +198,10 @@ acceptance criteria: matched by the ordered increments below
 #     signed out. Wrap with ClerkOfflineError.is(err) from @clerk/expo/errors if
 #     offline resilience is ever wanted.
 #   - Checks green: typecheck, lint (0 errors), 18 tests, expo export bundles.
-#   - STILL PENDING: a NEW EAS dev-client build (native Clerk + bumped native
-#     Expo modules) + on-device smoke (sign in with Google end-to-end, add a
-#     todo, relaunch persists). Not runnable on this box (no emulator).
+#   - RESOLVED: EAS dev build 11 (2026-08-26, cut for the user button) bundles
+#     these bumped native modules + Clerk. It runs on device: the app launches,
+#     todos load, and the persisted sign-in session survives relaunch. A fresh
+#     Google sign-in end-to-end was not re-run on 11 (session already present).
 #
 # TODO — Agent-driven mobile verification (dev-infra, HIGH priority):
 #   - PROBLEM: today the only way the agent proves a mobile change runs is to cut
