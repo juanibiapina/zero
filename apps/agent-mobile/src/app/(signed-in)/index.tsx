@@ -1,9 +1,19 @@
 import { useAuth } from '@clerk/expo';
 import { UserButton } from '@clerk/expo/native';
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  BackHandler,
+  Pressable,
+  ScrollView,
+  type TextInput,
+  View,
+} from 'react-native';
+import {
+  KeyboardEvents,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller';
 
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
@@ -17,6 +27,8 @@ export default function HomeScreen() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     let active = true;
@@ -62,8 +74,55 @@ export default function HomeScreen() {
 
   const closeAdd = useCallback(() => {
     setText('');
+    setConfirmingDiscard(false);
     setAdding(false);
   }, []);
+
+  // Dismissing the quick-add: with unsaved text, confirm before discarding;
+  // with an empty input, close silently.
+  const requestClose = useCallback(() => {
+    if (text.trim()) {
+      setConfirmingDiscard(true);
+    } else {
+      closeAdd();
+    }
+  }, [text, closeAdd]);
+
+  // First Android Back press with the keyboard up is swallowed by the OS to
+  // hide the keyboard and never reaches BackHandler. So treat "keyboard hidden
+  // while the quick-add has unsaved text" as a dismiss request too, giving the
+  // Todoist single-back behavior. Guard on adding + unsaved text so the hide
+  // that happens while closing (input unmounts) doesn't re-open the dialog.
+  useEffect(() => {
+    const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
+      if (adding && !confirmingDiscard && text.trim()) {
+        setConfirmingDiscard(true);
+      }
+    });
+    return () => sub.remove();
+  }, [adding, confirmingDiscard, text]);
+
+  // Android hardware / navigation back button, for the cases where the keyboard
+  // is already down (dialog open, or bar open after the keyboard was hidden).
+  // Returning true consumes the event so the OS does not navigate away.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (confirmingDiscard) {
+        setConfirmingDiscard(false);
+        return true;
+      }
+      if (adding && text.trim()) {
+        setConfirmingDiscard(true);
+        return true;
+      }
+      if (adding) {
+        closeAdd();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [adding, confirmingDiscard, text, closeAdd]);
 
   const onDone = useCallback(
     async (item: Todo) => {
@@ -123,11 +182,12 @@ export default function HomeScreen() {
           <Pressable
             accessibilityLabel="Dismiss quick add"
             className="absolute inset-0"
-            onPress={closeAdd}
+            onPress={requestClose}
           />
           <KeyboardStickyView className="absolute inset-x-0 bottom-0">
             <View className="flex-row gap-2 border-t border-neutral-200 bg-white px-6 py-3">
               <Input
+                ref={inputRef}
                 className="flex-1"
                 placeholder="Add a todo"
                 value={text}
@@ -145,6 +205,22 @@ export default function HomeScreen() {
               />
             </View>
           </KeyboardStickyView>
+          {confirmingDiscard ? (
+            <ConfirmDialog
+              title="Discard changes?"
+              message="The changes you've made will not be saved."
+              cancelLabel="Cancel"
+              confirmLabel="Discard"
+              destructive
+              onCancel={() => {
+                setConfirmingDiscard(false);
+                // The Back that opened this dialog also hid the keyboard;
+                // refocus to bring it back so editing continues seamlessly.
+                inputRef.current?.focus();
+              }}
+              onConfirm={closeAdd}
+            />
+          ) : null}
         </>
       ) : (
         <Fab

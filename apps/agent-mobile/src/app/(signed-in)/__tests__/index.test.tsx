@@ -161,4 +161,88 @@ describe('HomeScreen', () => {
     const reopened = getByPlaceholderText('Add a todo');
     expect(reopened.props.value).toBe('');
   });
+
+  it('confirms before discarding unsaved quick-add text', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([]);
+
+    const { getByLabelText, getByText, getByPlaceholderText, queryByText } =
+      await render(<HomeScreen />);
+
+    await waitFor(() =>
+      expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add todo'));
+    });
+    const input = getByPlaceholderText('Add a todo');
+    await act(async () => {
+      fireEvent.changeText(input, 'buy milk');
+    });
+
+    // Tapping the backdrop with unsaved text opens the confirm dialog and does
+    // NOT clear/close the bar.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Dismiss quick add'));
+    });
+    expect(getByText('Discard changes?')).toBeTruthy();
+    expect(getByPlaceholderText('Add a todo').props.value).toBe('buy milk');
+
+    // Cancel keeps editing: dialog gone, text preserved.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Cancel'));
+    });
+    expect(queryByText('Discard changes?')).toBeNull();
+    expect(getByPlaceholderText('Add a todo').props.value).toBe('buy milk');
+  });
+
+  it('discards the quick-add text when confirming', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([]);
+
+    const { getByLabelText, getByText, getByPlaceholderText, queryByPlaceholderText } =
+      await render(<HomeScreen />);
+
+    await waitFor(() =>
+      expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add todo'));
+    });
+    await act(async () => {
+      fireEvent.changeText(getByPlaceholderText('Add a todo'), 'buy milk');
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Dismiss quick add'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Discard'));
+    });
+
+    expect(queryByPlaceholderText('Add a todo')).toBeNull();
+  });
+
+  it('closes the quick-add silently when it is empty', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([]);
+
+    const { getByLabelText, getByText, queryByText, queryByPlaceholderText } =
+      await render(<HomeScreen />);
+
+    await waitFor(() =>
+      expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add todo'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Dismiss quick add'));
+    });
+
+    expect(queryByText('Discard changes?')).toBeNull();
+    expect(queryByPlaceholderText('Add a todo')).toBeNull();
+  });
 });

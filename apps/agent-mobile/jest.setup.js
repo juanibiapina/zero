@@ -11,6 +11,9 @@ jest.mock('react-native-keyboard-controller', () => {
     KeyboardStickyView: Passthrough,
     KeyboardAvoidingView: Passthrough,
     KeyboardAwareScrollView: Passthrough,
+    KeyboardEvents: {
+      addListener: () => ({ remove: () => {} }),
+    },
     useKeyboardHandler: () => {},
     useReanimatedKeyboardAnimation: () => ({
       height: { value: 0 },

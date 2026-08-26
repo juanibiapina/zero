@@ -461,18 +461,30 @@ they hot-reload with no EAS build.
   Likely react-native-reanimated (already a dep) for the entrance/translate, kept
   in sync with the keyboard height (react-native-keyboard-controller already
   tracks it).
-- Add flow — confirm discard. Any dismissal of the open quick-add while there is
-  unsaved text should show a confirm popup ("Discard this todo?" keep / discard),
-  like Todoist, instead of silently clearing and closing. Both dismissal paths
-  trigger it: tapping outside (the backdrop) AND pressing the Android hardware /
-  navigation back button while typing. With empty text it just closes (current
-  behavior). Needs a small dialog/action-sheet plus a back-handler
-  (BackHandler / navigation beforeRemove) that intercepts back while the bar is
-  open with text.
-  Todoist reference (screenshot): centered modal dialog, title "Discard
-  changes?", body "The changes you've made will not be saved.", two right-aligned
-  text buttons "Cancel" (dismiss, keep editing) and "Discard" (destructive tint,
-  clears + closes). The keyboard stays up behind it. Match this copy and layout.
+- [DONE] Add flow — confirm discard. Dismissing the open quick-add with unsaved
+  text now shows a centered confirm dialog ("Discard changes?" / "The changes
+  you've made will not be saved." / Cancel + destructive Discard) instead of
+  silently clearing. Both paths gate on trimmed text: backdrop tap AND the
+  Android hardware/navigation back button. Empty text still closes silently.
+  Implemented as `src/components/ui/confirm-dialog.tsx` (reusable) + state in the
+  home screen. GOTCHAS: the dialog is an in-tree absolute overlay, NOT an RN
+  `Modal`, so the focused input keeps focus and the keyboard stays up behind it
+  (an RN Modal on Android steals focus / drops the keyboard). Back is handled
+  with `BackHandler.addEventListener('hardwareBackPress', ...)` returning `true`
+  to consume it; the effect must return `sub.remove()` (deps: adding,
+  confirmingDiscard, text, closeAdd) or a stale handler captures old state.
+  DOUBLE-BACK GOTCHA (device-found): on Android the OS swallows the FIRST Back
+  press while the soft keyboard is up (it just hides the keyboard) and never
+  calls `BackHandler`, so back-only needed two presses. Fixed by also listening
+  to `KeyboardEvents.addListener('keyboardDidHide', ...)` (react-native-keyboard-
+  controller) and opening the dialog when the keyboard hides while the bar has
+  unsaved text — the first Back now shows the dialog. Guard on
+  `adding && !confirmingDiscard && text.trim()` so the hide during close doesn't
+  re-open it. On Cancel we refocus the input (Input now forwardRef's to its
+  TextInput) to restore the keyboard the Back press dismissed. Pure JS,
+  hot-reloads with no EAS build. Tests: confirm-dialog.test.tsx (3) + 3 new
+  home-screen tests (confirm, discard, empty-close); back-button + keyboard-hide
+  paths left to device verification. All mobile checks green, expo export bundles.
 - Done flow — fade out done items. Marking a todo done should fade/animate the row
   out (like Todoist) rather than removing it instantly. Today onDone does an
   optimistic hard remove. Add an exit animation (reanimated layout/exiting) before

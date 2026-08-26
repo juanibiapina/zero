@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-08-27: The Zero app now asks before it throws away a to-do you were typing. If you tap away or hit back with unsaved text, it checks first so you don't lose what you wrote.
 - 2026-08-27: You can now finish a to-do in the Zero app: tap the circle next to it and it leaves your list. It stays saved, so nothing is lost.
 - 2026-08-27: The Zero app header now shows your profile picture. Tap it to manage your account or sign out.
 - 2026-08-26: Adding a to-do in the Zero app is faster: tap the round + button in the corner and the keyboard pops up right away. Type a task, hit enter, and the box stays open so you can add several in a row. Tap outside to close it.
