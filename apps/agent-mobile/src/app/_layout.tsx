@@ -1,6 +1,7 @@
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Stack } from 'expo-router';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 
@@ -20,7 +21,9 @@ export default function RootLayout() {
       publishableKey={CLERK_PUBLISHABLE_KEY}
       tokenCache={tokenCache}
     >
-      <Stack screenOptions={{ headerShown: false }} />
+      <KeyboardProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </KeyboardProvider>
     </ClerkProvider>
   );
 }

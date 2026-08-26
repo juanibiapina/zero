@@ -156,20 +156,40 @@ acceptance criteria: matched by the ordered increments below
 #   inc 0 UI foundation ......... DONE  commit 368a6c9
 #   inc 1 add + list todos ...... DONE  commit 82dc1e7 (works on phone)
 #   loading-state fix ........... DONE  commit c46319d (works on phone)
-#   UI: Todoist-style quick add . NEXT (not planned yet)
+#   UI: Todoist-style quick add . DONE  (branch ui-quick-add; device-verified)
 #   inc 2 mark done ............. after
 #   inc 3 scheduled date ........ todo
 #   inc 4 postpone tomorrow ..... todo
 #   inc 5 manual reorder ........ todo
 #
-# NEXT — UI: Todoist-style quick add (improve the capture UI):
-#   - Replace the top inline "Input + Add" row with a circular add button (FAB)
-#     pinned bottom-right (Todoist's "Dynamic Add Button", bottom-right).
-#   - Tapping it opens an input that is already focused, so the keyboard comes up
-#     immediately; type the item and submit to add.
-#   - Todoist keeps quick-add fast/capture-focused and lets you add several in a
-#     row; consider keeping the input open + cleared after each add.
-#   - Check Todoist mobile for inspiration. Plan this when we get to it.
+# DONE — UI: Todoist-style quick add (branch ui-quick-add):
+#   - Replaced the top inline "Input + Add" row with a circular + FAB (new
+#     components/ui/fab.tsx) pinned bottom-right.
+#   - Tapping it opens a bottom quick-add bar whose Input has autoFocus, so the
+#     keyboard comes up immediately. blurOnSubmit={false} keeps the keyboard up
+#     on submit; the bar stays open + cleared for rapid multi-capture. A
+#     full-screen backdrop Pressable (and an empty submit) closes it.
+#   - Keyboard avoidance: bar wrapped in <KeyboardStickyView> from
+#     react-native-keyboard-controller (KeyboardProvider added at the root in
+#     _layout.tsx). RN's own KeyboardAvoidingView / a hand-rolled Keyboard-height
+#     offset both misaligned on Android edge-to-edge (a gap = the nav-bar inset).
+#     keyboard-controller tracks the keyboard and handles insets on both
+#     platforms.
+#   - IMPORTANT: keyboard-controller is a NATIVE module, so it needs a new EAS
+#     dev-client build before it runs on the phone (versionCode 9,
+#     `eas build -p android --profile development`). It is the app's first native
+#     dep beyond the Expo/RN baseline; NativeWind/safe-area were already native or
+#     JS-only. After installing the new dev client, JS changes hot-reload as before.
+#   - jest: the native module is mocked in jest.setup.js (registered via the
+#     "setupFiles" jest config). The mock passthroughs return children directly,
+#     NOT via JSX/createElement, else NativeWind's babel transform trips jest's
+#     out-of-scope mock-factory guard (Invalid variable access _ReactNativeCSSInterop).
+#   - Tests: fab.test.tsx (2), index.test.tsx updated to the FAB flow + a
+#     rapid-capture assertion. 18 mobile tests pass, typecheck+lint clean,
+#     expo export bundles. Device-verified on dev-client versionCode 9: bar sits
+#     flush on the keyboard, rapid capture + backdrop-close work.
+#   - Gotcha: this setup's render() is async — await it in tests, else the query
+#     helpers are undefined ("getByLabelText is not a function").
 # Local branches increment-0-nativewind / increment-1-todos /
 # fix-todos-loading-state are merged to main, not yet deleted.
 build order (capture point):

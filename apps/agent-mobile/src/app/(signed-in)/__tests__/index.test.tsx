@@ -60,12 +60,33 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
   });
 
-  it('adds a typed todo and shows it in the list', async () => {
+  it('opens the quick-add input only after tapping the add button', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([]);
+
+    const { getByLabelText, queryByPlaceholderText } = await render(
+      <HomeScreen />,
+    );
+
+    await waitFor(() =>
+      expect(queryByPlaceholderText('Add a todo')).toBeNull(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add todo'));
+    });
+
+    expect(queryByPlaceholderText('Add a todo')).toBeTruthy();
+  });
+
+  it('adds a typed todo and keeps the input open and cleared for the next one', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTodos.mockResolvedValue([]);
     mockAddTodo.mockResolvedValue(todo('2', 'call mom'));
 
-    const { getByText, getByPlaceholderText } = await render(<HomeScreen />);
+    const { getByText, getByLabelText, getByPlaceholderText } = await render(
+      <HomeScreen />,
+    );
 
     // Let the initial (empty) load settle before typing, else it can clobber
     // the just-added item.
@@ -74,14 +95,23 @@ describe('HomeScreen', () => {
     );
 
     await act(async () => {
-      fireEvent.changeText(getByPlaceholderText('Add a todo'), 'call mom');
+      fireEvent.press(getByLabelText('Add todo'));
+    });
+
+    const input = getByPlaceholderText('Add a todo');
+    await act(async () => {
+      fireEvent.changeText(input, 'call mom');
     });
     await act(async () => {
-      fireEvent.press(getByText('Add'));
+      fireEvent(input, 'submitEditing');
     });
 
     await waitFor(() => expect(getByText('call mom')).toBeTruthy());
     expect(mockAddTodo).toHaveBeenCalledTimes(1);
     expect(mockAddTodo.mock.calls[0][1]).toBe('call mom');
+
+    // The quick-add input stays open and cleared for rapid capture.
+    const reopened = getByPlaceholderText('Add a todo');
+    expect(reopened.props.value).toBe('');
   });
 });

@@ -1,8 +1,10 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
 import { Button } from '@/components/ui/button';
+import { Fab } from '@/components/ui/fab';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { addTodo, fetchTodos, type Todo } from '@/lib/api';
@@ -14,6 +16,7 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -37,13 +40,19 @@ export default function HomeScreen() {
 
   const onAdd = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed) {
+      // Submitting an empty input closes the quick-add bar.
+      setAdding(false);
+      return;
+    }
+    if (busy) return;
     setBusy(true);
     try {
       const todo = await addTodo(getToken, trimmed);
       setTodos((prev) => [...prev, todo]);
       setText('');
       setError(null);
+      // Keep the bar open and cleared for rapid, repeated capture.
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -51,27 +60,20 @@ export default function HomeScreen() {
     }
   }, [text, busy, getToken]);
 
+  const closeAdd = useCallback(() => {
+    setText('');
+    setAdding(false);
+  }, []);
+
   return (
-    <View className="flex-1 gap-4 px-6 pt-16">
-      <View className="flex-row items-center justify-between">
+    <View className="flex-1 px-6 pt-16">
+      <View className="mb-4 flex-row items-center justify-between">
         <Text variant="title">Todos</Text>
         <Button
           variant="secondary"
           label="Sign out"
           onPress={() => void signOut()}
         />
-      </View>
-
-      <View className="flex-row gap-2">
-        <Input
-          className="flex-1"
-          placeholder="Add a todo"
-          value={text}
-          onChangeText={setText}
-          onSubmitEditing={() => void onAdd()}
-          returnKeyType="done"
-        />
-        <Button label="Add" disabled={busy} onPress={() => void onAdd()} />
       </View>
 
       {error ? <Text variant="error">{error}</Text> : null}
@@ -89,6 +91,38 @@ export default function HomeScreen() {
           ))
         )}
       </ScrollView>
+
+      {adding ? (
+        <>
+          {/* Backdrop: tap outside the bar to dismiss. */}
+          <Pressable
+            accessibilityLabel="Dismiss quick add"
+            className="absolute inset-0"
+            onPress={closeAdd}
+          />
+          <KeyboardStickyView className="absolute inset-x-0 bottom-0">
+            <View className="flex-row gap-2 border-t border-neutral-200 bg-white px-6 py-3">
+              <Input
+                className="flex-1"
+                placeholder="Add a todo"
+                value={text}
+                onChangeText={setText}
+                onSubmitEditing={() => void onAdd()}
+                blurOnSubmit={false}
+                returnKeyType="done"
+                autoFocus
+              />
+              <Button label="Add" disabled={busy} onPress={() => void onAdd()} />
+            </View>
+          </KeyboardStickyView>
+        </>
+      ) : (
+        <Fab
+          label="Add todo"
+          className="absolute bottom-6 right-6"
+          onPress={() => setAdding(true)}
+        />
+      )}
     </View>
   );
 }
