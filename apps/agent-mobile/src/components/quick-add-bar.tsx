@@ -23,7 +23,7 @@ export function QuickAddBar({
   onChangeText,
   onSubmit,
   busy,
-  placeholder = 'Add a todo',
+  placeholder = 'Capture a thought',
   autoFocus = true,
   inputRef,
 }: QuickAddBarProps) {
@@ -42,7 +42,7 @@ export function QuickAddBar({
         autoFocus={autoFocus}
       />
       <Fab
-        label="Add todo"
+        label="Capture"
         className="h-12 w-12"
         disabled={busy}
         onPress={onSubmit}

@@ -2,34 +2,34 @@ import { describe, expect, it } from "vitest";
 import { OpenAPIHono } from "@hono/zod-openapi";
 
 import type { Env } from "../types";
-import type { Todo } from "../store/todos";
-import { createTodosRoutes } from "./todos";
+import type { Capture } from "../store/captures";
+import { createCapturesRoutes } from "./captures";
 
-// A stand-in UserDO exposing just the todo RPC surface, backed by an array.
-const fakeUserDO = (seed: Todo[] = []) => {
-  const todos = [...seed];
+// A stand-in UserDO exposing just the capture RPC surface, backed by an array.
+const fakeUserDO = (seed: Capture[] = []) => {
+  const captures = [...seed];
   let n = seed.length;
   return {
-    addTodo(text: string): Todo {
-      const todo: Todo = {
+    addCapture(text: string): Capture {
+      const capture: Capture = {
         id: `id-${++n}`,
         text,
         createdAt: new Date(1700000000000 + n).toISOString(),
-        doneAt: null,
+        processedAt: null,
       };
-      todos.push(todo);
-      return todo;
+      captures.push(capture);
+      return capture;
     },
-    listTodos(): Todo[] {
-      return todos.filter((t) => t.doneAt === null);
+    listInbox(): Capture[] {
+      return captures.filter((c) => c.processedAt === null);
     },
-    markTodoDone(id: string): Todo | null {
-      const todo = todos.find((t) => t.id === id);
-      if (!todo) return null;
-      todo.doneAt = new Date(1700000000000).toISOString();
-      return todo;
+    processCapture(id: string): Capture | null {
+      const capture = captures.find((c) => c.id === id);
+      if (!capture) return null;
+      capture.processedAt = new Date(1700000000000).toISOString();
+      return capture;
     },
-    _todos: todos,
+    _captures: captures,
   };
 };
 
@@ -50,122 +50,126 @@ const buildApp = (env: Env, userId: string) => {
     c.set("userId", userId);
     await next();
   });
-  app.route("/", createTodosRoutes());
+  app.route("/", createCapturesRoutes());
   return {
     request: (path: string, init?: RequestInit) =>
       app.fetch(new Request(`http://localhost${path}`, init), env),
   };
 };
 
-describe("GET /api/todos", () => {
-  it("returns the user's todos", async () => {
+describe("GET /api/captures", () => {
+  it("returns the user's Inbox", async () => {
     const userDO = fakeUserDO([
       {
         id: "id-1",
         text: "buy milk",
         createdAt: "2023-11-14T22:13:20.001Z",
-        doneAt: null,
+        processedAt: null,
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
-    const res = await app.request("/api/todos");
+    const res = await app.request("/api/captures");
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      todos: [
+      captures: [
         {
           id: "id-1",
           text: "buy milk",
           createdAt: "2023-11-14T22:13:20.001Z",
-          doneAt: null,
+          processedAt: null,
         },
       ],
     });
   });
 
-  it("returns an empty list when there are none", async () => {
+  it("returns an empty Inbox when there are none", async () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
-    const res = await app.request("/api/todos");
+    const res = await app.request("/api/captures");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ todos: [] });
+    expect(await res.json()).toEqual({ captures: [] });
   });
 });
 
-describe("POST /api/todos", () => {
-  it("adds a todo and returns it", async () => {
+describe("POST /api/captures", () => {
+  it("captures an item and returns it", async () => {
     const userDO = fakeUserDO();
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
-    const res = await app.request("/api/todos", {
+    const res = await app.request("/api/captures", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: "call mom" }),
     });
 
     expect(res.status).toBe(201);
-    const body: { todo: Todo } = await res.json();
-    expect(body.todo.text).toBe("call mom");
-    expect(body.todo.id).toBeTruthy();
-    expect(userDO._todos.map((t) => t.text)).toEqual(["call mom"]);
+    const body: { capture: Capture } = await res.json();
+    expect(body.capture.text).toBe("call mom");
+    expect(body.capture.id).toBeTruthy();
+    expect(userDO._captures.map((c) => c.text)).toEqual(["call mom"]);
   });
 
   it("rejects an empty text with 400", async () => {
     const userDO = fakeUserDO();
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
-    const res = await app.request("/api/todos", {
+    const res = await app.request("/api/captures", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: "" }),
     });
 
     expect(res.status).toBe(400);
-    expect(userDO._todos).toEqual([]);
+    expect(userDO._captures).toEqual([]);
   });
 });
 
-describe("POST /api/todos/{id}/done", () => {
-  it("marks a todo done and returns it", async () => {
+describe("POST /api/captures/{id}/process", () => {
+  it("processes a capture and returns it", async () => {
     const userDO = fakeUserDO([
       {
         id: "id-1",
         text: "buy milk",
         createdAt: "2023-11-14T22:13:20.001Z",
-        doneAt: null,
+        processedAt: null,
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
-    const res = await app.request("/api/todos/id-1/done", { method: "POST" });
+    const res = await app.request("/api/captures/id-1/process", {
+      method: "POST",
+    });
 
     expect(res.status).toBe(200);
-    const body: { todo: Todo } = await res.json();
-    expect(body.todo.id).toBe("id-1");
-    expect(body.todo.doneAt).toBeTruthy();
+    const body: { capture: Capture } = await res.json();
+    expect(body.capture.id).toBe("id-1");
+    expect(body.capture.processedAt).toBeTruthy();
   });
 
-  it("removes the done todo from a following list", async () => {
+  it("removes the processed capture from a following Inbox", async () => {
     const userDO = fakeUserDO([
       {
         id: "id-1",
         text: "buy milk",
         createdAt: "2023-11-14T22:13:20.001Z",
-        doneAt: null,
+        processedAt: null,
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
-    await app.request("/api/todos/id-1/done", { method: "POST" });
-    const res = await app.request("/api/todos");
+    await app.request("/api/captures/id-1/process", { method: "POST" });
+    const res = await app.request("/api/captures");
 
-    expect(await res.json()).toEqual({ todos: [] });
+    expect(await res.json()).toEqual({ captures: [] });
   });
 
   it("returns 404 for an unknown id", async () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
 
-    const res = await app.request("/api/todos/nope/done", { method: "POST" });
+    const res = await app.request("/api/captures/nope/process", {
+      method: "POST",
+    });
 
     expect(res.status).toBe(404);
   });

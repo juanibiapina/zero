@@ -38,36 +38,36 @@ export async function fetchUserSettings(
   return (await res.json()) as UserSettings;
 }
 
-export type Todo = {
+export type Capture = {
   id: string;
   text: string;
   createdAt: string;
-  // Null while open; an ISO timestamp once marked done.
-  doneAt: string | null;
+  // Null while in the Inbox; an ISO timestamp once Processed (GTD Clarify).
+  processedAt: string | null;
 };
 
-// The caller's open todo list, oldest first.
-export async function fetchTodos(
+// The caller's Inbox (open captures), oldest first.
+export async function fetchInbox(
   getToken: TokenGetter,
   baseUrl: string = API_BASE_URL,
-): Promise<Todo[]> {
-  const res = await apiFetch(getToken, '/api/todos', {}, baseUrl);
+): Promise<Capture[]> {
+  const res = await apiFetch(getToken, '/api/captures', {}, baseUrl);
   if (!res.ok) {
-    throw new Error(`GET /api/todos failed: ${res.status}`);
+    throw new Error(`GET /api/captures failed: ${res.status}`);
   }
-  const body = (await res.json()) as { todos: Todo[] };
-  return body.todos;
+  const body = (await res.json()) as { captures: Capture[] };
+  return body.captures;
 }
 
-// Capture a new todo; returns the created row (with its server id).
-export async function addTodo(
+// Capture a new item; returns the created row (with its server id).
+export async function addCapture(
   getToken: TokenGetter,
   text: string,
   baseUrl: string = API_BASE_URL,
-): Promise<Todo> {
+): Promise<Capture> {
   const res = await apiFetch(
     getToken,
-    '/api/todos',
+    '/api/captures',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,27 +76,28 @@ export async function addTodo(
     baseUrl,
   );
   if (!res.ok) {
-    throw new Error(`POST /api/todos failed: ${res.status}`);
+    throw new Error(`POST /api/captures failed: ${res.status}`);
   }
-  const body = (await res.json()) as { todo: Todo };
-  return body.todo;
+  const body = (await res.json()) as { capture: Capture };
+  return body.capture;
 }
 
-// Mark a todo done; returns the updated row. The open list excludes it after.
-export async function markTodoDone(
+// Process a capture (GTD Clarify); returns the updated row. The Inbox excludes
+// it after.
+export async function processCapture(
   getToken: TokenGetter,
   id: string,
   baseUrl: string = API_BASE_URL,
-): Promise<Todo> {
+): Promise<Capture> {
   const res = await apiFetch(
     getToken,
-    `/api/todos/${id}/done`,
+    `/api/captures/${id}/process`,
     { method: 'POST' },
     baseUrl,
   );
   if (!res.ok) {
-    throw new Error(`POST /api/todos/${id}/done failed: ${res.status}`);
+    throw new Error(`POST /api/captures/${id}/process failed: ${res.status}`);
   }
-  const body = (await res.json()) as { todo: Todo };
-  return body.todo;
+  const body = (await res.json()) as { capture: Capture };
+  return body.capture;
 }

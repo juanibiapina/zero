@@ -8,8 +8,8 @@ describe('QuickAddBar', () => {
     const { getByPlaceholderText, getByLabelText } = await render(
       <QuickAddBar value="" onChangeText={() => {}} onSubmit={() => {}} />,
     );
-    expect(getByPlaceholderText('Add a todo')).toBeTruthy();
-    expect(getByLabelText('Add todo')).toBeTruthy();
+    expect(getByPlaceholderText('Capture a thought')).toBeTruthy();
+    expect(getByLabelText('Capture')).toBeTruthy();
   });
 
   it('submits on the add button and on the keyboard done key', async () => {
@@ -18,8 +18,8 @@ describe('QuickAddBar', () => {
       <QuickAddBar value="buy milk" onChangeText={() => {}} onSubmit={onSubmit} />,
     );
 
-    fireEvent.press(getByLabelText('Add todo'));
-    fireEvent(getByPlaceholderText('Add a todo'), 'submitEditing');
+    fireEvent.press(getByLabelText('Capture'));
+    fireEvent(getByPlaceholderText('Capture a thought'), 'submitEditing');
 
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });

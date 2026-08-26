@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 import {
-  addTodo,
+  addCapture,
   apiFetch,
-  fetchTodos,
-  markTodoDone,
-  type Todo,
+  fetchInbox,
+  processCapture,
+  type Capture,
 } from '../api';
 
 type TokenGetter = () => Promise<string | null>;
@@ -44,80 +44,86 @@ describe('apiFetch', () => {
   });
 });
 
-describe('fetchTodos', () => {
+describe('fetchInbox', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('GETs /api/todos and returns the list', async () => {
-    const todos: Todo[] = [
+  it('GETs /api/captures and returns the Inbox', async () => {
+    const captures: Capture[] = [
       {
         id: '1',
         text: 'buy milk',
         createdAt: '2023-01-01T00:00:00.000Z',
-        doneAt: null,
+        processedAt: null,
       },
     ];
     jest
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ todos }), { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify({ captures }), { status: 200 }),
+      );
     const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
 
-    const result = await fetchTodos(getToken, 'https://example.test');
+    const result = await fetchInbox(getToken, 'https://example.test');
 
-    expect(result).toEqual(todos);
+    expect(result).toEqual(captures);
   });
 });
 
-describe('addTodo', () => {
+describe('addCapture', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('POSTs the text and returns the created todo', async () => {
-    const todo: Todo = {
+  it('POSTs the text and returns the created capture', async () => {
+    const capture: Capture = {
       id: '1',
       text: 'call mom',
       createdAt: '2023-01-01T00:00:00.000Z',
-      doneAt: null,
+      processedAt: null,
     };
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ todo }), { status: 201 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify({ capture }), { status: 201 }),
+      );
     const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
 
-    const result = await addTodo(getToken, 'call mom', 'https://example.test');
+    const result = await addCapture(getToken, 'call mom', 'https://example.test');
 
-    expect(result).toEqual(todo);
+    expect(result).toEqual(capture);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://example.test/api/todos');
+    expect(url).toBe('https://example.test/api/captures');
     expect(init.method).toBe('POST');
     expect(JSON.parse(String(init.body))).toEqual({ text: 'call mom' });
   });
 });
 
-describe('markTodoDone', () => {
+describe('processCapture', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('POSTs to /api/todos/{id}/done with the Bearer token', async () => {
-    const todo: Todo = {
+  it('POSTs to /api/captures/{id}/process with the Bearer token', async () => {
+    const capture: Capture = {
       id: 'abc',
       text: 'buy milk',
       createdAt: '2023-01-01T00:00:00.000Z',
-      doneAt: '2023-01-02T00:00:00.000Z',
+      processedAt: '2023-01-02T00:00:00.000Z',
     };
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ todo }), { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify({ capture }), { status: 200 }),
+      );
     const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
 
-    const result = await markTodoDone(getToken, 'abc', 'https://example.test');
+    const result = await processCapture(getToken, 'abc', 'https://example.test');
 
-    expect(result).toEqual(todo);
+    expect(result).toEqual(capture);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://example.test/api/todos/abc/done');
+    expect(url).toBe('https://example.test/api/captures/abc/process');
     expect(init.method).toBe('POST');
     const headers = new Headers(init.headers);
     expect(headers.get('Authorization')).toBe('Bearer tok');

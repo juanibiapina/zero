@@ -13,7 +13,7 @@ import { createClerkWebhookRoute } from "./routes/clerk-webhook";
 import { createUserSettingsRoutes } from "./routes/user-settings";
 import { createOnboardingRoutes } from "./routes/onboarding";
 import { createAdminRoutes } from "./routes/admin";
-import { createTodosRoutes } from "./routes/todos";
+import { createCapturesRoutes } from "./routes/captures";
 
 type Variables = {
   userId: string;
@@ -62,7 +62,7 @@ export const createApp = () => {
   app.route("/", createUserSettingsRoutes());
   app.route("/", createOnboardingRoutes());
   app.route("/", createAdminRoutes());
-  app.route("/", createTodosRoutes());
+  app.route("/", createCapturesRoutes());
 
   return app;
 };

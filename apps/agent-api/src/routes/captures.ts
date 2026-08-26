@@ -1,4 +1,4 @@
-// Clerk-authed routes for the todo capture list. Todos live in the caller's
+// Clerk-authed routes for the GTD capture Inbox. Captures live in the caller's
 // UserDO (one instance per Clerk user), reached the same way as user settings.
 // This is the parallel todo app's API; it does not touch the agent.
 
@@ -13,29 +13,29 @@ type Variables = {
   userId: string;
 };
 
-const TodoSchema = z.object({
+const CaptureSchema = z.object({
   id: z.string(),
   text: z.string(),
   createdAt: z.string(),
-  doneAt: z.string().nullable(),
+  processedAt: z.string().nullable(),
 });
 
-export const createTodosRoutes = () => {
+export const createCapturesRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
   const listRoute = createRoute({
     method: "get",
-    path: "/api/todos",
-    tags: ["Todos"],
-    summary: "List the caller's todos",
+    path: "/api/captures",
+    tags: ["Captures"],
+    summary: "List the caller's Inbox",
     responses: {
       200: {
         content: {
           "application/json": {
-            schema: z.object({ todos: z.array(TodoSchema) }),
+            schema: z.object({ captures: z.array(CaptureSchema) }),
           },
         },
-        description: "The open todo list, oldest first",
+        description: "The Inbox, oldest first",
       },
     },
   });
@@ -43,15 +43,15 @@ export const createTodosRoutes = () => {
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
     const userDO = getUserDO(c.env, userId);
-    const todos = await userDO.listTodos();
-    return c.json({ todos }, 200);
+    const captures = await userDO.listInbox();
+    return c.json({ captures }, 200);
   });
 
   const addRoute = createRoute({
     method: "post",
-    path: "/api/todos",
-    tags: ["Todos"],
-    summary: "Add a todo to the capture list",
+    path: "/api/captures",
+    tags: ["Captures"],
+    summary: "Capture an item into the Inbox",
     request: {
       body: {
         content: {
@@ -64,9 +64,9 @@ export const createTodosRoutes = () => {
     responses: {
       201: {
         content: {
-          "application/json": { schema: z.object({ todo: TodoSchema }) },
+          "application/json": { schema: z.object({ capture: CaptureSchema }) },
         },
-        description: "The created todo",
+        description: "The created capture",
       },
       400: {
         content: {
@@ -81,45 +81,45 @@ export const createTodosRoutes = () => {
     const userId = c.get("userId");
     const { text } = c.req.valid("json");
     const userDO = getUserDO(c.env, userId);
-    const todo = await userDO.addTodo(text);
-    log("todo_added", { clerk_user_id: userId });
-    return c.json({ todo }, 201);
+    const capture = await userDO.addCapture(text);
+    log("capture_added", { clerk_user_id: userId });
+    return c.json({ capture }, 201);
   });
 
-  const doneRoute = createRoute({
+  const processRoute = createRoute({
     method: "post",
-    path: "/api/todos/{id}/done",
-    tags: ["Todos"],
-    summary: "Mark a todo done",
+    path: "/api/captures/{id}/process",
+    tags: ["Captures"],
+    summary: "Process a capture (GTD Clarify), removing it from the Inbox",
     request: {
       params: z.object({ id: z.string() }),
     },
     responses: {
       200: {
         content: {
-          "application/json": { schema: z.object({ todo: TodoSchema }) },
+          "application/json": { schema: z.object({ capture: CaptureSchema }) },
         },
-        description: "The todo, now done",
+        description: "The capture, now processed",
       },
       404: {
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
         },
-        description: "No todo with that id",
+        description: "No capture with that id",
       },
     },
   });
 
-  router.openapi(doneRoute, async (c) => {
+  router.openapi(processRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
     const userDO = getUserDO(c.env, userId);
-    const todo = await userDO.markTodoDone(id);
-    if (!todo) {
-      return c.json({ error: "todo not found" }, 404);
+    const capture = await userDO.processCapture(id);
+    if (!capture) {
+      return c.json({ error: "capture not found" }, 404);
     }
-    log("todo_done", { clerk_user_id: userId });
-    return c.json({ todo }, 200);
+    log("capture_processed", { clerk_user_id: userId });
+    return c.json({ capture }, 200);
   });
 
   return router;

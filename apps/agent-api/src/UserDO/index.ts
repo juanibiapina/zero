@@ -5,7 +5,7 @@ import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
-import { DbTodoStore, type Todo } from "../store/todos";
+import { DbCaptureStore, type Capture } from "../store/captures";
 import {
   SystemTopicStore,
   systemTopicsFingerprint,
@@ -92,8 +92,8 @@ export class UserDO extends DurableObject<Env> {
   private store: Store;
   // File bytes in R2. Metadata rows live in this user's SQLite store.
   private fileBlobs: FileBlobStore;
-  // The parallel todo app's capture list. Separate from `store` on purpose.
-  private todos: DbTodoStore;
+  // The parallel todo app's GTD capture Inbox. Separate from `store` on purpose.
+  private captures: DbCaptureStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -101,7 +101,7 @@ export class UserDO extends DurableObject<Env> {
     const dbStore = new DbStore(this.db);
     this.store = new SystemTopicStore(dbStore);
     this.fileBlobs = createR2FileBlobs(env.FILES);
-    this.todos = new DbTodoStore(this.db);
+    this.captures = new DbCaptureStore(this.db);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
@@ -119,18 +119,18 @@ export class UserDO extends DurableObject<Env> {
     });
   }
 
-  // --- Todos (parallel todo app) ---
+  // --- Captures (parallel todo app's GTD Inbox) ---
 
-  addTodo(text: string): Todo {
-    return this.todos.add(text);
+  addCapture(text: string): Capture {
+    return this.captures.add(text);
   }
 
-  listTodos(): Todo[] {
-    return this.todos.list();
+  listInbox(): Capture[] {
+    return this.captures.list();
   }
 
-  markTodoDone(id: string): Todo | null {
-    return this.todos.markDone(id);
+  processCapture(id: string): Capture | null {
+    return this.captures.process(id);
   }
 
   // --- Conversations and messages ---

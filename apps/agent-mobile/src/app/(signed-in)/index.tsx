@@ -18,8 +18,8 @@ import Animated, {
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
-import { type Todo } from '@/lib/api';
-import { useAddTodo, useMarkTodoDone, useTodos } from '@/lib/todos';
+import { type Capture } from '@/lib/api';
+import { useAddCapture, useInbox, useProcessCapture } from '@/lib/captures';
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -31,22 +31,22 @@ export default function HomeScreen() {
   // Server state via React Query: retry/backoff, refetch-on-reconnect and
   // refetch-on-focus (AppState) come from the QueryClient; the resume-time
   // "stuck error" is handled there, not by hand.
-  const todosQuery = useTodos(getToken);
-  const addMutation = useAddTodo(getToken);
-  const doneMutation = useMarkTodoDone(getToken);
+  const inboxQuery = useInbox(getToken);
+  const addMutation = useAddCapture(getToken);
+  const processMutation = useProcessCapture(getToken);
 
-  const todos = todosQuery.data ?? [];
-  const loading = todosQuery.isPending;
+  const captures = inboxQuery.data ?? [];
+  const loading = inboxQuery.isPending;
   const busy = addMutation.isPending;
   // A mutation the user just triggered wins; otherwise show a load error only
   // when there's nothing on screen, so a failed background refetch stays silent
-  // behind the last-good list.
+  // behind the last-good Inbox.
   const error = addMutation.error
     ? messageOf(addMutation.error)
-    : doneMutation.error
-      ? messageOf(doneMutation.error)
-      : todos.length === 0 && todosQuery.error
-        ? messageOf(todosQuery.error)
+    : processMutation.error
+      ? messageOf(processMutation.error)
+      : captures.length === 0 && inboxQuery.error
+        ? messageOf(inboxQuery.error)
         : null;
 
   const [text, setText] = useState('');
@@ -123,18 +123,18 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [adding, confirmingDiscard, text, closeAdd]);
 
-  const onDone = useCallback(
-    (item: Todo) => {
+  const onProcess = useCallback(
+    (item: Capture) => {
       // Optimistic remove + rollback live in the mutation hook.
-      doneMutation.mutate(item.id);
+      processMutation.mutate(item.id);
     },
-    [doneMutation],
+    [processMutation],
   );
 
   return (
     <View className="flex-1 px-6 pt-16">
       <View className="mb-4 flex-row items-center justify-between">
-        <Text variant="title">Todos</Text>
+        <Text variant="title">Inbox</Text>
         {/* Native Clerk avatar (already a 36px circle); tapping opens the
             profile (manage account, security, sign out). No wrapper clip — an
             extra rounded-full/overflow-hidden mask crops the avatar off-center. */}
@@ -145,14 +145,14 @@ export default function HomeScreen() {
 
       <ScrollView className="flex-1">
         {loading ? (
-          <Text variant="subtitle">Loading your todos…</Text>
-        ) : todos.length === 0 ? (
-          <Text variant="subtitle">No todos yet. Add one above.</Text>
+          <Text variant="subtitle">Loading your inbox…</Text>
+        ) : captures.length === 0 ? (
+          <Text variant="subtitle">Your inbox is empty. Capture something.</Text>
         ) : (
-          todos.map((item) => (
-            // Animated row: marking done fades + collapses it out (exiting) and
+          captures.map((item) => (
+            // Animated row: processing fades + collapses it out (exiting) and
             // the rows below slide up (layout); an error re-insert fades back in
-            // (entering). onDone keeps its optimistic-remove contract.
+            // (entering). onProcess keeps its optimistic-remove contract.
             <Animated.View
               key={item.id}
               entering={FadeIn.duration(150)}
@@ -160,13 +160,14 @@ export default function HomeScreen() {
               layout={LinearTransition.duration(200)}
               className="flex-row items-center gap-3 border-b border-neutral-200 py-3"
             >
-              {/* Leftside done control: a tappable circle, matching the
-                  Person-avatar motif. Tap completes the item. */}
+              {/* Leftside process control: a tappable circle, matching the
+                  Person-avatar motif. Tap processes the capture out of the Inbox
+                  (GTD Clarify). */}
               <Pressable
-                accessibilityLabel={`Mark "${item.text}" done`}
+                accessibilityLabel={`Process "${item.text}"`}
                 className="h-6 w-6 rounded-full border-2 border-neutral-400"
                 hitSlop={8}
-                onPress={() => void onDone(item)}
+                onPress={() => void onProcess(item)}
               />
               <Text className="flex-1">{item.text}</Text>
             </Animated.View>

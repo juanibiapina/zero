@@ -24,7 +24,7 @@ export type QuickAddProps = {
 // Transition layer between two independent, reusable elements: the collapsed
 // `Fab` (plus button) and the expanded `QuickAddBar`. It owns ONLY the motion —
 // cross-fading the two elements as `open` flips and keeping the open bar stuck to
-// the keyboard — and knows nothing about todo state. The elements know nothing
+// the keyboard — and knows nothing about capture state. The elements know nothing
 // about the animation. Decoupled by design so either can be reused or restyled
 // without touching the other.
 export function QuickAdd({
@@ -77,7 +77,7 @@ export function QuickAdd({
           className="absolute inset-x-0 bottom-0 items-end px-6 pb-6"
           pointerEvents="box-none"
         >
-          <Fab label="Add todo" onPress={onOpen} />
+          <Fab label="Capture" onPress={onOpen} />
         </Animated.View>
       )}
     </>
