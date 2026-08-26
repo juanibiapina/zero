@@ -463,10 +463,27 @@ Fixes to make the capture + done flows feel like Todoist. Not planned yet;
 plan each before building. All mobile-only (apps/agent-mobile), pure JS, so
 they hot-reload with no EAS build.
 
-- Add flow — animate the quick-add input (PLANNED, see "Plan: quick-add morph +
-  done fade-out" below). The circular + FAB should morph into the full-width
-  quick-add bar and back (Todoist-style), rising with the keyboard, not the
-  current instant swap. Imperative reanimated shared value + keyboard height.
+- [DONE] Add flow — animate the quick-add input. The plus FAB and the quick-add
+  bar now cross-fade as the bar opens/closes and the bar rises with the keyboard,
+  replacing the instant swap. ARCHITECTURE (per "treat them individually,
+  separation of concerns"): two reusable presentational elements — `Fab`
+  (existing) and `QuickAddBar` (`src/components/quick-add-bar.tsx`, input + Add
+  button, no animation/keyboard logic) — plus a decoupled transition layer
+  `QuickAdd` (`src/components/quick-add.tsx`) that owns ONLY the motion (cross-
+  fade the two, keyboard-follow via `useReanimatedKeyboardAnimation` whose height
+  is negative-on-open so it maps straight to translateY) and the backdrop. The
+  home screen owns state (adding/text/discard) and passes handlers down; the
+  elements know nothing about the animation. RESEARCH: Todoist Android's quick-add
+  is a bottom sheet off the FAB = Material's container-transform pattern (300ms,
+  cubic-bezier(0.4,0,0.2,1), fade-through). A true single-surface container
+  transform (shape+color+position in one tween) was designed but NOT built:
+  guidance was to keep the FAB and bar as separate reusable elements, so the
+  transition layer cross-fades them instead of morphing one surface. Reanimated
+  shared-element transitions are experimental / not production, so a single-
+  surface morph would be hand-built if ever wanted. Pure JS, hot-reloads. Tests:
+  quick-add-bar.test.tsx (2) + existing home-screen flow tests still green (they
+  drive the FAB/bar through QuickAdd). DEVICE-VERIFY: the keyboard-rise direction
+  (height sign) and the cross-fade timing.
 - Done flow — fade out done items (PLANNED, see the same plan). Fade + collapse
   the row on done, rows below slide up, instead of the instant hard remove.
 - [DONE] Add flow — confirm discard. Dismissing the open quick-add with unsaved

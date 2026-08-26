@@ -8,10 +8,7 @@ import {
   type TextInput,
   View,
 } from 'react-native';
-import {
-  KeyboardEvents,
-  KeyboardStickyView,
-} from 'react-native-keyboard-controller';
+import { KeyboardEvents } from 'react-native-keyboard-controller';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -19,8 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Fab } from '@/components/ui/fab';
-import { Input } from '@/components/ui/input';
+import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
 import { addTodo, fetchTodos, markTodoDone, type Todo } from '@/lib/api';
 
@@ -192,59 +188,36 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {adding ? (
-        <>
-          {/* Backdrop: tap outside the bar to dismiss. */}
-          <Pressable
-            accessibilityLabel="Dismiss quick add"
-            className="absolute inset-0"
-            onPress={requestClose}
-          />
-          <KeyboardStickyView className="absolute inset-x-0 bottom-0">
-            <View className="flex-row gap-2 border-t border-neutral-200 bg-white px-6 py-3">
-              <Input
-                ref={inputRef}
-                className="flex-1"
-                placeholder="Add a todo"
-                value={text}
-                onChangeText={setText}
-                onSubmitEditing={() => void onAdd()}
-                blurOnSubmit={false}
-                returnKeyType="done"
-                autoFocus
-              />
-              <Fab
-                label="Add todo"
-                className="h-12 w-12"
-                disabled={busy}
-                onPress={() => void onAdd()}
-              />
-            </View>
-          </KeyboardStickyView>
-          {confirmingDiscard ? (
-            <ConfirmDialog
-              title="Discard changes?"
-              message="The changes you've made will not be saved."
-              cancelLabel="Cancel"
-              confirmLabel="Discard"
-              destructive
-              onCancel={() => {
-                setConfirmingDiscard(false);
-                // The Back that opened this dialog also hid the keyboard;
-                // refocus to bring it back so editing continues seamlessly.
-                inputRef.current?.focus();
-              }}
-              onConfirm={closeAdd}
-            />
-          ) : null}
-        </>
-      ) : (
-        <Fab
-          label="Add todo"
-          className="absolute bottom-6 right-6"
-          onPress={() => setAdding(true)}
+      {/* Transition layer: cross-fades the plus FAB and the quick-add bar and
+          lifts the bar with the keyboard. It owns the motion; this screen owns
+          the state. */}
+      <QuickAdd
+        open={adding}
+        text={text}
+        onChangeText={setText}
+        onOpen={() => setAdding(true)}
+        onSubmit={() => void onAdd()}
+        onRequestClose={requestClose}
+        busy={busy}
+        inputRef={inputRef}
+      />
+
+      {confirmingDiscard ? (
+        <ConfirmDialog
+          title="Discard changes?"
+          message="The changes you've made will not be saved."
+          cancelLabel="Cancel"
+          confirmLabel="Discard"
+          destructive
+          onCancel={() => {
+            setConfirmingDiscard(false);
+            // The Back that opened this dialog also hid the keyboard; refocus to
+            // bring it back so editing continues seamlessly.
+            inputRef.current?.focus();
+          }}
+          onConfirm={closeAdd}
         />
-      )}
+      ) : null}
     </View>
   );
 }
