@@ -39,7 +39,27 @@ of allowed interactions vs blacklist of forbidden ones.
 
 ## Entity wiki (draft — grow one at a time)
 
-- **Todo** — belongs to a Project. Basic actions: add, mark done. First slice.
+Grounding: the entry point is modeled as GTD's **Inbox**, not a todo list (see
+"GTD nomenclature" below). The foundational block is the **Capture**. The typed
+entities a Capture becomes during **Process** (GTD Clarify) are exactly GTD's
+eight endpoints: Trash, Someday/Maybe, Reference (≈ Note), Project, Done-now,
+Waiting-For (≈ Person + delegation), Next Action (the real Todo), Calendar
+(≈ our schedules). So the list below is the Clarify target set, not a loose bag.
+
+- **Capture** — the foundational block and the entry point. A single raw line of
+  text dropped into the **Inbox**: a thought, task, idea, book someone
+  mentioned, anything. Deliberately UNTYPED and uncommitted (GTD "stuff"). No
+  Project, no type, no priority at capture time. Actions: capture (add),
+  **Process** (the GTD Clarify step — turn it into a typed entity and remove it
+  from the inbox), optional **Tickler** date (resurface in the inbox on its day;
+  a scheduled show-up, NOT a deadline). Rule: the Inbox is not a to-do list, and
+  a processed Capture never goes back into it. First real slices (built as
+  "todos", renamed to Capture): capture + Process.
+- **Todo** (a.k.a. **Next Action**) — a typed entity a Capture becomes during
+  Process, NOT the entry point. GTD-strict: the single physical, visible next
+  step ("email James", not "follow up"), optionally with a Context
+  (@computer, @calls, @home, @errands, @waiting). Belongs to a Project. This is
+  what the app originally mis-modeled as the first block.
 - **Project** — goal-oriented (baby, diploma, buy a house, watch a movie).
   Sometimes maintenance-oriented (a "baby maintenance" project should maybe not
   exist). Has a nice icon (baby face, diploma). Can contain Todos, agent
@@ -73,6 +93,49 @@ of allowed interactions vs blacklist of forbidden ones.
   (Google Photos), **Google Wallet** (service; auto-use for movie tickets),
   **Movie ticket** — candidate entities.
 
+## GTD nomenclature (research, 2026-08-27)
+
+Sourced from gettingthingsdone.com (David Allen Co.), the 2015 revised book via
+Wikipedia, and practitioner guides. This is the vocabulary the app models. We
+adopted **Capture** (item), **Inbox** (list), **Process** (the tap action, GTD
+Clarify), **Tickler** (scheduled show-up date).
+
+The five steps (2015 ed.): **Capture → Clarify → Organize → Reflect → Engage**
+(2001 ed. named them Collect → Process → Organize → Plan → Do; "Process" ≈
+Clarify, which is why our tap action is **Process**).
+
+- **Capture** — collect everything with your attention into a trusted tool.
+- **Clarify** — process each item: what is it, is it actionable?
+- **Organize** — put it on the right list.
+- **Reflect** — the Weekly Review.
+- **Engage** — just do it.
+
+Core nouns:
+
+- **Stuff** — Allen's word for the raw, uncategorized captured items ("open
+  loops", "incompletes"). Purist noun for an inbox item; bad for code/UI, so we
+  say **Capture** (derived from the Capture step).
+- **Inbox** ("in") — the collection bucket. Rules: empty it to zero regularly;
+  it is NOT a to-do list; never put clarified items back into it.
+- **Project** — any outcome needing 2+ actions.
+- **Next Action** — the single physical, visible next step (the true "todo").
+- **Context** — where/tool/person a next action needs (@computer, @calls, @home,
+  @errands, @waiting, @anywhere).
+- **Waiting For** — delegated items you track and chase.
+- **Someday/Maybe** — not now; might do later.
+- **Reference** — non-actionable info worth keeping (a recommended book).
+- **Tickler file** ("43 folders") — date-based resurfacing: an item reappears on
+  its day. This is our "scheduled show-up date" and the "recurring = resurface"
+  idea.
+- **Two-minute rule** — if a clarified item takes <2 min, do it now.
+- **Weekly Review** — the Reflect cadence. **Trusted system** — the whole store.
+
+The eight endpoints of Clarify (every inbox item leaves to exactly one):
+Trash, Someday/Maybe, Reference, Projects (2+ steps; gets an outcome + next
+action), Done-now (<2 min), Waiting-For (delegated), Next Action (context list;
+single step), Calendar (day/time-specific). **These eight ARE the typed entities
+the vision wants**, so Clarify/Process is the spine of the app, not a footnote.
+
 ## Concrete pains that motivate this
 
 - Zero booked a movie calendar event but ignored that the confirmation named 2
@@ -94,8 +157,16 @@ of allowed interactions vs blacklist of forbidden ones.
 
 ## Spec map (the part we actually build)
 
-story:   Replace Todoist as my task entry point with a parallel app in zero.
+story:   Replace Todoist's entry point with a GTD capture Inbox in zero: one
+         fast place to capture any raw thought, then Process it later into a
+         typed entity. NOT a todo list (the original mis-model; see the reframe
+         plan below).
 decisions:
+  - VOCABULARY LOCKED (2026-08-27, GTD nomenclature): the item is a **Capture**,
+    the list is the **Inbox**, the tap action is **Process** (GTD Clarify), a
+    scheduled show-up date is a **Tickler**. Code, routes, tables, docs use these
+    words; none say todo/done. Increments 0–2 were built as "todos" and get
+    renamed to Capture (see "reframe the todo app as a GTD capture Inbox" below).
   - Scope this session to the first shippable slice; vision stays a growing wiki.
   - Surface: extend the existing Expo mobile app (apps/agent-mobile) so there's a
     real dock icon on the phone. It already has Clerk login. Not a PWA. Phone is
@@ -121,39 +192,41 @@ decisions:
     modules, so adopting them needs no new EAS build, only a metro/babel config
     change + `expo start --clear`. New Architecture (SDK 57) supported by v4.
 rules:
-  - rule: Capture an item to a single flat inbox list
+  - rule: Capture a raw item into the flat Inbox (untyped, uncommitted)
     examples:
-      - Type "buy milk", tap add -> "buy milk" appears in the list
-  - rule: Optionally set a scheduled "show-up" date (NOT a deadline) while adding
+      - Type "buy milk", tap add -> "buy milk" appears in the Inbox
+  - rule: Process a Capture -> it leaves the Inbox (still stored)
     examples:
-      - Add "pay rent", pick tomorrow -> item hidden today, shows up tomorrow
-      - Add "call mom" with no date -> shows in the list now
-  - rule: See the list = what's due to show up now (scheduled <= today, plus undated)
+      - Tap the circle on "buy milk" -> vanishes from the Inbox instantly
+      - (later) Process clarifies it into a typed entity (one of the 8 endpoints)
+  - rule: Optionally set a Tickler date (a scheduled show-up, NOT a deadline)
     examples:
-      - Open the app -> today's + undated open items are visible in one list
-  - rule: List is hand-ordered; position IS the priority (no priority field)
+      - Add "pay rent", pick tomorrow -> hidden today, resurfaces in the Inbox tomorrow
+      - Add "call mom" with no date -> shows in the Inbox now
+  - rule: The Inbox = Captures due to show up now (tickler <= today, plus undated)
     examples:
-      - New captures append at the bottom
-      - User reorders items to set priority (top = do first)
-  - rule: Postpone an item to tomorrow (FREQUENT, core action)
+      - Open the app -> today's + undated open Captures are visible in one list
+  - rule: Inbox is hand-ordered; position IS the priority (no priority field)
     examples:
-      - Tap postpone on "call mom" -> leaves today's list, returns tomorrow
-  - rule: Mark an item done
-    examples:
-      - Tap done on "buy milk" -> vanishes from the list instantly (still stored)
+      - New Captures append at the bottom
+      - User reorders to set priority (top = process first)
 
 deferred (later slices, in rough order):
-  - Separate the two roles of the list: a pure capture inbox vs a today/do-list
-    (a known Todoist pain the product should fix; not needed to match flow now)
-  - Triage: move captured items into Projects (the next-day workflow; richest
-    for data-model learning)
-  - Use the list as a daily to-do list (second mode of the same surface)
-  - Recurring tasks
-  - Reminders / push notifications
-  - (not used in Todoist today, likely never: subtasks, priorities, labels)
+  - PROCESS/CLARIFY into typed entities — the spine. A Capture becomes one of
+    GTD's 8 endpoints: Trash, Someday/Maybe, Reference (Note), Project, Done-now,
+    Waiting-For (Person), Next Action (Todo), Calendar (schedule). Richest slice
+    for the data model; promoted from a footnote to the next real increment.
+  - Tickler: scheduled show-up date on a Capture + a "due today" Inbox view.
+  - Separate the two roles: a pure capture Inbox vs a today/do-list. GTD rule:
+    the Inbox is NOT a to-do list and processed items never return to it. This is
+    the split the product must enforce, not just offer.
+  - Recurring capture (a Tickler that re-fires) — GTD's answer to "recurring".
+  - Reminders / push notifications.
+  - (likely never, not used in Todoist today: subtasks, priorities, labels.)
 
 questions:
-  - Slice-1 list view: ordering, and what happens to done items (see Q5)
+  - Inbox view: ordering, and what Process does before the Clarify decision tree
+    exists (today it just removes; see the reframe plan).
 
 acceptance criteria: matched by the ordered increments below
 
@@ -187,9 +260,15 @@ acceptance criteria: matched by the ordered increments below
 #                                 dropped the NativeWind transform, so rows showed
 #                                 as plain text with an invisible zero-size done
 #                                 circle. `expo start --dev-client --clear` fixed it.)
-#   inc 3 scheduled date ........ NEXT
-#   inc 4 postpone tomorrow ..... todo
-#   inc 5 manual reorder ........ todo
+#   inc 3 RENAME todo -> Capture . NEXT (GTD reframe; see the reframe plan below.
+#                                 Rename table/routes/RPC/store + mobile, migration
+#                                 0039 renames todos->captures, doneAt->processedAt.
+#                                 Behavior unchanged: add + Process. No new feature.)
+#   inc 4 Process/Clarify ....... todo (THE SPINE: a Capture becomes a typed entity,
+#                                 one of GTD's 8 endpoints. Richest data-model slice.)
+#   inc 5 Tickler date .......... todo (scheduled show-up date + "due today" Inbox)
+#   (dropped from the roadmap: "postpone to tomorrow" and "reorder = priority" as
+#    standalone todo-list mechanics; revisit only as Inbox/Tickler behavior.)
 #
 # DONE — Upgrade all mobile deps + Clerk Core 3 (branch upgrade-mobile-deps):
 #   - Expo stayed on SDK 57 (57.0.16 is the latest SDK; no newer one exists), so
@@ -448,16 +527,141 @@ build order (capture point):
      list. No done/dates/order yet. Verified on the phone.
   2. [DONE] Mark done: tap the leftside circle -> vanishes from list, still
      stored (doneAt timestamp; open list = doneAt IS NULL).
-  3. Scheduled date + today view: optional show-up date on add; list shows
-     scheduled<=today + undated; future-dated hidden until their day.
-  4. Postpone to tomorrow: one-tap reschedule.
-  5. Manual reorder: drag to order, persisted. Position = priority.
-  # After #5: capture point matches today's Todoist flow (minus recurring).
-then later: recurring -> inbox/today split -> triage into Projects
+  3. [NEXT] RENAME todo -> Capture (GTD reframe): rename table/routes/RPC/store +
+     mobile, migration 0039 renames todos->captures & doneAt->processedAt.
+     Behavior unchanged (add + Process). See the reframe plan below.
+  4. Process/Clarify: a Capture becomes a typed entity (one of GTD's 8 endpoints).
+     The spine; richest data-model slice.
+  5. Tickler date: optional scheduled show-up date on a Capture; Inbox shows
+     tickler<=today + undated; future-dated hidden until their day.
+  # After #5: the Inbox matches the user's real capture flow, GTD-faithful.
+then later: recurring capture (tickler re-fire) -> enforce Inbox-vs-do-list split
 
 ---
 
-## UI polish backlog (before increment 3)
+## Plan: reframe the todo app as a GTD capture Inbox — [NEXT, increment 3]
+
+Self-contained plan for a fresh agent. Assume only this doc.
+
+### Goal
+
+Stop modeling the entry point as a **Todo** (a task in a Project, "mark done").
+Model it as GTD's **Inbox**: one fast place to capture any raw, untyped thought,
+later **Processed** into a typed entity. "Todo" was the wrong first block (see the
+entity wiki + GTD nomenclature sections above). Behavior does NOT change here:
+add + remove-from-list stay identical. This is a rename of the concept across
+code, data, docs, and vocabulary, so the NEXT increment builds Process/Clarify
+(the spine) instead of todo-list features.
+
+### Vocabulary (LOCKED 2026-08-27)
+
+- item = **Capture** (table `captures`, type `Capture`)
+- list/place = **Inbox** (UI title, empty-state copy)
+- tap action = **Process** (GTD Clarify; column `processedAt`, RPC
+  `processCapture`, route `POST /api/captures/{id}/process`, log
+  `capture_processed`)
+- scheduled show-up date = **Tickler** (increment 5, not this one)
+
+Open Q resolved: today Process just removes the Capture from the Inbox (no
+Clarify decision tree yet). `processedAt` is a nullable ISO timestamp; the Inbox
+= rows where `processedAt IS NULL`.
+
+### Data migration (preserve the user's real captures)
+
+Real data lives in the production `todos` table in the live UserDO. Cloudflare DO
+SQLite supports `RENAME TO` / `RENAME COLUMN`. DO NOT edit the applied
+0037/0038 files. Add forward-only:
+
+- `UserDO/db/migrations/0039_rename_todos_to_captures.sql`:
+  ```sql
+  ALTER TABLE "todos" RENAME TO "captures";
+  ALTER TABLE "captures" RENAME COLUMN "doneAt" TO "processedAt";
+  ```
+- Register `m0039` in `db/migrations.ts`. Auto-applies on next DO wake.
+- `db/schema.ts`: rename table `todos` -> `captures`, column `doneAt` ->
+  `processedAt`, update the comment to describe the Inbox.
+
+### Backend rename (apps/agent-api/src)
+
+- `store/todos.ts` -> `store/captures.ts`: `DbCaptureStore`, `Capture`
+  (`id`, `text`, `createdAt`, `processedAt`), `add` / `list`
+  (`isNull("processedAt")`) / `process(id)`.
+- `routes/todos.ts` -> `routes/captures.ts`: `GET /api/captures` -> `{ captures }`;
+  `POST /api/captures` `{ text }` -> `{ capture }`;
+  `POST /api/captures/{id}/process` -> `{ capture }` / 404. `CaptureSchema`. Logs
+  `capture_added` / `capture_processed`.
+- `UserDO/index.ts`: field `captures`, RPC `addCapture` / `listInbox` /
+  `processCapture`.
+- `app.ts`: `createCapturesRoutes()`.
+- Keep the "standalone from the agent Store" boundary.
+
+### Mobile rename (apps/agent-mobile/src)
+
+- `lib/api.ts`: `Capture` type; `fetchInbox` / `addCapture` / `processCapture`.
+- `lib/todos.ts` -> `lib/captures.ts`: `useInbox` / `useAddCapture` /
+  `useProcessCapture`, `inboxKey`. Keep the React Query optimistic-remove +
+  rollback contract.
+- `app/(signed-in)/index.tsx`: title **"Inbox"**; "Loading your inbox…"; empty
+  "Your inbox is empty. Capture something."; circle label
+  `Process "${item.text}"`. All behavior (optimistic remove, fade-out, quick-add,
+  discard-confirm, Android back) unchanged.
+- `components/quick-add*.tsx`: labels "Add to inbox" / placeholder "Capture a
+  thought".
+
+### Tests (rename + update fixtures; assertions stay behavioral)
+
+- `store/captures.test.ts`: add->list round-trip; `process` removes from the open
+  list and stamps `processedAt`; `process("nope")` -> null.
+- `routes/captures.test.ts`: POST then GET round-trips; process removes it;
+  unknown id -> 404; two users isolated. Rename the fake UserDO methods.
+- Mobile `lib/__tests__/api.test.ts`: the three functions hit the new paths with
+  the Bearer token.
+- Mobile screen + quick-add tests: same flows, renamed hooks/labels.
+
+### Verification (this box: no workerd, no emulator)
+
+- `pnpm --filter @zero/agent-api test | typecheck | lint`.
+- `pnpm --filter @zero/agent-mobile test | typecheck | lint`, then
+  `expo export --platform android`.
+- Land backend on `main` first (phone hits the deployed worker). After deploy the
+  migration runs on next DO wake; confirm existing captures survive (title now
+  "Inbox", old items still listed), then Process one -> leaves -> relaunch ->
+  still gone.
+
+### Docs / changelog
+
+- Mobile todo app is a separate surface: NO `apps/agent-api/CHANGELOG.md` entry.
+  Record here (PROGRESS + build order) on completion; note the SQLite RENAME
+  migration and that 0037/0038 stay untouched.
+
+### Skills to use
+
+- ubiquitous-language — keep code + docs on the locked nouns.
+- refactoring — behavior-preserving rename with a green baseline; commit before,
+  rename in safe steps. tdd — keep existing behavior tests green as the guard.
+- development-guidelines, typescript-strict, react-testing / front-end-testing,
+  git-commit, open-pr.
+
+### Acceptance criteria
+
+- Code, routes, tables, docs all say Capture/Inbox/Process; none say todo/done.
+- Migration 0039 renames table + column; production captures survive after deploy.
+- `GET /api/captures` = open Inbox; POST adds; `POST /api/captures/{id}/process`
+  removes (404 unknown); users isolated.
+- Mobile shows "Inbox"; capture + Process behave exactly as add + done did.
+- All checks green; `expo export` bundles.
+
+### Risks
+
+- Migration on live data: forward-only, never edit 0037/0038, verify the swap on
+  device after deploy before processing anything.
+- Rename churn: `todo` appears across ~14 files, two packages. Lean on typecheck
+  + green behavior tests; grep for residual `todo`/`done` after.
+- Scope: rename only. Process/Clarify into typed entities is increment 4.
+
+---
+
+## UI polish backlog (pre-reframe; items mostly DONE)
 
 Fixes to make the capture + done flows feel like Todoist. Not planned yet;
 plan each before building. All mobile-only (apps/agent-mobile), pure JS, so
