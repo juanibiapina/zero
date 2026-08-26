@@ -2,10 +2,6 @@
 
 User-facing changes to Zero, most recent first.
 
-- 2026-08-27: You can now finish a to-do in the Zero app: tap the circle next to it and it leaves your list. It stays saved, so nothing is lost.
-- 2026-08-27: The Zero app header now shows your profile picture. Tap it to manage your account or sign out.
-- 2026-08-26: Adding a to-do in the Zero app is faster: tap the round + button in the corner and the keyboard pops up right away. Type a task, hit enter, and the box stays open so you can add several in a row. Tap outside to close it.
-- 2026-08-26: The Zero app now has a to-do list: type a task, tap Add, and it shows up and stays saved. This is the first piece of a bigger app coming to your phone.
 - 2026-08-17: If you go quiet for about a week, Zero now checks in once — offering to pick up an unread email, a topic you were working on, or just to help.
 - 2026-08-14: When someone answers an email Zero sent for you, Zero tells you within the hour and picks up where the thread left off. Ask it to keep an eye on any other thread you're waiting on, and it watches that one too.
 - 2026-08-14: Zero now reliably replies after a new message even if a previous turn was interrupted mid-flight.
