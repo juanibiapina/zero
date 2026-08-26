@@ -160,7 +160,8 @@ acceptance criteria: matched by the ordered increments below
 #   Upgrade mobile deps ......... DONE code+checks (branch upgrade-mobile-deps);
 #                                 needs a new EAS dev build + on-device OAuth smoke
 #   UI: Clerk user button ....... TODO (unblocked: @clerk/expo/native now available)
-#   Agent-driven mobile verify .. TODO (dev-infra; see note; do before/with inc 2)
+#   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
+#                                 Pixel 7 over USB; see note; waits for the device)
 #   inc 2 mark done ............. after
 #   inc 3 scheduled date ........ todo
 #   inc 4 postpone tomorrow ..... todo
@@ -201,41 +202,79 @@ acceptance criteria: matched by the ordered increments below
 #     an EAS APK and have the human install + click it. Feedback loop is far too
 #     slow, and broken builds reach the human. We want the AGENT to bring the app
 #     up, SEE it render, and INTERACT with the specific feature it added, via a
-#     few simple commands, on THIS dev box. The human still gets an APK to eyeball
-#     the real thing -- but should stop receiving broken versions.
-#   - GOAL (acceptance): a documented one-liner (e.g. `bin/mobile-verify` or a
-#     turbo/pnpm script) that boots the app headless, drives a scripted flow
-#     (open app -> reach the feature -> tap/type -> assert something visible), and
-#     leaves a SCREENSHOT + pass/fail the agent can read without a phone. Must run
-#     on this NixOS box (no KVM, no local Android emulator, workerd can't run).
-#   - AUTH: the flow needs to get past Clerk sign-in. Support BOTH: (a) a bypass/
-#     mocked-auth mode for fast feature checks (a fake session / test JWT, or an
-#     EXPO_PUBLIC_E2E flag that stubs useAuth -- note sign-in.tsx already has an
-#     EXPO_PUBLIC_E2E probe branch), and (b) an occasional REAL Google login path
-#     for auth-touching changes. Real OAuth needs a browser + Google account, so
-#     it likely stays manual/CI, while the bypass path is the agent's default.
-#   - CONSTRAINTS / what exists:
-#     * No local emulator here. Options to evaluate: (1) render the app on the WEB
-#       target (`expo start --web`, react-native-web is already a dep) and drive
-#       it with the `browse` skill (Chrome CLI screenshots) -- fastest, but native
-#       modules (react-native-keyboard-controller, Clerk native, expo-glass) may
-#       not run on web and need mocking/guards; (2) a cloud/CI emulator the agent
-#       triggers and reads artifacts from -- the Mobile E2E workflow already boots
-#       an emulator + Maestro and uploads screenshot/logcat/ui.xml, so extending
-#       those Maestro flows per feature is the lowest-new-infra path, but it runs
-#       in GitHub Actions, not locally (slower loop); (3) a hosted device farm.
-#     * Metro runs locally ONLY with EXPO_UNSTABLE_HEADLESS=1 on this box (the CLI
-#       otherwise crashes installing the React Native DevTools binary: "NixOS
-#       cannot run dynamically linked executables", exit 127). Whatever harness we
-#       pick must set that flag.
-#     * Keep the APK path (EAS preview/dev build) for human visual verification;
-#       this task is ADDITIVE -- a fast agent loop, not a replacement.
-#   - DELIVERABLE OF THE SETUP TASK: pick one primary approach (lean toward the
-#     web-target + browse-skill loop for speed, with Maestro/CI as the on-device
-#     backstop), wire the auth bypass, add the one-liner + a README section, and
-#     prove it by having the agent verify an existing feature (add-a-todo) end to
-#     end with a screenshot. After this lands, EVERY mobile-touching task must run
-#     it and paste the screenshot/result before calling the work done.
+#     few simple commands. The human still gets an APK to eyeball the real thing
+#     -- but should stop receiving broken versions.
+#   - We want an ACTUAL mobile client (real device / emulator), NOT a web-target
+#     simulation (react-native-web) -- explicitly rejected by the human.
+#
+#   - HARD CONSTRAINT (verified 2026-08-26): the dev box ("mini") has NO /dev/kvm
+#     and ZERO vmx/svm CPU flags, so an accelerated Android emulator CANNOT run
+#     locally. No adb / Android SDK / Java / Maestro installed yet either. So the
+#     Android instance must be hosted off-CPU-emulation and reached over adb.
+#
+#   - DEVICE DECISION (human, 2026-08-26): use a spare **Pixel 7** (old phone)
+#     plugged into "mini" over USB, LATER (not available right now). That means:
+#     * Local USB adb -- no Tailscale, no kernel changes, no Redroid needed.
+#     * REAL Google login works (real device with Chrome + Google), so both the
+#       bypass path and the occasional real-OAuth path are testable on it.
+#     * Redroid (containerized Android, no KVM, needs NixOS binder/ashmem kernel
+#       modules) and adb-over-Tailscale were the fallbacks if there were no
+#       device; now they are unneeded. CI's mobile-e2e emulator stays the
+#       device-less backstop.
+#
+#   - DRIVER LAYER (the "ideal for coding agents" piece): use **Maestro + its
+#     built-in MCP** (`claude mcp add maestro -- maestro mcp`, 9 tools: list
+#     devices, inspect screen, generate + run flows, screenshot, Viewer, submit
+#     to Cloud). Reason: we ALREADY run Maestro flows in CI (.maestro/,
+#     mobile-e2e.yml), so one tool spans the interactive agent loop AND the
+#     deterministic saved regression flows. Alternative kept in reserve:
+#     mobile-mcp (mobile-next) -- accessibility-tree-first, cheaper tokens, any
+#     adb device -- if Maestro's screenshot token cost hurts. (Appium MCP /
+#     Callstack Agent Device also exist; not preferred given the Maestro
+#     investment.) Consider a formal evaluate-existing-solutions pass before
+#     committing.
+#
+#   - APP RUN MODE: fast local loop = drive the already-installed Expo dev-client
+#     with Metro headless (EXPO_UNSTABLE_HEADLESS=1 -- REQUIRED on this box or the
+#     CLI crashes installing the RN DevTools binary, "NixOS cannot run dynamically
+#     linked executables", exit 127; see mobile README). JS changes hot-reload, no
+#     new EAS build. For a deterministic full-native check, drive a preview APK
+#     (self-contained, same as CI's expo prebuild + assembleRelease); that APK
+#     comes from EAS/CI, not local (no Android SDK here).
+#
+#   - AUTH: support BOTH. (a) BYPASS (agent default): extend the existing
+#     EXPO_PUBLIC_E2E flag (sign-in.tsx already branches on it) into a test-only
+#     signed-in mode -- stub useAuth/session + a test JWT the worker accepts (or a
+#     mock API base) -- so the agent reaches the todo feature in one launch, no
+#     OAuth. (b) REAL Google login (occasional, auth-touching changes only): drive
+#     the OAuth Custom Tab via Maestro on the Pixel 7; Google anti-bot screens make
+#     this flaky, so it stays manual/CI-gated, not the default loop.
+#
+#   - DELIVERABLE: a one-liner (bin/mobile-verify or a pnpm/turbo script) that
+#     checks a device is connected (adb devices), boots the app (dev-client + Metro
+#     headless, or installs the preview APK), runs a Maestro flow (open -> reach
+#     feature -> tap/type -> assert something visible), and saves a SCREENSHOT +
+#     pass/fail the agent reads. Plus a mobile README section (USB pairing, bypass
+#     flag, the command). PROOF: agent verifies the existing add-a-todo feature end
+#     to end and pastes the screenshot.
+#
+#   - NEW PROJECT RULE (add to AGENTS.md + here once it works): every
+#     mobile-touching task runs bin/mobile-verify and includes the
+#     screenshot/result before the work is called done.
+#
+#   - PHASES: (1) toolchain on NixOS via nix -- adb (android-tools), JDK, Maestro;
+#     register `maestro mcp`; watch for NixOS dynamic-link issues, prefer nixpkgs
+#     builds, fall back to mobile-mcp or raw adb if Maestro won't run. (2) plug in
+#     the Pixel 7 over USB, enable USB debugging, authorize, confirm `maestro test`
+#     drives it. (3) auth-bypass mode. (4) bin/mobile-verify + the add-a-todo flow.
+#     (5) prove + document + add the project rule. Phases 1/3/4 can be prepped now;
+#     phase 2 waits for the device.
+#
+#   - RISKS: NixOS toolchain friction (adb/Maestro/Java as dynamic binaries -- use
+#     nixpkgs builds, fall back to mobile-mcp); device not always connected (loop
+#     degrades to CI emulator backstop); real-OAuth flakiness (keep off the default
+#     path). Security: if adb ever goes over the network instead of USB, restrict
+#     to Tailscale, never expose :5555 publicly.
 #
 # TODO — UI: Clerk user button (AFTER the dep upgrade; replace "Sign out"):
 #   - Today the home header has a plain secondary "Sign out" Button. Replace it
