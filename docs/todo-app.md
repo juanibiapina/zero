@@ -276,6 +276,40 @@ acceptance criteria: matched by the ordered increments below
 #     path). Security: if adb ever goes over the network instead of USB, restrict
 #     to Tailscale, never expose :5555 publicly.
 #
+#   - ONE-TIME PIXEL 7 SETUP (done by hand once, later when the human is home;
+#     goal: phone sits on a shelf next to mini, plugged in, and mini controls it
+#     FULLY hands-off at all times -- so no lock + reboot-proof authorization).
+#     This setup itself MUST be documented (mobile README) as part of the task.
+#     * Dedicate the phone as a test device (optional factory reset; no personal
+#       data since it's exposed on a shelf). Join home wifi. Optionally sign into a
+#       THROWAWAY Google account (only needed for the real-OAuth path; the bypass
+#       path needs none).
+#     * Enable Developer options (About phone -> tap Build number 7x). In Developer
+#       options: USB debugging ON; Stay awake ON; disable Automatic system updates
+#       (avoid surprise reboots); optionally Wireless debugging ON as a USB-flake
+#       backup.
+#     * CRITICAL: Settings -> Security -> Screen lock = None. With no PIN a reboot
+#       lands on the home screen and mini can always drive it; a PIN would strand
+#       the phone behind a lock nobody can reach.
+#     * The ONE physical tap that matters: plug into mini with a DATA usb cable ->
+#       on the phone check "Always allow from this computer" -> Allow. This binds
+#       trust to mini's adb key (~/.android/adbkey) and PERSISTS across reboots (no
+#       re-prompt), as long as that key is never regenerated. PROTECT that key
+#       (back it up; don't let a re-image / `adb keygen` / deleting ~/.android wipe
+#       it, or you'd need physical access to re-tap the dialog).
+#     * After authorization, mini pushes the rest with NO phone touching:
+#       `adb shell settings put global stay_on_while_plugged_in 3`, wake before each
+#       run (`adb shell input keyevent KEYCODE_WAKEUP` -> home, since lock is None),
+#       install/launch, run the Maestro flow, screenshot, assert.
+#     * OPEN CHOICES (decide at setup): (a) screen burn-in -- "Stay awake" keeps the
+#       OLED on 24/7 (months -> burn-in); cleaner is wake-on-demand (let it sleep,
+#       mini wakes it per run). Leaning wake-on-demand. (b) battery -- plugged at
+#       100% forever degrades the cell; acceptable for a disposable test device,
+#       Adaptive Charging helps.
+#   - STATUS: waiting on the human to be home to do the physical Pixel setup; the
+#     device-independent prep (nix toolchain, EXPO_PUBLIC_E2E auth bypass, the
+#     bin/mobile-verify script + add-a-todo Maestro flow) can proceed beforehand.
+#
 # TODO — UI: Clerk user button (AFTER the dep upgrade; replace "Sign out"):
 #   - Today the home header has a plain secondary "Sign out" Button. Replace it
 #     with a proper Clerk user control: the user's avatar that, when tapped,
