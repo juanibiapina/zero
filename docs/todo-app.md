@@ -8,6 +8,14 @@ as increments land.
 
 ---
 
+## Changelog routing
+
+The mobile todo app is a **separate product surface, not the Zero agent**. Its
+user-facing changes do **NOT** go in `apps/agent-api/CHANGELOG.md` — that file
+ships in-product as Zero's read-only "Changelog" topic to agent users, and the
+todo app is not part of it. Track todo-app changes here (PROGRESS block + build
+order) until the app grows its own user-facing changelog.
+
 ## North star
 
 Replace Todoist as the single entry point to all tasks, then let that entry

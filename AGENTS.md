@@ -22,10 +22,14 @@ separate follow-up after deployment.
 
 Route the entry by product:
 
-- **Agent (Zero assistant):** changes to `apps/agent-api`, the Telegram bot, or
-  the `apps/agent-mobile` app go in `apps/agent-api/CHANGELOG.md`.
+- **Agent (Zero assistant):** changes to `apps/agent-api` or the Telegram bot go
+  in `apps/agent-api/CHANGELOG.md`.
 - **ZeroVault / ZeroErrors / console:** changes to `apps/vault-*`, `apps/errors-*`,
   or shared console UI go in the root `CHANGELOG.md`.
+- **Mobile todo app (`apps/agent-mobile`):** a separate product surface, NOT the
+  Zero agent. Its user-facing changes do **not** go in `apps/agent-api/CHANGELOG.md`
+  (that ships to agent users as the in-product Changelog topic). Track them in
+  `docs/todo-app.md` until the app has its own user-facing changelog.
 
 `apps/agent-api/CHANGELOG.md` is bundled and surfaced in-product as Zero's
 read-only "Changelog" system topic (`apps/agent-api/src/store/system-topics.ts`),
