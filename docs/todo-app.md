@@ -449,6 +449,29 @@ then later: recurring -> inbox/today split -> triage into Projects
 
 ---
 
+## UI polish backlog (before increment 3)
+
+Fixes to make the capture + done flows feel like Todoist. Not planned yet;
+plan each before building. All mobile-only (apps/agent-mobile), pure JS, so
+they hot-reload with no EAS build.
+
+- Add flow — animate the quick-add input. Opening it should animate in and rise
+  smoothly together with the keyboard (not appear instantly), matching Todoist's
+  quick-add. Today it pops in via KeyboardStickyView with no entrance animation.
+  Likely react-native-reanimated (already a dep) for the entrance/translate, kept
+  in sync with the keyboard height (react-native-keyboard-controller already
+  tracks it).
+- Add flow — confirm discard. Tapping outside the open quick-add (the backdrop)
+  when there is unsaved text should show a confirm popup ("Discard this todo?"
+  keep / discard), like Todoist, instead of silently clearing and closing. With
+  empty text it just closes (current behavior). Needs a small dialog/action-sheet.
+- Done flow — fade out done items. Marking a todo done should fade/animate the row
+  out (like Todoist) rather than removing it instantly. Today onDone does an
+  optimistic hard remove. Add an exit animation (reanimated layout/exiting) before
+  the row leaves; keep the optimistic remove + error rollback semantics.
+
+---
+
 ## Plan: increment 1 (walking skeleton) — [DONE, commit 82dc1e7; kept for history]
 
 Goal: a signed-in user adds a text todo on the mobile screen; it persists in the
