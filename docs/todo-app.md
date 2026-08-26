@@ -490,9 +490,15 @@ they hot-reload with no EAS build.
   `adding && !confirmingDiscard && text.trim()` so the hide during close doesn't
   re-open it. On Cancel we refocus the input (Input now forwardRef's to its
   TextInput) to restore the keyboard the Back press dismissed. Pure JS,
-  hot-reloads with no EAS build. Tests: confirm-dialog.test.tsx (3) + 3 new
-  home-screen tests (confirm, discard, empty-close); back-button + keyboard-hide
-  paths left to device verification. All mobile checks green, expo export bundles.
+  hot-reloads with no EAS build. Tests: confirm-dialog.test.tsx (3) + home-screen
+  tests (confirm, discard, empty-close). All mobile checks green, expo export
+  bundles.
+  EMPTY-BACK FIX (2026-08-26): with an empty input, the first Back (which Android
+  turns into a keyboard-hide, never reaching BackHandler) now CLOSES the bar, not
+  just the keyboard. The `keyboardDidHide` handler closes on empty text and
+  confirms on unsaved text. The jest keyboard mock now records listeners and
+  exposes `global.__emitKeyboardEvent(name)` so both branches are tested
+  (2 new home-screen tests) instead of device-only.
 ---
 
 ## Plan: quick-add morph + done fade-out animations

@@ -95,17 +95,22 @@ export default function HomeScreen() {
 
   // First Android Back press with the keyboard up is swallowed by the OS to
   // hide the keyboard and never reaches BackHandler. So treat "keyboard hidden
-  // while the quick-add has unsaved text" as a dismiss request too, giving the
-  // Todoist single-back behavior. Guard on adding + unsaved text so the hide
-  // that happens while closing (input unmounts) doesn't re-open the dialog.
+  // while the quick-add is open" as a dismiss request, giving the Todoist
+  // single-back behavior: with unsaved text, confirm before discarding; with an
+  // empty input, close the bar (previously it stayed open, needing a second
+  // Back). Guard on `adding` (not confirming) so the hide that fires while
+  // closing (input unmounts) doesn't re-trigger.
   useEffect(() => {
     const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
-      if (adding && !confirmingDiscard && text.trim()) {
+      if (!adding || confirmingDiscard) return;
+      if (text.trim()) {
         setConfirmingDiscard(true);
+      } else {
+        closeAdd();
       }
     });
     return () => sub.remove();
-  }, [adding, confirmingDiscard, text]);
+  }, [adding, confirmingDiscard, text, closeAdd]);
 
   // Android hardware / navigation back button, for the cases where the keyboard
   // is already down (dialog open, or bar open after the keyboard was hidden).

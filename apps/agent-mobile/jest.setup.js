@@ -52,13 +52,26 @@ jest.mock('react-native-reanimated', () => {
 // NativeWind's babel transform inside the mock factory.
 jest.mock('react-native-keyboard-controller', () => {
   const Passthrough = ({ children }) => children ?? null;
+  // Track keyboard listeners so tests can drive keyboard events. Fire them via
+  // global.__emitKeyboardEvent('keyboardDidHide') inside an act() wrapper.
+  const listeners = {};
+  global.__emitKeyboardEvent = (name) => {
+    (listeners[name] || []).forEach((cb) => cb());
+  };
   return {
     KeyboardProvider: Passthrough,
     KeyboardStickyView: Passthrough,
     KeyboardAvoidingView: Passthrough,
     KeyboardAwareScrollView: Passthrough,
     KeyboardEvents: {
-      addListener: () => ({ remove: () => {} }),
+      addListener: (name, cb) => {
+        (listeners[name] = listeners[name] || []).push(cb);
+        return {
+          remove: () => {
+            listeners[name] = (listeners[name] || []).filter((l) => l !== cb);
+          },
+        };
+      },
     },
     useKeyboardHandler: () => {},
     useReanimatedKeyboardAnimation: () => ({

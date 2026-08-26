@@ -224,6 +224,62 @@ describe('HomeScreen', () => {
     expect(queryByPlaceholderText('Add a todo')).toBeNull();
   });
 
+  it('closes the empty quick-add when the keyboard hides (Android back)', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([]);
+
+    const { getByLabelText, getByText, getByPlaceholderText, queryByPlaceholderText } =
+      await render(<HomeScreen />);
+
+    await waitFor(() =>
+      expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add todo'));
+    });
+    expect(getByPlaceholderText('Add a todo')).toBeTruthy();
+
+    // Android's first Back only hides the keyboard; the empty bar must close.
+    await act(async () => {
+      (
+        globalThis as { __emitKeyboardEvent?: (name: string) => void }
+      ).__emitKeyboardEvent?.('keyboardDidHide');
+    });
+
+    expect(queryByPlaceholderText('Add a todo')).toBeNull();
+  });
+
+  it('confirms instead of closing when the keyboard hides with unsaved text', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTodos.mockResolvedValue([]);
+
+    const { getByLabelText, getByText, getByPlaceholderText } = await render(
+      <HomeScreen />,
+    );
+
+    await waitFor(() =>
+      expect(getByText('No todos yet. Add one above.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add todo'));
+    });
+    await act(async () => {
+      fireEvent.changeText(getByPlaceholderText('Add a todo'), 'buy milk');
+    });
+
+    await act(async () => {
+      (
+        globalThis as { __emitKeyboardEvent?: (name: string) => void }
+      ).__emitKeyboardEvent?.('keyboardDidHide');
+    });
+
+    // Unsaved text: the dialog appears, the bar stays open.
+    expect(getByText('Discard changes?')).toBeTruthy();
+    expect(getByPlaceholderText('Add a todo').props.value).toBe('buy milk');
+  });
+
   it('closes the quick-add silently when it is empty', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTodos.mockResolvedValue([]);
