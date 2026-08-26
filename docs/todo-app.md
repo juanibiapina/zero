@@ -469,6 +469,10 @@ they hot-reload with no EAS build.
   behavior). Needs a small dialog/action-sheet plus a back-handler
   (BackHandler / navigation beforeRemove) that intercepts back while the bar is
   open with text.
+  Todoist reference (screenshot): centered modal dialog, title "Discard
+  changes?", body "The changes you've made will not be saved.", two right-aligned
+  text buttons "Cancel" (dismiss, keep editing) and "Discard" (destructive tint,
+  clears + closes). The keyboard stays up behind it. Match this copy and layout.
 - Done flow — fade out done items. Marking a todo done should fade/animate the row
   out (like Todoist) rather than removing it instantly. Today onDone does an
   optimistic hard remove. Add an exit animation (reanimated layout/exiting) before
