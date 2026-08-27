@@ -10,7 +10,7 @@
 // so NativeWind's babel transform has nothing to wrap and won't inject an
 // out-of-scope _ReactNativeCSSInterop reference into the mock factory.
 jest.mock('react-native-reanimated', () => {
-  const { View } = require('react-native');
+  const { View, FlatList } = require('react-native');
   const builder = () => {
     const b = {
       duration: () => b,
@@ -25,6 +25,9 @@ jest.mock('react-native-reanimated', () => {
     __esModule: true,
     default: {
       View,
+      // Animated.FlatList is undefined in the real reanimated mock; alias the RN
+      // FlatList so the Inbox list renders (itemLayoutAnimation is ignored).
+      FlatList,
       createAnimatedComponent: (c) => c,
     },
     FadeIn: builder(),

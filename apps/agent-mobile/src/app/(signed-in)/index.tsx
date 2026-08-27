@@ -3,8 +3,8 @@ import { UserButton } from '@clerk/expo/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackHandler,
+  type ListRenderItemInfo,
   Pressable,
-  ScrollView,
   type TextInput,
   View,
 } from 'react-native';
@@ -24,6 +24,8 @@ import { useAddCapture, useInbox, useProcessCapture } from '@/lib/captures';
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+const AnimatedFlatList = Animated.FlatList<Capture>;
 
 export default function HomeScreen() {
   const { getToken } = useAuth();
@@ -126,6 +128,25 @@ export default function HomeScreen() {
     [processMutation],
   );
 
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<Capture>) => (
+      <Animated.View
+        entering={FadeIn.duration(150)}
+        exiting={FadeOut.duration(200)}
+        className="flex-row items-center gap-3 border-b border-neutral-200 py-3"
+      >
+        <Pressable
+          accessibilityLabel={`Process "${item.text}"`}
+          className="h-6 w-6 rounded-full border-2 border-neutral-400"
+          hitSlop={8}
+          onPress={() => void onProcess(item)}
+        />
+        <Text className="flex-1">{item.text}</Text>
+      </Animated.View>
+    ),
+    [onProcess],
+  );
+
   return (
     <View className="flex-1 px-6 pt-16">
       <View className="mb-4 flex-row items-center justify-between">
@@ -137,31 +158,26 @@ export default function HomeScreen() {
 
       {error ? <Text variant="error">{error}</Text> : null}
 
-      <ScrollView className="flex-1">
-        {loading ? (
-          <Text variant="subtitle">Loading your inbox…</Text>
-        ) : captures.length === 0 ? (
-          <Text variant="subtitle">Your inbox is empty. Capture something.</Text>
-        ) : (
-          captures.map((item) => (
-            <Animated.View
-              key={item.id}
-              entering={FadeIn.duration(150)}
-              exiting={FadeOut.duration(200)}
-              layout={LinearTransition.duration(200)}
-              className="flex-row items-center gap-3 border-b border-neutral-200 py-3"
-            >
-              <Pressable
-                accessibilityLabel={`Process "${item.text}"`}
-                className="h-6 w-6 rounded-full border-2 border-neutral-400"
-                hitSlop={8}
-                onPress={() => void onProcess(item)}
-              />
-              <Text className="flex-1">{item.text}</Text>
-            </Animated.View>
-          ))
-        )}
-      </ScrollView>
+      {loading ? (
+        <Text variant="subtitle">Loading your inbox…</Text>
+      ) : (
+        // FlatList virtualizes the Inbox (unbounded); @expo/ui List is native
+        // but not virtualized, so it is the wrong tool here. itemLayoutAnimation
+        // slides the remaining rows when one is processed; the row's own
+        // entering/exiting fades it in and out.
+        <AnimatedFlatList
+          style={{ flex: 1 }}
+          data={captures}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          itemLayoutAnimation={LinearTransition.duration(200)}
+          ListEmptyComponent={
+            <Text variant="subtitle">
+              Your inbox is empty. Capture something.
+            </Text>
+          }
+        />
+      )}
 
       {/* Transition layer: cross-fades the plus FAB and the quick-add bar and
           lifts the bar with the keyboard. It owns the motion; this screen owns
