@@ -552,7 +552,8 @@ build order (capture point):
      stored (doneAt timestamp; open list = doneAt IS NULL).
   3. [DONE, a2d4d80] RENAME todo -> Capture (reframe): migration 0039 renames
      todos->captures & doneAt->processedAt; behavior unchanged. Web parity
-     shipped too (PR #49) + TanStack DB spike phase 0+1 on /inbox (PR #50).
+     shipped too (PR #49) + TanStack DB on /inbox: phase 0+1 (PR #50) and phase 2
+     offline SQL persistence (PR #51, commit 44f145e).
   4. Process into typed entities: a Capture becomes a typed entity (not yet
      designed). Richest data-model slice.
   5. Scheduled show-up date: optional date on a Capture; list shows date<=today +
@@ -684,15 +685,34 @@ SQLite supports `RENAME TO` / `RENAME COLUMN`. DO NOT edit the applied
 
 ## Plan: adopt TanStack DB for the Capture Inbox data layer (spike-first)
 
-STATUS: Phase 0 + Phase 1 DONE (PR #50, merge 99b03e1). /inbox runs on a TanStack
-DB Query Collection + live query with optimistic capture/process, in-memory (no
-persistence yet). Bundle grew 428->609KB raw (+~49KB gzip) for the TanStack
-stack. A partial index (migration 0040, on captures(createdAt) WHERE processedAt
-IS NULL) keeps the Inbox query fast. NEXT: Phase 2 (offline SQL persistence) —
-now has its own verified, self-contained plan below ("Plan: Phase 2 — web
-offline SQL persistence"). The 0.6-era API names in this section (see the
-"Concrete API" note) are STALE; the Phase 2 plan carries the corrected 0.8.x
-package names.
+STATUS: Phase 0 + Phase 1 + Phase 2 DONE. Phase 0+1 shipped in PR #50 (merge
+99b03e1); Phase 2 (offline SQL persistence) shipped in PR #51 (commit 44f145e on
+main). /inbox now runs on a TanStack DB collection persisted to SQLite/OPFS for
+offline reads, with writes through an IndexedDB-backed offline outbox
+(@tanstack/offline-transactions, Option A) that retries on reconnect; it falls
+back to the in-memory Query Collection when OPFS/Worker is unavailable (private
+browsing, older browsers) so /inbox never hard-crashes. A partial index
+(migration 0040, on captures(createdAt) WHERE processedAt IS NULL) keeps the
+Inbox query fast. Real package names as shipped: persistence is
+@tanstack/browser-db-sqlite-persistence@0.2.18 (re-exports
+persistedCollectionOptions; NOT @tanstack/db@0.8.5 core) over wa-sqlite, plus
+@tanstack/offline-transactions@1.0.51. Two stores by design: SQLite/OPFS for the
+synced read snapshot, IndexedDB for the write outbox. Measured bundle (vite
+build, 2026-08-27): the main app chunk is 575KB raw / 169KB gzip (SMALLER than
+Phase 1's 609KB — the WASM persistence moved off the main path into a separate,
+lazily-loaded worker chunk of 1,698KB raw / 706KB gzip that loads only when OPFS
+persistence starts; no standalone .wasm, wa-sqlite is bundled into that worker).
+The 0.6-era API names in the "Concrete API" note above are STALE; the Phase 2
+plan below carries the corrected 0.8.x names.
+
+STILL OPEN — the deploy-time DECISION GATE (before Phase 3 / mobile): verify real
+offline behavior in a browser on the deployed /inbox — offline read (DevTools
+offline, reload, last-synced captures render), offline write (capture offline,
+reload survives, syncs on reconnect), and the C1 runtime check (the opfs-worker
+chunk + wa-sqlite return 200, no 404). This box cannot run it (no workerd, no
+browser); it is a post-deploy check. C3 caveat stands: /api/captures has no
+idempotency key, so a retry after a lost ACK can duplicate a capture (rare;
+accepted for the spike).
 
 Self-contained plan for a fresh agent. Assume only this doc.
 
@@ -772,8 +792,8 @@ to avoid cross-package wiring before the model is proven.
   helpers. Removes the hand-rolled `useState`/`useEffect`. Same behavior:
   capture appends, list oldest-first, Process removes, rapid capture,
   loading/empty/error. Still behind the unlinked `/inbox` — zero blast radius.
-- Phase 2 — web offline SQL persistence. See the dedicated, verified plan
-  below ("Plan: Phase 2 — web offline SQL persistence") for the corrected 0.8.x
+- Phase 2 [DONE, PR #51, commit 44f145e] — web offline SQL persistence. See the
+  dedicated plan below ("Plan: Phase 2 — web offline SQL persistence") for the 0.8.x
   package names and the write-path design. In short: wrap the Query Collection
   in `persistedCollectionOptions` from `@tanstack/browser-db-sqlite-persistence`
   (SQLite-WASM/OPFS, durable reads) and route writes through
@@ -857,7 +877,12 @@ follow-up (front-end-testing skill), not a blocker.
 
 ---
 
-## Plan: Phase 2 — web offline SQL persistence
+## Plan: Phase 2 — web offline SQL persistence — [DONE, PR #51, commit 44f145e]
+
+Shipped as Option A (durable offline writes via the offline outbox). See the
+STATUS block above for the shipped package names, the two-store split, the
+measured bundle, and the still-open deploy-time DECISION GATE. The plan below is
+kept as the as-built record.
 
 Self-contained plan for a fresh agent. Assume only this doc. VERIFIED against the
 installed packages and the adapters' own 0.2.18 source (2026-08-27); no blockers.
