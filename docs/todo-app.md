@@ -296,6 +296,44 @@ acceptance criteria: matched by the ordered increments below
 #                                 placeholder "Capture a thought". Behavior
 #                                 unchanged (add + Process). agent-api 934 tests,
 #                                 mobile 32 tests, typecheck+lint+expo export green.
+#   expo-ui refactor ............ DONE (branch refactor-mobile-expo-ui). Adopt the
+#                                 native @expo/ui layer where it fits, per the
+#                                 expo-ui / expo-native-ui skills. Three changes +
+#                                 one recorded decision:
+#                                 (1) Inbox list ScrollView+map -> a virtualized
+#                                     reanimated Animated.FlatList (itemLayout +
+#                                     per-row fade kept). @expo/ui List is native
+#                                     but NOT virtualized, so it is the WRONG tool
+#                                     for the unbounded Inbox -- FlatList is right.
+#                                     jest gotcha: Animated.FlatList is undefined
+#                                     in the reanimated mock; aliased it to the RN
+#                                     FlatList in jest.setup.js.
+#                                 (2) Sign-in CTAs -> native @expo/ui <Button> in a
+#                                     <Host> (filled/outlined); deleted the custom
+#                                     Pressable Button + its test (sign-in was the
+#                                     only consumer). @expo/ui native module already
+#                                     ships in dev client 11.
+#                                 (3) Dropped unused template deps expo-symbols
+#                                     (iOS-only SF Symbols; app is Android) and
+#                                     expo-glass-effect.
+#                                 KEPT custom, by decision (native did NOT fit):
+#                                   - Quick-add bar stays a KeyboardStickyView +
+#                                     reanimated cross-fade. @expo/ui has no
+#                                     keyboard-attached quick-add primitive; a
+#                                     BottomSheet changes the rapid-capture model.
+#                                   - ConfirmDialog stays an in-tree overlay. The
+#                                     only native path is RN Alert, a system modal
+#                                     that dismisses the keyboard and cannot be
+#                                     queried in-tree; it would regress the
+#                                     deliberate keyboard-preserving discard flow
+#                                     and its 3 tests for a marginal gain.
+#                                   - Fab stays custom (not a native Button shape).
+#                                 Checks: mobile typecheck+lint green, 29 tests
+#                                 (down 3 with the custom Button), expo export
+#                                 bundles. NOT yet device-verified (needs a phone /
+#                                 dev client 11 running; @expo/ui native views must
+#                                 render on device before merge -- same class as the
+#                                 Clerk UserButton hazard).
 #   inc 4 Process/Clarify ....... todo (THE SPINE: a Capture becomes a typed entity,
 #                                 one of GTD's 8 endpoints. Richest data-model slice.)
 #   inc 5 Tickler date .......... todo (scheduled show-up date + "due today" Inbox)
