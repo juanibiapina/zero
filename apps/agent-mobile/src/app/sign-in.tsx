@@ -1,11 +1,11 @@
 import { useAuth, useSSO } from '@clerk/expo';
+import { Button, Host } from '@expo/ui';
 import * as AuthSession from 'expo-auth-session';
 import { Redirect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 
 // Dismisses the web browser once the OAuth redirect completes.
@@ -76,18 +76,25 @@ export default function SignInScreen() {
     <View className="flex-1 items-center justify-center gap-4 px-6">
       <Text variant="title">Zero Agent</Text>
       <Text variant="subtitle">Sign in with your Zero account.</Text>
-      <Button
-        label={busy ? 'Signing in…' : 'Continue with Google'}
-        disabled={busy}
-        onPress={() => void onSignInPress()}
-      />
+      {/* Each @expo/ui tree needs its own Host; matchContents sizes it to the
+          button so the surrounding RN flex layout is unchanged. */}
+      <Host matchContents>
+        <Button
+          variant="filled"
+          disabled={busy}
+          onPress={() => void onSignInPress()}
+          label={busy ? 'Signing in…' : 'Continue with Google'}
+        />
+      </Host>
       {error ? <Text variant="error">{error}</Text> : null}
       {e2e ? (
-        <Button
-          variant="secondary"
-          label="Run redirect probe"
-          onPress={() => void onProbePress()}
-        />
+        <Host matchContents>
+          <Button
+            variant="outlined"
+            onPress={() => void onProbePress()}
+            label="Run redirect probe"
+          />
+        </Host>
       ) : null}
     </View>
   );
