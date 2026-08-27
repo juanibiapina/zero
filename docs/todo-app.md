@@ -195,8 +195,18 @@ acceptance criteria: matched by the ordered increments below
 #                                 avatar renders centered. Not yet re-smoked:
 #                                 tapping opens the profile, sign-out, Google
 #                                 sign-in regression, add-a-todo.
-#   Agent-driven mobile verify .. PLANNED (dev-infra; Maestro+MCP driving a spare
-#                                 Pixel 7 over USB; see note; waits for the device)
+#   Agent-driven mobile verify .. DONE (dev-infra). Pixel 7 USB-attached to mini;
+#                                 adb + Maestro installed declaratively via
+#                                 juanibiapina/dotfiles. The agent drives the phone
+#                                 element-based with the **Maestro CLI** (maestro
+#                                 hierarchy/test/studio) -- MCP/mcpli DROPPED (mcpli
+#                                 is HTTP-only, maestro mcp is stdio, and the CLI
+#                                 needs no bridge). Verified: `maestro test` launches
+#                                 the app and asserts the Inbox on-device. Also
+#                                 device-verified the @expo/ui refactor (native
+#                                 sign-in Button renders; FlatList Inbox loads real
+#                                 captures). See apps/agent-mobile/README.md
+#                                 "Physical device testing".
 #   do-orm isNull pre-step ...... DONE  do-orm 0.2.0 (8c77381); zero 007412b
 #   inc 2 mark done ............. DONE  commit ec43e75 (doneAt column + isNull
 #                                 open-list filter; POST /api/todos/{id}/done;
@@ -306,6 +316,15 @@ acceptance criteria: matched by the ordered increments below
 #     Google sign-in end-to-end was not re-run on 11 (session already present).
 #
 # TODO — Agent-driven mobile verification (dev-infra, HIGH priority):
+#   - RESOLVED (2026-08-27): Pixel 7 is USB-attached to mini and driven by the
+#     agent via the Maestro CLI. adb + maestro are installed declaratively in
+#     juanibiapina/dotfiles (nix/hosts/mini/modules/android.nix). CHANGES from the
+#     plan below: (1) DRIVER is the Maestro **CLI**, not Maestro+MCP -- the CLI
+#     (maestro hierarchy/test/studio) covers the loop and needs no MCP; mcpli was
+#     also ruled out (HTTP-only, maestro mcp is stdio). (2) The bin/mobile-verify
+#     one-liner + auth-bypass are NOT built yet; the agent drives ad-hoc flows
+#     today. The notes below are kept for the auth-bypass and two-phone ideas that
+#     still stand. See apps/agent-mobile/README.md "Physical device testing".
 #   - PROBLEM: today the only way the agent proves a mobile change runs is to cut
 #     an EAS APK and have the human install + click it. Feedback loop is far too
 #     slow, and broken builds reach the human. We want the AGENT to bring the app

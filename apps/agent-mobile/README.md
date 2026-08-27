@@ -217,6 +217,68 @@ Flows:
 Trigger it from the GitHub Actions tab (**Run workflow**). To debug a failure,
 download the `mobile-e2e-artifacts` and open `screen.png` / `ui.xml` / `logcat.txt`.
 
+## Physical device testing (Pixel 7 on `mini`)
+
+A real **Pixel 7** (`adb` serial shown as model `Pixel_7`, device `panther`) is
+USB-attached to the `mini` host and available for on-device testing. It is set
+up **declaratively in `juanibiapina/dotfiles`**, not by hand:
+
+- `nix/hosts/mini/modules/android.nix` installs `android-tools` (adb), `scrcpy`,
+  and **`maestro`** (from nixpkgs; it bundles its own JRE, no separate JDK), plus
+  a udev rule + `adbusers` group so the headless `juan` user can reach the device
+  over USB.
+- `nix/modules/homemanager/android.nix` ships the shared adb key (via agenix) so
+  `mini` presents the same identity the phone already authorized ("Always allow
+  from this computer"), surviving reboots.
+
+Confirm it is connected: `adb devices` should list the `Pixel_7`. Wake it with
+`adb shell input keyevent KEYCODE_WAKEUP` (screen lock is off on this test
+device).
+
+### Drive it with the Maestro CLI (element-based — preferred)
+
+Prefer Maestro over raw `adb input tap`: it selects by on-screen element and
+auto-waits/retries, so it does not fight coordinate math, screen-doze, or dev
+overlays (a stray React Native LogBox banner silently ate `adb` taps on the FAB).
+
+```bash
+maestro hierarchy                     # dump the current screen's element tree
+maestro test apps/agent-mobile/.maestro/<flow>.yaml   # run a saved flow
+maestro studio                        # interactive: inspect the live screen, author taps
+```
+
+A flow is declarative and element-based, e.g.:
+
+```yaml
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- assertVisible: "Inbox"
+- takeScreenshot: inbox        # RELATIVE name only; absolute paths are rejected
+```
+
+`takeScreenshot` writes under the run folder
+(`~/.maestro/tests/<timestamp>/.../<name>.png`), not an arbitrary path.
+
+**Caveat:** the CI flows use `launchApp: { clearState: true }`, which **signs the
+device out**. Run those only on this test device, and re-sign-in afterward to
+test signed-in screens (the Inbox). To test without disturbing the session, use a
+`launchApp` (no `clearState`) + `assertVisible` flow like the one above.
+
+### Test unreleased local JS on the device (dev client + Metro over USB)
+
+The installed **dev client** loads JS from Metro on `mini` over the USB bridge:
+
+```bash
+adb reverse tcp:8081 tcp:8081                                  # phone localhost:8081 -> mini
+EXPO_UNSTABLE_HEADLESS=1 pnpm --filter @zero/agent-mobile exec expo start   # headless (NixOS)
+adb shell am start -a android.intent.action.VIEW \
+  -d "zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" \
+  dev.juanibiapina.zeroagent                                  # launch pointed at Metro
+```
+
+Pure-JS changes hot-reload; only new native modules need a fresh EAS dev build.
+
 ## Builds
 
 From `apps/agent-mobile`:
