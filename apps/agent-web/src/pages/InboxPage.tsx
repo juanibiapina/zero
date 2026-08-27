@@ -1,86 +1,65 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useLiveQuery } from "@tanstack/react-db";
+import { isNull } from "@tanstack/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/AppHeader";
 import { ErrorText } from "@/components/ConnectionStatus";
-import {
-  addCapture,
-  fetchInbox,
-  processCapture,
-  type Capture,
-} from "@/lib/captures";
+import { capturesCollection } from "@/lib/captures-collection";
+import { type Capture } from "@/lib/captures";
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// The GTD capture Inbox on the web. Parity with the mobile screen: capture (add),
-// list open captures oldest-first, Process (remove). Hand-rolled fetch + local
-// state, matching the rest of the web app; Process is optimistic with rollback.
-// Reached only via the unlinked /inbox route — the current app is untouched.
+// The GTD capture Inbox on the web, now backed by a TanStack DB collection
+// (spike, Phase 1). Reads via a live query; writes are optimistic through the
+// collection (insert = capture, update processedAt = Process) and reconcile via
+// the collection's auto-refetch. Reached only via the unlinked /inbox route.
 export function InboxPage() {
-  const [captures, setCaptures] = useState<Capture[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  // Live query: open captures (processedAt is null), oldest first. Updates
+  // reactively as the collection changes, optimistically or after a refetch.
+  const { data: captures, isLoading } = useLiveQuery((q) =>
+    q
+      .from({ c: capturesCollection })
+      .where(({ c }) => isNull(c.processedAt))
+      .orderBy(({ c }) => c.createdAt, "asc"),
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await fetchInbox();
-        if (!cancelled) setCaptures(list);
-      } catch (e) {
-        if (!cancelled) setError(messageOf(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
-    setBusy(true);
+    if (!trimmed) return;
     setError(null);
-    void (async () => {
-      try {
-        const created = await addCapture(trimmed);
-        // Append (oldest-first order); keep the input open and cleared so many
-        // items can be captured in a row.
-        setCaptures((prev) => [...prev, created]);
-        setText("");
-        inputRef.current?.focus();
-      } catch (e) {
-        setError(messageOf(e));
-      } finally {
-        setBusy(false);
-      }
-    })();
-  }, [text, busy]);
+    // Optimistic insert with a temp id; the server mints the real id and the
+    // collection's refetch replaces this row. Rollback on failure.
+    const now = new Date().toISOString();
+    const tx = capturesCollection.insert({
+      id: `temp-${crypto.randomUUID()}`,
+      text: trimmed,
+      createdAt: now,
+      processedAt: null,
+    });
+    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    // Keep the input open and cleared for rapid capture.
+    setText("");
+    inputRef.current?.focus();
+  }, [text]);
 
   const onProcess = useCallback((item: Capture) => {
-    // Optimistic remove; restore the row on failure.
     setError(null);
-    setCaptures((prev) => prev.filter((c) => c.id !== item.id));
-    void (async () => {
-      try {
-        await processCapture(item.id);
-      } catch (e) {
-        setError(messageOf(e));
-        setCaptures((prev) =>
-          [...prev, item].sort((a, b) =>
-            a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0,
-          ),
-        );
-      }
-    })();
+    // Optimistic update; the live query drops it from the Inbox immediately.
+    // TanStack DB rolls the update back automatically if the handler rejects.
+    const tx = capturesCollection.update(item.id, (draft) => {
+      draft.processedAt = new Date().toISOString();
+    });
+    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
   }, []);
+
+  const list = captures ?? [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -110,26 +89,24 @@ export function InboxPage() {
               aria-label="Capture a thought"
               onChange={(e) => setText(e.target.value)}
             />
-            <Button type="submit" disabled={busy || text.trim() === ""}>
-              {busy ? "Adding…" : "Add"}
+            <Button type="submit" disabled={text.trim() === ""}>
+              Add
             </Button>
           </form>
 
           {error && <ErrorText>{error}</ErrorText>}
 
-          {loading ? (
+          {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading your inbox…</p>
-          ) : captures.length === 0 ? (
+          ) : list.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Your inbox is empty. Capture something.
             </p>
           ) : (
             <ul className="divide-y">
-              {captures.map((item) => (
+              {list.map((item) => (
                 <li key={item.id} className="flex items-center gap-3 py-3">
-                  {/* Left round Process control, matching the mobile motif and
-                      the Person-avatar circle. Click processes the capture out of
-                      the Inbox (GTD Clarify). */}
+                  {/* Left round Process control (GTD Clarify). */}
                   <button
                     type="button"
                     aria-label={`Process "${item.text}"`}
