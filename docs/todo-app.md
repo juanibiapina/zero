@@ -699,7 +699,11 @@ STATUS: Phase 0 + Phase 1 DONE (PR #50, merge 99b03e1). /inbox runs on a TanStac
 DB Query Collection + live query with optimistic capture/process, in-memory (no
 persistence yet). Bundle grew 428->609KB raw (+~49KB gzip) for the TanStack
 stack. A partial index (migration 0040, on captures(createdAt) WHERE processedAt
-IS NULL) keeps the Inbox query fast. NEXT: Phase 2 (offline SQLite persistence).
+IS NULL) keeps the Inbox query fast. NEXT: Phase 2 (offline SQL persistence) —
+now has its own verified, self-contained plan below ("Plan: Phase 2 — web
+offline SQL persistence"). The 0.6-era API names in this section (see the
+"Concrete API" note) are STALE; the Phase 2 plan carries the corrected 0.8.x
+package names.
 
 Self-contained plan for a fresh agent. Assume only this doc.
 
@@ -779,12 +783,14 @@ to avoid cross-package wiring before the model is proven.
   helpers. Removes the hand-rolled `useState`/`useEffect`. Same behavior:
   capture appends, list oldest-first, Process removes, rapid capture,
   loading/empty/error. Still behind the unlinked `/inbox` — zero blast radius.
-- Phase 2 — web offline persistence. Wrap the collection in
-  `persistedCollectionOptions` with the browser SQLite-WASM adapter; add
-  `@tanstack/offline-transactions` for a durable write queue. PROVE: load
-  `/inbox` offline (devtools offline) and the last-synced captures render;
-  capture while offline and it persists + syncs on reconnect. This is the
-  offline + instant + auto-sync the user asked for.
+- Phase 2 — web offline SQL persistence. See the dedicated, verified plan
+  below ("Plan: Phase 2 — web offline SQL persistence") for the corrected 0.8.x
+  package names and the write-path design. In short: wrap the Query Collection
+  in `persistedCollectionOptions` from `@tanstack/browser-db-sqlite-persistence`
+  (SQLite-WASM/OPFS, durable reads) and route writes through
+  `@tanstack/offline-transactions` (IndexedDB outbox, durable writes). PROVE:
+  load `/inbox` offline (devtools offline) and last-synced captures render;
+  capture while offline and it persists + syncs on reconnect.
 - DECISION GATE. Evaluate DX, bundle size, and real offline behavior on the
   deployed `/inbox` before touching mobile or committing further. Cheap to
   abandon here (web `/inbox` is unlinked, no tests, no other consumer).
@@ -859,6 +865,242 @@ follow-up (front-end-testing skill), not a blocker.
 - Phase 3: web + mobile share one `createCapturesCollection` from agent-core;
   mobile behavior tests green; mobile device-verified on a fresh EAS build.
 - Backend unchanged across Phases 0-3; no Postgres introduced.
+
+---
+
+## Plan: Phase 2 — web offline SQL persistence
+
+Self-contained plan for a fresh agent. Assume only this doc. VERIFIED against the
+installed packages and the adapters' own 0.2.18 source (2026-08-27); no blockers.
+
+### Goal
+
+Make the unlinked web `/inbox` local-first: last-synced captures render while
+offline, and a capture made offline persists across reload and syncs when the
+network returns. Backend, DO, do-orm, and the `/api/captures` REST endpoints stay
+unchanged. Ship behind the same unlinked `/inbox` route (zero blast radius), then
+hit the DECISION GATE before mobile (Phase 3).
+
+### Current state (verified in repo)
+
+- `apps/agent-web/src/lib/captures-collection.ts`: a Query Collection built with
+  `queryCollectionOptions` over a module-scope `QueryClient`. `queryFn:
+  fetchInbox`, `onInsert -> addCapture`, `onUpdate (processedAt set) ->
+  processCapture`. In-memory only.
+- `InboxPage.tsx` reads via `useLiveQuery` (filter `isNull(processedAt)`, order
+  `createdAt asc`) and writes via `capturesCollection.insert/update`, surfacing
+  errors through `tx.isPersisted.promise.catch`.
+- No `QueryClientProvider` in the tree; the collection holds the `QueryClient`
+  directly. No web test harness.
+- Installed: `@tanstack/db@0.8.5`, `@tanstack/query-db-collection@1.2.10`,
+  `@tanstack/react-db@0.3.5`, `@tanstack/react-query@5.102.7`.
+
+### Corrected API (the 0.6 names in the section above are STALE)
+
+`@tanstack/db@0.8.5` does NOT export `persistedCollectionOptions`. Persistence now
+lives in platform adapter packages that re-export it (verified by unpacking the
+tarballs):
+
+- Reads (durable local base): `@tanstack/browser-db-sqlite-persistence@0.2.18` —
+  exports `openBrowserWASQLiteOPFSDatabase`, `createBrowserWASQLitePersistence`,
+  and re-exports `persistedCollectionOptions` (from
+  `@tanstack/db-sqlite-persistence-core@0.2.18`). Peer dep
+  `@journeyapps/wa-sqlite@^1.4.1` (SQLite WASM engine, OPFS-backed) — a fork; add
+  it explicitly (pnpm won't auto-pull a peer).
+- Writes (durable outbox): `@tanstack/offline-transactions@1.0.51` — web import
+  `@tanstack/offline-transactions` (RN import is a separate `/react-native`
+  subpath). Outbox in IndexedDB with localStorage fallback, multi-tab leader
+  election, FIFO, exponential backoff + jitter, `window.online/offline`
+  detection. Its RN peers (`@react-native-community/netinfo`, `react-native`) are
+  OPTIONAL, so web needs neither.
+
+Version compat verified: `db-sqlite-persistence-core@0.2.18` and
+`offline-transactions@1.0.51` both depend on exactly `@tanstack/db@0.8.5` = the
+installed version. No peer war.
+
+Two stores, by design (not a smell): SQLite/OPFS persists the synced snapshot for
+offline reads; IndexedDB persists the write outbox.
+
+Persisted collection shape (the spread is the vendor's own documented pattern;
+`queryCollectionOptions` returns a `CollectionConfig`, which carries the required
+`sync: SyncConfig`, so it satisfies `persistedCollectionOptions`'s synced
+overload):
+
+```ts
+const database = await openBrowserWASQLiteOPFSDatabase({ databaseName: "zero-inbox.sqlite" });
+const persistence = createBrowserWASQLitePersistence({ database });
+
+export const capturesCollection = createCollection(
+  persistedCollectionOptions({
+    persistence,
+    schemaVersion: 1, // bumping clears the local copy and re-syncs from server
+    ...queryCollectionOptions({ queryClient, queryKey: ["captures"], queryFn: fetchInbox, getKey /* handlers: see write path */ }),
+  }),
+);
+```
+
+For a synced collection the server stays authoritative; persistence is only a
+durable local base plus reconciliation on resume. `schemaVersion` bump = clear
+local + re-sync (the escape hatch if the local store corrupts).
+
+### The write-path decision (the crux)
+
+Phase 1 writes go through the collection's own `onInsert`/`onUpdate`, which call
+the REST API immediately and roll back on failure — no offline durability. Two
+ways to get durable offline writes:
+
+- Option A (recommended) — outbox executor. Move the server calls out of the
+  collection handlers into
+  `startOfflineExecutor({ collections: { captures: capturesCollection },
+  mutationFns: { addCapture, processCapture } })`. Writes go through
+  `offline.createOfflineTransaction(...).mutate(() =>
+  capturesCollection.insert/update(...))`. The optimistic row applies locally and
+  persists (SQLite base), the mutation persists to the IndexedDB outbox, and the
+  executor calls the REST endpoint when online with retry. CONCRETE SHAPE
+  (verified against 0.2.18 types, confirm at spike): define the collection
+  WITHOUT server-calling `onInsert`/`onUpdate`. A write wrapped in
+  `offlineTx.mutate(() => collection.insert(...))` joins the ambient offline
+  transaction, whose `mutationFn` does the server call — so the collection needs
+  no handlers. A bare `collection.insert()` outside an offline transaction then
+  throws `MissingInsertHandlerError`, which is acceptable because every write goes
+  through the executor. (`persistedCollectionOptions` passes the `CollectionConfig`,
+  including any handlers, straight through, so keeping handlers here would
+  double-send.)
+- Option B (fallback) — reads-only persistence. Keep the Phase 1 handlers; add
+  only `browser-db-sqlite-persistence`. Offline reads work; offline writes still
+  fail. Cheaper/smaller but misses the "capture while offline" criterion. Note:
+  `persistedCollectionOptions` still requires a synced collection here; Option B
+  just drops `offline-transactions`.
+
+Default to A. Fall back to B only if A is blocked at the gate.
+
+### Implementation phases (each independently shippable)
+
+- 2a — toolchain de-risk (mirror the Phase 0 discipline). Add
+  `@tanstack/browser-db-sqlite-persistence`, `@journeyapps/wa-sqlite`,
+  `@tanstack/offline-transactions` (pin exact versions). A throwaway module opens
+  the OPFS database, builds a persisted collection, writes one row. Verify
+  `pnpm --filter @zero/agent-web typecheck | lint | build` green, and MEASURE the
+  bundle delta from `vite build` output (Phase 1 baseline: 609KB raw / ~+49KB
+  gzip over the pre-TanStack 428KB). Record new raw + gzip. If the WASM payload is
+  unacceptable, STOP (Option B, or a lighter localStorage read-persister).
+  CRITICAL (C1): the browser adapter spawns a nested Web Worker via
+  `new Worker(new URL("../assets/opfs-worker-*.js", import.meta.url))`, and that
+  worker loads the wa-sqlite `.wasm`. Vite must emit BOTH the worker chunk and the
+  wasm. A `vite build` can succeed while the worker URL 404s at RUNTIME. So 2a's
+  real gate is opening the OPFS database in a real browser on the
+  deployed/preview bundle and confirming the worker + `.wasm` return 200 (Network
+  tab) — this box can't run it, so it is a post-deploy check, not a build check.
+- 2b — wire persistence into `capturesCollection`. Rebuild
+  `captures-collection.ts` to open the OPFS database and wrap the existing
+  `queryCollectionOptions` in `persistedCollectionOptions`. The DB open is async;
+  prefer a lazy/init-promise pattern over top-level `await` (avoids blocking first
+  render AND makes the C4 fallback natural). Keep `useLiveQuery` in `InboxPage`
+  unchanged. C4: `openBrowserWASQLiteOPFSDatabase` throws
+  `PersistenceUnavailableError` when OPFS/Worker is missing (private browsing,
+  older browsers) — catch it and fall back to the in-memory Query Collection so
+  `/inbox` never hard-crashes.
+- 2c — durable offline writes (Option A). Introduce the offline executor and route
+  `insert`/`update` through it (collection defined without server-calling
+  handlers, per the write-path shape above). Preserve the existing error surface
+  in `InboxPage` (`ErrorText`). Handle the non-leader-tab case
+  (`onLeadershipChange` -> online-only) at least with a comment; multi-tab is not
+  a hard requirement for a single-user Inbox.
+
+### System-wide impact
+
+- No backend change. REST endpoints and do-orm untouched; `queryFn` still
+  `GET /api/captures`, mutations still hit the existing POST routes.
+- Serving: agent-web is bundled into `zero-api` static assets; the new `.wasm` +
+  worker chunk ship there, within `zero-api`'s `apps/agent-web` watch path, so a
+  push redeploys them.
+- Auth: same-origin cookie, unchanged. Isolation: `/inbox` stays unlinked; `/` and
+  every existing screen untouched.
+
+### Tests
+
+`agent-web` has no test harness (matches the app). Verify by typecheck + lint +
+build + a deployed-browser check, same as Phases 0-1:
+
+- Offline READ: load `/inbox` online, then DevTools -> Network -> Offline, reload
+  -> last-synced captures still render.
+- Offline WRITE: while offline, capture a thought -> it appears; reload (still
+  offline) -> it survives; go online -> it syncs to the server (confirm it reaches
+  the phone / same UserDO).
+- No-regression: capture, oldest-first list, Process optimistic-remove, rapid
+  capture, empty/loading/error all behave as Phase 1.
+
+Standing up Vitest Browser Mode for these flows is a flagged follow-up
+(front-end-testing skill), not a blocker.
+
+### Verification (this box: no workerd)
+
+- `pnpm --filter @zero/agent-web typecheck | lint | build`. Record bundle size.
+- No local end-to-end (the `/api` proxy needs workerd). Push -> `zero-api`
+  redeploys bundled assets -> run the offline read/write checks on
+  `https://zero.juanibiapina.dev/inbox` (Phase 2: toggle devtools offline).
+
+### DECISION GATE (before Phase 3 / mobile)
+
+Evaluate on the deployed `/inbox`: real offline read + write behavior, DX of the
+outbox wiring, and bundle size. Cheap to abandon (unlinked route, no tests, no
+other consumer). Only proceed to extract `createCapturesCollection` into
+`packages/agent-core` and migrate mobile if this holds up.
+
+### Docs / changelog
+
+- No `apps/agent-api/CHANGELOG.md` entry (todo app is a separate surface; route is
+  unlinked anyway).
+- Update this doc's PROGRESS + the TanStack plan STATUS on completion: record the
+  real package names, that `persistedCollectionOptions` is re-exported from the
+  adapter (not core 0.8.5), the two-store split (SQLite reads / IndexedDB outbox),
+  and the measured bundle delta.
+
+### Skills to use
+
+- evaluate-existing-solutions — library choice made; revisit only if the gate
+  surfaces a blocker. development-guidelines, typescript-strict — collection /
+  persistence / handler types. codebase-design — keep the collection factory
+  clean for the Phase 3 agent-core extraction. git-commit, open-pr — per phase.
+  front-end-testing — only if the optional web test harness lands.
+
+### Acceptance criteria
+
+- `/inbox` renders last-synced captures while offline.
+- A capture made offline persists across reload and syncs on reconnect (Option A).
+  If shipped as Option B, this is explicitly deferred and recorded.
+- Capture / list (oldest-first) / Process behave exactly as Phase 1.
+- App root `/` and all existing routes unchanged; `/inbox` still unlinked.
+- Backend unchanged; no Postgres.
+- `pnpm --filter @zero/agent-web typecheck | lint | build` green; bundle delta
+  measured and recorded.
+
+### Risks & mitigations
+
+- C1 — worker + WASM asset emission under Vite + zero-api static hosting is the
+  single most likely break -> 2a de-risks it with a RUNTIME browser check on the
+  deployed bundle, not just a green build.
+- Stale doc API (0.6 names) -> corrected above; pin exact versions (young:
+  adapters at 0.2.x, churn expected).
+- WASM bundle size (hundreds of KB) -> measure in 2a; fall back to Option B or a
+  localStorage read-persister; worst case ship reads-only.
+- C3 — offline retries can DUPLICATE a capture: `/api/captures` has no idempotency
+  key; `offline-transactions` hands the `mutationFn` an `idempotencyKey`, but the
+  server ignores it, so a retry after a lost ACK (POST succeeded, response
+  dropped) creates a second capture. For the spike, accept rare duplicates and say
+  so; true exactly-once needs a server-side idempotency key (backend change, out
+  of Phase 2 scope).
+- C4 — OPFS unavailable (private browsing / old browser): catch
+  `PersistenceUnavailableError` and fall back to the in-memory collection so
+  `/inbox` never hard-crashes.
+- No cross-origin isolation needed: the OPFS prereq check tests only
+  `navigator.storage.getDirectory` + `Worker` (no `SharedArrayBuffer` /
+  `crossOriginIsolated`), verified in the adapter source. OPFS needs a secure
+  context; prod is HTTPS.
+- Async DB open vs module-scope singleton export -> lazy/init-promise pattern in
+  2b. Double-send if both collection handlers and the executor call the server ->
+  omit collection handlers in Option A. Multi-tab -> leader election; non-leader
+  tabs run online-only, acceptable for a single-user Inbox.
 
 ---
 
