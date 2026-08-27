@@ -559,9 +559,9 @@ build order (capture point):
      list. No done/dates/order yet. Verified on the phone.
   2. [DONE] Mark done: tap the leftside circle -> vanishes from list, still
      stored (doneAt timestamp; open list = doneAt IS NULL).
-  3. [NEXT] RENAME todo -> Capture (GTD reframe): rename table/routes/RPC/store +
-     mobile, migration 0039 renames todos->captures & doneAt->processedAt.
-     Behavior unchanged (add + Process). See the reframe plan below.
+  3. [DONE, a2d4d80] RENAME todo -> Capture (GTD reframe): migration 0039 renames
+     todos->captures & doneAt->processedAt; behavior unchanged. Web parity
+     shipped too (PR #49) + TanStack DB spike phase 0+1 on /inbox (PR #50).
   4. Process/Clarify: a Capture becomes a typed entity (one of GTD's 8 endpoints).
      The spine; richest data-model slice.
   5. Tickler date: optional scheduled show-up date on a Capture; Inbox shows
@@ -571,7 +571,7 @@ then later: recurring capture (tickler re-fire) -> enforce Inbox-vs-do-list spli
 
 ---
 
-## Plan: reframe the todo app as a GTD capture Inbox — [NEXT, increment 3]
+## Plan: reframe the todo app as a GTD capture Inbox — [DONE, increment 3, a2d4d80]
 
 Self-contained plan for a fresh agent. Assume only this doc.
 
@@ -695,6 +695,12 @@ SQLite supports `RENAME TO` / `RENAME COLUMN`. DO NOT edit the applied
 
 ## Plan: adopt TanStack DB for the Capture Inbox data layer (spike-first)
 
+STATUS: Phase 0 + Phase 1 DONE (PR #50, merge 99b03e1). /inbox runs on a TanStack
+DB Query Collection + live query with optimistic capture/process, in-memory (no
+persistence yet). Bundle grew 428->609KB raw (+~49KB gzip) for the TanStack
+stack. A partial index (migration 0040, on captures(createdAt) WHERE processedAt
+IS NULL) keeps the Inbox query fast. NEXT: Phase 2 (offline SQLite persistence).
+
 Self-contained plan for a fresh agent. Assume only this doc.
 
 ### Goal
@@ -760,13 +766,13 @@ to avoid cross-package wiring before the model is proven.
 
 ### Phased plan (each phase independently shippable; a gate before mobile)
 
-- Phase 0 — toolchain de-risk. Add the deps to `apps/agent-web`; a throwaway
+- Phase 0 [DONE, PR #50] — toolchain de-risk. Add the deps to `apps/agent-web`; a throwaway
   module that builds a trivial collection + live query. Verify
   `pnpm --filter @zero/agent-web typecheck | lint | build` (esp. that SQLite-WASM
   persistence bundles and its size is acceptable). On mobile, verify
   `expo export` still bundles with the RN persistence dep added. STOP if the
   toolchain fights (esp. Expo native SQLite = a new EAS dev build; see Risks).
-- Phase 1 — web `/inbox` on a Query Collection (in-memory, no persistence).
+- Phase 1 [DONE, PR #50] — web `/inbox` on a Query Collection (in-memory, no persistence).
   Add `@tanstack/react-query` + a `QueryClient` to `agent-web` (it has none
   today). Rebuild `InboxPage` on `capturesCollection` + `useLiveQuery`, with
   optimistic `onInsert`/`onUpdate` calling the existing `lib/captures.ts` REST
