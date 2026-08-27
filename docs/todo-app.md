@@ -260,19 +260,19 @@ acceptance criteria: matched by the ordered increments below
 #                                 dropped the NativeWind transform, so rows showed
 #                                 as plain text with an invisible zero-size done
 #                                 circle. `expo start --dev-client --clear` fixed it.)
-#   inc 3 RENAME todo -> Capture . CODE DONE (pending deploy + device verify).
+#   inc 3 RENAME todo -> Capture . DONE  commit a2d4d80 (DEVICE-VERIFIED on the
+#                                 phone: existing captures survived migration 0039,
+#                                 Process works, new capture works).
 #                                 GTD reframe: migration 0039 renames
-#                                 todos->captures & doneAt->processedAt; backend
-#                                 store/routes/RPC (addCapture/listInbox/
+#                                 todos->captures & doneAt->processedAt (forward-
+#                                 only; 0037/0038 untouched; live rows preserved);
+#                                 backend store/routes/RPC (addCapture/listInbox/
 #                                 processCapture, /api/captures[/{id}/process]);
 #                                 mobile lib/captures.ts + screen title "Inbox",
 #                                 circle label "Process", FAB "Capture",
 #                                 placeholder "Capture a thought". Behavior
-#                                 unchanged (add + Process). agent-api 934 tests +
-#                                 typecheck + lint green; mobile 32 tests +
-#                                 typecheck + lint + expo export bundle green.
-#                                 VERIFY: land on main, confirm existing captures
-#                                 survive the rename on the phone, Process works.
+#                                 unchanged (add + Process). agent-api 934 tests,
+#                                 mobile 32 tests, typecheck+lint+expo export green.
 #   inc 4 Process/Clarify ....... todo (THE SPINE: a Capture becomes a typed entity,
 #                                 one of GTD's 8 endpoints. Richest data-model slice.)
 #   inc 5 Tickler date .......... todo (scheduled show-up date + "due today" Inbox)
