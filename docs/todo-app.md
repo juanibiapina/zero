@@ -670,6 +670,134 @@ SQLite supports `RENAME TO` / `RENAME COLUMN`. DO NOT edit the applied
 
 ---
 
+## Plan: web parity for the Capture Inbox (unlinked /inbox) — [NEXT]
+
+Self-contained plan for a fresh agent. Assume only this doc.
+
+### Goal
+
+Let the user capture and process from a desktop browser, matching the mobile
+Inbox, so the web is a real entry point too. Same three actions: capture (add),
+Inbox (list open captures, oldest first), Process (remove). Built in
+`apps/agent-web`.
+
+### Isolation decision (LOCKED): unlinked `/inbox` route, no feature flag
+
+The new Inbox must NOT interfere with the current web app (Settings home,
+onboarding, admin). Chosen approach: add ONE additive route `/inbox` inside the
+existing signed-in `Routes`, with NO header link and NO change to the index/home,
+`AppHeader`, onboarding, or settings. The URL itself is the gate: nobody reaches
+the Inbox unless they type `/inbox`. Rejected a build-time `VITE_ENABLE_INBOX`
+flag: it is more machinery for less isolation (it still edits shared routing and
+needs a new build var wired into the `zero-web` vault project), and an unlinked
+route is a "flag-free flag". When the Inbox is ready to go live, promote it to the
+home route in one small edit; no flag cleanup.
+
+### Key facts (verified in repo, 2026-08-27)
+
+- NO backend work. `/api/captures` and `/api/captures/{id}/process` already
+  exist, are tested, and are deployed. Web is a pure new consumer.
+- Auth is free. `apps/agent-web` is served same-origin by `zero-api` and
+  authenticates with the Clerk COOKIE — existing `/api/user-settings` and
+  `/api/telegram-*` calls use plain `fetch` with no Bearer header. So
+  `fetch("/api/captures")` from the browser is already authenticated. No token
+  plumbing (unlike mobile, which is cross-origin and sends a Bearer JWT). Both
+  the web and mobile Clerk are the SAME instance and hit the SAME per-user
+  UserDO, so the phone and web show the same Inbox.
+- Stack: React 19 + react-router 8 + Clerk `@clerk/react` + Tailwind 4 + shadcn
+  `src/components/ui/{button,input,card}`. `App.tsx` holds routing:
+  `AuthGate` (signed-in guard) -> `AppShell` (fetches `/api/user-settings`,
+  renders `<Outlet>` + `DevToolbar`) -> `index` = `HomeRoute` (onboarding gate ->
+  `SettingsPage`), plus `onboarding`, `admin`, `admin/users/:userId`. `AppShell`
+  gates render on settings load but does NOT force onboarding except on the index
+  `HomeRoute`, so a sibling `/inbox` route renders directly (no onboarding
+  redirect). `SettingsPage` renders its own `<AppHeader/>`; the Inbox page will
+  do the same.
+- Bundled into `zero-api` as static assets (`assets.directory
+  ../agent-web/dist`); a push redeploys it (watch path `apps/agent-web`). Dev
+  Vite (`server.proxy`) proxies `/api` -> `http://localhost:8790` (the agent
+  worker), so local end-to-end needs workerd, which this box cannot run.
+- NO test harness in `agent-web` (no vitest, no test script).
+
+### Changes (all additive)
+
+- `src/lib/captures.ts` (new): `type Capture` (`id`, `text`, `createdAt`,
+  `processedAt: string | null`) and `fetchInbox()`, `addCapture(text)`,
+  `processCapture(id)` using same-origin `fetch` (no token arg), throwing on
+  non-ok. Mirrors the mobile `src/lib/api.ts` capture helpers minus the token.
+- `src/pages/InboxPage.tsx` (new): `<AppHeader/>` + a persistent capture `Input`
+  at top (Enter or an Add `Button` appends; on success the input stays focused
+  and clears for rapid capture) + the open-capture list, each row a LEFT round
+  Process control (a circular `Button`/pressable, `aria-label={`Process
+  "${text}"`}`) and the text. Loading, empty ("Your inbox is empty. Capture
+  something."), and error states. Process = optimistic remove from local state,
+  call `processCapture`, restore the row + show error text on failure. Hand-rolled
+  `useState`/`useEffect` (fetch on mount), matching `SettingsPage`'s style; do
+  NOT add React Query to web (mobile needed it for Android resume/refetch quirks
+  that do not apply to a desktop tab).
+- `src/App.tsx`: add exactly one route inside the existing signed-in `Routes`,
+  `<Route path="inbox" element={<InboxPage/>} />`. Nothing else changes — index,
+  header, onboarding, settings, admin all untouched.
+
+Reuse `ui/button`, `ui/input`, `ui/card`. No `AppHeader` edit (no nav link).
+
+### Behavior parity checklist
+
+capture appends (Enter or Add) · list oldest-first · Process optimistic-remove +
+rollback · rapid capture (input stays open, cleared) · loading / empty / error.
+Skip the mobile-only affordances (FAB morph, discard-confirm dialog,
+keyboard-hide handling) — they solve touch problems a desktop input does not have.
+
+### Tests
+
+`agent-web` has no test harness today, so this ships WITHOUT web unit tests,
+matching the app; the consumed API is already tested and unchanged. Verify by
+typecheck + lint + build + a real-browser check after deploy. Standing up Vitest
+Browser Mode (see the front-end-testing skill) is a flagged follow-up, not a
+blocker for this slice.
+
+### Verification (this box: no workerd)
+
+- `pnpm --filter @zero/agent-web typecheck | lint | build`.
+- No local end-to-end (the `/api` proxy target `localhost:8790` needs workerd,
+  which this box cannot run). Push -> `zero-api` redeploys the bundled assets ->
+  open `https://zero.juanibiapina.dev/inbox`: existing captures show (same UserDO
+  as the phone), capture a new one, Process one, confirm it matches the phone.
+  Confirm the app root `/` is unchanged (still Settings/onboarding).
+
+### Docs / changelog
+
+- Update this doc's PROGRESS on completion: web Inbox parity behind the unlinked
+  `/inbox` route; record the cookie-auth (web) vs Bearer (mobile) difference.
+- No `apps/agent-api/CHANGELOG.md` entry (the todo app is a separate surface, per
+  the routing rule at the top of this doc), and the route is unlinked anyway.
+
+### Skills to use
+
+- development-guidelines — throughout. typescript-strict — the `Capture` type +
+  fetch helpers. git-commit — commits. open-pr — if a PR.
+- front-end-testing / react-testing — only if the optional Vitest harness is
+  added.
+
+### Acceptance criteria
+
+- `/inbox` renders the Inbox for a signed-in user; capture, list (oldest-first),
+  and Process (optimistic remove + rollback) all work and match the phone.
+- The app root `/` and every existing screen/route/header are byte-for-byte
+  unchanged; no link to `/inbox` exists.
+- No backend change; `/api/captures` consumed with same-origin cookie auth.
+- `pnpm --filter @zero/agent-web typecheck | lint | build` green.
+
+### Risks
+
+- A sibling `/inbox` route still renders under `AppShell`, which shows
+  `DevToolbar` and waits for `/api/user-settings`; harmless and consistent with
+  other pages. Mitigation: none needed.
+- No automated web test; mitigated by the unchanged, already-tested API and a
+  post-deploy browser check.
+
+---
+
 ## UI polish backlog (pre-reframe; items mostly DONE)
 
 Fixes to make the capture + done flows feel like Todoist. Not planned yet;
