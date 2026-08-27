@@ -330,10 +330,18 @@ acceptance criteria: matched by the ordered increments below
 #                                   - Fab stays custom (not a native Button shape).
 #                                 Checks: mobile typecheck+lint green, 29 tests
 #                                 (down 3 with the custom Button), expo export
-#                                 bundles. NOT yet device-verified (needs a phone /
-#                                 dev client 11 running; @expo/ui native views must
-#                                 render on device before merge -- same class as the
-#                                 Clerk UserButton hazard).
+#                                 bundles. DEVICE-VERIFIED on EAS dev build 14
+#                                 (versionCode 14, 2026-08-27): the native @expo/ui
+#                                 sign-in Button renders and the FlatList Inbox
+#                                 behaves. HAZARD CONFIRMED IN PRACTICE: the older
+#                                 installed client did NOT have the @expo/ui native
+#                                 view, so the new Button JS crashed on render until
+#                                 a fresh dev build (build 14) recompiled the tree.
+#                                 RULE: any FIRST use of an @expo/ui component needs
+#                                 a new dev build before it runs on device -- JS
+#                                 hot-reload alone is not enough (same as the Clerk
+#                                 UserButton). Pure-JS increments (FlatList, dep
+#                                 prune) needed no rebuild.
 #   inc 4 Process/Clarify ....... todo (THE SPINE: a Capture becomes a typed entity,
 #                                 one of GTD's 8 endpoints. Richest data-model slice.)
 #   inc 5 Tickler date .......... todo (scheduled show-up date + "due today" Inbox)

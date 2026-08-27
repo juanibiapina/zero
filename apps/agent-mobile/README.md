@@ -65,10 +65,12 @@ back only where the native component does not fit.
 - **Native controls -> `@expo/ui`.** The sign-in buttons use `<Button>` from
   `@expo/ui` (wrapped in `<Host>`; Jetpack Compose on Android). Prefer it over a
   hand-rolled Pressable for future buttons, switches, sliders, menus, and grouped
-  form sections. `@expo/ui` is a **native module**: its views need to be in the
-  installed dev client (they ship in build 11). Do not hot-reload a new `@expo/ui`
-  component onto an older client that lacks it, or the screen crashes (same hazard
-  as the Clerk `UserButton`).
+  form sections. `@expo/ui` is a **native module**: its views must be compiled
+  into the installed dev client. The **first** use of any `@expo/ui` component
+  needs a **new EAS dev build** (the sign-in Button first shipped in build 14) —
+  JS hot-reload alone crashes on render on an older client that lacks the native
+  view (same hazard as the Clerk `UserButton`). Once the module is in the client,
+  further JS changes hot-reload normally.
 - **The Inbox list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; the Inbox is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
