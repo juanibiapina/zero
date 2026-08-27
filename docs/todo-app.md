@@ -296,6 +296,52 @@ acceptance criteria: matched by the ordered increments below
 #                                 placeholder "Capture a thought". Behavior
 #                                 unchanged (add + Process). agent-api 934 tests,
 #                                 mobile 32 tests, typecheck+lint+expo export green.
+#   expo-ui refactor ............ DONE (branch refactor-mobile-expo-ui). Adopt the
+#                                 native @expo/ui layer where it fits, per the
+#                                 expo-ui / expo-native-ui skills. Three changes +
+#                                 one recorded decision:
+#                                 (1) Inbox list ScrollView+map -> a virtualized
+#                                     reanimated Animated.FlatList (itemLayout +
+#                                     per-row fade kept). @expo/ui List is native
+#                                     but NOT virtualized, so it is the WRONG tool
+#                                     for the unbounded Inbox -- FlatList is right.
+#                                     jest gotcha: Animated.FlatList is undefined
+#                                     in the reanimated mock; aliased it to the RN
+#                                     FlatList in jest.setup.js.
+#                                 (2) Sign-in CTAs -> native @expo/ui <Button> in a
+#                                     <Host> (filled/outlined); deleted the custom
+#                                     Pressable Button + its test (sign-in was the
+#                                     only consumer). @expo/ui native module already
+#                                     ships in dev client 11.
+#                                 (3) Dropped unused template deps expo-symbols
+#                                     (iOS-only SF Symbols; app is Android) and
+#                                     expo-glass-effect.
+#                                 KEPT custom, by decision (native did NOT fit):
+#                                   - Quick-add bar stays a KeyboardStickyView +
+#                                     reanimated cross-fade. @expo/ui has no
+#                                     keyboard-attached quick-add primitive; a
+#                                     BottomSheet changes the rapid-capture model.
+#                                   - ConfirmDialog stays an in-tree overlay. The
+#                                     only native path is RN Alert, a system modal
+#                                     that dismisses the keyboard and cannot be
+#                                     queried in-tree; it would regress the
+#                                     deliberate keyboard-preserving discard flow
+#                                     and its 3 tests for a marginal gain.
+#                                   - Fab stays custom (not a native Button shape).
+#                                 Checks: mobile typecheck+lint green, 29 tests
+#                                 (down 3 with the custom Button), expo export
+#                                 bundles. DEVICE-VERIFIED on EAS dev build 14
+#                                 (versionCode 14, 2026-08-27): the native @expo/ui
+#                                 sign-in Button renders and the FlatList Inbox
+#                                 behaves. HAZARD CONFIRMED IN PRACTICE: the older
+#                                 installed client did NOT have the @expo/ui native
+#                                 view, so the new Button JS crashed on render until
+#                                 a fresh dev build (build 14) recompiled the tree.
+#                                 RULE: any FIRST use of an @expo/ui component needs
+#                                 a new dev build before it runs on device -- JS
+#                                 hot-reload alone is not enough (same as the Clerk
+#                                 UserButton). Pure-JS increments (FlatList, dep
+#                                 prune) needed no rebuild.
 #   inc 4 Process/Clarify ....... todo (THE SPINE: a Capture becomes a typed entity,
 #                                 one of GTD's 8 endpoints. Richest data-model slice.)
 #   inc 5 Tickler date .......... todo (scheduled show-up date + "due today" Inbox)
