@@ -670,7 +670,170 @@ SQLite supports `RENAME TO` / `RENAME COLUMN`. DO NOT edit the applied
 
 ---
 
-## Plan: web parity for the Capture Inbox (unlinked /inbox) — [NEXT]
+## Plan: adopt TanStack DB for the Capture Inbox data layer (spike-first)
+
+Self-contained plan for a fresh agent. Assume only this doc.
+
+### Goal
+
+Replace the ad-hoc data layers (web hand-rolled `fetch`, mobile React Query, both
+over the DO REST API) with ONE local-first data layer built on **TanStack DB**,
+giving instant/optimistic writes, offline persistence, and query-driven auto-sync,
+shared across web and mobile. Land it spike-first on the isolated web `/inbox`,
+prove it, then migrate mobile. Backend stays Cloudflare + the per-user DO +
+do-orm + the existing `/api/captures` REST endpoints — no Postgres, no backend
+rewrite.
+
+### Why TanStack DB (decision, from a research pass 2026-08-27)
+
+Compared against Zero, ElectricSQL, PowerSync, TinyBase, Legend-State,
+WatermelonDB, RxDB, LiveStore, Triplit, Jazz. Most are Postgres/own-backend
+engines that fight the Cloudflare per-user DO model. The two that keep the DO
+backend and share web+mobile were TinyBase and TanStack DB. Chose TanStack DB:
+it reuses the React Query mutation model the mobile app already uses (lowest
+learning delta), keeps do-orm + the REST API, persists to SQLite on web (WASM),
+Expo/RN, and even Cloudflare Durable Objects (0.6), and its **live-query engine
+with joins** is the right foundation for the future eight-endpoint entity model
+(Captures joined to Projects, Persons, etc.). Accepted tradeoff: Query
+Collections are query-driven (refetch/poll), NOT real-time server push. For a
+single-user Inbox this is fine; real-time multi-device is a later, optional
+add (a custom DO-WebSocket collection or an Electric/PowerSync collection) that
+does not throw away the collections + live queries built now. TinyBase's one
+edge was a turnkey `WsServerDurableObject` push hub; we trade that for TanStack's
+query DX and React-Query reuse.
+
+### Concrete API (grounded in the 0.6 docs; confirm exact package names at impl)
+
+- Packages: `@tanstack/db` (core `createCollection`), `@tanstack/react-db`
+  (`useLiveQuery`), `@tanstack/query-db-collection` (`queryCollectionOptions`).
+  Persistence (new in 0.6): `persistedCollectionOptions({ persistence,
+  schemaVersion, ...<synced options> })` with per-platform SQLite adapters
+  (browser SQLite WASM; RN `createReactNativeSQLitePersistence` over op-sqlite or
+  expo-sqlite). Durable offline writes: `@tanstack/offline-transactions`. Pin
+  versions; these are young (0.6) and churn.
+- A capture collection wraps the Query Collection:
+  `createCollection(queryCollectionOptions({ queryClient, queryKey:
+  ['captures'], queryFn: fetchInbox, getKey: c => c.id, onInsert, onUpdate }))`.
+  After any mutation handler resolves it auto-refetches (pass `{ refetch: false }`
+  to skip when the server response is applied directly).
+- Mutations map to the existing REST:
+  - `onInsert` -> `addCapture(text)` (POST /api/captures)
+  - `onUpdate` when `processedAt` is set -> `processCapture(id)`
+    (POST /api/captures/{id}/process). Process is modeled as an UPDATE that
+    stamps `processedAt`; the Inbox live query filters `processedAt == null`, so
+    a processed row leaves the view (and stays available for a future
+    "processed" view). No delete endpoint exists, so no `onDelete`.
+- Read via `useLiveQuery(q => q.from({ c: capturesCollection })
+  .where(({ c }) => c.processedAt == null).orderBy(({ c }) => c.createdAt))`.
+
+### Where the code lives
+
+Target: a shared factory `createCapturesCollection({ queryClient, persistence })`
+in `packages/agent-core` (today an empty placeholder — this grows it), so the
+collection definition, schema, and live queries are shared; each app injects its
+platform QueryClient + persistence adapter. The spike MAY start inline in
+`apps/agent-web` and extract to `agent-core` when mobile is brought in (Phase 3),
+to avoid cross-package wiring before the model is proven.
+
+### Phased plan (each phase independently shippable; a gate before mobile)
+
+- Phase 0 — toolchain de-risk. Add the deps to `apps/agent-web`; a throwaway
+  module that builds a trivial collection + live query. Verify
+  `pnpm --filter @zero/agent-web typecheck | lint | build` (esp. that SQLite-WASM
+  persistence bundles and its size is acceptable). On mobile, verify
+  `expo export` still bundles with the RN persistence dep added. STOP if the
+  toolchain fights (esp. Expo native SQLite = a new EAS dev build; see Risks).
+- Phase 1 — web `/inbox` on a Query Collection (in-memory, no persistence).
+  Add `@tanstack/react-query` + a `QueryClient` to `agent-web` (it has none
+  today). Rebuild `InboxPage` on `capturesCollection` + `useLiveQuery`, with
+  optimistic `onInsert`/`onUpdate` calling the existing `lib/captures.ts` REST
+  helpers. Removes the hand-rolled `useState`/`useEffect`. Same behavior:
+  capture appends, list oldest-first, Process removes, rapid capture,
+  loading/empty/error. Still behind the unlinked `/inbox` — zero blast radius.
+- Phase 2 — web offline persistence. Wrap the collection in
+  `persistedCollectionOptions` with the browser SQLite-WASM adapter; add
+  `@tanstack/offline-transactions` for a durable write queue. PROVE: load
+  `/inbox` offline (devtools offline) and the last-synced captures render;
+  capture while offline and it persists + syncs on reconnect. This is the
+  offline + instant + auto-sync the user asked for.
+- DECISION GATE. Evaluate DX, bundle size, and real offline behavior on the
+  deployed `/inbox` before touching mobile or committing further. Cheap to
+  abandon here (web `/inbox` is unlinked, no tests, no other consumer).
+- Phase 3 — share + migrate mobile. Extract `createCapturesCollection` to
+  `packages/agent-core`; consume it from both apps. Migrate the mobile Inbox off
+  React Query hooks (`lib/captures.ts` hooks) onto the shared collection, with the
+  RN SQLite persistence adapter. NOTE: local SQLite on mobile is a NATIVE module
+  (op-sqlite/expo-sqlite) => a new EAS dev-client build (the app has NO local
+  SQLite today; do-orm runs on the DO, not the device). Keep the existing mobile
+  behavior tests green as the guard; adapt them to the collection.
+- Phase 4 — real-time push (DEFERRED, not now). If multi-device live sync is
+  ever needed, add a custom DO-WebSocket collection (or an Electric/PowerSync
+  collection) without discarding the collections + live queries. Explicitly out
+  of scope for this adoption.
+
+### Backend impact
+
+None for phases 0-3: the REST endpoints and do-orm stay. `queryFn` calls
+`GET /api/captures`; handlers call the existing POST endpoints. Optional later:
+add `loadSubset`/incremental sync or a WebSocket for Phase 4.
+
+### Tests
+
+`agent-web` has no test harness, so Phases 1-2 verify via typecheck + lint +
+build + a deployed browser check (matches the app; the REST API is already
+tested). Mobile (Phase 3) keeps its existing behavior tests as the guard, adapted
+to the collection. Standing up Vitest Browser Mode for the web Inbox is a flagged
+follow-up (front-end-testing skill), not a blocker.
+
+### Verification (this box: no workerd, no emulator)
+
+- Web: `pnpm --filter @zero/agent-web typecheck | lint | build`. No local
+  end-to-end (the dev `/api` proxy needs workerd, which this box can't run);
+  verify on the deployed `zero.juanibiapina.dev/inbox` after each phase (Phase 2:
+  toggle devtools offline).
+- Mobile (Phase 3): `pnpm --filter @zero/agent-mobile test | typecheck | lint` +
+  `expo export`; device-verify over Metro (and a new EAS build for the native
+  SQLite module).
+
+### Risks & mitigations
+
+- Young libraries (0.6), API churn -> pin versions; keep the spike isolated on
+  `/inbox`; the DECISION GATE lets us bail cheaply.
+- Mobile local SQLite = native module = new EAS build and added bundle/native
+  surface -> confirm in Phase 0 `expo export`; treat Phase 3 as its own EAS-build
+  increment; Phase 1-2 (web) need no native module (WASM).
+- Web bundle size (SQLite WASM is hundreds of KB) -> measure in Phase 0; if
+  unacceptable, fall back to a lighter web persistence (localStorage collection)
+  or ship Phase 1 (in-memory) only and reconsider.
+- Two apps eventually depend on `agent-core` with platform-specific adapters ->
+  share only the collection definition/factory; inject QueryClient + persistence
+  per app.
+- do-orm vs collection shape -> the DO keeps do-orm + the `captures` table as the
+  source of truth; TanStack DB is a CLIENT layer over the REST API, not a second
+  server store. No server data-model change.
+
+### Skills to use
+
+- evaluate-existing-solutions — the library choice is made; revisit only if
+  Phase 0/gate surfaces a blocker.
+- development-guidelines — throughout. typescript-strict — collection schema +
+  handler types. codebase-design — the `createCapturesCollection` factory
+  contract in agent-core (Phase 3). git-commit — commits. open-pr — per phase.
+- react-testing / front-end-testing — only if the optional web test harness lands.
+
+### Acceptance criteria
+
+- Phase 1: `/inbox` runs on a TanStack DB Query Collection + live query;
+  capture/list/Process behave exactly as today; web checks green.
+- Phase 2: `/inbox` shows last-synced captures while offline and queues+retries
+  offline writes; verified on deploy.
+- Phase 3: web + mobile share one `createCapturesCollection` from agent-core;
+  mobile behavior tests green; mobile device-verified on a fresh EAS build.
+- Backend unchanged across Phases 0-3; no Postgres introduced.
+
+---
+
+## Plan: web parity for the Capture Inbox (unlinked /inbox) — [DONE, PR #49, merge 0cee2eb]
 
 Self-contained plan for a fresh agent. Assume only this doc.
 

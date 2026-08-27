@@ -28,9 +28,6 @@ function messageOf(err: unknown): string {
 export default function HomeScreen() {
   const { getToken } = useAuth();
 
-  // Server state via React Query: retry/backoff, refetch-on-reconnect and
-  // refetch-on-focus (AppState) come from the QueryClient; the resume-time
-  // "stuck error" is handled there, not by hand.
   const inboxQuery = useInbox(getToken);
   const addMutation = useAddCapture(getToken);
   const processMutation = useProcessCapture(getToken);
@@ -38,9 +35,8 @@ export default function HomeScreen() {
   const captures = inboxQuery.data ?? [];
   const loading = inboxQuery.isPending;
   const busy = addMutation.isPending;
-  // A mutation the user just triggered wins; otherwise show a load error only
-  // when there's nothing on screen, so a failed background refetch stays silent
-  // behind the last-good Inbox.
+  // Show a load error only when there's nothing on screen, so a failed
+  // background refetch stays silent behind the last-good Inbox.
   const error = addMutation.error
     ? messageOf(addMutation.error)
     : processMutation.error
@@ -125,7 +121,6 @@ export default function HomeScreen() {
 
   const onProcess = useCallback(
     (item: Capture) => {
-      // Optimistic remove + rollback live in the mutation hook.
       processMutation.mutate(item.id);
     },
     [processMutation],
@@ -135,9 +130,8 @@ export default function HomeScreen() {
     <View className="flex-1 px-6 pt-16">
       <View className="mb-4 flex-row items-center justify-between">
         <Text variant="title">Inbox</Text>
-        {/* Native Clerk avatar (already a 36px circle); tapping opens the
-            profile (manage account, security, sign out). No wrapper clip — an
-            extra rounded-full/overflow-hidden mask crops the avatar off-center. */}
+        {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
+            avatar off-center. */}
         <UserButton />
       </View>
 
@@ -150,9 +144,6 @@ export default function HomeScreen() {
           <Text variant="subtitle">Your inbox is empty. Capture something.</Text>
         ) : (
           captures.map((item) => (
-            // Animated row: processing fades + collapses it out (exiting) and
-            // the rows below slide up (layout); an error re-insert fades back in
-            // (entering). onProcess keeps its optimistic-remove contract.
             <Animated.View
               key={item.id}
               entering={FadeIn.duration(150)}
@@ -160,9 +151,6 @@ export default function HomeScreen() {
               layout={LinearTransition.duration(200)}
               className="flex-row items-center gap-3 border-b border-neutral-200 py-3"
             >
-              {/* Leftside process control: a tappable circle, matching the
-                  Person-avatar motif. Tap processes the capture out of the Inbox
-                  (GTD Clarify). */}
               <Pressable
                 accessibilityLabel={`Process "${item.text}"`}
                 className="h-6 w-6 rounded-full border-2 border-neutral-400"

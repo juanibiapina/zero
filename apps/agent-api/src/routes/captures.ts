@@ -1,7 +1,3 @@
-// Clerk-authed routes for the GTD capture Inbox. Captures live in the caller's
-// UserDO (one instance per Clerk user), reached the same way as user settings.
-// This is the parallel todo app's API; it does not touch the agent.
-
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 

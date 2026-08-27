@@ -92,7 +92,6 @@ export class UserDO extends DurableObject<Env> {
   private store: Store;
   // File bytes in R2. Metadata rows live in this user's SQLite store.
   private fileBlobs: FileBlobStore;
-  // The parallel todo app's GTD capture Inbox. Separate from `store` on purpose.
   private captures: DbCaptureStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -118,8 +117,6 @@ export class UserDO extends DurableObject<Env> {
       dbStore.syncSystemTopicsFingerprint(systemTopicsFingerprint());
     });
   }
-
-  // --- Captures (parallel todo app's GTD Inbox) ---
 
   addCapture(text: string): Capture {
     return this.captures.add(text);
