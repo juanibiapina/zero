@@ -192,16 +192,12 @@ export const processedUpdates = table("processed_updates", {
   createdAt: column.text().notNull(),
 });
 
-// Captures: the GTD Inbox for the parallel todo app (the Todoist replacement).
-// A capture is a raw, untyped line dropped into the Inbox; later it is Processed
-// (GTD Clarify) into a typed entity. Deliberately standalone from the agent's
-// tables and Store; it has its own DbCaptureStore. `id` is a client-independent
-// UUID; `createdAt` is the capture time and the Inbox order.
+// The GTD capture Inbox (the Todoist replacement). Standalone from the agent's
+// tables; owned by DbCaptureStore. The Inbox is the rows where processedAt IS
+// NULL; createdAt is the Inbox order.
 export const captures = table("captures", {
   id: column.text().notNull().primaryKey(),
   text: column.text().notNull(),
   createdAt: column.text().notNull(),
-  // Process timestamp (GTD Clarify). Null while in the Inbox; an ISO time once
-  // processed out. The Inbox is the rows where processedAt IS NULL.
   processedAt: column.text(),
 });

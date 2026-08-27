@@ -10,8 +10,6 @@ import {
 
 export const inboxKey = ['inbox'] as const;
 
-// The caller's Inbox (open captures). Retry/backoff, refetch-on-reconnect and
-// refetch-on-focus come from the QueryClient defaults + AppState bridge.
 export function useInbox(getToken: TokenGetter) {
   return useQuery({
     queryKey: inboxKey,
@@ -19,8 +17,6 @@ export function useInbox(getToken: TokenGetter) {
   });
 }
 
-// Capture a new item. Not optimistic: on success the server row (with its id) is
-// appended to the cached Inbox.
 export function useAddCapture(getToken: TokenGetter) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -34,8 +30,7 @@ export function useAddCapture(getToken: TokenGetter) {
   });
 }
 
-// Process a capture (GTD Clarify). Optimistic: drop it from the cached Inbox
-// immediately and restore it if the request fails.
+// Optimistic: drop it from the cached Inbox immediately, restore on failure.
 export function useProcessCapture(getToken: TokenGetter) {
   const queryClient = useQueryClient();
   return useMutation({

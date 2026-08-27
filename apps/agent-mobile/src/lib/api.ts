@@ -4,9 +4,7 @@ import { API_BASE_URL } from './env';
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
 export type TokenGetter = () => Promise<string | null>;
 
-// Authenticated fetch against the worker API. Prefixes the base URL and attaches
-// the Clerk session token as a Bearer header, which `clerkMiddleware` on the
-// worker reads to authenticate the request.
+// Cross-origin: attaches the Clerk session token as a Bearer header.
 export async function apiFetch(
   getToken: TokenGetter,
   path: string,
@@ -42,11 +40,9 @@ export type Capture = {
   id: string;
   text: string;
   createdAt: string;
-  // Null while in the Inbox; an ISO timestamp once Processed (GTD Clarify).
   processedAt: string | null;
 };
 
-// The caller's Inbox (open captures), oldest first.
 export async function fetchInbox(
   getToken: TokenGetter,
   baseUrl: string = API_BASE_URL,
@@ -59,7 +55,6 @@ export async function fetchInbox(
   return body.captures;
 }
 
-// Capture a new item; returns the created row (with its server id).
 export async function addCapture(
   getToken: TokenGetter,
   text: string,
@@ -82,8 +77,6 @@ export async function addCapture(
   return body.capture;
 }
 
-// Process a capture (GTD Clarify); returns the updated row. The Inbox excludes
-// it after.
 export async function processCapture(
   getToken: TokenGetter,
   id: string,

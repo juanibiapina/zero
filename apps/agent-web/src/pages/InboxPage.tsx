@@ -12,13 +12,7 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// The GTD capture Inbox on the web, now backed by a TanStack DB collection
-// (spike, Phase 1). Reads via a live query; writes are optimistic through the
-// collection (insert = capture, update processedAt = Process) and reconcile via
-// the collection's auto-refetch. Reached only via the unlinked /inbox route.
 export function InboxPage() {
-  // Live query: open captures (processedAt is null), oldest first. Updates
-  // reactively as the collection changes, optimistically or after a refetch.
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: capturesCollection })
@@ -34,25 +28,19 @@ export function InboxPage() {
     const trimmed = text.trim();
     if (!trimmed) return;
     setError(null);
-    // Optimistic insert with a temp id; the server mints the real id and the
-    // collection's refetch replaces this row. Rollback on failure.
-    const now = new Date().toISOString();
     const tx = capturesCollection.insert({
       id: `temp-${crypto.randomUUID()}`,
       text: trimmed,
-      createdAt: now,
+      createdAt: new Date().toISOString(),
       processedAt: null,
     });
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    // Keep the input open and cleared for rapid capture.
     setText("");
     inputRef.current?.focus();
   }, [text]);
 
   const onProcess = useCallback((item: Capture) => {
     setError(null);
-    // Optimistic update; the live query drops it from the Inbox immediately.
-    // TanStack DB rolls the update back automatically if the handler rejects.
     const tx = capturesCollection.update(item.id, (draft) => {
       draft.processedAt = new Date().toISOString();
     });
@@ -106,7 +94,6 @@ export function InboxPage() {
             <ul className="divide-y">
               {list.map((item) => (
                 <li key={item.id} className="flex items-center gap-3 py-3">
-                  {/* Left round Process control (GTD Clarify). */}
                   <button
                     type="button"
                     aria-label={`Process "${item.text}"`}
