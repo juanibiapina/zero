@@ -132,6 +132,21 @@ export function createPersistedApi(deps: {
     }),
   );
 
+  // After a write reaches the server (including an outbox replay on reconnect),
+  // refetch the collection so the live view reconciles the optimistic/pending row
+  // with the server's real row. A direct collection refetch is what updates the
+  // persisted collection's live query; a bare queryClient invalidate does not
+  // reliably refresh it.
+  const refresh = async () => {
+    const utils = (collection as { utils?: { refetch?: () => Promise<unknown> } })
+      .utils;
+    if (utils?.refetch) {
+      await utils.refetch();
+    } else {
+      await queryClient.invalidateQueries({ queryKey: CAPTURES_QUERY_KEY });
+    }
+  };
+
   const offline = startOfflineExecutor({
     collections: { captures: collection },
     mutationFns: {
@@ -141,13 +156,13 @@ export function createPersistedApi(deps: {
           const text = m.modified.text;
           if (typeof text === "string") await rest.addCapture(text);
         }
-        await queryClient.invalidateQueries({ queryKey: CAPTURES_QUERY_KEY });
+        await refresh();
       },
       processCapture: async ({ transaction }) => {
         for (const m of transaction.mutations) {
           if (m.modified.processedAt != null) await rest.processCapture(String(m.key));
         }
-        await queryClient.invalidateQueries({ queryKey: CAPTURES_QUERY_KEY });
+        await refresh();
       },
     },
     onLeadershipChange: (isLeader) => {

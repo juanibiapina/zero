@@ -693,14 +693,22 @@ op-sqlite path — no fallback, no native errors once build 18 shipped the nativ
 online capture (FAB -> type -> the row appears), online Process (tap the circle ->
 the row leaves), and durable READS (both databases/zero-inbox.sqlite ~176KB synced
 snapshot and databases/zero-inbox-outbox.sqlite exist; the Inbox renders instantly
-from the local snapshot). KNOWN GAP (not shipped): a capture made while OFFLINE
-appears in-session but does NOT survive a relaunch and does not sync on reconnect
-— the persisted snapshot only holds server-confirmed rows, and the offline outbox
-restoration is not re-applying the optimistic row on reload. This is the same
-durable-offline-WRITE path that Phase 2's DECISION GATE was meant to verify on web
-and never did, so it likely needs work on BOTH platforms (correct
-offline-transactions restoration wiring, and probably the explicit
-useLiveQuery({ queryKey }) the runtime warns about). EAS gotcha recorded: the
+from the local snapshot). OFFLINE WRITES: durable and syncing (device-verified). A capture made while
+offline shows in-session and is persisted to the op-sqlite outbox; on reconnect it
+replays its POST, drains the outbox, and the synced row appears in the live view.
+Two fixes were needed and are in the code: (1) the replay mutationFns refresh the
+live view via collection.utils.refetch() (a bare queryClient.invalidateQueries does
+NOT refresh a persisted collection); (2) a lenient online detector (online =
+netinfo isConnected, not gated on the slow isInternetReachable probe) so a
+same-session reconnect replays promptly instead of only on the next app launch.
+Verified on device: offline capture -> wifi on -> both queued writes POST within
+~20s and render, outbox drains to 0, nothing lost across many offline/online
+cycles. REMAINING EDGE (data-safe, not fixed): a pure offline COLD start (app
+killed, reopened while still offline) gets stuck on a loading spinner and does not
+show the Inbox or the pending capture — Clerk needs the network to restore the
+session, and the collection build is gated behind it. The queued write is safe in
+the outbox and syncs once the app is online again; this is a Clerk-offline +
+cold-start concern beyond the captures data layer. EAS gotcha recorded: the
 first two rebuilds (16, 17) returned a cached artifact with the SAME fingerprint
 (73bc4af) as the pre-deps build and byte-identical APKs; `eas build --clear-cache`
 forced a genuine native recompile (build 18) that actually links op-sqlite. Also:

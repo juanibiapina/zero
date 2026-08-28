@@ -1,6 +1,9 @@
 import type { DB } from '@op-engineering/op-sqlite';
 import type { OpSQLiteDatabaseLike } from '@tanstack/react-native-db-sqlite-persistence';
-import type { StorageAdapter } from '@tanstack/offline-transactions';
+import type {
+  OnlineDetector,
+  StorageAdapter,
+} from '@tanstack/offline-transactions';
 import type { QueryClient } from '@tanstack/react-query';
 import {
   createCapturesApi,
@@ -57,6 +60,57 @@ function makeOpSqliteStorage(db: DB): StorageAdapter {
   };
 }
 
+// A connectivity detector that treats the device as online as soon as netinfo
+// reports a connected transport, without waiting for its slower
+// `isInternetReachable` probe. The default RN detector gates on reachability,
+// which lags on reconnect, so a queued offline write would not replay until the
+// next app launch. Here a reconnect fires listeners promptly and the outbox
+// replays; a POST that still fails simply retries.
+type NetInfoModule = {
+  fetch: () => Promise<{ isConnected: boolean | null }>;
+  addEventListener: (
+    cb: (s: { isConnected: boolean | null }) => void,
+  ) => () => void;
+};
+
+function makeLenientOnlineDetector(netInfo: NetInfoModule): OnlineDetector {
+  const listeners = new Set<() => void>();
+  let online = true;
+  const notify = () => {
+    for (const l of listeners) {
+      try {
+        l();
+      } catch {
+        // a listener throwing must not stop the others
+      }
+    }
+  };
+  netInfo
+    .fetch()
+    .then((s) => {
+      online = !!s.isConnected;
+    })
+    .catch(() => {});
+  const unsub = netInfo.addEventListener((s) => {
+    const now = !!s.isConnected;
+    const was = online;
+    online = now;
+    if (now && !was) notify();
+  });
+  return {
+    subscribe: (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+    notifyOnline: notify,
+    isOnline: () => online,
+    dispose: () => {
+      unsub();
+      listeners.clear();
+    },
+  };
+}
+
 // Build the mobile Capture data layer: durable offline SQLite (op-sqlite) plus an
 // outbox that retries over the native network detector. Falls back to the shared
 // in-memory Query Collection when the native modules are unavailable (e.g. under
@@ -79,11 +133,14 @@ export function createMobileCapturesApi(deps: {
         '@tanstack/react-native-db-sqlite-persistence'
       );
       const rn = await import('@tanstack/offline-transactions/react-native');
+      const netInfo = (await import('@react-native-community/netinfo'))
+        .default as unknown as NetInfoModule;
 
       const outboxDb = open({ name: OUTBOX_DB_NAME });
       const storage = makeOpSqliteStorage(outboxDb);
+      const onlineDetector = makeLenientOnlineDetector(netInfo);
       startExecutor = (config) =>
-        rn.startOfflineExecutor({ ...config, storage });
+        rn.startOfflineExecutor({ ...config, storage, onlineDetector });
 
       const database = open({ name: DB_NAME });
       // op-sqlite's DB types execute params as mutable Scalar[]; the adapter wants
