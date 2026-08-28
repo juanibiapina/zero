@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/AppHeader";
 import { ErrorText } from "@/components/ConnectionStatus";
+import { inboxView } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { type Capture } from "@/lib/captures";
 
@@ -79,6 +80,14 @@ function InboxReady({ api }: { api: CapturesApi }) {
   );
 
   const list = captures ?? [];
+  // Gate on the row count, not isLoading: a hydrated snapshot must paint even
+  // while the network sync is still pending. Write errors show above the list
+  // (their own ErrorText), so the list region tracks no loadError here.
+  const view = inboxView({
+    count: list.length,
+    isLoading,
+    loadError: null,
+  });
 
   return (
     <>
@@ -104,9 +113,9 @@ function InboxReady({ api }: { api: CapturesApi }) {
 
       {error && <ErrorText>{error}</ErrorText>}
 
-      {isLoading ? (
+      {view === "loading" ? (
         <p className="text-sm text-muted-foreground">Loading your inbox…</p>
-      ) : list.length === 0 ? (
+      ) : view === "empty" ? (
         <p className="text-sm text-muted-foreground">
           Your inbox is empty. Capture something.
         </p>
