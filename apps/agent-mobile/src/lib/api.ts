@@ -1,4 +1,9 @@
+import type { Capture } from '@zero/agent-core';
+
 import { API_BASE_URL } from './env';
+
+// The Capture entity type is shared across web + mobile.
+export type { Capture };
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
@@ -35,13 +40,6 @@ export async function fetchUserSettings(
   }
   return (await res.json()) as UserSettings;
 }
-
-export type Capture = {
-  id: string;
-  text: string;
-  createdAt: string;
-  processedAt: string | null;
-};
 
 export async function fetchInbox(
   getToken: TokenGetter,

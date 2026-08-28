@@ -1,12 +1,9 @@
 // Same-origin requests: the browser carries the Clerk session cookie, so no
 // Bearer token is needed here (unlike the cross-origin mobile client).
 
-export type Capture = {
-  id: string;
-  text: string;
-  createdAt: string;
-  processedAt: string | null;
-};
+import type { Capture } from "@zero/agent-core";
+
+export type { Capture };
 
 export async function fetchInbox(): Promise<Capture[]> {
   const res = await fetch("/api/captures");

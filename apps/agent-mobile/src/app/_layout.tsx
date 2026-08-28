@@ -1,3 +1,6 @@
+// Polyfill Web Crypto (Hermes has none) before anything builds a collection.
+import '@/lib/crypto-polyfill';
+
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { QueryClientProvider } from '@tanstack/react-query';

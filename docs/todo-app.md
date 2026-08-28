@@ -685,9 +685,33 @@ SQLite supports `RENAME TO` / `RENAME COLUMN`. DO NOT edit the applied
 
 ## Plan: adopt TanStack DB for the Capture Inbox data layer (spike-first)
 
-STATUS: Phase 0 + Phase 1 + Phase 2 DONE. Phase 0+1 shipped in PR #50 (merge
-99b03e1); Phase 2 (offline SQL persistence) shipped in PR #51 (commit 44f145e on
-main). /inbox now runs on a TanStack DB collection persisted to SQLite/OPFS for
+STATUS: Phase 0 + Phase 1 + Phase 2 DONE; Phase 3 (share + mobile) code-complete,
+on a branch, pending device verification on a fresh EAS build. Phase 0+1 shipped
+in PR #50 (merge 99b03e1); Phase 2 (offline SQL persistence) shipped in PR #51
+(commit 44f145e on main). Phase 3 as built: the Capture collection factory now
+lives in packages/agent-core (createCapturesApi + Capture, injecting QueryClient,
+auth-bound REST, and a platform persistence + offline executor); web
+captures-collection.ts became a thin adapter (browser persistence + cookie REST,
+behavior + bundle unchanged — main chunk 550KB/162KB gzip); the mobile Inbox was
+moved off its React Query hooks (lib/captures.ts, deleted) onto the shared
+collection with op-sqlite persistence (@tanstack/react-native-db-sqlite-persistence
+@0.2.18, peer @op-engineering/op-sqlite@18 — the RN adapter takes op-sqlite, NOT
+expo-sqlite) and a React Native offline outbox
+(@tanstack/offline-transactions/react-native + @react-native-community/netinfo),
+whose durable store is a small op-sqlite KV StorageAdapter (RN has no IndexedDB).
+Native imports are lazy so jest and any client without the native modules fall
+back to the shared in-memory collection. Gotchas found and fixed: (1) agent-core's
+TanStack deps must be peerDependencies (not deps) or pnpm makes a second
+offline-transactions instance and the OfflineExecutor types stop matching; each
+app carries the TanStack packages directly, react-query pinned to one version;
+(2) Hermes has no Web Crypto, and @tanstack/db's safeRandomUUID needs
+crypto.getRandomValues, so a mobile crypto polyfill from expo-crypto is imported
+first in _layout.tsx; (3) jest could not parse fractional-indexing (pure ESM
+pulled by @tanstack/db) under pnpm's nested node_modules — fixed by allowlisting
+it in the app's transformIgnorePatterns; (4) the query collection leaves a
+background timer, so the mobile jest script runs with --forceExit; the collection
+is cleaned up on unmount. Checks green: agent-core + web typecheck/lint/build,
+mobile typecheck/lint, 29 mobile tests, expo export (Android bundle 6.8MB). /inbox now runs on a TanStack DB collection persisted to SQLite/OPFS for
 offline reads, with writes through an IndexedDB-backed offline outbox
 (@tanstack/offline-transactions, Option A) that retries on reconnect; it falls
 back to the in-memory Query Collection when OPFS/Worker is unavailable (private
@@ -1115,6 +1139,292 @@ other consumer). Only proceed to extract `createCapturesCollection` into
   2b. Double-send if both collection handlers and the executor call the server ->
   omit collection handlers in Option A. Multi-tab -> leader election; non-leader
   tabs run online-only, acceptable for a single-user Inbox.
+
+---
+
+## Plan: Phase 3 — share the Capture collection and migrate mobile
+
+Self-contained plan for a fresh agent. Assume only this doc. Grounded in the repo
+and the adapters' 0.2.18 / 1.0.51 npm metadata (2026-08-27).
+
+### Goal
+
+Give web and mobile ONE shared Capture data layer, then move the mobile Inbox off
+its React Query hooks onto that shared TanStack DB collection, with durable
+offline SQLite on the phone (the same local-first behavior web got in Phase 2).
+Extract the collection factory into `packages/agent-core` so the collection
+definition, live-query filter, optimistic helpers, and the offline write path are
+defined once; each app injects its platform QueryClient, its auth-bound REST
+functions, and its platform persistence + offline executor. Backend, DO, do-orm,
+and the `/api/captures` REST endpoints stay unchanged. This runs the DECISION
+GATE first (see below): do NOT start Phase 3 until the deployed web `/inbox`
+offline behavior is confirmed.
+
+### Preconditions (gate before any code)
+
+- Phase 2 DECISION GATE passed on the deployed web `/inbox`: offline read, offline
+  write + reconnect sync, and the C1 runtime check all hold. Phase 3 hardens the
+  same design on a second platform; do not port an unproven design.
+- Cut Phase 3 as its OWN EAS-build increment. It adds native modules (see below),
+  so a JS-only hot-reload cannot run it on device; a fresh EAS dev build is
+  mandatory (same hazard the keyboard-controller and @expo/ui increments hit).
+
+### Current state (verified in repo)
+
+- Mobile Inbox (`apps/agent-mobile/src/app/(signed-in)/index.tsx`) reads/writes via
+  React Query hooks in `src/lib/captures.ts` (`useInbox` / `useAddCapture` /
+  `useProcessCapture`), which call the Bearer-token REST helpers in `src/lib/api.ts`
+  (`fetchInbox` / `addCapture` / `processCapture`, each taking a `getToken`). The
+  root `_layout.tsx` wraps the app in a tuned `QueryClientProvider`
+  (`createQueryClient`: retry/backoff, `refetchOnReconnect`, 30s `staleTime`) and
+  bridges React Query `focusManager` to `AppState`.
+- Web Inbox already runs the target design: `apps/agent-web/src/lib/captures-collection.ts`
+  exposes a `CapturesApi` = `{ collection, add(text)->Transaction,
+  process(id)->Transaction, offline }` via `getCapturesApi()`, which tries a
+  persisted collection (wa-sqlite/OPFS + `@tanstack/offline-transactions` outbox,
+  Option A: collection has NO server-calling handlers, all writes flow through the
+  executor's `mutationFns`) and falls back to an in-memory Query Collection on
+  `PersistenceUnavailableError`. `InboxPage.tsx` reads with `useLiveQuery`
+  (`isNull(processedAt)`, `orderBy createdAt asc`) and surfaces write errors via
+  `tx.isPersisted.promise.catch`. Web auth is the same-origin COOKIE, so its REST
+  helpers take no token.
+- `packages/agent-core` is an empty placeholder (`src/index.ts`, no deps). This
+  plan grows it.
+- Mobile has NO local SQLite today (do-orm runs on the DO, not the device) and no
+  native persistence deps.
+
+### The auth split is the core design constraint
+
+Web REST helpers are token-free (cookie); mobile REST helpers take a `getToken`
+(cross-origin Bearer). So the shared factory must NOT import either app's
+`captures.ts`/`api.ts`. It takes the three REST functions as INJECTED
+dependencies, already auth-bound by the caller:
+
+```ts
+type CapturesRest = {
+  fetchInbox: () => Promise<Capture[]>;
+  addCapture: (text: string) => Promise<Capture>;
+  processCapture: (id: string) => Promise<Capture>;
+};
+```
+
+- Web injects closures over its cookie `fetch` helpers (no token).
+- Mobile injects closures that bind `getToken`: e.g. `fetchInbox: () =>
+  apiFetchInbox(getToken)`. Because `getToken` is only valid once signed in, the
+  mobile collection must be BUILT INSIDE the signed-in tree, not at module scope
+  like web. See "Mobile token binding" below.
+
+### What moves into `packages/agent-core` (the shared contract)
+
+Extract the platform-agnostic core of the web `captures-collection.ts`, parameterized:
+
+- `type Capture` (`id`, `text`, `createdAt`, `processedAt: string | null`) — the
+  shared entity type (today duplicated in web `lib/captures.ts` and mobile
+  `lib/api.ts`).
+- `type CapturesApi` = `{ collection, add(text)->Transaction,
+  process(id)->Transaction, offline: boolean }` — the caller contract both
+  Inbox screens already speak.
+- `optimisticCapture(text)`, `markProcessed(draft)`, the `isNull(processedAt)` +
+  `orderBy(createdAt asc)` live-query shape (export a helper or document the query
+  so both pages stay identical).
+- `createInMemoryApi({ queryClient, rest })` — the fallback Query Collection with
+  server-calling `onInsert`/`onUpdate` handlers built from `rest`.
+- `createPersistedApi({ queryClient, rest, persistence, startOfflineExecutor })` —
+  the Option A path: persisted collection with NO handlers, writes through an
+  injected `startOfflineExecutor`. `persistence` and `startOfflineExecutor` are
+  injected because their imports are platform-specific (web `@tanstack/*` browser
+  vs RN subpaths); agent-core must not import a platform SQLite engine.
+- `createCapturesApi(deps)` — try persisted, catch and fall back to in-memory
+  (the web `getCapturesApi` try/catch, made reusable).
+
+agent-core depends on the platform-agnostic `@tanstack/db`,
+`@tanstack/query-db-collection`, `@tanstack/react-query`,
+`@tanstack/db-sqlite-persistence-core` (types only) and `@tanstack/offline-transactions`
+core types — NOT `browser-db-sqlite-persistence` and NOT
+`react-native-db-sqlite-persistence`. Each app owns its platform adapter and
+passes the built `persistence` + `startOfflineExecutor` in. Keep agent-core
+free of React and RN imports so the DO/worker could reuse `Capture` later.
+
+Codebase-design note: the value of this factory is the SHARED collection
+definition + write path, not CRUD. Inject the three things that genuinely differ
+per platform (QueryClient, auth-bound REST, persistence/executor). Do not widen it
+into a generic entity store (see the per-entity data-store decision at the top of
+this doc).
+
+### Mobile-specific pieces
+
+- Native deps (BOTH require a new EAS dev build):
+  - `@tanstack/react-native-db-sqlite-persistence@0.2.18`, exporting
+    `createReactNativeSQLitePersistence({ database })`; its peer is
+    `@op-engineering/op-sqlite@^15.2.5` (op-sqlite specifically — this CORRECTS the
+    earlier doc note that said op-sqlite OR expo-sqlite; the official RN adapter
+    takes an `OpSQLiteDatabaseLike`). op-sqlite supports Expo via autolinking /
+    its config plugin; add it and prebuild.
+  - `@tanstack/offline-transactions` imported from its `/react-native` subpath, with
+    peer `@react-native-community/netinfo` (>=11) for RN online/offline detection
+    (the web build used `window.online/offline`; RN has neither). netinfo is an
+    Expo-compatible native module.
+  - Pin exact versions (adapters are 0.2.x, young, churn expected). Version compat:
+    the RN adapter and `offline-transactions@1.0.51` both target
+    `@tanstack/db@0.8.5`, the version web already pins.
+- Open the op-sqlite database and build the RN persistence in a mobile-only module
+  (e.g. `src/lib/captures-collection.native.ts`), then hand `persistence` +
+  `startOfflineExecutor` (from the RN subpath) to `createCapturesApi`.
+- Token binding: build the collection once inside the `(signed-in)` tree where
+  `getToken` from `useAuth()` is valid. Options, in order of preference:
+  (1) a `CapturesProvider` mounted in `src/app/(signed-in)/_layout.tsx` that
+  memoizes `getCapturesApi` bound to the current `getToken` and exposes it via
+  context; the Inbox screen consumes it with `useLiveQuery`. This mirrors web's
+  single async init but scoped to the session, and it disposes/rebuilds on
+  sign-out. Do NOT put the collection at module scope (web can because cookie auth
+  is always valid; mobile cannot).
+- Keep the tuned mobile `QueryClient` (`createQueryClient`) as the collection's
+  `queryClient` so the flaky-radio retry/backoff + `refetchOnReconnect` +
+  `AppState` focus bridging still apply. The offline outbox handles WRITES;
+  React Query still governs the READ `queryFn` refetch.
+
+### Mobile screen migration (behavior-preserving)
+
+Rebuild `src/app/(signed-in)/index.tsx` to consume the shared `CapturesApi`:
+
+- Read: `useLiveQuery(q => q.from({ c: api.collection }).where(isNull(processedAt))
+  .orderBy(createdAt asc))` replaces `useInbox`.
+- Write: `api.add(text)` / `api.process(id)` (returning a `Transaction`) replace
+  `useAddCapture` / `useProcessCapture`; surface errors via
+  `tx.isPersisted.promise.catch` (same pattern web uses), mapped to the existing
+  `ErrorText`/error state.
+- KEEP every mobile-only affordance exactly as is: the FAB quick-add morph,
+  `KeyboardStickyView` bar, rapid capture, `ConfirmDialog` discard flow, Android
+  `BackHandler`, the `Animated.FlatList` with `LinearTransition` + `FadeIn/FadeOut`,
+  and the load-error-only-when-empty rule. This is a data-layer swap, not a UI
+  change.
+- Delete `src/lib/captures.ts` (the React Query hooks) once the screen no longer
+  imports it. `src/lib/api.ts` REST helpers STAY (the mobile-bound closures wrap
+  them); dedupe the `Capture` type to the agent-core one.
+
+### Tests (keep the existing mobile behavior tests as the guard)
+
+- jest has NO op-sqlite / netinfo native modules, so in the test environment
+  `createCapturesApi` MUST fall back to the in-memory Query Collection (same
+  fallback that protects web private-browsing). This keeps tests native-free — do
+  not mock op-sqlite. Verify the fallback path triggers cleanly under jest-expo.
+- `src/app/(signed-in)/__tests__/index.test.tsx` already mocks `@/lib/api` and
+  drives the real hooks through it. Adapt it to drive the collection: keep mocking
+  the REST functions (the in-memory fallback's handlers call them), assert the same
+  behaviors — capture appends, list oldest-first, Process optimistic-remove, rapid
+  capture, empty/loading/error. It may need to `await` the async `getCapturesApi`
+  init (the render is already async; see the quick-add async-render gotcha in
+  PROGRESS).
+- `src/lib/__tests__/api.test.ts` (REST helpers hit the right paths with Bearer)
+  stays as-is. Add a small agent-core unit test for `createInMemoryApi`
+  (add->list->process round-trip) if a harness is cheap; the factory is the new
+  shared seam.
+- If `useLiveQuery` needs a jest shim under jest-expo, add it to `jest.setup.js`
+  (same place the reanimated `Animated.FlatList` and keyboard-controller mocks
+  live).
+
+### System-wide impact
+
+- No backend change. `queryFn` still `GET /api/captures`; writes still POST to the
+  existing routes. C3 duplicate-on-retry caveat carries over to mobile (no server
+  idempotency key); accept rare duplicates for the spike.
+- New native surface on mobile (op-sqlite + netinfo) -> a new EAS dev-client build
+  and a bundle-size bump; measure `expo export` output and record it. This is the
+  app's second and third native deps beyond the Expo/RN + keyboard-controller
+  baseline.
+- Web is refactor-only: `captures-collection.ts` becomes a thin adapter that
+  injects the browser persistence + web REST closures into the shared factory. Web
+  behavior must not change; it already passed its gate.
+
+### Verification (this box: no workerd, no emulator)
+
+- agent-core + web: `pnpm --filter @zero/agent-core typecheck | lint`,
+  `pnpm --filter @zero/agent-web typecheck | lint | build` (web still green,
+  behavior unchanged, bundle unchanged).
+- Mobile: `pnpm --filter @zero/agent-mobile test | typecheck | lint`, then
+  `expo export` (bundles with the two native deps added — record size). Native
+  code cannot run under jest; the in-memory fallback covers tests.
+- Device: cut a new EAS dev build (native modules). Device-verify on the Pixel 7
+  via the Maestro CLI: Inbox loads real captures; capture + Process work; then the
+  offline proof — airplane mode ON, capture a thought, kill+relaunch (still
+  offline) the item survives, airplane mode OFF, it syncs to the same UserDO
+  (confirm it shows on web `/inbox`). This is the mobile mirror of Phase 2's
+  offline read/write proof.
+
+### DECISION GATE (after mobile)
+
+With web + mobile both on the shared collection, decide whether local-first
+TanStack DB is the committed data layer for every future entity (Todo, Project,
+Person…) or whether the Capture Inbox keeps it while richer entities take another
+path. Record the call here.
+
+### Docs / changelog
+
+- No `apps/agent-api/CHANGELOG.md` entry (todo app is a separate surface; the
+  mobile Inbox already shipped there). Record mobile-user-visible offline behavior
+  here in PROGRESS on completion, plus: the shared `agent-core` factory contract,
+  that mobile persistence is op-sqlite (not expo-sqlite), the netinfo dep, the new
+  EAS build, and the measured mobile bundle delta.
+
+### Skills to use
+
+- codebase-design — the `createCapturesApi` factory contract in agent-core (the
+  central design act; keep it a deep module with injected platform seams, not a
+  generic store). structure-codebase — where the shared factory and the two
+  platform adapters live. evaluate-existing-solutions — library choice is made;
+  revisit only if the RN adapter or op-sqlite fights Expo at the spike.
+  development-guidelines, typescript-strict — factory + injected-dependency types.
+  refactoring — web is a behavior-preserving refactor onto the shared factory
+  (green build as guard). tdd / react-testing — keep the mobile behavior tests
+  green through the swap. git-commit, open-pr — per increment (agent-core extract
+  + web refactor as one PR; mobile migration + EAS build as its own PR).
+
+### Suggested increments (each its own PR)
+
+- 3a — extract `createCapturesApi` + `Capture` + helpers into `packages/agent-core`;
+  refactor web `captures-collection.ts` to consume it (inject browser persistence +
+  cookie REST). Web behavior + bundle unchanged; web checks green. No mobile change.
+- 3b — mobile toolchain de-risk: add op-sqlite, netinfo, the RN persistence adapter
+  + offline-transactions/react-native (pinned). A throwaway module opens an
+  op-sqlite DB and builds a persisted collection; `expo export` bundles; record the
+  size delta. STOP if op-sqlite/Expo prebuild fights.
+- 3c — mobile migration: build the RN adapter module + `CapturesProvider` (token
+  binding), swap the Inbox screen onto the shared collection, delete
+  `lib/captures.ts`, adapt the tests (in-memory fallback under jest). Cut a new EAS
+  dev build and device-verify the offline proof.
+
+### Risks & mitigations
+
+- Native modules (op-sqlite, netinfo) => new EAS build and Expo prebuild friction ->
+  isolate in 3b, prove `expo export` + a dev build before touching the screen; op-sqlite
+  supports Expo autolinking. If op-sqlite won't prebuild cleanly, fall back to
+  reads-only persistence or ship mobile on the in-memory collection (parity with
+  web Option B) and defer durable offline writes.
+- Token binding (getToken only valid signed-in) -> build the collection inside the
+  `(signed-in)` tree via a provider; never module-scope on mobile.
+- Test env has no native SQLite -> rely on the in-memory fallback under jest; do not
+  mock op-sqlite. Confirm the fallback triggers.
+- C3 duplicate-on-retry (no server idempotency key) -> carries to mobile; accept
+  rare duplicates for the spike, note that exactly-once needs a backend key.
+- Young libraries (0.2.x adapters) -> pin exact versions; the shared factory keeps
+  the churn in one place.
+- Web regression during the extract -> web already passed its gate; treat 3a as a
+  pure refactor with the green build as the guard, no behavior or bundle change.
+
+### Acceptance criteria
+
+- Web + mobile both consume ONE `createCapturesApi` from `packages/agent-core`;
+  the `Capture` type is defined once.
+- Mobile Inbox behavior is unchanged (capture, oldest-first list, Process
+  optimistic-remove + rollback, rapid capture, discard-confirm, Android back,
+  FlatList animations, load-error-only-when-empty).
+- Mobile is local-first: a capture made offline survives relaunch and syncs on
+  reconnect (device-verified on a fresh EAS build); or, if shipped reads-only, that
+  deferral is recorded.
+- Mobile tests green via the in-memory fallback (no op-sqlite mock); typecheck +
+  lint green; `expo export` bundles; mobile bundle delta recorded.
+- Web behavior and bundle unchanged; agent-core + web checks green.
+- Backend unchanged; no Postgres.
 
 ---
 
