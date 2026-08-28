@@ -15,7 +15,7 @@ export async function fetchInbox(): Promise<Capture[]> {
 }
 
 export async function addCapture(
-  text: string,
+  capture: { id: string; text: string },
   idempotencyKey: string,
 ): Promise<Capture> {
   const res = await fetch("/api/captures", {
@@ -24,7 +24,7 @@ export async function addCapture(
       "Content-Type": "application/json",
       "Idempotency-Key": idempotencyKey,
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(capture),
   });
   if (!res.ok) {
     throw new Error(`POST /api/captures failed: ${res.status}`);

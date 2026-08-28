@@ -31,10 +31,13 @@ function toCapture(row: {
 export class DbCaptureStore {
   constructor(private db: Database) {}
 
-  // Capturing with an idempotencyKey is exactly-once: a replay of the same key
-  // (a retried write after a lost ACK) returns the already-stored row instead of
-  // inserting a second one. Without a key, every add is independent.
-  add(text: string, idempotencyKey?: string): Capture {
+  // The client mints the capture id, so the add is exactly-once on the id alone:
+  // a replay (a retried write after a lost ACK) re-sends the same id and gets the
+  // already-stored row back instead of inserting a second one. The idempotencyKey
+  // stays as a parallel dedupe token until it retires.
+  add(id: string, text: string, idempotencyKey?: string): Capture {
+    const existingById = this.db.get(captures, { where: eq("id", id) });
+    if (existingById) return toCapture(existingById);
     if (idempotencyKey) {
       const existing = this.db.get(captures, {
         where: eq("idempotencyKey", idempotencyKey),
@@ -42,7 +45,7 @@ export class DbCaptureStore {
       if (existing) return toCapture(existing);
     }
     const capture: Capture = {
-      id: crypto.randomUUID(),
+      id,
       text,
       createdAt: new Date().toISOString(),
       processedAt: null,

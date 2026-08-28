@@ -55,7 +55,7 @@ export async function fetchInbox(
 
 export async function addCapture(
   getToken: TokenGetter,
-  text: string,
+  capture: { id: string; text: string },
   idempotencyKey: string,
   baseUrl: string = API_BASE_URL,
 ): Promise<Capture> {
@@ -68,7 +68,7 @@ export async function addCapture(
         'Content-Type': 'application/json',
         'Idempotency-Key': idempotencyKey,
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(capture),
     },
     baseUrl,
   );

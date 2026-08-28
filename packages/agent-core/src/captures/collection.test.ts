@@ -16,10 +16,12 @@ function fakeRest(initial: Capture[]): CapturesRest {
       await sleep(5);
       return server.filter((c) => c.processedAt == null).map((c) => ({ ...c }));
     },
-    addCapture: async (text) => {
+    addCapture: async ({ id, text }) => {
       await sleep(5);
+      const existing = server.find((c) => c.id === id);
+      if (existing) return { ...existing };
       const capture: Capture = {
-        id: `s${server.length + 1}`,
+        id,
         text,
         createdAt: new Date().toISOString(),
         processedAt: null,

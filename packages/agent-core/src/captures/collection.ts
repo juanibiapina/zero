@@ -20,9 +20,15 @@ import type { Capture } from "./types";
 // layer, so the auth split stays out of the shared code.
 export type CapturesRest = {
   fetchInbox: () => Promise<Capture[]>;
-  // idempotencyKey is a per-write key the server dedupes on, so a retried add
-  // (offline outbox replay after a lost ACK) cannot create a second capture.
-  addCapture: (text: string, idempotencyKey: string) => Promise<Capture>;
+  // The client mints the capture's id (a stable UUID), so the optimistic row and
+  // the server's row share one key and never swap. The server persists this id as
+  // the primary key and dedupes on it: a retried add (offline outbox replay after
+  // a lost ACK) re-sends the same id and gets the stored row back, not a second
+  // capture. idempotencyKey stays as a parallel dedupe token until it retires.
+  addCapture: (
+    capture: { id: string; text: string },
+    idempotencyKey: string,
+  ) => Promise<Capture>;
   processCapture: (id: string) => Promise<Capture>;
 };
 
@@ -57,11 +63,13 @@ export const CAPTURES_QUERY_KEY = ["captures"];
 // Bumping this clears the persisted local copy and re-syncs from the server.
 const SCHEMA_VERSION = 1;
 
-// Temp id for the optimistic row; replaced by the server's real id on refetch.
-// `safeRandomUUID` works on browser and React Native (no crypto polyfill).
+// The optimistic row's id is a client-minted UUID that the server persists
+// verbatim, so this id never changes: no temp-to-real swap, no flicker, and any
+// later delete/edit by id stays valid. `safeRandomUUID` works on browser and
+// React Native (no crypto polyfill).
 function optimisticCapture(text: string): Capture {
   return {
-    id: `temp-${safeRandomUUID()}`,
+    id: safeRandomUUID(),
     text,
     createdAt: new Date().toISOString(),
     processedAt: null,
@@ -104,9 +112,13 @@ export function createInMemoryApi(deps: {
       onInsert: async ({ transaction }) => {
         // This fallback has no durable outbox (online-only), so there is no
         // cross-restart replay; a fresh per-write key still gives the server a
-        // stable dedupe token within any in-session retry.
+        // stable dedupe token within any in-session retry. The capture's own id
+        // (client-minted) is the real dedupe key.
         for (const m of transaction.mutations)
-          await rest.addCapture(m.modified.text, safeRandomUUID());
+          await rest.addCapture(
+            { id: m.modified.id, text: m.modified.text },
+            safeRandomUUID(),
+          );
       },
       onUpdate: async ({ transaction }) => {
         for (const m of transaction.mutations) {
@@ -181,8 +193,10 @@ export function createPersistedApi(deps: {
         // keep it here so an offline-transactions version bump is one line.
         // The outbox types a mutation's fields as unknown; narrow before sending.
         for (const m of transaction.mutations) {
+          const id = m.modified.id;
           const text = m.modified.text;
-          if (typeof text === "string") await rest.addCapture(text, idempotencyKey);
+          if (typeof id === "string" && typeof text === "string")
+            await rest.addCapture({ id, text }, idempotencyKey);
         }
         await refresh();
       },
