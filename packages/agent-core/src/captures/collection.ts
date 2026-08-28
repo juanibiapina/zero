@@ -72,6 +72,20 @@ function markProcessed(draft: Capture): void {
   draft.processedAt = new Date().toISOString();
 }
 
+// Write the server's post-process row straight into the collection's synced
+// base. Without this, processing flickers: the optimistic `markProcessed`
+// overlay hides the row, but when that overlay is dropped on completion the
+// synced base still holds the row's stale (unprocessed) value for one tick
+// before the reconciling refetch's delete lands, so the row reappears and
+// vanishes. Upserting the processed row keeps the base filtered out across the
+// drop. The Query Collection's write utils are not on the base Collection type,
+// so reach them through a narrow cast (same shape as `refresh` below).
+function syncProcessed(collection: Collection<Capture, string>, capture: Capture): void {
+  const utils = (collection as { utils?: { writeUpsert?: (data: Capture) => void } })
+    .utils;
+  utils?.writeUpsert?.(capture);
+}
+
 // Fallback: an in-memory Query Collection whose own handlers call the REST API
 // and roll back on failure. Used when durable persistence is unavailable
 // (private browsing on web, or the jest / no-native-SQLite environment) so the
@@ -96,7 +110,10 @@ export function createInMemoryApi(deps: {
       },
       onUpdate: async ({ transaction }) => {
         for (const m of transaction.mutations) {
-          if (m.modified.processedAt != null) await rest.processCapture(String(m.key));
+          if (m.modified.processedAt != null) {
+            const updated = await rest.processCapture(String(m.key));
+            syncProcessed(collection, updated);
+          }
         }
       },
     }),
@@ -171,7 +188,10 @@ export function createPersistedApi(deps: {
       },
       processCapture: async ({ transaction }) => {
         for (const m of transaction.mutations) {
-          if (m.modified.processedAt != null) await rest.processCapture(String(m.key));
+          if (m.modified.processedAt != null) {
+            const updated = await rest.processCapture(String(m.key));
+            syncProcessed(collection, updated);
+          }
         }
         await refresh();
       },
