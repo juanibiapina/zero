@@ -40,5 +40,6 @@ import m0038 from "./migrations/0038_todo_done.sql";
 import m0039 from "./migrations/0039_rename_todos_to_captures.sql";
 import m0040 from "./migrations/0040_captures_inbox_index.sql";
 import m0041 from "./migrations/0041_captures_idempotency_key.sql";
+import m0042 from "./migrations/0042_captures_drop_idempotency_key.sql";
 
-export const migrations = { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014, m0015, m0016, m0017, m0018, m0019, m0020, m0021, m0022, m0023, m0024, m0025, m0026, m0027, m0028, m0029, m0030, m0031, m0032, m0033, m0034, m0035, m0036, m0037, m0038, m0039, m0040, m0041 };
+export const migrations = { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014, m0015, m0016, m0017, m0018, m0019, m0020, m0021, m0022, m0023, m0024, m0025, m0026, m0027, m0028, m0029, m0030, m0031, m0032, m0033, m0034, m0035, m0036, m0037, m0038, m0039, m0040, m0041, m0042 };

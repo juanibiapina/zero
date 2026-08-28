@@ -196,12 +196,10 @@ export const processedUpdates = table("processed_updates", {
 // tables; owned by DbCaptureStore. The Inbox is the rows where processedAt IS
 // NULL; createdAt is the Inbox order.
 export const captures = table("captures", {
+  // The client mints the id (a UUID) and re-sends it verbatim on every
+  // retry/replay, so the primary key itself dedupes a lost-ACK double-insert.
   id: column.text().notNull().primaryKey(),
   text: column.text().notNull(),
   createdAt: column.text().notNull(),
   processedAt: column.text(),
-  // Client-supplied per-write idempotency key (the offline outbox reuses it on
-  // every retry/replay). NULL for legacy rows and keyless adds. A partial unique
-  // index (migration 0041) dedupes retries so a lost ACK cannot double-insert.
-  idempotencyKey: column.text(),
 });

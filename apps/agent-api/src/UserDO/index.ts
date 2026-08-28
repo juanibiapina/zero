@@ -118,8 +118,8 @@ export class UserDO extends DurableObject<Env> {
     });
   }
 
-  addCapture(text: string, idempotencyKey?: string): Capture {
-    return this.captures.add(text, idempotencyKey);
+  addCapture(id: string, text: string): Capture {
+    return this.captures.add(id, text);
   }
 
   listInbox(): Capture[] {

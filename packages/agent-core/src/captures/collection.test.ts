@@ -16,10 +16,12 @@ function fakeRest(initial: Capture[]): CapturesRest {
       await sleep(5);
       return server.filter((c) => c.processedAt == null).map((c) => ({ ...c }));
     },
-    addCapture: async (text) => {
+    addCapture: async ({ id, text }) => {
       await sleep(5);
+      const existing = server.find((c) => c.id === id);
+      if (existing) return { ...existing };
       const capture: Capture = {
-        id: `s${server.length + 1}`,
+        id,
         text,
         createdAt: new Date().toISOString(),
         processedAt: null,
@@ -37,7 +39,62 @@ function fakeRest(initial: Capture[]): CapturesRest {
   };
 }
 
+// One visibility invariant for every Inbox write. Keyed by a stable identity
+// (the capture text here), an item's presence across the recorded snapshots must
+// form a single contiguous block of `true`: once it appears it stays until an
+// operation removes it, once removed it never returns, and it is never shown
+// twice at once. A vanish-then-reappear or a reappear-then-vanish breaks the
+// contiguity; a duplicate breaks the count. Reused across add and process so a
+// future op (delete, edit) inherits the same check.
+function expectNoFlicker(snapshots: string[][], id: string): void {
+  for (const snapshot of snapshots) {
+    expect(snapshot.filter((x) => x === id).length).toBeLessThanOrEqual(1);
+  }
+  const present = snapshots.map((s) => s.includes(id));
+  const firstTrue = present.indexOf(true);
+  if (firstTrue === -1) return;
+  const lastTrue = present.lastIndexOf(true);
+  for (let i = firstTrue; i <= lastTrue; i++) {
+    expect(present[i]).toBe(true);
+  }
+}
+
 describe("captures collection", () => {
+  it("adding a capture shows it once, without a vanish/reappear flicker", async () => {
+    const api = createInMemoryApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([
+        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null },
+      ]),
+    });
+
+    const inbox = createLiveQueryCollection((q) =>
+      q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+    );
+
+    const snapshots: string[][] = [];
+    const record = () => snapshots.push(inbox.toArray.map((c: Capture) => c.text));
+    inbox.subscribeChanges(record);
+
+    await api.collection.stateWhenReady();
+    await inbox.preload();
+    await sleep(50);
+    record();
+
+    const tx = api.add("beta");
+    await tx.isPersisted.promise;
+    await sleep(50);
+    record();
+
+    // Final state: both are in the Inbox (order is not asserted; the live query
+    // has no orderBy).
+    const finalTexts = inbox.toArray.map((c: Capture) => c.text);
+    expect([...finalTexts].sort()).toEqual(["alpha", "beta"]);
+
+    // No flicker: once beta appears it never blinks out, and never doubles.
+    expectNoFlicker(snapshots, "beta");
+  });
+
   it("processing a capture removes it once, without a reappear flicker", async () => {
     const api = createInMemoryApi({
       queryClient: new QueryClient(),
@@ -71,11 +128,7 @@ describe("captures collection", () => {
     // Final state: alpha is gone.
     expect(inbox.toArray.map((c: Capture) => c.text)).toEqual(["beta"]);
 
-    // No flicker: once alpha leaves a snapshot, it never comes back.
-    const firstGone = snapshots.findIndex((s) => !s.includes("alpha"));
-    expect(firstGone).toBeGreaterThanOrEqual(0);
-    for (const snapshot of snapshots.slice(firstGone)) {
-      expect(snapshot).not.toContain("alpha");
-    }
+    // No flicker: once alpha leaves it never comes back (same invariant as add).
+    expectNoFlicker(snapshots, "alpha");
   });
 });

@@ -5,25 +5,24 @@ import type { Env } from "../types";
 import type { Capture } from "../store/captures";
 import { createCapturesRoutes } from "./captures";
 
+// A well-formed UUID the client mints; the route body requires uuid shape.
+const UUID_1 = "11111111-1111-4111-8111-111111111111";
+
 // A stand-in UserDO exposing just the capture RPC surface, backed by an array.
 const fakeUserDO = (seed: Capture[] = []) => {
   const captures = [...seed];
   let n = seed.length;
-  const keyed = new Map<string, Capture>();
   return {
-    addCapture(text: string, idempotencyKey?: string): Capture {
-      if (idempotencyKey) {
-        const existing = keyed.get(idempotencyKey);
-        if (existing) return existing;
-      }
+    addCapture(id: string, text: string): Capture {
+      const existingById = captures.find((c) => c.id === id);
+      if (existingById) return existingById;
       const capture: Capture = {
-        id: `id-${++n}`,
+        id,
         text,
-        createdAt: new Date(1700000000000 + n).toISOString(),
+        createdAt: new Date(1700000000000 + ++n).toISOString(),
         processedAt: null,
       };
       captures.push(capture);
-      if (idempotencyKey) keyed.set(idempotencyKey, capture);
       return capture;
     },
     listInbox(): Capture[] {
@@ -106,28 +105,25 @@ describe("POST /api/captures", () => {
     const res = await app.request("/api/captures", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: "call mom" }),
+      body: JSON.stringify({ id: UUID_1, text: "call mom" }),
     });
 
     expect(res.status).toBe(201);
     const body: { capture: Capture } = await res.json();
     expect(body.capture.text).toBe("call mom");
-    expect(body.capture.id).toBeTruthy();
+    expect(body.capture.id).toBe(UUID_1);
     expect(userDO._captures.map((c) => c.text)).toEqual(["call mom"]);
   });
 
-  it("dedupes two POSTs carrying the same Idempotency-Key", async () => {
+  it("dedupes a replayed POST that re-sends the same id", async () => {
     const userDO = fakeUserDO();
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
     const send = () =>
       app.request("/api/captures", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": "retry-1",
-        },
-        body: JSON.stringify({ text: "call mom" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: UUID_1, text: "call mom" }),
       });
 
     const first: { capture: Capture } = await (await send()).json();
@@ -147,7 +143,7 @@ describe("POST /api/captures", () => {
     const res = await app.request("/api/captures", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: "" }),
+      body: JSON.stringify({ id: UUID_1, text: "" }),
     });
 
     expect(res.status).toBe(400);

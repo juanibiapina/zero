@@ -12,8 +12,7 @@ export interface Capture {
   processedAt: string | null;
 }
 
-// The stored row also carries idempotencyKey; the Capture the client sees never
-// does. Project every row back to the clean shape.
+// Project a stored row back to the client-facing Capture shape.
 function toCapture(row: {
   id: string;
   text: string;
@@ -31,23 +30,19 @@ function toCapture(row: {
 export class DbCaptureStore {
   constructor(private db: Database) {}
 
-  // Capturing with an idempotencyKey is exactly-once: a replay of the same key
-  // (a retried write after a lost ACK) returns the already-stored row instead of
-  // inserting a second one. Without a key, every add is independent.
-  add(text: string, idempotencyKey?: string): Capture {
-    if (idempotencyKey) {
-      const existing = this.db.get(captures, {
-        where: eq("idempotencyKey", idempotencyKey),
-      });
-      if (existing) return toCapture(existing);
-    }
+  // The client mints the capture id, so the add is exactly-once on the id alone:
+  // a replay (a retried write after a lost ACK) re-sends the same id and gets the
+  // already-stored row back instead of inserting a second one.
+  add(id: string, text: string): Capture {
+    const existingById = this.db.get(captures, { where: eq("id", id) });
+    if (existingById) return toCapture(existingById);
     const capture: Capture = {
-      id: crypto.randomUUID(),
+      id,
       text,
       createdAt: new Date().toISOString(),
       processedAt: null,
     };
-    this.db.insert(captures, { ...capture, idempotencyKey: idempotencyKey ?? null });
+    this.db.insert(captures, capture);
     return capture;
   }
 

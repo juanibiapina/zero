@@ -10,12 +10,12 @@ import { DbCaptureStore } from "./captures";
 const makeStore = () => new DbCaptureStore(createDb(createMockStorage()));
 
 describe("DbCaptureStore", () => {
-  it("stores an added capture and returns it with an id", () => {
+  it("stores an added capture under the client id and returns it", () => {
     const store = makeStore();
 
-    const capture = store.add("buy milk");
+    const capture = store.add("id-1", "buy milk");
 
-    expect(capture.id).toBeTruthy();
+    expect(capture.id).toBe("id-1");
     expect(capture.text).toBe("buy milk");
     expect(store.list()).toEqual([capture]);
   });
@@ -23,8 +23,8 @@ describe("DbCaptureStore", () => {
   it("lists captures in capture order (oldest first)", () => {
     const store = makeStore();
 
-    const first = store.add("first");
-    const second = store.add("second");
+    const first = store.add("id-1", "first");
+    const second = store.add("id-2", "second");
 
     expect(store.list()).toEqual([first, second]);
   });
@@ -36,15 +36,15 @@ describe("DbCaptureStore", () => {
   it("adds captures open (processedAt is null)", () => {
     const store = makeStore();
 
-    const capture = store.add("open item");
+    const capture = store.add("id-1", "open item");
 
     expect(capture.processedAt).toBeNull();
   });
 
   it("drops a processed capture from the Inbox but keeps the others", () => {
     const store = makeStore();
-    const first = store.add("first");
-    const second = store.add("second");
+    const first = store.add("id-1", "first");
+    const second = store.add("id-2", "second");
 
     const processed = store.process(first.id);
 
@@ -55,47 +55,28 @@ describe("DbCaptureStore", () => {
 
   it("returns null when processing an unknown id", () => {
     const store = makeStore();
-    store.add("only");
+    store.add("id-1", "only");
 
     expect(store.process("nope")).toBeNull();
   });
 
-  it("dedupes a repeated add with the same idempotency key", () => {
+  it("dedupes a replayed add that re-sends the same id", () => {
     const store = makeStore();
 
-    const first = store.add("buy milk", "key-1");
-    const replay = store.add("buy milk", "key-1");
-
-    expect(replay).toEqual(first);
-    expect(store.list()).toEqual([first]);
-  });
-
-  it("returns the original capture (not a second write) on a replay under the same key", () => {
-    const store = makeStore();
-
-    const first = store.add("first text", "key-1");
-    // A retried write can carry the same key; the stored row wins, unchanged.
-    const replay = store.add("second text", "key-1");
+    const first = store.add("id-1", "buy milk");
+    // A retried write re-sends the same id; the stored row wins, unchanged.
+    const replay = store.add("id-1", "different text");
 
     expect(replay.id).toBe(first.id);
-    expect(replay.text).toBe("first text");
+    expect(replay.text).toBe("buy milk");
     expect(store.list()).toEqual([first]);
   });
 
-  it("treats adds without a key as independent", () => {
+  it("treats adds under different ids as independent", () => {
     const store = makeStore();
 
-    const a = store.add("a");
-    const b = store.add("b");
-
-    expect(store.list()).toEqual([a, b]);
-  });
-
-  it("treats adds under different keys as independent", () => {
-    const store = makeStore();
-
-    const a = store.add("a", "key-1");
-    const b = store.add("b", "key-2");
+    const a = store.add("id-1", "a");
+    const b = store.add("id-2", "b");
 
     expect(store.list()).toEqual([a, b]);
   });

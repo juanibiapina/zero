@@ -26,13 +26,12 @@ at capture time.
 
 `captures` table in the per-user `UserDO` (SQLite). Client-facing `Capture`:
 
-- `id` — string id
+- `id` — string id, a UUID the **client mints** and the server persists verbatim
+  as the primary key (stable end to end, so the optimistic row never swaps keys,
+  and it is the dedupe key: a replayed add re-sends the same id)
 - `text` — the raw line
 - `createdAt` — ISO timestamp
 - `processedAt` — nullable ISO timestamp; `null` = still in the Inbox
-
-The stored row also carries `idempotencyKey` (dedupe for the offline add path);
-the client never sees it.
 
 ## Behavior
 
@@ -53,9 +52,9 @@ the client never sees it.
   methods `add` / `list` = open Inbox / `process`), never a generic CRUD bag.
 - **API** — per-user isolated:
   - `GET /api/captures` → `{ captures }`, the open Inbox oldest-first.
-  - `POST /api/captures { text }` → `201 { capture }`; dedupes on an
-    `Idempotency-Key` header (a replayed key returns the existing row). `400` on
-    empty text.
+  - `POST /api/captures { id, text }` → `201 { capture }`; the client sends the
+    UUID `id`, and the server dedupes on it (a replay re-sends the same id and
+    gets the stored row back). `400` on empty text or a non-UUID id.
   - `POST /api/captures/{id}/process` → `200 { capture }`, or `404` when unknown.
 - **Data layer** — a TanStack DB collection persisted to SQLite/OPFS (web) and
   op-sqlite (mobile) for offline reads, with an offline outbox for writes that

@@ -5,6 +5,8 @@ import { View } from 'react-native';
 
 import type { Capture } from '@/lib/api';
 
+import HomeScreen from '../index';
+
 const mockGetToken = jest.fn<() => Promise<string | null>>();
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: mockGetToken }),
@@ -21,18 +23,21 @@ jest.mock('@clerk/expo/native', () => ({
 
 const mockFetchInbox = jest.fn<(getToken: unknown) => Promise<Capture[]>>();
 const mockAddCapture =
-  jest.fn<(getToken: unknown, text: string) => Promise<Capture>>();
+  jest.fn<
+    (
+      getToken: unknown,
+      capture: { id: string; text: string },
+    ) => Promise<Capture>
+  >();
 const mockProcessCapture =
   jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
 jest.mock('@/lib/api', () => ({
   fetchInbox: (getToken: unknown) => mockFetchInbox(getToken),
-  addCapture: (getToken: unknown, text: string) =>
-    mockAddCapture(getToken, text),
+  addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
+    mockAddCapture(getToken, capture),
   processCapture: (getToken: unknown, id: string) =>
     mockProcessCapture(getToken, id),
 }));
-
-import HomeScreen from '../index';
 
 const capture = (id: string, text: string): Capture => ({
   id,
@@ -193,7 +198,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() => expect(getByText('call mom')).toBeTruthy());
     expect(mockAddCapture).toHaveBeenCalledTimes(1);
-    expect(mockAddCapture.mock.calls[0][1]).toBe('call mom');
+    expect(mockAddCapture.mock.calls[0][1].text).toBe('call mom');
 
     // The quick-add input stays open and cleared for rapid capture.
     const reopened = getByPlaceholderText('Capture a thought');

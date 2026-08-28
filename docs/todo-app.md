@@ -120,8 +120,10 @@ Shipped (on main, device-verified): the Capture Inbox on mobile
 (`apps/agent-mobile`) and web (unlinked `/inbox`) — add a Capture, Process it out
 of the Inbox — backed by the `captures` table and `/api/captures` in the per-user
 UserDO. Mobile UI on NativeWind v4 + `@expo/ui`; Clerk sign-in with a native user
-button. The Inbox data layer runs on TanStack DB with offline SQLite persistence
-and an idempotent add path.
+button. The Inbox data layer runs on TanStack DB with offline SQLite persistence.
+Captures carry a client-minted UUID id (stable end to end, and the sole
+idempotency key for offline replay), so adding and processing a Capture no longer
+flickers — the row never blinks out-and-back while the write settles.
 
 In flight (details in `docs/plans/`):
 

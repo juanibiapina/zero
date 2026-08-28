@@ -52,7 +52,7 @@ export const createCapturesRoutes = () => {
       body: {
         content: {
           "application/json": {
-            schema: z.object({ text: z.string().min(1) }),
+            schema: z.object({ id: z.string().uuid(), text: z.string().min(1) }),
           },
         },
       },
@@ -75,12 +75,12 @@ export const createCapturesRoutes = () => {
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { text } = c.req.valid("json");
-    // The offline outbox reuses this key on every retry/replay; the DO dedupes on
-    // it so a lost ACK cannot double-insert the capture. Absent for online adds.
-    const idempotencyKey = c.req.header("Idempotency-Key");
+    const { id, text } = c.req.valid("json");
+    // The client mints the id and re-sends it verbatim on every retry/replay, so
+    // the DO dedupes on the id (its primary key) and a lost ACK cannot
+    // double-insert.
     const userDO = getUserDO(c.env, userId);
-    const capture = await userDO.addCapture(text, idempotencyKey);
+    const capture = await userDO.addCapture(id, text);
     log("capture_added", { clerk_user_id: userId });
     return c.json({ capture }, 201);
   });
