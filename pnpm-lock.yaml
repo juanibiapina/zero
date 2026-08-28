@@ -18,7 +18,7 @@ importers:
     dependencies:
       drizzle-orm:
         specifier: ^0.45.2
-        version: 0.45.2(@cloudflare/workers-types@5.20260801.1)(@opentelemetry/api@1.9.0)
+        version: 0.45.2(@cloudflare/workers-types@5.20260801.1)(@op-engineering/op-sqlite@18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8))(@opentelemetry/api@1.9.0)
     devDependencies:
       '@zeroapps/cli':
         specifier: 0.7.0
@@ -111,9 +111,36 @@ importers:
       '@expo/ui':
         specifier: ~57.0.13
         version: 57.0.13(@babel/core@7.29.7)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(expo@57.0.16)(react-dom@19.2.3(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
+      '@op-engineering/op-sqlite':
+        specifier: ^18.1.4
+        version: 18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
+      '@react-native-community/netinfo':
+        specifier: 12.0.1
+        version: 12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
+      '@tanstack/db':
+        specifier: 0.8.5
+        version: 0.8.5(typescript@6.0.3)
+      '@tanstack/db-sqlite-persistence-core':
+        specifier: 0.2.18
+        version: 0.2.18(typescript@6.0.3)
+      '@tanstack/offline-transactions':
+        specifier: 1.0.51
+        version: 1.0.51(@react-native-community/netinfo@12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(typescript@6.0.3)
+      '@tanstack/query-db-collection':
+        specifier: 1.2.10
+        version: 1.2.10(@tanstack/query-core@5.102.7)(typescript@6.0.3)
+      '@tanstack/react-db':
+        specifier: 0.3.5
+        version: 0.3.5(react@19.2.3)(typescript@6.0.3)
+      '@tanstack/react-native-db-sqlite-persistence':
+        specifier: 0.2.18
+        version: 0.2.18(@op-engineering/op-sqlite@18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3))(typescript@6.0.3)
       '@tanstack/react-query':
-        specifier: ^5.102.5
-        version: 5.102.5(react@19.2.3)
+        specifier: 5.102.7
+        version: 5.102.7(react@19.2.3)
+      '@zero/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -250,9 +277,12 @@ importers:
       '@tanstack/db':
         specifier: 0.8.5
         version: 0.8.5(typescript@6.0.3)
+      '@tanstack/db-sqlite-persistence-core':
+        specifier: 0.2.18
+        version: 0.2.18(typescript@6.0.3)
       '@tanstack/offline-transactions':
         specifier: 1.0.51
-        version: 1.0.51(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(typescript@6.0.3)
+        version: 1.0.51(@react-native-community/netinfo@12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(typescript@6.0.3)
       '@tanstack/query-db-collection':
         specifier: 1.2.10
         version: 1.2.10(@tanstack/query-core@5.102.7)(typescript@6.0.3)
@@ -262,6 +292,9 @@ importers:
       '@tanstack/react-query':
         specifier: 5.102.7
         version: 5.102.7(react@19.2.8)
+      '@zero/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -545,6 +578,21 @@ importers:
 
   packages/agent-core:
     devDependencies:
+      '@tanstack/db':
+        specifier: 0.8.5
+        version: 0.8.5(typescript@6.0.3)
+      '@tanstack/db-sqlite-persistence-core':
+        specifier: 0.2.18
+        version: 0.2.18(typescript@6.0.3)
+      '@tanstack/offline-transactions':
+        specifier: 1.0.51
+        version: 1.0.51(@react-native-community/netinfo@12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(typescript@6.0.3)
+      '@tanstack/query-db-collection':
+        specifier: 1.2.10
+        version: 1.2.10(@tanstack/query-core@5.102.7)(typescript@6.0.3)
+      '@tanstack/react-query':
+        specifier: 5.102.7
+        version: 5.102.7(react@19.2.8)
       '@zero/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
@@ -2884,6 +2932,16 @@ packages:
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
 
+  '@op-engineering/op-sqlite@18.1.4':
+    resolution: {integrity: sha512-8gjHXMyigCSDy/xdn46SQdnOW9pgJuTyrxqZj9ro75Lkp6dg+xs8wzyO+QH+khTWkY6TSofP3NcttJ1uiLdUFA==}
+    peerDependencies:
+      '@sqlite.org/sqlite-wasm': '*'
+      react: '*'
+      react-native: '*'
+    peerDependenciesMeta:
+      '@sqlite.org/sqlite-wasm':
+        optional: true
+
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
@@ -3318,6 +3376,12 @@ packages:
     resolution: {integrity: sha512-W4/vbwUOYOjco0x3toB8QCr7EjIP6nE9G7o8PMguvvjYT5Awg09lyV4enACRx4s++PPulBiBSjL0KTFx2u0Z/g==}
     peerDependencies:
       react-native: ^0.0.0-0 || >=0.60 <1.0
+
+  '@react-native-community/netinfo@12.0.1':
+    resolution: {integrity: sha512-P/3caXIvfYSJG8AWJVefukg+ZGRPs+M4Lp3pNJtgcTYoJxCjWrKQGNnCkj/Cz//zWa/avGed0i/wzm0T8vV2IQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '>=0.59'
 
   '@react-native-masked-view/masked-view@0.3.2':
     resolution: {integrity: sha512-XwuQoW7/GEgWRMovOQtX3A4PrXhyaZm0lVUiY8qJDvdngjLms9Cpdck6SmGAUNqQwcj2EadHC1HwL0bEyoa/SQ==}
@@ -4260,12 +4324,6 @@ packages:
     resolution: {integrity: sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==}
     engines: {node: '>=18'}
 
-  '@tanstack/query-core@5.101.2':
-    resolution: {integrity: sha512-hH5MLoJhF7KaIGd7q3xTXGXvslI+GYlM1Z/35aSHHWaCJWB7XvTSHYuV3eM7tw+aE0mT/xMro4M4Q9rCGHT0lw==}
-
-  '@tanstack/query-core@5.102.5':
-    resolution: {integrity: sha512-RjCmHf9cPRYcH/dpO0Jagw3rxCM1bLzMKKSGzaDkQJADDKGpv5RFjN54IyHSOIPa822AUA7ASOXDjjy1jfyzIA==}
-
   '@tanstack/query-core@5.102.7':
     resolution: {integrity: sha512-4TH8KQrCLoNs9Zvl1LW1iaZ9cZx3dGTgfZ1BnLrcRxMNnX/toe/dGbfvF/DkvbzRyfLfpMKZkembz3o0rnugtw==}
 
@@ -4280,10 +4338,11 @@ packages:
     peerDependencies:
       react: '>=16.8.0'
 
-  '@tanstack/react-query@5.102.5':
-    resolution: {integrity: sha512-PyTmSq2nW4MnPuQ/T4hZbH2BYShpgCLSJNwCaPEEYO3RWd9yX611wOMm7etz2SZWVh4N7Azag5iZLMDqYTzfNA==}
+  '@tanstack/react-native-db-sqlite-persistence@0.2.18':
+    resolution: {integrity: sha512-Jw13fYCtyfM0RmBDTm+Q5HvDbo6ESL8gwQF1jGg6i8gd5ivD84p3ftW6d46ax6aP7+eZ6sjHO9Va2d8xDx6YXA==}
     peerDependencies:
-      react: ^18 || ^19
+      '@op-engineering/op-sqlite': ^15.2.5
+      typescript: '>=4.7'
 
   '@tanstack/react-query@5.102.7':
     resolution: {integrity: sha512-bbd8T4jDIj9aPbNn11SsjNH8apKY4zspkrw63JRsNDXjpW5SRF7X0ipi7yrGd8DCs8QhYfhQJKqEj1YLru1DbQ==}
@@ -11995,7 +12054,7 @@ snapshots:
       '@solana/wallet-standard': 1.1.4(@solana/wallet-adapter-base@0.9.27(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@6.0.6)))(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@6.0.3)(utf-8-validate@6.0.6))(bs58@6.0.0)(react@19.2.3)
       '@stripe/stripe-js': 5.6.0
       '@swc/helpers': 0.5.21
-      '@tanstack/query-core': 5.102.5
+      '@tanstack/query-core': 5.102.7
       '@wallet-standard/core': 1.1.1
       '@zxcvbn-ts/core': 3.0.4
       '@zxcvbn-ts/language-common': 3.0.4
@@ -12076,7 +12135,7 @@ snapshots:
 
   '@clerk/shared@4.25.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@tanstack/query-core': 5.101.2
+      '@tanstack/query-core': 5.102.7
       dequal: 2.0.3
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.7
@@ -12086,7 +12145,7 @@ snapshots:
 
   '@clerk/shared@4.30.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
-      '@tanstack/query-core': 5.102.5
+      '@tanstack/query-core': 5.102.7
       dequal: 2.0.3
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.7
@@ -13429,6 +13488,17 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
+  '@op-engineering/op-sqlite@18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)':
+    dependencies:
+      react: 19.2.3
+      react-native: 0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+
+  '@op-engineering/op-sqlite@18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
+      react-native: 0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10)
+    optional: true
+
   '@opentelemetry/api@1.9.0':
     optional: true
 
@@ -13924,6 +13994,17 @@ snapshots:
       react-native: 0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
     optional: true
 
+  '@react-native-community/netinfo@12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)':
+    dependencies:
+      react: 19.2.3
+      react-native: 0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+
+  '@react-native-community/netinfo@12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
+      react-native: 0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10)
+    optional: true
+
   '@react-native-masked-view/masked-view@0.3.2(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)':
     dependencies:
       react: 19.2.3
@@ -14027,7 +14108,7 @@ snapshots:
       debug: 4.4.3
       invariant: 2.2.4
       metro: 0.84.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       metro-core: 0.84.4
       semver: 7.8.5
     transitivePeerDependencies:
@@ -15134,19 +15215,25 @@ snapshots:
       '@tanstack/pacer-lite': 0.2.2
       typescript: 6.0.3
 
-  '@tanstack/offline-transactions@1.0.51(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(typescript@6.0.3)':
+  '@tanstack/offline-transactions@1.0.51(@react-native-community/netinfo@12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(typescript@6.0.3)':
     dependencies:
       '@tanstack/db': 0.8.5(typescript@6.0.3)
     optionalDependencies:
+      '@react-native-community/netinfo': 12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
+      react-native: 0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+    transitivePeerDependencies:
+      - typescript
+
+  '@tanstack/offline-transactions@1.0.51(@react-native-community/netinfo@12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8))(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(typescript@6.0.3)':
+    dependencies:
+      '@tanstack/db': 0.8.5(typescript@6.0.3)
+    optionalDependencies:
+      '@react-native-community/netinfo': 12.0.1(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8)
       react-native: 0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - typescript
 
   '@tanstack/pacer-lite@0.2.2': {}
-
-  '@tanstack/query-core@5.101.2': {}
-
-  '@tanstack/query-core@5.102.5': {}
 
   '@tanstack/query-core@5.102.7': {}
 
@@ -15157,6 +15244,14 @@ snapshots:
       '@tanstack/query-core': 5.102.7
       typescript: 6.0.3
 
+  '@tanstack/react-db@0.3.5(react@19.2.3)(typescript@6.0.3)':
+    dependencies:
+      '@tanstack/db': 0.8.5(typescript@6.0.3)
+      react: 19.2.3
+      use-sync-external-store: 1.6.0(react@19.2.3)
+    transitivePeerDependencies:
+      - typescript
+
   '@tanstack/react-db@0.3.5(react@19.2.8)(typescript@6.0.3)':
     dependencies:
       '@tanstack/db': 0.8.5(typescript@6.0.3)
@@ -15165,9 +15260,15 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@tanstack/react-query@5.102.5(react@19.2.3)':
+  '@tanstack/react-native-db-sqlite-persistence@0.2.18(@op-engineering/op-sqlite@18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3))(typescript@6.0.3)':
     dependencies:
-      '@tanstack/query-core': 5.102.5
+      '@op-engineering/op-sqlite': 18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
+      '@tanstack/db-sqlite-persistence-core': 0.2.18(typescript@6.0.3)
+      typescript: 6.0.3
+
+  '@tanstack/react-query@5.102.7(react@19.2.3)':
+    dependencies:
+      '@tanstack/query-core': 5.102.7
       react: 19.2.3
 
   '@tanstack/react-query@5.102.7(react@19.2.8)':
@@ -16974,9 +17075,10 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 5.0.3
 
-  drizzle-orm@0.45.2(@cloudflare/workers-types@5.20260801.1)(@opentelemetry/api@1.9.0):
+  drizzle-orm@0.45.2(@cloudflare/workers-types@5.20260801.1)(@op-engineering/op-sqlite@18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8))(@opentelemetry/api@1.9.0):
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260801.1
+      '@op-engineering/op-sqlite': 18.1.4(react-native@0.86.2(@babel/core@7.29.7)(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@5.0.10))(react@19.2.8)
       '@opentelemetry/api': 1.9.0
 
   dset@3.1.4: {}
@@ -19915,6 +20017,22 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  metro-config@0.84.4(bufferutil@4.1.0)(utf-8-validate@5.0.10):
+    dependencies:
+      connect: 3.7.0
+      flow-enums-runtime: 0.0.6
+      jest-validate: 29.7.0
+      metro: 0.84.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      metro-cache: 0.84.4
+      metro-core: 0.84.4
+      metro-runtime: 0.84.4
+      yaml: 2.9.0
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+    optional: true
+
   metro-config@0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       connect: 3.7.0
@@ -20171,7 +20289,7 @@ snapshots:
       metro-babel-transformer: 0.84.4
       metro-cache: 0.84.4
       metro-cache-key: 0.84.4
-      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@5.0.10)
       metro-core: 0.84.4
       metro-file-map: 0.84.4
       metro-resolver: 0.84.4
@@ -22889,7 +23007,6 @@ snapshots:
   use-sync-external-store@1.6.0(react@19.2.3):
     dependencies:
       react: 19.2.3
-    optional: true
 
   use-sync-external-store@1.6.0(react@19.2.8):
     dependencies:

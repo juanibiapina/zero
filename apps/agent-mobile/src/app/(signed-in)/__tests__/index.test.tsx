@@ -120,9 +120,11 @@ describe('HomeScreen', () => {
   it('processes a capture, removing it from the Inbox', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchInbox.mockResolvedValue([capture('1', 'buy milk')]);
-    mockProcessCapture.mockResolvedValue({
-      ...capture('1', 'buy milk'),
-      processedAt: '2023-01-02T00:00:00.000Z',
+    // The collection refetches after the write; once processed the open Inbox is
+    // empty, so the server (mock) then returns [].
+    mockProcessCapture.mockImplementation(async () => {
+      mockFetchInbox.mockResolvedValue([]);
+      return { ...capture('1', 'buy milk'), processedAt: '2023-01-02T00:00:00.000Z' };
     });
 
     const { getByText, getByLabelText, queryByText } = await renderScreen();
@@ -158,7 +160,13 @@ describe('HomeScreen', () => {
   it('captures typed text and keeps the input open and cleared for the next one', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchInbox.mockResolvedValue([]);
-    mockAddCapture.mockResolvedValue(capture('2', 'call mom'));
+    // The collection refetches after the write; the server (mock) then returns
+    // the newly added capture so it survives reconciliation.
+    mockAddCapture.mockImplementation(async () => {
+      const added = capture('2', 'call mom');
+      mockFetchInbox.mockResolvedValue([added]);
+      return added;
+    });
 
     const { getByText, getByLabelText, getByPlaceholderText } =
       await renderScreen();

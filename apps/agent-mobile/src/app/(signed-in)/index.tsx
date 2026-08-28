@@ -1,5 +1,9 @@
 import { useAuth } from '@clerk/expo';
 import { UserButton } from '@clerk/expo/native';
+import { isNull } from '@tanstack/db';
+import { useLiveQuery } from '@tanstack/react-db';
+import { useQueryClient } from '@tanstack/react-query';
+import { CAPTURES_QUERY_KEY, type Capture, type CapturesApi } from '@zero/agent-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackHandler,
@@ -18,8 +22,7 @@ import Animated, {
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
-import { type Capture } from '@/lib/api';
-import { useAddCapture, useInbox, useProcessCapture } from '@/lib/captures';
+import { createMobileCapturesApi } from '@/lib/captures-collection';
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -27,25 +30,98 @@ function messageOf(err: unknown): string {
 
 const AnimatedFlatList = Animated.FlatList<Capture>;
 
-export default function HomeScreen() {
+// Build the Capture data layer once inside the signed-in tree, where the Clerk
+// token getter is valid. getToken is read through a ref so the collection is
+// built once (not rebuilt when Clerk hands back a new function identity).
+function useCapturesApi(): CapturesApi | null {
+  const queryClient = useQueryClient();
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
-  const inboxQuery = useInbox(getToken);
-  const addMutation = useAddCapture(getToken);
-  const processMutation = useProcessCapture(getToken);
+  const [api, setApi] = useState<CapturesApi | null>(null);
+  useEffect(() => {
+    let live = true;
+    let built: CapturesApi | null = null;
+    void createMobileCapturesApi({
+      queryClient,
+      getToken: () => getTokenRef.current(),
+    }).then((a) => {
+      built = a;
+      if (live) {
+        setApi(a);
+      } else {
+        // Unmounted before it resolved: release the collection's subscription.
+        void a.collection.cleanup();
+      }
+    });
+    return () => {
+      live = false;
+      if (built) void built.collection.cleanup();
+    };
+  }, [queryClient]);
 
-  const captures = inboxQuery.data ?? [];
-  const loading = inboxQuery.isPending;
-  const busy = addMutation.isPending;
+  return api;
+}
+
+// Read the collection's read (sync) error from the shared QueryClient. useLiveQuery
+// exposes isError but not the message, and the error lives in the react-query
+// cache under CAPTURES_QUERY_KEY. Returns the message only while an error is the
+// current state.
+function useLoadError(): string | null {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => {
+      const state = queryClient.getQueryState(CAPTURES_QUERY_KEY);
+      setError(
+        state?.status === 'error' && state.error
+          ? messageOf(state.error)
+          : null,
+      );
+    };
+    read();
+    return queryClient.getQueryCache().subscribe(read);
+  }, [queryClient]);
+  return error;
+}
+
+export default function HomeScreen() {
+  const api = useCapturesApi();
+  return (
+    <View className="flex-1 px-6 pt-16">
+      <View className="mb-4 flex-row items-center justify-between">
+        <Text variant="title">Inbox</Text>
+        {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
+            avatar off-center. */}
+        <UserButton />
+      </View>
+
+      {api ? (
+        <Inbox api={api} />
+      ) : (
+        <Text variant="subtitle">Loading your inbox…</Text>
+      )}
+    </View>
+  );
+}
+
+function Inbox({ api }: { api: CapturesApi }) {
+  const { data: captures, isLoading } = useLiveQuery((q) =>
+    q
+      .from({ c: api.collection })
+      .where(({ c }) => isNull(c.processedAt))
+      .orderBy(({ c }) => c.createdAt, 'asc'),
+  );
+  const list = captures ?? [];
+
+  const loadError = useLoadError();
+  const [writeError, setWriteError] = useState<string | null>(null);
   // Show a load error only when there's nothing on screen, so a failed
   // background refetch stays silent behind the last-good Inbox.
-  const error = addMutation.error
-    ? messageOf(addMutation.error)
-    : processMutation.error
-      ? messageOf(processMutation.error)
-      : captures.length === 0 && inboxQuery.error
-        ? messageOf(inboxQuery.error)
-        : null;
+  const error = writeError ?? (list.length === 0 ? loadError : null);
 
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
@@ -59,10 +135,13 @@ export default function HomeScreen() {
       setAdding(false);
       return;
     }
-    if (addMutation.isPending) return;
+    setWriteError(null);
+    // Optimistic: the row appears at once; surface a failure if the write loses.
+    const tx = api.add(trimmed);
+    tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     // Keep the bar open and cleared for rapid, repeated capture.
-    addMutation.mutate(trimmed, { onSuccess: () => setText('') });
-  }, [text, addMutation]);
+    setText('');
+  }, [text, api]);
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -123,9 +202,11 @@ export default function HomeScreen() {
 
   const onProcess = useCallback(
     (item: Capture) => {
-      processMutation.mutate(item.id);
+      setWriteError(null);
+      const tx = api.process(item.id);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     },
-    [processMutation],
+    [api],
   );
 
   const renderItem = useCallback(
@@ -139,7 +220,7 @@ export default function HomeScreen() {
           accessibilityLabel={`Process "${item.text}"`}
           className="h-6 w-6 rounded-full border-2 border-neutral-400"
           hitSlop={8}
-          onPress={() => void onProcess(item)}
+          onPress={() => onProcess(item)}
         />
         <Text className="flex-1">{item.text}</Text>
       </Animated.View>
@@ -148,17 +229,10 @@ export default function HomeScreen() {
   );
 
   return (
-    <View className="flex-1 px-6 pt-16">
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text variant="title">Inbox</Text>
-        {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
-            avatar off-center. */}
-        <UserButton />
-      </View>
-
+    <>
       {error ? <Text variant="error">{error}</Text> : null}
 
-      {loading ? (
+      {isLoading ? (
         <Text variant="subtitle">Loading your inbox…</Text>
       ) : (
         // FlatList virtualizes the Inbox (unbounded); @expo/ui List is native
@@ -167,7 +241,7 @@ export default function HomeScreen() {
         // entering/exiting fades it in and out.
         <AnimatedFlatList
           style={{ flex: 1 }}
-          data={captures}
+          data={list}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           itemLayoutAnimation={LinearTransition.duration(200)}
@@ -187,9 +261,9 @@ export default function HomeScreen() {
         text={text}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
-        onSubmit={() => void onAdd()}
+        onSubmit={() => onAdd()}
         onRequestClose={requestClose}
-        busy={busy}
+        busy={false}
         inputRef={inputRef}
       />
 
@@ -209,6 +283,6 @@ export default function HomeScreen() {
           onConfirm={closeAdd}
         />
       ) : null}
-    </View>
+    </>
   );
 }
