@@ -66,6 +66,13 @@ at capture time.
 
 - What Process does beyond removing the Capture (today it just removes).
 - List-view ordering semantics as the Inbox grows.
+- Loading semantics: the Inbox list region gates on the row count, not the
+  collection's `isLoading`. The persisted collection hydrates the local snapshot
+  into the live query before its network sync marks the collection ready, so
+  `isLoading` stays true while rows already exist; gating on `isLoading` would
+  hide a hydrated snapshot behind a spinner until the network answered. The
+  shared `inboxView` helper in `@zero/agent-core` encodes the rule (rows whenever
+  present; spinner only when empty and loading).
 
 ## Next
 

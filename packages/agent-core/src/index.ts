@@ -11,3 +11,4 @@ export {
   type StartOfflineExecutor,
   type WarnFn,
 } from "./captures/collection";
+export { inboxView, type InboxView } from "./captures/view";

@@ -125,6 +125,22 @@ Captures carry a client-minted UUID id (stable end to end, and the sole
 idempotency key for offline replay), so adding and processing a Capture no longer
 flickers — the row never blinks out-and-back while the write settles.
 
+The Inbox now paints instantly from the local snapshot: the list region gates on
+the row count, not the collection's `isLoading`, so a hydrated snapshot shows at
+once and the network sync updates it in place instead of a spinner covering
+stale rows. The rule lives in a shared `inboxView` helper in `@zero/agent-core`,
+used by both the web and mobile screens. Root cause it fixes: the persisted
+collection (`persistedCollectionOptions` wrapping a query collection) marks the
+collection ready only after the first network `fetchInbox` resolves, so a
+fully-hydrated local snapshot sat behind "Loading your inbox…" until the network
+answered.
+
+Dev-testing note: the installed dev client loading JS from Metro over USB falls
+back to the in-memory Query Collection (persistence throws `Expected
+HMRClient.setup() call at startup`), so the durable-snapshot path only runs on a
+standalone EAS build, not the dev client. Verify Inbox loading behavior on a
+`preview`/`production` build, not `expo start`.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add

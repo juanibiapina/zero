@@ -3,7 +3,12 @@ import { UserButton } from '@clerk/expo/native';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useQueryClient } from '@tanstack/react-query';
-import { CAPTURES_QUERY_KEY, type Capture, type CapturesApi } from '@zero/agent-core';
+import {
+  CAPTURES_QUERY_KEY,
+  inboxView,
+  type Capture,
+  type CapturesApi,
+} from '@zero/agent-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackHandler,
@@ -119,6 +124,10 @@ function Inbox({ api }: { api: CapturesApi }) {
 
   const loadError = useLoadError();
   const [writeError, setWriteError] = useState<string | null>(null);
+  // Gate the list on the row count, not isLoading: a hydrated snapshot must
+  // paint even while the network sync is still pending, so opening the Inbox
+  // never blinks to a spinner over stale rows.
+  const view = inboxView({ count: list.length, isLoading, loadError });
   // Show a load error only when there's nothing on screen, so a failed
   // background refetch stays silent behind the last-good Inbox.
   const error = writeError ?? (list.length === 0 ? loadError : null);
@@ -232,7 +241,7 @@ function Inbox({ api }: { api: CapturesApi }) {
     <>
       {error ? <Text variant="error">{error}</Text> : null}
 
-      {isLoading ? (
+      {view === 'loading' ? (
         <Text variant="subtitle">Loading your inbox…</Text>
       ) : (
         // FlatList virtualizes the Inbox (unbounded); @expo/ui List is native
