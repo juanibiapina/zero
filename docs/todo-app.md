@@ -278,6 +278,20 @@ acceptance criteria: matched by the ordered increments below
 #                                 hot-reload alone is not enough (same as the Clerk
 #                                 UserButton). Pure-JS increments (FlatList, dep
 #                                 prune) needed no rebuild.
+#   TanStack phase 5 idempotent captures . DONE (branch tanstack-idempotent-
+#                                 captures). Closes the C3 duplicate: POST
+#                                 /api/captures dedupes on an Idempotency-Key
+#                                 header = the offline executor's per-write key
+#                                 (field is `idempotencyKey` in offline-
+#                                 transactions 1.0.51, verified in the executable;
+#                                 an earlier `n` note was from a corrupted
+#                                 sourcemap). Server column + partial unique index
+#                                 (migration 0041, 0037-0040 untouched);
+#                                 store.add(text, key?) returns the existing row on
+#                                 replay. Add-path only (process already
+#                                 idempotent). Pure JS/data, NO new EAS build.
+#                                 Checks green: agent-api 939, agent-core, web
+#                                 build 550KB (unchanged), mobile 29 + expo export.
 #   inc 4 Process into typed entities ... todo (a Capture becomes a typed entity;
 #                                 not yet designed. Richest data-model slice.)
 #   inc 5 Scheduled show-up date ........ todo (a date on a Capture + "due today" view)
@@ -763,9 +777,9 @@ offline behavior in a browser on the deployed /inbox — offline read (DevTools
 offline, reload, last-synced captures render), offline write (capture offline,
 reload survives, syncs on reconnect), and the C1 runtime check (the opfs-worker
 chunk + wa-sqlite return 200, no 404). This box cannot run it (no workerd, no
-browser); it is a post-deploy check. C3 caveat stands: /api/captures has no
-idempotency key, so a retry after a lost ACK can duplicate a capture (rare;
-accepted for the spike).
+browser); it is a post-deploy check. C3 caveat is now FIXED in TanStack Phase 5
+(see that plan below): /api/captures dedupes on an Idempotency-Key header carrying
+the offline executor's per-write key, so a lost-ACK retry no longer duplicates.
 
 Self-contained plan for a fresh agent. Assume only this doc.
 
@@ -1454,6 +1468,114 @@ path. Record the call here.
   lint green; `expo export` bundles; mobile bundle delta recorded.
 - Web behavior and bundle unchanged; agent-core + web checks green.
 - Backend unchanged; no Postgres.
+
+---
+
+## Plan: TanStack Phase 5 — exactly-once captures (close the C3 duplicate) — [DONE, branch tanstack-idempotent-captures]
+
+Self-contained plan for a fresh agent. Assume only this doc.
+
+### Goal
+
+Make `POST /api/captures` idempotent so a capture cannot be duplicated when the
+offline outbox retries a write whose ACK was lost (network dropped after the DO
+inserted the row but before the response arrived). This closes the **C3** caveat
+recorded across the TanStack phases. Backend stays Cloudflare + per-user DO +
+do-orm; no Postgres.
+
+### Root cause
+
+Web `/inbox` and the mobile Inbox write through `@tanstack/offline-transactions`.
+On reconnect the outbox replays each pending write. If the original POST inserted
+a row but the HTTP response was lost, the client replays the same POST and
+`DbCaptureStore.add` (unconditional `crypto.randomUUID()` insert) makes a second
+row. Only the **add** path can duplicate; **process** stamps `processedAt` on a
+row addressed by id, so a replay just re-stamps the same row (already idempotent).
+
+### Research (2026-08-28) — how this is normally done
+
+Same pattern everywhere: client generates a key per write, server dedupes on it.
+Confirmed against primary sources:
+- **Todoist Sync API**: every command carries a `uuid`; "Todoist will not execute
+  a command that has same UUID as a previously executed command … clients can
+  safely retry without performing the action twice." Todoist also keeps a
+  **separate** per-object `temp_id` (resolved via `temp_id_mapping`) — distinct
+  from the per-operation `uuid`.
+- **Stripe / IETF `Idempotency-Key` draft**: an `Idempotency-Key` HTTP header,
+  V4-UUID/high-entropy; the server **saves and returns the same response** on a
+  replay; keys scoped per account; retention/TTL (Stripe 24h).
+- **TanStack `@tanstack/offline-transactions`**: the offline executor already
+  hands each `mutationFn` a per-write idempotency key intended for exactly this —
+  the README shows `mutationFn: async ({ transaction, idempotencyKey }) =>
+  api.saveBatch(..., { idempotencyKey })`.
+
+CORRECTION over an earlier draft that reused the optimistic temp id as the key:
+the standard is a **per-operation** key (Todoist `uuid`, TanStack
+`idempotencyKey`), NOT the per-object temp id. Reusing the object id is safe only
+while a Capture has exactly one create; a future second mutation (edit, un-process)
+would be wrongly deduped against the create. So use the executor's per-write key.
+
+Field-name note (verified in the installed 1.0.51 executable, not the sourcemap,
+which is corrupted): the key the executor passes to the `mutationFn` and stores in
+the outbox is literally **`idempotencyKey`** (matches the `.d.ts` and the README).
+An earlier note guessed `n` from a garbled sourcemap; that was wrong. The durable
+leader/replay path (`TransactionExecutor`) calls
+`mutationFn({ transaction, idempotencyKey })`, so `idempotencyKey` is stable
+across every retry and cold-start replay. (The rare non-leader online-only path
+spreads a field named `n` instead — if it ever ran it would yield an undefined
+key = a keyless add = no dedupe, still correct; not our single-user leader path.)
+
+### What shipped
+
+Client — thread the executor's per-write key as an `Idempotency-Key` header on the
+add path only:
+- `packages/agent-core/src/captures/collection.ts`: `CapturesRest.addCapture`
+  widened to `(text, idempotencyKey) => Promise<Capture>`. The persisted path's
+  `addCapture` mutationFn reads `idempotencyKey` (the single read site for the
+  field name) and passes it. The in-memory fallback (online-only, no durable
+  replay) synthesizes a fresh `safeRandomUUID()` per write.
+- `apps/agent-web/src/lib/captures.ts` and `apps/agent-mobile/src/lib/api.ts`:
+  `addCapture` gained an `idempotencyKey` arg and sends header `Idempotency-Key`.
+  Mobile signature is `addCapture(getToken, text, idempotencyKey, baseUrl?)`; the
+  `captures-collection.ts` closure forwards the key.
+
+Server — dedupe on the key inside the per-user DO:
+- `UserDO/db/schema.ts`: `captures` gained a nullable `idempotencyKey` column.
+- Migration `0041_captures_idempotency_key.sql` (registered `m0041`; 0037–0040
+  untouched): `ALTER TABLE ADD COLUMN idempotencyKey TEXT` + a **partial unique
+  index** `WHERE idempotencyKey IS NOT NULL` (many NULLs allowed for legacy/keyless
+  rows; a key backs at most one capture — a backstop under the store's
+  read-then-insert; the DO is single-threaded per user so no race).
+- `store/captures.ts`: `add(text, idempotencyKey?)` returns the existing row when
+  the key was already seen, else inserts with the key. The key is server-only; a
+  `toCapture` projection keeps it out of the `Capture` shape the client sees
+  (also applied to `list`/`process`).
+- `UserDO/index.ts` `addCapture(text, idempotencyKey?)` forwards it;
+  `routes/captures.ts` reads the `Idempotency-Key` header. Response stays 201; a
+  deduped replay returns the same capture.
+
+The `Capture` type (`id`, `text`, `createdAt`, `processedAt`) is unchanged
+everywhere — the key is a column + a header, never part of the rendered entity.
+
+### Verification (this box: no workerd, no emulator)
+
+Green: `agent-api` 939 tests + typecheck; `agent-core` typecheck + lint; `agent-web`
+typecheck + lint + build (main chunk 550KB, unchanged from Phase 3); `agent-mobile`
+29 tests + typecheck + lint (3 pre-existing warnings) + `expo export` (6.8MB).
+Pure JS/data change — **no new EAS build** (no native module); the mobile change
+hot-reloads on the existing dev client. Land backend on `main` first (migration
+0041 applies on next DO wake; an un-migrated worker ignores the header harmlessly,
+an un-updated client just sends none). Deploy-time proof: two rapid POSTs with the
+same `Idempotency-Key` against the deployed worker return the same capture id and
+one Inbox row.
+
+### Out of scope (future hardening)
+
+- Body-mismatch rejection (Stripe 422 when a key is reused with different params):
+  skipped; a Capture retry always carries identical text.
+- Key retention/GC: the key lives on the capture row, so it persists as long as
+  the capture — no separate store or TTL.
+- Process-path idempotency and a generic idempotency store for future entities.
 
 ---
 
