@@ -20,7 +20,9 @@ import type { Capture } from "./types";
 // layer, so the auth split stays out of the shared code.
 export type CapturesRest = {
   fetchInbox: () => Promise<Capture[]>;
-  addCapture: (text: string) => Promise<Capture>;
+  // idempotencyKey is a per-write key the server dedupes on, so a retried add
+  // (offline outbox replay after a lost ACK) cannot create a second capture.
+  addCapture: (text: string, idempotencyKey: string) => Promise<Capture>;
   processCapture: (id: string) => Promise<Capture>;
 };
 
@@ -86,7 +88,11 @@ export function createInMemoryApi(deps: {
       queryFn: () => rest.fetchInbox(),
       getKey: (c: Capture) => c.id,
       onInsert: async ({ transaction }) => {
-        for (const m of transaction.mutations) await rest.addCapture(m.modified.text);
+        // This fallback has no durable outbox (online-only), so there is no
+        // cross-restart replay; a fresh per-write key still gives the server a
+        // stable dedupe token within any in-session retry.
+        for (const m of transaction.mutations)
+          await rest.addCapture(m.modified.text, safeRandomUUID());
       },
       onUpdate: async ({ transaction }) => {
         for (const m of transaction.mutations) {
@@ -150,11 +156,16 @@ export function createPersistedApi(deps: {
   const offline = startOfflineExecutor({
     collections: { captures: collection },
     mutationFns: {
-      addCapture: async ({ transaction }) => {
+      addCapture: async ({ transaction, idempotencyKey }) => {
+        // `idempotencyKey` is the offline executor's per-write key: generated once
+        // per write, persisted in the outbox, and reused verbatim on every retry
+        // and cold-start replay. Passing it to the server dedupes a lost-ACK
+        // retry (the C3 duplicate). This is the single read site for the field;
+        // keep it here so an offline-transactions version bump is one line.
         // The outbox types a mutation's fields as unknown; narrow before sending.
         for (const m of transaction.mutations) {
           const text = m.modified.text;
-          if (typeof text === "string") await rest.addCapture(text);
+          if (typeof text === "string") await rest.addCapture(text, idempotencyKey);
         }
         await refresh();
       },

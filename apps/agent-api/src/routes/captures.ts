@@ -76,8 +76,11 @@ export const createCapturesRoutes = () => {
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
     const { text } = c.req.valid("json");
+    // The offline outbox reuses this key on every retry/replay; the DO dedupes on
+    // it so a lost ACK cannot double-insert the capture. Absent for online adds.
+    const idempotencyKey = c.req.header("Idempotency-Key");
     const userDO = getUserDO(c.env, userId);
-    const capture = await userDO.addCapture(text);
+    const capture = await userDO.addCapture(text, idempotencyKey);
     log("capture_added", { clerk_user_id: userId });
     return c.json({ capture }, 201);
   });

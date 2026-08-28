@@ -14,10 +14,16 @@ export async function fetchInbox(): Promise<Capture[]> {
   return body.captures;
 }
 
-export async function addCapture(text: string): Promise<Capture> {
+export async function addCapture(
+  text: string,
+  idempotencyKey: string,
+): Promise<Capture> {
   const res = await fetch("/api/captures", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
     body: JSON.stringify({ text }),
   });
   if (!res.ok) {

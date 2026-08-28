@@ -9,8 +9,13 @@ import { createCapturesRoutes } from "./captures";
 const fakeUserDO = (seed: Capture[] = []) => {
   const captures = [...seed];
   let n = seed.length;
+  const keyed = new Map<string, Capture>();
   return {
-    addCapture(text: string): Capture {
+    addCapture(text: string, idempotencyKey?: string): Capture {
+      if (idempotencyKey) {
+        const existing = keyed.get(idempotencyKey);
+        if (existing) return existing;
+      }
       const capture: Capture = {
         id: `id-${++n}`,
         text,
@@ -18,6 +23,7 @@ const fakeUserDO = (seed: Capture[] = []) => {
         processedAt: null,
       };
       captures.push(capture);
+      if (idempotencyKey) keyed.set(idempotencyKey, capture);
       return capture;
     },
     listInbox(): Capture[] {
@@ -108,6 +114,30 @@ describe("POST /api/captures", () => {
     expect(body.capture.text).toBe("call mom");
     expect(body.capture.id).toBeTruthy();
     expect(userDO._captures.map((c) => c.text)).toEqual(["call mom"]);
+  });
+
+  it("dedupes two POSTs carrying the same Idempotency-Key", async () => {
+    const userDO = fakeUserDO();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const send = () =>
+      app.request("/api/captures", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "retry-1",
+        },
+        body: JSON.stringify({ text: "call mom" }),
+      });
+
+    const first: { capture: Capture } = await (await send()).json();
+    const replay: { capture: Capture } = await (await send()).json();
+
+    expect(replay.capture.id).toBe(first.capture.id);
+    expect(userDO._captures).toHaveLength(1);
+
+    const inbox = await (await app.request("/api/captures")).json();
+    expect(inbox).toEqual({ captures: [first.capture] });
   });
 
   it("rejects an empty text with 400", async () => {
