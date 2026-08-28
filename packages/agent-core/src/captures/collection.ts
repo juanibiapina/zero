@@ -80,18 +80,41 @@ function markProcessed(draft: Capture): void {
   draft.processedAt = new Date().toISOString();
 }
 
-// Write the server's post-process row straight into the collection's synced
-// base. Without this, processing flickers: the optimistic `markProcessed`
-// overlay hides the row, but when that overlay is dropped on completion the
-// synced base still holds the row's stale (unprocessed) value for one tick
-// before the reconciling refetch's delete lands, so the row reappears and
-// vanishes. Upserting the processed row keeps the base filtered out across the
-// drop. The Query Collection's write utils are not on the base Collection type,
-// so reach them through a narrow cast (same shape as `refresh` below).
-function syncProcessed(collection: Collection<Capture, string>, capture: Capture): void {
-  const utils = (collection as { utils?: { writeUpsert?: (data: Capture) => void } })
-    .utils;
-  utils?.writeUpsert?.(capture);
+// The Query Collection's direct-write utils, which are not on the base
+// Collection type; reach them through one narrow accessor shared by every write.
+type CaptureWriteUtils = {
+  writeUpsert: (data: Capture | Capture[]) => void;
+  writeDelete: (keys: string | string[]) => void;
+  writeBatch: (cb: () => void) => void;
+};
+function writeUtils(
+  collection: Collection<Capture, string>,
+): CaptureWriteUtils | undefined {
+  return (collection as { utils?: Partial<CaptureWriteUtils> }).utils as
+    | CaptureWriteUtils
+    | undefined;
+}
+
+// Reconcile the synced base to the server's authoritative result, in place, by
+// each row's stable id. Every write handler calls this AFTER its REST call and
+// BEFORE it returns (before the optimistic overlay is released), so the base
+// already holds the server's row/deletion when the overlay drops. That is what
+// prevents flicker: without it, dropping the overlay reverts to the stale base
+// for one tick until a trailing full-list refetch lands, and the row blinks.
+// Because the capture id is client-minted and stable, add is same-key like
+// process (no temp-to-real swap), so a plain upsert lands on the right row and
+// a future delete/edit needs no new anti-flicker code. Never rely on the
+// trailing refetch for visual correctness.
+function reconcile(
+  collection: Collection<Capture, string>,
+  delta: { upsert?: Capture[]; remove?: string[] },
+): void {
+  const utils = writeUtils(collection);
+  if (!utils) return;
+  utils.writeBatch(() => {
+    if (delta.upsert?.length) utils.writeUpsert(delta.upsert);
+    if (delta.remove?.length) utils.writeDelete(delta.remove);
+  });
 }
 
 // Fallback: an in-memory Query Collection whose own handlers call the REST API
@@ -113,20 +136,27 @@ export function createInMemoryApi(deps: {
         // This fallback has no durable outbox (online-only), so there is no
         // cross-restart replay; a fresh per-write key still gives the server a
         // stable dedupe token within any in-session retry. The capture's own id
-        // (client-minted) is the real dedupe key.
-        for (const m of transaction.mutations)
-          await rest.addCapture(
+        // (client-minted) is the real dedupe key. Reconcile the server's row
+        // into the synced base before returning, so releasing the optimistic
+        // overlay reveals the same-id row and never blinks; skip the auto-refetch
+        // that would otherwise churn the whole list.
+        for (const m of transaction.mutations) {
+          const real = await rest.addCapture(
             { id: m.modified.id, text: m.modified.text },
             safeRandomUUID(),
           );
+          reconcile(collection, { upsert: [real] });
+        }
+        return { refetch: false };
       },
       onUpdate: async ({ transaction }) => {
         for (const m of transaction.mutations) {
           if (m.modified.processedAt != null) {
             const updated = await rest.processCapture(String(m.key));
-            syncProcessed(collection, updated);
+            reconcile(collection, { upsert: [updated] });
           }
         }
+        return { refetch: false };
       },
     }),
   );
@@ -167,11 +197,14 @@ export function createPersistedApi(deps: {
     }),
   );
 
-  // After a write reaches the server (including an outbox replay on reconnect),
-  // refetch the collection so the live view reconciles the optimistic/pending row
-  // with the server's real row. A direct collection refetch is what updates the
-  // persisted collection's live query; a bare queryClient invalidate does not
-  // reliably refresh it.
+  // Durability/drift fallback, run AFTER the in-handler `reconcile` (which owns
+  // visual correctness). The reconcile already wrote the server's row into the
+  // synced base by its stable id, so the live view is correct without this; the
+  // refetch stays only to persist that row through the collection's own sync
+  // path (outbox replay on reconnect, multi-tab drift) until a browser check
+  // confirms `writeUpsert` persists to SQLite on its own, at which point it can
+  // go. It is no longer on the flicker-critical path. A direct collection
+  // refetch is what updates the persisted live query; a bare invalidate does not.
   const refresh = async () => {
     const utils = (collection as { utils?: { refetch?: () => Promise<unknown> } })
       .utils;
@@ -195,8 +228,10 @@ export function createPersistedApi(deps: {
         for (const m of transaction.mutations) {
           const id = m.modified.id;
           const text = m.modified.text;
-          if (typeof id === "string" && typeof text === "string")
-            await rest.addCapture({ id, text }, idempotencyKey);
+          if (typeof id === "string" && typeof text === "string") {
+            const real = await rest.addCapture({ id, text }, idempotencyKey);
+            reconcile(collection, { upsert: [real] });
+          }
         }
         await refresh();
       },
@@ -204,7 +239,7 @@ export function createPersistedApi(deps: {
         for (const m of transaction.mutations) {
           if (m.modified.processedAt != null) {
             const updated = await rest.processCapture(String(m.key));
-            syncProcessed(collection, updated);
+            reconcile(collection, { upsert: [updated] });
           }
         }
         await refresh();
