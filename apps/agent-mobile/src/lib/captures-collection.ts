@@ -22,7 +22,7 @@ const OUTBOX_DB_NAME = 'zero-inbox-outbox.sqlite';
 function makeRest(getToken: TokenGetter): CapturesRest {
   return {
     fetchInbox: () => fetchInbox(getToken),
-    addCapture: (capture, idempotencyKey) => addCapture(getToken, capture, idempotencyKey),
+    addCapture: (capture) => addCapture(getToken, capture),
     processCapture: (id) => processCapture(getToken, id),
   };
 }

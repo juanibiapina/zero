@@ -72,43 +72,11 @@ describe("DbCaptureStore", () => {
     expect(store.list()).toEqual([first]);
   });
 
-  it("dedupes a repeated add with the same idempotency key", () => {
-    const store = makeStore();
-
-    // Distinct ids so the dedupe can only come from the key path.
-    const first = store.add("id-1", "buy milk", "key-1");
-    const replay = store.add("id-2", "buy milk", "key-1");
-
-    expect(replay).toEqual(first);
-    expect(store.list()).toEqual([first]);
-  });
-
-  it("returns the original capture (not a second write) on a replay under the same key", () => {
-    const store = makeStore();
-
-    const first = store.add("id-1", "first text", "key-1");
-    // A retried write can carry the same key; the stored row wins, unchanged.
-    const replay = store.add("id-2", "second text", "key-1");
-
-    expect(replay.id).toBe(first.id);
-    expect(replay.text).toBe("first text");
-    expect(store.list()).toEqual([first]);
-  });
-
-  it("treats adds without a key as independent", () => {
+  it("treats adds under different ids as independent", () => {
     const store = makeStore();
 
     const a = store.add("id-1", "a");
     const b = store.add("id-2", "b");
-
-    expect(store.list()).toEqual([a, b]);
-  });
-
-  it("treats adds under different keys as independent", () => {
-    const store = makeStore();
-
-    const a = store.add("id-1", "a", "key-1");
-    const b = store.add("id-2", "b", "key-2");
 
     expect(store.list()).toEqual([a, b]);
   });

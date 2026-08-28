@@ -78,10 +78,9 @@ export const createCapturesRoutes = () => {
     const { id, text } = c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
-    // double-insert. The idempotencyKey header stays as a parallel dedupe token.
-    const idempotencyKey = c.req.header("Idempotency-Key");
+    // double-insert.
     const userDO = getUserDO(c.env, userId);
-    const capture = await userDO.addCapture(id, text, idempotencyKey);
+    const capture = await userDO.addCapture(id, text);
     log("capture_added", { clerk_user_id: userId });
     return c.json({ capture }, 201);
   });

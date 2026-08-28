@@ -23,12 +23,10 @@ export type CapturesRest = {
   // The client mints the capture's id (a stable UUID), so the optimistic row and
   // the server's row share one key and never swap. The server persists this id as
   // the primary key and dedupes on it: a retried add (offline outbox replay after
-  // a lost ACK) re-sends the same id and gets the stored row back, not a second
-  // capture. idempotencyKey stays as a parallel dedupe token until it retires.
-  addCapture: (
-    capture: { id: string; text: string },
-    idempotencyKey: string,
-  ) => Promise<Capture>;
+  // a lost ACK) re-sends the same id, persisted verbatim in the outbox, and gets
+  // the stored row back, not a second capture. The id is the whole idempotency
+  // token, so no separate key is sent.
+  addCapture: (capture: { id: string; text: string }) => Promise<Capture>;
   processCapture: (id: string) => Promise<Capture>;
 };
 
@@ -133,18 +131,15 @@ export function createInMemoryApi(deps: {
       queryFn: () => rest.fetchInbox(),
       getKey: (c: Capture) => c.id,
       onInsert: async ({ transaction }) => {
-        // This fallback has no durable outbox (online-only), so there is no
-        // cross-restart replay; a fresh per-write key still gives the server a
-        // stable dedupe token within any in-session retry. The capture's own id
-        // (client-minted) is the real dedupe key. Reconcile the server's row
-        // into the synced base before returning, so releasing the optimistic
-        // overlay reveals the same-id row and never blinks; skip the auto-refetch
-        // that would otherwise churn the whole list.
+        // The capture's client-minted id is the server's dedupe key. Reconcile
+        // the server's row into the synced base before returning, so releasing
+        // the optimistic overlay reveals the same-id row and never blinks; skip
+        // the auto-refetch that would otherwise churn the whole list.
         for (const m of transaction.mutations) {
-          const real = await rest.addCapture(
-            { id: m.modified.id, text: m.modified.text },
-            safeRandomUUID(),
-          );
+          const real = await rest.addCapture({
+            id: m.modified.id,
+            text: m.modified.text,
+          });
           reconcile(collection, { upsert: [real] });
         }
         return { refetch: false };
@@ -218,18 +213,16 @@ export function createPersistedApi(deps: {
   const offline = startOfflineExecutor({
     collections: { captures: collection },
     mutationFns: {
-      addCapture: async ({ transaction, idempotencyKey }) => {
-        // `idempotencyKey` is the offline executor's per-write key: generated once
-        // per write, persisted in the outbox, and reused verbatim on every retry
-        // and cold-start replay. Passing it to the server dedupes a lost-ACK
-        // retry (the C3 duplicate). This is the single read site for the field;
-        // keep it here so an offline-transactions version bump is one line.
-        // The outbox types a mutation's fields as unknown; narrow before sending.
+      addCapture: async ({ transaction }) => {
+        // The capture's client-minted id is the dedupe key: the outbox persists
+        // the whole mutation, so a cold-start replay after a lost ACK re-sends
+        // the same id and the server returns the stored row instead of a second
+        // capture. The outbox types a mutation's fields as unknown; narrow first.
         for (const m of transaction.mutations) {
           const id = m.modified.id;
           const text = m.modified.text;
           if (typeof id === "string" && typeof text === "string") {
-            const real = await rest.addCapture({ id, text }, idempotencyKey);
+            const real = await rest.addCapture({ id, text });
             reconcile(collection, { upsert: [real] });
           }
         }

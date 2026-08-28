@@ -7,21 +7,15 @@ import { createCapturesRoutes } from "./captures";
 
 // A well-formed UUID the client mints; the route body requires uuid shape.
 const UUID_1 = "11111111-1111-4111-8111-111111111111";
-const UUID_2 = "22222222-2222-4222-8222-222222222222";
 
 // A stand-in UserDO exposing just the capture RPC surface, backed by an array.
 const fakeUserDO = (seed: Capture[] = []) => {
   const captures = [...seed];
   let n = seed.length;
-  const keyed = new Map<string, Capture>();
   return {
-    addCapture(id: string, text: string, idempotencyKey?: string): Capture {
+    addCapture(id: string, text: string): Capture {
       const existingById = captures.find((c) => c.id === id);
       if (existingById) return existingById;
-      if (idempotencyKey) {
-        const existing = keyed.get(idempotencyKey);
-        if (existing) return existing;
-      }
       const capture: Capture = {
         id,
         text,
@@ -29,7 +23,6 @@ const fakeUserDO = (seed: Capture[] = []) => {
         processedAt: null,
       };
       captures.push(capture);
-      if (idempotencyKey) keyed.set(idempotencyKey, capture);
       return capture;
     },
     listInbox(): Capture[] {
@@ -135,31 +128,6 @@ describe("POST /api/captures", () => {
 
     const first: { capture: Capture } = await (await send()).json();
     const replay: { capture: Capture } = await (await send()).json();
-
-    expect(replay.capture.id).toBe(first.capture.id);
-    expect(userDO._captures).toHaveLength(1);
-
-    const inbox = await (await app.request("/api/captures")).json();
-    expect(inbox).toEqual({ captures: [first.capture] });
-  });
-
-  it("dedupes two POSTs carrying the same Idempotency-Key", async () => {
-    const userDO = fakeUserDO();
-    const app = buildApp(fakeEnv(userDO), "user_abc");
-
-    const send = (id: string) =>
-      app.request("/api/captures", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": "retry-1",
-        },
-        body: JSON.stringify({ id, text: "call mom" }),
-      });
-
-    // Distinct ids so the dedupe can only come from the Idempotency-Key path.
-    const first: { capture: Capture } = await (await send(UUID_1)).json();
-    const replay: { capture: Capture } = await (await send(UUID_2)).json();
 
     expect(replay.capture.id).toBe(first.capture.id);
     expect(userDO._captures).toHaveLength(1);

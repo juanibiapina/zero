@@ -12,8 +12,7 @@ export interface Capture {
   processedAt: string | null;
 }
 
-// The stored row also carries idempotencyKey; the Capture the client sees never
-// does. Project every row back to the clean shape.
+// Project a stored row back to the client-facing Capture shape.
 function toCapture(row: {
   id: string;
   text: string;
@@ -33,24 +32,17 @@ export class DbCaptureStore {
 
   // The client mints the capture id, so the add is exactly-once on the id alone:
   // a replay (a retried write after a lost ACK) re-sends the same id and gets the
-  // already-stored row back instead of inserting a second one. The idempotencyKey
-  // stays as a parallel dedupe token until it retires.
-  add(id: string, text: string, idempotencyKey?: string): Capture {
+  // already-stored row back instead of inserting a second one.
+  add(id: string, text: string): Capture {
     const existingById = this.db.get(captures, { where: eq("id", id) });
     if (existingById) return toCapture(existingById);
-    if (idempotencyKey) {
-      const existing = this.db.get(captures, {
-        where: eq("idempotencyKey", idempotencyKey),
-      });
-      if (existing) return toCapture(existing);
-    }
     const capture: Capture = {
       id,
       text,
       createdAt: new Date().toISOString(),
       processedAt: null,
     };
-    this.db.insert(captures, { ...capture, idempotencyKey: idempotencyKey ?? null });
+    this.db.insert(captures, capture);
     return capture;
   }
 

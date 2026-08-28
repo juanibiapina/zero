@@ -76,7 +76,7 @@ describe('addCapture', () => {
     jest.restoreAllMocks();
   });
 
-  it('POSTs the id and text with the Idempotency-Key and returns the created capture', async () => {
+  it('POSTs the id and text and returns the created capture', async () => {
     const capture: Capture = {
       id: 'cid-1',
       text: 'call mom',
@@ -93,7 +93,6 @@ describe('addCapture', () => {
     const result = await addCapture(
       getToken,
       { id: 'cid-1', text: 'call mom' },
-      'write-42',
       'https://example.test',
     );
 
@@ -105,8 +104,6 @@ describe('addCapture', () => {
       id: 'cid-1',
       text: 'call mom',
     });
-    const headers = new Headers(init.headers);
-    expect(headers.get('Idempotency-Key')).toBe('write-42');
   });
 });
 
