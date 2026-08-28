@@ -685,8 +685,29 @@ SQLite supports `RENAME TO` / `RENAME COLUMN`. DO NOT edit the applied
 
 ## Plan: adopt TanStack DB for the Capture Inbox data layer (spike-first)
 
-STATUS: Phase 0 + Phase 1 + Phase 2 DONE; Phase 3 (share + mobile) code-complete,
-on a branch, pending device verification on a fresh EAS build. Phase 0+1 shipped
+STATUS: Phase 0 + Phase 1 + Phase 2 DONE; Phase 3 (share + mobile) code-complete
+on branch tanstack-phase-3-mobile, DEVICE-VERIFIED on EAS dev build 18 (Pixel 7,
+Maestro) with ONE known gap. Verified working on device: the migration (the Inbox
+loads real captures through the shared TanStack DB collection on the durable
+op-sqlite path — no fallback, no native errors once build 18 shipped the natives),
+online capture (FAB -> type -> the row appears), online Process (tap the circle ->
+the row leaves), and durable READS (both databases/zero-inbox.sqlite ~176KB synced
+snapshot and databases/zero-inbox-outbox.sqlite exist; the Inbox renders instantly
+from the local snapshot). KNOWN GAP (not shipped): a capture made while OFFLINE
+appears in-session but does NOT survive a relaunch and does not sync on reconnect
+— the persisted snapshot only holds server-confirmed rows, and the offline outbox
+restoration is not re-applying the optimistic row on reload. This is the same
+durable-offline-WRITE path that Phase 2's DECISION GATE was meant to verify on web
+and never did, so it likely needs work on BOTH platforms (correct
+offline-transactions restoration wiring, and probably the explicit
+useLiveQuery({ queryKey }) the runtime warns about). EAS gotcha recorded: the
+first two rebuilds (16, 17) returned a cached artifact with the SAME fingerprint
+(73bc4af) as the pre-deps build and byte-identical APKs; `eas build --clear-cache`
+forced a genuine native recompile (build 18) that actually links op-sqlite. Also:
+`unzip` is absent on this box — inspect an APK with python zipfile, not unzip, or
+you get false "missing native" readings. Phase 0+1 shipped in PR #50 (merge
+99b03e1); Phase 2 (offline SQL persistence) shipped in PR #51 (commit 44f145e on
+main). Phase 0+1 shipped
 in PR #50 (merge 99b03e1); Phase 2 (offline SQL persistence) shipped in PR #51
 (commit 44f145e on main). Phase 3 as built: the Capture collection factory now
 lives in packages/agent-core (createCapturesApi + Capture, injecting QueryClient,
