@@ -104,9 +104,15 @@ function InboxReady({ api }: { api: CapturesApi }) {
           value={text}
           placeholder="Capture a thought"
           aria-label="Capture a thought"
+          className="h-11"
           onChange={(e) => setText(e.target.value)}
         />
-        <Button type="submit" disabled={text.trim() === ""}>
+        <Button
+          type="submit"
+          size="lg"
+          className="h-11 min-w-20"
+          disabled={text.trim() === ""}
+        >
           Add
         </Button>
       </form>
@@ -120,16 +126,19 @@ function InboxReady({ api }: { api: CapturesApi }) {
           Your inbox is empty. Capture something.
         </p>
       ) : (
-        <ul className="divide-y">
+        <ul className="space-y-3">
           {list.map((item) => (
-            <li key={item.id} className="flex items-center gap-3 py-3">
+            <li
+              key={item.id}
+              className="flex items-center gap-4 rounded-xl border bg-card px-4 py-4"
+            >
               <button
                 type="button"
                 aria-label={`Process "${item.text}"`}
-                className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
+                className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
                 onClick={() => onProcess(item)}
               />
-              <span className="flex-1 text-sm">{item.text}</span>
+              <span className="flex-1 text-base">{item.text}</span>
             </li>
           ))}
         </ul>
