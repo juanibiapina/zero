@@ -114,12 +114,6 @@ Note…) is a vision draft, not committed.
 
 ---
 
-## Changelog
-
-- 2026-08-29: The Inbox list now shows each item as a spaced card with more room
-  around it, larger tap targets, and a roomier capture bar, on both web and
-  mobile.
-
 ## Project tracking
 
 Shipped (on main, device-verified): the Capture Inbox on mobile
