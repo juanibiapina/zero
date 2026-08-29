@@ -141,6 +141,20 @@ HMRClient.setup() call at startup`), so the durable-snapshot path only runs on a
 standalone EAS build, not the dev client. Verify Inbox loading behavior on a
 `preview`/`production` build, not `expo start`.
 
+Follow-up (measured on a standalone build): "paints instantly" was optimistic.
+The data layer builds in ~19ms, but the persisted collection's own snapshot
+hydration takes **~700ms** to get the cached rows into the live query on a cold
+start (op-sqlite read + `startInternal` metadata/subset work on a busy startup
+thread). During that window `count === 0` and `inboxView` returns `loading`, so
+`bbcecaf`'s row-count gate still flashed "Loading your inbox…" for ~0.7s.
+Eagerly kicking the sync at build time (`startSyncImmediate`) did **not** help —
+it starts ~500ms earlier but the hydrate still takes ~700ms. The shipped fix
+instead **delays the loading text ~1s** (a `useDelayed` hook on both screens) and
+shows a blank list beat during the hydrate; cached cold starts now paint the
+cards with no spinner, and the text only appears on a genuinely slow first load.
+The real lever left on the table is the ~700ms hydration itself (library
+internals); trim that and the delay becomes unnecessary.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add
