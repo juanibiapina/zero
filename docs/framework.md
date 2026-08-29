@@ -1,7 +1,9 @@
 # Framework Architecture
 
-This document describes the layered architecture pattern used for the
-Cloudflare Workers backend.
+The Cloudflare Workers backend is a strict four-layer stack: Entry Point → App →
+Routes → Durable Object. Data flows down and each layer calls only the one
+directly below it, so a request's path is always the same and every dependency
+points one way. The rest of this doc walks each layer.
 
 ## Layer Overview
 
@@ -171,9 +173,10 @@ The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on t
 are unit-tested with an in-memory store and a scripted mock model. `UserDO`
 supplies the production `DbStore` adapter. LLM access sits behind the
 `AgentModel` port (`agents/protocol.ts`), whose only production adapter is
-`agents/model.ts` (official `@anthropic-ai/sdk` client, Cloudflare AI Gateway,
-per-user + per-agent `cf-aig-metadata`). The tool loop itself is Zero's
-(`agents/run.ts`), so no SDK type reaches the agents or tools.
+`agents/model-pi.ts` (pi-ai's `cloudflare-ai-gateway` provider, per-user +
+per-agent `cf-aig-metadata`). The tool loop itself is Zero's (`agents/run.ts`),
+so no SDK type reaches the agents or tools. The model, provider and effort are
+owned by `design.md` (Architecture); prompt caching by `caching.md`.
 
 ## State
 

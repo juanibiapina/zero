@@ -1,73 +1,63 @@
 # Zero — Design Document
 
-## Goal
+## Summary
 
-Zero turns a Telegram chat (a forum topic, or a DM using topicId=0) into a
-conversation with a meta-agent. The web frontend uses Telegram's
-[Login Widget](https://core.telegram.org/widgets/login) to link a Clerk account
-to a Telegram numeric id (HMAC-verified server-side against the bot token). From
-then on, each message is processed by a two-phase agent that runs inside the
-per-user `UserDO` Durable Object.
+**Zero runs each Telegram message as a self-contained agent turn inside one
+per-user Durable Object (`UserDO`), which owns all of that user's state and runs
+the turn on an alarm.** The web frontend only links a Clerk account to a Telegram
+id; from then on the webhook routes, enqueues, and returns 200 immediately, and
+everything expensive happens later on the DO alarm. That single choice — one
+Durable Object per user, the turn as an alarm over local SQLite — is what makes
+replies durable, resumable, and strongly consistent with no container and no
+per-user filesystem.
 
-The webhook resolves the user from the Telegram id (KV cache, authoritative
-`TelegramAccountDO` on a miss) and calls
-`UserDO.enqueueTurn` (dedupe the update, store the user message, arm a DO
-alarm), then returns 200 immediately. The alarm runs the turn:
+This document is the single source of truth for the model and LLM transport
+(see [LLM path](#llm-path)); [`topics.md`](topics.md) owns the topic model and
+the agents, [`framework.md`](framework.md) the layered worker structure, and
+[`caching.md`](caching.md) prompt caching.
+
+## Key design decisions
+
+Everything below is detail under these five decisions:
+
+1. **The webhook enqueues each message and answers 200 immediately; a DO alarm
+   produces the reply.** The webhook resolves the user, dedupes, and enqueues; the
+   alarm runs the turn. A slow model call runs on the alarm, so it never holds the
+   webhook open. See [How a message becomes a turn](#how-a-message-becomes-a-turn).
+2. **The turn is one agent loop over ports.** The interface agent, the learner,
+   and onboarding are the same runner with different prompts and toolsets, and
+   they depend only on ports (`Store`, `WebSearch`, `GoogleWorkspace`,
+   `AgentModel`), so they are unit-tested off the platform. See [The turn](#the-turn).
+3. **All durable state is the `UserDO` SQLite; KV is only an identity cache.**
+   Topics, conversations, messages, and file metadata live in the DO; KV holds
+   one reverse-lookup key. See [State model](#state-model).
+4. **Work that needs its own alarm gets its own Durable Object.** A DO has exactly
+   one alarm, so turn draining, scheduling, and learning are split across
+   `UserDO`, `ScheduleDO`, and `LearningDO`. See [Durable Objects](#durable-objects).
+5. **The LLM path is provider-neutral and content-free at the edges.** pi-ai over
+   the Cloudflare AI Gateway (BYOK) routes by model id alone, per-user attribution
+   rides on gateway metadata, and no log line carries message content. See
+   [LLM path](#llm-path) and [Logging](#logging).
+
+## How a message becomes a turn
+
+A message is linked, routed, enqueued, and answered on an alarm. The web frontend
+uses Telegram's [Login Widget](https://core.telegram.org/widgets/login) to link a
+Clerk account to a Telegram numeric id (HMAC-verified server-side against the bot
+token). Each later message is resolved to that user (KV cache, authoritative
+`TelegramAccountDO` on a miss), passed to `UserDO.enqueueTurn` (dedupe the
+update, store the user message, arm a DO alarm), and acknowledged with 200. The
+alarm then runs the turn:
 
 1. **Interface agent** reads recent conversation history and a topic-based
-   knowledge model (DO SQLite) and replies to the user via a `reply()` tool,
-   sending live progress as it works. It tracks every topic it reads or writes.
-2. **Writer agent** consolidates durable knowledge into the accessed topics.
+   knowledge model (DO SQLite) and replies to the user. There is no `reply` tool:
+   the model's own text blocks are the messages, delivered as it writes them, so
+   progress is live. It tracks every topic it reads or writes.
+2. **Learning** consolidates durable knowledge into the accessed topics later,
+   off the turn path, in `LearningDO` (see [`topics.md`](topics.md)).
 
-LLM calls go through the Cloudflare AI Gateway (BYOK; the gateway stores the
-real provider key and the provider bills us directly) authenticated with
-`cf-aig-authorization` and tagged per user with `cf-aig-metadata`. The model is
-`MODEL_ID` (`gpt-5.6-luna`, on the OpenAI Responses API). The model and its
-reasoning effort resolve together in one place (`resolveModelSpec`), on pi-ai's
-provider-neutral effort scale (default `high`). pi-ai's built-in
-`cloudflare-ai-gateway` provider owns the transport and routes by the model's own
-`api`, so `MODEL_ID` alone decides where traffic goes and a rollback to a
-Cloudflare-gateway catalog id such as `claude-sonnet-4.6` (dotted, Anthropic
-Messages wire) needs no code change. Each completed agent execution writes one
-aggregate call/token/cost point to the `AI_USAGE` Analytics Engine dataset,
-indexed by Clerk user and attributed to its agent and conversation when one
-exists. The estimate can be sampled, retains about three months of history, and
-can miss an execution interrupted by a hard isolate reset; AI Gateway logs remain
-the request-level debugging source. Durable state is the DO SQLite (topics,
-conversations, messages, file metadata); file bytes live in the `FILES` R2
-binding. There is no container and no per-user filesystem. A
-self-rescheduling `setTimeout` drives the Telegram typing action across the
-interface phase and stops when the reply is sent, which ends the turn. See
-[`topics.md`](topics.md) for the full design of the topic model and the two
-agents.
-
-## Package Structure
-
-```
-zero/
-├── apps/
-│   ├── agent-api/       (@zero/agent-api)        — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
-│   └── agent-web/       (@zero/agent-web)        — Vite + React: single Telegram-id form
-├── packages/
-│   ├── agent-core/      (@zero/agent-core)       — Reserved for future shared types (currently empty)
-│   ├── eslint-config/                            — Shared ESLint config
-│   └── typescript-config/                        — Shared TypeScript config
-└── docs/                                         — Design + ops docs
-```
-
-## Tech Stack
-
-| Concern | Choice |
-|---|---|
-| Frontend | React 19, Tailwind v4, shadcn/ui primitives |
-| API    | Hono + OpenAPIHono + Zod on Cloudflare Workers |
-| State  | UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) + Workers KV for identity lookups |
-| Agents | Zero-owned tool loop (`agents/run.ts`) over [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) behind the `AgentModel` seam (`agents/model-pi.ts`) |
-| LLM    | Cloudflare AI Gateway (BYOK) via pi-ai's built-in `cloudflare-ai-gateway` provider — `gpt-5.6-luna`; model + effort resolve together in `resolveModelSpec` |
-| Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
-| Secrets | Doppler (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
-
-## Architecture
+A self-rescheduling `setTimeout` drives the Telegram typing action across the
+interface phase and stops when the reply is sent, which ends the turn.
 
 ```
 ┌─ Frontend (Vite + React) ────────────────────────────────────────┐
@@ -106,27 +96,61 @@ zero/
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on the
+### Webhook flow
+
+The webhook is built on grammY via its `hono` adapter (`webhookCallback`).
+grammY validates the secret-token header against `TELEGRAM_WEBHOOK_SECRET`,
+parses the `Update`, and dispatches to bot middleware. The middleware accepts
+**forum topic messages**, **DMs** and **ordinary group messages**, including a
+forum's General tab; anything without a topic uses topicId=0. The `/new` command
+resets the conversation thread for a `(chatId, topicId)` (topics are left
+intact). The `/start` command runs a normal turn on a user's first contact so
+Zero introduces itself, and answers with a short ack on every later `/start`; an
+unlinked sender is told where to sign in (see
+[`telegram-login.md`](telegram-login.md)).
+
+A regular message with text/caption is enqueued and returns 200 to Telegram
+immediately. The background task:
+
+1. `resolveContext` keeps topic messages, and maps any other private, group or
+   supergroup chat to topicId=0; channel posts are dropped.
+2. Resolve `telegramId` → `clerkUserId` (KV cache, `TelegramAccountDO` on a
+   miss); drop the message if neither knows it.
+3. For any downloadable file under 20 MB, the route resolves Telegram's file,
+   downloads the bytes, and hands canonical metadata plus bytes to UserDO.
+4. `UserDO.enqueueTurn` saves through `UserFileStore`, appends the canonical
+   marker, dedupes the update, queues the message, and arms the DO alarm. The
+   alarm runs the turn.
+
+The webhook URL and secret are registered with Telegram manually via the Bot
+API's `setWebhook` method — see [`telegram-webhook.md`](telegram-webhook.md).
+
+## The turn
+
+The three agents are one runner instantiated three ways, each depending on ports
+so it runs off the platform. `agents/run.ts` (`model + system + (prompt | messages) +
+tools → final text`) is the interface agent, the learner, and onboarding, each
+with different system prompts and toolsets. The interface agent's returned text
+is ignored (its output is the `{ replies, accessed }` collected by its tool
+closures); it investigates the web in its own loop with `web_search` and
+`read_page`, no nested agent involved, inline in the turn's DO alarm. See
+[`topics.md`](topics.md) and [`research.md`](research.md).
+
+The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend only on the
 `Store` port (`apps/agent-api/src/store/types.ts`), a model factory
 (`agents/model.ts`), a `WebSearch` port (`apps/agent-api/src/websearch/types.ts`), and a
-`GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`), not on the DO or do-orm.
+`GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`); the DO and do-orm stay out of reach.
 They are unit-tested with an in-memory store, a scripted mock model, and
 in-memory search/Google adapters; `UserDO` supplies the production `DbStore`,
 `createBraveSearch`, and `createGoogleWorkspace` (with a memoized Clerk token
 provider) adapters and the alarm-driven execution.
 
-The interface agent, the learner and onboarding are the **same runner**
-(`agents/run.ts`: `model + system + (prompt | messages) + tools → final text`)
-instantiated with different system prompts and toolsets. The interface agent's
-returned text is ignored (its output is the `{ replies, accessed }` collected by
-its tool closures); it investigates the web in its own loop with `web_search`
-and `read_page`, no nested agent involved, inline in the turn's DO alarm. See
-[`topics.md`](topics.md), [`research.md`](research.md), and
-[`framework.md`](framework.md).
+### Structured message history (interface agent)
 
-**Structured message history (interface agent).** The interface agent builds a
-real multi-turn conversation (`buildConversationMessages` in
-`agents/interface.ts`), not a single flattened blob. The split is deliberate:
+The interface agent builds a real multi-turn conversation
+(`buildConversationMessages` in `agents/interface.ts`), so each turn extends the
+cacheable prefix instead of rewriting a single flattened blob. The split is
+deliberate:
 
 - **System prompt** carries everything that is instruction or stable reference,
   not a turn: agent instructions and the pinned-topics block. The datetime
@@ -159,20 +183,46 @@ its own reasoning. Only `text` blocks are ever delivered to Telegram, and neithe
 the learner nor compaction sees anything but text. The learning and onboarding
 agents still use the single-`prompt` path.
 
-Every agent runs Sonnet 4.6 with adaptive thinking and `display: "omitted"`,
-which returns the reasoning signature without the reasoning prose. That includes
-the background agents: the learner and compaction decide what Zero remembers
-about a user, which is the judgement call whose mistakes last longest. Thinking
-makes learner slices slower, which the slice contract already absorbs (bounded
-steps per alarm, wire log persisted as it goes, a slice lost to wall time retried
-from where it stopped). `output_config.effort` is deliberately not sent: omitting
-it is the API's `high`, which is where Zero has always run.
+### Reasoning effort
 
-## State Model
+Every agent runs `MODEL_ID` at the default `high` reasoning effort (resolved in
+`resolveModelSpec`, see [LLM path](#llm-path)), and persists the reasoning
+signature without the reasoning prose. That includes the background agents: the
+learner and compaction decide what Zero remembers about a user, which is the
+judgement call whose mistakes last longest. Reasoning makes learner slices
+slower, which the slice contract already absorbs (bounded steps per alarm, wire
+log persisted as it goes, a slice lost to wall time retried from where it
+stopped). Effort is left at the API default `high`, which is where Zero has
+always run.
 
-Per-user data lives in a `UserDO` Durable Object (source of truth, SQLite via
+## LLM path
+
+**LLM calls go through the Cloudflare AI Gateway (BYOK) over pi-ai, and the model
+id alone decides the provider.** The gateway stores the real provider key and the
+provider bills us directly; requests are authenticated with `cf-aig-authorization`
+and tagged per user with `cf-aig-metadata`. The model is `MODEL_ID`
+(`gpt-5.6-luna`, on the OpenAI Responses API). The model and its reasoning effort
+resolve together in one place (`resolveModelSpec`), on pi-ai's provider-neutral
+effort scale (default `high`). pi-ai's built-in `cloudflare-ai-gateway` provider
+owns the transport and routes by the model's own `api`, so `MODEL_ID` alone
+decides where traffic goes and a rollback to a Cloudflare-gateway catalog id such
+as `claude-sonnet-4.6` (dotted, Anthropic Messages wire) needs no code change.
+
+Usage is accounted per execution, as an estimate. Each completed agent execution
+writes one aggregate call/token/cost point to the `AI_USAGE` Analytics Engine
+dataset, indexed by Clerk user and attributed to its agent and conversation when
+one exists. The estimate can be sampled, retains about three months of history,
+and can miss an execution interrupted by a hard isolate reset; AI Gateway logs
+remain the request-level debugging source.
+
+## State model
+
+**Per-user data lives in a `UserDO` Durable Object (source of truth, SQLite via
 [do-orm](https://github.com/juanibiapina/do-orm)); Workers KV holds only a cache
-of the Telegram→Clerk reverse lookup used to route incoming messages.
+of the Telegram→Clerk reverse lookup used to route incoming messages.** Durable
+state is the DO SQLite (topics, conversations, messages, file metadata); file
+bytes live in the `FILES` R2 binding. There is no container and no per-user
+filesystem.
 
 ### KV (bootstrap)
 
@@ -215,12 +265,20 @@ both are synced on write.
 
 ## Durable Objects
 
+**A Durable Object has exactly one alarm, so work that needs its own alarm gets
+its own object**, all keyed by the same Clerk user id. `UserDO` and
+`TelegramAccountDO` are below; `ScheduleDO` and `LearningDO`, which carry the
+scheduling and learning alarms off the turn path, are detailed in
+[`topics.md`](topics.md) and [`schedules.md`](schedules.md).
+
 | DO | Purpose | Storage |
 |---|---|---|
-| **UserDO** | Per-user data store and turn runner. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, settings, and the topic model, and runs the two-phase agent turn on a DO alarm. | SQLite via do-orm |
+| **UserDO** | Per-user data store and turn runner. One instance per Clerk user (`idFromName(clerkUserId)`). Owns the Telegram link, settings, and the topic model, and runs the agent turn on a DO alarm. | SQLite via do-orm |
 | **TelegramAccountDO** | One instance per Telegram account (`idFromName(telegramId)`). Owns that account's claim on a Zero user, and answers the webhook's lookup whenever the KV cache misses. | `ctx.storage` (one key) |
 
-## Routes
+## HTTP surface
+
+### Routes
 
 ```
 GET    /api/telegram-id                  — Read caller's Telegram id (Clerk)
@@ -263,40 +321,11 @@ against `TELEGRAM_BOT_TOKEN` (`apps/agent-api/src/telegram-auth.ts`). See
 [`telegram-login.md`](telegram-login.md) for the algorithm, BotFather setup, and
 the required `VITE_TELEGRAM_BOT_USERNAME` env var.
 
-### Webhook flow
-
-The webhook is built on grammY via its `hono` adapter (`webhookCallback`).
-grammY validates the secret-token header against `TELEGRAM_WEBHOOK_SECRET`,
-parses the `Update`, and dispatches to bot middleware. The middleware accepts
-**forum topic messages**, **DMs** and **ordinary group messages**, including a
-forum's General tab; anything without a topic uses topicId=0. The `/new` command resets the
-conversation thread for a `(chatId, topicId)` (topics are left intact). The
-`/start` command runs a normal turn on a user's first contact so Zero
-introduces itself, and answers with a short ack on every later `/start`; an
-unlinked sender is told where to sign in (see
-[`telegram-login.md`](telegram-login.md)).
-
-A regular message with text/caption is enqueued and returns 200 to Telegram
-immediately. The background task:
-
-1. `resolveContext` keeps topic messages, and maps any other private, group or
-   supergroup chat to topicId=0; channel posts are dropped.
-2. Resolve `telegramId` → `clerkUserId` (KV cache, `TelegramAccountDO` on a
-   miss); drop the message if neither knows it.
-3. For any downloadable file under 20 MB, the route resolves Telegram's file,
-   downloads the bytes, and hands canonical metadata plus bytes to UserDO.
-4. `UserDO.enqueueTurn` saves through `UserFileStore`, appends the canonical
-   marker, dedupes the update, queues the message, and arms the DO alarm. The
-   alarm runs the turn (see Architecture).
-
-The webhook URL and secret are registered with Telegram manually via the Bot
-API's `setWebhook` method — see [`telegram-webhook.md`](telegram-webhook.md).
-
 ### User files
 
-Files belong to the Zero user, not to Telegram, Gmail, a conversation, or a
-topic. `/new`, topic deletion, Telegram unlink, and Google disconnect leave
-saved files intact. `delete_file` removes one file; a full account-data purge
+**Files belong to the Zero user alone.** Telegram, Gmail, a conversation, and a
+topic only reference them, so `/new`, topic deletion, Telegram unlink, and Google
+disconnect all leave saved files intact. `delete_file` removes one file; a full account-data purge
 removes all metadata and both new and legacy R2 objects.
 
 `UserFileStore` (`apps/agent-api/src/files/`) is the only module that coordinates
@@ -335,9 +364,12 @@ page-labelled text, and bounded output. Audio, video, voice messages, stickers,
 and other documents remain stored, listable, sendable, and deletable even when
 Zero has no reader for their content.
 
-## Secrets
+## Cross-cutting concerns
 
-Stored in Doppler (`zero-api`):
+### Secrets
+
+Stored in ZeroVault (`zero-api`); see [`secrets.md`](secrets.md) for how each
+value is sourced and served. The design-relevant ones:
 
 - `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`
 - `TELEGRAM_BOT_TOKEN` — used by grammY to authenticate as the bot
@@ -354,22 +386,16 @@ Stored in Doppler (`zero-api`):
   Engine dataset. The write path uses the `AI_USAGE` binding and does not use
   this token.
 
-Google Workspace access is **not** stored in Doppler. Each user opts in via the
+Google Workspace access is **not** a stored secret. Each user opts in via the
 “Connect Google” button in the web UI (Clerk `createExternalAccount` with the
 Workspace scopes). See [`google-workspace.md`](google-workspace.md).
 
-## Dev Environment
+### Logging
 
-- **5176**: Web frontend (Vite)
-- **8790**: API worker (Wrangler)
-
-See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
-
-## Logging
-
-Every log line is a single JSON object on stdout/stderr. Cloudflare's Workers
-Logs indexer auto-extracts the fields, so the dashboard can filter on e.g.
-`service`, `msg`, `clerk_user_id` directly instead of grepping a message string.
+**Every log line is a single JSON object on stdout/stderr, content-free.**
+Cloudflare's Workers Logs indexer auto-extracts the fields, so the dashboard can
+filter on e.g. `service`, `msg`, `clerk_user_id` directly instead of grepping a
+message string.
 
 Conventions:
 
@@ -386,10 +412,43 @@ Conventions:
 - Never log message content, model replies, tool results, or request bodies.
   Counts and identifiers only.
 
-Prompt caching (system prefix, tool schemas, and conversation history) is
-documented in [caching.md](./caching.md).
+### Dev environment
 
-## Future Work
+- **5176**: Web frontend (Vite)
+- **8790**: API worker (Wrangler)
+
+See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
+
+### Tech stack
+
+| Concern | Choice |
+|---|---|
+| Frontend | React 19, Tailwind v4, shadcn/ui primitives |
+| API    | Hono + OpenAPIHono + Zod on Cloudflare Workers |
+| State  | UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) + Workers KV for identity lookups |
+| Agents | Zero-owned tool loop (`agents/run.ts`) over [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) behind the `AgentModel` seam (`agents/model-pi.ts`) |
+| LLM    | Cloudflare AI Gateway (BYOK) via pi-ai's built-in `cloudflare-ai-gateway` provider — `gpt-5.6-luna`; model + effort resolve together in `resolveModelSpec` |
+| Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
+| Secrets | ZeroVault (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
+
+### Package structure
+
+```
+zero/
+├── apps/
+│   ├── agent-api/       (@zero/agent-api)        — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
+│   └── agent-web/       (@zero/agent-web)        — Vite + React: single Telegram-id form
+├── packages/
+│   ├── agent-core/      (@zero/agent-core)       — Reserved for future shared types (currently empty)
+│   ├── eslint-config/                            — Shared ESLint config
+│   └── typescript-config/                        — Shared TypeScript config
+└── docs/                                         — Design + ops docs
+```
+
+Prompt caching (system prefix, tool schemas, and conversation history) is
+documented in [`caching.md`](caching.md).
+
+## Future work
 
 - Add format-specific readers for stored audio and video files.
 - Consider structured multi-turn history for the learning agent (it currently
@@ -398,6 +457,7 @@ documented in [caching.md](./caching.md).
   shapes are known; Google onboarding is the first, deliberately minimal, one
   (see [`onboarding.md`](onboarding.md)).
 - Per-user model/effort preference: the decision point already exists
-  (`resolveModelSpec`), so this is a policy + a switching API on top of it, not a
-  new seam.
+  (`resolveModelSpec`), so a policy plus a switching API on top of it covers this,
+  with no new seam.
 - Surface topic/conversation history in the web UI for browsing/export.
+```

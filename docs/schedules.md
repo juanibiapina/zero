@@ -136,8 +136,8 @@ because no amount of backoff will produce a handler for it.
 
 The tools are registered unconditionally, like the file tools, so the tool
 schema stays byte-identical across users and turns (see `caching.md`). They go
-to the interface agent only: the research and writer agents cannot message the
-user, so they must not be able to book a turn that does.
+to the interface agent only: the learner and onboarding agents cannot message
+the user, so they must not be able to book a turn that does.
 
 There is no `update_schedule`. Cancel plus create covers it without
 partial-patch semantics.
