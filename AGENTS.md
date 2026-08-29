@@ -30,8 +30,10 @@ Route the entry by product:
   or shared console UI go in the root `CHANGELOG.md`.
 - **Mobile todo app (`apps/agent-mobile`):** a separate product surface, NOT the
   Zero agent. Its user-facing changes do **not** go in `apps/agent-api/CHANGELOG.md`
-  (that ships to agent users as the in-product Changelog topic). Track them in
-  `docs/todo-app.md` until the app has its own user-facing changelog.
+  (that ships to agent users as the in-product Changelog topic). They go in
+  `apps/agent-mobile/CHANGELOG.md`.
+- **Web app (`apps/agent-web`):** user-facing changes to the web surface (e.g. the
+  Inbox) go in `apps/agent-web/CHANGELOG.md`, not the agent file.
 
 `apps/agent-api/CHANGELOG.md` is bundled and surfaced in-product as Zero's
 read-only "Changelog" system topic (`apps/agent-api/src/store/system-topics.ts`),

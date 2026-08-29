@@ -35,6 +35,11 @@ function messageOf(err: unknown): string {
 
 const AnimatedFlatList = Animated.FlatList<Capture>;
 
+// Vertical gap between carded rows.
+function Separator() {
+  return <View className="h-3" />;
+}
+
 // Build the Capture data layer once inside the signed-in tree, where the Clerk
 // token getter is valid. getToken is read through a ref so the collection is
 // built once (not rebuilt when Clerk hands back a new function identity).
@@ -97,7 +102,7 @@ export default function HomeScreen() {
   const api = useCapturesApi();
   return (
     <View className="flex-1 px-6 pt-16">
-      <View className="mb-4 flex-row items-center justify-between">
+      <View className="mb-6 flex-row items-center justify-between">
         <Text variant="title">Inbox</Text>
         {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
             avatar off-center. */}
@@ -223,11 +228,11 @@ function Inbox({ api }: { api: CapturesApi }) {
       <Animated.View
         entering={FadeIn.duration(150)}
         exiting={FadeOut.duration(200)}
-        className="flex-row items-center gap-3 border-b border-neutral-200 py-3"
+        className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
       >
         <Pressable
           accessibilityLabel={`Process "${item.text}"`}
-          className="h-6 w-6 rounded-full border-2 border-neutral-400"
+          className="h-7 w-7 rounded-full border-2 border-neutral-400"
           hitSlop={8}
           onPress={() => onProcess(item)}
         />
@@ -250,9 +255,11 @@ function Inbox({ api }: { api: CapturesApi }) {
         // entering/exiting fades it in and out.
         <AnimatedFlatList
           style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 96 }}
           data={list}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          ItemSeparatorComponent={Separator}
           itemLayoutAnimation={LinearTransition.duration(200)}
           ListEmptyComponent={
             <Text variant="subtitle">
