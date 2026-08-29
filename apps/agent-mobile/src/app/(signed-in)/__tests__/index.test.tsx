@@ -65,7 +65,7 @@ const renderScreen = () => {
 };
 
 describe('HomeScreen', () => {
-  it('shows a loading state until the first fetch settles', async () => {
+  it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {
     mockGetToken.mockResolvedValue('tok');
     let resolveFetch!: (captures: Capture[]) => void;
     mockFetchInbox.mockReturnValue(
@@ -76,9 +76,16 @@ describe('HomeScreen', () => {
 
     const { getByText, queryByText } = await renderScreen();
 
-    // Fetch is still pending: loading shown, empty message NOT shown.
-    expect(getByText('Loading your inbox…')).toBeTruthy();
+    // The cached snapshot hydrates fast, so the loading text is held back at
+    // first: no spinner flash, and the empty message is not shown either.
+    expect(queryByText('Loading your inbox…')).toBeNull();
     expect(queryByText('Your inbox is empty. Capture something.')).toBeNull();
+
+    // Only a genuinely slow, still-pending fetch surfaces the loading text.
+    await waitFor(
+      () => expect(getByText('Loading your inbox…')).toBeTruthy(),
+      { timeout: 2000 },
+    );
 
     await act(async () => {
       resolveFetch([]);

@@ -13,6 +13,29 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// How long the Inbox may sit empty-and-loading before it shows the "Loading…"
+// text. The local snapshot hydrates the cached rows in well under this, so a
+// normal load paints straight to the list with no spinner flash; the text only
+// appears on a genuinely slow first load (empty cache waiting on the network).
+const LOADING_TEXT_DELAY_MS = 1000;
+
+// True only after `active` has held continuously for `ms`. Resets the moment
+// `active` goes false, so a fast hydrate never trips it.
+function useDelayed(active: boolean, ms: number): boolean {
+  const [elapsed, setElapsed] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => setElapsed(true), ms);
+    // Reset in cleanup (not the effect body) so re-entering the active state
+    // waits out the delay again, without a synchronous setState on mount.
+    return () => {
+      clearTimeout(t);
+      setElapsed(false);
+    };
+  }, [active, ms]);
+  return active && elapsed;
+}
+
 export function InboxPage() {
   const [api, setApi] = useState<CapturesApi | null>(null);
 
@@ -37,11 +60,7 @@ export function InboxPage() {
               Capture anything. Process it later.
             </p>
           </div>
-          {api ? (
-            <InboxReady api={api} />
-          ) : (
-            <p className="text-sm text-muted-foreground">Loading your inbox…</p>
-          )}
+          {api ? <InboxReady api={api} /> : <div className="min-h-24" />}
         </div>
       </main>
     </div>
@@ -89,6 +108,8 @@ function InboxReady({ api }: { api: CapturesApi }) {
     loadError: null,
   });
 
+  const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
+
   return (
     <>
       <form
@@ -120,7 +141,11 @@ function InboxReady({ api }: { api: CapturesApi }) {
       {error && <ErrorText>{error}</ErrorText>}
 
       {view === "loading" ? (
-        <p className="text-sm text-muted-foreground">Loading your inbox…</p>
+        showLoadingText ? (
+          <p className="text-sm text-muted-foreground">Loading your inbox…</p>
+        ) : (
+          <div className="min-h-24" />
+        )
       ) : view === "empty" ? (
         <p className="text-sm text-muted-foreground">
           Your inbox is empty. Capture something.

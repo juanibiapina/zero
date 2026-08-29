@@ -296,6 +296,47 @@ eas build -p android --profile preview
 `preview` profile produces a sideloadable **APK** (not an AAB); `production`
 produces an AAB for the Play Store (defined but unused for now).
 
+### Local builds on the `mini` NixOS box (no EAS quota)
+
+The EAS free tier caps Android cloud builds per month. When it runs out (or to
+iterate faster on the durable, standalone code path that only runs in a real
+build), build the APK **locally on `mini`** with a Nix dev shell that ships the
+exact Android toolchain Expo SDK 57 / React Native 0.86 pin (SDK platform 36,
+build-tools 36.0.0, NDK 27.1.12297006, cmake 3.22.1, JDK 17). The shell lives in
+`juanibiapina/dotfiles` (`nix/shells/android.nix`, exposed as the flake output
+`devShells.x86_64-linux.android`) — it is a dev shell, so it needs **no**
+`nixos-rebuild` / system change.
+
+The one NixOS-specific fix it applies: gradle otherwise downloads an `aapt2`
+binary that cannot run on NixOS, so `GRADLE_OPTS` points the Android Gradle
+Plugin at the Nix-store `aapt2` instead (the canonical fix from the nixpkgs
+manual). `ANDROID_HOME`/`ANDROID_SDK_ROOT`/`ANDROID_NDK_ROOT`/`JAVA_HOME` are set
+by the shell.
+
+```bash
+# from the zero repo root, on mini
+export NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1
+nix develop ~/workspace/juanibiapina/dotfiles#android --command bash -c '
+  cd apps/agent-mobile
+  eas build --platform android --profile preview --local \
+    --non-interactive --output /tmp/local-preview.apk
+'
+adb install -r -d /tmp/local-preview.apk
+```
+
+Notes:
+- `eas build --local` still fetches the signing keystore from EAS ("Using remote
+  Android credentials"), so the local APK installs over the existing app with no
+  uninstall. It runs the same prebuild + gradle steps as the cloud, just on this
+  box in the Nix shell.
+- The first build is slow (gradle ~20 min: it compiles op-sqlite, reanimated,
+  worklets and expo-modules-core native for all four ABIs). Later builds reuse
+  the gradle/pnpm caches.
+- The SDK/NDK download on the first `nix develop` is multi-GB and cached in the
+  Nix store afterwards.
+- Plain `pnpm`/`node` from the outer environment stay on `PATH` inside the shell,
+  so the repo's package manager is used as usual.
+
 ## Install on a physical Android device
 
 1. Run `eas build -p android --profile preview` (or trigger the manual CI job

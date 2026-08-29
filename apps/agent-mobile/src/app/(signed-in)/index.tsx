@@ -40,6 +40,30 @@ function Separator() {
   return <View className="h-3" />;
 }
 
+// How long the Inbox may sit empty-and-loading before it shows the "Loading…"
+// text. The local SQLite snapshot hydrates the cached rows in well under this,
+// so a normal cold start paints straight to the list with no spinner flash; the
+// text only appears on a genuinely slow first load (empty cache waiting on the
+// network).
+const LOADING_TEXT_DELAY_MS = 1000;
+
+// True only after `active` has held continuously for `ms`. Resets the moment
+// `active` goes false, so a fast hydrate never trips it.
+function useDelayed(active: boolean, ms: number): boolean {
+  const [elapsed, setElapsed] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => setElapsed(true), ms);
+    // Reset in cleanup (not the effect body) so re-entering the active state
+    // waits out the delay again, without a synchronous setState on mount.
+    return () => {
+      clearTimeout(t);
+      setElapsed(false);
+    };
+  }, [active, ms]);
+  return active && elapsed;
+}
+
 // Build the Capture data layer once inside the signed-in tree, where the Clerk
 // token getter is valid. getToken is read through a ref so the collection is
 // built once (not rebuilt when Clerk hands back a new function identity).
@@ -109,11 +133,7 @@ export default function HomeScreen() {
         <UserButton />
       </View>
 
-      {api ? (
-        <Inbox api={api} />
-      ) : (
-        <Text variant="subtitle">Loading your inbox…</Text>
-      )}
+      {api ? <Inbox api={api} /> : <View className="flex-1" />}
     </View>
   );
 }
@@ -242,12 +262,21 @@ function Inbox({ api }: { api: CapturesApi }) {
     [onProcess],
   );
 
+  // Only surface the loading text once the snapshot has had time to hydrate;
+  // otherwise a cached cold start would flash it for the sub-second the rows
+  // take to arrive.
+  const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
+
   return (
     <>
       {error ? <Text variant="error">{error}</Text> : null}
 
       {view === 'loading' ? (
-        <Text variant="subtitle">Loading your inbox…</Text>
+        showLoadingText ? (
+          <Text variant="subtitle">Loading your inbox…</Text>
+        ) : (
+          <View className="flex-1" />
+        )
       ) : (
         // FlatList virtualizes the Inbox (unbounded); @expo/ui List is native
         // but not virtualized, so it is the wrong tool here. itemLayoutAnimation
