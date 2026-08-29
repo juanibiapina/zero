@@ -141,19 +141,32 @@ HMRClient.setup() call at startup`), so the durable-snapshot path only runs on a
 standalone EAS build, not the dev client. Verify Inbox loading behavior on a
 `preview`/`production` build, not `expo start`.
 
-Follow-up (measured on a standalone build): "paints instantly" was optimistic.
-The data layer builds in ~19ms, but the persisted collection's own snapshot
-hydration takes **~700ms** to get the cached rows into the live query on a cold
-start (op-sqlite read + `startInternal` metadata/subset work on a busy startup
-thread). During that window `count === 0` and `inboxView` returns `loading`, so
-`bbcecaf`'s row-count gate still flashed "Loading your inbox…" for ~0.7s.
-Eagerly kicking the sync at build time (`startSyncImmediate`) did **not** help —
-it starts ~500ms earlier but the hydrate still takes ~700ms. The shipped fix
-instead **delays the loading text ~1s** (a `useDelayed` hook on both screens) and
-shows a blank list beat during the hydrate; cached cold starts now paint the
-cards with no spinner, and the text only appears on a genuinely slow first load.
-The real lever left on the table is the ~700ms hydration itself (library
-internals); trim that and the delay becomes unnecessary.
+Follow-up (measured on a standalone build, then fixed): "paints instantly" was
+false. Per-SQL timing showed the local snapshot is fully read in **~60ms** (the
+`SELECT … FROM "c_…"` returns by +59ms), but the rows did not reach the screen
+until **~700ms–1.5s**, exactly when the network `fetchInbox` committed. Root
+cause: `createPersistedApi` wrapped `queryCollectionOptions` in
+`persistedCollectionOptions`, making the collection **`sync-present`**, where the
+wrapped sync only calls `markReady()` after its network query resolves
+(`@tanstack/db-sqlite-persistence-core` `persisted.js`). A `@tanstack/db`
+collection withholds data from live queries until `ready`, so the cached rows sat
+buffered behind the network. It was never local-first; `bbcecaf`'s row-count gate
+never fired because `data` stayed empty. (The delayed-loading-text hook from the
+first attempt was a cosmetic cover; the ~700ms was network, not SQLite.)
+
+Fix (shipped): the persisted collection now uses a **custom sync** that calls
+`markReady()` immediately — the persisted wrapper defers it until the local
+hydrate finishes, so the collection is ready from the **cache** in ~60ms — then
+fetches the server inbox in the background and reconciles it into the synced base
+via `begin/write/commit` (a pure `inboxReconcileWrites` diff: update present,
+insert new, delete removed). Measured after the change: first rows at **~37ms**
+after the data layer builds, with the network updating in place. The same
+`refetch` is wired to app-foreground (`AppState`/`visibilitychange`), which also
+fixes the "items don't refresh until a cold start" staleness. The `useDelayed`
+loading-text hook stays only as a safety net for the genuinely-empty first run.
+Note: the collection now has a stable id `"captures"`; the id change orphans the
+old persisted table once, so the first launch after upgrading re-syncs from the
+server, instant thereafter.
 
 In flight (details in `docs/plans/`):
 

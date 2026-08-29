@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { createLiveQueryCollection, isNull } from "@tanstack/db";
 
-import { createInMemoryApi, type CapturesRest } from "./collection";
+import {
+  createInMemoryApi,
+  inboxReconcileWrites,
+  type CapturesRest,
+} from "./collection";
 import type { Capture } from "./types";
 
 // A fake Captures server with a small latency so the optimistic overlay and the
@@ -130,5 +134,51 @@ describe("captures collection", () => {
 
     // No flicker: once alpha leaves it never comes back (same invariant as add).
     expectNoFlicker(snapshots, "alpha");
+  });
+});
+
+describe("inboxReconcileWrites", () => {
+  const cap = (id: string, processedAt: string | null = null): Capture => ({
+    id,
+    text: id,
+    createdAt: "2023-01-01T00:00:00.000Z",
+    processedAt,
+  });
+
+  it("inserts every server row when the collection is empty", () => {
+    const writes = inboxReconcileWrites([], [cap("a"), cap("b")]);
+    expect(writes).toEqual([
+      { type: "insert", value: cap("a") },
+      { type: "insert", value: cap("b") },
+    ]);
+  });
+
+  it("updates rows already present instead of re-inserting them", () => {
+    const writes = inboxReconcileWrites(["a"], [cap("a"), cap("b")]);
+    expect(writes).toEqual([
+      { type: "update", value: cap("a") },
+      { type: "insert", value: cap("b") },
+    ]);
+  });
+
+  it("deletes keys the server no longer returns (processed / removed rows)", () => {
+    const writes = inboxReconcileWrites(["a", "b"], [cap("a")]);
+    expect(writes).toEqual([
+      { type: "update", value: cap("a") },
+      { type: "delete", key: "b" },
+    ]);
+  });
+
+  it("clears everything when the server inbox is empty", () => {
+    const writes = inboxReconcileWrites(["a", "b"], []);
+    expect(writes).toEqual([
+      { type: "delete", key: "a" },
+      { type: "delete", key: "b" },
+    ]);
+  });
+
+  it("emits no duplicate insert for a key that is already present", () => {
+    const writes = inboxReconcileWrites(["a"], [cap("a")]);
+    expect(writes).toEqual([{ type: "update", value: cap("a") }]);
   });
 });

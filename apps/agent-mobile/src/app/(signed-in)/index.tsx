@@ -4,13 +4,13 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  CAPTURES_QUERY_KEY,
   inboxView,
   type Capture,
   type CapturesApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   BackHandler,
   type ListRenderItemInfo,
   Pressable,
@@ -100,25 +100,15 @@ function useCapturesApi(): CapturesApi | null {
   return api;
 }
 
-// Read the collection's read (sync) error from the shared QueryClient. useLiveQuery
-// exposes isError but not the message, and the error lives in the react-query
-// cache under CAPTURES_QUERY_KEY. Returns the message only while an error is the
-// current state.
-function useLoadError(): string | null {
-  const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
+// Read the inbox load (sync) error from the data layer's own channel. Returns
+// the message only while an error is the current state.
+function useLoadError(api: CapturesApi): string | null {
+  const [error, setError] = useState<string | null>(() => api.getLoadError());
   useEffect(() => {
-    const read = () => {
-      const state = queryClient.getQueryState(CAPTURES_QUERY_KEY);
-      setError(
-        state?.status === 'error' && state.error
-          ? messageOf(state.error)
-          : null,
-      );
-    };
+    const read = () => setError(api.getLoadError());
     read();
-    return queryClient.getQueryCache().subscribe(read);
-  }, [queryClient]);
+    return api.subscribeLoadError(read);
+  }, [api]);
   return error;
 }
 
@@ -147,8 +137,17 @@ function Inbox({ api }: { api: CapturesApi }) {
   );
   const list = captures ?? [];
 
-  const loadError = useLoadError();
+  const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
+
+  // Refresh when the app returns to the foreground, so a list changed elsewhere
+  // (Telegram, another device) shows up without a cold start.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void api.refetch();
+    });
+    return () => sub.remove();
+  }, [api]);
   // Gate the list on the row count, not isLoading: a hydrated snapshot must
   // paint even while the network sync is still pending, so opening the Inbox
   // never blinks to a spinner over stale rows.

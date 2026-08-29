@@ -2,6 +2,7 @@ import {
   createCollection,
   safeRandomUUID,
   type Collection,
+  type SyncConfig,
   type Transaction,
 } from "@tanstack/db";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
@@ -41,7 +42,44 @@ export type CapturesApi = {
   // True when writes persist to a durable offline outbox (SQLite + outbox
   // storage); false for the in-memory fallback.
   offline: boolean;
+  // Re-pull the server inbox and reconcile it into the collection. Call on app
+  // foreground so a list changed elsewhere (Telegram, another device) refreshes
+  // without a cold start.
+  refetch: () => Promise<void>;
+  // The current inbox load (sync) error message, or null. Screens read this to
+  // show an error only when there is nothing else on screen. `subscribeLoadError`
+  // fires whenever it changes; the callback re-reads `getLoadError`.
+  getLoadError: () => string | null;
+  subscribeLoadError: (cb: () => void) => () => void;
 };
+
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// The sync write messages that reconcile the synced base to the server's inbox
+// list: update each row already present, insert each new one, and delete any
+// key the server no longer returns. Pure so the diff (the tricky part — no
+// duplicate inserts, processed rows pruned, optimistic-only keys left alone by
+// hitting only the synced base) is unit-tested without the persistence stack.
+export type InboxWrite =
+  | { type: "insert" | "update"; value: Capture }
+  | { type: "delete"; key: string };
+export function inboxReconcileWrites(
+  currentKeys: Iterable<string>,
+  server: readonly Capture[],
+): InboxWrite[] {
+  const present = new Set(currentKeys);
+  const serverIds = new Set(server.map((c) => c.id));
+  const writes: InboxWrite[] = [];
+  for (const c of server) {
+    writes.push({ type: present.has(c.id) ? "update" : "insert", value: c });
+  }
+  for (const key of present) {
+    if (!serverIds.has(key)) writes.push({ type: "delete", key });
+  }
+  return writes;
+}
 
 // The platform's offline-transactions entry point. Injected because web imports
 // it from `@tanstack/offline-transactions` and mobile from its `/react-native`
@@ -156,20 +194,48 @@ export function createInMemoryApi(deps: {
     }),
   );
 
+  const refetchUtil = (
+    collection as { utils?: { refetch?: () => Promise<unknown> } }
+  ).utils?.refetch;
+
   return {
     collection,
     add: (text) => collection.insert(optimisticCapture(text)),
     process: (id) => collection.update(id, markProcessed),
     offline: false,
+    refetch: async () => {
+      if (refetchUtil) {
+        await refetchUtil();
+      } else {
+        await queryClient.invalidateQueries({ queryKey: CAPTURES_QUERY_KEY });
+      }
+    },
+    // The Query Collection records its fetch error in the react-query cache; read
+    // it there so the load-error channel is uniform across both API builders.
+    getLoadError: () => {
+      const state = queryClient.getQueryState(CAPTURES_QUERY_KEY);
+      return state?.status === "error" && state.error
+        ? messageOf(state.error)
+        : null;
+    },
+    subscribeLoadError: (cb) => queryClient.getQueryCache().subscribe(cb),
   };
 }
 
-// Durable offline mode: the synced Query Collection is persisted to SQLite for
-// offline reads, and writes go through an offline outbox that retries when the
-// network returns. The collection carries NO server-calling handlers: every
-// write flows through the executor's mutationFns below, which call the REST API
-// and then invalidate the query to reconcile the optimistic temp-id row with the
-// server's real row (mirroring the Query Collection's own auto-refetch).
+// Durable offline mode: local-first. The collection is a persisted SQLite
+// collection driven by a custom sync that marks ready from the local snapshot
+// immediately (the persisted wrapper awaits its hydrate first), then fetches the
+// server inbox in the background and reconciles it into the synced base. That is
+// the whole point: cached rows paint at once and the network updates them in
+// place, instead of the live query waiting on the first network fetch. Writes go
+// through an offline outbox that retries when the network returns; the
+// executor's mutationFns call the REST API and reconcile the server's row.
+//
+// It is deliberately NOT `queryCollectionOptions` wrapped in persistence: that
+// makes the collection `sync-present`, where readiness is gated on the network
+// query, so the local snapshot sat behind "Loading…" for the whole round trip
+// (see docs/todo-app.md). The custom sync stays sync-present (writes still
+// persist) but readiness comes from the cache.
 export function createPersistedApi(deps: {
   queryClient: QueryClient;
   rest: CapturesRest;
@@ -177,38 +243,92 @@ export function createPersistedApi(deps: {
   startOfflineExecutor: StartOfflineExecutor;
   onWarn?: WarnFn;
 }): CapturesApi {
-  const { queryClient, rest, persistence, startOfflineExecutor, onWarn = noopWarn } = deps;
+  const { rest, persistence, startOfflineExecutor, onWarn = noopWarn } = deps;
 
-  const collection = createCollection(
-    persistedCollectionOptions<Capture, string>({
-      persistence,
-      schemaVersion: SCHEMA_VERSION,
-      ...queryCollectionOptions({
-        queryClient,
-        queryKey: CAPTURES_QUERY_KEY,
-        queryFn: () => rest.fetchInbox(),
-        getKey: (c: Capture) => c.id,
-      }),
-    }),
-  );
+  // The sync's write controls, captured when the collection starts syncing.
+  // reconcile* and refetch write server data through these; null until the first
+  // subscription starts the sync, so every use guards on it.
+  type SyncStart = Parameters<SyncConfig<Capture, string>["sync"]>[0];
+  type Controls = Pick<SyncStart, "begin" | "write" | "commit">;
+  let controls: Controls | null = null;
 
-  // Durability/drift fallback, run AFTER the in-handler `reconcile` (which owns
-  // visual correctness). The reconcile already wrote the server's row into the
-  // synced base by its stable id, so the live view is correct without this; the
-  // refetch stays only to persist that row through the collection's own sync
-  // path (outbox replay on reconnect, multi-tab drift) until a browser check
-  // confirms `writeUpsert` persists to SQLite on its own, at which point it can
-  // go. It is no longer on the flicker-critical path. A direct collection
-  // refetch is what updates the persisted live query; a bare invalidate does not.
-  const refresh = async () => {
-    const utils = (collection as { utils?: { refetch?: () => Promise<unknown> } })
-      .utils;
-    if (utils?.refetch) {
-      await utils.refetch();
-    } else {
-      await queryClient.invalidateQueries({ queryKey: CAPTURES_QUERY_KEY });
+  // Load-error channel: the custom sync has no react-query cache, so surface the
+  // fetch error here for the screens to read.
+  let loadError: string | null = null;
+  const errorListeners = new Set<() => void>();
+  const setLoadError = (next: string | null) => {
+    if (next === loadError) return;
+    loadError = next;
+    for (const cb of errorListeners) cb();
+  };
+
+  // Assigned before the sync runs (createCollection returns synchronously; the
+  // sync fires later on first subscribe), so the reconcile closures can read it.
+  let collection: Collection<Capture, string>;
+
+  // Upsert one server row into the synced base by its stable id (insert if new,
+  // update if present). Used after each write's REST call.
+  const reconcileOne = (c: Capture) => {
+    if (!controls) return;
+    controls.begin();
+    controls.write({ type: collection.has(c.id) ? "update" : "insert", value: c });
+    controls.commit();
+  };
+
+  // Replace the synced inbox with the server's authoritative list: upsert each
+  // server row and delete any synced row the server no longer returns (e.g. a
+  // processed capture). Deletes hit only the synced base, so a pending optimistic
+  // row (not yet in the base) is left untouched.
+  const reconcileList = (server: Capture[]) => {
+    if (!controls) return;
+    controls.begin();
+    for (const write of inboxReconcileWrites(collection.keys(), server)) {
+      controls.write(write);
+    }
+    controls.commit();
+  };
+
+  const fetchAndReconcile = async () => {
+    try {
+      const rows = await rest.fetchInbox();
+      setLoadError(null);
+      reconcileList(rows);
+    } catch (err) {
+      setLoadError(messageOf(err));
     }
   };
+
+  const sync: SyncConfig<Capture, string> = {
+    sync: (params) => {
+      controls = {
+        begin: params.begin,
+        write: params.write,
+        commit: params.commit,
+      };
+      // Ready from the local snapshot at once. The persisted wrapper defers this
+      // markReady until its hydrate finishes, so the cached rows are already in
+      // the collection when the live query starts emitting — no wait on the
+      // network. The background fetch then updates rows in place.
+      params.markReady();
+      void fetchAndReconcile();
+      return () => {
+        controls = null;
+      };
+    },
+  };
+
+  collection = createCollection(
+    persistedCollectionOptions<Capture, string>({
+      // Stable id so the persisted table survives across launches and app
+      // versions. (Changing it orphans the old table and forces a one-time
+      // re-sync from the server.)
+      id: "captures",
+      getKey: (c: Capture) => c.id,
+      schemaVersion: SCHEMA_VERSION,
+      persistence,
+      sync,
+    }),
+  );
 
   const offline = startOfflineExecutor({
     collections: { captures: collection },
@@ -223,19 +343,19 @@ export function createPersistedApi(deps: {
           const text = m.modified.text;
           if (typeof id === "string" && typeof text === "string") {
             const real = await rest.addCapture({ id, text });
-            reconcile(collection, { upsert: [real] });
+            reconcileOne(real);
           }
         }
-        await refresh();
+        await fetchAndReconcile();
       },
       processCapture: async ({ transaction }) => {
         for (const m of transaction.mutations) {
           if (m.modified.processedAt != null) {
             const updated = await rest.processCapture(String(m.key));
-            reconcile(collection, { upsert: [updated] });
+            reconcileOne(updated);
           }
         }
-        await refresh();
+        await fetchAndReconcile();
       },
     },
     onLeadershipChange: (isLeader) => {
@@ -264,6 +384,12 @@ export function createPersistedApi(deps: {
     add: (text) => addAction({ text }),
     process: (id) => processAction({ id }),
     offline: true,
+    refetch: () => fetchAndReconcile(),
+    getLoadError: () => loadError,
+    subscribeLoadError: (cb) => {
+      errorListeners.add(cb);
+      return () => errorListeners.delete(cb);
+    },
   };
 }
 

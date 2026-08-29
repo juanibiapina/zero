@@ -79,6 +79,16 @@ function InboxReady({ api }: { api: CapturesApi }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Refresh when the tab becomes visible again, so a list changed elsewhere
+  // (Telegram, another device) shows up without a reload.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void api.refetch();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [api]);
+
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
