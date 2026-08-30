@@ -203,3 +203,18 @@ export const captures = table("captures", {
   createdAt: column.text().notNull(),
   processedAt: column.text(),
 });
+
+// The Today list (the Todoist replacement). A Task is a typed, clarified
+// next-action with a day, distinct from a Capture. Owned by DbTaskStore. Open
+// tasks are the rows where completedAt IS NULL; showUpDate is the local day the
+// task is due (client-side "due today" filter). See docs/entities/task.md.
+export const tasks = table("tasks", {
+  // The client mints the id (a UUID) and re-sends it verbatim on every
+  // retry/replay, so the primary key itself dedupes a lost-ACK double-insert.
+  id: column.text().notNull().primaryKey(),
+  text: column.text().notNull(),
+  // Local date (YYYY-MM-DD) the task should show up on.
+  showUpDate: column.text().notNull(),
+  createdAt: column.text().notNull(),
+  completedAt: column.text(),
+});

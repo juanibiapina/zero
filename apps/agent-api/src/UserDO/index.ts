@@ -6,6 +6,7 @@ import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
 import { DbCaptureStore, type Capture } from "../store/captures";
+import { DbTaskStore, type Task } from "../store/tasks";
 import {
   SystemTopicStore,
   systemTopicsFingerprint,
@@ -93,6 +94,7 @@ export class UserDO extends DurableObject<Env> {
   // File bytes in R2. Metadata rows live in this user's SQLite store.
   private fileBlobs: FileBlobStore;
   private captures: DbCaptureStore;
+  private tasks: DbTaskStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -101,6 +103,7 @@ export class UserDO extends DurableObject<Env> {
     this.store = new SystemTopicStore(dbStore);
     this.fileBlobs = createR2FileBlobs(env.FILES);
     this.captures = new DbCaptureStore(this.db);
+    this.tasks = new DbTaskStore(this.db);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
@@ -128,6 +131,18 @@ export class UserDO extends DurableObject<Env> {
 
   processCapture(id: string): Capture | null {
     return this.captures.process(id);
+  }
+
+  addTask(id: string, text: string, showUpDate: string): Task {
+    return this.tasks.add(id, text, showUpDate);
+  }
+
+  listTasks(): Task[] {
+    return this.tasks.list();
+  }
+
+  completeTask(id: string): Task | null {
+    return this.tasks.complete(id);
   }
 
   // --- Conversations and messages ---

@@ -12,3 +12,18 @@ export {
   type WarnFn,
 } from "./captures/collection";
 export { inboxView, type InboxView } from "./captures/view";
+
+// The Task data layer (Today list), a sibling of the Capture layer.
+export type { Task } from "./tasks/types";
+export {
+  TASKS_QUERY_KEY,
+  createTasksApi,
+  createInMemoryTasksApi,
+  createPersistedTasksApi,
+  tasksReconcileWrites,
+  type TasksApi,
+  type TasksRest,
+  type TaskWrite,
+} from "./tasks/collection";
+export { todayView, type TodayView } from "./tasks/view";
+export { dueToday, localToday } from "./tasks/today";
