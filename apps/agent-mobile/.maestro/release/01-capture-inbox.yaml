@@ -8,13 +8,13 @@ appId: dev.juanibiapina.zeroagent
     visible: "Captures"
     timeout: 45000
 - takeScreenshot: capture-00-open
-- tapOn: "Capture"
+- tapOn: "^Capture$"
 - inputText: "Release E2E capture"
 - pressKey: Enter
 - assertVisible: "Release E2E capture"
 - takeScreenshot: capture-01-added
-# Close the quick-add so its full-screen backdrop stops covering the row.
-- tapOn: "Dismiss quick add"
+# Submitting clears the input and the quick-add bar closes, so the row's
+# Process control is directly tappable.
 - tapOn: 'Process "Release E2E capture"'
 - assertNotVisible: "Release E2E capture"
 - takeScreenshot: capture-02-processed

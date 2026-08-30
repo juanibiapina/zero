@@ -7,11 +7,10 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "Captures"
     timeout: 45000
-- tapOn: "Capture"
+- tapOn: "^Capture$"
 - inputText: "Cross-tab capture"
 - pressKey: Enter
 - assertVisible: "Cross-tab capture"
-- tapOn: "Dismiss quick add"
 - tapOn: "Today"
 - assertVisible: "Today"
 - assertNotVisible: "Cross-tab capture"
@@ -19,7 +18,6 @@ appId: dev.juanibiapina.zeroagent
 - inputText: "Cross-tab task"
 - pressKey: Enter
 - assertVisible: "Cross-tab task"
-- tapOn: "Dismiss quick add"
 - tapOn: "Captures"
 - assertVisible: "Cross-tab capture"
 - assertNotVisible: "Cross-tab task"

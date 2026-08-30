@@ -15,7 +15,6 @@ appId: dev.juanibiapina.zeroagent
 - pressKey: Enter
 - assertVisible: "Release E2E task"
 - takeScreenshot: today-01-added
-- tapOn: "Dismiss quick add"
 - tapOn: 'Complete "Release E2E task"'
 - assertNotVisible: "Release E2E task"
 - takeScreenshot: today-02-completed
