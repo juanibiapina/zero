@@ -29,6 +29,9 @@ export type CapturesRest = {
   // token, so no separate key is sent.
   addCapture: (capture: { id: string; text: string }) => Promise<Capture>;
   processCapture: (id: string) => Promise<Capture>;
+  // Same-key update: sets the capture's text on its stable id and returns the
+  // server row. Idempotent, so a replayed offline edit re-applies the same text.
+  editCapture: (id: string, text: string) => Promise<Capture>;
 };
 
 // One handle over the Captures data layer. Both Captures screens read
@@ -39,6 +42,8 @@ export type CapturesApi = {
   collection: Collection<Capture, string>;
   add: (text: string) => Transaction;
   process: (id: string) => Transaction;
+  // Replace a capture's text optimistically (same-key update on its stable id).
+  edit: (id: string, text: string) => Transaction;
   // True when writes persist to a durable offline outbox (SQLite + outbox
   // storage); false for the in-memory fallback.
   offline: boolean;
@@ -116,6 +121,14 @@ function markProcessed(draft: Capture): void {
   draft.processedAt = new Date().toISOString();
 }
 
+// Optimistic edit: set the row's text in place. Leaves processedAt null, which is
+// how the in-memory onUpdate tells an edit apart from a process.
+function setText(text: string): (draft: Capture) => void {
+  return (draft) => {
+    draft.text = text;
+  };
+}
+
 // The Query Collection's direct-write utils, which are not on the base
 // Collection type; reach them through one narrow accessor shared by every write.
 type CaptureWriteUtils = {
@@ -183,11 +196,15 @@ export function createInMemoryApi(deps: {
         return { refetch: false };
       },
       onUpdate: async ({ transaction }) => {
+        // One collection.update backs both process and edit; disambiguate by the
+        // field each one changes. Process sets processedAt; edit leaves it null
+        // and only changes text.
         for (const m of transaction.mutations) {
-          if (m.modified.processedAt != null) {
-            const updated = await rest.processCapture(String(m.key));
-            reconcile(collection, { upsert: [updated] });
-          }
+          const updated =
+            m.modified.processedAt != null
+              ? await rest.processCapture(String(m.key))
+              : await rest.editCapture(String(m.key), m.modified.text);
+          reconcile(collection, { upsert: [updated] });
         }
         return { refetch: false };
       },
@@ -202,6 +219,7 @@ export function createInMemoryApi(deps: {
     collection,
     add: (text) => collection.insert(optimisticCapture(text)),
     process: (id) => collection.update(id, markProcessed),
+    edit: (id, text) => collection.update(id, setText(text)),
     offline: false,
     refetch: async () => {
       if (refetchUtil) {
@@ -359,6 +377,19 @@ export function createPersistedApi(deps: {
         }
         await fetchAndReconcile();
       },
+      editCapture: async ({ transaction }) => {
+        // The offline path keys off the mutationFn name, so edit is its own fn
+        // (no processedAt branch needed here). The outbox types fields as
+        // unknown; narrow before use.
+        for (const m of transaction.mutations) {
+          const text = m.modified.text;
+          if (typeof text === "string") {
+            const updated = await rest.editCapture(String(m.key), text);
+            reconcileOne(updated);
+          }
+        }
+        await fetchAndReconcile();
+      },
     },
     onLeadershipChange: (isLeader) => {
       // Non-leader tabs / instances run online-only; fine for a single-user Captures list.
@@ -380,11 +411,18 @@ export function createPersistedApi(deps: {
       collection.update(id, markProcessed);
     },
   });
+  const editAction = offline.createOfflineAction<{ id: string; text: string }>({
+    mutationFnName: "editCapture",
+    onMutate: ({ id, text }) => {
+      collection.update(id, setText(text));
+    },
+  });
 
   return {
     collection,
     add: (text) => addAction({ text }),
     process: (id) => processAction({ id }),
+    edit: (id, text) => editAction({ id, text }),
     offline: true,
     refetch: () => fetchAndReconcile(),
     getLoadError: () => loadError,

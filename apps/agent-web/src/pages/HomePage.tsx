@@ -168,6 +168,15 @@ function CapturesReady({ api }: { api: CapturesApi }) {
     [api],
   );
 
+  const onEdit = useCallback(
+    (item: Capture, text: string) => {
+      setError(null);
+      const tx = api.edit(item.id, text);
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    },
+    [api],
+  );
+
   const list = captures ?? [];
   const view = capturesView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
@@ -203,6 +212,7 @@ function CapturesReady({ api }: { api: CapturesApi }) {
               text={item.text}
               actionLabel={`Process "${item.text}"`}
               onAction={() => onProcess(item)}
+              onEdit={(text) => onEdit(item, text)}
             />
           ))}
         </ul>
@@ -358,11 +368,32 @@ function Row({
   text,
   actionLabel,
   onAction,
+  onEdit,
 }: {
   text: string;
   actionLabel: string;
   onAction: () => void;
+  // When provided, the row's text becomes click-to-edit inline. Today omits it,
+  // so its rows stay read-only.
+  onEdit?: (text: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+
+  const startEdit = () => {
+    if (!onEdit) return;
+    setDraft(text);
+    setEditing(true);
+  };
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = draft.trim();
+    // No-op on empty or unchanged, matching add's empty guard.
+    if (!trimmed || trimmed === text) return;
+    onEdit?.(trimmed);
+  };
+
   return (
     <li className="flex items-center gap-4 rounded-xl border bg-card px-4 py-4">
       <button
@@ -371,7 +402,34 @@ function Row({
         className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
         onClick={onAction}
       />
-      <span className="flex-1 text-base">{text}</span>
+      {editing ? (
+        <Input
+          autoFocus
+          value={draft}
+          aria-label={`Edit "${text}"`}
+          className="h-9 flex-1"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <span
+          className={
+            "flex-1 text-base" + (onEdit ? " cursor-text" : "")
+          }
+          onClick={startEdit}
+        >
+          {text}
+        </span>
+      )}
     </li>
   );
 }

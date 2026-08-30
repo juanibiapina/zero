@@ -133,6 +133,10 @@ export class UserDO extends DurableObject<Env> {
     return this.captures.process(id);
   }
 
+  editCapture(id: string, text: string): Capture | null {
+    return this.captures.editText(id, text);
+  }
+
   addTask(id: string, text: string, showUpDate: string): Task {
     return this.tasks.add(id, text, showUpDate);
   }

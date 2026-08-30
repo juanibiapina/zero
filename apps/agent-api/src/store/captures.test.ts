@@ -80,4 +80,35 @@ describe("DbCaptureStore", () => {
 
     expect(store.list()).toEqual([a, b]);
   });
+
+  it("edits a capture's text and returns the updated row", () => {
+    const store = makeStore();
+    const original = store.add("id-1", "buy milk");
+
+    const edited = store.editText("id-1", "buy oat milk");
+
+    expect(edited?.id).toBe("id-1");
+    expect(edited?.text).toBe("buy oat milk");
+    // Only text changes: createdAt and processedAt are untouched.
+    expect(edited?.createdAt).toBe(original.createdAt);
+    expect(edited?.processedAt).toBeNull();
+  });
+
+  it("keeps list position when editing text", () => {
+    const store = makeStore();
+    const first = store.add("id-1", "first");
+    const second = store.add("id-2", "second");
+
+    store.editText("id-1", "first edited");
+
+    expect(store.list().map((c) => c.id)).toEqual([first.id, second.id]);
+    expect(store.list()[0].text).toBe("first edited");
+  });
+
+  it("returns null when editing an unknown id", () => {
+    const store = makeStore();
+    store.add("id-1", "only");
+
+    expect(store.editText("nope", "x")).toBeNull();
+  });
 });

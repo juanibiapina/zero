@@ -40,6 +40,13 @@ function fakeRest(initial: Capture[]): CapturesRest {
       capture.processedAt = new Date().toISOString();
       return { ...capture };
     },
+    editCapture: async (id, text) => {
+      await sleep(5);
+      const capture = server.find((c) => c.id === id);
+      if (!capture) throw new Error(`no capture ${id}`);
+      capture.text = text;
+      return { ...capture };
+    },
   };
 }
 
@@ -97,6 +104,48 @@ describe("captures collection", () => {
 
     // No flicker: once beta appears it never blinks out, and never doubles.
     expectNoFlicker(snapshots, "beta");
+  });
+
+  it("editing a capture shows the new text and reconciles, routing to editCapture not process", async () => {
+    const base = fakeRest([
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null },
+    ]);
+    // Count which REST verb each write routes to, so the in-memory onUpdate
+    // branch (process vs edit) is asserted, not just the visible text.
+    let processCalls = 0;
+    let editCalls = 0;
+    const rest: CapturesRest = {
+      ...base,
+      processCapture: (id) => {
+        processCalls++;
+        return base.processCapture(id);
+      },
+      editCapture: (id, text) => {
+        editCalls++;
+        return base.editCapture(id, text);
+      },
+    };
+    const api = createInMemoryApi({ queryClient: new QueryClient(), rest });
+
+    const captures = createLiveQueryCollection((q) =>
+      q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+    );
+    await api.collection.stateWhenReady();
+    await captures.preload();
+    await sleep(50);
+
+    const tx = api.edit("s1", "alpha edited");
+    await tx.isPersisted.promise;
+    await sleep(50);
+
+    const rows = captures.toArray as Capture[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text).toBe("alpha edited");
+    // Still open, not removed by the edit.
+    expect(rows[0].processedAt).toBeNull();
+    // Routed to edit, never to process.
+    expect(editCalls).toBe(1);
+    expect(processCalls).toBe(0);
   });
 
   it("processing a capture removes it once, without a reappear flicker", async () => {

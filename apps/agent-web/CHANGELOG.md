@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-08-30: Tap a capture's text to edit it inline. Changes save on their own and sync across your devices.
 - 2026-08-30: The Inbox is now called Captures.
 - 2026-08-30: More breathing room between the capture bar and the list on Inbox and Today.
 - 2026-08-30: A Today view sits beside the Inbox. Switch to Today and anything you add becomes a task for today; check it off when done. Overdue tasks carry over to today on their own.

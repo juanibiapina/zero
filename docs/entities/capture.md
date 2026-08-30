@@ -24,6 +24,11 @@ The singular/plural pair is intentional; do not "fix" it back to "Inbox".
 - **Process** — GTD Clarify: the action that removes a Capture from Captures
   (still stored). Column `processedAt`, RPC `processCapture`, log
   `capture_processed`.
+- **Edit** — change a Capture's `text` in place. Same-key idempotent update on
+  the stable `id` (no new row, no key swap), so a replayed offline edit just
+  re-applies the same text. Store verb `editText`, RPC `editCapture`, log
+  `capture_edited`. Only `text` changes; `createdAt`/`processedAt`/order are
+  untouched.
 
 The word "Inbox" is reserved for the unrelated Gmail label in the agent's email
 tools; it never names this view.
@@ -45,6 +50,9 @@ tools; it never names this view.
   Captures append at the bottom.
 - **Process** a Capture: it leaves Captures (still stored). Today Process just
   removes it; later it could turn the Capture into a typed entity.
+- **Edit** a Capture's text in place, on web and mobile: tap the row's text to
+  edit inline; an empty or unchanged edit is a no-op. Optimistic and
+  offline-durable like add/process.
 - Ordering is oldest-first by `createdAt`. Hand-reordering (position = priority)
   is a vision, not yet built.
 
@@ -54,14 +62,17 @@ tools; it never names this view.
   (`apps/agent-web`, unlinked route). Quick-add bar off a FAB; tap a row's circle
   to Process. NativeWind v4 + `@expo/ui` on mobile.
 - **Storage** — the server domain store is `DbCaptureStore` (domain methods
-  `add` / `list` = open Captures / `process`). See `docs/storage.md` for how data
-  is saved on both the server and the client.
+  `add` / `list` = open Captures / `process` / `editText`). See `docs/storage.md`
+  for how data is saved on both the server and the client.
 - **API** — per-user isolated:
   - `GET /api/captures` → `{ captures }`, the open Captures oldest-first.
   - `POST /api/captures { id, text }` → `201 { capture }`; the client sends the
     UUID `id`, and the server dedupes on it (a replay re-sends the same id and
     gets the stored row back). `400` on empty text or a non-UUID id.
   - `POST /api/captures/{id}/process` → `200 { capture }`, or `404` when unknown.
+  - `PATCH /api/captures/{id} { text }` → `200 { capture }`, `404` when unknown,
+    `400` on empty text. PATCH (not a `POST …/edit` action) because editing text
+    is a genuine idempotent field update on the capture's stable id.
 - **Other entities** — **Task** is the first typed entity (see
   `docs/entities/task.md`). Processing a Capture into a Task (the Capture->Task
   transition, adding a `sourceCaptureId` on Task) is the next entity interaction

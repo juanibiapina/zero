@@ -34,6 +34,12 @@ const fakeUserDO = (seed: Capture[] = []) => {
       capture.processedAt = new Date(1700000000000).toISOString();
       return capture;
     },
+    editCapture(id: string, text: string): Capture | null {
+      const capture = captures.find((c) => c.id === id);
+      if (!capture) return null;
+      capture.text = text;
+      return capture;
+    },
     _captures: captures,
   };
 };
@@ -198,5 +204,60 @@ describe("POST /api/captures/{id}/process", () => {
     });
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe("PATCH /api/captures/{id}", () => {
+  const seeded = () =>
+    fakeUserDO([
+      {
+        id: "id-1",
+        text: "buy milk",
+        createdAt: "2023-11-14T22:13:20.001Z",
+        processedAt: null,
+      },
+    ]);
+
+  it("edits a capture's text and returns it", async () => {
+    const userDO = seeded();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "buy oat milk" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { capture: Capture } = await res.json();
+    expect(body.capture.id).toBe("id-1");
+    expect(body.capture.text).toBe("buy oat milk");
+    expect(userDO._captures[0].text).toBe("buy oat milk");
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+
+    const res = await app.request("/api/captures/nope", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "x" }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects an empty text with 400", async () => {
+    const userDO = seeded();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(userDO._captures[0].text).toBe("buy milk");
   });
 });

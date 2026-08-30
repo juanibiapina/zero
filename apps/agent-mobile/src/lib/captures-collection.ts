@@ -6,7 +6,13 @@ import {
   type StartOfflineExecutor,
 } from '@zero/agent-core';
 
-import { addCapture, fetchCaptures, processCapture, type TokenGetter } from './api';
+import {
+  addCapture,
+  editCapture,
+  fetchCaptures,
+  processCapture,
+  type TokenGetter,
+} from './api';
 import { getAppOutbox, getAppPersistence } from './db';
 
 // Bind the cross-origin REST helpers to the current Clerk token getter so the
@@ -16,6 +22,7 @@ function makeRest(getToken: TokenGetter): CapturesRest {
     fetchCaptures: () => fetchCaptures(getToken),
     addCapture: (capture) => addCapture(getToken, capture),
     processCapture: (id) => processCapture(getToken, id),
+    editCapture: (id, text) => editCapture(getToken, id, text),
   };
 }
 

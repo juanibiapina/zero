@@ -19,7 +19,7 @@ import {
   BackHandler,
   type ListRenderItemInfo,
   Pressable,
-  type TextInput,
+  TextInput,
   View,
 } from 'react-native';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
@@ -347,6 +347,23 @@ function Captures({ api }: { api: CapturesApi }) {
     [api],
   );
 
+  // Inline edit: tapping a row's text turns it into a TextInput seeded with the
+  // current text; submitting commits (trim, no-op on empty/unchanged).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+
+  const onEditSubmit = useCallback(
+    (item: Capture) => {
+      const trimmed = editText.trim();
+      setEditingId(null);
+      if (!trimmed || trimmed === item.text) return;
+      setWriteError(null);
+      const tx = api.edit(item.id, trimmed);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    },
+    [api, editText],
+  );
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Capture>) => (
       <Animated.View
@@ -360,10 +377,32 @@ function Captures({ api }: { api: CapturesApi }) {
           hitSlop={8}
           onPress={() => onProcess(item)}
         />
-        <Text className="flex-1">{item.text}</Text>
+        {editingId === item.id ? (
+          <TextInput
+            autoFocus
+            accessibilityLabel={`Edit "${item.text}"`}
+            className="flex-1 text-base text-neutral-900"
+            value={editText}
+            onChangeText={setEditText}
+            onSubmitEditing={() => onEditSubmit(item)}
+            onBlur={() => onEditSubmit(item)}
+            returnKeyType="done"
+          />
+        ) : (
+          <Pressable
+            className="flex-1"
+            accessibilityLabel={`Edit "${item.text}"`}
+            onPress={() => {
+              setEditText(item.text);
+              setEditingId(item.id);
+            }}
+          >
+            <Text>{item.text}</Text>
+          </Pressable>
+        )}
       </Animated.View>
     ),
-    [onProcess],
+    [onProcess, editingId, editText, onEditSubmit],
   );
 
   // Only surface the loading text once the snapshot has had time to hydrate;

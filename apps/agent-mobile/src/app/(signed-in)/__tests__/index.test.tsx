@@ -33,6 +33,8 @@ const mockAddCapture =
   >();
 const mockProcessCapture =
   jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
+const mockEditCapture =
+  jest.fn<(getToken: unknown, id: string, text: string) => Promise<Capture>>();
 const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
 const mockAddTask =
   jest.fn<
@@ -49,6 +51,8 @@ jest.mock('@/lib/api', () => ({
     mockAddCapture(getToken, capture),
   processCapture: (getToken: unknown, id: string) =>
     mockProcessCapture(getToken, id),
+  editCapture: (getToken: unknown, id: string, text: string) =>
+    mockEditCapture(getToken, id, text),
   fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
   addTask: (
     getToken: unknown,
@@ -194,6 +198,61 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(queryByText('buy milk')).toBeNull());
     expect(mockProcessCapture).toHaveBeenCalledTimes(1);
     expect(mockProcessCapture.mock.calls[0][1]).toBe('1');
+  });
+
+  it('edits a capture inline and shows the new text', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    mockEditCapture.mockImplementation(async (_g, id, text) => {
+      const edited = { ...capture(id, text) };
+      mockFetchCaptures.mockResolvedValue([edited]);
+      return edited;
+    });
+
+    const { getByText, getByLabelText, getByDisplayValue } =
+      await renderScreen();
+
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    // Tap the row text to enter edit mode.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+
+    const input = getByDisplayValue('buy milk');
+    await act(async () => {
+      fireEvent.changeText(input, 'buy oat milk');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(getByText('buy oat milk')).toBeTruthy());
+    expect(mockEditCapture).toHaveBeenCalledTimes(1);
+    expect(mockEditCapture.mock.calls[0][1]).toBe('1');
+    expect(mockEditCapture.mock.calls[0][2]).toBe('buy oat milk');
+  });
+
+  it('does not call edit when the text is unchanged', async () => {
+    // Module-level mocks are not auto-cleared between tests; drop any prior call.
+    mockEditCapture.mockClear();
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+
+    const { getByText, getByLabelText, getByDisplayValue } =
+      await renderScreen();
+
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    const input = getByDisplayValue('buy milk');
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    expect(mockEditCapture).not.toHaveBeenCalled();
   });
 
   it('opens the quick-add input only after tapping the add button', async () => {

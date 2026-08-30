@@ -5,6 +5,7 @@ import {
   addTask,
   apiFetch,
   completeTask,
+  editCapture,
   fetchCaptures,
   fetchTasks,
   processCapture,
@@ -136,6 +137,42 @@ describe('processCapture', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://example.test/api/captures/abc/process');
     expect(init.method).toBe('POST');
+    const headers = new Headers(init.headers);
+    expect(headers.get('Authorization')).toBe('Bearer tok');
+  });
+});
+
+describe('editCapture', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('PATCHes /api/captures/{id} with the text and Bearer token', async () => {
+    const capture: Capture = {
+      id: 'abc',
+      text: 'buy oat milk',
+      createdAt: '2023-01-01T00:00:00.000Z',
+      processedAt: null,
+    };
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ capture }), { status: 200 }),
+      );
+    const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
+
+    const result = await editCapture(
+      getToken,
+      'abc',
+      'buy oat milk',
+      'https://example.test',
+    );
+
+    expect(result).toEqual(capture);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.test/api/captures/abc');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(String(init.body))).toEqual({ text: 'buy oat milk' });
     const headers = new Headers(init.headers);
     expect(headers.get('Authorization')).toBe('Bearer tok');
   });

@@ -121,5 +121,57 @@ export const createCapturesRoutes = () => {
     return c.json({ capture }, 200);
   });
 
+  const editRoute = createRoute({
+    method: "patch",
+    path: "/api/captures/{id}",
+    tags: ["Captures"],
+    summary: "Edit a capture's text",
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({ text: z.string().min(1) }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: z.object({ capture: CaptureSchema }) },
+        },
+        description: "The capture, with its new text",
+      },
+      400: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "Empty or missing text",
+      },
+      404: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "No capture with that id",
+      },
+    },
+  });
+
+  // PATCH (not a POST …/edit action) because editing text is a genuine
+  // idempotent field update on the capture's stable id. See docs/entities/capture.md.
+  router.openapi(editRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const { text } = c.req.valid("json");
+    const userDO = getUserDO(c.env, userId);
+    const capture = await userDO.editCapture(id, text);
+    if (!capture) {
+      return c.json({ error: "capture not found" }, 404);
+    }
+    log("capture_edited", { clerk_user_id: userId });
+    return c.json({ capture }, 200);
+  });
+
   return router;
 };

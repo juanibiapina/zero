@@ -66,4 +66,14 @@ export class DbCaptureStore {
     const row = this.db.get(captures, { where: eq("id", id) });
     return row ? toCapture(row) : null;
   }
+
+  // Replace a capture's text. Same-key idempotent update (the client-minted id is
+  // the primary key), so a replayed edit re-applies the same text harmlessly.
+  // Only text changes; createdAt/processedAt and list position are untouched.
+  // Returns the updated row, or null when no row has that id.
+  editText(id: string, text: string): Capture | null {
+    this.db.update(captures, { text }, { where: eq("id", id) });
+    const row = this.db.get(captures, { where: eq("id", id) });
+    return row ? toCapture(row) : null;
+  }
 }
