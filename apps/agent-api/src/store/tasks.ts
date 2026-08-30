@@ -1,5 +1,5 @@
 // Tasks: the Today list for the parallel todo app. A Task is a typed, clarified
-// next-action with a day, distinct from a Capture (the untyped Inbox entry). It
+// next-action with a day, distinct from a Capture (the untyped Captures entry). It
 // is standalone from the agent's Store on purpose so it does not widen the
 // agent's interface, and separate from DbCaptureStore because the two entities
 // have different verbs: a Capture is processed (clarified out), a Task is

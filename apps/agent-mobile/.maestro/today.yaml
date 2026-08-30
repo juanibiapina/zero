@@ -4,7 +4,7 @@ appId: dev.juanibiapina.zeroagent
 # it keeps the signed-in session and talks to the live /api/tasks. It cleans up
 # after itself by completing the task it adds.
 - launchApp
-- assertVisible: "Inbox"
+- assertVisible: "Captures"
 - tapOn: "Today"
 - assertVisible: "Today"
 - takeScreenshot: today-open

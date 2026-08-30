@@ -18,7 +18,7 @@ import { Loading } from "@/components/Loading";
 import { DevToolbar } from "@/components/DevToolbar";
 import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
-import { InboxPage } from "./pages/InboxPage";
+import { HomePage } from "./pages/HomePage";
 import { AdminPage } from "./pages/AdminPage";
 import { UserDetailPage } from "./pages/UserDetailPage";
 
@@ -48,9 +48,9 @@ function AuthGate() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<HomeRoute />} />
-        {/* Unlinked: reachable only by typing /inbox. Keeps the GTD capture
-            Inbox isolated from the current web app while it is dogfooded. */}
-        <Route path="inbox" element={<InboxPage />} />
+        {/* Unlinked: reachable only by typing /captures. Keeps the GTD Captures
+            list isolated from the current web app while it is dogfooded. */}
+        <Route path="captures" element={<HomePage />} />
         <Route path="onboarding" element={<OnboardingRoute />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users/:userId" element={<UserDetailPage />} />

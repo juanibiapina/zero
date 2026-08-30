@@ -1,5 +1,5 @@
 // A Task: one typed, clarified next-action with a day, the Today list's item.
-// Distinct from a Capture (the untyped Inbox entry): a Task is completed (done),
+// Distinct from a Capture (the untyped Captures entry): a Task is completed (done),
 // a Capture is processed (clarified out). The single shared entity type for the
 // Task data layer, used by web and mobile.
 export type Task = {

@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/AppHeader";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
+  capturesView,
   dueToday,
-  inboxView,
   localToday,
   todayView,
 } from "@zero/agent-core";
@@ -41,18 +41,18 @@ function useDelayed(active: boolean, ms: number): boolean {
   return active && elapsed;
 }
 
-type Tab = "inbox" | "today";
+type Tab = "captures" | "today";
 
-// Inbox holds unclarified Captures; Today holds Tasks due on or before today.
+// Captures holds unclarified Captures; Today holds Tasks due on or before today.
 // The active tab is also the entry target: the add bar creates a Capture on
-// Inbox and a Task dated today on Today. Same bar, same speed, the intent is the
-// tab you are in.
-export function InboxPage() {
-  const [tab, setTab] = useState<Tab>("inbox");
+// Captures and a Task dated today on Today. Same bar, same speed, the intent is
+// the tab you are in.
+export function HomePage() {
+  const [tab, setTab] = useState<Tab>("captures");
 
-  const title = tab === "inbox" ? "Inbox" : "Today";
+  const title = tab === "captures" ? "Captures" : "Today";
   const subtitle =
-    tab === "inbox"
+    tab === "captures"
       ? "Capture anything. Process it later."
       : "What you are doing today.";
 
@@ -68,8 +68,8 @@ export function InboxPage() {
           </div>
           {/* Both panels stay mounted so switching tabs is instant and neither
               list re-hydrates; the inactive one is hidden. */}
-          <div className={tab === "inbox" ? undefined : "hidden"}>
-            <InboxPanel />
+          <div className={tab === "captures" ? undefined : "hidden"}>
+            <CapturesPanel />
           </div>
           <div className={tab === "today" ? undefined : "hidden"}>
             <TodayPanel />
@@ -107,15 +107,15 @@ function SegmentedControl({
     <div
       role="tablist"
       className="flex gap-1 rounded-lg bg-muted p-1"
-      aria-label="Inbox and Today"
+      aria-label="Captures and Today"
     >
-      {item("inbox", "Inbox")}
+      {item("captures", "Captures")}
       {item("today", "Today")}
     </div>
   );
 }
 
-function InboxPanel() {
+function CapturesPanel() {
   const [api, setApi] = useState<CapturesApi | null>(null);
   useEffect(() => {
     let live = true;
@@ -126,10 +126,10 @@ function InboxPanel() {
       live = false;
     };
   }, []);
-  return api ? <InboxReady api={api} /> : <div className="min-h-24" />;
+  return api ? <CapturesReady api={api} /> : <div className="min-h-24" />;
 }
 
-function InboxReady({ api }: { api: CapturesApi }) {
+function CapturesReady({ api }: { api: CapturesApi }) {
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: api.collection })
@@ -169,7 +169,7 @@ function InboxReady({ api }: { api: CapturesApi }) {
   );
 
   const list = captures ?? [];
-  const view = inboxView({ count: list.length, isLoading, loadError: null });
+  const view = capturesView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   return (
@@ -187,13 +187,13 @@ function InboxReady({ api }: { api: CapturesApi }) {
 
       {view === "loading" ? (
         showLoadingText ? (
-          <p className="text-sm text-muted-foreground">Loading your inbox…</p>
+          <p className="text-sm text-muted-foreground">Loading your captures…</p>
         ) : (
           <div className="min-h-24" />
         )
       ) : view === "empty" ? (
         <p className="text-sm text-muted-foreground">
-          Your inbox is empty. Capture something.
+          No captures yet. Capture something.
         </p>
       ) : (
         <ul className="space-y-3">

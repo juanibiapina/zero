@@ -5,7 +5,7 @@ import type { Capture } from "@zero/agent-core";
 
 export type { Capture };
 
-export async function fetchInbox(): Promise<Capture[]> {
+export async function fetchCaptures(): Promise<Capture[]> {
   const res = await fetch("/api/captures");
   if (!res.ok) {
     throw new Error(`GET /api/captures failed: ${res.status}`);

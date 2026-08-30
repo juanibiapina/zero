@@ -41,7 +41,7 @@ describe("DbCaptureStore", () => {
     expect(capture.processedAt).toBeNull();
   });
 
-  it("drops a processed capture from the Inbox but keeps the others", () => {
+  it("drops a processed capture from Captures but keeps the others", () => {
     const store = makeStore();
     const first = store.add("id-1", "first");
     const second = store.add("id-2", "second");

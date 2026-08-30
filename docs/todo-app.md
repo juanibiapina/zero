@@ -35,7 +35,7 @@ of allowed interactions vs blacklist of forbidden ones.
 
 - do-orm already IS the generic layer (`db.insert/all/get/update` + conditions).
   A per-entity store adds only the entity's DOMAIN methods (capture: `add`,
-  `list` = open Inbox, `process`) — that is the value, not CRUD.
+  `list` = open Captures, `process`) — that is the value, not CRUD.
 - A uniform generic store fights the Minecraft-block philosophy above: adding an
   entity should force wiring its behavior, not be a no-op in a shared bag.
 - One example is not enough to abstract. Extract a small shared base only at the
@@ -54,7 +54,7 @@ specificity; do-orm + a Rule-of-Three base covers it when the time comes.
 deliberate structural sibling of Capture at every layer — `DbTaskStore` mirrors
 `DbCaptureStore`, the tasks collection mirrors the captures collection, the
 mobile `tasks-collection.ts` mirrors `captures-collection.ts` (with its own
-SQLite + outbox files), and the web/mobile Today panel mirrors the Inbox panel.
+SQLite + outbox files), and the web/mobile Today panel mirrors the Captures panel.
 The duplication is intentional and kept identical on purpose, so extracting a
 shared base (store, collection factory, list screen) is mechanical when entity
 **#3** lands. Do not extract before then.
@@ -66,8 +66,8 @@ Grounding: the foundational block is the **Capture** (the entry point);
 (Project, Person, Note…) is a vision draft, not committed.
 
 - **Capture** — the foundational block and the entry point. A single raw line of
-  text (a thought, task, idea, anything), untyped and uncommitted, added to the
-  Inbox and later Processed out of it. Fully documented in
+  text (a thought, task, idea, anything), untyped and uncommitted, added to
+  Captures and later Processed out of it. Fully documented in
   `docs/entities/capture.md`.
 - **Task** — the first typed entity (named `Task`, not "Todo", which collides
   with the app name). A clarified next-action with a `showUpDate`, completed out
@@ -137,17 +137,18 @@ Grounding: the foundational block is the **Capture** (the entry point);
 
 ## Project tracking
 
-Shipped (on main, device-verified): the Capture Inbox on mobile
-(`apps/agent-mobile`) and web (unlinked `/inbox`) — add a Capture, Process it out
-of the Inbox — backed by the `captures` table and `/api/captures` in the per-user
-UserDO. Mobile UI on NativeWind v4 + `@expo/ui`; Clerk sign-in with a native user
-button. The Inbox data layer runs on TanStack DB (see `docs/storage.md`).
-Captures carry a client-minted UUID id (stable end to end, and the sole
-idempotency key for offline replay), so adding and processing a Capture no longer
-flickers — the row never blinks out-and-back while the write settles.
+Shipped (on main, device-verified): the Capture list (Captures) on mobile
+(`apps/agent-mobile`) and web (unlinked `/captures`) — add a Capture, Process it
+out of Captures — backed by the `captures` table and `/api/captures` in the
+per-user UserDO. Mobile UI on NativeWind v4 + `@expo/ui`; Clerk sign-in with a
+native user button. The Captures data layer runs on TanStack DB (see
+`docs/storage.md`). Captures carry a client-minted UUID id (stable end to end,
+and the sole idempotency key for offline replay), so adding and processing a
+Capture no longer flickers — the row never blinks out-and-back while the write
+settles.
 
-The Inbox loads local-first and reconciles the server in the background; the
-shared `inboxView` helper in `@zero/agent-core` gates the list on the row count
+Captures loads local-first and reconciles the server in the background; the
+shared `capturesView` helper in `@zero/agent-core` gates the list on the row count
 so a hydrated snapshot shows at once. See `docs/storage.md` for the mechanics.
 
 Shipped (2026-08-30): **Task**, the first typed entity, and the **Today** view
@@ -156,9 +157,9 @@ Capture stack, web first, then mobile: a `tasks` table + `/api/tasks` in the
 per-user UserDO (add is exactly-once on the client-minted id; complete flips
 `completedAt`; list returns open tasks); a shared `@zero/agent-core` Task type,
 `createTasksApi` collection (local-first, offline outbox), and `todayView` /
-`dueToday` / `localToday` helpers; and an **Inbox | Today** segmented control on
-both web (`/inbox`) and mobile home. The active segment is the entry target: the
-quick-add mints a Capture on Inbox and a Task dated today on Today; the circle
+`dueToday` / `localToday` helpers; and a **Captures | Today** segmented control on
+both web (`/captures`) and mobile home. The active segment is the entry target: the
+quick-add mints a Capture on Captures and a Task dated today on Today; the circle
 completes. Timezone lives on the client (server returns all open tasks; the live
 query filters `showUpDate <= localToday`, so overdue rolls in and future stays
 hidden). Mobile device verification (Maestro, Pixel 7) still needs a standalone

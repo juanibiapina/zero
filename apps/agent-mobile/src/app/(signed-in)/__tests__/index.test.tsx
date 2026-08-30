@@ -23,7 +23,7 @@ jest.mock('@clerk/expo/native', () => ({
   UserButton: () => mockUserButton(),
 }));
 
-const mockFetchInbox = jest.fn<(getToken: unknown) => Promise<Capture[]>>();
+const mockFetchCaptures = jest.fn<(getToken: unknown) => Promise<Capture[]>>();
 const mockAddCapture =
   jest.fn<
     (
@@ -44,7 +44,7 @@ const mockAddTask =
 const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 jest.mock('@/lib/api', () => ({
-  fetchInbox: (getToken: unknown) => mockFetchInbox(getToken),
+  fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
   addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
     mockAddCapture(getToken, capture),
   processCapture: (getToken: unknown, id: string) =>
@@ -107,7 +107,7 @@ describe('HomeScreen', () => {
     try {
       mockGetToken.mockResolvedValue('tok');
       let resolveFetch!: (captures: Capture[]) => void;
-      mockFetchInbox.mockReturnValue(
+      mockFetchCaptures.mockReturnValue(
         new Promise<Capture[]>((resolve) => {
           resolveFetch = resolve;
         }),
@@ -119,15 +119,15 @@ describe('HomeScreen', () => {
 
       // The cached snapshot hydrates fast, so the loading text is held back at
       // first: no spinner flash, and the empty message is not shown either.
-      expect(queryByText('Loading your inbox…')).toBeNull();
-      expect(queryByText('Your inbox is empty. Capture something.')).toBeNull();
+      expect(queryByText('Loading your captures…')).toBeNull();
+      expect(queryByText('No captures yet. Capture something.')).toBeNull();
 
       // Only a genuinely slow, still-pending fetch surfaces the loading text,
       // once the delay elapses.
       await act(async () => {
         jest.advanceTimersByTime(1000);
       });
-      expect(getByText('Loading your inbox…')).toBeTruthy();
+      expect(getByText('Loading your captures…')).toBeTruthy();
 
       await act(async () => {
         resolveFetch([]);
@@ -135,9 +135,9 @@ describe('HomeScreen', () => {
       await act(async () => {});
 
       expect(
-        getByText('Your inbox is empty. Capture something.'),
+        getByText('No captures yet. Capture something.'),
       ).toBeTruthy();
-      expect(queryByText('Loading your inbox…')).toBeNull();
+      expect(queryByText('Loading your captures…')).toBeNull();
     } finally {
       jest.useRealTimers();
     }
@@ -145,7 +145,7 @@ describe('HomeScreen', () => {
 
   it('shows the account button instead of a sign-out button', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
 
     const { getByLabelText, queryByText } = await renderScreen();
 
@@ -155,7 +155,7 @@ describe('HomeScreen', () => {
 
   it('surfaces a load error when there is nothing to show', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockRejectedValue(
+    mockFetchCaptures.mockRejectedValue(
       new Error('java.net.UnknownHostException'),
     );
 
@@ -166,20 +166,20 @@ describe('HomeScreen', () => {
 
   it('shows the fetched captures', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([capture('1', 'buy milk')]);
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
 
     const { getByText } = await renderScreen();
 
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
   });
 
-  it('processes a capture, removing it from the Inbox', async () => {
+  it('processes a capture, removing it from Captures', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([capture('1', 'buy milk')]);
-    // The collection refetches after the write; once processed the open Inbox is
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    // The collection refetches after the write; once processed the open Captures list is
     // empty, so the server (mock) then returns [].
     mockProcessCapture.mockImplementation(async () => {
-      mockFetchInbox.mockResolvedValue([]);
+      mockFetchCaptures.mockResolvedValue([]);
       return { ...capture('1', 'buy milk'), processedAt: '2023-01-02T00:00:00.000Z' };
     });
 
@@ -198,7 +198,7 @@ describe('HomeScreen', () => {
 
   it('opens the quick-add input only after tapping the add button', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
 
     const { getByLabelText, queryByPlaceholderText } = await renderScreen();
 
@@ -215,12 +215,12 @@ describe('HomeScreen', () => {
 
   it('captures typed text and keeps the input open and cleared for the next one', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
     // The collection refetches after the write; the server (mock) then returns
     // the newly added capture so it survives reconciliation.
     mockAddCapture.mockImplementation(async () => {
       const added = capture('2', 'call mom');
-      mockFetchInbox.mockResolvedValue([added]);
+      mockFetchCaptures.mockResolvedValue([added]);
       return added;
     });
 
@@ -231,7 +231,7 @@ describe('HomeScreen', () => {
     // the just-added item.
     await waitFor(() =>
       expect(
-        getByText('Your inbox is empty. Capture something.'),
+        getByText('No captures yet. Capture something.'),
       ).toBeTruthy(),
     );
 
@@ -258,14 +258,14 @@ describe('HomeScreen', () => {
 
   it('confirms before discarding unsaved quick-add text', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
 
     const { getByLabelText, getByText, getByPlaceholderText, queryByText } =
       await renderScreen();
 
     await waitFor(() =>
       expect(
-        getByText('Your inbox is empty. Capture something.'),
+        getByText('No captures yet. Capture something.'),
       ).toBeTruthy(),
     );
 
@@ -299,7 +299,7 @@ describe('HomeScreen', () => {
 
   it('discards the quick-add text when confirming', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
 
     const {
       getByLabelText,
@@ -310,7 +310,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() =>
       expect(
-        getByText('Your inbox is empty. Capture something.'),
+        getByText('No captures yet. Capture something.'),
       ).toBeTruthy(),
     );
 
@@ -332,7 +332,7 @@ describe('HomeScreen', () => {
 
   it('closes the empty quick-add when the keyboard hides (Android back)', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
 
     const {
       getByLabelText,
@@ -343,7 +343,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() =>
       expect(
-        getByText('Your inbox is empty. Capture something.'),
+        getByText('No captures yet. Capture something.'),
       ).toBeTruthy(),
     );
 
@@ -364,14 +364,14 @@ describe('HomeScreen', () => {
 
   it('confirms instead of closing when the keyboard hides with unsaved text', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
 
     const { getByLabelText, getByText, getByPlaceholderText } =
       await renderScreen();
 
     await waitFor(() =>
       expect(
-        getByText('Your inbox is empty. Capture something.'),
+        getByText('No captures yet. Capture something.'),
       ).toBeTruthy(),
     );
 
@@ -397,14 +397,14 @@ describe('HomeScreen', () => {
 
   it('closes the quick-add silently when it is empty', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
 
     const { getByLabelText, getByText, queryByText, queryByPlaceholderText } =
       await renderScreen();
 
     await waitFor(() =>
       expect(
-        getByText('Your inbox is empty. Capture something.'),
+        getByText('No captures yet. Capture something.'),
       ).toBeTruthy(),
     );
 
@@ -423,7 +423,7 @@ describe('HomeScreen', () => {
 describe('Today tab', () => {
   it('shows tasks due on or before today and hides future ones', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
     mockFetchTasks.mockResolvedValue([
       task('1', 'ship it', '2020-01-01'), // overdue: shown
       task('2', 'next year', '2999-01-01'), // future: hidden
@@ -441,7 +441,7 @@ describe('Today tab', () => {
 
   it('adds a task dated today from the Today quick-add', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
     mockAddTask.mockImplementation(async (_g, t) => {
       const added = task(t.id, t.text, t.showUpDate);
       mockFetchTasks.mockResolvedValue([added]);
@@ -477,7 +477,7 @@ describe('Today tab', () => {
 
   it('completes a task, removing it from Today', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchInbox.mockResolvedValue([]);
+    mockFetchCaptures.mockResolvedValue([]);
     mockFetchTasks.mockResolvedValue([task('1', 'ship it', '2020-01-01')]);
     mockCompleteTask.mockImplementation(async () => {
       mockFetchTasks.mockResolvedValue([]);

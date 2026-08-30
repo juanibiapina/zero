@@ -5,7 +5,7 @@ import {
   addTask,
   apiFetch,
   completeTask,
-  fetchInbox,
+  fetchCaptures,
   fetchTasks,
   processCapture,
   type Capture,
@@ -48,12 +48,12 @@ describe('apiFetch', () => {
   });
 });
 
-describe('fetchInbox', () => {
+describe('fetchCaptures', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
 
-  it('GETs /api/captures and returns the Inbox', async () => {
+  it('GETs /api/captures and returns the captures', async () => {
     const captures: Capture[] = [
       {
         id: '1',
@@ -69,7 +69,7 @@ describe('fetchInbox', () => {
       );
     const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
 
-    const result = await fetchInbox(getToken, 'https://example.test');
+    const result = await fetchCaptures(getToken, 'https://example.test');
 
     expect(result).toEqual(captures);
   });

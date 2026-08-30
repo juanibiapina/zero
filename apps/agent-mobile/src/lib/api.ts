@@ -41,7 +41,7 @@ export async function fetchUserSettings(
   return (await res.json()) as UserSettings;
 }
 
-export async function fetchInbox(
+export async function fetchCaptures(
   getToken: TokenGetter,
   baseUrl: string = API_BASE_URL,
 ): Promise<Capture[]> {

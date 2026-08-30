@@ -125,7 +125,7 @@ export class UserDO extends DurableObject<Env> {
     return this.captures.add(id, text);
   }
 
-  listInbox(): Capture[] {
+  listCaptures(): Capture[] {
     return this.captures.list();
   }
 

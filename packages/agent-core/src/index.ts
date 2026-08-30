@@ -11,7 +11,7 @@ export {
   type StartOfflineExecutor,
   type WarnFn,
 } from "./captures/collection";
-export { inboxView, type InboxView } from "./captures/view";
+export { capturesView, type CapturesView } from "./captures/view";
 
 // The Task data layer (Today list), a sibling of the Capture layer.
 export type { Task } from "./tasks/types";

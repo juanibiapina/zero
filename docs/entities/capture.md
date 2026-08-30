@@ -15,12 +15,18 @@ at capture time.
 
 ## Vocabulary
 
-- **Capture** — the item (table `captures`, type `Capture`).
-- **Inbox** — the list of un-processed Captures (UI title, empty-state copy). The
-  Inbox is the Captures where `processedAt IS NULL`, oldest first.
-- **Process** — GTD Clarify: the action that removes a Capture from the Inbox
+The singular/plural pair is intentional; do not "fix" it back to "Inbox".
+
+- **Capture** (singular) — the item (table `captures`, type `Capture`). Unchanged.
+- **Captures** (plural) — the list/screen of un-processed Captures (UI title,
+  tab, route, empty-state copy). It is the Captures where `processedAt IS NULL`,
+  oldest first. This term replaced the earlier "Inbox".
+- **Process** — GTD Clarify: the action that removes a Capture from Captures
   (still stored). Column `processedAt`, RPC `processCapture`, log
   `capture_processed`.
+
+The word "Inbox" is reserved for the unrelated Gmail label in the agent's email
+tools; it never names this view.
 
 ## Data shape
 
@@ -31,27 +37,27 @@ at capture time.
   and it is the dedupe key: a replayed add re-sends the same id)
 - `text` — the raw line
 - `createdAt` — ISO timestamp
-- `processedAt` — nullable ISO timestamp; `null` = still in the Inbox
+- `processedAt` — nullable ISO timestamp; `null` = still in Captures
 
 ## Behavior
 
-- **Capture** a raw item into the flat Inbox (untyped, uncommitted). New Captures
-  append at the bottom.
-- **Process** a Capture: it leaves the Inbox (still stored). Today Process just
+- **Capture** a raw item into the flat Captures list (untyped, uncommitted). New
+  Captures append at the bottom.
+- **Process** a Capture: it leaves Captures (still stored). Today Process just
   removes it; later it could turn the Capture into a typed entity.
 - Ordering is oldest-first by `createdAt`. Hand-reordering (position = priority)
   is a vision, not yet built.
 
 ## Interactions (per system)
 
-- **UI** — mobile Inbox screen (`apps/agent-mobile`) and web `/inbox`
+- **UI** — mobile Captures screen (`apps/agent-mobile`) and web `/captures`
   (`apps/agent-web`, unlinked route). Quick-add bar off a FAB; tap a row's circle
   to Process. NativeWind v4 + `@expo/ui` on mobile.
 - **Storage** — the server domain store is `DbCaptureStore` (domain methods
-  `add` / `list` = open Inbox / `process`). See `docs/storage.md` for how data is
-  saved on both the server and the client.
+  `add` / `list` = open Captures / `process`). See `docs/storage.md` for how data
+  is saved on both the server and the client.
 - **API** — per-user isolated:
-  - `GET /api/captures` → `{ captures }`, the open Inbox oldest-first.
+  - `GET /api/captures` → `{ captures }`, the open Captures oldest-first.
   - `POST /api/captures { id, text }` → `201 { capture }`; the client sends the
     UUID `id`, and the server dedupes on it (a replay re-sends the same id and
     gets the stored row back). `400` on empty text or a non-UUID id.
@@ -64,13 +70,13 @@ at capture time.
 ## Open questions
 
 - What Process does beyond removing the Capture (today it just removes).
-- List-view ordering semantics as the Inbox grows.
-- Loading semantics: the Inbox list region gates on the row count, not the
+- List-view ordering semantics as Captures grows.
+- Loading semantics: the Captures list region gates on the row count, not the
   collection's `isLoading`. The persisted collection hydrates the local snapshot
   into the live query before its network sync marks the collection ready, so
   `isLoading` stays true while rows already exist; gating on `isLoading` would
   hide a hydrated snapshot behind a spinner until the network answered. The
-  shared `inboxView` helper in `@zero/agent-core` encodes the rule (rows whenever
+  shared `capturesView` helper in `@zero/agent-core` encodes the rule (rows whenever
   present; spinner only when empty and loading).
 
 ## Next

@@ -192,9 +192,9 @@ export const processedUpdates = table("processed_updates", {
   createdAt: column.text().notNull(),
 });
 
-// The GTD capture Inbox (the Todoist replacement). Standalone from the agent's
-// tables; owned by DbCaptureStore. The Inbox is the rows where processedAt IS
-// NULL; createdAt is the Inbox order.
+// The GTD Captures list (the Todoist replacement). Standalone from the agent's
+// tables; owned by DbCaptureStore. Captures are the rows where processedAt IS
+// NULL; createdAt is the Captures order.
 export const captures = table("captures", {
   // The client mints the id (a UUID) and re-sends it verbatim on every
   // retry/replay, so the primary key itself dedupes a lost-ACK double-insert.

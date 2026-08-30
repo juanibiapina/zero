@@ -20,7 +20,7 @@ import type { Capture } from "./types";
 // that carry the Clerk Bearer token. agent-core never imports either app's HTTP
 // layer, so the auth split stays out of the shared code.
 export type CapturesRest = {
-  fetchInbox: () => Promise<Capture[]>;
+  fetchCaptures: () => Promise<Capture[]>;
   // The client mints the capture's id (a stable UUID), so the optimistic row and
   // the server's row share one key and never swap. The server persists this id as
   // the primary key and dedupes on it: a retried add (offline outbox replay after
@@ -31,7 +31,7 @@ export type CapturesRest = {
   processCapture: (id: string) => Promise<Capture>;
 };
 
-// One handle over the Inbox data layer. Both Inbox screens read
+// One handle over the Captures data layer. Both Captures screens read
 // `collection` through a live query and write with `add` / `process`, which
 // return the underlying transaction so the page can surface a write error via
 // `tx.isPersisted.promise`.
@@ -42,11 +42,11 @@ export type CapturesApi = {
   // True when writes persist to a durable offline outbox (SQLite + outbox
   // storage); false for the in-memory fallback.
   offline: boolean;
-  // Re-pull the server inbox and reconcile it into the collection. Call on app
+  // Re-pull the server captures and reconcile them into the collection. Call on app
   // foreground so a list changed elsewhere (Telegram, another device) refreshes
   // without a cold start.
   refetch: () => Promise<void>;
-  // The current inbox load (sync) error message, or null. Screens read this to
+  // The current captures load (sync) error message, or null. Screens read this to
   // show an error only when there is nothing else on screen. `subscribeLoadError`
   // fires whenever it changes; the callback re-reads `getLoadError`.
   getLoadError: () => string | null;
@@ -57,21 +57,21 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// The sync write messages that reconcile the synced base to the server's inbox
-// list: update each row already present, insert each new one, and delete any
-// key the server no longer returns. Pure so the diff (the tricky part — no
-// duplicate inserts, processed rows pruned, optimistic-only keys left alone by
-// hitting only the synced base) is unit-tested without the persistence stack.
-export type InboxWrite =
+// The sync write messages that reconcile the synced base to the server's
+// captures list: update each row already present, insert each new one, and
+// delete any key the server no longer returns. Pure so the diff (the tricky
+// part — no duplicate inserts, processed rows pruned, optimistic-only keys left
+// alone by hitting only the synced base) is unit-tested without the persistence stack.
+export type CaptureWrite =
   | { type: "insert" | "update"; value: Capture }
   | { type: "delete"; key: string };
-export function inboxReconcileWrites(
+export function reconcileCaptureWrites(
   currentKeys: Iterable<string>,
   server: readonly Capture[],
-): InboxWrite[] {
+): CaptureWrite[] {
   const present = new Set(currentKeys);
   const serverIds = new Set(server.map((c) => c.id));
-  const writes: InboxWrite[] = [];
+  const writes: CaptureWrite[] = [];
   for (const c of server) {
     writes.push({ type: present.has(c.id) ? "update" : "insert", value: c });
   }
@@ -156,7 +156,7 @@ function reconcile(
 // Fallback: an in-memory Query Collection whose own handlers call the REST API
 // and roll back on failure. Used when durable persistence is unavailable
 // (private browsing on web, or the jest / no-native-SQLite environment) so the
-// Inbox never hard-crashes; offline writes are not durable in this mode.
+// Captures list never hard-crashes; offline writes are not durable in this mode.
 export function createInMemoryApi(deps: {
   queryClient: QueryClient;
   rest: CapturesRest;
@@ -166,7 +166,7 @@ export function createInMemoryApi(deps: {
     queryCollectionOptions({
       queryClient,
       queryKey: CAPTURES_QUERY_KEY,
-      queryFn: () => rest.fetchInbox(),
+      queryFn: () => rest.fetchCaptures(),
       getKey: (c: Capture) => c.id,
       onInsert: async ({ transaction }) => {
         // The capture's client-minted id is the server's dedupe key. Reconcile
@@ -225,7 +225,7 @@ export function createInMemoryApi(deps: {
 // Durable offline mode: local-first. The collection is a persisted SQLite
 // collection driven by a custom sync that marks ready from the local snapshot
 // immediately (the persisted wrapper awaits its hydrate first), then fetches the
-// server inbox in the background and reconciles it into the synced base. That is
+// server captures in the background and reconciles them into the synced base. That is
 // the whole point: cached rows paint at once and the network updates them in
 // place, instead of the live query waiting on the first network fetch. Writes go
 // through an offline outbox that retries when the network returns; the
@@ -277,14 +277,14 @@ export function createPersistedApi(deps: {
     void controls.commit();
   };
 
-  // Replace the synced inbox with the server's authoritative list: upsert each
+  // Replace the synced captures with the server's authoritative list: upsert each
   // server row and delete any synced row the server no longer returns (e.g. a
   // processed capture). Deletes hit only the synced base, so a pending optimistic
   // row (not yet in the base) is left untouched.
   const reconcileList = (server: Capture[]) => {
     if (!controls) return;
     controls.begin();
-    for (const write of inboxReconcileWrites(collection.keys(), server)) {
+    for (const write of reconcileCaptureWrites(collection.keys(), server)) {
       controls.write(write);
     }
     void controls.commit();
@@ -292,7 +292,7 @@ export function createPersistedApi(deps: {
 
   const fetchAndReconcile = async () => {
     try {
-      const rows = await rest.fetchInbox();
+      const rows = await rest.fetchCaptures();
       setLoadError(null);
       reconcileList(rows);
     } catch (err) {
@@ -361,9 +361,9 @@ export function createPersistedApi(deps: {
       },
     },
     onLeadershipChange: (isLeader) => {
-      // Non-leader tabs / instances run online-only; fine for a single-user Inbox.
+      // Non-leader tabs / instances run online-only; fine for a single-user Captures list.
       if (!isLeader) {
-        onWarn("inbox: another instance holds the offline outbox; this one is online-only");
+        onWarn("captures: another instance holds the offline outbox; this one is online-only");
       }
     },
   });
@@ -420,7 +420,7 @@ export async function createCapturesApi(deps: {
         onWarn,
       });
     } catch (err) {
-      onWarn("inbox: offline SQL persistence unavailable, using in-memory fallback", err);
+      onWarn("captures: offline SQL persistence unavailable, using in-memory fallback", err);
     }
   }
   return createInMemoryApi({ queryClient, rest });

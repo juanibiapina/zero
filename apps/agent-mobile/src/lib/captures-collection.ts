@@ -6,14 +6,14 @@ import {
   type StartOfflineExecutor,
 } from '@zero/agent-core';
 
-import { addCapture, fetchInbox, processCapture, type TokenGetter } from './api';
+import { addCapture, fetchCaptures, processCapture, type TokenGetter } from './api';
 import { getAppOutbox, getAppPersistence } from './db';
 
 // Bind the cross-origin REST helpers to the current Clerk token getter so the
 // shared factory stays auth-agnostic.
 function makeRest(getToken: TokenGetter): CapturesRest {
   return {
-    fetchInbox: () => fetchInbox(getToken),
+    fetchCaptures: () => fetchCaptures(getToken),
     addCapture: (capture) => addCapture(getToken, capture),
     processCapture: (id) => processCapture(getToken, id),
   };

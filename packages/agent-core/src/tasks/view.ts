@@ -1,6 +1,6 @@
 // What the Today list region should show, decided once and shared by the web and
 // mobile screens so the local-first rule lives in one tested place. Same rule as
-// inboxView (never hide existing rows behind a spinner); kept as its own helper
+// capturesView (never hide existing rows behind a spinner); kept as its own helper
 // so the two entities stay independent (extract a shared base at the ~3rd
 // entity, per docs/todo-app.md).
 export type TodayView = "rows" | "loading" | "empty" | "error";

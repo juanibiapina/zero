@@ -1,4 +1,4 @@
-// The GTD capture Inbox, standalone from the agent's Store on purpose so it does
+// The GTD Captures list, standalone from the agent's Store on purpose so it does
 // not widen the agent's interface.
 
 import { asc, eq, isNull, type Database } from "do-orm";
@@ -46,7 +46,7 @@ export class DbCaptureStore {
     return capture;
   }
 
-  // The Inbox is the rows where processedAt IS NULL, oldest first.
+  // Captures are the rows where processedAt IS NULL, oldest first.
   list(): Capture[] {
     return this.db
       .all(captures, {

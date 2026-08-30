@@ -5,7 +5,7 @@ import { createLiveQueryCollection, isNull } from "@tanstack/db";
 
 import {
   createInMemoryApi,
-  inboxReconcileWrites,
+  reconcileCaptureWrites,
   type CapturesRest,
 } from "./collection";
 import type { Capture } from "./types";
@@ -16,7 +16,7 @@ import type { Capture } from "./types";
 function fakeRest(initial: Capture[]): CapturesRest {
   const server = initial.map((c) => ({ ...c }));
   return {
-    fetchInbox: async () => {
+    fetchCaptures: async () => {
       await sleep(5);
       return server.filter((c) => c.processedAt == null).map((c) => ({ ...c }));
     },
@@ -43,7 +43,7 @@ function fakeRest(initial: Capture[]): CapturesRest {
   };
 }
 
-// One visibility invariant for every Inbox write. Keyed by a stable identity
+// One visibility invariant for every Captures write. Keyed by a stable identity
 // (the capture text here), an item's presence across the recorded snapshots must
 // form a single contiguous block of `true`: once it appears it stays until an
 // operation removes it, once removed it never returns, and it is never shown
@@ -72,16 +72,16 @@ describe("captures collection", () => {
       ]),
     });
 
-    const inbox = createLiveQueryCollection((q) =>
+    const captures = createLiveQueryCollection((q) =>
       q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
     );
 
     const snapshots: string[][] = [];
-    const record = () => snapshots.push(inbox.toArray.map((c: Capture) => c.text));
-    inbox.subscribeChanges(record);
+    const record = () => snapshots.push(captures.toArray.map((c: Capture) => c.text));
+    captures.subscribeChanges(record);
 
     await api.collection.stateWhenReady();
-    await inbox.preload();
+    await captures.preload();
     await sleep(50);
     record();
 
@@ -90,9 +90,9 @@ describe("captures collection", () => {
     await sleep(50);
     record();
 
-    // Final state: both are in the Inbox (order is not asserted; the live query
+    // Final state: both are in the Captures (order is not asserted; the live query
     // has no orderBy).
-    const finalTexts = inbox.toArray.map((c: Capture) => c.text);
+    const finalTexts = captures.toArray.map((c: Capture) => c.text);
     expect([...finalTexts].sort()).toEqual(["alpha", "beta"]);
 
     // No flicker: once beta appears it never blinks out, and never doubles.
@@ -108,21 +108,21 @@ describe("captures collection", () => {
       ]),
     });
 
-    // Mirror the Inbox screen's live query: unprocessed captures only.
-    const inbox = createLiveQueryCollection((q) =>
+    // Mirror the Captures screen's live query: unprocessed captures only.
+    const captures = createLiveQueryCollection((q) =>
       q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
     );
 
-    // Record the inbox after every change so a one-tick reappear is caught.
+    // Record the captures after every change so a one-tick reappear is caught.
     const snapshots: string[][] = [];
-    const record = () => snapshots.push(inbox.toArray.map((c: Capture) => c.text));
-    inbox.subscribeChanges(record);
+    const record = () => snapshots.push(captures.toArray.map((c: Capture) => c.text));
+    captures.subscribeChanges(record);
 
     await api.collection.stateWhenReady();
-    await inbox.preload();
+    await captures.preload();
     await sleep(50);
     record();
-    expect(inbox.toArray.map((c: Capture) => c.text)).toEqual(["alpha", "beta"]);
+    expect(captures.toArray.map((c: Capture) => c.text)).toEqual(["alpha", "beta"]);
 
     const tx = api.process("s1");
     await tx.isPersisted.promise;
@@ -130,14 +130,14 @@ describe("captures collection", () => {
     record();
 
     // Final state: alpha is gone.
-    expect(inbox.toArray.map((c: Capture) => c.text)).toEqual(["beta"]);
+    expect(captures.toArray.map((c: Capture) => c.text)).toEqual(["beta"]);
 
     // No flicker: once alpha leaves it never comes back (same invariant as add).
     expectNoFlicker(snapshots, "alpha");
   });
 });
 
-describe("inboxReconcileWrites", () => {
+describe("reconcileCaptureWrites", () => {
   const cap = (id: string, processedAt: string | null = null): Capture => ({
     id,
     text: id,
@@ -146,7 +146,7 @@ describe("inboxReconcileWrites", () => {
   });
 
   it("inserts every server row when the collection is empty", () => {
-    const writes = inboxReconcileWrites([], [cap("a"), cap("b")]);
+    const writes = reconcileCaptureWrites([], [cap("a"), cap("b")]);
     expect(writes).toEqual([
       { type: "insert", value: cap("a") },
       { type: "insert", value: cap("b") },
@@ -154,7 +154,7 @@ describe("inboxReconcileWrites", () => {
   });
 
   it("updates rows already present instead of re-inserting them", () => {
-    const writes = inboxReconcileWrites(["a"], [cap("a"), cap("b")]);
+    const writes = reconcileCaptureWrites(["a"], [cap("a"), cap("b")]);
     expect(writes).toEqual([
       { type: "update", value: cap("a") },
       { type: "insert", value: cap("b") },
@@ -162,15 +162,15 @@ describe("inboxReconcileWrites", () => {
   });
 
   it("deletes keys the server no longer returns (processed / removed rows)", () => {
-    const writes = inboxReconcileWrites(["a", "b"], [cap("a")]);
+    const writes = reconcileCaptureWrites(["a", "b"], [cap("a")]);
     expect(writes).toEqual([
       { type: "update", value: cap("a") },
       { type: "delete", key: "b" },
     ]);
   });
 
-  it("clears everything when the server inbox is empty", () => {
-    const writes = inboxReconcileWrites(["a", "b"], []);
+  it("clears everything when the server captures is empty", () => {
+    const writes = reconcileCaptureWrites(["a", "b"], []);
     expect(writes).toEqual([
       { type: "delete", key: "a" },
       { type: "delete", key: "b" },
@@ -178,7 +178,7 @@ describe("inboxReconcileWrites", () => {
   });
 
   it("emits no duplicate insert for a key that is already present", () => {
-    const writes = inboxReconcileWrites(["a"], [cap("a")]);
+    const writes = reconcileCaptureWrites(["a"], [cap("a")]);
     expect(writes).toEqual([{ type: "update", value: cap("a") }]);
   });
 });

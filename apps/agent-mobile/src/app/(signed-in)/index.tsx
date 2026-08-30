@@ -4,8 +4,8 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  capturesView,
   dueToday,
-  inboxView,
   localToday,
   todayView,
   type Capture,
@@ -159,20 +159,20 @@ function useLoadError(api: {
   return error;
 }
 
-type Tab = 'inbox' | 'today';
+type Tab = 'captures' | 'today';
 
-// Inbox holds unclarified Captures; Today holds Tasks due on or before today.
+// Captures holds unclarified Captures; Today holds Tasks due on or before today.
 // The active tab is also the entry target: the quick-add creates a Capture on
-// Inbox and a Task dated today on Today.
+// Captures and a Task dated today on Today.
 export default function HomeScreen() {
   const capturesApi = useCapturesApi();
   const tasksApi = useTasksApi();
-  const [tab, setTab] = useState<Tab>('inbox');
+  const [tab, setTab] = useState<Tab>('captures');
 
   return (
     <View className="flex-1 px-6 pt-16">
       <View className="mb-4 flex-row items-center justify-between">
-        <Text variant="title">{tab === 'inbox' ? 'Inbox' : 'Today'}</Text>
+        <Text variant="title">{tab === 'captures' ? 'Captures' : 'Today'}</Text>
         {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
             avatar off-center. */}
         <UserButton />
@@ -185,9 +185,9 @@ export default function HomeScreen() {
           its quick-add overlay hides with it) but its live query stays warm. */}
       <View
         className="flex-1"
-        style={tab === 'inbox' ? undefined : { display: 'none' }}
+        style={tab === 'captures' ? undefined : { display: 'none' }}
       >
-        {capturesApi ? <Inbox api={capturesApi} /> : <View className="flex-1" />}
+        {capturesApi ? <Captures api={capturesApi} /> : <View className="flex-1" />}
       </View>
       <View
         className="flex-1"
@@ -227,13 +227,13 @@ function SegmentedControl({
   };
   return (
     <View className="mb-4 flex-row gap-1 rounded-xl bg-neutral-100 p-1">
-      {item('inbox', 'Inbox')}
+      {item('captures', 'Captures')}
       {item('today', 'Today')}
     </View>
   );
 }
 
-function Inbox({ api }: { api: CapturesApi }) {
+function Captures({ api }: { api: CapturesApi }) {
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: api.collection })
@@ -254,11 +254,11 @@ function Inbox({ api }: { api: CapturesApi }) {
     return () => sub.remove();
   }, [api]);
   // Gate the list on the row count, not isLoading: a hydrated snapshot must
-  // paint even while the network sync is still pending, so opening the Inbox
+  // paint even while the network sync is still pending, so opening Captures
   // never blinks to a spinner over stale rows.
-  const view = inboxView({ count: list.length, isLoading, loadError });
+  const view = capturesView({ count: list.length, isLoading, loadError });
   // Show a load error only when there's nothing on screen, so a failed
-  // background refetch stays silent behind the last-good Inbox.
+  // background refetch stays silent behind the last-good Captures.
   const error = writeError ?? (list.length === 0 ? loadError : null);
 
   const [text, setText] = useState('');
@@ -377,12 +377,12 @@ function Inbox({ api }: { api: CapturesApi }) {
 
       {view === 'loading' ? (
         showLoadingText ? (
-          <Text variant="subtitle">Loading your inbox…</Text>
+          <Text variant="subtitle">Loading your captures…</Text>
         ) : (
           <View className="flex-1" />
         )
       ) : (
-        // FlatList virtualizes the Inbox (unbounded); @expo/ui List is native
+        // FlatList virtualizes Captures (unbounded); @expo/ui List is native
         // but not virtualized, so it is the wrong tool here. itemLayoutAnimation
         // slides the remaining rows when one is processed; the row's own
         // entering/exiting fades it in and out.
@@ -396,7 +396,7 @@ function Inbox({ api }: { api: CapturesApi }) {
           itemLayoutAnimation={LinearTransition.duration(200)}
           ListEmptyComponent={
             <Text variant="subtitle">
-              Your inbox is empty. Capture something.
+              No captures yet. Capture something.
             </Text>
           }
         />
@@ -436,7 +436,7 @@ function Inbox({ api }: { api: CapturesApi }) {
   );
 }
 
-// Sibling of Inbox for the Today list. Duplicated deliberately (Rule of Three:
+// Sibling of Captures for the Today list. Duplicated deliberately (Rule of Three:
 // extract a shared list screen at entity #3), so the two stay structurally
 // identical. Differences: it lists open Tasks narrowed to due-on-or-before the
 // local today, completes instead of processes, and the quick-add mints a Task

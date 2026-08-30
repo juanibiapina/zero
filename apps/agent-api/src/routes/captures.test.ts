@@ -25,7 +25,7 @@ const fakeUserDO = (seed: Capture[] = []) => {
       captures.push(capture);
       return capture;
     },
-    listInbox(): Capture[] {
+    listCaptures(): Capture[] {
       return captures.filter((c) => c.processedAt === null);
     },
     processCapture(id: string): Capture | null {
@@ -63,7 +63,7 @@ const buildApp = (env: Env, userId: string) => {
 };
 
 describe("GET /api/captures", () => {
-  it("returns the user's Inbox", async () => {
+  it("returns the user's Captures", async () => {
     const userDO = fakeUserDO([
       {
         id: "id-1",
@@ -89,7 +89,7 @@ describe("GET /api/captures", () => {
     });
   });
 
-  it("returns an empty Inbox when there are none", async () => {
+  it("returns an empty Captures list when there are none", async () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
     const res = await app.request("/api/captures");
     expect(res.status).toBe(200);
@@ -132,8 +132,8 @@ describe("POST /api/captures", () => {
     expect(replay.capture.id).toBe(first.capture.id);
     expect(userDO._captures).toHaveLength(1);
 
-    const inbox = await (await app.request("/api/captures")).json();
-    expect(inbox).toEqual({ captures: [first.capture] });
+    const captures = await (await app.request("/api/captures")).json();
+    expect(captures).toEqual({ captures: [first.capture] });
   });
 
   it("rejects an empty text with 400", async () => {
@@ -173,7 +173,7 @@ describe("POST /api/captures/{id}/process", () => {
     expect(body.capture.processedAt).toBeTruthy();
   });
 
-  it("removes the processed capture from a following Inbox", async () => {
+  it("removes the processed capture from a following Captures list", async () => {
     const userDO = fakeUserDO([
       {
         id: "id-1",

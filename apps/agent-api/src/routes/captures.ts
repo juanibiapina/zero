@@ -23,7 +23,7 @@ export const createCapturesRoutes = () => {
     method: "get",
     path: "/api/captures",
     tags: ["Captures"],
-    summary: "List the caller's Inbox",
+    summary: "List the caller's Captures",
     responses: {
       200: {
         content: {
@@ -31,7 +31,7 @@ export const createCapturesRoutes = () => {
             schema: z.object({ captures: z.array(CaptureSchema) }),
           },
         },
-        description: "The Inbox, oldest first",
+        description: "The Captures, oldest first",
       },
     },
   });
@@ -39,7 +39,7 @@ export const createCapturesRoutes = () => {
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
     const userDO = getUserDO(c.env, userId);
-    const captures = await userDO.listInbox();
+    const captures = await userDO.listCaptures();
     return c.json({ captures }, 200);
   });
 
@@ -47,7 +47,7 @@ export const createCapturesRoutes = () => {
     method: "post",
     path: "/api/captures",
     tags: ["Captures"],
-    summary: "Capture an item into the Inbox",
+    summary: "Capture an item into Captures",
     request: {
       body: {
         content: {
@@ -89,7 +89,7 @@ export const createCapturesRoutes = () => {
     method: "post",
     path: "/api/captures/{id}/process",
     tags: ["Captures"],
-    summary: "Process a capture (GTD Clarify), removing it from the Inbox",
+    summary: "Process a capture (GTD Clarify), removing it from Captures",
     request: {
       params: z.object({ id: z.string() }),
     },

@@ -71,8 +71,8 @@ back only where the native component does not fit.
   JS hot-reload alone crashes on render on an older client that lacks the native
   view (same hazard as the Clerk `UserButton`). Once the module is in the client,
   further JS changes hot-reload normally.
-- **The Inbox list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
-  native but **not virtualized**; the Inbox is unbounded, so it uses a reanimated
+- **The Captures list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
+  native but **not virtualized**; Captures is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
 - **Kept custom on purpose.** The keyboard-attached quick-add bar
   (`KeyboardStickyView` + reanimated) and the in-tree `ConfirmDialog` stay
@@ -274,8 +274,8 @@ A flow is declarative and element-based, e.g.:
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp
-- assertVisible: "Inbox"
-- takeScreenshot: inbox        # RELATIVE name only; absolute paths are rejected
+- assertVisible: "Captures"
+- takeScreenshot: captures     # RELATIVE name only; absolute paths are rejected
 ```
 
 `takeScreenshot` writes under the run folder
@@ -283,7 +283,7 @@ appId: dev.juanibiapina.zeroagent
 
 **Caveat:** the CI flows use `launchApp: { clearState: true }`, which **signs the
 device out**. Run those only on this test device, and re-sign-in afterward to
-test signed-in screens (the Inbox). To test without disturbing the session, use a
+test signed-in screens (Captures). To test without disturbing the session, use a
 `launchApp` (no `clearState`) + `assertVisible` flow like the one above.
 
 ### Test unreleased local JS on the device (dev client + Metro over USB)
