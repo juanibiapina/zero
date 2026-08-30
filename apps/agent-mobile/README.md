@@ -226,17 +226,59 @@ The workflow has two jobs:
   a hash of the app sources, so flow/harness-only changes skip the ~24 min
   rebuild and the run finishes in ~10 min.
 - **E2E** — boots an emulator, installs the APK, and runs `run-e2e.sh`, which
-  drives the Maestro flows and always uploads a **screenshot, logcat, and UI
-  hierarchy** as artifacts (so failures are inspectable without a device).
+  drives the `.maestro/ci/` Maestro flows and always uploads a **screenshot,
+  logcat, and UI hierarchy** as artifacts (so failures are inspectable without a
+  device).
 
-Flows:
+The flows are split into two folders that never mix in one run (a `clearState`
+flow would reset state mid-suite):
 
-- `sign-in.yaml` — smoke: the app boots to the sign-in screen (catches Clerk
-  init hangs / crashes). The Google OAuth round-trip needs a real browser +
-  Google account and is not automated here.
+- `.maestro/ci/` — signed-out smoke against the **real Clerk** instance, run by
+  this workflow. `sign-in.yaml` boots to the sign-in screen (catches Clerk init
+  hangs / crashes); `probe.yaml` exercises the native OAuth redirect handling
+  without Google. The Google OAuth round-trip needs a real browser + account and
+  is not automated here.
+- `.maestro/release/` — the hermetic **signed-in** suite (fake auth + local
+  worker). See "Release E2E suite" below.
 
 Trigger it from the GitHub Actions tab (**Run workflow**). To debug a failure,
 download the `mobile-e2e-artifacts` and open `screen.png` / `ui.xml` / `logcat.txt`.
+
+## Release E2E suite (hermetic: fake auth + local worker)
+
+The signed-in flows (capture, task, offline sync, cross-tab) can run in CI **and**
+on the Pixel because auth is mocked, so there is no Google OAuth wall. The stack
+is fully hermetic: no production data, no second Google account, deterministic.
+
+How it works:
+
+- **Fake auth build.** A Metro resolver alias (in `metro.config.js`), gated by
+  `EXPO_PUBLIC_E2E_FAKE_AUTH=1`, swaps `@clerk/expo`, `@clerk/expo/token-cache`,
+  and `@clerk/expo/native` for tiny in-repo fakes (`src/lib/fake-auth/`). The app
+  is signed-in with a static token (`e2e-test-user`); no screen imports change,
+  and production/preview builds resolve Clerk as normal. Build it with the `e2e`
+  EAS profile (`EXPO_PUBLIC_E2E_FAKE_AUTH=1`, `EXPO_PUBLIC_API_URL=http://localhost:8787`).
+- **Local worker.** `wrangler dev --config apps/agent-api/wrangler.e2e.jsonc`
+  runs the real worker with a throwaway local Durable Object (`--persist-to` a
+  temp dir, wiped per run). Under `ENVIRONMENT=test` the `/api/*` guard trusts
+  the bearer as the userId (no Clerk secret needed); that config drops the remote
+  `AI` binding so the stack needs no Cloudflare token. The app reaches it at
+  `http://localhost:8787` via `adb reverse tcp:8787 tcp:8787`.
+- **Flows.** `.maestro/release/`: `01-capture-inbox`, `02-task-today`,
+  `03-offline-sync`, `04-cross-tab`. They `launchApp` without `clearState` and
+  start from a wiped DO.
+
+Run it in CI: the manual **Mobile Release E2E** workflow
+(`.github/workflows/mobile-release-e2e.yml`) builds the fake-auth APK, starts the
+worker on the runner, and runs `run-release-emulator.sh` on the emulator.
+
+Run it on the Pixel from `mini`: `bash apps/agent-mobile/.maestro/run-release.sh`.
+NixOS cannot start `workerd` directly, so the worker runs in a rootless **podman**
+container (`node:22-slim`, `--network host`) that mounts the repo and serves
+`wrangler dev`. The script publishes 8787, `adb reverse`s it to the phone, runs
+the release flows, and captures a screenshot + UI hierarchy. The fake-auth e2e
+APK must already be installed on the Pixel (build it with
+`eas build -p android --profile e2e --local` then `adb install -r`).
 
 ## Physical device testing (Pixel 7 on `mini`)
 

@@ -1,0 +1,26 @@
+# Release E2E (hermetic). Add a capture and a task, then switch tabs and assert
+# each shows only in its own list. Guards the tab routing: a capture must not
+# leak into Today, and a task must not leak into Captures.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Captures"
+    timeout: 45000
+- tapOn: "Capture"
+- inputText: "Cross-tab capture"
+- pressKey: Enter
+- assertVisible: "Cross-tab capture"
+- tapOn: "Dismiss quick add"
+- tapOn: "Today"
+- assertVisible: "Today"
+- assertNotVisible: "Cross-tab capture"
+- tapOn: "Add a task"
+- inputText: "Cross-tab task"
+- pressKey: Enter
+- assertVisible: "Cross-tab task"
+- tapOn: "Dismiss quick add"
+- tapOn: "Captures"
+- assertVisible: "Cross-tab capture"
+- assertNotVisible: "Cross-tab task"
+- takeScreenshot: cross-tab-done

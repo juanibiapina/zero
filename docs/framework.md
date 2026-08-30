@@ -79,6 +79,10 @@ Sets up Hono and the middleware stack:
    own secret-token auth).
 3. **Clerk middleware + auth guard** — for everything else under `/api/*`.
    The guard verifies the Clerk JWT and stashes `userId` on the Hono context.
+   Exception: under `ENVIRONMENT=test` (the hermetic mobile release E2E stack,
+   `wrangler.e2e.jsonc`) the guard skips Clerk and trusts the bearer as the
+   `userId`. Production and development never set `ENVIRONMENT=test`, so this
+   branch is inert there. See `apps/agent-mobile/README.md` ("Release E2E suite").
 
 ```typescript
 type Variables = {

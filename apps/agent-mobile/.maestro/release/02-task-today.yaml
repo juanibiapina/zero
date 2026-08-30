@@ -1,0 +1,21 @@
+# Release E2E (hermetic). Switch to Today, add a task for today, assert it
+# shows, complete it, assert it clears. The throwaway DO is wiped per run, so no
+# self-cleanup is needed.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Captures"
+    timeout: 45000
+- tapOn: "Today"
+- assertVisible: "Today"
+- takeScreenshot: today-00-open
+- tapOn: "Add a task"
+- inputText: "Release E2E task"
+- pressKey: Enter
+- assertVisible: "Release E2E task"
+- takeScreenshot: today-01-added
+- tapOn: "Dismiss quick add"
+- tapOn: 'Complete "Release E2E task"'
+- assertNotVisible: "Release E2E task"
+- takeScreenshot: today-02-completed

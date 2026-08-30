@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Runs inside the android-emulator-runner. Installs the APK, runs the Maestro
-# flows, and always captures a screenshot + UI hierarchy of the final state so
-# failures are inspectable from CI artifacts. Kept as a file (not inline YAML)
-# so multi-line shell and quoting are reliable.
+# Runs inside the android-emulator-runner for the hermetic RELEASE suite. The
+# fake-auth APK is already signed in; it talks to a local worker the CI job
+# started on the runner host (port 8787). `adb reverse` maps the device's
+# localhost:8787 to that host port, so the same http://localhost:8787 the device
+# harness uses works on the emulator too. Installs the APK, runs the release
+# flows, and always captures a screenshot + UI hierarchy so failures are
+# inspectable from CI artifacts.
 set -uo pipefail
 
 APK="${RUNNER_TEMP}/apk/app-release.apk"
@@ -16,34 +19,26 @@ for pkg in com.google.android.googlequicksearchbox \
   adb shell pm disable-user --user 0 "$pkg" || true
 done
 
-# Chrome's uninitialised first-run screen otherwise pops over the app (masking
-# it) and blocks OAuth Custom Tabs. Skip it via Chrome's command-line file, which
-# a rooted emulator's Chrome reads. This keeps Chrome usable for the OAuth flow.
-adb root >/dev/null 2>&1 || true
-sleep 3
 adb wait-for-device
-adb shell 'echo "chrome --disable-fre --no-first-run --no-default-browser-check" > /data/local/tmp/chrome-command-line' || true
-adb shell 'chmod 644 /data/local/tmp/chrome-command-line' || true
+
+# Route the device's localhost:8787 to the worker running on the runner host.
+adb reverse tcp:8787 tcp:8787
 
 adb install -r "$APK"
 adb logcat -c
 adb logcat > "${OUT}/logcat.txt" &
-
-# Serve the redirect probe page on the host; the emulator reaches it at
-# http://10.0.2.2:8080/redirect.html (the app's default probe URL).
-python3 -m http.server 8080 --directory apps/agent-mobile/.maestro/ci >/dev/null 2>&1 &
-HTTP_PID=$!
-trap 'kill "$HTTP_PID" >/dev/null 2>&1 || true' EXIT
 
 # Let the system settle before driving the UI, so SystemUI is not still busy.
 sleep 20
 
 mkdir -p "${OUT}/maestro"
 # The CI emulator occasionally throws a transient SystemUI ANR that masks the
-# app; retry the flow once before treating it as a real failure.
+# app; retry the suite once before treating it as a real failure. Re-establish
+# the reverse tunnel each attempt in case a restart dropped it.
 CODE=0
 for attempt in 1 2; do
-  maestro test apps/agent-mobile/.maestro/ci \
+  adb reverse tcp:8787 tcp:8787 || true
+  maestro test apps/agent-mobile/.maestro/release \
     --format junit \
     --output "${OUT}/maestro/report.xml" \
     --debug-output "${OUT}/maestro"

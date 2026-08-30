@@ -49,8 +49,27 @@ export const createApp = () => {
   app.route("/", createTelegramWebhookRoute());
   app.route("/", createClerkWebhookRoute());
 
-  app.use("/api/*", clerkMiddleware());
+  // Auth guard. Under ENVIRONMENT=test the hermetic release E2E stack has no
+  // Clerk secret, so trust the bearer token as the userId and skip Clerk
+  // entirely. Production and development never set ENVIRONMENT=test, so this
+  // branch is inert there and the real Clerk verification always runs.
   app.use("/api/*", async (c, next) => {
+    if (c.env.ENVIRONMENT === "test") {
+      const bearer = c.req.header("Authorization")?.replace(/^Bearer\s+/i, "");
+      if (!bearer) {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      c.set("userId", bearer);
+      return next();
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Hono context type mismatch with Clerk's expected Context type
+    return clerkMiddleware()(c, next);
+  });
+  app.use("/api/*", async (c, next) => {
+    if (c.env.ENVIRONMENT === "test") {
+      // userId already set by the test bypass above.
+      return next();
+    }
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Hono context type mismatch with Clerk's expected Context type
     const auth = getAuth(c);
     if (!auth?.userId) {
