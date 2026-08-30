@@ -191,6 +191,27 @@ pnpm --filter @zero/agent-mobile typecheck
 pnpm --filter @zero/agent-mobile test
 ```
 
+### Run checks on a starved box (the `mini` host)
+
+The `mini` dev host has 2 CPUs and 7.6 GB RAM. These checks are cheap in
+isolation (typecheck and test each finish in under 10 seconds), but they slow
+down 10-50x when they compete for memory and the box swaps. A measured
+`tsc --noEmit` that takes 7 seconds idle took 320-355 seconds while Metro,
+`jest`, and a gradle JVM ran alongside it; a plain `git checkout` took 5 minutes
+in the same window. The checks are not slow, the box is out of memory.
+
+Before running checks on `mini`:
+
+1. **Stop Metro first.** `expo start` is persistent and holds 1-2 GB for the
+   whole session. Kill it, run the checks, then restart it.
+2. **Do not run a local build next to checks.** A local `gradlew` or
+   `eas build --local` starts a JVM that alone takes 1.5 GB resident. Prefer an
+   EAS cloud build (see [Builds](#builds)), which keeps the box's memory free.
+3. **Lower parallelism on 2 cores.** Run `jest --runInBand` (or
+   `--maxWorkers=1`) and, when running the whole pipeline, `turbo ...
+   --concurrency=1`. The defaults fan out one worker per core, and each React
+   Native transform is memory-heavy.
+
 ## End-to-end tests (emulator + Maestro)
 
 Automated UI tests run a real APK on an Android emulator and drive it with
