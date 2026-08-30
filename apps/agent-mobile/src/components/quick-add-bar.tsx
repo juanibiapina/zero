@@ -13,6 +13,8 @@ export type QuickAddBarProps = {
   placeholder?: string;
   autoFocus?: boolean;
   inputRef?: Ref<TextInput>;
+  // Accessibility label of the submit button. Defaults to the Capture wording.
+  fabLabel?: string;
 };
 
 // Presentational quick-add input row: a text field plus an Add button. No
@@ -26,6 +28,7 @@ export function QuickAddBar({
   placeholder = 'Capture a thought',
   autoFocus = true,
   inputRef,
+  fabLabel = 'Capture',
 }: QuickAddBarProps) {
   return (
     <View className="flex-row items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-3 py-2 shadow-lg">
@@ -42,7 +45,7 @@ export function QuickAddBar({
         autoFocus={autoFocus}
       />
       <Fab
-        label="Capture"
+        label={fabLabel}
         className="h-12 w-12"
         disabled={busy}
         onPress={onSubmit}

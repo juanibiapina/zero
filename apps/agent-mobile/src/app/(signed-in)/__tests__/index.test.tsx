@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { View } from 'react-native';
 
-import type { Capture } from '@/lib/api';
+import { localToday } from '@zero/agent-core';
+
+import type { Capture, Task } from '@/lib/api';
 
 import HomeScreen from '../index';
 
@@ -31,12 +33,29 @@ const mockAddCapture =
   >();
 const mockProcessCapture =
   jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
+const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
+const mockAddTask =
+  jest.fn<
+    (
+      getToken: unknown,
+      task: { id: string; text: string; showUpDate: string },
+    ) => Promise<Task>
+  >();
+const mockCompleteTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 jest.mock('@/lib/api', () => ({
   fetchInbox: (getToken: unknown) => mockFetchInbox(getToken),
   addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
     mockAddCapture(getToken, capture),
   processCapture: (getToken: unknown, id: string) =>
     mockProcessCapture(getToken, id),
+  fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
+  addTask: (
+    getToken: unknown,
+    task: { id: string; text: string; showUpDate: string },
+  ) => mockAddTask(getToken, task),
+  completeTask: (getToken: unknown, id: string) =>
+    mockCompleteTask(getToken, id),
 }));
 
 const capture = (id: string, text: string): Capture => ({
@@ -44,6 +63,20 @@ const capture = (id: string, text: string): Capture => ({
   text,
   createdAt: '2023-01-01T00:00:00.000Z',
   processedAt: null,
+});
+
+const task = (id: string, text: string, showUpDate: string): Task => ({
+  id,
+  text,
+  createdAt: '2023-01-01T00:00:00.000Z',
+  showUpDate,
+  completedAt: null,
+});
+
+// Both panels mount at once, so every render needs the Today data layer stubbed
+// too. Default it to an empty list unless a test overrides it.
+beforeEach(() => {
+  mockFetchTasks.mockResolvedValue([]);
 });
 
 // Render the screen inside a fresh QueryClient with retries off, so a rejected
@@ -373,5 +406,89 @@ describe('HomeScreen', () => {
 
     expect(queryByText('Discard changes?')).toBeNull();
     expect(queryByPlaceholderText('Capture a thought')).toBeNull();
+  });
+});
+
+describe('Today tab', () => {
+  it('shows tasks due on or before today and hides future ones', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchInbox.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([
+      task('1', 'ship it', '2020-01-01'), // overdue: shown
+      task('2', 'next year', '2999-01-01'), // future: hidden
+    ]);
+
+    const { getByLabelText, getByText, queryByText } = await renderScreen();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Today'));
+    });
+
+    await waitFor(() => expect(getByText('ship it')).toBeTruthy());
+    expect(queryByText('next year')).toBeNull();
+  });
+
+  it('adds a task dated today from the Today quick-add', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchInbox.mockResolvedValue([]);
+    mockAddTask.mockImplementation(async (_g, t) => {
+      const added = task(t.id, t.text, t.showUpDate);
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const { getByLabelText, getByText, getByPlaceholderText } =
+      await renderScreen();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Today'));
+    });
+    await waitFor(() =>
+      expect(getByText('Nothing for today. Add a task.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a task'));
+    });
+    const input = getByPlaceholderText('Add a task for today');
+    await act(async () => {
+      fireEvent.changeText(input, 'call plumber');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(getByText('call plumber')).toBeTruthy());
+    expect(mockAddTask).toHaveBeenCalledTimes(1);
+    expect(mockAddTask.mock.calls[0][1].text).toBe('call plumber');
+    expect(mockAddTask.mock.calls[0][1].showUpDate).toBe(localToday());
+  });
+
+  it('completes a task, removing it from Today', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchInbox.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([task('1', 'ship it', '2020-01-01')]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return {
+        ...task('1', 'ship it', '2020-01-01'),
+        completedAt: '2023-01-02T00:00:00.000Z',
+      };
+    });
+
+    const { getByLabelText, getByText, queryByText } = await renderScreen();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Today'));
+    });
+    await waitFor(() => expect(getByText('ship it')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "ship it"'));
+    });
+
+    await waitFor(() => expect(queryByText('ship it')).toBeNull());
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1);
+    expect(mockCompleteTask.mock.calls[0][1]).toBe('1');
   });
 });

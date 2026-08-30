@@ -59,8 +59,10 @@ at capture time.
 - **Data layer** — a TanStack DB collection persisted to SQLite/OPFS (web) and
   op-sqlite (mobile) for offline reads, with an offline outbox for writes that
   retries on reconnect. See `docs/plans/todo-tanstack-db.md`.
-- **Other entities** — none yet. Processing a Capture into a typed entity (Todo,
-  …) is the next entity interaction to design.
+- **Other entities** — **Task** is the first typed entity (see
+  `docs/entities/task.md`). Processing a Capture into a Task (the Capture->Task
+  transition, adding a `sourceCaptureId` on Task) is the next entity interaction
+  to design; today Process just removes the Capture.
 
 ## Open questions
 
@@ -76,7 +78,11 @@ at capture time.
 
 ## Next
 
-- Process into typed entities (the richest data-model slice; not yet designed).
-- A scheduled show-up date on a Capture + a "due today" view.
+- Process a Capture into a **Task** (the Capture->Task transition; the richest
+  data-model slice, not yet designed). See `docs/entities/task.md`.
 - Recurring capture.
 - Likely never (not used in Todoist today): subtasks, priorities, labels.
+
+Note: the earlier "scheduled show-up date on a Capture + due-today view" idea is
+superseded by the **Task** entity, which is that date done right (a Task carries
+a `showUpDate` and feeds the Today view). Do not add a date to Capture.

@@ -19,6 +19,11 @@ export type QuickAddProps = {
   onRequestClose: () => void;
   busy?: boolean;
   inputRef?: Ref<TextInput>;
+  // Wording of the collapsed FAB and the input placeholder. Defaults keep the
+  // Capture copy so existing callers need no change; the Today list overrides
+  // both. The FAB label doubles as its accessibility label.
+  fabLabel?: string;
+  placeholder?: string;
 };
 
 // Transition layer between two independent, reusable elements: the collapsed
@@ -36,6 +41,8 @@ export function QuickAdd({
   onRequestClose,
   busy,
   inputRef,
+  fabLabel = 'Capture',
+  placeholder,
 }: QuickAddProps) {
   return (
     <>
@@ -65,6 +72,8 @@ export function QuickAdd({
               onSubmit={onSubmit}
               busy={busy}
               inputRef={inputRef}
+              fabLabel={fabLabel}
+              placeholder={placeholder}
             />
           </Animated.View>
         </KeyboardStickyView>
@@ -77,7 +86,7 @@ export function QuickAdd({
           className="absolute inset-x-0 bottom-0 items-end px-6 pb-6"
           pointerEvents="box-none"
         >
-          <Fab label="Capture" onPress={onOpen} />
+          <Fab label={fabLabel} onPress={onOpen} />
         </Animated.View>
       )}
     </>

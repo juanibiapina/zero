@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 import {
   addCapture,
+  addTask,
   apiFetch,
+  completeTask,
   fetchInbox,
+  fetchTasks,
   processCapture,
   type Capture,
+  type Task,
 } from '../api';
 
 type TokenGetter = () => Promise<string | null>;
@@ -131,6 +135,94 @@ describe('processCapture', () => {
     expect(result).toEqual(capture);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://example.test/api/captures/abc/process');
+    expect(init.method).toBe('POST');
+    const headers = new Headers(init.headers);
+    expect(headers.get('Authorization')).toBe('Bearer tok');
+  });
+});
+
+const task = (id: string, text: string): Task => ({
+  id,
+  text,
+  createdAt: '2023-01-01T00:00:00.000Z',
+  showUpDate: '2023-01-01',
+  completedAt: null,
+});
+
+describe('fetchTasks', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('GETs /api/tasks and returns the open tasks', async () => {
+    const tasks: Task[] = [task('1', 'ship it')];
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ tasks }), { status: 200 }),
+      );
+    const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
+
+    const result = await fetchTasks(getToken, 'https://example.test');
+
+    expect(result).toEqual(tasks);
+  });
+});
+
+describe('addTask', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('POSTs id, text and showUpDate and returns the created task', async () => {
+    const created = task('tid-1', 'call plumber');
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ task: created }), { status: 201 }),
+      );
+    const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
+
+    const result = await addTask(
+      getToken,
+      { id: 'tid-1', text: 'call plumber', showUpDate: '2023-01-01' },
+      'https://example.test',
+    );
+
+    expect(result).toEqual(created);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.test/api/tasks');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      id: 'tid-1',
+      text: 'call plumber',
+      showUpDate: '2023-01-01',
+    });
+  });
+});
+
+describe('completeTask', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('POSTs to /api/tasks/{id}/complete with the Bearer token', async () => {
+    const completed: Task = {
+      ...task('abc', 'ship it'),
+      completedAt: '2023-01-02T00:00:00.000Z',
+    };
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ task: completed }), { status: 200 }),
+      );
+    const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
+
+    const result = await completeTask(getToken, 'abc', 'https://example.test');
+
+    expect(result).toEqual(completed);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.test/api/tasks/abc/complete');
     expect(init.method).toBe('POST');
     const headers = new Headers(init.headers);
     expect(headers.get('Authorization')).toBe('Bearer tok');

@@ -50,18 +50,31 @@ of allowed interactions vs blacklist of forbidden ones.
 The thing to watch is duplicated CRUD boilerplate across future stores, not
 specificity; do-orm + a Rule-of-Three base covers it when the time comes.
 
+**Rule-of-Three status (2026-08-30):** **Task** is entity #2, built as a
+deliberate structural sibling of Capture at every layer — `DbTaskStore` mirrors
+`DbCaptureStore`, the tasks collection mirrors the captures collection, the
+mobile `tasks-collection.ts` mirrors `captures-collection.ts` (with its own
+SQLite + outbox files), and the web/mobile Today panel mirrors the Inbox panel.
+The duplication is intentional and kept identical on purpose, so extracting a
+shared base (store, collection factory, list screen) is mechanical when entity
+**#3** lands. Do not extract before then.
+
 ## Entity wiki (draft — grow one at a time)
 
-Grounding: the foundational block, and the only entity we are certain of, is the
-**Capture** — the entry point. Everything else below (Todo, Project, Person,
-Note…) is a vision draft, not committed.
+Grounding: the foundational block is the **Capture** (the entry point);
+**Task** is the first typed entity built on top of it. Everything else below
+(Project, Person, Note…) is a vision draft, not committed.
 
-- **Capture** — the foundational block and the entry point; the only entity we
-  are certain of. A single raw line of text (a thought, task, idea, anything),
-  untyped and uncommitted, added to the Inbox and later Processed out of it.
-  Fully documented in `docs/entities/capture.md`.
-- **Todo** — a typed entity a Capture could become, NOT the entry point. The
-  single concrete next step, belongs to a Project.
+- **Capture** — the foundational block and the entry point. A single raw line of
+  text (a thought, task, idea, anything), untyped and uncommitted, added to the
+  Inbox and later Processed out of it. Fully documented in
+  `docs/entities/capture.md`.
+- **Task** — the first typed entity (named `Task`, not "Todo", which collides
+  with the app name). A clarified next-action with a `showUpDate`, completed out
+  of the Today view. Built as a sibling of Capture. Fully documented in
+  `docs/entities/task.md`. A Capture becoming a Task (the Capture->Task
+  transition) and Task belonging to a Project are the next interactions to
+  design.
 - **Project** — goal-oriented (baby, diploma, buy a house, watch a movie).
   Sometimes maintenance-oriented (a "baby maintenance" project should maybe not
   exist). Has a nice icon (baby face, diploma). Can contain Todos, agent
@@ -168,6 +181,21 @@ Note: the collection now has a stable id `"captures"`; the id change orphans the
 old persisted table once, so the first launch after upgrading re-syncs from the
 server, instant thereafter.
 
+Shipped (2026-08-30): **Task**, the first typed entity, and the **Today** view
+over it (plan: `docs/plans/todo-task-entity.md`). Built as a sibling of the
+Capture stack, web first, then mobile: a `tasks` table + `/api/tasks` in the
+per-user UserDO (add is exactly-once on the client-minted id; complete flips
+`completedAt`; list returns open tasks); a shared `@zero/agent-core` Task type,
+`createTasksApi` collection (local-first, offline outbox), and `todayView` /
+`dueToday` / `localToday` helpers; and an **Inbox | Today** segmented control on
+both web (`/inbox`) and mobile home. The active segment is the entry target: the
+quick-add mints a Capture on Inbox and a Task dated today on Today; the circle
+completes. Timezone lives on the client (server returns all open tasks; the live
+query filters `showUpDate <= localToday`, so overdue rolls in and future stays
+hidden). Mobile keeps separate SQLite + outbox files (`zero-today.sqlite`,
+`zero-today-outbox.sqlite`) from Capture. Mobile device verification (Maestro,
+Pixel 7) still needs a standalone EAS build for the durable-snapshot path.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add
@@ -177,11 +205,12 @@ In flight (details in `docs/plans/`):
 
 Next:
 
-- **Process into typed entities** — a Capture becomes a typed entity (not yet
-  designed; the richest data-model slice).
-- **Scheduled show-up date** — an optional date on a Capture plus a "due today"
-  view (date <= today + undated; future-dated hidden until their day).
-- later: recurring capture.
+- **Capture → Task** — Process a Capture into a Task (adds `sourceCaptureId`; not
+  yet designed; the richest data-model slice).
+- **Reschedule a Task** — swipe-to-tomorrow / pick a future date (v1 dates every
+  Task today with no way to change it).
+- **Task → Project** — Task belongs to a Project (adds `projectId`).
+- later: agent `create_task` tool, recurring capture, recurring Tasks.
 
 Dev infra: a physical Pixel 7 is USB-attached to the dev box and driven with the
 Maestro CLI for on-device verification (see `apps/agent-mobile/README.md`). Rules

@@ -1,9 +1,9 @@
-import type { Capture } from '@zero/agent-core';
+import type { Capture, Task } from '@zero/agent-core';
 
 import { API_BASE_URL } from './env';
 
-// The Capture entity type is shared across web + mobile.
-export type { Capture };
+// The Capture and Task entity types are shared across web + mobile.
+export type { Capture, Task };
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
@@ -91,4 +91,59 @@ export async function processCapture(
   }
   const body = (await res.json()) as { capture: Capture };
   return body.capture;
+}
+
+// Task REST helpers: siblings of the Capture ones above, hitting /api/tasks.
+// The server returns all open tasks (completedAt IS NULL); the client applies
+// the local-today date filter, so no timezone crosses the wire.
+export async function fetchTasks(
+  getToken: TokenGetter,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task[]> {
+  const res = await apiFetch(getToken, '/api/tasks', {}, baseUrl);
+  if (!res.ok) {
+    throw new Error(`GET /api/tasks failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { tasks: Task[] };
+  return body.tasks;
+}
+
+export async function addTask(
+  getToken: TokenGetter,
+  task: { id: string; text: string; showUpDate: string },
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    '/api/tasks',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(task),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/tasks failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
+export async function completeTask(
+  getToken: TokenGetter,
+  id: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}/complete`,
+    { method: 'POST' },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/tasks/${id}/complete failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
 }
