@@ -173,7 +173,7 @@ function InboxReady({ api }: { api: CapturesApi }) {
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   return (
-    <>
+    <div className="space-y-6">
       <QuickAdd
         value={text}
         placeholder="Capture a thought"
@@ -207,7 +207,7 @@ function InboxReady({ api }: { api: CapturesApi }) {
           ))}
         </ul>
       )}
-    </>
+    </div>
   );
 }
 
@@ -272,7 +272,7 @@ function TodayReady({ api }: { api: TasksApi }) {
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   return (
-    <>
+    <div className="space-y-6">
       <QuickAdd
         value={text}
         placeholder="Add a task for today"
@@ -306,7 +306,7 @@ function TodayReady({ api }: { api: TasksApi }) {
           ))}
         </ul>
       )}
-    </>
+    </div>
   );
 }
 
