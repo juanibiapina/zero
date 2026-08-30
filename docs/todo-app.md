@@ -118,6 +118,14 @@ Grounding: the foundational block is the **Capture** (the entry point);
 - Movie tickets should go to Google Wallet automatically.
 - A movie project should ping during/after the movie for a review + photo with
   the poster, and prompt to tag the people who came.
+- Starting a new agent session in an existing GitHub project is many manual
+  steps in `juanibiapina/agent`: create a Telegram topic, name it, then run
+  Telegram commands to bind it to the repo directory (e.g. the zero repo). Every
+  new session against the same project repeats the whole ritual. In the todo
+  app, spinning up a new session for a known project should be one click/action:
+  the Project already knows its repo directory, so the app creates the Session
+  and binds it in a single step — no topic naming, no directory-selection
+  commands.
 
 ## Dreamy / low-confidence ideas (parked)
 
