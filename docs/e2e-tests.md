@@ -62,3 +62,13 @@ and spins up several processes); run it on demand.
 Unit tests inject failures at the `AgentModel` seam (`capturingModel` in `apps/agent-api/src/agents/mock-model.ts`), which is above the HTTP client, so nothing retries and a thrown error surfaces immediately. Classification reads `status`: see the 429 case in `apps/agent-api/src/agents/orchestrator.test.ts`, which throws `Object.assign(new Error("rate limited"), { status: 429 })`.
 
 Only the e2e suite exercises the real OpenAI client, where a 429 is retried twice (`maxRetries: 2`) with backoff before it surfaces. That is why `packages/agent-e2e/src/rate-limit.test.ts` polls with a longer timeout.
+
+## Related: mobile release E2E
+
+The mobile app has its own hermetic signed-in E2E tier that reuses this same
+local-worker-with-mocks pattern, extended to the `/api/*` routes: a fake-auth
+app build talks to `wrangler dev --config apps/agent-api/wrangler.e2e.jsonc`,
+whose `ENVIRONMENT=test` guard trusts the bearer as the userId (no Clerk secret),
+storing in a throwaway local Durable Object. It drives real UI flows on an
+emulator (CI) and the Pixel 7 (on `mini`). See
+`apps/agent-mobile/README.md` ("Release E2E suite").

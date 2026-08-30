@@ -1,0 +1,20 @@
+# Release E2E (hermetic: fake auth + local worker, throwaway DO wiped per run).
+# Capture something, assert it lands in the Captures list, process it, assert it
+# leaves the open list. No clearState: the run keeps the fake signed-in session.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Captures"
+    timeout: 45000
+- takeScreenshot: capture-00-open
+- tapOn: "^Capture$"
+- inputText: "Release E2E capture"
+- pressKey: Enter
+- assertVisible: "Release E2E capture"
+- takeScreenshot: capture-01-added
+# Submitting clears the input and the quick-add bar closes, so the row's
+# Process control is directly tappable.
+- tapOn: 'Process "Release E2E capture"'
+- assertNotVisible: "Release E2E capture"
+- takeScreenshot: capture-02-processed
