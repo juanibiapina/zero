@@ -1,18 +1,11 @@
-import {
-  createBrowserWASQLitePersistence,
-  openBrowserWASQLiteOPFSDatabase,
-} from "@tanstack/browser-db-sqlite-persistence";
 import { startOfflineExecutor } from "@tanstack/offline-transactions";
 import { createTasksApi, type TasksApi } from "@zero/agent-core";
 
 import { queryClient } from "./captures-collection";
+import { getAppPersistence } from "./db";
 import { addTask, completeTask, fetchTasks } from "./tasks";
 
 export type { TasksApi };
-
-// Its own OPFS database file, separate from the Inbox's, so the two entities
-// never share a table.
-const DATABASE_NAME = "zero-today.sqlite";
 
 let apiPromise: Promise<TasksApi> | null = null;
 
@@ -25,12 +18,7 @@ export function getTasksApi(): Promise<TasksApi> {
     apiPromise = createTasksApi({
       queryClient,
       rest: { fetchTasks, addTask, completeTask },
-      persistence: async () => {
-        const database = await openBrowserWASQLiteOPFSDatabase({
-          databaseName: DATABASE_NAME,
-        });
-        return createBrowserWASQLitePersistence({ database });
-      },
+      persistence: () => getAppPersistence(),
       startOfflineExecutor,
       onWarn: (message, error) => console.warn(message, error),
     });

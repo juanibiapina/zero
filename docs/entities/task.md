@@ -76,11 +76,10 @@ speculative columns before their behavior is designed.
   active segment is the entry target: the quick-add mints a Capture on Inbox and
   a Task dated today on Today. Same bar, same speed; the intent is the segment
   you are in. Tap a row's circle to Complete.
-- **Storage** — the `tasks` table lives in the existing per-user `UserDO`, not a
-  separate worker or DO. do-orm plus a per-entity `DbTaskStore` (domain methods
-  `add` / `list` = open tasks / `complete`), never a generic CRUD bag. It is a
-  sibling of `DbCaptureStore`; the duplication is deliberate (Rule of Three:
-  extract a shared base at entity #3).
+- **Storage** — the server domain store is `DbTaskStore` (domain methods
+  `add` / `list` = open tasks / `complete`), a sibling of `DbCaptureStore`; the
+  duplication is deliberate (Rule of Three: extract a shared base at entity #3).
+  See `docs/storage.md` for how data is saved on both the server and the client.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, all open Tasks (`completedAt IS NULL`),
     oldest-first. No date filter server-side.
@@ -91,13 +90,8 @@ speculative columns before their behavior is designed.
   - Logs `task_added` / `task_completed` (mirror `capture_added` /
     `capture_processed`).
 - **Data layer** — a TanStack DB collection (`createTasksApi` in
-  `@zero/agent-core`) persisted to SQLite/OPFS (web) and op-sqlite (mobile) for
-  offline reads, with an offline outbox for writes that retries on reconnect.
-  Local-first: the collection is ready from the cache, then reconciles the server
-  list in the background (same no-flicker `begin/write/commit` diff as Captures).
-  Mobile keeps **separate** SQLite files (`zero-today.sqlite`,
-  `zero-today-outbox.sqlite`) so the two entities never share a table or an
-  outbox.
+  `@zero/agent-core`). See `docs/storage.md` for how data is saved on both the
+  server and the client.
 - **Timezone lives on the client.** The server returns every open Task; the
   client live query narrows to `showUpDate <= localToday` (`dueToday` +
   `localToday` in `@zero/agent-core`). This mirrors how the Inbox filters
