@@ -96,6 +96,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Installing the monorepo deps plus the emulator's 7.3 GB userdata partition
+      # overflows the runner disk ("Not enough space to create userdata
+      # partition"). Reclaim space before both.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: false
+          tool-cache: false
+          large-packages: true
+          dotnet: true
+          haskell: true
+          swap-storage: false
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
