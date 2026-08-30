@@ -1,0 +1,18 @@
+appId: dev.juanibiapina.zeroagent
+---
+# Today tab: switch to it, add a task for today, complete it. No clearState, so
+# it keeps the signed-in session and talks to the live /api/tasks. It cleans up
+# after itself by completing the task it adds.
+- launchApp
+- assertVisible: "Inbox"
+- tapOn: "Today"
+- assertVisible: "Today"
+- takeScreenshot: today-open
+- tapOn: "Add a task"
+- inputText: "Maestro device test task"
+- pressKey: Enter
+- assertVisible: "Maestro device test task"
+- takeScreenshot: today-added
+- tapOn: 'Complete "Maestro device test task"'
+- assertNotVisible: "Maestro device test task"
+- takeScreenshot: today-completed

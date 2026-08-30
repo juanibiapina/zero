@@ -47,6 +47,7 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@babel/plugin-transform-react-jsx": "^7.29.7",
     "@jest/globals": "^29.7.0",
     "@testing-library/react-native": "^14.0.1",
     "@types/react": "~19.2.18",
