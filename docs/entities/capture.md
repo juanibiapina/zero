@@ -47,18 +47,15 @@ at capture time.
 - **UI** — mobile Inbox screen (`apps/agent-mobile`) and web `/inbox`
   (`apps/agent-web`, unlinked route). Quick-add bar off a FAB; tap a row's circle
   to Process. NativeWind v4 + `@expo/ui` on mobile.
-- **Storage** — the `captures` table lives in the existing per-user `UserDO`, not
-  a separate worker or DO. do-orm plus a per-entity `DbCaptureStore` (domain
-  methods `add` / `list` = open Inbox / `process`), never a generic CRUD bag.
+- **Storage** — the server domain store is `DbCaptureStore` (domain methods
+  `add` / `list` = open Inbox / `process`). See `docs/storage.md` for how data is
+  saved on both the server and the client.
 - **API** — per-user isolated:
   - `GET /api/captures` → `{ captures }`, the open Inbox oldest-first.
   - `POST /api/captures { id, text }` → `201 { capture }`; the client sends the
     UUID `id`, and the server dedupes on it (a replay re-sends the same id and
     gets the stored row back). `400` on empty text or a non-UUID id.
   - `POST /api/captures/{id}/process` → `200 { capture }`, or `404` when unknown.
-- **Data layer** — a TanStack DB collection persisted to SQLite/OPFS (web) and
-  op-sqlite (mobile) for offline reads, with an offline outbox for writes that
-  retries on reconnect. See `docs/plans/todo-tanstack-db.md`.
 - **Other entities** — **Task** is the first typed entity (see
   `docs/entities/task.md`). Processing a Capture into a Task (the Capture->Task
   transition, adding a `sourceCaptureId` on Task) is the next entity interaction

@@ -141,53 +141,14 @@ Shipped (on main, device-verified): the Capture Inbox on mobile
 (`apps/agent-mobile`) and web (unlinked `/inbox`) — add a Capture, Process it out
 of the Inbox — backed by the `captures` table and `/api/captures` in the per-user
 UserDO. Mobile UI on NativeWind v4 + `@expo/ui`; Clerk sign-in with a native user
-button. The Inbox data layer runs on TanStack DB with offline SQLite persistence.
+button. The Inbox data layer runs on TanStack DB (see `docs/storage.md`).
 Captures carry a client-minted UUID id (stable end to end, and the sole
 idempotency key for offline replay), so adding and processing a Capture no longer
 flickers — the row never blinks out-and-back while the write settles.
 
-The Inbox now paints instantly from the local snapshot: the list region gates on
-the row count, not the collection's `isLoading`, so a hydrated snapshot shows at
-once and the network sync updates it in place instead of a spinner covering
-stale rows. The rule lives in a shared `inboxView` helper in `@zero/agent-core`,
-used by both the web and mobile screens. Root cause it fixes: the persisted
-collection (`persistedCollectionOptions` wrapping a query collection) marks the
-collection ready only after the first network `fetchInbox` resolves, so a
-fully-hydrated local snapshot sat behind "Loading your inbox…" until the network
-answered.
-
-Dev-testing note: the installed dev client loading JS from Metro over USB falls
-back to the in-memory Query Collection (persistence throws `Expected
-HMRClient.setup() call at startup`), so the durable-snapshot path only runs on a
-standalone EAS build, not the dev client. Verify Inbox loading behavior on a
-`preview`/`production` build, not `expo start`.
-
-Follow-up (measured on a standalone build, then fixed): "paints instantly" was
-false. Per-SQL timing showed the local snapshot is fully read in **~60ms** (the
-`SELECT … FROM "c_…"` returns by +59ms), but the rows did not reach the screen
-until **~700ms–1.5s**, exactly when the network `fetchInbox` committed. Root
-cause: `createPersistedApi` wrapped `queryCollectionOptions` in
-`persistedCollectionOptions`, making the collection **`sync-present`**, where the
-wrapped sync only calls `markReady()` after its network query resolves
-(`@tanstack/db-sqlite-persistence-core` `persisted.js`). A `@tanstack/db`
-collection withholds data from live queries until `ready`, so the cached rows sat
-buffered behind the network. It was never local-first; `bbcecaf`'s row-count gate
-never fired because `data` stayed empty. (The delayed-loading-text hook from the
-first attempt was a cosmetic cover; the ~700ms was network, not SQLite.)
-
-Fix (shipped): the persisted collection now uses a **custom sync** that calls
-`markReady()` immediately — the persisted wrapper defers it until the local
-hydrate finishes, so the collection is ready from the **cache** in ~60ms — then
-fetches the server inbox in the background and reconciles it into the synced base
-via `begin/write/commit` (a pure `inboxReconcileWrites` diff: update present,
-insert new, delete removed). Measured after the change: first rows at **~37ms**
-after the data layer builds, with the network updating in place. The same
-`refetch` is wired to app-foreground (`AppState`/`visibilitychange`), which also
-fixes the "items don't refresh until a cold start" staleness. The `useDelayed`
-loading-text hook stays only as a safety net for the genuinely-empty first run.
-Note: the collection now has a stable id `"captures"`; the id change orphans the
-old persisted table once, so the first launch after upgrading re-syncs from the
-server, instant thereafter.
+The Inbox loads local-first and reconciles the server in the background; the
+shared `inboxView` helper in `@zero/agent-core` gates the list on the row count
+so a hydrated snapshot shows at once. See `docs/storage.md` for the mechanics.
 
 Shipped (2026-08-30): **Task**, the first typed entity, and the **Today** view
 over it (plan: `docs/plans/todo-task-entity.md`). Built as a sibling of the
@@ -200,9 +161,8 @@ both web (`/inbox`) and mobile home. The active segment is the entry target: the
 quick-add mints a Capture on Inbox and a Task dated today on Today; the circle
 completes. Timezone lives on the client (server returns all open tasks; the live
 query filters `showUpDate <= localToday`, so overdue rolls in and future stays
-hidden). Mobile keeps separate SQLite + outbox files (`zero-today.sqlite`,
-`zero-today-outbox.sqlite`) from Capture. Mobile device verification (Maestro,
-Pixel 7) still needs a standalone EAS build for the durable-snapshot path.
+hidden). Mobile device verification (Maestro, Pixel 7) still needs a standalone
+EAS build for the durable-snapshot path.
 
 In flight (details in `docs/plans/`):
 
