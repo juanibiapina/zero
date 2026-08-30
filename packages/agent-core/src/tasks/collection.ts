@@ -227,6 +227,10 @@ export function createPersistedTasksApi(deps: {
     for (const cb of errorListeners) cb();
   };
 
+  // Forward-referenced by the closures below and assigned once after
+  // `createCollection` returns; it cannot be `const` because `sync` (passed into
+  // `createCollection`) reads it back through `reconcileList`.
+  // eslint-disable-next-line prefer-const
   let collection: Collection<Task, string>;
 
   const reconcileOne = (t: Task) => {
@@ -236,7 +240,7 @@ export function createPersistedTasksApi(deps: {
       type: collection.has(t.id) ? "update" : "insert",
       value: t,
     });
-    controls.commit();
+    void controls.commit();
   };
 
   const reconcileList = (server: Task[]) => {
@@ -245,7 +249,7 @@ export function createPersistedTasksApi(deps: {
     for (const write of tasksReconcileWrites(collection.keys(), server)) {
       controls.write(write);
     }
-    controls.commit();
+    void controls.commit();
   };
 
   const fetchAndReconcile = async () => {

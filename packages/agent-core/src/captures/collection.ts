@@ -264,6 +264,8 @@ export function createPersistedApi(deps: {
 
   // Assigned before the sync runs (createCollection returns synchronously; the
   // sync fires later on first subscribe), so the reconcile closures can read it.
+  // It cannot be `const`: `sync` reads it back through `reconcileList`.
+  // eslint-disable-next-line prefer-const
   let collection: Collection<Capture, string>;
 
   // Upsert one server row into the synced base by its stable id (insert if new,
@@ -272,7 +274,7 @@ export function createPersistedApi(deps: {
     if (!controls) return;
     controls.begin();
     controls.write({ type: collection.has(c.id) ? "update" : "insert", value: c });
-    controls.commit();
+    void controls.commit();
   };
 
   // Replace the synced inbox with the server's authoritative list: upsert each
@@ -285,7 +287,7 @@ export function createPersistedApi(deps: {
     for (const write of inboxReconcileWrites(collection.keys(), server)) {
       controls.write(write);
     }
-    controls.commit();
+    void controls.commit();
   };
 
   const fetchAndReconcile = async () => {

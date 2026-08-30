@@ -99,37 +99,48 @@ const renderScreen = () => {
 
 describe('HomeScreen', () => {
   it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    let resolveFetch!: (captures: Capture[]) => void;
-    mockFetchInbox.mockReturnValue(
-      new Promise<Capture[]>((resolve) => {
-        resolveFetch = resolve;
-      }),
-    );
+    // Fake timers so the loading-text delay is driven by the test clock, not
+    // wall time. Under real timers a loaded CI box can let the 1s delay elapse
+    // during the first `await`, flashing the text before the "held back"
+    // assertion and failing the test intermittently.
+    jest.useFakeTimers();
+    try {
+      mockGetToken.mockResolvedValue('tok');
+      let resolveFetch!: (captures: Capture[]) => void;
+      mockFetchInbox.mockReturnValue(
+        new Promise<Capture[]>((resolve) => {
+          resolveFetch = resolve;
+        }),
+      );
 
-    const { getByText, queryByText } = await renderScreen();
+      const { getByText, queryByText } = await renderScreen();
+      // Flush mount effects and microtasks without advancing the delay timer.
+      await act(async () => {});
 
-    // The cached snapshot hydrates fast, so the loading text is held back at
-    // first: no spinner flash, and the empty message is not shown either.
-    expect(queryByText('Loading your inbox…')).toBeNull();
-    expect(queryByText('Your inbox is empty. Capture something.')).toBeNull();
+      // The cached snapshot hydrates fast, so the loading text is held back at
+      // first: no spinner flash, and the empty message is not shown either.
+      expect(queryByText('Loading your inbox…')).toBeNull();
+      expect(queryByText('Your inbox is empty. Capture something.')).toBeNull();
 
-    // Only a genuinely slow, still-pending fetch surfaces the loading text.
-    await waitFor(
-      () => expect(getByText('Loading your inbox…')).toBeTruthy(),
-      { timeout: 2000 },
-    );
+      // Only a genuinely slow, still-pending fetch surfaces the loading text,
+      // once the delay elapses.
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(getByText('Loading your inbox…')).toBeTruthy();
 
-    await act(async () => {
-      resolveFetch([]);
-    });
+      await act(async () => {
+        resolveFetch([]);
+      });
+      await act(async () => {});
 
-    await waitFor(() =>
       expect(
         getByText('Your inbox is empty. Capture something.'),
-      ).toBeTruthy(),
-    );
-    expect(queryByText('Loading your inbox…')).toBeNull();
+      ).toBeTruthy();
+      expect(queryByText('Loading your inbox…')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('shows the account button instead of a sign-out button', async () => {
