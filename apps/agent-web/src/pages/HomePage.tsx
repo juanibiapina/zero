@@ -47,12 +47,7 @@ export function HomePage() {
       <AppHeader />
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Captures</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Capture anything. Process it later.
-            </p>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Captures</h1>
           <CapturesPanel />
         </div>
       </main>
