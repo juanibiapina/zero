@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/AppHeader";
 import { ErrorText } from "@/components/ConnectionStatus";
-import { capturesView } from "@zero/agent-core";
+import {
+  capturesView,
+  capturesLocalToday,
+  tomorrow,
+  visibleCaptures,
+} from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { type Capture } from "@/lib/captures";
 
@@ -117,7 +122,19 @@ function CapturesReady({ api }: { api: CapturesApi }) {
     [api],
   );
 
-  const list = captures ?? [];
+  const onReschedule = useCallback(
+    (item: Capture) => {
+      setError(null);
+      const tx = api.reschedule(item.id, tomorrow(capturesLocalToday()));
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    },
+    [api],
+  );
+
+  // The server already returns only visible captures; this second pass is the
+  // optimistic hide, so a just-postponed row leaves the list at once (before the
+  // server's filtered GET reconciles it). Overdue rolls in; no red.
+  const list = visibleCaptures(captures ?? [], capturesLocalToday());
   const view = capturesView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
@@ -153,6 +170,7 @@ function CapturesReady({ api }: { api: CapturesApi }) {
               actionLabel={`Process "${item.text}"`}
               onAction={() => onProcess(item)}
               onEdit={(text) => onEdit(item, text)}
+              onReschedule={() => onReschedule(item)}
             />
           ))}
         </ul>
@@ -210,6 +228,7 @@ function Row({
   actionLabel,
   onAction,
   onEdit,
+  onReschedule,
 }: {
   text: string;
   actionLabel: string;
@@ -217,6 +236,8 @@ function Row({
   // When provided, the row's text becomes click-to-edit inline. Today omits it,
   // so its rows stay read-only.
   onEdit?: (text: string) => void;
+  // When provided, a "Tomorrow" button (shown on hover/focus) postpones the row.
+  onReschedule?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
@@ -236,7 +257,7 @@ function Row({
   };
 
   return (
-    <li className="flex items-center gap-4 rounded-xl border bg-card px-4 py-4">
+    <li className="group flex items-center gap-4 rounded-xl border bg-card px-4 py-4">
       <button
         type="button"
         aria-label={actionLabel}
@@ -270,6 +291,16 @@ function Row({
         >
           {text}
         </span>
+      )}
+      {onReschedule && !editing && (
+        <button
+          type="button"
+          aria-label={`Postpone "${text}" to tomorrow`}
+          className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          onClick={onReschedule}
+        >
+          Tomorrow
+        </button>
       )}
     </li>
   );

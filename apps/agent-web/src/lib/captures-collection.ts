@@ -2,7 +2,13 @@ import { QueryClient } from "@tanstack/react-query";
 import { startOfflineExecutor } from "@tanstack/offline-transactions";
 import { createCapturesApi, type CapturesApi } from "@zero/agent-core";
 
-import { addCapture, editCapture, fetchCaptures, processCapture } from "./captures";
+import {
+  addCapture,
+  editCapture,
+  fetchCaptures,
+  processCapture,
+  rescheduleCapture,
+} from "./captures";
 import { getAppPersistence } from "./db";
 
 export type { CapturesApi };
@@ -19,7 +25,7 @@ export function getCapturesApi(): Promise<CapturesApi> {
   if (!apiPromise) {
     apiPromise = createCapturesApi({
       queryClient,
-      rest: { fetchCaptures, addCapture, processCapture, editCapture },
+      rest: { fetchCaptures, addCapture, processCapture, editCapture, rescheduleCapture },
       persistence: () => getAppPersistence(),
       startOfflineExecutor,
       onWarn: (message, error) => console.warn(message, error),

@@ -32,6 +32,9 @@ export type CapturesRest = {
   // Same-key update: sets the capture's text on its stable id and returns the
   // server row. Idempotent, so a replayed offline edit re-applies the same text.
   editCapture: (id: string, text: string) => Promise<Capture>;
+  // Same-key update: sets (or clears, with null) the capture's show-up date on
+  // its stable id and returns the server row. Idempotent like editCapture.
+  rescheduleCapture: (id: string, showUpDate: string | null) => Promise<Capture>;
 };
 
 // One handle over the Captures data layer. Both Captures screens read
@@ -44,6 +47,9 @@ export type CapturesApi = {
   process: (id: string) => Transaction;
   // Replace a capture's text optimistically (same-key update on its stable id).
   edit: (id: string, text: string) => Transaction;
+  // Set (or clear, with null) a capture's show-up date optimistically. Postpone
+  // is reschedule(id, tomorrow); the optimistic hide drops the row at once.
+  reschedule: (id: string, showUpDate: string | null) => Transaction;
   // True when writes persist to a durable offline outbox (SQLite + outbox
   // storage); false for the in-memory fallback.
   offline: boolean;
@@ -114,6 +120,7 @@ function optimisticCapture(text: string): Capture {
     text,
     createdAt: new Date().toISOString(),
     processedAt: null,
+    showUpDate: null,
   };
 }
 
@@ -126,6 +133,15 @@ function markProcessed(draft: Capture): void {
 function setText(text: string): (draft: Capture) => void {
   return (draft) => {
     draft.text = text;
+  };
+}
+
+// Optimistic reschedule: set the row's show-up date in place. The in-memory
+// onUpdate disambiguates this from edit/process by the changed field set, since
+// a rescheduled row keeps its old text and null processedAt.
+function setShowUpDate(showUpDate: string | null): (draft: Capture) => void {
+  return (draft) => {
+    draft.showUpDate = showUpDate;
   };
 }
 
@@ -196,14 +212,18 @@ export function createInMemoryApi(deps: {
         return { refetch: false };
       },
       onUpdate: async ({ transaction }) => {
-        // One collection.update backs both process and edit; disambiguate by the
-        // field each one changes. Process sets processedAt; edit leaves it null
-        // and only changes text.
+        // One collection.update backs process, edit and reschedule; disambiguate
+        // by the changed field set (m.changes), not m.modified: a rescheduled row
+        // still carries its old text and null processedAt, so only the changed
+        // keys tell the three apart. Order: showUpDate changed → reschedule;
+        // else processedAt set → process; else edit.
         for (const m of transaction.mutations) {
           const updated =
-            m.modified.processedAt != null
-              ? await rest.processCapture(String(m.key))
-              : await rest.editCapture(String(m.key), m.modified.text);
+            "showUpDate" in m.changes
+              ? await rest.rescheduleCapture(String(m.key), m.modified.showUpDate)
+              : m.modified.processedAt != null
+                ? await rest.processCapture(String(m.key))
+                : await rest.editCapture(String(m.key), m.modified.text);
           reconcile(collection, { upsert: [updated] });
         }
         return { refetch: false };
@@ -220,6 +240,8 @@ export function createInMemoryApi(deps: {
     add: (text) => collection.insert(optimisticCapture(text)),
     process: (id) => collection.update(id, markProcessed),
     edit: (id, text) => collection.update(id, setText(text)),
+    reschedule: (id, showUpDate) =>
+      collection.update(id, setShowUpDate(showUpDate)),
     offline: false,
     refetch: async () => {
       if (refetchUtil) {
@@ -390,6 +412,19 @@ export function createPersistedApi(deps: {
         }
         await fetchAndReconcile();
       },
+      rescheduleCapture: async ({ transaction }) => {
+        // Own mutationFn (keyed by name), so no field disambiguation here. The
+        // outbox types fields as unknown; showUpDate is string | null, so accept
+        // both and reject only a missing key.
+        for (const m of transaction.mutations) {
+          const showUpDate = m.modified.showUpDate;
+          if (typeof showUpDate === "string" || showUpDate === null) {
+            const updated = await rest.rescheduleCapture(String(m.key), showUpDate);
+            reconcileOne(updated);
+          }
+        }
+        await fetchAndReconcile();
+      },
     },
     onLeadershipChange: (isLeader) => {
       // Non-leader tabs / instances run online-only; fine for a single-user Captures list.
@@ -417,12 +452,22 @@ export function createPersistedApi(deps: {
       collection.update(id, setText(text));
     },
   });
+  const rescheduleAction = offline.createOfflineAction<{
+    id: string;
+    showUpDate: string | null;
+  }>({
+    mutationFnName: "rescheduleCapture",
+    onMutate: ({ id, showUpDate }) => {
+      collection.update(id, setShowUpDate(showUpDate));
+    },
+  });
 
   return {
     collection,
     add: (text) => addAction({ text }),
     process: (id) => processAction({ id }),
     edit: (id, text) => editAction({ id, text }),
+    reschedule: (id, showUpDate) => rescheduleAction({ id, showUpDate }),
     offline: true,
     refetch: () => fetchAndReconcile(),
     getLoadError: () => loadError,

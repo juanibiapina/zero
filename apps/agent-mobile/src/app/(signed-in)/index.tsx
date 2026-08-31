@@ -5,24 +5,36 @@ import { useLiveQuery } from '@tanstack/react-db';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   capturesView,
+  capturesLocalToday,
+  tomorrow,
+  visibleCaptures,
   type Capture,
   type CapturesApi,
 } from '@zero/agent-core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   BackHandler,
   type ListRenderItemInfo,
   Pressable,
+  StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  FadeIn,
-  FadeOut,
+  Easing,
   LinearTransition,
+  ReduceMotion,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
@@ -38,6 +50,147 @@ const AnimatedCaptureList = Animated.FlatList<Capture>;
 // Vertical gap between carded rows.
 function Separator() {
   return <View className="h-3" />;
+}
+
+// Strong ease-out for the commit slide (from the Expo animation recipe).
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+// A right-swipe commits once the projected resting position passes this many
+// px, so a short fast flick commits and a slow long drag does not.
+const SWIPE_THRESHOLD = 140;
+
+// Where the finger would come to rest if it kept decelerating (Apple's
+// exponential-decay form). Lets a flick commit on velocity, not just distance.
+function project(velocity: number, decelerationRate = 0.998): number {
+  'worklet';
+  return ((velocity / 1000) * decelerationRate) / (1 - decelerationRate);
+}
+
+// One Captures row: swipe right to postpone, tap the circle to process, tap the
+// text to edit inline. This is a swipe-to-commit (one decisive swipe = the
+// action), so it is a hand-built Gesture.Pan, not ReanimatedSwipeable (which is
+// for swipe-to-reveal action buttons and orphans its action layer when the row
+// is removed). The "Tomorrow" background is a child of this wrapper, so it
+// unmounts with the row — no ghost. Extracted to its own component so the
+// screen's memoized callbacks stay clean.
+function CaptureRow({
+  item,
+  editing,
+  editText,
+  onProcess,
+  onReschedule,
+  onEditSubmit,
+  onChangeEditText,
+  onStartEdit,
+}: {
+  item: Capture;
+  editing: boolean;
+  editText: string;
+  onProcess: (item: Capture) => void;
+  onReschedule: (item: Capture) => void;
+  onEditSubmit: (item: Capture) => void;
+  onChangeEditText: (text: string) => void;
+  onStartEdit: (item: Capture) => void;
+}) {
+  const { width } = useWindowDimensions();
+  const reduced = useReducedMotion();
+  // The card's horizontal offset. 0 at rest (covering the green background);
+  // grows rightward as the user swipes, revealing "Tomorrow" underneath.
+  const x = useSharedValue(0);
+  // Where the card was when this drag started, so a grab mid-animation continues
+  // smoothly instead of jumping to 0.
+  const startX = useSharedValue(0);
+
+  // Built inline (no useMemo) so the React Compiler owns the memoization; a
+  // silent skip of this leaf row is harmless, unlike a manual-memo mismatch.
+  const pan = Gesture.Pan()
+    .enabled(!editing)
+    // Right-only, and declaring the axis keeps the pan from stealing the list's
+    // vertical scroll. A tap has no horizontal travel, so it never activates.
+    .activeOffsetX(12)
+    .onStart(() => {
+      startX.set(x.get());
+    })
+    .onUpdate((e) => {
+      x.set(Math.max(0, startX.get() + e.translationX));
+    })
+    .onEnd((e) => {
+      const projected = x.get() + project(e.velocityX);
+      if (projected > SWIPE_THRESHOLD) {
+        // Commit: slide the card fully off, then remove it. The optimistic hide
+        // drops the row and the list's itemLayoutAnimation closes the gap.
+        x.set(
+          withTiming(
+            width,
+            { duration: 200, easing: EASE_OUT, reduceMotion: ReduceMotion.System },
+            (finished) => {
+              if (finished) scheduleOnRN(onReschedule, item);
+            },
+          ),
+        );
+      } else {
+        // Snap back.
+        x.set(
+          withSpring(0, {
+            duration: 300,
+            dampingRatio: 1,
+            velocity: e.velocityX,
+            reduceMotion: ReduceMotion.System,
+          }),
+        );
+      }
+    });
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: reduced ? 0 : x.get() }],
+  }));
+
+  return (
+    <View className="overflow-hidden rounded-2xl">
+      {/* Revealed as the card slides right. Left-aligned so the label shows in
+          the gap the card opens. */}
+      <View
+        style={StyleSheet.absoluteFill}
+        className="flex-row items-center rounded-2xl bg-emerald-600 px-4"
+      >
+        <Text className="font-medium text-white">Tomorrow</Text>
+      </View>
+      <GestureDetector gesture={pan}>
+        <Animated.View
+          style={rowStyle}
+          className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
+        >
+          <Pressable
+            accessibilityLabel={`Process "${item.text}"`}
+            className="h-7 w-7 rounded-full border-2 border-neutral-400"
+            hitSlop={8}
+            onPress={() => onProcess(item)}
+          />
+          {editing ? (
+            <TextInput
+              autoFocus
+              accessibilityLabel={`Edit "${item.text}"`}
+              className="flex-1 text-base text-neutral-900"
+              value={editText}
+              onChangeText={onChangeEditText}
+              onSubmitEditing={() => onEditSubmit(item)}
+              onBlur={() => onEditSubmit(item)}
+              returnKeyType="done"
+            />
+          ) : (
+            <Pressable
+              className="flex-1"
+              accessibilityLabel={`Edit "${item.text}"`}
+              onPress={() => onStartEdit(item)}
+            >
+              <Text>{item.text}</Text>
+            </Pressable>
+          )}
+          {/* TODO(haptics): Haptics.impactAsync(Light) on commit once
+              expo-haptics is added (native module → needs a dev-client rebuild). */}
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
 }
 
 // How long a list may sit empty-and-loading before it shows the "Loading…"
@@ -141,7 +294,15 @@ function Captures({ api }: { api: CapturesApi }) {
       .where(({ c }) => isNull(c.processedAt))
       .orderBy(({ c }) => c.createdAt, 'asc'),
   );
-  const list = captures ?? [];
+  // The server already returns only visible captures; this second pass is the
+  // optimistic hide, so a just-postponed row leaves the list at once (before the
+  // server's filtered GET reconciles it). Overdue rolls in; no red. Memoized so
+  // the render-phase filter (and its localToday read) stays out of the React
+  // Compiler's path for the screen's callbacks.
+  const list = useMemo(
+    () => visibleCaptures(captures ?? [], capturesLocalToday()),
+    [captures],
+  );
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -248,6 +409,15 @@ function Captures({ api }: { api: CapturesApi }) {
     [api],
   );
 
+  const onReschedule = useCallback(
+    (item: Capture) => {
+      setWriteError(null);
+      const tx = api.reschedule(item.id, tomorrow(capturesLocalToday()));
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    },
+    [api],
+  );
+
   // Inline edit: tapping a row's text turns it into a TextInput seeded with the
   // current text; submitting commits (trim, no-op on empty/unchanged).
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -265,45 +435,25 @@ function Captures({ api }: { api: CapturesApi }) {
     [api, editText],
   );
 
+  const onStartEdit = useCallback((item: Capture) => {
+    setEditText(item.text);
+    setEditingId(item.id);
+  }, []);
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Capture>) => (
-      <Animated.View
-        entering={FadeIn.duration(150)}
-        exiting={FadeOut.duration(200)}
-        className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
-      >
-        <Pressable
-          accessibilityLabel={`Process "${item.text}"`}
-          className="h-7 w-7 rounded-full border-2 border-neutral-400"
-          hitSlop={8}
-          onPress={() => onProcess(item)}
-        />
-        {editingId === item.id ? (
-          <TextInput
-            autoFocus
-            accessibilityLabel={`Edit "${item.text}"`}
-            className="flex-1 text-base text-neutral-900"
-            value={editText}
-            onChangeText={setEditText}
-            onSubmitEditing={() => onEditSubmit(item)}
-            onBlur={() => onEditSubmit(item)}
-            returnKeyType="done"
-          />
-        ) : (
-          <Pressable
-            className="flex-1"
-            accessibilityLabel={`Edit "${item.text}"`}
-            onPress={() => {
-              setEditText(item.text);
-              setEditingId(item.id);
-            }}
-          >
-            <Text>{item.text}</Text>
-          </Pressable>
-        )}
-      </Animated.View>
+      <CaptureRow
+        item={item}
+        editing={editingId === item.id}
+        editText={editText}
+        onProcess={onProcess}
+        onReschedule={onReschedule}
+        onEditSubmit={onEditSubmit}
+        onChangeEditText={setEditText}
+        onStartEdit={onStartEdit}
+      />
     ),
-    [onProcess, editingId, editText, onEditSubmit],
+    [onProcess, onReschedule, editingId, editText, onEditSubmit, onStartEdit],
   );
 
   // Only surface the loading text once the snapshot has had time to hydrate;

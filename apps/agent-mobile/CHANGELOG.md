@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-08-31: Swipe a capture right to postpone it to the next day; it drops off your list and comes back tomorrow. Works offline.
 - 2026-08-31: The Today tab is gone; the app is one Captures list again.
 - 2026-08-30: Tap a capture's text to edit it inline. Changes save on their own, even offline, and sync across your devices.
 - 2026-08-30: The Inbox is now called Captures.

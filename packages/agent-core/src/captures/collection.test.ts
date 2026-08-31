@@ -29,6 +29,7 @@ function fakeRest(initial: Capture[]): CapturesRest {
         text,
         createdAt: new Date().toISOString(),
         processedAt: null,
+        showUpDate: null,
       };
       server.push(capture);
       return { ...capture };
@@ -45,6 +46,13 @@ function fakeRest(initial: Capture[]): CapturesRest {
       const capture = server.find((c) => c.id === id);
       if (!capture) throw new Error(`no capture ${id}`);
       capture.text = text;
+      return { ...capture };
+    },
+    rescheduleCapture: async (id, showUpDate) => {
+      await sleep(5);
+      const capture = server.find((c) => c.id === id);
+      if (!capture) throw new Error(`no capture ${id}`);
+      capture.showUpDate = showUpDate;
       return { ...capture };
     },
   };
@@ -75,7 +83,7 @@ describe("captures collection", () => {
     const api = createInMemoryApi({
       queryClient: new QueryClient(),
       rest: fakeRest([
-        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null },
+        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
       ]),
     });
 
@@ -108,7 +116,7 @@ describe("captures collection", () => {
 
   it("editing a capture shows the new text and reconciles, routing to editCapture not process", async () => {
     const base = fakeRest([
-      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null },
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
     ]);
     // Count which REST verb each write routes to, so the in-memory onUpdate
     // branch (process vs edit) is asserted, not just the visible text.
@@ -148,12 +156,59 @@ describe("captures collection", () => {
     expect(processCalls).toBe(0);
   });
 
+  it("rescheduling a capture sets its showUpDate and routes to rescheduleCapture, not edit/process", async () => {
+    const base = fakeRest([
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
+    ]);
+    let processCalls = 0;
+    let editCalls = 0;
+    let rescheduleCalls = 0;
+    const rest: CapturesRest = {
+      ...base,
+      processCapture: (id) => {
+        processCalls++;
+        return base.processCapture(id);
+      },
+      editCapture: (id, text) => {
+        editCalls++;
+        return base.editCapture(id, text);
+      },
+      rescheduleCapture: (id, showUpDate) => {
+        rescheduleCalls++;
+        return base.rescheduleCapture(id, showUpDate);
+      },
+    };
+    const api = createInMemoryApi({ queryClient: new QueryClient(), rest });
+
+    // The live query keeps only open rows; a rescheduled row stays open (its
+    // processedAt is untouched), so it is still visible here — the optimistic
+    // date hide is a separate screen-level pass (visibleCaptures).
+    const captures = createLiveQueryCollection((q) =>
+      q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+    );
+    await api.collection.stateWhenReady();
+    await captures.preload();
+    await sleep(50);
+
+    const tx = api.reschedule("s1", "2099-01-01");
+    await tx.isPersisted.promise;
+    await sleep(50);
+
+    const rows = captures.toArray as Capture[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].showUpDate).toBe("2099-01-01");
+    expect(rows[0].processedAt).toBeNull();
+    expect(rescheduleCalls).toBe(1);
+    expect(editCalls).toBe(0);
+    expect(processCalls).toBe(0);
+  });
+
   it("processing a capture removes it once, without a reappear flicker", async () => {
     const api = createInMemoryApi({
       queryClient: new QueryClient(),
       rest: fakeRest([
-        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null },
-        { id: "s2", text: "beta", createdAt: "2020-01-02T00:00:00.000Z", processedAt: null },
+        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
+        { id: "s2", text: "beta", createdAt: "2020-01-02T00:00:00.000Z", processedAt: null, showUpDate: null },
       ]),
     });
 
@@ -192,6 +247,7 @@ describe("reconcileCaptureWrites", () => {
     text: id,
     createdAt: "2023-01-01T00:00:00.000Z",
     processedAt,
+    showUpDate: null,
   });
 
   it("inserts every server row when the collection is empty", () => {

@@ -14,7 +14,11 @@ const CaptureSchema = z.object({
   text: z.string(),
   createdAt: z.string(),
   processedAt: z.string().nullable(),
+  showUpDate: z.string().nullable(),
 });
+
+// A local calendar day, YYYY-MM-DD. The client mints it in the user's timezone.
+const ShowUpDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const createCapturesRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
@@ -125,13 +129,18 @@ export const createCapturesRoutes = () => {
     method: "patch",
     path: "/api/captures/{id}",
     tags: ["Captures"],
-    summary: "Edit a capture's text",
+    summary: "Update a capture's text and/or show-up date",
     request: {
       params: z.object({ id: z.string() }),
       body: {
         content: {
           "application/json": {
-            schema: z.object({ text: z.string().min(1) }),
+            // A partial update: either field may be present. showUpDate may be
+            // null to clear the date (make the capture always visible again).
+            schema: z.object({
+              text: z.string().min(1).optional(),
+              showUpDate: ShowUpDate.nullable().optional(),
+            }),
           },
         },
       },
@@ -141,13 +150,13 @@ export const createCapturesRoutes = () => {
         content: {
           "application/json": { schema: z.object({ capture: CaptureSchema }) },
         },
-        description: "The capture, with its new text",
+        description: "The updated capture",
       },
       400: {
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
         },
-        description: "Empty or missing text",
+        description: "Empty text, malformed date, or no fields to update",
       },
       404: {
         content: {
@@ -158,18 +167,32 @@ export const createCapturesRoutes = () => {
     },
   });
 
-  // PATCH (not a POST …/edit action) because editing text is a genuine
-  // idempotent field update on the capture's stable id. See docs/entities/capture.md.
+  // PATCH (not a POST …/edit action) because updating a capture's fields is a
+  // genuine idempotent field update on its stable id. One endpoint carries both
+  // edit (text) and reschedule (showUpDate). See docs/entities/capture.md.
   router.openapi(editRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const { text } = c.req.valid("json");
+    const body = c.req.valid("json");
+    const hasText = body.text !== undefined;
+    const hasShowUpDate = "showUpDate" in body;
+    if (!hasText && !hasShowUpDate) {
+      return c.json({ error: "no fields to update" }, 400);
+    }
+
     const userDO = getUserDO(c.env, userId);
-    const capture = await userDO.editCapture(id, text);
+    let capture: Awaited<ReturnType<typeof userDO.editCapture>> = null;
+    if (hasShowUpDate) {
+      capture = await userDO.rescheduleCapture(id, body.showUpDate ?? null);
+      if (capture) log("capture_rescheduled", { clerk_user_id: userId });
+    }
+    if (hasText && body.text !== undefined) {
+      capture = await userDO.editCapture(id, body.text);
+      if (capture) log("capture_edited", { clerk_user_id: userId });
+    }
     if (!capture) {
       return c.json({ error: "capture not found" }, 404);
     }
-    log("capture_edited", { clerk_user_id: userId });
     return c.json({ capture }, 200);
   });
 

@@ -35,16 +35,73 @@ jest.mock('react-native-reanimated', () => {
     LinearTransition: builder(),
     ReduceMotion: { System: 'system', Always: 'always', Never: 'never' },
     ReducedMotionConfig: () => null,
-    useSharedValue: (v) => ({ value: v }),
+    // Support the .get()/.set() shared-value API the swipe row uses, not just
+    // .value, so useAnimatedStyle worklets that read x.get() don't throw.
+    useSharedValue: (initial) => {
+      let val = initial;
+      return {
+        get: () => val,
+        set: (next) => {
+          val = typeof next === 'function' ? next(val) : next;
+        },
+        get value() {
+          return val;
+        },
+        set value(next) {
+          val = next;
+        },
+      };
+    },
     useAnimatedStyle: () => ({}),
     useReducedMotion: () => false,
+    // Return the target synchronously; the completion callback (3rd arg) is a
+    // no-op under jest (the commit slide is verified on-device, not in jest).
     withTiming: (v) => v,
     withSpring: (v) => v,
+    Easing: { bezier: () => () => 0 },
     interpolate: () => 0,
     useReanimatedKeyboardAnimation: () => ({
       height: { value: 0 },
       progress: { value: 0 },
     }),
+  };
+});
+
+// react-native-worklets: the native module is absent under jest. The swipe row
+// only uses scheduleOnRN to hop a worklet callback back to JS; run it inline.
+jest.mock('react-native-worklets', () => ({
+  scheduleOnRN: (fn, ...args) => fn(...args),
+}));
+
+// react-native-gesture-handler is a native module; mock the pieces the screen
+// uses (the row's Gesture.Pan + GestureDetector, and the root view) so the tree
+// renders without native bindings. GestureDetector/RootView return children
+// directly (no JSX) to avoid NativeWind's babel transform inside the factory.
+// The swipe gesture itself is verified on-device (Maestro), not in jest.
+jest.mock('react-native-gesture-handler', () => {
+  const makeGesture = () => {
+    const g = {};
+    for (const m of [
+      'enabled',
+      'activeOffsetX',
+      'failOffsetY',
+      'onStart',
+      'onUpdate',
+      'onEnd',
+      'onBegin',
+      'onChange',
+      'onFinalize',
+    ]) {
+      g[m] = () => g;
+    }
+    return g;
+  };
+  const Passthrough = ({ children }) => children ?? null;
+  return {
+    __esModule: true,
+    Gesture: { Pan: makeGesture, Tap: makeGesture },
+    GestureDetector: Passthrough,
+    GestureHandlerRootView: Passthrough,
   };
 });
 

@@ -33,6 +33,10 @@ const mockProcessCapture =
   jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
 const mockEditCapture =
   jest.fn<(getToken: unknown, id: string, text: string) => Promise<Capture>>();
+const mockRescheduleCapture =
+  jest.fn<
+    (getToken: unknown, id: string, showUpDate: string | null) => Promise<Capture>
+  >();
 jest.mock('@/lib/api', () => ({
   fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
   addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
@@ -41,13 +45,20 @@ jest.mock('@/lib/api', () => ({
     mockProcessCapture(getToken, id),
   editCapture: (getToken: unknown, id: string, text: string) =>
     mockEditCapture(getToken, id, text),
+  rescheduleCapture: (getToken: unknown, id: string, showUpDate: string | null) =>
+    mockRescheduleCapture(getToken, id, showUpDate),
 }));
 
-const capture = (id: string, text: string): Capture => ({
+const capture = (
+  id: string,
+  text: string,
+  showUpDate: string | null = null,
+): Capture => ({
   id,
   text,
   createdAt: '2023-01-01T00:00:00.000Z',
   processedAt: null,
+  showUpDate,
 });
 
 // Render the screen inside a fresh QueryClient with retries off, so a rejected
@@ -142,6 +153,21 @@ describe('HomeScreen', () => {
     const { getByText } = await renderScreen();
 
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+  });
+
+  it('hides a future-dated capture (optimistic visibility)', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    // The server would filter this out; the mock returns it as-is, so this
+    // exercises the client-side visibleCaptures hide.
+    mockFetchCaptures.mockResolvedValue([
+      capture('1', 'visible now'),
+      capture('2', 'later', '2099-01-01'),
+    ]);
+
+    const { getByText, queryByText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('visible now')).toBeTruthy());
+    expect(queryByText('later')).toBeNull();
   });
 
   it('processes a capture, removing it from Captures', async () => {

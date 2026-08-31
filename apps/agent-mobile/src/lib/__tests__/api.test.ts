@@ -9,6 +9,7 @@ import {
   fetchCaptures,
   fetchTasks,
   processCapture,
+  rescheduleCapture,
   type Capture,
   type Task,
 } from '../api';
@@ -61,6 +62,7 @@ describe('fetchCaptures', () => {
         text: 'buy milk',
         createdAt: '2023-01-01T00:00:00.000Z',
         processedAt: null,
+        showUpDate: null,
       },
     ];
     jest
@@ -87,6 +89,7 @@ describe('addCapture', () => {
       text: 'call mom',
       createdAt: '2023-01-01T00:00:00.000Z',
       processedAt: null,
+      showUpDate: null,
     };
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')
@@ -123,6 +126,7 @@ describe('processCapture', () => {
       text: 'buy milk',
       createdAt: '2023-01-01T00:00:00.000Z',
       processedAt: '2023-01-02T00:00:00.000Z',
+      showUpDate: null,
     };
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')
@@ -153,6 +157,7 @@ describe('editCapture', () => {
       text: 'buy oat milk',
       createdAt: '2023-01-01T00:00:00.000Z',
       processedAt: null,
+      showUpDate: null,
     };
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')
@@ -173,6 +178,43 @@ describe('editCapture', () => {
     expect(url).toBe('https://example.test/api/captures/abc');
     expect(init.method).toBe('PATCH');
     expect(JSON.parse(String(init.body))).toEqual({ text: 'buy oat milk' });
+    const headers = new Headers(init.headers);
+    expect(headers.get('Authorization')).toBe('Bearer tok');
+  });
+});
+
+describe('rescheduleCapture', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('PATCHes /api/captures/{id} with the showUpDate and Bearer token', async () => {
+    const capture: Capture = {
+      id: 'abc',
+      text: 'buy milk',
+      createdAt: '2023-01-01T00:00:00.000Z',
+      processedAt: null,
+      showUpDate: '2099-01-01',
+    };
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ capture }), { status: 200 }),
+      );
+    const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
+
+    const result = await rescheduleCapture(
+      getToken,
+      'abc',
+      '2099-01-01',
+      'https://example.test',
+    );
+
+    expect(result).toEqual(capture);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://example.test/api/captures/abc');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(String(init.body))).toEqual({ showUpDate: '2099-01-01' });
     const headers = new Headers(init.headers);
     expect(headers.get('Authorization')).toBe('Bearer tok');
   });

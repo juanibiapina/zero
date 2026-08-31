@@ -6,6 +6,7 @@ import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
 import { DbCaptureStore, type Capture } from "../store/captures";
+import { localDayInZone } from "../dates";
 import { DbTaskStore, type Task } from "../store/tasks";
 import {
   SystemTopicStore,
@@ -126,7 +127,11 @@ export class UserDO extends DurableObject<Env> {
   }
 
   listCaptures(): Capture[] {
-    return this.captures.list();
+    // The server is the source of truth for visibility: filter by the user's
+    // local day, derived from their synced timezone (default UTC when unset).
+    const timezone = this.store.getSettings().timezone ?? "UTC";
+    const today = localDayInZone(new Date(), timezone);
+    return this.captures.list(today);
   }
 
   processCapture(id: string): Capture | null {
@@ -135,6 +140,10 @@ export class UserDO extends DurableObject<Env> {
 
   editCapture(id: string, text: string): Capture | null {
     return this.captures.editText(id, text);
+  }
+
+  rescheduleCapture(id: string, showUpDate: string | null): Capture | null {
+    return this.captures.reschedule(id, showUpDate);
   }
 
   addTask(id: string, text: string, showUpDate: string): Task {

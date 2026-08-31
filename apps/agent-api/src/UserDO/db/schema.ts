@@ -202,6 +202,9 @@ export const captures = table("captures", {
   text: column.text().notNull(),
   createdAt: column.text().notNull(),
   processedAt: column.text(),
+  // Local day (YYYY-MM-DD) the capture should reappear on. NULL = always
+  // visible. Postpone sets it; the visibility filter runs server-side.
+  showUpDate: column.text(),
 });
 
 // The Today list (the Todoist replacement). A Task is a typed, clarified

@@ -12,6 +12,11 @@ export {
   type WarnFn,
 } from "./captures/collection";
 export { capturesView, type CapturesView } from "./captures/view";
+export {
+  localToday as capturesLocalToday,
+  tomorrow,
+  visibleCaptures,
+} from "./captures/dates";
 
 // The Task data layer (Today list), a sibling of the Capture layer.
 export type { Task } from "./tasks/types";

@@ -51,3 +51,19 @@ export async function editCapture(id: string, text: string): Promise<Capture> {
   const body = (await res.json()) as { capture: Capture };
   return body.capture;
 }
+
+export async function rescheduleCapture(
+  id: string,
+  showUpDate: string | null,
+): Promise<Capture> {
+  const res = await fetch(`/api/captures/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ showUpDate }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/captures/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { capture: Capture };
+  return body.capture;
+}

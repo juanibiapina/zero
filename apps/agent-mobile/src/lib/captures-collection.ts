@@ -11,6 +11,7 @@ import {
   editCapture,
   fetchCaptures,
   processCapture,
+  rescheduleCapture,
   type TokenGetter,
 } from './api';
 import { getAppOutbox, getAppPersistence } from './db';
@@ -23,6 +24,8 @@ function makeRest(getToken: TokenGetter): CapturesRest {
     addCapture: (capture) => addCapture(getToken, capture),
     processCapture: (id) => processCapture(getToken, id),
     editCapture: (id, text) => editCapture(getToken, id, text),
+    rescheduleCapture: (id, showUpDate) =>
+      rescheduleCapture(getToken, id, showUpDate),
   };
 }
 

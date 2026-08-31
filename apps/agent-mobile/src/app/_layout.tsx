@@ -6,6 +6,7 @@ import { tokenCache } from '@clerk/expo/token-cache';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 
@@ -29,18 +30,20 @@ export default function RootLayout() {
   const [queryClient] = useState(createQueryClient);
   useEffect(() => setupAppStateFocus(), []);
   return (
-    <ClerkProvider
-      publishableKey={publishableKey}
-      tokenCache={tokenCache}
-    >
-      <QueryClientProvider client={queryClient}>
-        <KeyboardProvider>
-          {/* Honor the OS "reduce motion" setting: disable animations when the
-              user asks, keep them otherwise. */}
-          <ReducedMotionConfig mode={ReduceMotion.System} />
-          <Stack screenOptions={{ headerShown: false }} />
-        </KeyboardProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClerkProvider
+        publishableKey={publishableKey}
+        tokenCache={tokenCache}
+      >
+        <QueryClientProvider client={queryClient}>
+          <KeyboardProvider>
+            {/* Honor the OS "reduce motion" setting: disable animations when the
+                user asks, keep them otherwise. */}
+            <ReducedMotionConfig mode={ReduceMotion.System} />
+            <Stack screenOptions={{ headerShown: false }} />
+          </KeyboardProvider>
+        </QueryClientProvider>
+      </ClerkProvider>
+    </GestureHandlerRootView>
   );
 }

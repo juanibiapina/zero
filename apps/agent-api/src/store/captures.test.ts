@@ -9,6 +9,11 @@ import { DbCaptureStore } from "./captures";
 // store's add/list SQL against an in-memory table.
 const makeStore = () => new DbCaptureStore(createDb(createMockStorage()));
 
+// A fixed "today" for the visibility filter. Added captures default to a null
+// show-up date, so they are visible on any day; tests that exercise the date
+// filter pass their own boundary values.
+const TODAY = "2024-03-09";
+
 describe("DbCaptureStore", () => {
   it("stores an added capture under the client id and returns it", () => {
     const store = makeStore();
@@ -17,7 +22,7 @@ describe("DbCaptureStore", () => {
 
     expect(capture.id).toBe("id-1");
     expect(capture.text).toBe("buy milk");
-    expect(store.list()).toEqual([capture]);
+    expect(store.list(TODAY)).toEqual([capture]);
   });
 
   it("lists captures in capture order (oldest first)", () => {
@@ -26,11 +31,11 @@ describe("DbCaptureStore", () => {
     const first = store.add("id-1", "first");
     const second = store.add("id-2", "second");
 
-    expect(store.list()).toEqual([first, second]);
+    expect(store.list(TODAY)).toEqual([first, second]);
   });
 
   it("starts empty", () => {
-    expect(makeStore().list()).toEqual([]);
+    expect(makeStore().list(TODAY)).toEqual([]);
   });
 
   it("adds captures open (processedAt is null)", () => {
@@ -50,7 +55,7 @@ describe("DbCaptureStore", () => {
 
     expect(processed?.id).toBe(first.id);
     expect(processed?.processedAt).toBeTruthy();
-    expect(store.list()).toEqual([second]);
+    expect(store.list(TODAY)).toEqual([second]);
   });
 
   it("returns null when processing an unknown id", () => {
@@ -69,7 +74,7 @@ describe("DbCaptureStore", () => {
 
     expect(replay.id).toBe(first.id);
     expect(replay.text).toBe("buy milk");
-    expect(store.list()).toEqual([first]);
+    expect(store.list(TODAY)).toEqual([first]);
   });
 
   it("treats adds under different ids as independent", () => {
@@ -78,7 +83,7 @@ describe("DbCaptureStore", () => {
     const a = store.add("id-1", "a");
     const b = store.add("id-2", "b");
 
-    expect(store.list()).toEqual([a, b]);
+    expect(store.list(TODAY)).toEqual([a, b]);
   });
 
   it("edits a capture's text and returns the updated row", () => {
@@ -101,8 +106,8 @@ describe("DbCaptureStore", () => {
 
     store.editText("id-1", "first edited");
 
-    expect(store.list().map((c) => c.id)).toEqual([first.id, second.id]);
-    expect(store.list()[0].text).toBe("first edited");
+    expect(store.list(TODAY).map((c) => c.id)).toEqual([first.id, second.id]);
+    expect(store.list(TODAY)[0].text).toBe("first edited");
   });
 
   it("returns null when editing an unknown id", () => {
@@ -110,5 +115,73 @@ describe("DbCaptureStore", () => {
     store.add("id-1", "only");
 
     expect(store.editText("nope", "x")).toBeNull();
+  });
+
+  it("adds a capture with a null show-up date (always visible)", () => {
+    const store = makeStore();
+
+    const capture = store.add("id-1", "plain");
+
+    expect(capture.showUpDate).toBeNull();
+  });
+
+  it("reschedules a capture to a future day and returns the updated row", () => {
+    const store = makeStore();
+    const original = store.add("id-1", "later");
+
+    const rescheduled = store.reschedule("id-1", "2099-01-01");
+
+    expect(rescheduled?.id).toBe("id-1");
+    expect(rescheduled?.showUpDate).toBe("2099-01-01");
+    // Only the date changes: text/createdAt/processedAt are untouched.
+    expect(rescheduled?.text).toBe("later");
+    expect(rescheduled?.createdAt).toBe(original.createdAt);
+    expect(rescheduled?.processedAt).toBeNull();
+  });
+
+  it("clears a capture's show-up date with null", () => {
+    const store = makeStore();
+    store.add("id-1", "back to plain");
+    store.reschedule("id-1", "2099-01-01");
+
+    const cleared = store.reschedule("id-1", null);
+
+    expect(cleared?.showUpDate).toBeNull();
+  });
+
+  it("returns null when rescheduling an unknown id", () => {
+    const store = makeStore();
+    store.add("id-1", "only");
+
+    expect(store.reschedule("nope", "2099-01-01")).toBeNull();
+  });
+
+  it("list(today) shows a null-date capture on any day", () => {
+    const store = makeStore();
+    const plain = store.add("id-1", "plain");
+
+    expect(store.list("2024-03-09")).toEqual([plain]);
+  });
+
+  it("list(today) shows a capture whose show-up date is today or overdue", () => {
+    const store = makeStore();
+    store.add("id-today", "today");
+    store.add("id-past", "past");
+    store.reschedule("id-today", "2024-03-09");
+    store.reschedule("id-past", "2020-01-01");
+
+    expect(store.list("2024-03-09").map((c) => c.id)).toEqual([
+      "id-today",
+      "id-past",
+    ]);
+  });
+
+  it("list(today) hides a future-dated capture until its day", () => {
+    const store = makeStore();
+    const plain = store.add("id-plain", "plain");
+    store.add("id-future", "future");
+    store.reschedule("id-future", "2099-01-01");
+
+    expect(store.list("2024-03-09")).toEqual([plain]);
   });
 });

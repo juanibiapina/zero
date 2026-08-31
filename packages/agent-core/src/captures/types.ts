@@ -5,4 +5,7 @@ export type Capture = {
   text: string;
   createdAt: string;
   processedAt: string | null;
+  // Local day (YYYY-MM-DD) the capture reappears on, or null for a plain,
+  // always-visible capture. Postpone sets it.
+  showUpDate: string | null;
 };

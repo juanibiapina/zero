@@ -21,6 +21,7 @@ const fakeUserDO = (seed: Capture[] = []) => {
         text,
         createdAt: new Date(1700000000000 + ++n).toISOString(),
         processedAt: null,
+        showUpDate: null,
       };
       captures.push(capture);
       return capture;
@@ -38,6 +39,12 @@ const fakeUserDO = (seed: Capture[] = []) => {
       const capture = captures.find((c) => c.id === id);
       if (!capture) return null;
       capture.text = text;
+      return capture;
+    },
+    rescheduleCapture(id: string, showUpDate: string | null): Capture | null {
+      const capture = captures.find((c) => c.id === id);
+      if (!capture) return null;
+      capture.showUpDate = showUpDate;
       return capture;
     },
     _captures: captures,
@@ -76,6 +83,7 @@ describe("GET /api/captures", () => {
         text: "buy milk",
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
+        showUpDate: null,
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -90,6 +98,7 @@ describe("GET /api/captures", () => {
           text: "buy milk",
           createdAt: "2023-11-14T22:13:20.001Z",
           processedAt: null,
+          showUpDate: null,
         },
       ],
     });
@@ -165,6 +174,7 @@ describe("POST /api/captures/{id}/process", () => {
         text: "buy milk",
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
+        showUpDate: null,
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -186,6 +196,7 @@ describe("POST /api/captures/{id}/process", () => {
         text: "buy milk",
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
+        showUpDate: null,
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -215,6 +226,7 @@ describe("PATCH /api/captures/{id}", () => {
         text: "buy milk",
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
+        showUpDate: null,
       },
     ]);
 
@@ -259,5 +271,77 @@ describe("PATCH /api/captures/{id}", () => {
 
     expect(res.status).toBe(400);
     expect(userDO._captures[0].text).toBe("buy milk");
+  });
+
+  it("reschedules a capture's show-up date and returns it", async () => {
+    const userDO = seeded();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showUpDate: "2099-01-01" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { capture: Capture } = await res.json();
+    expect(body.capture.showUpDate).toBe("2099-01-01");
+    expect(userDO._captures[0].showUpDate).toBe("2099-01-01");
+    // Text untouched by a date-only update.
+    expect(userDO._captures[0].text).toBe("buy milk");
+  });
+
+  it("clears a capture's show-up date with null", async () => {
+    const userDO = seeded();
+    userDO._captures[0].showUpDate = "2099-01-01";
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showUpDate: null }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(userDO._captures[0].showUpDate).toBeNull();
+  });
+
+  it("rejects a malformed show-up date with 400", async () => {
+    const userDO = seeded();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showUpDate: "tomorrow" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(userDO._captures[0].showUpDate).toBeNull();
+  });
+
+  it("rejects a body with no fields to update with 400", async () => {
+    const userDO = seeded();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 when rescheduling an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+
+    const res = await app.request("/api/captures/nope", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showUpDate: "2099-01-01" }),
+    });
+
+    expect(res.status).toBe(404);
   });
 });
