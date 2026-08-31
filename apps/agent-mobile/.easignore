@@ -1,5 +1,8 @@
 # EAS uploads the whole repo. Trim files the Android build never needs.
 # Keep every package.json so the pnpm workspace still resolves.
+# Session state dirs at the repo root hold Unix sockets (nvim, pi agent) that
+# break the upload copy ("Cannot copy a socket file"); never needed by the build.
+/.local
 /docs
 /.github
 /PLAN.md

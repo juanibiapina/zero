@@ -3,6 +3,10 @@
 # is packed into the archive, ballooning it to hundreds of MB. Nothing here is
 # needed by the build.
 .pnpm-store/
+# Repo-root session state dirs hold live Unix sockets (nvim, pi agent) that break
+# the upload copy ("Cannot copy a socket file"). .easignore overrides .gitignore,
+# so this must be listed here even though .local is gitignored.
+.local/
 **/android/app/build/
 **/android/build/
 **/ios/build/
