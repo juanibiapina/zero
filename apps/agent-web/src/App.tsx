@@ -16,6 +16,7 @@ import {
 import { CenteredPage } from "@/components/CenteredPage";
 import { Loading } from "@/components/Loading";
 import { DevToolbar } from "@/components/DevToolbar";
+import { createWebTimezoneSync } from "./lib/timezone-sync";
 import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HomePage } from "./pages/HomePage";
@@ -82,27 +83,9 @@ function AppShell() {
         setOnboardingSeen(data.onboardingSeen);
         setGoogleOnboardingStatus(data.googleOnboardingStatus);
       }
-      // Keep the stored timezone in sync with this browser. Telegram carries no
-      // timezone, so the web app is the only reliable source. Only PATCH when
-      // it's missing or has changed (travel) — steady state is zero writes.
-      const resolved = Intl.DateTimeFormat().resolvedOptions();
-      const current = resolved.timeZone;
-      if (current && current !== data.timezone) {
-        let region: string | undefined;
-        try {
-          region = new Intl.Locale(resolved.locale).region;
-        } catch {
-          // The timezone remains useful when a browser reports an odd locale.
-        }
-        void fetch("/api/user-settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            timezone: current,
-            ...(region ? { region } : {}),
-          }),
-        });
-      }
+      // Silently sync the browser's timezone. The onboarding GET above seeds the
+      // baseline. See docs/timezone.md.
+      void createWebTimezoneSync().onColdStart(data.timezone);
     })();
     return () => { cancelled = true; };
   }, []);

@@ -42,7 +42,8 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
-      "expo-image"
+      "expo-image",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

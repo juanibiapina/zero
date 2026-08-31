@@ -41,6 +41,21 @@ export async function fetchUserSettings(
   return (await res.json()) as UserSettings;
 }
 
+// Writes this device's timezone to the server, for the silent timezone sync.
+export async function patchTimezone(
+  getToken: TokenGetter,
+  zone: string,
+): Promise<void> {
+  const res = await apiFetch(getToken, '/api/user-settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ timezone: zone }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/user-settings failed: ${res.status}`);
+  }
+}
+
 export async function fetchCaptures(
   getToken: TokenGetter,
   baseUrl: string = API_BASE_URL,
@@ -118,7 +133,7 @@ export async function editCapture(
 
 // Task REST helpers: siblings of the Capture ones above, hitting /api/tasks.
 // The server returns all open tasks (completedAt IS NULL); the client applies
-// the local-today date filter, so no timezone crosses the wire.
+// the local-today date filter.
 export async function fetchTasks(
   getToken: TokenGetter,
   baseUrl: string = API_BASE_URL,

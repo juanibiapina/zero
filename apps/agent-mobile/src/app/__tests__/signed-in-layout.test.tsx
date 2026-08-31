@@ -1,12 +1,23 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import { render } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 import SignedInLayout from '../(signed-in)/_layout';
 
 const mockUseAuth = jest.fn();
+const mockOnColdStart = jest.fn(async () => {});
+const mockOnForeground = jest.fn(async () => {});
+const mockCreateSync = jest.fn((_getToken: unknown) => ({
+  onColdStart: mockOnColdStart,
+  onForeground: mockOnForeground,
+}));
 
 jest.mock('@clerk/expo', () => ({
   useAuth: () => mockUseAuth(),
+}));
+
+jest.mock('../../lib/timezone-sync', () => ({
+  createMobileTimezoneSync: (getToken: unknown) => mockCreateSync(getToken),
 }));
 
 jest.mock('expo-router', () => ({
@@ -21,6 +32,12 @@ jest.mock('expo-router', () => ({
 }));
 
 describe('SignedInLayout', () => {
+  beforeEach(() => {
+    mockOnColdStart.mockClear();
+    mockOnForeground.mockClear();
+    mockCreateSync.mockClear();
+  });
+
   it('shows a loading indicator until Clerk is loaded', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: false, isSignedIn: false });
     const { toJSON } = await render(<SignedInLayout />);
@@ -37,5 +54,26 @@ describe('SignedInLayout', () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
     const { getByText } = await render(<SignedInLayout />);
     expect(getByText('stack')).toBeTruthy();
+  });
+
+  it('does not sync timezone while signed out', async () => {
+    mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
+    await render(<SignedInLayout />);
+    expect(mockCreateSync).not.toHaveBeenCalled();
+  });
+
+  it('reconciles on cold start and on foreground when signed in', async () => {
+    mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
+    const spy = jest.spyOn(AppState, 'addEventListener');
+    await render(<SignedInLayout />);
+
+    expect(mockOnColdStart).toHaveBeenCalledTimes(1);
+
+    const handler = spy.mock.calls.at(-1)?.[1] as (s: string) => void;
+    handler('background');
+    expect(mockOnForeground).not.toHaveBeenCalled();
+    handler('active');
+    expect(mockOnForeground).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
   });
 });

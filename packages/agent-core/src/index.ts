@@ -27,3 +27,14 @@ export {
 } from "./tasks/collection";
 export { todayView, type TodayView } from "./tasks/view";
 export { dueToday, localToday } from "./tasks/today";
+
+// Silent automatic timezone sync (shared core; per-surface adapters).
+export {
+  createTimezoneSync,
+  isCanonicalZone,
+  type DeviceClock,
+  type SettingsGateway,
+  type TimezoneStore,
+  type TimezoneSync,
+  type TimezoneSyncDeps,
+} from "./timezone/sync";
