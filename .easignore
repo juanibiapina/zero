@@ -1,0 +1,9 @@
+# Files EAS Build must not upload in the project archive. Without this the local
+# pnpm content-addressable store (created by some pnpm operations in the tree)
+# is packed into the archive, ballooning it to hundreds of MB. Nothing here is
+# needed by the build.
+.pnpm-store/
+**/android/app/build/
+**/android/build/
+**/ios/build/
+**/.gradle/
