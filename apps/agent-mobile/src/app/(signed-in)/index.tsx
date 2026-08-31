@@ -5,15 +5,10 @@ import { useLiveQuery } from '@tanstack/react-db';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   capturesView,
-  dueToday,
-  localToday,
-  todayView,
   type Capture,
   type CapturesApi,
-  type Task,
-  type TasksApi,
 } from '@zero/agent-core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
   BackHandler,
@@ -33,15 +28,12 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
 import { createMobileCapturesApi } from '@/lib/captures-collection';
-import { createMobileTasksApi } from '@/lib/tasks-collection';
-import { cn } from '@/lib/cn';
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
 const AnimatedCaptureList = Animated.FlatList<Capture>;
-const AnimatedTaskList = Animated.FlatList<Task>;
 
 // Vertical gap between carded rows.
 function Separator() {
@@ -108,44 +100,8 @@ function useCapturesApi(): CapturesApi | null {
   return api;
 }
 
-// Sibling of useCapturesApi for the Task (Today) data layer. Built once in the
-// signed-in tree with its own separate SQLite files. Kept structurally
-// identical to the Capture hook until a shared base is extracted at entity #3.
-function useTasksApi(): TasksApi | null {
-  const queryClient = useQueryClient();
-  const { getToken } = useAuth();
-  const getTokenRef = useRef(getToken);
-  useEffect(() => {
-    getTokenRef.current = getToken;
-  }, [getToken]);
-
-  const [api, setApi] = useState<TasksApi | null>(null);
-  useEffect(() => {
-    let live = true;
-    let built: TasksApi | null = null;
-    void createMobileTasksApi({
-      queryClient,
-      getToken: () => getTokenRef.current(),
-    }).then((a) => {
-      built = a;
-      if (live) {
-        setApi(a);
-      } else {
-        void a.collection.cleanup();
-      }
-    });
-    return () => {
-      live = false;
-      if (built) void built.collection.cleanup();
-    };
-  }, [queryClient]);
-
-  return api;
-}
-
 // Read a data layer's load (sync) error from its own channel. Returns the
-// message only while an error is the current state. Works for both the Capture
-// and Task apis (same getLoadError/subscribeLoadError shape).
+// message only while an error is the current state.
 function useLoadError(api: {
   getLoadError: () => string | null;
   subscribeLoadError: (cb: () => void) => () => void;
@@ -159,76 +115,21 @@ function useLoadError(api: {
   return error;
 }
 
-type Tab = 'captures' | 'today';
-
-// Captures holds unclarified Captures; Today holds Tasks due on or before today.
-// The active tab is also the entry target: the quick-add creates a Capture on
-// Captures and a Task dated today on Today.
+// Captures is the sole list: unclarified raw thoughts. The quick-add creates a
+// Capture; tap a row's circle to Process it.
 export default function HomeScreen() {
   const capturesApi = useCapturesApi();
-  const tasksApi = useTasksApi();
-  const [tab, setTab] = useState<Tab>('captures');
 
   return (
     <View className="flex-1 px-6 pt-16">
       <View className="mb-4 flex-row items-center justify-between">
-        <Text variant="title">{tab === 'captures' ? 'Captures' : 'Today'}</Text>
+        <Text variant="title">Captures</Text>
         {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
             avatar off-center. */}
         <UserButton />
       </View>
 
-      <SegmentedControl tab={tab} onChange={setTab} />
-
-      {/* Both panels stay mounted so switching tabs is instant and neither list
-          re-hydrates; the inactive one is hidden (display:none takes no space,
-          its quick-add overlay hides with it) but its live query stays warm. */}
-      <View
-        className="flex-1"
-        style={tab === 'captures' ? undefined : { display: 'none' }}
-      >
-        {capturesApi ? <Captures api={capturesApi} /> : <View className="flex-1" />}
-      </View>
-      <View
-        className="flex-1"
-        style={tab === 'today' ? undefined : { display: 'none' }}
-      >
-        {tasksApi ? <Today api={tasksApi} /> : <View className="flex-1" />}
-      </View>
-    </View>
-  );
-}
-
-function SegmentedControl({
-  tab,
-  onChange,
-}: {
-  tab: Tab;
-  onChange: (t: Tab) => void;
-}) {
-  const item = (value: Tab, label: string) => {
-    const active = tab === value;
-    return (
-      <Pressable
-        accessibilityRole="tab"
-        accessibilityState={{ selected: active }}
-        accessibilityLabel={label}
-        className={cn(
-          'flex-1 items-center rounded-lg py-1.5',
-          active && 'bg-white shadow-sm',
-        )}
-        onPress={() => onChange(value)}
-      >
-        <Text className={cn(active ? 'text-neutral-900' : 'text-neutral-500')}>
-          {label}
-        </Text>
-      </Pressable>
-    );
-  };
-  return (
-    <View className="mb-4 flex-row gap-1 rounded-xl bg-neutral-100 p-1">
-      {item('captures', 'Captures')}
-      {item('today', 'Today')}
+      {capturesApi ? <Captures api={capturesApi} /> : <View className="flex-1" />}
     </View>
   );
 }
@@ -466,184 +367,6 @@ function Captures({ api }: { api: CapturesApi }) {
             setConfirmingDiscard(false);
             // The Back that opened this dialog also hid the keyboard; refocus to
             // bring it back so editing continues seamlessly.
-            inputRef.current?.focus();
-          }}
-          onConfirm={closeAdd}
-        />
-      ) : null}
-    </>
-  );
-}
-
-// Sibling of Captures for the Today list. Duplicated deliberately (Rule of Three:
-// extract a shared list screen at entity #3), so the two stay structurally
-// identical. Differences: it lists open Tasks narrowed to due-on-or-before the
-// local today, completes instead of processes, and the quick-add mints a Task
-// dated today.
-function Today({ api }: { api: TasksApi }) {
-  const { data: tasks, isLoading } = useLiveQuery((q) =>
-    q
-      .from({ t: api.collection })
-      .where(({ t }) => isNull(t.completedAt))
-      .orderBy(({ t }) => t.createdAt, 'asc'),
-  );
-  // The live query returns all open tasks; narrow to those due on or before the
-  // local today (overdue rolls in, future stays hidden), ordered by day.
-  const list = useMemo(() => dueToday(tasks ?? [], localToday()), [tasks]);
-
-  const loadError = useLoadError(api);
-  const [writeError, setWriteError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void api.refetch();
-    });
-    return () => sub.remove();
-  }, [api]);
-
-  const view = todayView({ count: list.length, isLoading, loadError });
-  const error = writeError ?? (list.length === 0 ? loadError : null);
-
-  const [text, setText] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const inputRef = useRef<TextInput>(null);
-
-  const onAdd = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      setAdding(false);
-      return;
-    }
-    setWriteError(null);
-    // v1 dates a new task today; the Today list shows it immediately.
-    const tx = api.add(trimmed, localToday());
-    tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    setText('');
-  }, [text, api]);
-
-  const closeAdd = useCallback(() => {
-    setText('');
-    setConfirmingDiscard(false);
-    setAdding(false);
-  }, []);
-
-  const requestClose = useCallback(() => {
-    if (text.trim()) {
-      setConfirmingDiscard(true);
-    } else {
-      closeAdd();
-    }
-  }, [text, closeAdd]);
-
-  useEffect(() => {
-    const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
-      if (!adding || confirmingDiscard) return;
-      if (text.trim()) {
-        setConfirmingDiscard(true);
-      } else {
-        closeAdd();
-      }
-    });
-    return () => sub.remove();
-  }, [adding, confirmingDiscard, text, closeAdd]);
-
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (confirmingDiscard) {
-        setConfirmingDiscard(false);
-        return true;
-      }
-      if (adding && text.trim()) {
-        setConfirmingDiscard(true);
-        return true;
-      }
-      if (adding) {
-        closeAdd();
-        return true;
-      }
-      return false;
-    });
-    return () => sub.remove();
-  }, [adding, confirmingDiscard, text, closeAdd]);
-
-  const onComplete = useCallback(
-    (item: Task) => {
-      setWriteError(null);
-      const tx = api.complete(item.id);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api],
-  );
-
-  const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<Task>) => (
-      <Animated.View
-        entering={FadeIn.duration(150)}
-        exiting={FadeOut.duration(200)}
-        className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
-      >
-        <Pressable
-          accessibilityLabel={`Complete "${item.text}"`}
-          className="h-7 w-7 rounded-full border-2 border-neutral-400"
-          hitSlop={8}
-          onPress={() => onComplete(item)}
-        />
-        <Text className="flex-1">{item.text}</Text>
-      </Animated.View>
-    ),
-    [onComplete],
-  );
-
-  const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
-
-  return (
-    <>
-      {error ? <Text variant="error">{error}</Text> : null}
-
-      {view === 'loading' ? (
-        showLoadingText ? (
-          <Text variant="subtitle">Loading today…</Text>
-        ) : (
-          <View className="flex-1" />
-        )
-      ) : (
-        <AnimatedTaskList
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 96 }}
-          data={list}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          ItemSeparatorComponent={Separator}
-          itemLayoutAnimation={LinearTransition.duration(200)}
-          ListEmptyComponent={
-            <Text variant="subtitle">Nothing for today. Add a task.</Text>
-          }
-        />
-      )}
-
-      <QuickAdd
-        open={adding}
-        text={text}
-        onChangeText={setText}
-        onOpen={() => setAdding(true)}
-        onSubmit={() => onAdd()}
-        onRequestClose={requestClose}
-        busy={false}
-        inputRef={inputRef}
-        fabLabel="Add a task"
-        placeholder="Add a task for today"
-      />
-
-      {confirmingDiscard ? (
-        <ConfirmDialog
-          title="Discard changes?"
-          message="The changes you've made will not be saved."
-          cancelLabel="Cancel"
-          confirmLabel="Discard"
-          destructive
-          onCancel={() => {
-            setConfirmingDiscard(false);
             inputRef.current?.focus();
           }}
           onConfirm={closeAdd}

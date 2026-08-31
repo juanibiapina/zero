@@ -59,6 +59,19 @@ The duplication is intentional and kept identical on purpose, so extracting a
 shared base (store, collection factory, list screen) is mechanical when entity
 **#3** lands. Do not extract before then.
 
+**Collapse to one list (decided 2026-08-31):** the Capture/Task split proved
+premature. The user works in a single list the way they do in Todoist and never
+adopted the separate Today tab. The **Today tab was removed from the UI** on web
+and mobile; the app is one Captures list again. All Task code stays parked in the
+tree (table, migration, `DbTaskStore`, `/api/tasks`, the `@zero/agent-core` Task
+data layer, both `tasks-collection.ts`) — unreferenced by any UI, deleted
+nowhere — so Task can return roughly as a one-screen change once Projects and the
+agent give it a reason to exist. The scheduling moves a single list actually
+wants (**postpone to a day**, **drag-to-reorder**) are being folded into Capture
+instead, which reverses the old "do not add a date to Capture" rule. This is
+slice 0 of the Captures postpone/reorder/detail-sheet plan; see that plan for the
+full sequence.
+
 ## Entity wiki (draft — grow one at a time)
 
 Grounding: the foundational block is the **Capture** (the entry point);

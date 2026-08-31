@@ -19,8 +19,11 @@ The singular/plural pair is intentional; do not "fix" it back to "Inbox".
 
 - **Capture** (singular) — the item (table `captures`, type `Capture`). Unchanged.
 - **Captures** (plural) — the list/screen of un-processed Captures (UI title,
-  tab, route, empty-state copy). It is the Captures where `processedAt IS NULL`,
-  oldest first. This term replaced the earlier "Inbox".
+  route, empty-state copy). It is the Captures where `processedAt IS NULL`,
+  oldest first. This term replaced the earlier "Inbox". It is now the **sole
+  list** on both surfaces: the Today tab was removed from the UI (see
+  `docs/entities/task.md` and `docs/todo-app.md`), so there is no tab switcher —
+  the screen opens straight to Captures.
 - **Process** — GTD Clarify: the action that removes a Capture from Captures
   (still stored). Column `processedAt`, RPC `processCapture`, log
   `capture_processed`.

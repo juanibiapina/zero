@@ -22,6 +22,20 @@ them.
 The name is `Task`, not the wiki's earlier "Todo" (which collides with the app
 name).
 
+## Status: parked (removed from the UI)
+
+Task is **dormant**. The Capture/Task split proved premature — the user works in
+one list (Todoist-style) and never adopted the separate Today tab. The Today tab
+was removed from both web and mobile; the app is one Captures list again. All
+Task machinery below stays in the tree, unreferenced by any UI: the `tasks`
+table + migration, `DbTaskStore`, `/api/tasks`, the `@zero/agent-core` Task data
+layer (`createTasksApi`, `todayView`, `dueToday`, `localToday`), and both
+`tasks-collection.ts`. Nothing is deleted, so re-enabling Task once Projects and
+the agent exist should be roughly a one-screen change. The scheduling behavior a
+single list still wants (postpone to a day, reorder) is being folded into
+Capture instead — see `docs/todo-app.md`. The rest of this file describes Task as
+built, for when it returns.
+
 ## What it is
 
 A single clarified next-action with a day it should show up: `text`, a

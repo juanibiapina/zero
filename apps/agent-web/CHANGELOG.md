@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-08-31: The Today tab is gone; the app is one Captures list again.
 - 2026-08-30: Tap a capture's text to edit it inline. Changes save on their own and sync across your devices.
 - 2026-08-30: The Inbox is now called Captures.
 - 2026-08-30: More breathing room between the capture bar and the list on Inbox and Today.
