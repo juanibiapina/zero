@@ -163,6 +163,45 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
   });
 
+  it('reorders: onReorder mints an in-between key and calls reorderCapture for the moved row', async () => {
+    // The native long-press-drag can't run under jest; the mock captures the
+    // list's onReorder so we can drive it directly and assert the wiring
+    // (onReorder -> reorderItems -> orderKeyBetween -> api.reorder). Three keyed
+    // rows in order a0 < a1 < a2.
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([
+      capture('a', 'Apple', null, 'a0'),
+      capture('b', 'Banana', null, 'a1'),
+      capture('c', 'Cherry', null, 'a2'),
+    ]);
+    mockReorderCapture.mockImplementation(async (_t, id, sortKey) => ({
+      ...capture(id, id === 'c' ? 'Cherry' : id, null, sortKey),
+    }));
+
+    await renderScreen();
+    await waitFor(() =>
+      expect(typeof (global as { __reorderableOnReorder?: unknown }).__reorderableOnReorder).toBe(
+        'function',
+      ),
+    );
+
+    // Drag the last row (Cherry, index 2) to the top (index 0).
+    await act(async () => {
+      (
+        global as unknown as {
+          __reorderableOnReorder: (e: { from: number; to: number }) => void;
+        }
+      ).__reorderableOnReorder({ from: 2, to: 0 });
+    });
+
+    await waitFor(() => expect(mockReorderCapture).toHaveBeenCalledTimes(1));
+    // Moved row is Cherry; the new key sorts before the old head (a0).
+    expect(mockReorderCapture.mock.calls[0][1]).toBe('c');
+    const newKey = mockReorderCapture.mock.calls[0][2];
+    expect(typeof newKey).toBe('string');
+    expect(newKey < 'a0').toBe(true);
+  });
+
   it('hides a future-dated capture (optimistic visibility)', async () => {
     mockGetToken.mockResolvedValue('tok');
     // The server would filter this out; the mock returns it as-is, so this

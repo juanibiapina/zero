@@ -68,16 +68,23 @@ function project(velocity: number, decelerationRate = 0.998): number {
   return ((velocity / 1000) * decelerationRate) / (1 - decelerationRate);
 }
 
-// One Captures row: long-press to drag-reorder, swipe right to postpone, tap the
-// circle to process, tap the text to edit inline. The swipe is a swipe-to-commit
-// (one decisive swipe = the action), so it is a hand-built Gesture.Pan, not
-// ReanimatedSwipeable (which is for swipe-to-reveal action buttons and orphans
-// its action layer when the row is removed). The "Tomorrow" background is a child
-// of this wrapper, so it unmounts with the row — no ghost. Reorder is started
-// only by an explicit long-press (useReorderableDrag), so a plain vertical pan
-// still scrolls the list and a horizontal pan still fires the swipe — the drag
-// never steals either. Extracted to its own component so the screen's memoized
-// callbacks stay clean.
+// One Captures row: long-press the text to drag-reorder, swipe right to
+// postpone, tap the circle to process, tap the text to edit inline. The swipe is
+// a swipe-to-commit (one decisive swipe = the action), so it is a hand-built
+// Gesture.Pan, not ReanimatedSwipeable (which is for swipe-to-reveal action
+// buttons and orphans its action layer when the row is removed). The "Tomorrow"
+// background is a child of this wrapper, so it unmounts with the row — no ghost.
+//
+// Reorder is triggered by a plain RN `Pressable onLongPress={drag}` (JS
+// Pressability), NOT a gesture-handler Gesture.LongPress. This is deliberate and
+// load-bearing: react-native-reorderable-list tracks the drag with a single pan
+// gesture on the whole list, and a competing GH gesture in this row's own
+// GestureDetector would block that list pan from activating — the row would lift
+// (armed) but never follow the finger. A JS long-press does not participate in
+// GH arbitration, so the list pan is free to track. The row's GestureDetector
+// therefore carries ONLY the horizontal swipe; horizontal move = swipe, hold =
+// drag, vertical move = list scroll/drag. Extracted to its own component so the
+// screen's memoized callbacks stay clean.
 function CaptureRow({
   item,
   editing,
@@ -99,9 +106,9 @@ function CaptureRow({
 }) {
   const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
-  // Starts the reorderable-list drag for this row; bound to a long press so a
-  // plain pan never triggers it. Must be called from inside a row rendered by
-  // ReorderableList (this is).
+  // Starts the reorderable-list drag for this row; bound to the text's RN
+  // `onLongPress` (see the note above — must be a JS long-press, not a GH
+  // gesture). Must be called from inside a row rendered by ReorderableList.
   const drag = useReorderableDrag();
   // The card's horizontal offset. 0 at rest (covering the green background);
   // grows rightward as the user swipes, revealing "Tomorrow" underneath.
@@ -150,20 +157,6 @@ function CaptureRow({
       }
     });
 
-  // Long-press to lift the row into a drag. runOnJS so the hook's drag() (a JS
-  // function) is called on the JS thread. Disabled while editing. Built inline
-  // (no useMemo), like the pan, so the React Compiler owns the memoization.
-  const longPress = Gesture.LongPress()
-    .enabled(!editing)
-    .minDuration(500)
-    .runOnJS(true)
-    .onStart(() => drag());
-
-  // Both recognizers live on the card: a stationary hold starts the drag; a
-  // horizontal move (activeOffsetX) starts the swipe; a vertical move does
-  // neither, so the list scrolls.
-  const gesture = Gesture.Simultaneous(pan, longPress);
-
   const rowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: reduced ? 0 : x.get() }],
   }));
@@ -178,7 +171,7 @@ function CaptureRow({
       >
         <Text className="font-medium text-white">Tomorrow</Text>
       </View>
-      <GestureDetector gesture={gesture}>
+      <GestureDetector gesture={pan}>
         <Animated.View
           style={rowStyle}
           className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
@@ -205,6 +198,11 @@ function CaptureRow({
               className="flex-1"
               accessibilityLabel={`Edit "${item.text}"`}
               onPress={() => onStartEdit(item)}
+              // Long-press the text body to start a reorder drag (Todoist-style).
+              // JS Pressability, so it does not block the list's pan (see note
+              // on CaptureRow). delayLongPress matches the platform default.
+              onLongPress={() => drag()}
+              delayLongPress={500}
             >
               <Text>{item.text}</Text>
             </Pressable>

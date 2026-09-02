@@ -40,8 +40,12 @@ The singular/plural pair is intentional; do not "fix" it back to "Inbox".
 - **Reorder** — set a Capture's `sortKey` on the stable `id` to move it in the
   manual list order (position = priority). Same-key idempotent update. Store verb
   `reorder`, RPC `reorderCapture`, log `capture_reordered`. On mobile, long-press
-  a row and drag it; on web, drag it by its grip handle (keyboard-reorderable
-  too). `sortKey` is a fractional index (see Data shape / Ordering).
+  a row's text and drag it; on web, drag it by its grip handle (keyboard-
+  reorderable too). `sortKey` is a fractional index (see Data shape / Ordering).
+  Mobile activation note: the long-press is a plain RN `Pressable onLongPress`
+  (JS), NOT a gesture-handler `Gesture.LongPress` — the library tracks the drag
+  with one pan on the whole list, and a competing GH gesture in the row would
+  block it (row lifts but never follows the finger).
 
 The word "Inbox" is reserved for the unrelated Gmail label in the agent's email
 tools; it never names this view.

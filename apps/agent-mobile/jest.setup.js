@@ -124,8 +124,22 @@ jest.mock('react-native-gesture-handler', () => {
 // FlatList (onReorder/itemLayoutAnimation ignored), useReorderableDrag returns a
 // no-op, and reorderItems is the real pure array move. The drag is verified
 // on-device (Maestro), not in jest.
-jest.mock('react-native-reorderable-list', () => {
+// Defined at MODULE scope (mock-prefixed) so the jest.mock factory may reference
+// it — a jest.mock factory cannot contain createElement/JSX, because NativeWind's
+// babel transform injects an out-of-scope interop ref there. React.createElement
+// (no JSX/className) keeps NativeWind from touching this. It renders a plain
+// FlatList (so rows still render for tests) and stashes the list's onReorder on a
+// global, so a test can drive a reorder without the native gesture
+// (global.__reorderableOnReorder({from,to})); the drag itself is verified
+// on-device. Reorderable-only props are stripped so FlatList sees no unknowns.
+const mockReactForReorderable = require('react');
+function mockReorderableList(props) {
   const { FlatList } = require('react-native');
+  const { onReorder, panGesture, itemLayoutAnimation, ...rest } = props;
+  global.__reorderableOnReorder = onReorder;
+  return mockReactForReorderable.createElement(FlatList, rest);
+}
+jest.mock('react-native-reorderable-list', () => {
   const reorderItems = (data, from, to) => {
     const copy = [...data];
     const [moved] = copy.splice(from, 1);
@@ -134,8 +148,8 @@ jest.mock('react-native-reorderable-list', () => {
   };
   return {
     __esModule: true,
-    default: FlatList,
-    ReorderableList: FlatList,
+    default: mockReorderableList,
+    ReorderableList: mockReorderableList,
     useReorderableDrag: () => () => {},
     useReorderableDragStart: () => {},
     useReorderableDragEnd: () => {},
