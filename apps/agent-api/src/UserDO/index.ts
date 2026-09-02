@@ -119,6 +119,15 @@ export class UserDO extends DurableObject<Env> {
       // their text must still invalidate persisted reads of them. This bumps
       // the knowledge version once per content change, never per boot.
       dbStore.syncSystemTopicsFingerprint(systemTopicsFingerprint());
+      // Ordering convergence for the sortKey column (migration 0045). A null
+      // sortKey sorts LAST, and `add` mints a real trailing key for every new
+      // capture — so without this the first capture added after 0045 would sort
+      // ABOVE all the still-null legacy rows, flipping every older capture to the
+      // bottom of the list. Backfilling once (in createdAt order) gives the
+      // legacy rows keys so their order holds and new adds append below them.
+      // Idempotent: a no-op once every row has a key. Runs in code because valid
+      // fractional keys cannot be minted in SQL.
+      this.captures.backfillSortKeys();
     });
   }
 
@@ -144,6 +153,10 @@ export class UserDO extends DurableObject<Env> {
 
   rescheduleCapture(id: string, showUpDate: string | null): Capture | null {
     return this.captures.reschedule(id, showUpDate);
+  }
+
+  reorderCapture(id: string, sortKey: string): Capture | null {
+    return this.captures.reorder(id, sortKey);
   }
 
   addTask(id: string, text: string, showUpDate: string): Task {

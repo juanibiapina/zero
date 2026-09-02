@@ -1,7 +1,8 @@
 // The GTD Captures list, standalone from the agent's Store on purpose so it does
 // not widen the agent's interface.
 
-import { asc, eq, isNull, type Database } from "do-orm";
+import { asc, desc, eq, isNull, type Database } from "do-orm";
+import { generateKeyBetween } from "fractional-indexing";
 
 import { captures } from "../UserDO/db/schema";
 
@@ -13,6 +14,11 @@ export interface Capture {
   // Local day (YYYY-MM-DD) the capture reappears on, or null for a plain,
   // always-visible capture.
   showUpDate: string | null;
+  // Fractional-index sort key for the manual list order, or null (unkeyed,
+  // sorts last). In practice every stored row is keyed (add mints, reorder sets,
+  // backfill keys legacy rows on DO init); null is only a transient pre-backfill
+  // legacy state. See schema.ts / migration 0045.
+  sortKey: string | null;
 }
 
 // Project a stored row back to the client-facing Capture shape.
@@ -22,6 +28,7 @@ function toCapture(row: {
   createdAt: string;
   processedAt: string | null;
   showUpDate: string | null;
+  sortKey: string | null;
 }): Capture {
   return {
     id: row.id,
@@ -29,7 +36,27 @@ function toCapture(row: {
     createdAt: row.createdAt,
     processedAt: row.processedAt,
     showUpDate: row.showUpDate,
+    sortKey: row.sortKey,
   };
+}
+
+// The manual list order: by sortKey ascending, NULLs last, createdAt ascending
+// as the tiebreak. sortKey is compared by raw codepoint (not localeCompare):
+// fractional-indexing's base-62 charset (0-9A-Za-z) sorts by ASCII order, but
+// localeCompare folds case (A ≈ a) and would corrupt the key sequence. The
+// createdAt tiebreak keeps localeCompare (ISO strings are digit-only). This is
+// the SAME rule as agent-core's compareByOrder (duplicated, not imported, so
+// agent-api gains no build coupling to the browser/RN package) — keep the two
+// in lockstep. NULLs sort last here too so a stray/legacy unkeyed row degrades
+// gracefully (falls to the bottom) instead of misordering.
+function byOrder(a: Capture, b: Capture): number {
+  if (a.sortKey == null && b.sortKey == null) {
+    return a.createdAt.localeCompare(b.createdAt);
+  }
+  if (a.sortKey == null) return 1;
+  if (b.sortKey == null) return -1;
+  if (a.sortKey !== b.sortKey) return a.sortKey < b.sortKey ? -1 : 1;
+  return a.createdAt.localeCompare(b.createdAt);
 }
 
 // A capture is visible on `today` when it has no show-up date or that date has
@@ -50,12 +77,16 @@ export class DbCaptureStore {
   add(id: string, text: string): Capture {
     const existingById = this.db.get(captures, { where: eq("id", id) });
     if (existingById) return toCapture(existingById);
+    // Mint the trailing key: read the current max sortKey and generate one after
+    // it, so a new capture appends to the bottom of the manual order.
+    const max = this.db.get(captures, { orderBy: desc("sortKey") });
     const capture: Capture = {
       id,
       text,
       createdAt: new Date().toISOString(),
       processedAt: null,
       showUpDate: null,
+      sortKey: generateKeyBetween(max?.sortKey ?? null, null),
     };
     this.db.insert(captures, capture);
     return capture;
@@ -72,7 +103,8 @@ export class DbCaptureStore {
         orderBy: asc("createdAt"),
       })
       .map(toCapture)
-      .filter((row) => isVisible(row, today));
+      .filter((row) => isVisible(row, today))
+      .sort(byOrder);
   }
 
   // Returns the updated row, or null when no row has that id.
@@ -104,5 +136,33 @@ export class DbCaptureStore {
     this.db.update(captures, { showUpDate }, { where: eq("id", id) });
     const row = this.db.get(captures, { where: eq("id", id) });
     return row ? toCapture(row) : null;
+  }
+
+  // Set a capture's manual sort key. Same-key idempotent update on the stable
+  // id, like reschedule. The client mints the key strictly between the drop
+  // position's two neighbors, so this only writes the moved row. Returns the
+  // updated row, or null when no row has that id.
+  reorder(id: string, sortKey: string): Capture | null {
+    this.db.update(captures, { sortKey }, { where: eq("id", id) });
+    const row = this.db.get(captures, { where: eq("id", id) });
+    return row ? toCapture(row) : null;
+  }
+
+  // One-shot backfill of sort keys for rows that predate the column (sortKey IS
+  // NULL). Assigns sequential fractional keys in createdAt order, so the list's
+  // manual order starts out matching the old oldest-first order. Idempotent:
+  // after the first run no NULL rows remain, so a second call is a cheap empty
+  // select. Called from the UserDO constructor's init block. Keys every NULL
+  // row regardless of processedAt (cheap; there is no un-process path).
+  backfillSortKeys(): void {
+    const rows = this.db.all(captures, {
+      where: isNull("sortKey"),
+      orderBy: asc("createdAt"),
+    });
+    let prev: string | null = null;
+    for (const row of rows) {
+      prev = generateKeyBetween(prev, null);
+      this.db.update(captures, { sortKey: prev }, { where: eq("id", row.id) });
+    }
   }
 }

@@ -8,7 +8,8 @@ const cap = (
   showUpDate: string | null,
   createdAt = "2023-01-01T00:00:00.000Z",
   processedAt: string | null = null,
-): Capture => ({ id, text: id, createdAt, processedAt, showUpDate });
+  sortKey: string | null = null,
+): Capture => ({ id, text: id, createdAt, processedAt, showUpDate, sortKey });
 
 describe("localToday", () => {
   it("formats a fixed date as YYYY-MM-DD in device local time", () => {
@@ -84,7 +85,7 @@ describe("visibleCaptures", () => {
     expect(visibleCaptures([processed], today)).toEqual([]);
   });
 
-  it("orders visible captures oldest first by createdAt", () => {
+  it("orders visible captures oldest first by createdAt when sortKey is absent", () => {
     const rows = visibleCaptures(
       [
         cap("late", null, "2023-02-01T00:00:00.000Z"),
@@ -93,5 +94,40 @@ describe("visibleCaptures", () => {
       today,
     );
     expect(rows.map((c) => c.id)).toEqual(["early", "late"]);
+  });
+
+  it("orders by sortKey ascending ahead of createdAt", () => {
+    const rows = visibleCaptures(
+      [
+        // Newer createdAt but a smaller sortKey → comes first.
+        cap("b", null, "2023-02-01T00:00:00.000Z", null, "a0"),
+        cap("a", null, "2023-01-01T00:00:00.000Z", null, "a1"),
+      ],
+      today,
+    );
+    expect(rows.map((c) => c.id)).toEqual(["b", "a"]);
+  });
+
+  it("sorts a null sortKey last (newest-at-bottom)", () => {
+    const rows = visibleCaptures(
+      [
+        cap("new", null, "2023-03-01T00:00:00.000Z", null, null),
+        cap("keyed", null, "2023-01-01T00:00:00.000Z", null, "a0"),
+      ],
+      today,
+    );
+    expect(rows.map((c) => c.id)).toEqual(["keyed", "new"]);
+  });
+
+  it("compares sortKey by codepoint, not case-folded (uppercase before lowercase)", () => {
+    const rows = visibleCaptures(
+      [
+        cap("lower", null, "2023-01-01T00:00:00.000Z", null, "a"),
+        cap("upper", null, "2023-01-01T00:00:00.000Z", null, "Z"),
+      ],
+      today,
+    );
+    // ASCII 'Z' (90) < 'a' (97); localeCompare would fold and flip this.
+    expect(rows.map((c) => c.id)).toEqual(["upper", "lower"]);
   });
 });

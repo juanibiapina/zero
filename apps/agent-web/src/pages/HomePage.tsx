@@ -1,6 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppHeader } from "@/components/AppHeader";
@@ -8,6 +25,7 @@ import { ErrorText } from "@/components/ConnectionStatus";
 import {
   capturesView,
   capturesLocalToday,
+  orderKeyBetween,
   tomorrow,
   visibleCaptures,
 } from "@zero/agent-core";
@@ -128,8 +146,36 @@ function CapturesReady({ api }: { api: CapturesApi }) {
 
   // The server already returns only visible captures; this second pass is the
   // optimistic hide, so a just-postponed row leaves the list at once (before the
-  // server's filtered GET reconciles it). Overdue rolls in; no red.
+  // server's filtered GET reconciles it). Overdue rolls in; no red. Ordered by
+  // the manual sort key.
   const list = visibleCaptures(captures ?? [], capturesLocalToday());
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // Drop: mint a key strictly between the moved row's new neighbors and persist
+  // it. arrayMove gives the post-drop order, from which the neighbors' keys (or
+  // null at an end) bound the new key. Optimistic setSortKey + the re-sort land
+  // it in place; surface a write error like the other verbs.
+  const onDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIndex = list.findIndex((c) => c.id === active.id);
+      const newIndex = list.findIndex((c) => c.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+      const moved = arrayMove(list, oldIndex, newIndex);
+      const pos = moved.findIndex((c) => c.id === active.id);
+      const prev = moved[pos - 1]?.sortKey ?? null;
+      const next = moved[pos + 1]?.sortKey ?? null;
+      setError(null);
+      const tx = api.reorder(String(active.id), orderKeyBetween(prev, next));
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    },
+    [api, list],
+  );
   const view = capturesView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
@@ -157,18 +203,30 @@ function CapturesReady({ api }: { api: CapturesApi }) {
           No captures yet. Capture something.
         </p>
       ) : (
-        <ul className="space-y-3">
-          {list.map((item) => (
-            <Row
-              key={item.id}
-              text={item.text}
-              actionLabel={`Process "${item.text}"`}
-              onAction={() => onProcess(item)}
-              onEdit={(text) => onEdit(item, text)}
-              onReschedule={() => onReschedule(item)}
-            />
-          ))}
-        </ul>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={onDragEnd}
+        >
+          <SortableContext
+            items={list.map((c) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="space-y-3">
+              {list.map((item) => (
+                <Row
+                  key={item.id}
+                  id={item.id}
+                  text={item.text}
+                  actionLabel={`Process "${item.text}"`}
+                  onAction={() => onProcess(item)}
+                  onEdit={(text) => onEdit(item, text)}
+                  onReschedule={() => onReschedule(item)}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
@@ -218,13 +276,36 @@ function QuickAdd({
   );
 }
 
+// A six-dot drag grip, rendered inside the handle button.
+function GripIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <circle cx="5" cy="4" r="1.4" />
+      <circle cx="11" cy="4" r="1.4" />
+      <circle cx="5" cy="8" r="1.4" />
+      <circle cx="11" cy="8" r="1.4" />
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="11" cy="12" r="1.4" />
+    </svg>
+  );
+}
+
 function Row({
+  id,
   text,
   actionLabel,
   onAction,
   onEdit,
   onReschedule,
 }: {
+  // Stable capture id; the sortable key for dnd-kit.
+  id: string;
   text: string;
   actionLabel: string;
   onAction: () => void;
@@ -236,6 +317,24 @@ function Row({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
+
+  // Drag reorder: only the grip handle carries the drag listeners, so the
+  // circle (process), text (inline edit) and "Tomorrow" button keep their own
+  // clicks. Keyboard reorder comes free (Space to lift, arrows to move).
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : undefined,
+    boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.15)" : undefined,
+  };
 
   const startEdit = () => {
     if (!onEdit) return;
@@ -252,7 +351,20 @@ function Row({
   };
 
   return (
-    <li className="group flex items-center gap-4 rounded-xl border bg-card px-4 py-4">
+    <li
+      ref={setNodeRef}
+      style={dragStyle}
+      className="group flex items-center gap-3 rounded-xl border bg-card px-4 py-4"
+    >
+      <button
+        type="button"
+        aria-label={`Reorder "${text}"`}
+        className="shrink-0 cursor-grab touch-none rounded-md px-1 text-muted-foreground/40 transition-colors hover:text-muted-foreground focus-visible:text-muted-foreground active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripIcon />
+      </button>
       <button
         type="button"
         aria-label={actionLabel}

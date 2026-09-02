@@ -37,6 +37,11 @@ The singular/plural pair is intentional; do not "fix" it back to "Inbox".
   (`null`) makes it always visible again. Same-key idempotent update. Store verb
   `reschedule`, RPC `rescheduleCapture`, log `capture_rescheduled`. Swiping a row
   right (or the web "Tomorrow" button) postpones to the next day.
+- **Reorder** — set a Capture's `sortKey` on the stable `id` to move it in the
+  manual list order (position = priority). Same-key idempotent update. Store verb
+  `reorder`, RPC `reorderCapture`, log `capture_reordered`. On mobile, long-press
+  a row and drag it; on web, drag it by its grip handle (keyboard-reorderable
+  too). `sortKey` is a fractional index (see Data shape / Ordering).
 
 The word "Inbox" is reserved for the unrelated Gmail label in the agent's email
 tools; it never names this view.
@@ -53,6 +58,16 @@ tools; it never names this view.
 - `processedAt` — nullable ISO timestamp; `null` = still in Captures
 - `showUpDate` — nullable local day `YYYY-MM-DD`; `null` = always visible, a
   non-null date hides the Capture until that day arrives (postpone)
+- `sortKey` — nullable fractional-index string (base-62) for the manual list
+  order; `null` means **unkeyed** and sorts **last** (newest-at-bottom). In
+  practice every row is keyed — `add` mints a trailing key, reorder mints a key
+  strictly between the drop position's two neighbors, and an init backfill keys
+  legacy rows — so `null` is only a transient state: a legacy row before the
+  backfill, or the client's optimistic just-added row before the server assigns
+  its key on reconcile. The column is nullable by design (`ADD COLUMN` can't be
+  `NOT NULL` on a populated table and a valid key can't be minted in SQL); the
+  whole stack tolerates `null` (sorts last) rather than depending on its absence.
+  See Ordering below.
 
 ## Behavior
 
@@ -75,8 +90,29 @@ tools; it never names this view.
   so a just-postponed row disappears instantly and offline; the server's filtered
   GET reconciles it. An overdue date rolls the Capture into today silently — no
   red, Things-3 gentle overdue.
-- Ordering is oldest-first by `createdAt`. Hand-reordering (position = priority)
-  is a vision, not yet built.
+- **Reorder** a Capture: drag it to a new position (long-press on mobile, grip
+  handle on web). The new order persists, syncs across devices/Telegram, and is
+  offline-durable. Optimistic like the other verbs.
+- **Ordering.** The list orders by `sortKey` ascending, `createdAt` ascending as
+  the tiebreak. `sortKey` is a **fractional index** (via `fractional-indexing`'s
+  `generateKeyBetween`): to move a row between two neighbors the client mints one
+  key strictly between their keys — an O(1) write that touches only the moved
+  row, never a renumber. Keys are compared by **raw codepoint**, never
+  `localeCompare` (which folds case and would corrupt the base-62 sequence); the
+  server comparator (`DbCaptureStore.list`) and the client comparator
+  (`visibleCaptures` / `compareByOrder` in `@zero/agent-core`) make the identical
+  codepoint comparison **and both sort a `null` key last**, so they order
+  identically and a stray/legacy unkeyed row (or the client's optimistic row)
+  falls to the bottom instead of misordering. The two comparators are duplicated
+  rather than shared (agent-api must not build-depend on the browser/RN
+  `@zero/agent-core` package), so a change to the rule must touch both. The
+  shared `orderKeyBetween` helper wraps the library behind one tested seam.
+- **Sort-key backfill (code, not SQL).** Migration `0045` only adds the nullable
+  `sortKey` column; valid fractional keys cannot be produced in SQL. A one-shot
+  `DbCaptureStore.backfillSortKeys()` assigns sequential keys to any `sortKey IS
+  NULL` row in `createdAt` order (so the legacy oldest-first order is preserved),
+  called from the `UserDO` init block. It is idempotent: once every row has a
+  key, a second run is a cheap empty select.
 
 ## Interactions (per system)
 
@@ -85,10 +121,12 @@ tools; it never names this view.
   to Process. NativeWind v4 + `@expo/ui` on mobile.
 - **Storage** — the server domain store is `DbCaptureStore` (domain methods
   `add` / `list(today)` = visible open Captures / `process` / `editText` /
-  `reschedule`). `list(today)` applies the date predicate in memory (do-orm has
-  no `or`); the DO computes `today` from the user's timezone with
-  `localDayInZone` (`apps/agent-api/src/dates.ts`). See `docs/storage.md` for how
-  data is saved on both the server and the client.
+  `reschedule` / `reorder` / `backfillSortKeys`). `add` mints the trailing
+  `sortKey` (reads the current max, `generateKeyBetween(max, null)`).
+  `list(today)` applies the date predicate in memory (do-orm has no `or`), then
+  sorts by `sortKey` then `createdAt` (nulls last); the DO computes `today` from
+  the user's timezone with `localDayInZone` (`apps/agent-api/src/dates.ts`). See
+  `docs/storage.md` for how data is saved on both the server and the client.
 - **API** — per-user isolated:
   - `GET /api/captures` → `{ captures }`, the **visible** open Captures
     oldest-first (see the server-side visibility filter above).
@@ -96,11 +134,13 @@ tools; it never names this view.
     UUID `id`, and the server dedupes on it (a replay re-sends the same id and
     gets the stored row back). `400` on empty text or a non-UUID id.
   - `POST /api/captures/{id}/process` → `200 { capture }`, or `404` when unknown.
-  - `PATCH /api/captures/{id} { text?, showUpDate? }` → `200 { capture }`, `404`
-    when unknown, `400` on empty text, a malformed date, or a body with neither
-    field. One partial update carries both **edit** (`text`) and **reschedule**
-    (`showUpDate`, nullable to clear); PATCH (not a `POST …/edit` action) because
-    each is a genuine idempotent field update on the capture's stable id.
+  - `PATCH /api/captures/{id} { text?, showUpDate?, sortKey? }` → `200 { capture }`,
+    `404` when unknown, `400` on empty text, a malformed date, an empty sort key,
+    or a body with no field. One partial update carries **edit** (`text`),
+    **reschedule** (`showUpDate`, nullable to clear), and **reorder** (`sortKey`);
+    PATCH (not a `POST …/edit` action) because each is a genuine idempotent field
+    update on the capture's stable id. In practice each PATCH carries exactly one
+    intent (reorder is sent alone).
 - **Other entities** — **Task** is the first typed entity (see
   `docs/entities/task.md`). Processing a Capture into a Task (the Capture->Task
   transition, adding a `sourceCaptureId` on Task) is the next entity interaction

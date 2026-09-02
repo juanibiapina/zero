@@ -154,6 +154,29 @@ export async function rescheduleCapture(
   return body.capture;
 }
 
+export async function reorderCapture(
+  getToken: TokenGetter,
+  id: string,
+  sortKey: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Capture> {
+  const res = await apiFetch(
+    getToken,
+    `/api/captures/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sortKey }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`PATCH /api/captures/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { capture: Capture };
+  return body.capture;
+}
+
 // Task REST helpers: siblings of the Capture ones above, hitting /api/tasks.
 // The server returns all open tasks (completedAt IS NULL); the client applies
 // the local-today date filter.

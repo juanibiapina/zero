@@ -12,6 +12,9 @@
   "files": [
     "src"
   ],
+  "dependencies": {
+    "fractional-indexing": "^4.0.0"
+  },
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

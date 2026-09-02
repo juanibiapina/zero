@@ -20,6 +20,7 @@
     "aws4fetch": "^1.0.20",
     "croner": "^10.0.1",
     "do-orm": "github:juanibiapina/do-orm",
+    "fractional-indexing": "^4.0.0",
     "grammy": "^1.45.1",
     "hono": "^4.12.33",
     "jose": "^6.2.6",

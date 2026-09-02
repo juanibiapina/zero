@@ -30,6 +30,7 @@ function fakeRest(initial: Capture[]): CapturesRest {
         createdAt: new Date().toISOString(),
         processedAt: null,
         showUpDate: null,
+        sortKey: null,
       };
       server.push(capture);
       return { ...capture };
@@ -53,6 +54,13 @@ function fakeRest(initial: Capture[]): CapturesRest {
       const capture = server.find((c) => c.id === id);
       if (!capture) throw new Error(`no capture ${id}`);
       capture.showUpDate = showUpDate;
+      return { ...capture };
+    },
+    reorderCapture: async (id, sortKey) => {
+      await sleep(5);
+      const capture = server.find((c) => c.id === id);
+      if (!capture) throw new Error(`no capture ${id}`);
+      capture.sortKey = sortKey;
       return { ...capture };
     },
   };
@@ -83,7 +91,7 @@ describe("captures collection", () => {
     const api = createInMemoryApi({
       queryClient: new QueryClient(),
       rest: fakeRest([
-        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
+        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: null },
       ]),
     });
 
@@ -116,7 +124,7 @@ describe("captures collection", () => {
 
   it("editing a capture shows the new text and reconciles, routing to editCapture not process", async () => {
     const base = fakeRest([
-      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: null },
     ]);
     // Count which REST verb each write routes to, so the in-memory onUpdate
     // branch (process vs edit) is asserted, not just the visible text.
@@ -158,7 +166,7 @@ describe("captures collection", () => {
 
   it("rescheduling a capture sets its showUpDate and routes to rescheduleCapture, not edit/process", async () => {
     const base = fakeRest([
-      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: null },
     ]);
     let processCalls = 0;
     let editCalls = 0;
@@ -203,12 +211,62 @@ describe("captures collection", () => {
     expect(processCalls).toBe(0);
   });
 
+  it("reordering a capture sets its sortKey and routes to reorderCapture, not edit/reschedule/process", async () => {
+    const base = fakeRest([
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: "a0" },
+    ]);
+    let processCalls = 0;
+    let editCalls = 0;
+    let rescheduleCalls = 0;
+    let reorderCalls = 0;
+    const rest: CapturesRest = {
+      ...base,
+      processCapture: (id) => {
+        processCalls++;
+        return base.processCapture(id);
+      },
+      editCapture: (id, text) => {
+        editCalls++;
+        return base.editCapture(id, text);
+      },
+      rescheduleCapture: (id, showUpDate) => {
+        rescheduleCalls++;
+        return base.rescheduleCapture(id, showUpDate);
+      },
+      reorderCapture: (id, sortKey) => {
+        reorderCalls++;
+        return base.reorderCapture(id, sortKey);
+      },
+    };
+    const api = createInMemoryApi({ queryClient: new QueryClient(), rest });
+
+    const captures = createLiveQueryCollection((q) =>
+      q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+    );
+    await api.collection.stateWhenReady();
+    await captures.preload();
+    await sleep(50);
+
+    const tx = api.reorder("s1", "a5");
+    await tx.isPersisted.promise;
+    await sleep(50);
+
+    const rows = captures.toArray as Capture[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].sortKey).toBe("a5");
+    expect(rows[0].processedAt).toBeNull();
+    expect(reorderCalls).toBe(1);
+    expect(rescheduleCalls).toBe(0);
+    expect(editCalls).toBe(0);
+    expect(processCalls).toBe(0);
+  });
+
   it("processing a capture removes it once, without a reappear flicker", async () => {
     const api = createInMemoryApi({
       queryClient: new QueryClient(),
       rest: fakeRest([
-        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null },
-        { id: "s2", text: "beta", createdAt: "2020-01-02T00:00:00.000Z", processedAt: null, showUpDate: null },
+        { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: null },
+        { id: "s2", text: "beta", createdAt: "2020-01-02T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: null },
       ]),
     });
 
@@ -248,6 +306,7 @@ describe("reconcileCaptureWrites", () => {
     createdAt: "2023-01-01T00:00:00.000Z",
     processedAt,
     showUpDate: null,
+    sortKey: null,
   });
 
   it("inserts every server row when the collection is empty", () => {

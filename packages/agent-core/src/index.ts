@@ -17,6 +17,7 @@ export {
   tomorrow,
   visibleCaptures,
 } from "./captures/dates";
+export { compareByOrder, orderKeyBetween } from "./captures/order";
 
 // The Task data layer (Today list), a sibling of the Capture layer.
 export type { Task } from "./tasks/types";

@@ -84,7 +84,13 @@ jest.mock('react-native-gesture-handler', () => {
     for (const m of [
       'enabled',
       'activeOffsetX',
+      'activeOffsetY',
       'failOffsetY',
+      'failOffsetX',
+      'minDuration',
+      'maxDistance',
+      'runOnJS',
+      'activateAfterLongPress',
       'onStart',
       'onUpdate',
       'onEnd',
@@ -99,9 +105,42 @@ jest.mock('react-native-gesture-handler', () => {
   const Passthrough = ({ children }) => children ?? null;
   return {
     __esModule: true,
-    Gesture: { Pan: makeGesture, Tap: makeGesture },
+    // Compose helpers return a gesture-like object; GestureDetector ignores it.
+    Gesture: {
+      Pan: makeGesture,
+      Tap: makeGesture,
+      LongPress: makeGesture,
+      Simultaneous: () => makeGesture(),
+      Race: () => makeGesture(),
+      Exclusive: () => makeGesture(),
+    },
     GestureDetector: Passthrough,
     GestureHandlerRootView: Passthrough,
+  };
+});
+
+// react-native-reorderable-list is native (worklet-driven); mock the pieces the
+// screen uses so the tree renders under jest. ReorderableList aliases the RN
+// FlatList (onReorder/itemLayoutAnimation ignored), useReorderableDrag returns a
+// no-op, and reorderItems is the real pure array move. The drag is verified
+// on-device (Maestro), not in jest.
+jest.mock('react-native-reorderable-list', () => {
+  const { FlatList } = require('react-native');
+  const reorderItems = (data, from, to) => {
+    const copy = [...data];
+    const [moved] = copy.splice(from, 1);
+    copy.splice(to, 0, moved);
+    return copy;
+  };
+  return {
+    __esModule: true,
+    default: FlatList,
+    ReorderableList: FlatList,
+    useReorderableDrag: () => () => {},
+    useReorderableDragStart: () => {},
+    useReorderableDragEnd: () => {},
+    useIsActive: () => false,
+    reorderItems,
   };
 });
 

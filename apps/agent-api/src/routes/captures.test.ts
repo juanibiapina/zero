@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OpenAPIHono } from "@hono/zod-openapi";
+import { generateKeyBetween } from "fractional-indexing";
 
 import type { Env } from "../types";
 import type { Capture } from "../store/captures";
@@ -16,12 +17,17 @@ const fakeUserDO = (seed: Capture[] = []) => {
     addCapture(id: string, text: string): Capture {
       const existingById = captures.find((c) => c.id === id);
       if (existingById) return existingById;
+      const max = captures.reduce<string | null>(
+        (m, c) => (c.sortKey != null && (m == null || c.sortKey > m) ? c.sortKey : m),
+        null,
+      );
       const capture: Capture = {
         id,
         text,
         createdAt: new Date(1700000000000 + ++n).toISOString(),
         processedAt: null,
         showUpDate: null,
+        sortKey: generateKeyBetween(max, null),
       };
       captures.push(capture);
       return capture;
@@ -45,6 +51,12 @@ const fakeUserDO = (seed: Capture[] = []) => {
       const capture = captures.find((c) => c.id === id);
       if (!capture) return null;
       capture.showUpDate = showUpDate;
+      return capture;
+    },
+    reorderCapture(id: string, sortKey: string): Capture | null {
+      const capture = captures.find((c) => c.id === id);
+      if (!capture) return null;
+      capture.sortKey = sortKey;
       return capture;
     },
     _captures: captures,
@@ -84,6 +96,7 @@ describe("GET /api/captures", () => {
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
         showUpDate: null,
+        sortKey: "a0",
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -99,6 +112,7 @@ describe("GET /api/captures", () => {
           createdAt: "2023-11-14T22:13:20.001Z",
           processedAt: null,
           showUpDate: null,
+          sortKey: "a0",
         },
       ],
     });
@@ -175,6 +189,7 @@ describe("POST /api/captures/{id}/process", () => {
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
         showUpDate: null,
+        sortKey: "a0",
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -197,6 +212,7 @@ describe("POST /api/captures/{id}/process", () => {
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
         showUpDate: null,
+        sortKey: "a0",
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -227,6 +243,7 @@ describe("PATCH /api/captures/{id}", () => {
         createdAt: "2023-11-14T22:13:20.001Z",
         processedAt: null,
         showUpDate: null,
+        sortKey: "a0",
       },
     ]);
 
@@ -318,6 +335,40 @@ describe("PATCH /api/captures/{id}", () => {
 
     expect(res.status).toBe(400);
     expect(userDO._captures[0].showUpDate).toBeNull();
+  });
+
+  it("reorders a capture's sort key and returns it", async () => {
+    const userDO = seeded();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sortKey: "a5" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { capture: Capture } = await res.json();
+    expect(body.capture.sortKey).toBe("a5");
+    expect(userDO._captures[0].sortKey).toBe("a5");
+    // Text and date untouched by a reorder-only update.
+    expect(userDO._captures[0].text).toBe("buy milk");
+    expect(userDO._captures[0].showUpDate).toBeNull();
+  });
+
+  it("rejects an empty sort key with 400", async () => {
+    const userDO = seeded();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sortKey: "" }),
+    });
+
+    expect(res.status).toBe(400);
+    // Unchanged by the rejected update (still the seeded key).
+    expect(userDO._captures[0].sortKey).toBe("a0");
   });
 
   it("rejects a body with no fields to update with 400", async () => {
