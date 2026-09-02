@@ -142,10 +142,10 @@ function CapturesReady({ api }: { api: CapturesApi }) {
     [api],
   );
 
-  // The server already returns only visible captures; this second pass is the
-  // optimistic hide, so a just-postponed row leaves the list at once (before the
-  // server's filtered GET reconciles it). Overdue rolls in; no red. Ordered by
-  // the manual sort key.
+  // The server returns every open capture (Captures and Upcoming share the same
+  // set); this pass keeps only the ones that have shown up, so a just-postponed
+  // row leaves the list at once and future-dated rows stay in Upcoming. Overdue
+  // rolls in; no red. Ordered by the manual sort key.
   const list = visibleCaptures(captures ?? [], capturesLocalToday());
 
   const sensors = useSensors(

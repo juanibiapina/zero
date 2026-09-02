@@ -22,6 +22,7 @@ import { createWebTimezoneSync } from "./lib/timezone-sync";
 import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HomePage } from "./pages/HomePage";
+import { UpcomingPage } from "./pages/UpcomingPage";
 import { AdminPage } from "./pages/AdminPage";
 import { UserDetailPage } from "./pages/UserDetailPage";
 
@@ -54,6 +55,9 @@ function AuthGate() {
         {/* Unlinked: reachable only by typing /captures. Keeps the GTD Captures
             list isolated from the current web app while it is dogfooded. */}
         <Route path="captures" element={<HomePage />} />
+        {/* Unlinked from the marketing app like Captures; the second GTD
+            section. Shows captures scheduled for a future day. */}
+        <Route path="upcoming" element={<UpcomingPage />} />
         <Route path="onboarding" element={<OnboardingRoute />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users/:userId" element={<UserDetailPage />} />

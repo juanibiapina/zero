@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-02: New Upcoming tab lists captures scheduled for a future day, grouped by day (Tomorrow and beyond). Tap a capture's circle to process it or its text to edit.
 - 2026-09-02: New bottom tab bar to move between sections; Captures is the first.
 - 2026-09-02: Press and hold a capture to drag it to a new spot; the order sticks and syncs across your devices. Works offline.
 - 2026-08-31: Swipe a capture right to postpone it to the next day; it drops off your list and comes back tomorrow. Works offline.

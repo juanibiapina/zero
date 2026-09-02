@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { View } from 'react-native';
 
 import type { Capture } from '@/lib/api';
+import { resetCapturesApiForTest } from '@/lib/captures-collection';
 
 import HomeScreen from '../index';
 
@@ -88,6 +89,10 @@ const renderScreen = () => {
 };
 
 describe('HomeScreen', () => {
+  beforeEach(() => {
+    resetCapturesApiForTest();
+  });
+
   it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {
     // Fake timers so the loading-text delay is driven by the test clock, not
     // wall time. Under real timers a loaded CI box can let the 1s delay elapse

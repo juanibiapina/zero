@@ -44,15 +44,20 @@ export default function SignedInLayout() {
     return <Redirect href="/sign-in" />;
   }
 
-  // A single-tab bar for now; a second section lands next. Each tab is a screen
-  // file whose name matches its Trigger `name`, so a new tab is a new file plus
-  // one more Trigger. NativeTabs is a native navigator, so its first use needs a
-  // fresh EAS dev build to appear on device (pure-JS reload will not show it).
+  // Two sections: Captures (what has shown up) and Upcoming (future-dated
+  // captures, grouped by day). Each tab is a screen file whose name matches its
+  // Trigger `name`, so a new tab is a new file plus one more Trigger. NativeTabs
+  // is a native navigator, so its first use needs a fresh EAS dev build to
+  // appear on device (pure-JS reload will not show it).
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Icon sf="tray.full" md="inbox" />
         <NativeTabs.Trigger.Label>Captures</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="upcoming">
+        <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
+        <NativeTabs.Trigger.Label>Upcoming</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

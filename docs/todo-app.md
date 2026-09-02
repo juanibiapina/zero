@@ -181,6 +181,17 @@ query filters `showUpDate <= localToday`, so overdue rolls in and future stays
 hidden). Mobile device verification (Maestro, Pixel 7) still needs a standalone
 EAS build for the durable-snapshot path.
 
+Shipped (2026-09-02): **Upcoming** as section #2 on both surfaces (plan:
+`docs/plans/todo-upcoming-tab.md`). A second tab (mobile) / nav entry (web) that
+lists open, future-dated captures (`showUpDate > today`) grouped into day
+sections (Tomorrow and beyond), the complement of the Captures list (which shows
+what has already shown up). Grouping is one shared pure helper `upcomingSections`
+in `@zero/agent-core`; each surface renders it in its own idiom (a mobile
+`SectionList`, a web section list), with process + inline-edit rows, no calendar
+strip and no drag-reorder. The mobile Capture data layer is now a shared
+singleton so both tabs read one collection. Quick-add-to-a-day and a date strip
+are deferred follow-ups.
+
 Shipped (2026-09-02): **navigation chrome** on both surfaces — a native bottom
 tab bar on mobile (`NativeTabs`) and a matching web nav (left sidebar on desktop,
 bottom bar on phones). One section for now (**Captures**); a second lands next.

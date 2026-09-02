@@ -70,11 +70,12 @@ describe('SignedInLayout', () => {
     expect(getByText('redirect:/sign-in')).toBeTruthy();
   });
 
-  it('renders the tab bar when signed in', async () => {
+  it('renders the tab bar with both sections when signed in', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
     const { getByText } = await render(<SignedInLayout />);
     expect(getByText(/^tabs/)).toBeTruthy();
     expect(getByText('Captures')).toBeTruthy();
+    expect(getByText('Upcoming')).toBeTruthy();
   });
 
   it('does not sync timezone while signed out', async () => {

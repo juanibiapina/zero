@@ -10,10 +10,7 @@ import { DbCaptureStore } from "./captures";
 // store's add/list SQL against an in-memory table.
 const makeStore = () => new DbCaptureStore(createDb(createMockStorage()));
 
-// A fixed "today" for the visibility filter. Added captures default to a null
-// show-up date, so they are visible on any day; tests that exercise the date
-// filter pass their own boundary values.
-const TODAY = "2024-03-09";
+
 
 describe("DbCaptureStore", () => {
   it("stores an added capture under the client id and returns it", () => {
@@ -23,7 +20,7 @@ describe("DbCaptureStore", () => {
 
     expect(capture.id).toBe("id-1");
     expect(capture.text).toBe("buy milk");
-    expect(store.list(TODAY)).toEqual([capture]);
+    expect(store.list()).toEqual([capture]);
   });
 
   it("lists captures in capture order (oldest first)", () => {
@@ -32,11 +29,11 @@ describe("DbCaptureStore", () => {
     const first = store.add("id-1", "first");
     const second = store.add("id-2", "second");
 
-    expect(store.list(TODAY)).toEqual([first, second]);
+    expect(store.list()).toEqual([first, second]);
   });
 
   it("starts empty", () => {
-    expect(makeStore().list(TODAY)).toEqual([]);
+    expect(makeStore().list()).toEqual([]);
   });
 
   it("adds captures open (processedAt is null)", () => {
@@ -56,7 +53,7 @@ describe("DbCaptureStore", () => {
 
     expect(processed?.id).toBe(first.id);
     expect(processed?.processedAt).toBeTruthy();
-    expect(store.list(TODAY)).toEqual([second]);
+    expect(store.list()).toEqual([second]);
   });
 
   it("returns null when processing an unknown id", () => {
@@ -75,7 +72,7 @@ describe("DbCaptureStore", () => {
 
     expect(replay.id).toBe(first.id);
     expect(replay.text).toBe("buy milk");
-    expect(store.list(TODAY)).toEqual([first]);
+    expect(store.list()).toEqual([first]);
   });
 
   it("treats adds under different ids as independent", () => {
@@ -84,7 +81,7 @@ describe("DbCaptureStore", () => {
     const a = store.add("id-1", "a");
     const b = store.add("id-2", "b");
 
-    expect(store.list(TODAY)).toEqual([a, b]);
+    expect(store.list()).toEqual([a, b]);
   });
 
   it("edits a capture's text and returns the updated row", () => {
@@ -107,8 +104,8 @@ describe("DbCaptureStore", () => {
 
     store.editText("id-1", "first edited");
 
-    expect(store.list(TODAY).map((c) => c.id)).toEqual([first.id, second.id]);
-    expect(store.list(TODAY)[0].text).toBe("first edited");
+    expect(store.list().map((c) => c.id)).toEqual([first.id, second.id]);
+    expect(store.list()[0].text).toBe("first edited");
   });
 
   it("returns null when editing an unknown id", () => {
@@ -157,33 +154,27 @@ describe("DbCaptureStore", () => {
     expect(store.reschedule("nope", "2099-01-01")).toBeNull();
   });
 
-  it("list(today) shows a null-date capture on any day", () => {
-    const store = makeStore();
-    const plain = store.add("id-1", "plain");
-
-    expect(store.list("2024-03-09")).toEqual([plain]);
-  });
-
-  it("list(today) shows a capture whose show-up date is today or overdue", () => {
-    const store = makeStore();
-    store.add("id-today", "today");
-    store.add("id-past", "past");
-    store.reschedule("id-today", "2024-03-09");
-    store.reschedule("id-past", "2020-01-01");
-
-    expect(store.list("2024-03-09").map((c) => c.id)).toEqual([
-      "id-today",
-      "id-past",
-    ]);
-  });
-
-  it("list(today) hides a future-dated capture until its day", () => {
+  it("lists an open capture regardless of its show-up date (client filters)", () => {
     const store = makeStore();
     const plain = store.add("id-plain", "plain");
-    store.add("id-future", "future");
+    const future = store.add("id-future", "future");
     store.reschedule("id-future", "2099-01-01");
 
-    expect(store.list("2024-03-09")).toEqual([plain]);
+    // The server returns every open capture, future-dated included; the client
+    // splits them into Captures and Upcoming.
+    expect(store.list().map((c) => c.id)).toEqual([plain.id, future.id]);
+    expect(store.list().find((c) => c.id === "id-future")?.showUpDate).toBe(
+      "2099-01-01",
+    );
+  });
+
+  it("drops a processed capture from the open list", () => {
+    const store = makeStore();
+    const open = store.add("id-open", "open");
+    store.add("id-done", "done");
+    store.process("id-done");
+
+    expect(store.list().map((c) => c.id)).toEqual([open.id]);
   });
 
   it("mints a trailing sort key on add, so a new capture sorts after existing", () => {
@@ -196,7 +187,7 @@ describe("DbCaptureStore", () => {
     // Second's key sorts after first's (codepoint), so list order matches
     // insertion order.
     expect(second.sortKey! > first.sortKey!).toBe(true);
-    expect(store.list(TODAY).map((c) => c.id)).toEqual(["id-1", "id-2"]);
+    expect(store.list().map((c) => c.id)).toEqual(["id-1", "id-2"]);
   });
 
   it("reorders a capture by setting its sort key idempotently", () => {
@@ -211,7 +202,7 @@ describe("DbCaptureStore", () => {
     expect(reordered?.sortKey).toBe(between);
     // Idempotent replay.
     expect(store.reorder("id-c", between)?.sortKey).toBe(between);
-    expect(store.list(TODAY).map((c) => c.id)).toEqual(["id-a", "id-c", "id-b"]);
+    expect(store.list().map((c) => c.id)).toEqual(["id-a", "id-c", "id-b"]);
   });
 
   it("returns null when reordering an unknown id", () => {
@@ -243,14 +234,14 @@ describe("DbCaptureStore", () => {
 
     // Every row now has a key, and the list order is oldest-first (the legacy
     // createdAt order preserved).
-    const rows = store.list(TODAY);
+    const rows = store.list();
     expect(rows.map((c) => c.id)).toEqual(["id-a", "id-b", "id-c"]);
     expect(rows.every((c) => c.sortKey != null && c.sortKey.length > 0)).toBe(true);
 
     // Second run is a no-op: no NULL rows remain, keys unchanged.
-    const before = store.list(TODAY).map((c) => c.sortKey);
+    const before = store.list().map((c) => c.sortKey);
     store.backfillSortKeys();
-    const after = store.list(TODAY).map((c) => c.sortKey);
+    const after = store.list().map((c) => c.sortKey);
     expect(after).toEqual(before);
   });
 
@@ -276,6 +267,6 @@ describe("DbCaptureStore", () => {
     const store = new DbCaptureStore(db);
 
     // Keyed row first even though it is newer; the null row falls to the bottom.
-    expect(store.list(TODAY).map((c) => c.id)).toEqual(["id-keyed", "id-null"]);
+    expect(store.list().map((c) => c.id)).toEqual(["id-keyed", "id-null"]);
   });
 });

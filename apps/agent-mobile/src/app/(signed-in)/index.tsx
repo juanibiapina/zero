@@ -1,8 +1,6 @@
-import { useAuth } from '@clerk/expo';
 import { UserButton } from '@clerk/expo/native';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   capturesView,
   capturesLocalToday,
@@ -44,7 +42,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
-import { createMobileCapturesApi } from '@/lib/captures-collection';
+import { useCapturesApi } from '@/lib/use-captures-api';
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -239,42 +237,6 @@ function useDelayed(active: boolean, ms: number): boolean {
   return active && elapsed;
 }
 
-// Build the Capture data layer once inside the signed-in tree, where the Clerk
-// token getter is valid. getToken is read through a ref so the collection is
-// built once (not rebuilt when Clerk hands back a new function identity).
-function useCapturesApi(): CapturesApi | null {
-  const queryClient = useQueryClient();
-  const { getToken } = useAuth();
-  const getTokenRef = useRef(getToken);
-  useEffect(() => {
-    getTokenRef.current = getToken;
-  }, [getToken]);
-
-  const [api, setApi] = useState<CapturesApi | null>(null);
-  useEffect(() => {
-    let live = true;
-    let built: CapturesApi | null = null;
-    void createMobileCapturesApi({
-      queryClient,
-      getToken: () => getTokenRef.current(),
-    }).then((a) => {
-      built = a;
-      if (live) {
-        setApi(a);
-      } else {
-        // Unmounted before it resolved: release the collection's subscription.
-        void a.collection.cleanup();
-      }
-    });
-    return () => {
-      live = false;
-      if (built) void built.collection.cleanup();
-    };
-  }, [queryClient]);
-
-  return api;
-}
-
 // Read a data layer's load (sync) error from its own channel. Returns the
 // message only while an error is the current state.
 function useLoadError(api: {
@@ -316,11 +278,11 @@ function Captures({ api }: { api: CapturesApi }) {
       .where(({ c }) => isNull(c.processedAt))
       .orderBy(({ c }) => c.createdAt, 'asc'),
   );
-  // The server already returns only visible captures; this second pass is the
-  // optimistic hide, so a just-postponed row leaves the list at once (before the
-  // server's filtered GET reconciles it). Overdue rolls in; no red. Memoized so
-  // the render-phase filter (and its localToday read) stays out of the React
-  // Compiler's path for the screen's callbacks.
+  // The server returns every open capture (Captures and Upcoming share the same
+  // set); this pass keeps only the ones that have shown up, so a just-postponed
+  // row leaves the list at once and future-dated rows stay in Upcoming. Overdue
+  // rolls in; no red. Memoized so the render-phase filter (and its localToday
+  // read) stays out of the React Compiler's path for the screen's callbacks.
   const list = useMemo(
     () => visibleCaptures(captures ?? [], capturesLocalToday()),
     [captures],

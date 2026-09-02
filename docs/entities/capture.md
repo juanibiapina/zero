@@ -85,15 +85,21 @@ tools; it never names this view.
 - **Postpone** a Capture to the next day: swipe the row right on mobile, or click
   the "Tomorrow" button on web. It leaves the list at once and comes back on its
   day. Optimistic and offline-durable.
-- **Visibility filter (server-side).** `GET /api/captures` returns only the
-  **visible** open Captures: `processedAt IS NULL AND (showUpDate IS NULL OR
-  showUpDate <= today)`. The DO derives `today` from the user's
-  `userSettings.timezone` (default UTC), so the server is the single source of
-  truth and a device with a wrong clock cannot desync the list. The client keeps
-  a **thin optimistic hide** (the same rule against the device's local day) only
-  so a just-postponed row disappears instantly and offline; the server's filtered
-  GET reconciles it. An overdue date rolls the Capture into today silently — no
-  red, Things-3 gentle overdue.
+- **Visibility (client-side).** `GET /api/captures` returns **every** open
+  Capture (`processedAt IS NULL`), future-dated rows included. The client owns
+  the split against its own local day: **Captures** shows the rows that have
+  shown up (`showUpDate IS NULL OR showUpDate <= today`, via `visibleCaptures`),
+  and **Upcoming** shows the future-dated rows grouped by day (`showUpDate >
+  today`, via `upcomingSections`) — both in `@zero/agent-core`. A Capture belongs
+  to exactly one of the two views. An overdue date rolls the Capture into today's
+  Captures list silently — no red, Things-3 gentle overdue. The client owning the
+  day keeps a just-postponed row leaving Captures instant and offline; there is no
+  server-side filter to reconcile against.
+- **Upcoming.** The complement of Captures: open, future-dated Captures grouped
+  into day sections (Tomorrow and beyond), ordered within a day by the same
+  manual `sortKey`. Surfaced as the second nav section (mobile Upcoming tab, web
+  `/upcoming`). Postponing a Capture moves it out of Captures and into Upcoming's
+  Tomorrow section. No calendar strip and no drag-reorder in this view.
 - **Reorder** a Capture: drag it to a new position (long-press on mobile, grip
   handle on web). The new order persists, syncs across devices/Telegram, and is
   offline-durable. Optimistic like the other verbs.
@@ -120,20 +126,20 @@ tools; it never names this view.
 
 ## Interactions (per system)
 
-- **UI** — mobile Captures screen (`apps/agent-mobile`) and web `/captures`
-  (`apps/agent-web`, unlinked route). Quick-add bar off a FAB; tap a row's circle
-  to Process. NativeWind v4 + `@expo/ui` on mobile.
+- **UI** — mobile Captures + Upcoming tabs (`apps/agent-mobile`) and web
+  `/captures` + `/upcoming` (`apps/agent-web`, unlinked routes). Quick-add bar off
+  a FAB; tap a row's circle to Process. Upcoming groups future-dated Captures by
+  day. NativeWind v4 + `@expo/ui` on mobile.
 - **Storage** — the server domain store is `DbCaptureStore` (domain methods
-  `add` / `list(today)` = visible open Captures / `process` / `editText` /
-  `reschedule` / `reorder` / `backfillSortKeys`). `add` mints the trailing
-  `sortKey` (reads the current max, `generateKeyBetween(max, null)`).
-  `list(today)` applies the date predicate in memory (do-orm has no `or`), then
-  sorts by `sortKey` then `createdAt` (nulls last); the DO computes `today` from
-  the user's timezone with `localDayInZone` (`apps/agent-api/src/dates.ts`). See
+  `add` / `list` = all open Captures / `process` / `editText` / `reschedule` /
+  `reorder` / `backfillSortKeys`). `add` mints the trailing `sortKey` (reads the
+  current max, `generateKeyBetween(max, null)`). `list` returns every open
+  Capture sorted by `sortKey` then `createdAt` (nulls last), with no visibility
+  filter — the client splits the set into Captures and Upcoming. See
   `docs/storage.md` for how data is saved on both the server and the client.
 - **API** — per-user isolated:
-  - `GET /api/captures` → `{ captures }`, the **visible** open Captures
-    oldest-first (see the server-side visibility filter above).
+  - `GET /api/captures` → `{ captures }`, **every** open Capture in manual order
+    (future-dated included); the client splits them into Captures and Upcoming.
   - `POST /api/captures { id, text }` → `201 { capture }`; the client sends the
     UUID `id`, and the server dedupes on it (a replay re-sends the same id and
     gets the stored row back). `400` on empty text or a non-UUID id.

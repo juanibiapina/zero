@@ -17,6 +17,43 @@ import {
 } from './api';
 import { getAppOutbox, getAppPersistence } from './db';
 
+// The current Clerk token getter, kept in a module ref so the singleton api is
+// built once yet always calls Clerk's latest getToken. The hook updates this on
+// every render (see use-captures-api).
+let tokenGetter: TokenGetter = async () => null;
+
+export function setCapturesTokenGetter(getToken: TokenGetter): void {
+  tokenGetter = getToken;
+}
+
+let apiPromise: Promise<CapturesApi> | null = null;
+
+// Singleton Capture data layer, shared across every tab. Building a second
+// collection over the same op-sqlite file would run two sync loops on one table
+// and corrupt writes, so both the Captures and Upcoming screens read this one
+// instance. Never cleaned up: it lives for the app's lifetime, like the web
+// singleton.
+export function getMobileCapturesApi(
+  queryClient: QueryClient,
+): Promise<CapturesApi> {
+  if (!apiPromise) {
+    apiPromise = createMobileCapturesApi({
+      queryClient,
+      getToken: () => tokenGetter(),
+    });
+  }
+  return apiPromise;
+}
+
+// Drop the singleton so the next getMobileCapturesApi builds a fresh collection.
+// For tests only: the module-level singleton otherwise leaks rows across renders
+// and breaks isolation.
+export function resetCapturesApiForTest(): void {
+  const pending = apiPromise;
+  apiPromise = null;
+  if (pending) void pending.then((a) => a.collection.cleanup()).catch(() => {});
+}
+
 // Bind the cross-origin REST helpers to the current Clerk token getter so the
 // shared factory stays auth-agnostic.
 function makeRest(getToken: TokenGetter): CapturesRest {

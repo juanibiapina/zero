@@ -59,15 +59,6 @@ function byOrder(a: Capture, b: Capture): number {
   return a.createdAt.localeCompare(b.createdAt);
 }
 
-// A capture is visible on `today` when it has no show-up date or that date has
-// arrived. do-orm has no `or` operator, so this predicate runs in memory over
-// the open-captures query (one user's list, tens of rows). Kept here rather than
-// imported from agent-core so agent-api gains no build coupling to a browser/RN
-// package for a two-line rule.
-function isVisible(row: Capture, today: string): boolean {
-  return row.showUpDate === null || row.showUpDate <= today;
-}
-
 export class DbCaptureStore {
   constructor(private db: Database) {}
 
@@ -92,18 +83,17 @@ export class DbCaptureStore {
     return capture;
   }
 
-  // The visible open captures for `today`, oldest first: rows where processedAt
-  // IS NULL and (showUpDate IS NULL OR showUpDate <= today). The date predicate
-  // is applied in memory (do-orm has no `or`); `today` is the user's local day,
-  // computed by the DO from their timezone.
-  list(today: string): Capture[] {
+  // Every open capture (processedAt IS NULL), in manual order. Future-dated rows
+  // are included: the client splits the open set into Captures (rows that have
+  // shown up) and Upcoming (future-dated rows), so visibility is a client
+  // concern and the server returns the whole open list.
+  list(): Capture[] {
     return this.db
       .all(captures, {
         where: isNull("processedAt"),
         orderBy: asc("createdAt"),
       })
       .map(toCapture)
-      .filter((row) => isVisible(row, today))
       .sort(byOrder);
   }
 
