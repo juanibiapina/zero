@@ -9,7 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AppHeader } from "@/components/AppHeader";
 import { ConnectedStatus, ErrorText } from "@/components/ConnectionStatus";
 import {
   GOOGLE_WORKSPACE_SCOPES,
@@ -425,8 +424,6 @@ function DangerZone() {
 export function SettingsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader />
-
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
           <TelegramConnect />

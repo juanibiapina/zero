@@ -5,6 +5,7 @@ import {
   Outlet,
   Route,
   Routes,
+  useLocation,
   useNavigate,
   useOutletContext,
 } from "react-router";
@@ -16,6 +17,7 @@ import {
 import { CenteredPage } from "@/components/CenteredPage";
 import { Loading } from "@/components/Loading";
 import { DevToolbar } from "@/components/DevToolbar";
+import { SideNav } from "@/components/SideNav";
 import { createWebTimezoneSync } from "./lib/timezone-sync";
 import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -63,6 +65,10 @@ function AuthGate() {
 
 function AppShell() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Onboarding is a standalone first-run flow: it keeps its own header and shows
+  // no section nav.
+  const showNav = location.pathname !== "/onboarding";
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
   const [googleOnboardingStatus, setGoogleOnboardingStatus] = useState<string | null>(null);
   const resetOnboarding = useCallback(() => {
@@ -96,7 +102,12 @@ function AppShell() {
 
   return (
     <>
-      <Outlet context={context} />
+      {showNav ? <SideNav /> : null}
+      {/* Offset the content for the sidebar (desktop) and the bottom bar
+          (mobile); no offset on the chrome-free onboarding flow. */}
+      <div className={showNav ? "pb-16 md:pb-0 md:pl-56" : undefined}>
+        <Outlet context={context} />
+      </div>
       <DevToolbar onResetOnboarding={resetOnboarding} />
     </>
   );

@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-02: New side navigation (a bottom bar on phones) to move between sections; Captures is the first.
 - 2026-09-02: Drag a capture by its handle to reorder your list; the order sticks and syncs across your devices. Works with the keyboard too.
 - 2026-08-31: Cleaner Captures screen — the tagline under the heading is gone.
 - 2026-08-31: Click "Tomorrow" on a capture to postpone it to the next day; it drops off your list and comes back tomorrow.

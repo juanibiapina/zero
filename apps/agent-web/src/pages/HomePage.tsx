@@ -20,7 +20,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AppHeader } from "@/components/AppHeader";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
   capturesView,
@@ -62,7 +61,6 @@ function useDelayed(active: boolean, ms: number): boolean {
 export function HomePage() {
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader />
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
           <h1 className="text-2xl font-bold tracking-tight">Captures</h1>

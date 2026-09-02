@@ -181,6 +181,15 @@ query filters `showUpDate <= localToday`, so overdue rolls in and future stays
 hidden). Mobile device verification (Maestro, Pixel 7) still needs a standalone
 EAS build for the durable-snapshot path.
 
+Shipped (2026-09-02): **navigation chrome** on both surfaces — a native bottom
+tab bar on mobile (`NativeTabs`) and a matching web nav (left sidebar on desktop,
+bottom bar on phones). One section for now (**Captures**); a second lands next.
+The chrome is built per surface (mobile tabs vs web sidebar), sharing only the
+`@zero/agent-core` view helpers, since `apps/agent-web` is a separate app, not the
+Expo web build. First on-device run of the native tab bar needs a fresh EAS dev
+build. This reverses the earlier one-list-no-nav shape (Today tab removal) in
+intent: nav returns, but sections grow one real screen at a time.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add

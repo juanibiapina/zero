@@ -25,11 +25,31 @@ jest.mock('expo-router', () => ({
     const { Text } = require('react-native');
     return <Text>redirect:{href}</Text>;
   },
-  Stack: () => {
-    const { Text } = require('react-native');
-    return <Text>stack</Text>;
-  },
 }));
+
+jest.mock('expo-router/unstable-native-tabs', () => {
+  const { Text } = require('react-native');
+  function NativeTabs({ children }: { children?: unknown }) {
+    return <Text>tabs{children}</Text>;
+  }
+  function Trigger({ children }: { children?: unknown }) {
+    return <>{children}</>;
+  }
+  function TriggerIcon() {
+    return null;
+  }
+  function TriggerLabel({ children }: { children?: unknown }) {
+    return <Text>{children}</Text>;
+  }
+  function TriggerBadge() {
+    return null;
+  }
+  Trigger.Icon = TriggerIcon;
+  Trigger.Label = TriggerLabel;
+  Trigger.Badge = TriggerBadge;
+  NativeTabs.Trigger = Trigger;
+  return { NativeTabs };
+});
 
 describe('SignedInLayout', () => {
   beforeEach(() => {
@@ -50,10 +70,11 @@ describe('SignedInLayout', () => {
     expect(getByText('redirect:/sign-in')).toBeTruthy();
   });
 
-  it('renders the stack when signed in', async () => {
+  it('renders the tab bar when signed in', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
     const { getByText } = await render(<SignedInLayout />);
-    expect(getByText('stack')).toBeTruthy();
+    expect(getByText(/^tabs/)).toBeTruthy();
+    expect(getByText('Captures')).toBeTruthy();
   });
 
   it('does not sync timezone while signed out', async () => {

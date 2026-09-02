@@ -1,5 +1,6 @@
 import { useAuth } from '@clerk/expo';
-import { Redirect, Stack } from 'expo-router';
+import { Redirect } from 'expo-router';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
 
@@ -43,7 +44,18 @@ export default function SignedInLayout() {
     return <Redirect href="/sign-in" />;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // A single-tab bar for now; a second section lands next. Each tab is a screen
+  // file whose name matches its Trigger `name`, so a new tab is a new file plus
+  // one more Trigger. NativeTabs is a native navigator, so its first use needs a
+  // fresh EAS dev build to appear on device (pure-JS reload will not show it).
+  return (
+    <NativeTabs>
+      <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger.Icon sf="tray.full" md="inbox" />
+        <NativeTabs.Trigger.Label>Captures</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
+  );
 }
 
 const styles = StyleSheet.create({
