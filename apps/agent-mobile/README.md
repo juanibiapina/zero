@@ -298,6 +298,18 @@ Confirm it is connected: `adb devices` should list the `Pixel_7`. Wake it with
 `adb shell input keyevent KEYCODE_WAKEUP` (screen lock is off on this test
 device).
 
+> **This device is dev-client-only. It always runs the `development` (dev
+> client) build and NEVER a `preview`/`production` build.** A dev client loads
+> JS from Metro, so pure-JS changes hot-reload over `adb reverse` — that is this
+> device's whole job. A `preview`/`production` build is **standalone**: its JS is
+> baked into the APK and it ignores Metro entirely, so installing one here
+> silently kills all unreleased-JS testing (the app just keeps running its
+> embedded bundle, which looks exactly like "stuck on old code"). If a non-dev
+> build ever lands on it, reinstall the dev client:
+> `eas build -p android --profile development` (or the local build below) →
+> `adb install`. Validate `preview`/`production` (standalone) builds off this
+> device — see [Builds](#builds).
+
 ### Drive it with the Maestro CLI (element-based — preferred)
 
 Prefer Maestro over raw `adb input tap`: it selects by on-screen element and
@@ -357,14 +369,17 @@ eas build -p android --profile preview
 `eas.json` sets `appVersionSource: remote` (EAS manages `versionCode`) and pins
 `node`/`pnpm` per profile to avoid EAS corepack/pnpm-detection issues. The
 `preview` profile produces a sideloadable **APK** (not an AAB); `production`
-produces an AAB for the Play Store (defined but unused for now).
+produces an AAB for the Play Store (defined but unused for now). The `preview`
+build (local or the manual CI job) is a **distributable artifact** — it is not
+sideloaded onto the mini Pixel, which stays on the dev client (see the callout
+under Physical device testing).
 
 ### Local builds on the `mini` NixOS box (no EAS quota)
 
-The EAS free tier caps Android cloud builds per month. When it runs out (or to
-iterate faster on the durable, standalone code path that only runs in a real
-build), build the APK **locally on `mini`** with a Nix dev shell that ships the
-exact Android toolchain Expo SDK 57 / React Native 0.86 pin (SDK platform 36,
+The EAS free tier caps Android cloud builds per month. When it runs out, build
+the **dev client** APK **locally on `mini`** and install it on the Pixel (this
+device is dev-client-only — see the callout above). Use a Nix dev shell that
+ships the exact Android toolchain Expo SDK 57 / React Native 0.86 pin (SDK platform 36,
 build-tools 36.0.0, NDK 27.1.12297006, cmake 3.22.1, JDK 17). The shell lives in
 `juanibiapina/dotfiles` (`nix/shells/android.nix`, exposed as the flake output
 `devShells.x86_64-linux.android`) — it is a dev shell, so it needs **no**
@@ -377,15 +392,20 @@ manual). `ANDROID_HOME`/`ANDROID_SDK_ROOT`/`ANDROID_NDK_ROOT`/`JAVA_HOME` are se
 by the shell.
 
 ```bash
-# from the zero repo root, on mini
+# from the zero repo root, on mini — builds the DEV CLIENT for this device
 export NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1
 nix develop ~/workspace/juanibiapina/dotfiles#android --command bash -c '
   cd apps/agent-mobile
-  eas build --platform android --profile preview --local \
-    --non-interactive --output /tmp/local-preview.apk
+  eas build --platform android --profile development --local \
+    --non-interactive --output /tmp/local-devclient.apk
 '
-adb install -r -d /tmp/local-preview.apk
+adb install -r -d /tmp/local-devclient.apk
 ```
+
+Do **not** build `--profile preview`/`production` and `adb install` it here — a
+standalone build breaks hot-reload on this device (see the callout above). If you
+need a standalone APK as an artifact, build it (locally or via EAS/CI) and
+distribute/validate it elsewhere; never sideload it onto the mini Pixel.
 
 Notes:
 - `eas build --local` still fetches the signing keystore from EAS ("Using remote
