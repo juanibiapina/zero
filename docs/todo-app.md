@@ -70,7 +70,10 @@ agent give it a reason to exist. The scheduling moves a single list actually
 wants (**postpone to a day**, **drag-to-reorder**) are being folded into Capture
 instead, which reverses the old "do not add a date to Capture" rule. This is
 slice 0 of the Captures postpone/reorder/detail-sheet plan; see that plan for the
-full sequence.
+full sequence. **Postpone (slice 1) and drag-to-reorder (slice 2) have shipped**
+on web and mobile — a capture carries a `showUpDate` and a fractional-index
+`sortKey`, and the list orders by that manual key. Next is the detail sheet
+(slice 3), then the full scheduler (slice 4).
 
 ## Entity wiki (draft — grow one at a time)
 

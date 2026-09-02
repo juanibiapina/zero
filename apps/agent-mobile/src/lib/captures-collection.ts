@@ -11,6 +11,7 @@ import {
   editCapture,
   fetchCaptures,
   processCapture,
+  reorderCapture,
   rescheduleCapture,
   type TokenGetter,
 } from './api';
@@ -26,6 +27,7 @@ function makeRest(getToken: TokenGetter): CapturesRest {
     editCapture: (id, text) => editCapture(getToken, id, text),
     rescheduleCapture: (id, showUpDate) =>
       rescheduleCapture(getToken, id, showUpDate),
+    reorderCapture: (id, sortKey) => reorderCapture(getToken, id, sortKey),
   };
 }
 

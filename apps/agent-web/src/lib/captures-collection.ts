@@ -7,6 +7,7 @@ import {
   editCapture,
   fetchCaptures,
   processCapture,
+  reorderCapture,
   rescheduleCapture,
 } from "./captures";
 import { getAppPersistence } from "./db";
@@ -25,7 +26,7 @@ export function getCapturesApi(): Promise<CapturesApi> {
   if (!apiPromise) {
     apiPromise = createCapturesApi({
       queryClient,
-      rest: { fetchCaptures, addCapture, processCapture, editCapture, rescheduleCapture },
+      rest: { fetchCaptures, addCapture, processCapture, editCapture, rescheduleCapture, reorderCapture },
       persistence: () => getAppPersistence(),
       startOfflineExecutor,
       onWarn: (message, error) => console.warn(message, error),

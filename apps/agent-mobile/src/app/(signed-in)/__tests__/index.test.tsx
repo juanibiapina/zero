@@ -37,6 +37,10 @@ const mockRescheduleCapture =
   jest.fn<
     (getToken: unknown, id: string, showUpDate: string | null) => Promise<Capture>
   >();
+const mockReorderCapture =
+  jest.fn<
+    (getToken: unknown, id: string, sortKey: string) => Promise<Capture>
+  >();
 jest.mock('@/lib/api', () => ({
   fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
   addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
@@ -47,18 +51,22 @@ jest.mock('@/lib/api', () => ({
     mockEditCapture(getToken, id, text),
   rescheduleCapture: (getToken: unknown, id: string, showUpDate: string | null) =>
     mockRescheduleCapture(getToken, id, showUpDate),
+  reorderCapture: (getToken: unknown, id: string, sortKey: string) =>
+    mockReorderCapture(getToken, id, sortKey),
 }));
 
 const capture = (
   id: string,
   text: string,
   showUpDate: string | null = null,
+  sortKey: string | null = null,
 ): Capture => ({
   id,
   text,
   createdAt: '2023-01-01T00:00:00.000Z',
   processedAt: null,
   showUpDate,
+  sortKey,
 });
 
 // Render the screen inside a fresh QueryClient with retries off, so a rejected

@@ -15,6 +15,10 @@ const CaptureSchema = z.object({
   createdAt: z.string(),
   processedAt: z.string().nullable(),
   showUpDate: z.string().nullable(),
+  // Nullable: in practice every stored row is keyed, but a null (unkeyed) row
+  // sorts last and is tolerated here rather than rejected — a stray/legacy null
+  // degrades gracefully instead of 500ing the whole list response.
+  sortKey: z.string().nullable(),
 });
 
 // A local calendar day, YYYY-MM-DD. The client mints it in the user's timezone.
@@ -129,17 +133,20 @@ export const createCapturesRoutes = () => {
     method: "patch",
     path: "/api/captures/{id}",
     tags: ["Captures"],
-    summary: "Update a capture's text and/or show-up date",
+    summary: "Update a capture's text, show-up date and/or sort key",
     request: {
       params: z.object({ id: z.string() }),
       body: {
         content: {
           "application/json": {
-            // A partial update: either field may be present. showUpDate may be
+            // A partial update: any field may be present. showUpDate may be
             // null to clear the date (make the capture always visible again).
+            // sortKey is a client-minted fractional index (trusted, not charset
+            // validated). In practice each PATCH carries exactly one intent.
             schema: z.object({
               text: z.string().min(1).optional(),
               showUpDate: ShowUpDate.nullable().optional(),
+              sortKey: z.string().min(1).optional(),
             }),
           },
         },
@@ -176,12 +183,17 @@ export const createCapturesRoutes = () => {
     const body = c.req.valid("json");
     const hasText = body.text !== undefined;
     const hasShowUpDate = "showUpDate" in body;
-    if (!hasText && !hasShowUpDate) {
+    const hasSortKey = body.sortKey !== undefined;
+    if (!hasText && !hasShowUpDate && !hasSortKey) {
       return c.json({ error: "no fields to update" }, 400);
     }
 
     const userDO = getUserDO(c.env, userId);
     let capture: Awaited<ReturnType<typeof userDO.editCapture>> = null;
+    if (hasSortKey && body.sortKey !== undefined) {
+      capture = await userDO.reorderCapture(id, body.sortKey);
+      if (capture) log("capture_reordered", { clerk_user_id: userId });
+    }
     if (hasShowUpDate) {
       capture = await userDO.rescheduleCapture(id, body.showUpDate ?? null);
       if (capture) log("capture_rescheduled", { clerk_user_id: userId });

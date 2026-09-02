@@ -3,6 +3,7 @@
 // optimistic hide, so a just-postponed row leaves the list at once and offline,
 // before the server's filtered GET reconciles it.
 
+import { compareByOrder } from "./order";
 import type { Capture } from "./types";
 
 // The device's local calendar day as YYYY-MM-DD. Duplicated from tasks/today.ts
@@ -31,8 +32,9 @@ export function tomorrow(today: string): string {
 // The optimistic client-side hide, mirroring the server filter: keep open
 // captures with no show-up date or a date that has arrived, so a plain capture
 // always shows and an overdue one rolls in silently (no red — Things-3 gentle
-// overdue). Ordered oldest first. Pure and string-compared (YYYY-MM-DD sorts
-// lexically), so it is unit-tested without the collection.
+// overdue). Ordered by the manual sort key (nulls last), createdAt as the
+// tiebreak — the same comparator the server uses, so client and server order
+// identically. Pure, so it is unit-tested without the collection.
 export function visibleCaptures(
   list: readonly Capture[],
   today: string,
@@ -45,5 +47,5 @@ export function visibleCaptures(
         // that predates showUpDate) is treated as "always visible", not hidden.
         (c.showUpDate == null || c.showUpDate <= today),
     )
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    .sort(compareByOrder);
 }

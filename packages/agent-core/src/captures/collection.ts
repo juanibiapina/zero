@@ -35,6 +35,9 @@ export type CapturesRest = {
   // Same-key update: sets (or clears, with null) the capture's show-up date on
   // its stable id and returns the server row. Idempotent like editCapture.
   rescheduleCapture: (id: string, showUpDate: string | null) => Promise<Capture>;
+  // Same-key update: sets the capture's manual sort key on its stable id and
+  // returns the server row. Idempotent like the others.
+  reorderCapture: (id: string, sortKey: string) => Promise<Capture>;
 };
 
 // One handle over the Captures data layer. Both Captures screens read
@@ -50,6 +53,9 @@ export type CapturesApi = {
   // Set (or clear, with null) a capture's show-up date optimistically. Postpone
   // is reschedule(id, tomorrow); the optimistic hide drops the row at once.
   reschedule: (id: string, showUpDate: string | null) => Transaction;
+  // Set a capture's manual sort key optimistically (same-key update). The caller
+  // mints the key between the drop position's neighbors with orderKeyBetween.
+  reorder: (id: string, sortKey: string) => Transaction;
   // True when writes persist to a durable offline outbox (SQLite + outbox
   // storage); false for the in-memory fallback.
   offline: boolean;
@@ -121,6 +127,10 @@ function optimisticCapture(text: string): Capture {
     createdAt: new Date().toISOString(),
     processedAt: null,
     showUpDate: null,
+    // Null sorts last, so a new capture lands at the bottom of the manual order
+    // (newest-at-bottom). The server mints the real trailing key on reconcile,
+    // still at the bottom — no jump. So the client never mints a key on add.
+    sortKey: null,
   };
 }
 
@@ -142,6 +152,14 @@ function setText(text: string): (draft: Capture) => void {
 function setShowUpDate(showUpDate: string | null): (draft: Capture) => void {
   return (draft) => {
     draft.showUpDate = showUpDate;
+  };
+}
+
+// Optimistic reorder: set the row's sort key in place. The in-memory onUpdate
+// disambiguates this from the others by the changed field set ("sortKey").
+function setSortKey(sortKey: string): (draft: Capture) => void {
+  return (draft) => {
+    draft.sortKey = sortKey;
   };
 }
 
@@ -212,18 +230,21 @@ export function createInMemoryApi(deps: {
         return { refetch: false };
       },
       onUpdate: async ({ transaction }) => {
-        // One collection.update backs process, edit and reschedule; disambiguate
-        // by the changed field set (m.changes), not m.modified: a rescheduled row
-        // still carries its old text and null processedAt, so only the changed
-        // keys tell the three apart. Order: showUpDate changed → reschedule;
-        // else processedAt set → process; else edit.
+        // One collection.update backs process, edit, reschedule and reorder;
+        // disambiguate by the changed field set (m.changes), not m.modified: a
+        // rescheduled/reordered row still carries its old text and null
+        // processedAt, so only the changed keys tell them apart. Order: sortKey
+        // changed → reorder; else showUpDate changed → reschedule; else
+        // processedAt set → process; else edit.
         for (const m of transaction.mutations) {
           const updated =
-            "showUpDate" in m.changes
-              ? await rest.rescheduleCapture(String(m.key), m.modified.showUpDate)
-              : m.modified.processedAt != null
-                ? await rest.processCapture(String(m.key))
-                : await rest.editCapture(String(m.key), m.modified.text);
+            "sortKey" in m.changes
+              ? await rest.reorderCapture(String(m.key), m.modified.sortKey!)
+              : "showUpDate" in m.changes
+                ? await rest.rescheduleCapture(String(m.key), m.modified.showUpDate)
+                : m.modified.processedAt != null
+                  ? await rest.processCapture(String(m.key))
+                  : await rest.editCapture(String(m.key), m.modified.text);
           reconcile(collection, { upsert: [updated] });
         }
         return { refetch: false };
@@ -242,6 +263,7 @@ export function createInMemoryApi(deps: {
     edit: (id, text) => collection.update(id, setText(text)),
     reschedule: (id, showUpDate) =>
       collection.update(id, setShowUpDate(showUpDate)),
+    reorder: (id, sortKey) => collection.update(id, setSortKey(sortKey)),
     offline: false,
     refetch: async () => {
       if (refetchUtil) {
@@ -425,6 +447,18 @@ export function createPersistedApi(deps: {
         }
         await fetchAndReconcile();
       },
+      reorderCapture: async ({ transaction }) => {
+        // Own mutationFn (keyed by name). The outbox types fields as unknown;
+        // sortKey is a non-empty string, so narrow before use.
+        for (const m of transaction.mutations) {
+          const sortKey = m.modified.sortKey;
+          if (typeof sortKey === "string") {
+            const updated = await rest.reorderCapture(String(m.key), sortKey);
+            reconcileOne(updated);
+          }
+        }
+        await fetchAndReconcile();
+      },
     },
     onLeadershipChange: (isLeader) => {
       // Non-leader tabs / instances run online-only; fine for a single-user Captures list.
@@ -461,6 +495,15 @@ export function createPersistedApi(deps: {
       collection.update(id, setShowUpDate(showUpDate));
     },
   });
+  const reorderAction = offline.createOfflineAction<{
+    id: string;
+    sortKey: string;
+  }>({
+    mutationFnName: "reorderCapture",
+    onMutate: ({ id, sortKey }) => {
+      collection.update(id, setSortKey(sortKey));
+    },
+  });
 
   return {
     collection,
@@ -468,6 +511,7 @@ export function createPersistedApi(deps: {
     process: (id) => processAction({ id }),
     edit: (id, text) => editAction({ id, text }),
     reschedule: (id, showUpDate) => rescheduleAction({ id, showUpDate }),
+    reorder: (id, sortKey) => reorderAction({ id, sortKey }),
     offline: true,
     refetch: () => fetchAndReconcile(),
     getLoadError: () => loadError,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDb } from "do-orm";
 import { createMockStorage } from "do-orm/src/test-utils";
 
+import { captures } from "../UserDO/db/schema";
 import { DbCaptureStore } from "./captures";
 
 // A DbCaptureStore over do-orm's in-memory mock storage. The mock creates tables
@@ -183,5 +184,98 @@ describe("DbCaptureStore", () => {
     store.reschedule("id-future", "2099-01-01");
 
     expect(store.list("2024-03-09")).toEqual([plain]);
+  });
+
+  it("mints a trailing sort key on add, so a new capture sorts after existing", () => {
+    const store = makeStore();
+    const first = store.add("id-1", "first");
+    const second = store.add("id-2", "second");
+
+    expect(first.sortKey).not.toBeNull();
+    expect(second.sortKey).not.toBeNull();
+    // Second's key sorts after first's (codepoint), so list order matches
+    // insertion order.
+    expect(second.sortKey! > first.sortKey!).toBe(true);
+    expect(store.list(TODAY).map((c) => c.id)).toEqual(["id-1", "id-2"]);
+  });
+
+  it("reorders a capture by setting its sort key idempotently", () => {
+    const store = makeStore();
+    const a = store.add("id-a", "a");
+    store.add("id-b", "b");
+    store.add("id-c", "c");
+
+    // Move c between a and b by minting a key between their keys.
+    const between = a.sortKey! + "V"; // a valid base-62 key strictly after a's, before b's
+    const reordered = store.reorder("id-c", between);
+    expect(reordered?.sortKey).toBe(between);
+    // Idempotent replay.
+    expect(store.reorder("id-c", between)?.sortKey).toBe(between);
+    expect(store.list(TODAY).map((c) => c.id)).toEqual(["id-a", "id-c", "id-b"]);
+  });
+
+  it("returns null when reordering an unknown id", () => {
+    const store = makeStore();
+    store.add("id-1", "only");
+    expect(store.reorder("nope", "a5")).toBeNull();
+  });
+
+  it("backfills sort keys in createdAt order and is a no-op on a second run", () => {
+    // Seed legacy rows with a null sortKey directly, mimicking the pre-backfill
+    // state right after migration 0045's ADD COLUMN.
+    const db = createDb(createMockStorage());
+    const seed = (id: string, createdAt: string) =>
+      db.insert(captures, {
+        id,
+        text: id,
+        createdAt,
+        processedAt: null,
+        showUpDate: null,
+        sortKey: null,
+      });
+    // Insert out of createdAt order to prove the backfill sorts by createdAt.
+    seed("id-b", "2023-02-01T00:00:00.000Z");
+    seed("id-a", "2023-01-01T00:00:00.000Z");
+    seed("id-c", "2023-03-01T00:00:00.000Z");
+
+    const store = new DbCaptureStore(db);
+    store.backfillSortKeys();
+
+    // Every row now has a key, and the list order is oldest-first (the legacy
+    // createdAt order preserved).
+    const rows = store.list(TODAY);
+    expect(rows.map((c) => c.id)).toEqual(["id-a", "id-b", "id-c"]);
+    expect(rows.every((c) => c.sortKey != null && c.sortKey.length > 0)).toBe(true);
+
+    // Second run is a no-op: no NULL rows remain, keys unchanged.
+    const before = store.list(TODAY).map((c) => c.sortKey);
+    store.backfillSortKeys();
+    const after = store.list(TODAY).map((c) => c.sortKey);
+    expect(after).toEqual(before);
+  });
+
+  it("sorts a null (unkeyed) sortKey last, behind keyed rows", () => {
+    // Mix a keyed row and a null (legacy, unkeyed) row directly, then list.
+    const db = createDb(createMockStorage());
+    db.insert(captures, {
+      id: "id-null",
+      text: "unkeyed",
+      createdAt: "2023-01-01T00:00:00.000Z",
+      processedAt: null,
+      showUpDate: null,
+      sortKey: null,
+    });
+    db.insert(captures, {
+      id: "id-keyed",
+      text: "keyed",
+      createdAt: "2023-02-01T00:00:00.000Z",
+      processedAt: null,
+      showUpDate: null,
+      sortKey: "a0",
+    });
+    const store = new DbCaptureStore(db);
+
+    // Keyed row first even though it is newer; the null row falls to the bottom.
+    expect(store.list(TODAY).map((c) => c.id)).toEqual(["id-keyed", "id-null"]);
   });
 });

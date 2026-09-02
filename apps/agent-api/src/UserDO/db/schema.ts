@@ -205,6 +205,15 @@ export const captures = table("captures", {
   // Local day (YYYY-MM-DD) the capture should reappear on. NULL = always
   // visible. Postpone sets it; the visibility filter runs server-side.
   showUpDate: column.text(),
+  // Fractional-index sort key (base-62 string) for the manual list order.
+  // Nullable: NULL means "unkeyed", which sorts LAST. In practice every stored
+  // row is keyed — `add` mints a trailing key, `reorder` sets one, and an init
+  // backfill (DbCaptureStore.backfillSortKeys) keys legacy rows so they keep
+  // their place instead of sinking below newly-keyed adds — so NULL is only a
+  // transient legacy state (pre-backfill) or the client's optimistic just-added
+  // row. Not NOT NULL because ADD COLUMN (migration 0045) can't carry it on a
+  // populated table and a valid key can't be minted in SQL.
+  sortKey: column.text(),
 });
 
 // The Today list (the Todoist replacement). A Task is a typed, clarified
