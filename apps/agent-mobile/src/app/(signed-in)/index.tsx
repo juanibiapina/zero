@@ -257,8 +257,26 @@ function useLoadError(api: {
 export default function HomeScreen() {
   const capturesApi = useCapturesApi();
 
+  // Measure the gap from this screen's content bottom to the window bottom (the
+  // native bottom tab bar plus the system gesture inset). The screen is inset
+  // above the tab bar, so the keyboard-sticky quick-add over-lifts by this gap;
+  // it is fed back as the bar's open offset so it docks to the keyboard. See
+  // QuickAdd.bottomOffset.
+  const { height: windowHeight } = useWindowDimensions();
+  const rootRef = useRef<View>(null);
+  const [bottomOffset, setBottomOffset] = useState(0);
+  const measureBottomGap = useCallback(() => {
+    rootRef.current?.measureInWindow((_x, y, _w, h) => {
+      setBottomOffset(Math.max(0, windowHeight - (y + h)));
+    });
+  }, [windowHeight]);
+
   return (
-    <View className="flex-1 px-6 pt-16">
+    <View
+      ref={rootRef}
+      onLayout={measureBottomGap}
+      className="flex-1 px-6 pt-16"
+    >
       <View className="mb-4 flex-row items-center justify-between">
         <Text variant="title">Captures</Text>
         {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
@@ -266,12 +284,22 @@ export default function HomeScreen() {
         <UserButton />
       </View>
 
-      {capturesApi ? <Captures api={capturesApi} /> : <View className="flex-1" />}
+      {capturesApi ? (
+        <Captures api={capturesApi} bottomOffset={bottomOffset} />
+      ) : (
+        <View className="flex-1" />
+      )}
     </View>
   );
 }
 
-function Captures({ api }: { api: CapturesApi }) {
+function Captures({
+  api,
+  bottomOffset,
+}: {
+  api: CapturesApi;
+  bottomOffset: number;
+}) {
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: api.collection })
@@ -509,6 +537,7 @@ function Captures({ api }: { api: CapturesApi }) {
         onRequestClose={requestClose}
         busy={false}
         inputRef={inputRef}
+        bottomOffset={bottomOffset}
       />
 
       {confirmingDiscard ? (

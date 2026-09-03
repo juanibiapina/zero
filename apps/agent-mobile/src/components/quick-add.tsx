@@ -24,6 +24,13 @@ export type QuickAddProps = {
   // both. The FAB label doubles as its accessibility label.
   fabLabel?: string;
   placeholder?: string;
+  // Distance (dp) from the screen's content bottom to the window bottom — the
+  // native bottom tab bar plus the system gesture inset. The screen is inset
+  // above the tab bar, but the keyboard-sticky bar lifts by the full keyboard
+  // height (measured from the window bottom), so without this it over-lifts by
+  // exactly this gap and floats above the keyboard. Added back as the open
+  // offset so the bar docks flush to the keyboard. The caller measures it.
+  bottomOffset?: number;
 };
 
 // Transition layer between two independent, reusable elements: the collapsed
@@ -43,6 +50,7 @@ export function QuickAdd({
   inputRef,
   fabLabel = 'Capture',
   placeholder,
+  bottomOffset = 0,
 }: QuickAddProps) {
   return (
     <>
@@ -60,7 +68,10 @@ export function QuickAdd({
         // edge-to-edge insets, keeping the bar glued to the keyboard as it
         // opens and closes. A hand-rolled translateY misaligns here (the bar/+
         // was left floating when the keyboard dismissed).
-        <KeyboardStickyView className="absolute inset-x-0 bottom-0">
+        <KeyboardStickyView
+          offset={{ opened: bottomOffset }}
+          className="absolute inset-x-0 bottom-0"
+        >
           <Animated.View
             entering={FadeIn.duration(200)}
             exiting={FadeOut.duration(150)}
