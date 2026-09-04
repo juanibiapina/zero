@@ -18,7 +18,11 @@ import {
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
-import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
+import {
+  useDelayed,
+  useForegroundRefetch,
+  useUndoableLeave,
+} from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
 
@@ -61,29 +65,12 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // The open detail sheet's project id, and the sets of projects mid-Done and
-  // mid-Delete (both shown struck-through with Undo until the timer commits
-  // them). Timers are cleared on unmount so a pending action never fires against
-  // a torn-down page.
+  // The open detail sheet's project id, plus two deferred-undo channels: one for
+  // Done, one for Delete. Both hold a row struck-through with an Undo for
+  // DONE_UNDO_MS before committing; the hook owns the timers and their cleanup.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
-  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
-  const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  useEffect(() => {
-    const timers = doneTimers.current;
-    const dTimers = deleteTimers.current;
-    return () => {
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-      for (const t of dTimers.values()) clearTimeout(t);
-      dTimers.clear();
-    };
-  }, []);
+  const done = useUndoableLeave(DONE_UNDO_MS);
+  const del = useUndoableLeave(DONE_UNDO_MS);
 
   useForegroundRefetch(api.refetch);
 
@@ -117,80 +104,26 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
     [api],
   );
 
-  // Setting Done does not write immediately: hold the row struck-through with an
-  // Undo for DONE_UNDO_MS, then commit. Undo clears the timer and the row stays.
-  const startDone = useCallback(
-    (id: string) => {
-      setPendingDone((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        doneTimers.current.delete(id);
-        setPendingDone((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitStatus(id, "done");
-      }, DONE_UNDO_MS);
-      doneTimers.current.set(id, timer);
-    },
-    [commitStatus],
-  );
-  const undoDone = useCallback((id: string) => {
-    const timer = doneTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    doneTimers.current.delete(id);
-    setPendingDone((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  // Delete mirrors Done: the row leaves after a DONE_UNDO_MS Undo window, then
-  // the hard delete commits. Deleting is destructive and has no server-side
-  // undo, so the client window is the only guard against a mis-tap.
-  const commitDelete = useCallback(
-    (id: string) => {
-      setError(null);
-      const tx = api.remove(id);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    },
-    [api],
-  );
+  // Setting Done and deleting both defer their write behind a DONE_UNDO_MS Undo
+  // window (delete is destructive with no server-side undo, so the window is the
+  // only guard against a mis-tap). Route an Undo tap to whichever channel owns
+  // the row.
   const startDelete = useCallback(
     (id: string) => {
-      setPendingDelete((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        deleteTimers.current.delete(id);
-        setPendingDelete((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitDelete(id);
-      }, DONE_UNDO_MS);
-      deleteTimers.current.set(id, timer);
+      del.start(id, () => {
+        setError(null);
+        const tx = api.remove(id);
+        tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      });
     },
-    [commitDelete],
+    [del, api],
   );
-  const undoDelete = useCallback((id: string) => {
-    const timer = deleteTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    deleteTimers.current.delete(id);
-    setPendingDelete((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  // Route an Undo tap to the pending action that owns the row.
   const onUndo = useCallback(
     (id: string) => {
-      if (pendingDelete.has(id)) undoDelete(id);
-      else undoDone(id);
+      if (del.pending.has(id)) del.undo(id);
+      else done.undo(id);
     },
-    [pendingDelete, undoDelete, undoDone],
+    [del, done],
   );
 
   const onPickStatus = useCallback(
@@ -198,16 +131,22 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
       setSelectedId(null);
       if (status === project.status) return;
       if (status === "done") {
-        startDone(project.id);
+        done.start(project.id, () => commitStatus(project.id, "done"));
       } else {
         commitStatus(project.id, status);
       }
     },
-    [commitStatus, startDone],
+    [commitStatus, done],
   );
 
   const list = useMemo(() => projects ?? [], [projects]);
   const sections = useMemo(() => projectsByStatus(list), [list]);
+  // A row is "leaving" if either channel (Done or Delete) holds it; both render
+  // it struck-through with an Undo.
+  const pending = useMemo(
+    () => new Set([...done.pending, ...del.pending]),
+    [done.pending, del.pending],
+  );
   const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
@@ -271,8 +210,7 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
               key={section.status}
               status={section.status}
               projects={section.projects}
-              pending={pendingDone}
-              pendingDelete={pendingDelete}
+              pending={pending}
               onOpen={(p) => setSelectedId(p.id)}
               onUndo={onUndo}
             />
@@ -327,16 +265,13 @@ function ProjectSectionView({
   status,
   projects,
   pending,
-  pendingDelete,
   onOpen,
   onUndo,
 }: {
   status: ProjectStatus;
   projects: Project[];
-  // Projects mid-Done (struck-through with Undo).
+  // Projects mid-Done or mid-Delete (struck-through with an Undo).
   pending: Set<string>;
-  // Projects mid-Delete (also struck-through with Undo).
-  pendingDelete: Set<string>;
   onOpen: (p: Project) => void;
   onUndo: (id: string) => void;
 }) {
@@ -369,7 +304,7 @@ function ProjectSectionView({
       {!collapsed && (
         <ul className="space-y-3">
           {projects.map((item) => {
-            const isPending = pending.has(item.id) || pendingDelete.has(item.id);
+            const isPending = pending.has(item.id);
             return (
               <li key={item.id}>
                 <div

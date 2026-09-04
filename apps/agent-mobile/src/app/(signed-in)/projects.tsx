@@ -34,6 +34,7 @@ import {
   useDelayed,
   useForegroundRefetch,
   useLoadError,
+  useUndoableLeave,
 } from '@/lib/screen-hooks';
 
 // Helper text (not the placeholder): teach outcome-based naming, the one
@@ -278,24 +279,11 @@ function Projects({
   const [collapseOverride, setCollapseOverride] = useState<
     Partial<Record<ProjectStatus, boolean>>
   >({});
-  const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
-  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
-  const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  useEffect(() => {
-    const timers = doneTimers.current;
-    const dTimers = deleteTimers.current;
-    return () => {
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-      for (const t of dTimers.values()) clearTimeout(t);
-      dTimers.clear();
-    };
-  }, []);
+  // Two deferred-undo channels: one for Done, one for Delete. Both hold a row
+  // struck-through with an Undo for DONE_UNDO_MS before committing; the hook
+  // owns the timers and their cleanup.
+  const done = useUndoableLeave(DONE_UNDO_MS);
+  const del = useUndoableLeave(DONE_UNDO_MS);
 
   // Refresh when the app returns to the foreground.
   useForegroundRefetch(api.refetch);
@@ -320,80 +308,27 @@ function Projects({
     [api],
   );
 
-  // Done defers the write: hold the row struck-through with Undo for
-  // DONE_UNDO_MS, then commit. Undo clears the timer and the row stays.
-  const startDone = useCallback(
-    (id: string) => {
-      setPendingDone((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        doneTimers.current.delete(id);
-        setPendingDone((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitStatus(id, 'done');
-      }, DONE_UNDO_MS);
-      doneTimers.current.set(id, timer);
-    },
-    [commitStatus],
-  );
-  const undoDone = useCallback((id: string) => {
-    const timer = doneTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    doneTimers.current.delete(id);
-    setPendingDone((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  // Delete mirrors Done: the row leaves after a DONE_UNDO_MS Undo window, then
-  // the hard delete commits. Deleting is destructive and has no server-side
-  // undo, so the client window is the only guard against a mis-tap.
-  const commitDelete = useCallback(
-    (id: string) => {
-      setWriteError(null);
-      const tx = api.remove(id);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api],
-  );
+  // Setting Done and deleting both defer their write behind a DONE_UNDO_MS Undo
+  // window (delete is destructive with no server-side undo, so the window is the
+  // only guard against a mis-tap).
   const startDelete = useCallback(
     (id: string) => {
-      setPendingDelete((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        deleteTimers.current.delete(id);
-        setPendingDelete((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitDelete(id);
-      }, DONE_UNDO_MS);
-      deleteTimers.current.set(id, timer);
+      del.start(id, () => {
+        setWriteError(null);
+        const tx = api.remove(id);
+        tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+      });
     },
-    [commitDelete],
+    [del, api],
   );
-  const undoDelete = useCallback((id: string) => {
-    const timer = deleteTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    deleteTimers.current.delete(id);
-    setPendingDelete((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
 
   // Route an Undo tap to the pending action that owns the row.
   const onUndo = useCallback(
     (id: string) => {
-      if (pendingDelete.has(id)) undoDelete(id);
-      else undoDone(id);
+      if (del.pending.has(id)) del.undo(id);
+      else done.undo(id);
     },
-    [pendingDelete, undoDelete, undoDone],
+    [del, done],
   );
 
   const onPickStatus = useCallback(
@@ -401,12 +336,12 @@ function Projects({
       setSelectedId(null);
       if (status === project.status) return;
       if (status === 'done') {
-        startDone(project.id);
+        done.start(project.id, () => commitStatus(project.id, 'done'));
       } else {
         commitStatus(project.id, status);
       }
     },
-    [commitStatus, startDone],
+    [commitStatus, done],
   );
 
   const onToggle = useCallback((status: ProjectStatus, current: boolean) => {
@@ -511,7 +446,7 @@ function Projects({
           renderItem={({ item }) => (
             <ProjectRow
               item={item}
-              pending={pendingDone.has(item.id) || pendingDelete.has(item.id)}
+              pending={done.pending.has(item.id) || del.pending.has(item.id)}
               onOpen={(p) => setSelectedId(p.id)}
               onUndo={onUndo}
             />
