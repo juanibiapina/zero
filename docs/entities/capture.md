@@ -165,7 +165,7 @@ tools; it never names this view.
   into the live query before its network sync marks the collection ready, so
   `isLoading` stays true while rows already exist; gating on `isLoading` would
   hide a hydrated snapshot behind a spinner until the network answered. The
-  shared `capturesView` helper in `@zero/agent-core` encodes the rule (rows whenever
+  shared `listView` helper in `@zero/agent-core` encodes the rule (rows whenever
   present; spinner only when empty and loading).
 
 ## Next

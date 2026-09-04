@@ -5,7 +5,7 @@ import { createLiveQueryCollection } from "@tanstack/db";
 
 import {
   createInMemoryProjectsApi,
-  projectsReconcileWrites,
+  projectsSpec,
   type ProjectsRest,
 } from "./collection";
 import type { Project } from "./types";
@@ -165,36 +165,16 @@ describe("projects collection", () => {
   });
 });
 
-describe("projectsReconcileWrites", () => {
-  it("inserts every server row when the collection is empty", () => {
-    const writes = projectsReconcileWrites([], [project("a"), project("b")]);
-    expect(writes).toEqual([
-      { type: "insert", value: project("a") },
-      { type: "insert", value: project("b") },
-    ]);
-  });
-
-  it("updates rows already present instead of re-inserting them", () => {
-    const writes = projectsReconcileWrites(["a"], [project("a"), project("b")]);
-    expect(writes).toEqual([
-      { type: "update", value: project("a") },
-      { type: "insert", value: project("b") },
-    ]);
-  });
-
-  it("deletes keys the server no longer returns", () => {
-    const writes = projectsReconcileWrites(["a", "b"], [project("a")]);
-    expect(writes).toEqual([
-      { type: "update", value: project("a") },
-      { type: "delete", key: "b" },
-    ]);
-  });
-
-  it("clears everything when the server list is empty", () => {
-    const writes = projectsReconcileWrites(["a", "b"], []);
-    expect(writes).toEqual([
-      { type: "delete", key: "a" },
-      { type: "delete", key: "b" },
+// The outbox persists queued offline writes by these names and the local cache
+// table by the entity name. Renaming any strands offline writes.
+describe("projects durable names", () => {
+  it("keeps the collection id and outbox mutationFn names", () => {
+    const spec = projectsSpec(fakeRest([]));
+    expect(spec.name).toBe("projects");
+    expect(Object.keys(spec.verbs).sort()).toEqual([
+      "addProject",
+      "editProject",
+      "setProjectStatus",
     ]);
   });
 });

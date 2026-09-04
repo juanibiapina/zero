@@ -6,7 +6,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
   projectsByStatus,
-  projectsView,
+  listView,
   type ProjectEditFields,
   type ProjectStatus,
 } from "@zero/agent-core";
@@ -221,7 +221,7 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
 
   const list = useMemo(() => projects ?? [], [projects]);
   const sections = useMemo(() => projectsByStatus(list), [list]);
-  const view = projectsView({ count: list.length, isLoading, loadError: null });
+  const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   const selected = selectedId

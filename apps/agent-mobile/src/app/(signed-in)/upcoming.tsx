@@ -12,7 +12,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, SectionList, TextInput, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
-import { useCapturesApi } from '@/lib/use-captures-api';
+import { useCapturesApi } from '@/lib/captures-collection';
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);

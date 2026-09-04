@@ -1,16 +1,13 @@
-import type { QueryClient } from '@tanstack/react-query';
-import {
-  createTasksApi,
-  type StartOfflineExecutor,
-  type TasksApi,
-  type TasksRest,
-} from '@zero/agent-core';
+import { createTasksApi, type TasksApi, type TasksRest } from '@zero/agent-core';
 
 import { addTask, completeTask, fetchTasks, type TokenGetter } from './api';
-import { getAppOutbox, getAppPersistence } from './db';
+import { defineMobileEntityApi } from './entity-api';
 
-// Bind the cross-origin REST helpers to the current Clerk token getter so the
-// shared factory stays auth-agnostic.
+// The mobile Task data layer: the shared factory bound to the Clerk token. No
+// screen reads it today (the Today tab is parked, see docs/todo-app.md); it is
+// wired like the others so un-parking it is a screen, not plumbing. The
+// mechanics (singleton, token ref, offline SQLite + outbox, jest fallback) are
+// in ./entity-api.
 function makeRest(getToken: TokenGetter): TasksRest {
   return {
     fetchTasks: () => fetchTasks(getToken),
@@ -19,35 +16,12 @@ function makeRest(getToken: TokenGetter): TasksRest {
   };
 }
 
-// Build the mobile Task data layer: durable offline SQLite (op-sqlite) plus an
-// outbox that retries over the native network detector, both shared with every
-// other collection through the single app database and outbox. Falls back to the
-// shared in-memory Query Collection when the native modules are unavailable (e.g.
-// under jest), so tests need no op-sqlite mock. Sibling of createMobileCapturesApi.
-export function createMobileTasksApi(deps: {
-  queryClient: QueryClient;
-  getToken: TokenGetter;
-}): Promise<TasksApi> {
-  // Stashed during the async persistence step, then used by the synchronous
-  // startOfflineExecutor the shared factory calls (only on the durable path).
-  let startExecutor: StartOfflineExecutor | null = null;
+const tasks = defineMobileEntityApi<TasksApi, TasksRest>({
+  create: createTasksApi,
+  makeRest,
+});
 
-  return createTasksApi({
-    queryClient: deps.queryClient,
-    rest: makeRest(deps.getToken),
-    persistence: async () => {
-      const rn = await import('@tanstack/offline-transactions/react-native');
-      const { storage, onlineDetector } = await getAppOutbox();
-      startExecutor = (config) =>
-        rn.startOfflineExecutor({ ...config, storage, onlineDetector });
-      return getAppPersistence();
-    },
-    startOfflineExecutor: (config) => {
-      if (!startExecutor) {
-        throw new Error('offline executor not initialized before use');
-      }
-      return startExecutor(config);
-    },
-    onWarn: (message, error) => console.warn(message, error),
-  });
-}
+export const getMobileTasksApi = tasks.get;
+export const setTasksTokenGetter = tasks.setTokenGetter;
+export const resetTasksApiForTest = tasks.resetForTest;
+export const useTasksApi = tasks.useApi;

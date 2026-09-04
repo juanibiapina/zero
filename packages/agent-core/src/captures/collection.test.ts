@@ -4,8 +4,8 @@ import { QueryClient } from "@tanstack/react-query";
 import { createLiveQueryCollection, isNull } from "@tanstack/db";
 
 import {
+  capturesSpec,
   createInMemoryApi,
-  reconcileCaptureWrites,
   type CapturesRest,
 } from "./collection";
 import type { Capture } from "./types";
@@ -299,50 +299,19 @@ describe("captures collection", () => {
   });
 });
 
-describe("reconcileCaptureWrites", () => {
-  const cap = (id: string, processedAt: string | null = null): Capture => ({
-    id,
-    text: id,
-    createdAt: "2023-01-01T00:00:00.000Z",
-    processedAt,
-    showUpDate: null,
-    sortKey: null,
-  });
-
-  it("inserts every server row when the collection is empty", () => {
-    const writes = reconcileCaptureWrites([], [cap("a"), cap("b")]);
-    expect(writes).toEqual([
-      { type: "insert", value: cap("a") },
-      { type: "insert", value: cap("b") },
+// The outbox persists queued offline writes by these names and the local cache
+// table by the entity name; a write queued by an old build replays on the new
+// one by them. Renaming any strands offline writes.
+describe("captures durable names", () => {
+  it("keeps the collection id and outbox mutationFn names", () => {
+    const spec = capturesSpec(fakeRest([]));
+    expect(spec.name).toBe("captures");
+    expect(Object.keys(spec.verbs).sort()).toEqual([
+      "addCapture",
+      "editCapture",
+      "processCapture",
+      "reorderCapture",
+      "rescheduleCapture",
     ]);
-  });
-
-  it("updates rows already present instead of re-inserting them", () => {
-    const writes = reconcileCaptureWrites(["a"], [cap("a"), cap("b")]);
-    expect(writes).toEqual([
-      { type: "update", value: cap("a") },
-      { type: "insert", value: cap("b") },
-    ]);
-  });
-
-  it("deletes keys the server no longer returns (processed / removed rows)", () => {
-    const writes = reconcileCaptureWrites(["a", "b"], [cap("a")]);
-    expect(writes).toEqual([
-      { type: "update", value: cap("a") },
-      { type: "delete", key: "b" },
-    ]);
-  });
-
-  it("clears everything when the server captures is empty", () => {
-    const writes = reconcileCaptureWrites(["a", "b"], []);
-    expect(writes).toEqual([
-      { type: "delete", key: "a" },
-      { type: "delete", key: "b" },
-    ]);
-  });
-
-  it("emits no duplicate insert for a key that is already present", () => {
-    const writes = reconcileCaptureWrites(["a"], [cap("a")]);
-    expect(writes).toEqual([{ type: "update", value: cap("a") }]);
   });
 });

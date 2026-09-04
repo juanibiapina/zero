@@ -40,8 +40,9 @@ Project was built in vertical slices (plan: `docs/plans/todo-project-entity.md`)
 
 Slice A (the hand-managed Project entity, no AI, no Task membership) is complete.
 The icon and description columns existed from A1's migration, so A3 needed none.
-The next tracked change is the Rule-of-Three extraction, then slice B
-(Task-under-Project).
+The Rule-of-Three extraction of the shared client plumbing followed
+(`docs/plans/todo-rule-of-three-extraction.md`); the next tracked change is
+slice B (Task-under-Project).
 
 ## What it is
 
@@ -120,9 +121,9 @@ no speculative columns before their behavior is designed.
   sheet is a generic, entity-agnostic primitive (`components/ui/sheet.tsx`),
   shared with the Captures detail sheet.
 - **Storage** — the server domain store is `DbProjectStore` (domain methods
-  `add` / `list` / `setStatus` / `edit`), a sibling of `DbCaptureStore` /
-  `DbTaskStore`; the duplication is deliberate and removed by the Rule-of-Three
-  extraction now due. See `docs/storage.md`.
+  `add` / `list` / `setStatus` / `edit`), a per-entity store like
+  `DbCaptureStore` / `DbTaskStore` (do-orm is the shared layer; a store holds
+  only domain verbs). See `docs/storage.md`.
 - **API** — per-user isolated:
   - `GET /api/projects` → `{ projects }`, the non-`done` working set, oldest-first.
   - `POST /api/projects { id, title, icon?, description?, status? }` →
@@ -135,33 +136,27 @@ no speculative columns before their behavior is designed.
     list) and the edit fields; an edit sends only the changed field.
   - Logs `project_added`, `project_status_changed`, and `project_edited`.
 - **Data layer** — a TanStack DB collection (`createProjectsApi` in
-  `@zero/agent-core`), a sibling of the Task layer: in-memory fallback plus
-  durable persisted offline mode with an outbox (`addProject` /
-  `setProjectStatus` / `editProject` replay offline), and pure
-  `projectsReconcileWrites` / `projectsByStatus` helpers. `setStatus` and `edit`
-  share one `collection.update`, disambiguated by the changed field set. See
-  `docs/storage.md`.
+  `@zero/agent-core`) built on the shared collection factory: a verb table
+  (`addProject` / `setProjectStatus` / `editProject`, also the offline outbox
+  names) over the factory's in-memory fallback and durable persisted offline
+  mode, plus the pure `projectsByStatus` helper. `setStatus` and `edit` share one
+  `collection.update`, told apart by the changed field set; a row whose status
+  becomes `done` leaves the collection at once. See `docs/storage.md`.
 - **Other entities** — none wired yet. Task membership (`projectId` on `tasks`)
   is slice B; the AI Capture → Project conversion is a later slice.
 
 ## Shared view rule
 
 The Projects list region gates on the row count, not the collection's
-`isLoading`, via the shared `projectsView` helper in `@zero/agent-core` (same rule
-as `todayView` / `capturesView`: rows whenever present; the spinner only when
-empty and loading). The persisted collection hydrates the local snapshot before
+`isLoading`, via the shared `listView` helper in `@zero/agent-core` (one rule for
+every entity list: rows whenever present; the spinner only when empty and
+loading). The persisted collection hydrates the local snapshot before
 the network sync marks ready, so gating on `isLoading` would hide a hydrated
 snapshot behind a spinner.
 
 ## Next
 
-- **Rule-of-Three extraction (now due)** — with Capture/Task/Project in hand,
-  extract the shared offline collection factory, the `*View` count-gate, and the
-  id/createdAt/dedupe conventions; never the domain verbs.
 - **Task → Project (slice B)** — a Task belongs to a Project (adds `projectId` on
   `tasks`); the sheet grows the project's Task list.
 - **AI conversion** — swipe a Capture, propose a Project, confirm (later slices of
   `docs/plans/todo-capture-to-project-ai.md`).
-- **Rule-of-Three extraction** — after A3, extract the shared offline collection
-  factory, the `*View` count-gate, and the id/createdAt/dedupe conventions from
-  Capture/Task/Project; never the domain verbs.

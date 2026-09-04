@@ -3,7 +3,7 @@ import { Button, Column, Row, Text as UIText, TextInput } from '@expo/ui';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
   projectsByStatus,
-  projectsView,
+  listView,
   type Project,
   type ProjectEditFields,
   type ProjectsApi,
@@ -23,7 +23,7 @@ import {
 import { QuickAdd } from '@/components/quick-add';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
-import { useProjectsApi } from '@/lib/use-projects-api';
+import { useProjectsApi } from '@/lib/projects-collection';
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -412,7 +412,7 @@ function Projects({
     setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
   }, []);
 
-  const view = projectsView({ count: list.length, isLoading, loadError });
+  const view = listView({ count: list.length, isLoading, loadError });
   const error = writeError ?? (list.length === 0 ? loadError : null);
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 

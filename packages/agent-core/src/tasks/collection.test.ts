@@ -5,7 +5,7 @@ import { createLiveQueryCollection, isNull } from "@tanstack/db";
 
 import {
   createInMemoryTasksApi,
-  tasksReconcileWrites,
+  tasksSpec,
   type TasksRest,
 } from "./collection";
 import type { Task } from "./types";
@@ -133,36 +133,12 @@ describe("tasks collection", () => {
   });
 });
 
-describe("tasksReconcileWrites", () => {
-  it("inserts every server row when the collection is empty", () => {
-    const writes = tasksReconcileWrites([], [task("a"), task("b")]);
-    expect(writes).toEqual([
-      { type: "insert", value: task("a") },
-      { type: "insert", value: task("b") },
-    ]);
-  });
-
-  it("updates rows already present instead of re-inserting them", () => {
-    const writes = tasksReconcileWrites(["a"], [task("a"), task("b")]);
-    expect(writes).toEqual([
-      { type: "update", value: task("a") },
-      { type: "insert", value: task("b") },
-    ]);
-  });
-
-  it("deletes keys the server no longer returns (completed / removed rows)", () => {
-    const writes = tasksReconcileWrites(["a", "b"], [task("a")]);
-    expect(writes).toEqual([
-      { type: "update", value: task("a") },
-      { type: "delete", key: "b" },
-    ]);
-  });
-
-  it("clears everything when the server list is empty", () => {
-    const writes = tasksReconcileWrites(["a", "b"], []);
-    expect(writes).toEqual([
-      { type: "delete", key: "a" },
-      { type: "delete", key: "b" },
-    ]);
+// The outbox persists queued offline writes by these names and the local cache
+// table by the entity name. Renaming any strands offline writes.
+describe("tasks durable names", () => {
+  it("keeps the collection id and outbox mutationFn names", () => {
+    const spec = tasksSpec(fakeRest([]));
+    expect(spec.name).toBe("tasks");
+    expect(Object.keys(spec.verbs).sort()).toEqual(["addTask", "completeTask"]);
   });
 });
