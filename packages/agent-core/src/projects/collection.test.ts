@@ -46,6 +46,15 @@ function fakeRest(initial: Project[]): ProjectsRest {
       }
       return { ...row, status };
     },
+    editProject: async (id, fields) => {
+      await sleep(5);
+      const row = server.find((p) => p.id === id);
+      if (!row) throw new Error(`no project ${id}`);
+      if (fields.title !== undefined) row.title = fields.title;
+      if (fields.icon !== undefined) row.icon = fields.icon;
+      if (fields.description !== undefined) row.description = fields.description;
+      return { ...row };
+    },
   };
 }
 
@@ -130,6 +139,29 @@ describe("projects collection", () => {
     await sleep(50);
 
     expect(api.collection.has("s1")).toBe(false);
+  });
+
+  it("edits a project's fields in place and keeps it in the collection", async () => {
+    const api = createInMemoryProjectsApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([project("s1", { title: "old", status: "active" })]),
+    });
+    await api.collection.stateWhenReady();
+
+    const tx = api.edit("s1", {
+      title: "Run a 5K under 30 min",
+      icon: "🏃",
+      description: "By June",
+    });
+    await tx.isPersisted.promise;
+    await sleep(50);
+
+    const row = api.collection.get("s1");
+    expect(row?.title).toBe("Run a 5K under 30 min");
+    expect(row?.icon).toBe("🏃");
+    expect(row?.description).toBe("By June");
+    // An edit never changes status, and never drops the row.
+    expect(row?.status).toBe("active");
   });
 });
 

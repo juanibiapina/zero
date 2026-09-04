@@ -111,16 +111,22 @@ export const createProjectsRoutes = () => {
     method: "patch",
     path: "/api/projects/{id}",
     tags: ["Projects"],
-    summary: "Change a project's status",
+    summary: "Edit a project or change its status",
     request: {
       params: z.object({ id: z.string() }),
       body: {
         content: {
           "application/json": {
-            // A partial update on the project's stable id. A2 carries only
-            // `status`; A3 widens this to title/icon/description. Setting `done`
-            // drops the row from the working list.
-            schema: z.object({ status: ProjectStatus.optional() }),
+            // A partial update on the project's stable id. It carries either the
+            // status transition (`status`, where `done` drops the row from the
+            // working list) or the editable fields (title/icon/description), or
+            // both. Empty title/icon are rejected; description may be null.
+            schema: z.object({
+              status: ProjectStatus.optional(),
+              title: z.string().min(1).optional(),
+              icon: z.string().min(1).optional(),
+              description: z.string().nullable().optional(),
+            }),
           },
         },
       },
@@ -136,7 +142,7 @@ export const createProjectsRoutes = () => {
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
         },
-        description: "No fields to update or an unknown status",
+        description: "No fields to update, or an empty title/icon or bad status",
       },
       404: {
         content: {
@@ -147,23 +153,48 @@ export const createProjectsRoutes = () => {
     },
   });
 
-  // PATCH (not a POST …/action) because changing a project's status is an
-  // idempotent field update on its stable id. One endpoint carries every status
-  // transition; A3 will widen the same body to the edit fields. See
+  // PATCH (not a POST …/action) because both editing a project and changing its
+  // status are idempotent field updates on its stable id. One endpoint carries
+  // every transition and every edit: the edit fields go through `editProject`,
+  // the status transition through `setProjectStatus`. See
   // docs/entities/project.md.
   router.openapi(editRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const { status } = c.req.valid("json");
-    if (status === undefined) {
+    const { status, title, icon, description } = c.req.valid("json");
+    const editFields: {
+      title?: string;
+      icon?: string;
+      description?: string | null;
+    } = {};
+    if (title !== undefined) editFields.title = title;
+    if (icon !== undefined) editFields.icon = icon;
+    if (description !== undefined) editFields.description = description;
+    const hasEdit = Object.keys(editFields).length > 0;
+    if (!hasEdit && status === undefined) {
       return c.json({ error: "no fields to update" }, 400);
     }
     const userDO = getUserDO(c.env, userId);
-    const project = await userDO.setProjectStatus(id, status);
-    if (!project) {
-      return c.json({ error: "project not found" }, 404);
+    let project: Awaited<ReturnType<typeof userDO.editProject>> = null;
+    if (hasEdit) {
+      project = await userDO.editProject(id, editFields);
+      if (!project) {
+        return c.json({ error: "project not found" }, 404);
+      }
+      log("project_edited", { clerk_user_id: userId });
     }
-    log("project_status_changed", { clerk_user_id: userId });
+    if (status !== undefined) {
+      project = await userDO.setProjectStatus(id, status);
+      if (!project) {
+        return c.json({ error: "project not found" }, 404);
+      }
+      log("project_status_changed", { clerk_user_id: userId });
+    }
+    // Unreachable: the empty-body case returned 400 above, so at least one branch
+    // set `project`. The guard narrows it to non-null for the typed response.
+    if (!project) {
+      return c.json({ error: "no fields to update" }, 400);
+    }
     return c.json({ project }, 200);
   });
 

@@ -99,7 +99,8 @@ third entity, now being built (slice A1 shipped). Everything else below
   a nice icon (baby face, diploma) and a status (active / next / waiting / backlog
   / done). Slices A1 + A2 shipped: name-only create, a status-grouped list, and a
   detail sheet where the status is changed (Done + inline Undo) on both surfaces;
-  enrichment (icon/title/notes editing) follows in A3. Vision beyond that:
+  slice A3 shipped enrichment in that sheet (curated emoji picker, editable title
+  and notes). Slice A (the hand-managed entity) is complete. Vision beyond that:
   can contain Todos, agent sessions, documents. Can spin off other Projects and
   even People. Notify dependent Projects when they move; can unblock them. Idea:
   project "slots", start with one slot to teach the game.
@@ -226,10 +227,20 @@ hide-empty, Backlog collapsed when large), and a tap opens a detail bottom sheet
 with a Status group; setting `done` removes the row with an inline ~5s Undo. The
 detail sheet is a generic reusable primitive — web on `@radix-ui/react-dialog`,
 mobile on the universal `@expo/ui` `BottomSheet` — shared with the Captures
-detail sheet. Enrichment (icon/title/description editing in the sheet) is A3; the
-`icon`/`description` fields exist in the data with defaults and still have no UI.
-A Rule-of-Three extraction of the shared plumbing (never the domain verbs) is the
-tracked follow-up after A3.
+detail sheet.
+
+Shipped (slice A3, plan `todo-project-entity-a3.md`): enrichment in the detail
+sheet. `DbProjectStore.edit` + a widened `PATCH /api/projects/{id}` carrying
+title/icon/description alongside status, and `api.edit` in the collection
+(offline-replaying; `setStatus` and `edit` share one update, disambiguated by the
+changed field set). The sheet gained a curated emoji icon picker, an editable
+title, and an editable notes field on both surfaces; field edits commit on
+blur/submit (the icon on tap) and keep the sheet open, while a status pick still
+dismisses it. The `icon`/`description` columns existed from A1, so A3 needed no
+migration. This completes **slice A** (the hand-managed Project entity: no AI, no
+Task membership). The mobile `@expo/ui` `TextInput` is native, so on-device
+verification needs an EAS dev build. The Rule-of-Three extraction of the shared
+plumbing (never the domain verbs) is now the due follow-up, before slice B.
 
 In flight (details in `docs/plans/`):
 
@@ -240,11 +251,14 @@ In flight (details in `docs/plans/`):
 
 Next:
 
+- **Rule-of-Three extraction** — with Capture/Task/Project shipped, extract the
+  shared offline collection factory, the `*View` count-gate, and the
+  id/createdAt/dedupe conventions (never the domain verbs). Due before slice B.
 - **Capture → Task** — Process a Capture into a Task (adds `sourceCaptureId`; not
   yet designed; the richest data-model slice).
 - **Reschedule a Task** — swipe-to-tomorrow / pick a future date (v1 dates every
   Task today with no way to change it).
-- **Task → Project** — Task belongs to a Project (adds `projectId`).
+- **Task → Project (slice B)** — Task belongs to a Project (adds `projectId`).
 - later: agent `create_task` tool, recurring capture, recurring Tasks.
 
 Dev infra: a physical Pixel 7 is USB-attached to the dev box and driven with the

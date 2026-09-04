@@ -21,9 +21,9 @@ and `projects` table, a sibling of `DbCaptureStore` / `DbTaskStore`.
 
 The name is `Project`.
 
-## Status: building (slices A1 + A2 shipped)
+## Status: slice A complete (A1 + A2 + A3 shipped)
 
-Project is being built in vertical slices (plan: `docs/plans/todo-project-entity.md`).
+Project was built in vertical slices (plan: `docs/plans/todo-project-entity.md`).
 
 - **A1 (shipped):** create a Project by name and see a flat list, on web
   (`/projects`) and mobile (a Projects tab). Persists and syncs; mobile create
@@ -33,17 +33,22 @@ Project is being built in vertical slices (plan: `docs/plans/todo-project-entity
   detail bottom sheet holds a Status group, and setting `done` removes a project
   from the working list with an inline Undo (~5s). Ships on web and mobile,
   offline-safe.
-- **A3 (next):** enrich in the sheet — emoji icon picker, editable title,
-  description.
+- **A3 (shipped):** enrich in the sheet — a curated emoji icon picker, an
+  editable title, and an editable description. Edits commit on blur/submit (the
+  icon on tap), keep the sheet open, persist, and sync offline. Ships on web and
+  mobile.
 
-The icon and description fields already exist in the data (with defaults) so A3
-needs no migration; only its UI is deferred.
+Slice A (the hand-managed Project entity, no AI, no Task membership) is complete.
+The icon and description columns existed from A1's migration, so A3 needed none.
+The next tracked change is the Rule-of-Three extraction, then slice B
+(Task-under-Project).
 
 ## What it is
 
 A named container with a status: `title`, an `icon` (emoji), an optional
 `description`, and a `status`. At creation only the title is asked for; the rest
-take defaults and are enriched later.
+take defaults and are enriched later from the detail sheet (icon picker, editable
+title and notes).
 
 ## Vocabulary
 
@@ -93,6 +98,10 @@ no speculative columns before their behavior is designed.
 - **Set status** — move a Project to any of the five states. Setting `done` is
   terminal and drops it from the working list. One `setStatus` verb carries every
   transition.
+- **Edit** — change a Project's `title`, `icon`, or `description` (only the given
+  fields; the description may be cleared to null). One `edit` verb, separate from
+  `setStatus` (status has terminal semantics). Idempotent on the id, so an
+  offline edit replays safely.
 
 ## Interactions (per system)
 
@@ -103,28 +112,35 @@ no speculative columns before their behavior is designed.
   Next / Waiting / Backlog sections with counts, empty sections hidden, Backlog
   collapsed when large. A row is a single tap target that opens a **detail bottom
   sheet** (web: `@radix-ui/react-dialog`; mobile: the universal `@expo/ui`
-  `BottomSheet`) holding a **Status group** — the five states, current one marked.
-  Setting `done` leaves the row briefly struck-through with an inline **Undo**
-  (~5s) before it leaves the list. The sheet is a generic, entity-agnostic
-  primitive (`components/ui/sheet.tsx`), shared with the Captures detail sheet.
+  `BottomSheet`) holding a curated **emoji icon picker**, an editable **title**
+  and **notes** field, and a **Status group** — the five states, current one
+  marked. Field edits commit on blur/submit (the icon on tap) and keep the sheet
+  open; a status pick dismisses it. Setting `done` leaves the row briefly
+  struck-through with an inline **Undo** (~5s) before it leaves the list. The
+  sheet is a generic, entity-agnostic primitive (`components/ui/sheet.tsx`),
+  shared with the Captures detail sheet.
 - **Storage** — the server domain store is `DbProjectStore` (domain methods
-  `add` / `list` / `setStatus`), a sibling of `DbCaptureStore` / `DbTaskStore`;
-  the duplication is deliberate and removed by a Rule-of-Three extraction after
-  A3. See `docs/storage.md`.
+  `add` / `list` / `setStatus` / `edit`), a sibling of `DbCaptureStore` /
+  `DbTaskStore`; the duplication is deliberate and removed by the Rule-of-Three
+  extraction now due. See `docs/storage.md`.
 - **API** — per-user isolated:
   - `GET /api/projects` → `{ projects }`, the non-`done` working set, oldest-first.
   - `POST /api/projects { id, title, icon?, description?, status? }` →
     `201 { project }`; the client normally sends only `id` + `title` and the
     server fills the defaults. `400` on empty title, a non-UUID id, or an unknown
     status.
-  - `PATCH /api/projects/{id} { status }` → `200 { project }`; `400` (no fields /
-    unknown status) / `404`. Setting `done` drops the row from the list.
-  - Logs `project_added` and `project_status_changed`.
+  - `PATCH /api/projects/{id} { status?, title?, icon?, description? }` →
+    `200 { project }`; `400` (no fields / empty title or icon / unknown status) /
+    `404`. Carries both the status transition (`done` drops the row from the
+    list) and the edit fields; an edit sends only the changed field.
+  - Logs `project_added`, `project_status_changed`, and `project_edited`.
 - **Data layer** — a TanStack DB collection (`createProjectsApi` in
   `@zero/agent-core`), a sibling of the Task layer: in-memory fallback plus
   durable persisted offline mode with an outbox (`addProject` /
-  `setProjectStatus` replay offline), and pure `projectsReconcileWrites` /
-  `projectsByStatus` helpers. See `docs/storage.md`.
+  `setProjectStatus` / `editProject` replay offline), and pure
+  `projectsReconcileWrites` / `projectsByStatus` helpers. `setStatus` and `edit`
+  share one `collection.update`, disambiguated by the changed field set. See
+  `docs/storage.md`.
 - **Other entities** — none wired yet. Task membership (`projectId` on `tasks`)
   is slice B; the AI Capture → Project conversion is a later slice.
 
@@ -139,8 +155,9 @@ snapshot behind a spinner.
 
 ## Next
 
-- **Enrich (A3)** — emoji icon picker, editable title, description, all in the
-  detail sheet.
+- **Rule-of-Three extraction (now due)** — with Capture/Task/Project in hand,
+  extract the shared offline collection factory, the `*View` count-gate, and the
+  id/createdAt/dedupe conventions; never the domain verbs.
 - **Task → Project (slice B)** — a Task belongs to a Project (adds `projectId` on
   `tasks`); the sheet grows the project's Task list.
 - **AI conversion** — swipe a Capture, propose a Project, confirm (later slices of

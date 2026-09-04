@@ -5,9 +5,9 @@
 // DbTaskStore because the entities have different verbs. See
 // docs/entities/project.md.
 //
-// Slice A1 wires only `add` and `list`; `setStatus` (A2) and `edit` (A3) land
-// later. The status column exists now (default 'next') so those slices need no
-// migration.
+// Slice A1 wires `add` and `list`; A2 adds `setStatus`; A3 adds `edit`
+// (title/icon/description). The icon/description columns exist from A1's
+// migration, so A3 needs no migration.
 
 import { asc, eq, ne, type Database } from "do-orm";
 
@@ -38,6 +38,15 @@ export type ProjectDefaults = {
   icon?: string;
   description?: string | null;
   status?: ProjectStatus;
+};
+
+// The fields a later edit may change (title/icon/description). Status is its own
+// verb (setStatus) because it has terminal semantics (done drops the row from
+// the list). Only the present keys are written.
+export type ProjectEdit = {
+  title?: string;
+  icon?: string;
+  description?: string | null;
 };
 
 // Project a stored row back to the client-facing Project shape.
@@ -97,6 +106,22 @@ export class DbProjectStore {
   // every transition; the caller decides which of the five states to pass.
   setStatus(id: string, status: ProjectStatus): Project | null {
     this.db.update(projects, { status }, { where: eq("id", id) });
+    const row = this.db.get(projects, { where: eq("id", id) });
+    return row ? toProject(row) : null;
+  }
+
+  // Edit a project's title/icon/description. Only the present keys are written
+  // (a partial update on the stable id, so a replayed offline edit re-applies
+  // the same values harmlessly). Status is not editable here (setStatus owns
+  // it). Returns the updated row, or null when no row has that id.
+  edit(id: string, fields: ProjectEdit): Project | null {
+    const patch: ProjectEdit = {};
+    if (fields.title !== undefined) patch.title = fields.title;
+    if (fields.icon !== undefined) patch.icon = fields.icon;
+    if (fields.description !== undefined) patch.description = fields.description;
+    if (Object.keys(patch).length > 0) {
+      this.db.update(projects, patch, { where: eq("id", id) });
+    }
     const row = this.db.get(projects, { where: eq("id", id) });
     return row ? toProject(row) : null;
   }

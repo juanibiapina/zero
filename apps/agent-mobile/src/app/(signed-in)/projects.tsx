@@ -1,10 +1,11 @@
 import { UserButton } from '@clerk/expo/native';
-import { Button, Column, Text as UIText } from '@expo/ui';
+import { Button, Column, Row, Text as UIText, TextInput } from '@expo/ui';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
   projectsByStatus,
   projectsView,
   type Project,
+  type ProjectEditFields,
   type ProjectsApi,
   type ProjectStatus,
 } from '@zero/agent-core';
@@ -14,7 +15,7 @@ import {
   BackHandler,
   Pressable,
   SectionList,
-  type TextInput,
+  type TextInput as RNTextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -57,6 +58,23 @@ const ALL_STATUSES: ProjectStatus[] = [
   'waiting',
   'backlog',
   'done',
+];
+
+// A small curated icon set (not a full emoji keyboard) so a project's icon
+// renders identically across platforms.
+const ICON_CHOICES = [
+  '📁',
+  '👶',
+  '🎓',
+  '🏠',
+  '🎬',
+  '✈️',
+  '📚',
+  '💼',
+  '❤️',
+  '💪',
+  '🧳',
+  '🎯',
 ];
 
 function useDelayed(active: boolean, ms: number): boolean {
@@ -182,6 +200,75 @@ function StatusGroup({
   );
 }
 
+// The detail sheet body (native @expo/ui tree): an icon picker, an editable
+// title and notes field, and the Status group. Edits commit on blur/submit (not
+// per keystroke) and keep the sheet open; only a status pick dismisses it. Keyed
+// by project id at the call site, so the seeded field state resets per project.
+function ProjectDetail({
+  project,
+  onEdit,
+  onPickStatus,
+}: {
+  project: Project;
+  onEdit: (id: string, fields: ProjectEditFields) => void;
+  onPickStatus: (status: ProjectStatus) => void;
+}) {
+  const [title, setTitle] = useState(project.title);
+  const [description, setDescription] = useState(project.description ?? '');
+
+  const commitTitle = useCallback(() => {
+    const trimmed = title.trim();
+    if (trimmed === '' || trimmed === project.title) {
+      setTitle(project.title);
+      return;
+    }
+    onEdit(project.id, { title: trimmed });
+  }, [title, project.id, project.title, onEdit]);
+
+  const commitDescription = useCallback(() => {
+    const next = description.trim() === '' ? null : description;
+    if ((next ?? null) === (project.description ?? null)) return;
+    onEdit(project.id, { description: next });
+  }, [description, project.id, project.description, onEdit]);
+
+  return (
+    <Column spacing={12}>
+      <UIText>Icon</UIText>
+      <Row spacing={8}>
+        {ICON_CHOICES.map((icon) => (
+          <Button
+            key={icon}
+            variant={icon === project.icon ? 'filled' : 'outlined'}
+            onPress={() => onEdit(project.id, { icon })}
+            label={icon}
+          />
+        ))}
+      </Row>
+
+      <UIText>Title</UIText>
+      <TextInput
+        defaultValue={project.title}
+        onChangeText={setTitle}
+        onBlur={commitTitle}
+        returnKeyType="done"
+        onSubmitEditing={commitTitle}
+        placeholder="Project name"
+      />
+
+      <UIText>Notes</UIText>
+      <TextInput
+        defaultValue={project.description ?? ''}
+        onChangeText={setDescription}
+        onBlur={commitDescription}
+        multiline
+        placeholder="A sentence of intent (optional)"
+      />
+
+      <StatusGroup current={project.status} onPick={onPickStatus} />
+    </Column>
+  );
+}
+
 // Projects is entity #3: outcome-oriented containers grouped by status. The
 // quick-add creates one by name; tapping a row opens the detail sheet where the
 // status is changed (icon/title/notes editing is slice A3).
@@ -268,6 +355,17 @@ function Projects({
     [api],
   );
 
+  // Edit a project's icon/title/notes from the sheet. Unlike a status pick, an
+  // edit keeps the sheet open so several fields can change.
+  const commitEdit = useCallback(
+    (id: string, fields: ProjectEditFields) => {
+      setWriteError(null);
+      const tx = api.edit(id, fields);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    },
+    [api],
+  );
+
   // Done defers the write: hold the row struck-through with Undo for
   // DONE_UNDO_MS, then commit. Undo clears the timer and the row stays.
   const startDone = useCallback(
@@ -344,7 +442,7 @@ function Projects({
   // Android back: dismiss the sheet, then close the quick-add, before leaving.
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<RNTextInput>(null);
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (selectedId) {
@@ -424,9 +522,11 @@ function Projects({
 
       <Sheet open={selected != null} onClose={() => setSelectedId(null)}>
         {selected ? (
-          <StatusGroup
-            current={selected.status}
-            onPick={(status) => onPickStatus(selected, status)}
+          <ProjectDetail
+            key={selected.id}
+            project={selected}
+            onEdit={commitEdit}
+            onPickStatus={(status) => onPickStatus(selected, status)}
           />
         ) : null}
       </Sheet>

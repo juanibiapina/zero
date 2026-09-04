@@ -103,4 +103,52 @@ describe("DbProjectStore", () => {
 
     expect(store.list().map((p) => p.id)).toEqual(["id-1"]);
   });
+
+  it("edits a project's title, icon, and description", () => {
+    const store = makeStore();
+    store.add("id-1", "Run a 5K");
+
+    const updated = store.edit("id-1", {
+      title: "Run a 5K under 30 min",
+      icon: "🏃",
+      description: "By June",
+    });
+
+    expect(updated?.title).toBe("Run a 5K under 30 min");
+    expect(updated?.icon).toBe("🏃");
+    expect(updated?.description).toBe("By June");
+  });
+
+  it("edits only the fields present and leaves the rest", () => {
+    const store = makeStore();
+    store.add("id-1", "Run a 5K", { icon: "🏃", description: "keep me" });
+
+    const updated = store.edit("id-1", { title: "Run a 10K" });
+
+    expect(updated?.title).toBe("Run a 10K");
+    expect(updated?.icon).toBe("🏃");
+    expect(updated?.description).toBe("keep me");
+  });
+
+  it("clears a description with null", () => {
+    const store = makeStore();
+    store.add("id-1", "Run a 5K", { description: "old" });
+
+    const updated = store.edit("id-1", { description: null });
+
+    expect(updated?.description).toBeNull();
+  });
+
+  it("does not change status through edit", () => {
+    const store = makeStore();
+    store.add("id-1", "Run a 5K", { status: "active" });
+
+    const updated = store.edit("id-1", { title: "renamed" });
+
+    expect(updated?.status).toBe("active");
+  });
+
+  it("returns null when editing a missing project", () => {
+    expect(makeStore().edit("nope", { title: "x" })).toBeNull();
+  });
 });

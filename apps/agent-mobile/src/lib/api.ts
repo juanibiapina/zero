@@ -1,9 +1,15 @@
-import type { Capture, Project, ProjectStatus, Task } from '@zero/agent-core';
+import type {
+  Capture,
+  Project,
+  ProjectEditFields,
+  ProjectStatus,
+  Task,
+} from '@zero/agent-core';
 
 import { API_BASE_URL } from './env';
 
 // The Capture, Task and Project entity types are shared across web + mobile.
-export type { Capture, Project, ProjectStatus, Task };
+export type { Capture, Project, ProjectEditFields, ProjectStatus, Task };
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
@@ -282,6 +288,29 @@ export async function setProjectStatus(
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`PATCH /api/projects/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { project: Project };
+  return body.project;
+}
+
+export async function editProject(
+  getToken: TokenGetter,
+  id: string,
+  fields: ProjectEditFields,
+  baseUrl: string = API_BASE_URL,
+): Promise<Project> {
+  const res = await apiFetch(
+    getToken,
+    `/api/projects/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
     },
     baseUrl,
   );

@@ -3,7 +3,12 @@ import { createProjectsApi, type ProjectsApi } from "@zero/agent-core";
 
 import { queryClient } from "./captures-collection";
 import { getAppPersistence } from "./db";
-import { addProject, fetchProjects, setProjectStatus } from "./projects";
+import {
+  addProject,
+  editProject,
+  fetchProjects,
+  setProjectStatus,
+} from "./projects";
 
 export type { ProjectsApi };
 
@@ -17,7 +22,7 @@ export function getProjectsApi(): Promise<ProjectsApi> {
   if (!apiPromise) {
     apiPromise = createProjectsApi({
       queryClient,
-      rest: { fetchProjects, addProject, setProjectStatus },
+      rest: { fetchProjects, addProject, setProjectStatus, editProject },
       persistence: () => getAppPersistence(),
       startOfflineExecutor,
       onWarn: (message, error) => console.warn(message, error),

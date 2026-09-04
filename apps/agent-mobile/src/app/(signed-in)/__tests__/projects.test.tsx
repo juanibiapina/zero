@@ -1,9 +1,15 @@
+import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { View } from 'react-native';
+import {
+  Pressable,
+  Text as RNText,
+  TextInput as RNTextInput,
+  View,
+} from 'react-native';
 
-import type { Project, ProjectStatus } from '@/lib/api';
+import type { Project, ProjectEditFields, ProjectStatus } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 
 import ProjectsScreen from '../projects';
@@ -20,6 +26,74 @@ jest.mock('@clerk/expo/native', () => ({
   UserButton: () => mockUserButton(),
 }));
 
+// The detail sheet renders a native @expo/ui tree (Column/Row/Button/TextInput
+// inside a native BottomSheet), which does not run under jest-expo: `Row`
+// resolves undefined, `TextInput` reaches for an absent native module, and the
+// native views need a device. Substitute faithful RN passthroughs for the six
+// controls the sheet uses so its wiring is unit-testable; the real native
+// controls are verified on-device (Maestro). `Button` exposes its label as the
+// accessibility name, so label-based queries match the real control; the mock
+// `BottomSheet` renders its children only when presented, like the real sheet.
+// Each mock is a hoisted `Mock`-prefixed component (jest permits a mock factory
+// to reference those) so its JSX is transformed at module scope where the
+// NativeWind helper is in scope.
+function MockView({ children }: { children?: ReactNode }) {
+  return <View>{children}</View>;
+}
+function MockText({ children }: { children?: ReactNode }) {
+  return <RNText>{children}</RNText>;
+}
+function MockButton({ label, onPress }: { label: string; onPress?: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
+      <RNText>{label}</RNText>
+    </Pressable>
+  );
+}
+function MockTextInput({
+  value,
+  defaultValue,
+  onChangeText,
+  onBlur,
+  onSubmitEditing,
+  placeholder,
+}: {
+  value?: string;
+  defaultValue?: string;
+  onChangeText?: (t: string) => void;
+  onBlur?: () => void;
+  onSubmitEditing?: () => void;
+  placeholder?: string;
+}) {
+  return (
+    <RNTextInput
+      value={value ?? defaultValue}
+      onChangeText={onChangeText}
+      onBlur={onBlur}
+      onSubmitEditing={onSubmitEditing}
+      placeholder={placeholder}
+    />
+  );
+}
+function MockBottomSheet({
+  isPresented,
+  children,
+}: {
+  isPresented?: boolean;
+  children?: ReactNode;
+}) {
+  return isPresented ? <View>{children}</View> : null;
+}
+jest.mock('@expo/ui', () => ({
+  Host: MockView,
+  Column: MockView,
+  Row: MockView,
+  Text: MockText,
+  Button: MockButton,
+  TextInput: MockTextInput,
+  BottomSheet: MockBottomSheet,
+}));
+
 const mockFetchProjects = jest.fn<(getToken: unknown) => Promise<Project[]>>();
 const mockAddProject =
   jest.fn<
@@ -32,12 +106,18 @@ const mockSetProjectStatus =
   jest.fn<
     (getToken: unknown, id: string, status: ProjectStatus) => Promise<Project>
   >();
+const mockEditProject =
+  jest.fn<
+    (getToken: unknown, id: string, fields: ProjectEditFields) => Promise<Project>
+  >();
 jest.mock('@/lib/api', () => ({
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: (getToken: unknown, project: { id: string; title: string }) =>
     mockAddProject(getToken, project),
   setProjectStatus: (getToken: unknown, id: string, status: ProjectStatus) =>
     mockSetProjectStatus(getToken, id, status),
+  editProject: (getToken: unknown, id: string, fields: ProjectEditFields) =>
+    mockEditProject(getToken, id, fields),
 }));
 
 const project = (
@@ -73,6 +153,7 @@ describe('ProjectsScreen', () => {
     resetProjectsApiForTest();
     mockAddProject.mockClear();
     mockSetProjectStatus.mockClear();
+    mockEditProject.mockClear();
   });
 
   it('shows the fetched projects with their icons', async () => {
@@ -222,6 +303,32 @@ describe('ProjectsScreen', () => {
     expect(mockSetProjectStatus.mock.calls[0][1]).toBe('1');
     expect(mockSetProjectStatus.mock.calls[0][2]).toBe('active');
     await waitFor(() => expect(getByLabelText('Active, 1')).toBeTruthy());
+  });
+
+  it('changes a project icon from the detail sheet', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);
+    mockEditProject.mockImplementation(async (_t, id, fields) => {
+      const updated = project('1', 'Run a 5K', fields.icon ?? '🏃', 'next');
+      mockFetchProjects.mockResolvedValue([updated]);
+      return updated;
+    });
+
+    const { getByText, getByLabelText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('Run a 5K')).toBeTruthy());
+
+    // Open the sheet, then pick a new icon from the curated picker.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Run a 5K'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('🎓'));
+    });
+
+    expect(mockEditProject).toHaveBeenCalledTimes(1);
+    expect(mockEditProject.mock.calls[0][1]).toBe('1');
+    expect(mockEditProject.mock.calls[0][2]).toEqual({ icon: '🎓' });
   });
 
   it('defers Done behind an Undo and does not commit when undone', async () => {

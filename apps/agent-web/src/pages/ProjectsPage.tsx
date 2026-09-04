@@ -7,6 +7,7 @@ import { ErrorText } from "@/components/ConnectionStatus";
 import {
   projectsByStatus,
   projectsView,
+  type ProjectEditFields,
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
@@ -48,6 +49,24 @@ const ALL_STATUSES: ProjectStatus[] = [
   "waiting",
   "backlog",
   "done",
+];
+
+// A small curated icon set (not a full emoji keyboard) so a project's icon
+// renders identically across platforms. Covers the vision's examples (baby,
+// diploma, house…) plus a neutral default.
+const ICON_CHOICES = [
+  "📁",
+  "👶",
+  "🎓",
+  "🏠",
+  "🎬",
+  "✈️",
+  "📚",
+  "💼",
+  "❤️",
+  "💪",
+  "🧳",
+  "🎯",
 ];
 
 // True only after `active` has held continuously for `ms`. Resets the moment
@@ -142,6 +161,17 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
     (id: string, status: ProjectStatus) => {
       setError(null);
       const tx = api.setStatus(id, status);
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    },
+    [api],
+  );
+
+  // Edit a project's icon/title/description from the sheet. Unlike a status
+  // pick, an edit keeps the sheet open so the user can change several fields.
+  const commitEdit = useCallback(
+    (id: string, fields: ProjectEditFields) => {
+      setError(null);
+      const tx = api.edit(id, fields);
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     },
     [api],
@@ -269,9 +299,11 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
         srOnlyTitle={selected == null}
       >
         {selected && (
-          <StatusGroup
-            current={selected.status}
-            onPick={(status) => onPickStatus(selected, status)}
+          <ProjectDetail
+            key={selected.id}
+            project={selected}
+            onEdit={commitEdit}
+            onPickStatus={(status) => onPickStatus(selected, status)}
           />
         )}
       </Sheet>
@@ -382,6 +414,107 @@ function ProjectSectionView({
         </ul>
       )}
     </section>
+  );
+}
+
+// The detail sheet body: an icon picker, an editable title, an editable
+// description, and the Status group. Edits commit on blur / Enter (not per
+// keystroke) and keep the sheet open; only a status pick dismisses it. Keyed by
+// project id at the call site, so the seeded field state resets between projects.
+function ProjectDetail({
+  project,
+  onEdit,
+  onPickStatus,
+}: {
+  project: Project;
+  onEdit: (id: string, fields: ProjectEditFields) => void;
+  onPickStatus: (status: ProjectStatus) => void;
+}) {
+  const [title, setTitle] = useState(project.title);
+  const [description, setDescription] = useState(project.description ?? "");
+
+  const commitTitle = useCallback(() => {
+    const trimmed = title.trim();
+    if (trimmed === "" || trimmed === project.title) {
+      setTitle(project.title);
+      return;
+    }
+    onEdit(project.id, { title: trimmed });
+  }, [title, project.id, project.title, onEdit]);
+
+  const commitDescription = useCallback(() => {
+    const next = description.trim() === "" ? null : description;
+    if ((next ?? null) === (project.description ?? null)) return;
+    onEdit(project.id, { description: next });
+  }, [description, project.id, project.description, onEdit]);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="mb-2 text-sm font-medium text-muted-foreground">Icon</p>
+        <div className="flex flex-wrap gap-2">
+          {ICON_CHOICES.map((icon) => {
+            const isCurrent = icon === project.icon;
+            return (
+              <button
+                key={icon}
+                type="button"
+                aria-label={`Set icon ${icon}`}
+                aria-pressed={isCurrent}
+                onClick={() => onEdit(project.id, { icon })}
+                className={cn(
+                  "flex size-11 items-center justify-center rounded-lg border text-xl transition-colors hover:bg-accent",
+                  isCurrent && "border-primary ring-2 ring-primary",
+                )}
+              >
+                {icon}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label
+          htmlFor="project-title"
+          className="text-sm font-medium text-muted-foreground"
+        >
+          Title
+        </label>
+        <Input
+          id="project-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitTitle();
+            }
+          }}
+        />
+      </div>
+
+      <div className="space-y-1">
+        <label
+          htmlFor="project-description"
+          className="text-sm font-medium text-muted-foreground"
+        >
+          Notes
+        </label>
+        <textarea
+          id="project-description"
+          value={description}
+          rows={3}
+          placeholder="A sentence of intent (optional)"
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={commitDescription}
+          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+      </div>
+
+      <StatusGroup current={project.status} onPick={onPickStatus} />
+    </div>
   );
 }
 

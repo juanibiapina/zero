@@ -37,6 +37,17 @@ export type ProjectsRest = {
   // Move a project to another status (including the terminal 'done', which drops
   // it from the working list). Idempotent on the id.
   setProjectStatus: (id: string, status: ProjectStatus) => Promise<Project>;
+  // Edit a project's title/icon/description (only the present fields). Idempotent
+  // on the id, so a replayed offline edit re-applies the same values.
+  editProject: (id: string, fields: ProjectEditFields) => Promise<Project>;
+};
+
+// The fields a detail-sheet edit may change. Status is a separate verb
+// (setStatus) because 'done' drops the row from the list.
+export type ProjectEditFields = {
+  title?: string;
+  icon?: string;
+  description?: string | null;
 };
 
 // One handle over the Project data layer. Both Projects screens read
@@ -47,6 +58,7 @@ export type ProjectsApi = {
   collection: Collection<Project, string>;
   add: (title: string) => Transaction;
   setStatus: (id: string, status: ProjectStatus) => Transaction;
+  edit: (id: string, fields: ProjectEditFields) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
   getLoadError: () => string | null;
@@ -112,6 +124,33 @@ function setStatusDraft(status: ProjectStatus) {
   };
 }
 
+// The optimistic mutator for an edit: set each present field on the row in place
+// so the sheet and the list row reflect the change immediately. The changed
+// fields are read back off the mutation in the write handler, which then calls
+// editProject.
+function editDraft(fields: ProjectEditFields) {
+  return (draft: Project): void => {
+    if (fields.title !== undefined) draft.title = fields.title;
+    if (fields.icon !== undefined) draft.icon = fields.icon;
+    if (fields.description !== undefined) draft.description = fields.description;
+  };
+}
+
+// Pick the edited fields out of a mutation's changed-field set, for the write
+// handlers. Only the fields an edit may touch (title/icon/description) are
+// forwarded to the server; status has its own verb. Reading `changes` (not the
+// whole row) means an icon-only edit sends only `{ icon }`, never clobbering a
+// title with a stale value.
+function editFieldsFromChanges(changes: Partial<Project>): ProjectEditFields {
+  const fields: ProjectEditFields = {};
+  if ("title" in changes && changes.title !== undefined)
+    fields.title = changes.title;
+  if ("icon" in changes && changes.icon !== undefined)
+    fields.icon = changes.icon;
+  if ("description" in changes) fields.description = changes.description ?? null;
+  return fields;
+}
+
 type ProjectWriteUtils = {
   writeUpsert: (data: Project | Project[]) => void;
   writeDelete: (keys: string | string[]) => void;
@@ -168,16 +207,28 @@ export function createInMemoryProjectsApi(deps: {
         return { refetch: false };
       },
       onUpdate: async ({ transaction }) => {
+        // One collection.update backs both setStatus and edit; disambiguate by
+        // the changed field set (m.changes), not m.modified — an edit leaves
+        // status untouched. status changed → setProjectStatus; else → editProject.
         for (const m of transaction.mutations) {
-          const updated = await rest.setProjectStatus(
-            String(m.key),
-            m.modified.status,
-          );
-          // A move to 'done' leaves the working set: the server stops returning
-          // it, so remove it here; otherwise upsert the reconciled row.
-          if (updated.status === "done") {
-            reconcile(collection, { remove: [updated.id] });
+          if ("status" in m.changes) {
+            const updated = await rest.setProjectStatus(
+              String(m.key),
+              m.modified.status,
+            );
+            // A move to 'done' leaves the working set: the server stops
+            // returning it, so remove it here; otherwise upsert the reconciled
+            // row.
+            if (updated.status === "done") {
+              reconcile(collection, { remove: [updated.id] });
+            } else {
+              reconcile(collection, { upsert: [updated] });
+            }
           } else {
+            const updated = await rest.editProject(
+              String(m.key),
+              editFieldsFromChanges(m.changes),
+            );
             reconcile(collection, { upsert: [updated] });
           }
         }
@@ -194,6 +245,7 @@ export function createInMemoryProjectsApi(deps: {
     collection,
     add: (title) => collection.insert(optimisticProject(title)),
     setStatus: (id, status) => collection.update(id, setStatusDraft(status)),
+    edit: (id, fields) => collection.update(id, editDraft(fields)),
     offline: false,
     refetch: async () => {
       if (refetchUtil) {
@@ -327,6 +379,23 @@ export function createPersistedProjectsApi(deps: {
         // A move to 'done' drops the row; the refetch reconcile removes it.
         await fetchAndReconcile();
       },
+      // Own mutationFn (keyed by name), so no field disambiguation here. The
+      // outbox types fields as unknown; the row carries the edited values.
+      editProject: async ({ transaction }) => {
+        for (const m of transaction.mutations) {
+          const title = m.modified.title;
+          const icon = m.modified.icon;
+          const description = m.modified.description;
+          if (typeof title === "string" && typeof icon === "string") {
+            const updated = await rest.editProject(String(m.key), {
+              title,
+              icon,
+              description: (description ?? null) as string | null,
+            });
+            reconcileOne(updated);
+          }
+        }
+      },
     },
     onLeadershipChange: (isLeader) => {
       if (!isLeader) {
@@ -352,11 +421,21 @@ export function createPersistedProjectsApi(deps: {
       collection.update(id, setStatusDraft(status));
     },
   });
+  const editAction = offline.createOfflineAction<{
+    id: string;
+    fields: ProjectEditFields;
+  }>({
+    mutationFnName: "editProject",
+    onMutate: ({ id, fields }) => {
+      collection.update(id, editDraft(fields));
+    },
+  });
 
   return {
     collection,
     add: (title) => addAction({ title }),
     setStatus: (id, status) => setStatusAction({ id, status }),
+    edit: (id, fields) => editAction({ id, fields }),
     offline: true,
     refetch: () => fetchAndReconcile(),
     getLoadError: () => loadError,

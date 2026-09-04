@@ -11,6 +11,7 @@ import {
   DbProjectStore,
   type Project,
   type ProjectDefaults,
+  type ProjectEdit,
   type ProjectStatus,
 } from "../store/projects";
 import {
@@ -187,6 +188,10 @@ export class UserDO extends DurableObject<Env> {
 
   setProjectStatus(id: string, status: ProjectStatus): Project | null {
     return this.projects.setStatus(id, status);
+  }
+
+  editProject(id: string, fields: ProjectEdit): Project | null {
+    return this.projects.edit(id, fields);
   }
 
   // --- Conversations and messages ---

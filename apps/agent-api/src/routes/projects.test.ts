@@ -40,6 +40,18 @@ const fakeUserDO = (seed: Project[] = []) => {
       project.status = status;
       return project;
     },
+    editProject(
+      id: string,
+      fields: { title?: string; icon?: string; description?: string | null },
+    ): Project | null {
+      const project = projects.find((p) => p.id === id);
+      if (!project) return null;
+      if (fields.title !== undefined) project.title = fields.title;
+      if (fields.icon !== undefined) project.icon = fields.icon;
+      if (fields.description !== undefined)
+        project.description = fields.description;
+      return project;
+    },
     _projects: projects,
   };
 };
@@ -218,6 +230,68 @@ describe("PATCH /api/projects/{id}", () => {
   it("returns 404 for an unknown id", async () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
     const res = await app.request("/api/projects/nope", patch({ status: "active" }));
+    expect(res.status).toBe(404);
+  });
+
+  it("edits the title", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request(
+      "/api/projects/id-1",
+      patch({ title: "Run a 5K under 30 min" }),
+    );
+
+    expect(res.status).toBe(200);
+    const body: { project: Project } = await res.json();
+    expect(body.project.title).toBe("Run a 5K under 30 min");
+  });
+
+  it("edits the icon", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/projects/id-1", patch({ icon: "🏃" }));
+
+    expect(res.status).toBe(200);
+    const body: { project: Project } = await res.json();
+    expect(body.project.icon).toBe("🏃");
+  });
+
+  it("clears the description with null", async () => {
+    const userDO = fakeUserDO([seedProject({ description: "old" })]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request(
+      "/api/projects/id-1",
+      patch({ description: null }),
+    );
+
+    expect(res.status).toBe(200);
+    const body: { project: Project } = await res.json();
+    expect(body.project.description).toBeNull();
+  });
+
+  it("rejects an empty title", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+    const res = await app.request("/api/projects/id-1", patch({ title: "" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an empty icon", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+    const res = await app.request("/api/projects/id-1", patch({ icon: "" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 when editing an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+    const res = await app.request(
+      "/api/projects/nope",
+      patch({ title: "x" }),
+    );
     expect(res.status).toBe(404);
   });
 });

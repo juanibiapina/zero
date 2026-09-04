@@ -8,6 +8,7 @@ import {
 
 import {
   addProject,
+  editProject,
   fetchProjects,
   setProjectStatus,
   type TokenGetter,
@@ -57,6 +58,7 @@ function makeRest(getToken: TokenGetter): ProjectsRest {
     fetchProjects: () => fetchProjects(getToken),
     addProject: (project) => addProject(getToken, project),
     setProjectStatus: (id, status) => setProjectStatus(getToken, id, status),
+    editProject: (id, fields) => editProject(getToken, id, fields),
   };
 }
 

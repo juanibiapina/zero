@@ -45,6 +45,7 @@ export {
   projectsReconcileWrites,
   type ProjectsApi,
   type ProjectsRest,
+  type ProjectEditFields,
   type ProjectWrite,
 } from "./projects/collection";
 export { projectsView, type ProjectsView } from "./projects/view";

@@ -455,7 +455,18 @@ Maestro after an EAS dev build, since the `@expo/ui` sheet is native).
   Done → Undo → leaves). **Acceptance:** change status from the sheet on both
   surfaces; the row re-groups; Done removes it with a working Undo.
 
-### A3 — Enrich in the sheet (web + mobile)
+### A3 — Enrich in the sheet (web + mobile) — SHIPPED
+
+Shipped as described (detailed plan: `docs/plans/todo-project-entity-a3.md`).
+Server `edit` + a widened `PATCH /api/projects/{id}` carrying
+title/icon/description alongside status; `api.edit` in the collection (offline
+replaying, `setStatus`/`edit` disambiguated by the changed field set); on both
+surfaces the detail sheet gained a curated emoji picker, an editable title, and an
+editable notes field, committing on blur/submit (icon on tap) and keeping the
+sheet open. Verified via package tests + typecheck + lint on all four packages;
+mobile on-device Maestro after an EAS dev build (the `@expo/ui` `TextInput` is
+native). With A3, slice A is complete; the Rule-of-Three extraction is the next
+change.
 
 - **User value:** rename a project, give it an icon, add a sentence of intent.
 - **Server/Shared:** `store.edit` + `PATCH { title?, icon?, description? }`;

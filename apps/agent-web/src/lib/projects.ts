@@ -1,9 +1,13 @@
 // Same-origin requests: the browser carries the Clerk session cookie, so no
 // Bearer token is needed here (unlike the cross-origin mobile client).
 
-import type { Project, ProjectStatus } from "@zero/agent-core";
+import type {
+  Project,
+  ProjectEditFields,
+  ProjectStatus,
+} from "@zero/agent-core";
 
-export type { Project, ProjectStatus };
+export type { Project, ProjectEditFields, ProjectStatus };
 
 export async function fetchProjects(): Promise<Project[]> {
   const res = await fetch("/api/projects");
@@ -38,6 +42,22 @@ export async function setProjectStatus(
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/projects/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { project: Project };
+  return body.project;
+}
+
+export async function editProject(
+  id: string,
+  fields: ProjectEditFields,
+): Promise<Project> {
+  const res = await fetch(`/api/projects/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
   });
   if (!res.ok) {
     throw new Error(`PATCH /api/projects/${id} failed: ${res.status}`);
