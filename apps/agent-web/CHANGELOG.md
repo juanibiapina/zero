@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-04: New Projects section: name a project by the outcome you want to reach and see all your projects in one list. Your projects are saved and sync across your devices.
 - 2026-09-02: New Upcoming section lists captures scheduled for a future day, grouped by day (Tomorrow and beyond). Click a capture's circle to process it or its text to edit.
 - 2026-09-02: New side navigation (a bottom bar on phones) to move between sections; Captures is the first.
 - 2026-09-02: Drag a capture by its handle to reorder your list; the order sticks and syncs across your devices. Works with the keyboard too.

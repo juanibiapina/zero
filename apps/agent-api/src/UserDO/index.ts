@@ -8,6 +8,11 @@ import { DbStore } from "../store/db";
 import { DbCaptureStore, type Capture } from "../store/captures";
 import { DbTaskStore, type Task } from "../store/tasks";
 import {
+  DbProjectStore,
+  type Project,
+  type ProjectDefaults,
+} from "../store/projects";
+import {
   SystemTopicStore,
   systemTopicsFingerprint,
 } from "../store/system-topics";
@@ -95,6 +100,7 @@ export class UserDO extends DurableObject<Env> {
   private fileBlobs: FileBlobStore;
   private captures: DbCaptureStore;
   private tasks: DbTaskStore;
+  private projects: DbProjectStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -104,6 +110,7 @@ export class UserDO extends DurableObject<Env> {
     this.fileBlobs = createR2FileBlobs(env.FILES);
     this.captures = new DbCaptureStore(this.db);
     this.tasks = new DbTaskStore(this.db);
+    this.projects = new DbProjectStore(this.db);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
@@ -167,6 +174,14 @@ export class UserDO extends DurableObject<Env> {
 
   completeTask(id: string): Task | null {
     return this.tasks.complete(id);
+  }
+
+  addProject(id: string, title: string, opts?: ProjectDefaults): Project {
+    return this.projects.add(id, title, opts);
+  }
+
+  listProjects(): Project[] {
+    return this.projects.list();
   }
 
   // --- Conversations and messages ---

@@ -23,6 +23,7 @@ import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HomePage } from "./pages/HomePage";
 import { UpcomingPage } from "./pages/UpcomingPage";
+import { ProjectsPage } from "./pages/ProjectsPage";
 import { AdminPage } from "./pages/AdminPage";
 import { UserDetailPage } from "./pages/UserDetailPage";
 
@@ -58,6 +59,8 @@ function AuthGate() {
         {/* Unlinked from the marketing app like Captures; the second GTD
             section. Shows captures scheduled for a future day. */}
         <Route path="upcoming" element={<UpcomingPage />} />
+        {/* Unlinked like Captures; the Projects list (entity #3). */}
+        <Route path="projects" element={<ProjectsPage />} />
         <Route path="onboarding" element={<OnboardingRoute />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users/:userId" element={<UserDetailPage />} />

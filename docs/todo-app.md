@@ -78,8 +78,9 @@ on web and mobile — a capture carries a `showUpDate` and a fractional-index
 ## Entity wiki (draft — grow one at a time)
 
 Grounding: the foundational block is the **Capture** (the entry point);
-**Task** is the first typed entity built on top of it. Everything else below
-(Project, Person, Note…) is a vision draft, not committed.
+**Task** is the first typed entity built on top of it, and **Project** is the
+third entity, now being built (slice A1 shipped). Everything else below
+(Person, Note…) is a vision draft, not committed.
 
 - **Capture** — the foundational block and the entry point. A single raw line of
   text (a thought, task, idea, anything), untyped and uncommitted, added to
@@ -91,12 +92,16 @@ Grounding: the foundational block is the **Capture** (the entry point);
   `docs/entities/task.md`. A Capture becoming a Task (the Capture->Task
   transition) and Task belonging to a Project are the next interactions to
   design.
-- **Project** — goal-oriented (baby, diploma, buy a house, watch a movie).
-  Sometimes maintenance-oriented (a "baby maintenance" project should maybe not
-  exist). Has a nice icon (baby face, diploma). Can contain Todos, agent
-  sessions, documents. Can spin off other Projects and even People. Notify
-  dependent Projects when they move; can unblock them. Idea: project "slots",
-  start with one slot to teach the game.
+- **Project** — the first container, now being built as entity #3 (plan:
+  `docs/plans/todo-project-entity.md`; source of truth: `docs/entities/project.md`).
+  Goal-oriented (baby, diploma, buy a house, watch a movie), sometimes
+  maintenance-oriented (a "baby maintenance" project should maybe not exist). Has
+  a nice icon (baby face, diploma) and a status (active / next / waiting / backlog
+  / done). Slice A1 shipped name-only create + a flat list on both surfaces; the
+  status model, detail sheet, and enrichment follow in A2/A3. Vision beyond that:
+  can contain Todos, agent sessions, documents. Can spin off other Projects and
+  even People. Notify dependent Projects when they move; can unblock them. Idea:
+  project "slots", start with one slot to teach the game.
 - **Person** — first-class. New to the user's workflow; named as a gap. Circle
   avatar. Connect to Todos and Projects. "People" is a basic filter: see how
   many people a Todo/Project affects. Family displayed clearly. Seed avatars +
@@ -200,6 +205,21 @@ The chrome is built per surface (mobile tabs vs web sidebar), sharing only the
 Expo web build. First on-device run of the native tab bar needs a fresh EAS dev
 build. This reverses the earlier one-list-no-nav shape (Today tab removal) in
 intent: nav returns, but sections grow one real screen at a time.
+
+Shipped (2026-09-04): **Project**, entity #3 and the first container — slice A1
+(plan: `docs/plans/todo-project-entity.md`, slice `todo-project-entity-a1.md`;
+source of truth: `docs/entities/project.md`). Built as a third full sibling of
+Capture/Task, web first then mobile: a `projects` table + `/api/projects` in the
+per-user UserDO (`add` is exactly-once on the client-minted id; `list` is
+oldest-first), a shared `@zero/agent-core` `Project` type, `createProjectsApi`
+collection (local-first, offline outbox), and a `projectsView` count-gate helper;
+a name-only create with outcome-naming helper text over a flat list on web
+(`/projects`, a `SideNav` entry) and mobile (a `NativeTabs` Projects tab). The
+`icon`/`description`/`status` fields exist in the data with defaults (icon 📁,
+status `next`) but have no UI yet — the status model lands in A2, enrichment in
+A3. First on-device run of the new native tab needs a fresh EAS dev build. A
+Rule-of-Three extraction of the shared plumbing (never the domain verbs) is the
+tracked follow-up after A3.
 
 In flight (details in `docs/plans/`):
 

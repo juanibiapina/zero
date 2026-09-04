@@ -46,9 +46,27 @@ function CalendarIcon({ className }: { className?: string }) {
   );
 }
 
+function FolderIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS: NavItem[] = [
   { to: "/captures", label: "Captures", icon: InboxIcon },
   { to: "/upcoming", label: "Upcoming", icon: CalendarIcon },
+  { to: "/projects", label: "Projects", icon: FolderIcon },
 ];
 
 // Shared section navigation for the signed-in web app: a left sidebar on desktop

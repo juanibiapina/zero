@@ -5,6 +5,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { QuickAddBar } from '@/components/quick-add-bar';
 import { Fab } from '@/components/ui/fab';
+import { Text } from '@/components/ui/text';
 
 export type QuickAddProps = {
   open: boolean;
@@ -24,6 +25,10 @@ export type QuickAddProps = {
   // both. The FAB label doubles as its accessibility label.
   fabLabel?: string;
   placeholder?: string;
+  // An optional persistent hint shown above the input while the bar is open
+  // (e.g. the Projects screen teaches outcome-based naming). Omitted by the
+  // Capture/Today callers, which need no hint.
+  helperText?: string;
   // Distance (dp) from the screen's content bottom to the window bottom — the
   // native bottom tab bar plus the system gesture inset. The screen is inset
   // above the tab bar, but the keyboard-sticky bar lifts by the full keyboard
@@ -50,6 +55,7 @@ export function QuickAdd({
   inputRef,
   fabLabel = 'Capture',
   placeholder,
+  helperText,
   bottomOffset = 0,
 }: QuickAddProps) {
   return (
@@ -77,6 +83,11 @@ export function QuickAdd({
             exiting={FadeOut.duration(150)}
             className="px-4 pb-4"
           >
+            {helperText ? (
+              <Text variant="subtitle" className="mb-2 px-1">
+                {helperText}
+              </Text>
+            ) : null}
             <QuickAddBar
               value={text}
               onChangeText={onChangeText}

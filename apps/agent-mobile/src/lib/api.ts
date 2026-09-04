@@ -1,9 +1,9 @@
-import type { Capture, Task } from '@zero/agent-core';
+import type { Capture, Project, Task } from '@zero/agent-core';
 
 import { API_BASE_URL } from './env';
 
-// The Capture and Task entity types are shared across web + mobile.
-export type { Capture, Task };
+// The Capture, Task and Project entity types are shared across web + mobile.
+export type { Capture, Project, Task };
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
@@ -230,4 +230,41 @@ export async function completeTask(
   }
   const body = (await res.json()) as { task: Task };
   return body.task;
+}
+
+// Project REST helpers: siblings of the Task ones above, hitting /api/projects.
+// The client sends only id + title; the server fills the defaults (icon 📁,
+// description null, status next).
+export async function fetchProjects(
+  getToken: TokenGetter,
+  baseUrl: string = API_BASE_URL,
+): Promise<Project[]> {
+  const res = await apiFetch(getToken, '/api/projects', {}, baseUrl);
+  if (!res.ok) {
+    throw new Error(`GET /api/projects failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { projects: Project[] };
+  return body.projects;
+}
+
+export async function addProject(
+  getToken: TokenGetter,
+  project: { id: string; title: string },
+  baseUrl: string = API_BASE_URL,
+): Promise<Project> {
+  const res = await apiFetch(
+    getToken,
+    '/api/projects',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(project),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/projects failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { project: Project };
+  return body.project;
 }

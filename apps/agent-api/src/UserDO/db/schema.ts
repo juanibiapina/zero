@@ -230,3 +230,23 @@ export const tasks = table("tasks", {
   createdAt: column.text().notNull(),
   completedAt: column.text(),
 });
+
+// Projects: the third entity of the todo app (the Todoist replacement). A named,
+// outcome-oriented container with a status. Standalone from the agent's tables;
+// owned by DbProjectStore. `id` is a client-minted UUID; `status` is one of
+// active/next/waiting/backlog/done and defaults to 'next'. See
+// docs/entities/project.md.
+export const projects = table("projects", {
+  // The client mints the id (a UUID) and re-sends it verbatim on every
+  // retry/replay, so the primary key itself dedupes a lost-ACK double-insert.
+  id: column.text().notNull().primaryKey(),
+  title: column.text().notNull(),
+  // A single emoji, defaulted at creation (📁) and enriched later. A plain
+  // string so the representation can evolve without a data migration.
+  icon: column.text().notNull(),
+  // Free-text notes (a sentence of intent). Nullable; empty by default.
+  description: column.text(),
+  // One of active/next/waiting/backlog/done. 'done' is terminal.
+  status: column.text().notNull().default("next"),
+  createdAt: column.text().notNull(),
+});

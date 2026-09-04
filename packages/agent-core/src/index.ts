@@ -35,6 +35,20 @@ export {
 export { todayView, type TodayView } from "./tasks/view";
 export { dueToday, localToday } from "./tasks/today";
 
+// The Project data layer (Projects list), a sibling of the Task layer.
+export type { Project, ProjectStatus } from "./projects/types";
+export {
+  PROJECTS_QUERY_KEY,
+  createProjectsApi,
+  createInMemoryProjectsApi,
+  createPersistedProjectsApi,
+  projectsReconcileWrites,
+  type ProjectsApi,
+  type ProjectsRest,
+  type ProjectWrite,
+} from "./projects/collection";
+export { projectsView, type ProjectsView } from "./projects/view";
+
 // Silent automatic timezone sync (shared core; per-surface adapters).
 export {
   createTimezoneSync,

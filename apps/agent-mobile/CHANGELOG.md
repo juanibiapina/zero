@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-04: New Projects tab: name a project by the outcome you want to reach and see all your projects in one list. Creating a project works offline and syncs across your devices.
 - 2026-09-03: The quick-add box now sits right above the keyboard instead of floating in the middle of the screen.
 - 2026-09-02: New Upcoming tab lists captures scheduled for a future day, grouped by day (Tomorrow and beyond). Tap a capture's circle to process it or its text to edit.
 - 2026-09-02: New bottom tab bar to move between sections; Captures is the first.
