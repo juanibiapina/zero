@@ -280,7 +280,7 @@ post-deploy check once `zero-api` auto-deploys.
 - **`docs/todo-app.md`** — Project A3 landed (enrich in the sheet); the entity
   wiki Project bullet drops the "enrichment follows in A3" caveat; the
   Rule-of-Three extraction becomes the immediate tracked follow-up (slice A is now
-  complete).
+  complete). (That extraction has since shipped, #66.)
 - **`docs/plans/todo-project-entity.md`** — mark A3 shipped (as A1/A2 are).
 - **Changelogs** (user-facing, same change; load the `changelog` skill first):
   `apps/agent-web/CHANGELOG.md` and `apps/agent-mobile/CHANGELOG.md` — the user
@@ -305,8 +305,8 @@ post-deploy check once `zero-api` auto-deploys.
 - `docs/entities/project.md`, `docs/todo-app.md`, and the parent plan are updated;
   both web + mobile changelogs carry a user-facing entry.
 - No AI and no Task-in-Project (later slices). Slice A (the Project entity, hand-
-  managed) is **complete**; the Rule-of-Three extraction is the next tracked
-  change before slice B.
+  managed) is **complete**; the Rule-of-Three extraction shipped after it (#66),
+  and slice B (Task-under-Project) is the next tracked change.
 
 ## Skills to use
 
@@ -340,11 +340,12 @@ post-deploy check once `zero-api` auto-deploys.
 - **Emoji rendering differs across platforms** — ship the small curated, tested
   set, not a free emoji keyboard.
 
-## Follow-up (NOT part of A3) — Rule-of-Three extraction
+## Follow-up (NOT part of A3) — Rule-of-Three extraction — SHIPPED
 
-With Capture, Task, and Project as three siblings, extract the shared plumbing
-(the offline collection factory: in-memory + persisted + reconcile-writes; the
-`*View` count-gate helper; the id/createdAt/dedupe conventions) — **never** the
-domain verbs (`process` / `complete` / `setStatus` / `edit`). Internal refactor,
-no user value, its own change before slice B (Task-under-Project). Tracked in
-`docs/todo-app.md` and the parent plan.
+With Capture, Task, and Project as three siblings, the shared plumbing was
+extracted (the offline collection factory: in-memory + persisted +
+reconcile-writes; the `*View` count-gate, now one `listView`; the
+id/createdAt/dedupe conventions and the per-surface wiring) — **never** the
+domain verbs (`process` / `complete` / `setStatus` / `edit`). Merged to `main` in
+#66. Plan: `docs/plans/todo-rule-of-three-extraction.md`. Slice B
+(Task-under-Project) is the next tracked change.

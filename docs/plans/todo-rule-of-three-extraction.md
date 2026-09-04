@@ -1,11 +1,13 @@
 # Rule-of-Three extraction (after Project slice A, before slice B)
 
-Status: **built** (2026-09-04). The shape below is what shipped; the two
-deviations from the first draft are that a verb's key in the table **is** its
-outbox mutationFn name (so the durable contract is unavoidable, no separate
-`mutationFnName` option) and that verbs are declared through typed constructors
-(`verbsFor<Row>().insert<Args>(…)` / `.update<Args>(…)`) so entity files carry
-no type annotations of their own.
+Status: **shipped** — merged to `main` in #66 (2026-09-04, squash `b588ced`).
+The shape below is what shipped; the two deviations from the first draft are that
+a verb's key in the table **is** its outbox mutationFn name (so the durable
+contract is unavoidable, no separate `mutationFnName` option) and that verbs are
+declared through typed constructors (`verbsFor<Row>().insert<Args>(…)` /
+`.update<Args>(…)`) so entity files carry no type annotations of their own. One
+acceptance item is still open: the Pixel 7 offline-replay pass on the persisted
+path (no CI test; pure JS, a Metro reload suffices) has not been run.
 
 Internal refactor, no user-visible change, no changelog entry. This is the
 "Follow-up (NOT a vertical slice)" named in `docs/plans/todo-project-entity.md`
