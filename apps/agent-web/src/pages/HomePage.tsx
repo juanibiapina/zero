@@ -23,38 +23,16 @@ import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
   listView,
+  LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  messageOf,
   orderKeyBetween,
   tomorrow,
   visibleCaptures,
 } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
+import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { type Capture } from "@/lib/captures";
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-// How long a list may sit empty-and-loading before it shows the "Loading…"
-// text. The local snapshot hydrates the cached rows in well under this, so a
-// normal load paints straight to the list with no spinner flash; the text only
-// appears on a genuinely slow first load (empty cache waiting on the network).
-const LOADING_TEXT_DELAY_MS = 1000;
-
-// True only after `active` has held continuously for `ms`. Resets the moment
-// `active` goes false, so a fast hydrate never trips it.
-function useDelayed(active: boolean, ms: number): boolean {
-  const [elapsed, setElapsed] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => setElapsed(true), ms);
-    return () => {
-      clearTimeout(t);
-      setElapsed(false);
-    };
-  }, [active, ms]);
-  return active && elapsed;
-}
 
 // Captures is the sole list: one fast place to drop any raw thought and Process
 // it later. The add bar creates a Capture; tap a row's circle to Process.
@@ -97,13 +75,7 @@ function CapturesReady({ api }: { api: CapturesApi }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void api.refetch();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [api]);
+  useForegroundRefetch(api.refetch);
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();

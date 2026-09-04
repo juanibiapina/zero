@@ -2,8 +2,15 @@ import { UserButton } from '@clerk/expo/native';
 import { Button, Column, Row, Text as UIText, TextInput } from '@expo/ui';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
+  ALL_STATUSES,
+  BACKLOG_COLLAPSE_THRESHOLD,
+  DONE_UNDO_MS,
+  ICON_CHOICES,
+  LOADING_TEXT_DELAY_MS,
+  messageOf,
   projectsByStatus,
   listView,
+  STATUS_LABELS,
   type Project,
   type ProjectEditFields,
   type ProjectsApi,
@@ -11,7 +18,6 @@ import {
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AppState,
   BackHandler,
   Pressable,
   SectionList,
@@ -24,84 +30,16 @@ import { QuickAdd } from '@/components/quick-add';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
+import {
+  useDelayed,
+  useForegroundRefetch,
+  useLoadError,
+  useUndoableLeave,
+} from '@/lib/screen-hooks';
 
 // Helper text (not the placeholder): teach outcome-based naming, the one
 // deliberate act of creating a project.
 const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done.";
-
-// How long a list may sit empty-and-loading before it shows the "Loading…"
-// text, so a cached cold start never flashes it. Mirrors the Captures screen.
-const LOADING_TEXT_DELAY_MS = 1000;
-
-// How long a project sits struck-through with Undo after being set Done, before
-// it commits and leaves the working list.
-const DONE_UNDO_MS = 5000;
-
-// A Backlog larger than this collapses by default (the "someday" pile, kept out
-// of the way). Active/Next/Waiting start open.
-const BACKLOG_COLLAPSE_THRESHOLD = 5;
-
-const STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: 'Active',
-  next: 'Next',
-  waiting: 'Waiting',
-  backlog: 'Backlog',
-  done: 'Done',
-};
-const ALL_STATUSES: ProjectStatus[] = [
-  'active',
-  'next',
-  'waiting',
-  'backlog',
-  'done',
-];
-
-// A small curated icon set (not a full emoji keyboard) so a project's icon
-// renders identically across platforms.
-const ICON_CHOICES = [
-  '📁',
-  '👶',
-  '🎓',
-  '🏠',
-  '🎬',
-  '✈️',
-  '📚',
-  '💼',
-  '❤️',
-  '💪',
-  '🧳',
-  '🎯',
-];
-
-function useDelayed(active: boolean, ms: number): boolean {
-  const [elapsed, setElapsed] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => setElapsed(true), ms);
-    return () => {
-      clearTimeout(t);
-      setElapsed(false);
-    };
-  }, [active, ms]);
-  return active && elapsed;
-}
-
-function useLoadError(api: {
-  getLoadError: () => string | null;
-  subscribeLoadError: (cb: () => void) => () => void;
-}): string | null {
-  const [error, setError] = useState<string | null>(() => api.getLoadError());
-  useEffect(() => {
-    const read = () => setError(api.getLoadError());
-    read();
-    return api.subscribeLoadError(read);
-  }, [api]);
-  return error;
-}
 
 // A project row: emoji icon + title, a single tap target that opens the detail
 // sheet. While mid-Done it is struck-through with an Undo instead of tappable.
@@ -341,32 +279,14 @@ function Projects({
   const [collapseOverride, setCollapseOverride] = useState<
     Partial<Record<ProjectStatus, boolean>>
   >({});
-  const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
-  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
-  const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  useEffect(() => {
-    const timers = doneTimers.current;
-    const dTimers = deleteTimers.current;
-    return () => {
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-      for (const t of dTimers.values()) clearTimeout(t);
-      dTimers.clear();
-    };
-  }, []);
+  // Two deferred-undo channels: one for Done, one for Delete. Both hold a row
+  // struck-through with an Undo for DONE_UNDO_MS before committing; the hook
+  // owns the timers and their cleanup.
+  const done = useUndoableLeave(DONE_UNDO_MS);
+  const del = useUndoableLeave(DONE_UNDO_MS);
 
   // Refresh when the app returns to the foreground.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void api.refetch();
-    });
-    return () => sub.remove();
-  }, [api]);
+  useForegroundRefetch(api.refetch);
 
   const commitStatus = useCallback(
     (id: string, status: ProjectStatus) => {
@@ -388,80 +308,27 @@ function Projects({
     [api],
   );
 
-  // Done defers the write: hold the row struck-through with Undo for
-  // DONE_UNDO_MS, then commit. Undo clears the timer and the row stays.
-  const startDone = useCallback(
-    (id: string) => {
-      setPendingDone((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        doneTimers.current.delete(id);
-        setPendingDone((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitStatus(id, 'done');
-      }, DONE_UNDO_MS);
-      doneTimers.current.set(id, timer);
-    },
-    [commitStatus],
-  );
-  const undoDone = useCallback((id: string) => {
-    const timer = doneTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    doneTimers.current.delete(id);
-    setPendingDone((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  // Delete mirrors Done: the row leaves after a DONE_UNDO_MS Undo window, then
-  // the hard delete commits. Deleting is destructive and has no server-side
-  // undo, so the client window is the only guard against a mis-tap.
-  const commitDelete = useCallback(
-    (id: string) => {
-      setWriteError(null);
-      const tx = api.remove(id);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api],
-  );
+  // Setting Done and deleting both defer their write behind a DONE_UNDO_MS Undo
+  // window (delete is destructive with no server-side undo, so the window is the
+  // only guard against a mis-tap).
   const startDelete = useCallback(
     (id: string) => {
-      setPendingDelete((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        deleteTimers.current.delete(id);
-        setPendingDelete((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitDelete(id);
-      }, DONE_UNDO_MS);
-      deleteTimers.current.set(id, timer);
+      del.start(id, () => {
+        setWriteError(null);
+        const tx = api.remove(id);
+        tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+      });
     },
-    [commitDelete],
+    [del, api],
   );
-  const undoDelete = useCallback((id: string) => {
-    const timer = deleteTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    deleteTimers.current.delete(id);
-    setPendingDelete((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
 
   // Route an Undo tap to the pending action that owns the row.
   const onUndo = useCallback(
     (id: string) => {
-      if (pendingDelete.has(id)) undoDelete(id);
-      else undoDone(id);
+      if (del.pending.has(id)) del.undo(id);
+      else done.undo(id);
     },
-    [pendingDelete, undoDelete, undoDone],
+    [del, done],
   );
 
   const onPickStatus = useCallback(
@@ -469,12 +336,12 @@ function Projects({
       setSelectedId(null);
       if (status === project.status) return;
       if (status === 'done') {
-        startDone(project.id);
+        done.start(project.id, () => commitStatus(project.id, 'done'));
       } else {
         commitStatus(project.id, status);
       }
     },
-    [commitStatus, startDone],
+    [commitStatus, done],
   );
 
   const onToggle = useCallback((status: ProjectStatus, current: boolean) => {
@@ -579,7 +446,7 @@ function Projects({
           renderItem={({ item }) => (
             <ProjectRow
               item={item}
-              pending={pendingDone.has(item.id) || pendingDelete.has(item.id)}
+              pending={done.pending.has(item.id) || del.pending.has(item.id)}
               onOpen={(p) => setSelectedId(p.id)}
               onUndo={onUndo}
             />

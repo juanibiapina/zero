@@ -9,7 +9,10 @@ export {
   type WarnFn,
   type Write,
 } from "./collection/base";
-export { listView, type ListView } from "./collection/view";
+export { listView, LOADING_TEXT_DELAY_MS, type ListView } from "./collection/view";
+
+// The error-to-message helper shared by every list screen.
+export { messageOf } from "./errors";
 
 // The Capture data layer (TanStack DB collection) shared by web + mobile.
 export type { Capture } from "./captures/types";
@@ -22,7 +25,9 @@ export {
   type CapturesRest,
 } from "./captures/collection";
 export {
+  dayLabel,
   localToday as capturesLocalToday,
+  parseLocalDay,
   tomorrow,
   visibleCaptures,
 } from "./captures/dates";
@@ -57,6 +62,13 @@ export {
   PROJECT_SECTION_ORDER,
   type ProjectSection,
 } from "./projects/sections";
+export {
+  ALL_STATUSES,
+  BACKLOG_COLLAPSE_THRESHOLD,
+  DONE_UNDO_MS,
+  ICON_CHOICES,
+  STATUS_LABELS,
+} from "./projects/display";
 
 // Silent automatic timezone sync (shared core; per-surface adapters).
 export {

@@ -255,6 +255,22 @@ Offline-safe on web and mobile. This added the shared collection factory's first
 `delete` verb kind (`packages/agent-core/src/collection/base.ts`), so every
 future entity gets optimistic delete + offline outbox for free.
 
+Tightening (2026-09-04, internal, no user-facing change; plan
+`docs/plans/todo-tightening.md`): the six list screens (Captures / Projects /
+Upcoming × web + mobile) shared four copies of the same plumbing. The pure,
+UI-agnostic pieces moved into `@zero/agent-core` (`messageOf`,
+`LOADING_TEXT_DELAY_MS`, the Upcoming `dayLabel` helpers, and the Projects
+display data in `projects/display.ts`: `STATUS_LABELS`, `ALL_STATUSES`,
+`ICON_CHOICES`, `BACKLOG_COLLAPSE_THRESHOLD`, `DONE_UNDO_MS`). The React hooks
+(`useDelayed`, `useLoadError`, `useForegroundRefetch`, and the `useUndoableLeave`
+hook that now backs both the Done and Delete undo timers) live in one
+`screen-hooks` module **per app**, not in `@zero/agent-core`: a workspace lib
+that calls React hooks resolves its own React copy (agent-core's would be 19.2.8
+vs the mobile app's pinned 19.2.3) and trips the rules-of-hooks dispatcher, so
+agent-core stays React-free. `apps/agent-web` also gained a Vitest +
+`@testing-library/react` toolchain and a `ProjectsPage` suite, so the web surface
+is no longer untested.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add

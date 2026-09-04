@@ -5,84 +5,26 @@ import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
+  ALL_STATUSES,
+  BACKLOG_COLLAPSE_THRESHOLD,
+  DONE_UNDO_MS,
+  ICON_CHOICES,
+  LOADING_TEXT_DELAY_MS,
+  messageOf,
   projectsByStatus,
   listView,
+  STATUS_LABELS,
   type ProjectEditFields,
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
+import {
+  useDelayed,
+  useForegroundRefetch,
+  useUndoableLeave,
+} from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-// How long a list may sit empty-and-loading before it shows the "Loading…"
-// text. The local snapshot hydrates the cached rows in well under this, so a
-// normal load paints straight to the list with no spinner flash; the text only
-// appears on a genuinely slow first load (empty cache waiting on the network).
-const LOADING_TEXT_DELAY_MS = 1000;
-
-// How long a project sits struck-through with an Undo affordance after the user
-// sets it Done, before it commits and leaves the working list. Long enough to
-// reverse a mistaken finish; short enough not to linger.
-const DONE_UNDO_MS = 5000;
-
-// A Backlog with more than this many projects collapses by default (it is the
-// "someday" pile and must stay out of the way). Active/Next/Waiting start open.
-const BACKLOG_COLLAPSE_THRESHOLD = 5;
-
-// The five states in fixed order, with their labels. Active/Next/Waiting/Backlog
-// are the working sections; Done is terminal (chosen from the sheet, never a
-// section).
-const STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: "Active",
-  next: "Next",
-  waiting: "Waiting",
-  backlog: "Backlog",
-  done: "Done",
-};
-const ALL_STATUSES: ProjectStatus[] = [
-  "active",
-  "next",
-  "waiting",
-  "backlog",
-  "done",
-];
-
-// A small curated icon set (not a full emoji keyboard) so a project's icon
-// renders identically across platforms. Covers the vision's examples (baby,
-// diploma, house…) plus a neutral default.
-const ICON_CHOICES = [
-  "📁",
-  "👶",
-  "🎓",
-  "🏠",
-  "🎬",
-  "✈️",
-  "📚",
-  "💼",
-  "❤️",
-  "💪",
-  "🧳",
-  "🎯",
-];
-
-// True only after `active` has held continuously for `ms`. Resets the moment
-// `active` goes false, so a fast hydrate never trips it.
-function useDelayed(active: boolean, ms: number): boolean {
-  const [elapsed, setElapsed] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => setElapsed(true), ms);
-    return () => {
-      clearTimeout(t);
-      setElapsed(false);
-    };
-  }, [active, ms]);
-  return active && elapsed;
-}
 
 // Projects is a status-grouped list of outcome-oriented containers. The add
 // field creates a Project by name; tapping a row opens a detail sheet where the
@@ -123,37 +65,14 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // The open detail sheet's project id, and the sets of projects mid-Done and
-  // mid-Delete (both shown struck-through with Undo until the timer commits
-  // them). Timers are cleared on unmount so a pending action never fires against
-  // a torn-down page.
+  // The open detail sheet's project id, plus two deferred-undo channels: one for
+  // Done, one for Delete. Both hold a row struck-through with an Undo for
+  // DONE_UNDO_MS before committing; the hook owns the timers and their cleanup.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
-  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
-  const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
-  useEffect(() => {
-    const timers = doneTimers.current;
-    const dTimers = deleteTimers.current;
-    return () => {
-      for (const t of timers.values()) clearTimeout(t);
-      timers.clear();
-      for (const t of dTimers.values()) clearTimeout(t);
-      dTimers.clear();
-    };
-  }, []);
+  const done = useUndoableLeave(DONE_UNDO_MS);
+  const del = useUndoableLeave(DONE_UNDO_MS);
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void api.refetch();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [api]);
+  useForegroundRefetch(api.refetch);
 
   const onAdd = useCallback(() => {
     const trimmed = title.trim();
@@ -185,80 +104,26 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
     [api],
   );
 
-  // Setting Done does not write immediately: hold the row struck-through with an
-  // Undo for DONE_UNDO_MS, then commit. Undo clears the timer and the row stays.
-  const startDone = useCallback(
-    (id: string) => {
-      setPendingDone((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        doneTimers.current.delete(id);
-        setPendingDone((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitStatus(id, "done");
-      }, DONE_UNDO_MS);
-      doneTimers.current.set(id, timer);
-    },
-    [commitStatus],
-  );
-  const undoDone = useCallback((id: string) => {
-    const timer = doneTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    doneTimers.current.delete(id);
-    setPendingDone((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  // Delete mirrors Done: the row leaves after a DONE_UNDO_MS Undo window, then
-  // the hard delete commits. Deleting is destructive and has no server-side
-  // undo, so the client window is the only guard against a mis-tap.
-  const commitDelete = useCallback(
-    (id: string) => {
-      setError(null);
-      const tx = api.remove(id);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    },
-    [api],
-  );
+  // Setting Done and deleting both defer their write behind a DONE_UNDO_MS Undo
+  // window (delete is destructive with no server-side undo, so the window is the
+  // only guard against a mis-tap). Route an Undo tap to whichever channel owns
+  // the row.
   const startDelete = useCallback(
     (id: string) => {
-      setPendingDelete((prev) => new Set(prev).add(id));
-      const timer = setTimeout(() => {
-        deleteTimers.current.delete(id);
-        setPendingDelete((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        commitDelete(id);
-      }, DONE_UNDO_MS);
-      deleteTimers.current.set(id, timer);
+      del.start(id, () => {
+        setError(null);
+        const tx = api.remove(id);
+        tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      });
     },
-    [commitDelete],
+    [del, api],
   );
-  const undoDelete = useCallback((id: string) => {
-    const timer = deleteTimers.current.get(id);
-    if (timer) clearTimeout(timer);
-    deleteTimers.current.delete(id);
-    setPendingDelete((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  // Route an Undo tap to the pending action that owns the row.
   const onUndo = useCallback(
     (id: string) => {
-      if (pendingDelete.has(id)) undoDelete(id);
-      else undoDone(id);
+      if (del.pending.has(id)) del.undo(id);
+      else done.undo(id);
     },
-    [pendingDelete, undoDelete, undoDone],
+    [del, done],
   );
 
   const onPickStatus = useCallback(
@@ -266,16 +131,22 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
       setSelectedId(null);
       if (status === project.status) return;
       if (status === "done") {
-        startDone(project.id);
+        done.start(project.id, () => commitStatus(project.id, "done"));
       } else {
         commitStatus(project.id, status);
       }
     },
-    [commitStatus, startDone],
+    [commitStatus, done],
   );
 
   const list = useMemo(() => projects ?? [], [projects]);
   const sections = useMemo(() => projectsByStatus(list), [list]);
+  // A row is "leaving" if either channel (Done or Delete) holds it; both render
+  // it struck-through with an Undo.
+  const pending = useMemo(
+    () => new Set([...done.pending, ...del.pending]),
+    [done.pending, del.pending],
+  );
   const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
@@ -339,8 +210,7 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
               key={section.status}
               status={section.status}
               projects={section.projects}
-              pending={pendingDone}
-              pendingDelete={pendingDelete}
+              pending={pending}
               onOpen={(p) => setSelectedId(p.id)}
               onUndo={onUndo}
             />
@@ -395,16 +265,13 @@ function ProjectSectionView({
   status,
   projects,
   pending,
-  pendingDelete,
   onOpen,
   onUndo,
 }: {
   status: ProjectStatus;
   projects: Project[];
-  // Projects mid-Done (struck-through with Undo).
+  // Projects mid-Done or mid-Delete (struck-through with an Undo).
   pending: Set<string>;
-  // Projects mid-Delete (also struck-through with Undo).
-  pendingDelete: Set<string>;
   onOpen: (p: Project) => void;
   onUndo: (id: string) => void;
 }) {
@@ -437,7 +304,7 @@ function ProjectSectionView({
       {!collapsed && (
         <ul className="space-y-3">
           {projects.map((item) => {
-            const isPending = pending.has(item.id) || pendingDelete.has(item.id);
+            const isPending = pending.has(item.id);
             return (
               <li key={item.id}>
                 <div
