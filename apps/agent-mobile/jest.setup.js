@@ -202,10 +202,17 @@ jest.mock('react-native-keyboard-controller', () => {
 // so NativeWind's babel transform does not touch the factory.
 const mockReactForExpoUi = require('react');
 jest.mock('@expo/ui', () => {
-  const { View, Text: RNText, Pressable } = require('react-native');
+  const {
+    View,
+    Text: RNText,
+    TextInput: RNTextInput,
+    Pressable,
+  } = require('react-native');
   const Host = ({ children }) =>
     mockReactForExpoUi.createElement(View, null, children);
   const Column = ({ children }) =>
+    mockReactForExpoUi.createElement(View, null, children);
+  const Row = ({ children }) =>
     mockReactForExpoUi.createElement(View, null, children);
   const Text = ({ children }) =>
     mockReactForExpoUi.createElement(RNText, null, children);
@@ -216,6 +223,27 @@ jest.mock('@expo/ui', () => {
       children ??
         (label != null ? mockReactForExpoUi.createElement(RNText, null, label) : null),
     );
+  const TextInput = ({
+    value,
+    defaultValue,
+    onChangeText,
+    onBlur,
+    onSubmitEditing,
+    placeholder,
+    autoFocus,
+    returnKeyType,
+    testID,
+  }) =>
+    mockReactForExpoUi.createElement(RNTextInput, {
+      value: value ?? defaultValue,
+      onChangeText,
+      onBlur,
+      onSubmitEditing,
+      placeholder,
+      autoFocus,
+      returnKeyType,
+      testID,
+    });
   const BottomSheet = ({ isPresented, children }) =>
     isPresented
       ? mockReactForExpoUi.createElement(
@@ -224,5 +252,14 @@ jest.mock('@expo/ui', () => {
           children,
         )
       : null;
-  return { __esModule: true, Host, Column, Text, Button, BottomSheet };
+  return {
+    __esModule: true,
+    Host,
+    Column,
+    Row,
+    Text,
+    Button,
+    TextInput,
+    BottomSheet,
+  };
 });

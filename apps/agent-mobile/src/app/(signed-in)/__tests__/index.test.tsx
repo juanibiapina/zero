@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { View } from 'react-native';
+import { BackHandler, View } from 'react-native';
 
 import type { Capture } from '@/lib/api';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
@@ -91,6 +91,7 @@ const renderScreen = () => {
 describe('HomeScreen', () => {
   beforeEach(() => {
     resetCapturesApiForTest();
+    mockEditCapture.mockReset();
   });
 
   it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {
@@ -245,7 +246,7 @@ describe('HomeScreen', () => {
     expect(mockProcessCapture.mock.calls[0][1]).toBe('1');
   });
 
-  it('edits a capture inline and shows the new text', async () => {
+  it('edits a capture from its detail sheet and shows the new text', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
     mockEditCapture.mockImplementation(async (_g, id, text) => {
@@ -259,17 +260,17 @@ describe('HomeScreen', () => {
 
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
 
-    // Tap the row text to enter edit mode.
     await act(async () => {
       fireEvent.press(getByLabelText('Edit "buy milk"'));
     });
 
     const input = getByDisplayValue('buy milk');
+    expect(input.props.autoFocus).toBe(true);
     await act(async () => {
       fireEvent.changeText(input, 'buy oat milk');
     });
     await act(async () => {
-      fireEvent(input, 'submitEditing');
+      fireEvent.press(getByLabelText('Done'));
     });
 
     await waitFor(() => expect(getByText('buy oat milk')).toBeTruthy());
@@ -278,9 +279,7 @@ describe('HomeScreen', () => {
     expect(mockEditCapture.mock.calls[0][2]).toBe('buy oat milk');
   });
 
-  it('does not call edit when the text is unchanged', async () => {
-    // Module-level mocks are not auto-cleared between tests; drop any prior call.
-    mockEditCapture.mockClear();
+  it('does not call edit when the sheet text is unchanged', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
 
@@ -298,6 +297,76 @@ describe('HomeScreen', () => {
     });
 
     expect(mockEditCapture).not.toHaveBeenCalled();
+  });
+
+  it('preserves the stored text when the sheet draft is empty', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+
+    const { getByText, getByLabelText, getByDisplayValue, queryByLabelText } =
+      await renderScreen();
+
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    await act(async () => {
+      fireEvent.changeText(getByDisplayValue('buy milk'), '   ');
+      fireEvent.press(getByLabelText('Done'));
+    });
+
+    expect(queryByLabelText('sheet')).toBeNull();
+    expect(getByText('buy milk')).toBeTruthy();
+    expect(mockEditCapture).not.toHaveBeenCalled();
+  });
+
+  it('closes the capture sheet before handling quick-add on Android Back', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    mockEditCapture.mockImplementation(async (_g, id, text) => {
+      const edited = { ...capture(id, text) };
+      mockFetchCaptures.mockResolvedValue([edited]);
+      return edited;
+    });
+    let onBack: Parameters<typeof BackHandler.addEventListener>[1] | null = null;
+    const addListener = jest
+      .spyOn(BackHandler, 'addEventListener')
+      .mockImplementation((_event, handler) => {
+        onBack = handler;
+        return { remove: jest.fn() };
+      });
+
+    try {
+      const {
+        getByText,
+        getByLabelText,
+        getByDisplayValue,
+        getByPlaceholderText,
+        queryByLabelText,
+      } = await renderScreen();
+
+      await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+      await act(async () => {
+        fireEvent.press(getByLabelText('Capture'));
+        fireEvent.press(getByLabelText('Edit "buy milk"'));
+      });
+      expect(getByPlaceholderText('Capture a thought')).toBeTruthy();
+      expect(getByLabelText('sheet')).toBeTruthy();
+      await act(async () => {
+        fireEvent.changeText(getByDisplayValue('buy milk'), 'buy oat milk');
+      });
+
+      await act(async () => {
+        expect(onBack?.({} as never)).toBe(true);
+      });
+
+      expect(queryByLabelText('sheet')).toBeNull();
+      expect(getByPlaceholderText('Capture a thought')).toBeTruthy();
+      await waitFor(() => expect(getByText('buy oat milk')).toBeTruthy());
+      expect(mockEditCapture).toHaveBeenCalledTimes(1);
+    } finally {
+      addListener.mockRestore();
+    }
   });
 
   it('opens the quick-add input only after tapping the add button', async () => {

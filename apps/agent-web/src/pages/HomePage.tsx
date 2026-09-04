@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
   listView,
@@ -74,6 +75,9 @@ function CapturesReady({ api }: { api: CapturesApi }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const closingDetailRef = useRef(false);
 
   useForegroundRefetch(api.refetch);
 
@@ -96,15 +100,6 @@ function CapturesReady({ api }: { api: CapturesApi }) {
     [api],
   );
 
-  const onEdit = useCallback(
-    (item: Capture, text: string) => {
-      setError(null);
-      const tx = api.edit(item.id, text);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    },
-    [api],
-  );
-
   const onReschedule = useCallback(
     (item: Capture) => {
       setError(null);
@@ -119,6 +114,28 @@ function CapturesReady({ api }: { api: CapturesApi }) {
   // row leaves the list at once and future-dated rows stay in Upcoming. Overdue
   // rolls in; no red. Ordered by the manual sort key.
   const list = visibleCaptures(captures ?? [], capturesLocalToday());
+  const selected = selectedId
+    ? (list.find((item) => item.id === selectedId) ?? null)
+    : null;
+
+  const openDetail = useCallback((item: Capture) => {
+    closingDetailRef.current = false;
+    setDraft(item.text);
+    setSelectedId(item.id);
+  }, []);
+
+  // Close first, then write only a changed, non-empty draft. Every sheet
+  // dismissal path and form submit calls this same callback.
+  const commitAndClose = useCallback(() => {
+    if (closingDetailRef.current) return;
+    closingDetailRef.current = true;
+    setSelectedId(null);
+    const trimmed = draft.trim();
+    if (!selected || !trimmed || trimmed === selected.text) return;
+    setError(null);
+    const tx = api.edit(selected.id, trimmed);
+    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+  }, [api, draft, selected]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -190,7 +207,7 @@ function CapturesReady({ api }: { api: CapturesApi }) {
                   text={item.text}
                   actionLabel={`Process "${item.text}"`}
                   onAction={() => onProcess(item)}
-                  onEdit={(text) => onEdit(item, text)}
+                  onOpen={() => openDetail(item)}
                   onReschedule={() => onReschedule(item)}
                 />
               ))}
@@ -198,6 +215,38 @@ function CapturesReady({ api }: { api: CapturesApi }) {
           </SortableContext>
         </DndContext>
       )}
+
+      <Sheet
+        open={selected != null}
+        onClose={commitAndClose}
+        title="Edit capture"
+        srOnlyTitle
+      >
+        {selected ? (
+          <form
+            className="space-y-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              commitAndClose();
+            }}
+          >
+            <div className="rounded-2xl bg-muted/60 px-5 py-4 transition-colors focus-within:bg-muted">
+              <Input
+                autoFocus
+                value={draft}
+                aria-label="Capture text"
+                className="h-14 rounded-none border-0 bg-transparent px-0 py-0 text-xl font-medium leading-7 shadow-none focus-visible:ring-0"
+                onChange={(event) => setDraft(event.target.value)}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit" size="lg" className="min-w-24 rounded-xl">
+                Done
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </Sheet>
     </div>
   );
 }
@@ -271,7 +320,7 @@ function Row({
   text,
   actionLabel,
   onAction,
-  onEdit,
+  onOpen,
   onReschedule,
 }: {
   // Stable capture id; the sortable key for dnd-kit.
@@ -279,17 +328,12 @@ function Row({
   text: string;
   actionLabel: string;
   onAction: () => void;
-  // When provided, the row's text becomes click-to-edit inline. Today omits it,
-  // so its rows stay read-only.
-  onEdit?: (text: string) => void;
+  onOpen: () => void;
   // When provided, a "Tomorrow" button (shown on hover/focus) postpones the row.
   onReschedule?: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(text);
-
   // Drag reorder: only the grip handle carries the drag listeners, so the
-  // circle (process), text (inline edit) and "Tomorrow" button keep their own
+  // circle (process), text (detail sheet) and "Tomorrow" button keep their own
   // clicks. Keyboard reorder comes free (Space to lift, arrows to move).
   const {
     attributes,
@@ -304,20 +348,6 @@ function Row({
     transition,
     zIndex: isDragging ? 1 : undefined,
     boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.15)" : undefined,
-  };
-
-  const startEdit = () => {
-    if (!onEdit) return;
-    setDraft(text);
-    setEditing(true);
-  };
-
-  const commit = () => {
-    setEditing(false);
-    const trimmed = draft.trim();
-    // No-op on empty or unchanged, matching add's empty guard.
-    if (!trimmed || trimmed === text) return;
-    onEdit?.(trimmed);
   };
 
   return (
@@ -341,35 +371,15 @@ function Row({
         className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
         onClick={onAction}
       />
-      {editing ? (
-        <Input
-          autoFocus
-          value={draft}
-          aria-label={`Edit "${text}"`}
-          className="h-9 flex-1"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              setEditing(false);
-            }
-          }}
-        />
-      ) : (
-        <span
-          className={
-            "flex-1 text-base" + (onEdit ? " cursor-text" : "")
-          }
-          onClick={startEdit}
-        >
-          {text}
-        </span>
-      )}
-      {onReschedule && !editing && (
+      <button
+        type="button"
+        className="flex-1 text-left text-base"
+        aria-label={`Edit "${text}"`}
+        onClick={onOpen}
+      >
+        {text}
+      </button>
+      {onReschedule && (
         <button
           type="button"
           aria-label={`Postpone "${text}" to tomorrow`}

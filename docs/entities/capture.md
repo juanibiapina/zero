@@ -80,7 +80,8 @@ tools; it never names this view.
 - **Process** a Capture: it leaves Captures (still stored). Today Process just
   removes it; later it could turn the Capture into a typed entity.
 - **Edit** a Capture's text in place, on web and mobile: tap the row's text to
-  edit inline; an empty or unchanged edit is a no-op. Optimistic and
+  open its edit-only detail sheet. Done, Enter, or dismissing the sheet saves a
+  changed non-empty draft; an empty or unchanged edit is a no-op. Optimistic and
   offline-durable like add/process.
 - **Postpone** a Capture to the next day: swipe the row right on mobile, or click
   the "Tomorrow" button on web. It leaves the list at once and comes back on its
@@ -128,8 +129,9 @@ tools; it never names this view.
 
 - **UI** — mobile Captures + Upcoming tabs (`apps/agent-mobile`) and web
   `/captures` + `/upcoming` (`apps/agent-web`, unlinked routes). Quick-add bar off
-  a FAB; tap a row's circle to Process. Upcoming groups future-dated Captures by
-  day. NativeWind v4 + `@expo/ui` on mobile.
+  a FAB; tap a row's circle to Process or its text to edit in a detail sheet.
+  Upcoming groups future-dated Captures by day. NativeWind v4 + `@expo/ui` on
+  mobile.
 - **Storage** — the server domain store is `DbCaptureStore` (domain methods
   `add` / `list` = all open Captures / `process` / `editText` / `reschedule` /
   `reorder` / `backfillSortKeys`). `add` mints the trailing `sortKey` (reads the

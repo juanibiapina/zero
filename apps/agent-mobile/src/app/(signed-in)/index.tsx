@@ -1,4 +1,5 @@
 import { UserButton } from '@clerk/expo/native';
+import { Button, Column, TextInput } from '@expo/ui';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -17,7 +18,7 @@ import {
   BackHandler,
   Pressable,
   StyleSheet,
-  TextInput,
+  type TextInput as RNTextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -42,6 +43,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
+import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
 import {
@@ -69,9 +71,9 @@ function project(velocity: number, decelerationRate = 0.998): number {
 }
 
 // One Captures row: long-press the text to drag-reorder, swipe right to
-// postpone, tap the circle to process, tap the text to edit inline. The swipe is
-// a swipe-to-commit (one decisive swipe = the action), so it is a hand-built
-// Gesture.Pan, not ReanimatedSwipeable (which is for swipe-to-reveal action
+// postpone, tap the circle to process, tap the text to open its detail sheet.
+// The swipe is a swipe-to-commit (one decisive swipe = the action), so it is a
+// hand-built Gesture.Pan, not ReanimatedSwipeable (which is for swipe-to-reveal action
 // buttons and orphans its action layer when the row is removed). The "Tomorrow"
 // background is a child of this wrapper, so it unmounts with the row — no ghost.
 //
@@ -87,22 +89,14 @@ function project(velocity: number, decelerationRate = 0.998): number {
 // screen's memoized callbacks stay clean.
 function CaptureRow({
   item,
-  editing,
-  editText,
   onProcess,
   onReschedule,
-  onEditSubmit,
-  onChangeEditText,
-  onStartEdit,
+  onOpen,
 }: {
   item: Capture;
-  editing: boolean;
-  editText: string;
   onProcess: (item: Capture) => void;
   onReschedule: (item: Capture) => void;
-  onEditSubmit: (item: Capture) => void;
-  onChangeEditText: (text: string) => void;
-  onStartEdit: (item: Capture) => void;
+  onOpen: (item: Capture) => void;
 }) {
   const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
@@ -120,7 +114,6 @@ function CaptureRow({
   // Built inline (no useMemo) so the React Compiler owns the memoization; a
   // silent skip of this leaf row is harmless, unlike a manual-memo mismatch.
   const pan = Gesture.Pan()
-    .enabled(!editing)
     // Right-only, and declaring the axis keeps the pan from stealing the list's
     // vertical scroll. A tap has no horizontal travel, so it never activates.
     .activeOffsetX(12)
@@ -182,36 +175,64 @@ function CaptureRow({
             hitSlop={8}
             onPress={() => onProcess(item)}
           />
-          {editing ? (
-            <TextInput
-              autoFocus
-              accessibilityLabel={`Edit "${item.text}"`}
-              className="flex-1 text-base text-neutral-900"
-              value={editText}
-              onChangeText={onChangeEditText}
-              onSubmitEditing={() => onEditSubmit(item)}
-              onBlur={() => onEditSubmit(item)}
-              returnKeyType="done"
-            />
-          ) : (
-            <Pressable
-              className="flex-1"
-              accessibilityLabel={`Edit "${item.text}"`}
-              onPress={() => onStartEdit(item)}
-              // Long-press the text body to start a reorder drag (Todoist-style).
-              // JS Pressability, so it does not block the list's pan (see note
-              // on CaptureRow). delayLongPress matches the platform default.
-              onLongPress={() => drag()}
-              delayLongPress={500}
-            >
-              <Text>{item.text}</Text>
-            </Pressable>
-          )}
+          <Pressable
+            className="flex-1"
+            accessibilityRole="button"
+            accessibilityLabel={`Edit "${item.text}"`}
+            onPress={() => onOpen(item)}
+            // Long-press the text body to start a reorder drag (Todoist-style).
+            // JS Pressability, so it does not block the list's pan (see note
+            // on CaptureRow). delayLongPress matches the platform default.
+            onLongPress={() => drag()}
+            delayLongPress={500}
+          >
+            <Text>{item.text}</Text>
+          </Pressable>
           {/* TODO(haptics): Haptics.impactAsync(Light) on commit once
               expo-haptics is added (native module → needs a dev-client rebuild). */}
         </Animated.View>
       </GestureDetector>
     </View>
+  );
+}
+
+// Native edit-only sheet body. Keyed by capture id at the call site so the
+// uncontrolled native field reseeds when another capture opens.
+function CaptureDetail({
+  draft,
+  onChangeDraft,
+  onDone,
+}: {
+  draft: string;
+  onChangeDraft: (text: string) => void;
+  onDone: () => void;
+}) {
+  return (
+    <Column spacing={20}>
+      <TextInput
+        autoFocus
+        defaultValue={draft}
+        onChangeText={onChangeDraft}
+        onSubmitEditing={onDone}
+        returnKeyType="done"
+        placeholder="Capture"
+        style={{
+          height: 72,
+          paddingHorizontal: 18,
+          paddingVertical: 14,
+          borderRadius: 16,
+          backgroundColor: '#f5f5f5',
+        }}
+        textStyle={{ fontSize: 19, fontWeight: '500', lineHeight: 26 }}
+        testID="capture-edit-input"
+      />
+      <Button
+        label="Done"
+        variant="filled"
+        style={{ height: 48, borderRadius: 14 }}
+        onPress={onDone}
+      />
+    </Column>
   );
 }
 
@@ -296,7 +317,33 @@ function Captures({
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<RNTextInput>(null);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const closingDetailRef = useRef(false);
+  const selected = selectedId
+    ? (list.find((item) => item.id === selectedId) ?? null)
+    : null;
+
+  const openDetail = useCallback((item: Capture) => {
+    closingDetailRef.current = false;
+    setDraft(item.text);
+    setSelectedId(item.id);
+  }, []);
+
+  // Every dismissal commits the same trimmed draft before closing. Empty and
+  // unchanged drafts preserve the stored text.
+  const commitAndClose = useCallback(() => {
+    if (closingDetailRef.current) return;
+    closingDetailRef.current = true;
+    setSelectedId(null);
+    const trimmed = draft.trim();
+    if (!selected || !trimmed || trimmed === selected.text) return;
+    setWriteError(null);
+    const tx = api.edit(selected.id, trimmed);
+    tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+  }, [api, draft, selected]);
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
@@ -353,6 +400,10 @@ function Captures({
   // Returning true consumes the event so the OS does not navigate away.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (selected) {
+        commitAndClose();
+        return true;
+      }
       if (confirmingDiscard) {
         setConfirmingDiscard(false);
         return true;
@@ -368,7 +419,7 @@ function Captures({
       return false;
     });
     return () => sub.remove();
-  }, [adding, confirmingDiscard, text, closeAdd]);
+  }, [selected, commitAndClose, adding, confirmingDiscard, text, closeAdd]);
 
   const onProcess = useCallback(
     (item: Capture) => {
@@ -407,42 +458,16 @@ function Captures({
     [api, list],
   );
 
-  // Inline edit: tapping a row's text turns it into a TextInput seeded with the
-  // current text; submitting commits (trim, no-op on empty/unchanged).
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
-
-  const onEditSubmit = useCallback(
-    (item: Capture) => {
-      const trimmed = editText.trim();
-      setEditingId(null);
-      if (!trimmed || trimmed === item.text) return;
-      setWriteError(null);
-      const tx = api.edit(item.id, trimmed);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api, editText],
-  );
-
-  const onStartEdit = useCallback((item: Capture) => {
-    setEditText(item.text);
-    setEditingId(item.id);
-  }, []);
-
   const renderItem = useCallback(
     ({ item }: { item: Capture }) => (
       <CaptureRow
         item={item}
-        editing={editingId === item.id}
-        editText={editText}
         onProcess={onProcess}
         onReschedule={onReschedule}
-        onEditSubmit={onEditSubmit}
-        onChangeEditText={setEditText}
-        onStartEdit={onStartEdit}
+        onOpen={openDetail}
       />
     ),
-    [onProcess, onReschedule, editingId, editText, onEditSubmit, onStartEdit],
+    [onProcess, onReschedule, openDetail],
   );
 
   // Only surface the loading text once the snapshot has had time to hydrate;
@@ -482,6 +507,17 @@ function Captures({
           }
         />
       )}
+
+      <Sheet open={selected != null} onClose={commitAndClose}>
+        {selected ? (
+          <CaptureDetail
+            key={selected.id}
+            draft={draft}
+            onChangeDraft={setDraft}
+            onDone={commitAndClose}
+          />
+        ) : null}
+      </Sheet>
 
       {/* Transition layer: cross-fades the plus FAB and the quick-add bar and
           lifts the bar with the keyboard. It owns the motion; this screen owns

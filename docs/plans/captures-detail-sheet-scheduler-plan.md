@@ -1,11 +1,13 @@
 # Captures: detail sheet + full scheduler — remaining slices
 
-Living plan for the todo app's leftover work. Slices 0–2 (collapse to one list,
-postpone-to-tomorrow, drag-to-reorder) and the `sortKey` data model are **shipped
-on `main`** and verified in prod — this plan covers only what is left:
+Living plan for the todo app's remaining scheduler work. Slices 0–3 (collapse
+to one list, postpone-to-tomorrow, drag-to-reorder, and the edit-only detail
+sheet) and the `sortKey` data model are **shipped** — this plan tracks their
+status and what is left:
 
-- **Slice 3 — Detail bottom sheet** (edit moves into a slide-up sheet) — NEXT
-- **Slice 4 — Full scheduler** (chips + calendar in the sheet)
+- **Slice 3 — Edit-only detail bottom sheet** (inline editing moved into the
+  existing shared sheet) — SHIPPED
+- **Slice 4 — Full scheduler** (chips + calendar added to the sheet) — NEXT
 - **Later fast-follow — Natural-language date input** ("next thursday")
 
 Dependencies: 4 needs the sheet from 3; 4 reuses the `reschedule(id, showUpDate|null)`
@@ -16,20 +18,20 @@ docs + changelog in the same change.
 ## What already exists (shipped foundation the remaining slices build on)
 
 - **Web list:** `apps/agent-web/src/pages/HomePage.tsx` — one Captures list.
-  `Row` has circle = process, text = **inline edit** (Slice 3 removes this), a
-  hover/focus "Tomorrow" button (`onReschedule`), and a dnd-kit drag grip. Rows
+  `Row` has circle = process, text = **open detail sheet**, a hover/focus
+  "Tomorrow" button (`onReschedule`), and a dnd-kit drag grip. Rows
   filtered through `visibleCaptures(rows, capturesLocalToday())`.
 - **Mobile list:** `apps/agent-mobile/src/app/(signed-in)/index.tsx` —
   `ReorderableList`; module-scope `CaptureRow` with inline `Gesture.Pan`
   swipe-right-to-postpone, `useReorderableDrag()` long-press drag, tap-circle =
-  process, tap-text = **inline edit** (Slice 3 removes this). `GestureHandlerRootView`
-  wraps the app in `_layout.tsx`. `BackHandler` chain present (extend it for the sheet).
+  process, tap-text = **open detail sheet**. `GestureHandlerRootView` wraps the app
+  in `_layout.tsx`; the `BackHandler` chain dismisses the sheet first.
 - **Server:** `captures` table has `text, createdAt, processedAt, showUpDate, sortKey`.
   `PATCH /api/captures/{id}` already accepts any subset of `{ text, showUpDate, sortKey }`
   as one idempotent same-key update (`apps/agent-api/src/routes/captures.ts`), so
-  Slice 4 needs **no new endpoint** — it reuses `showUpDate`. `GET /api/captures`
-  returns only the visible open set (server filters `showUpDate IS NULL OR <= today`
-  from `userSettings.timezone`).
+  Slice 3 and Slice 4 need **no new endpoint**. `GET /api/captures` returns every
+  open Capture; the clients split the set between Captures and Upcoming using
+  their local day.
 - **Shared collection:** `packages/agent-core/src/captures/*` — `collection.ts`
   (`createCapturesApi` with `edit`/`reschedule`/`reorder` verbs, optimistic +
   offline outbox), `dates.ts` (`capturesLocalToday`, `tomorrow`, `visibleCaptures`
@@ -38,11 +40,13 @@ docs + changelog in the same change.
 - **REST:** web `apps/agent-web/src/lib/captures.ts`, mobile
   `apps/agent-mobile/src/lib/api.ts` (no mobile `lib/captures.ts`); both wired into
   each app's `captures-collection.ts`.
-- **Mobile deps present:** `@expo/ui ~57.0.13` (SDK 57 → `BottomSheet` +
-  `@expo/ui/community/datetimepicker`), gesture-handler, reanimated 4, worklets,
-  `react-native-reorderable-list`. **No `expo-haptics`** (native; deferred). Web
-  `agent-web` has its own minimal `components/ui` (button/card/input/table) — **no
-  sheet or calendar component yet**; no shadcn/`@zero/ui`.
+- **Shared sheet primitives are shipped:** mobile
+  `apps/agent-mobile/src/components/ui/sheet.tsx` wraps the universal `@expo/ui`
+  `BottomSheet`; web `apps/agent-web/src/components/ui/sheet.tsx` wraps Radix
+  Dialog as a bottom-anchored sheet with title, Close, Esc, backdrop dismissal,
+  focus trap, and scroll lock. Projects already uses both. Slice 3 adds no
+  dependency and must reuse these primitives unchanged. `@expo/ui ~57.0.13`
+  also provides the native `TextInput` and `Button` needed for the mobile body.
 - **Changelogs:** `apps/agent-web/CHANGELOG.md` + `apps/agent-mobile/CHANGELOG.md`.
   NOT `apps/agent-api/CHANGELOG.md` (that ships to Zero-assistant users).
 
@@ -54,51 +58,144 @@ docs + changelog in the same change.
   (`visibleCaptures`, `upcomingSections`) must stay inside `useMemo`; build any
   gesture **inline** (no `useMemo`) or the compiler bails the whole screen's
   memoization.
-- **Native components need a fresh build.** Slices 1–2 were JS-only (hot-reload on
-  the dev client). Slice 3's `@expo/ui BottomSheet` and Slice 4's native
-  datetimepicker are native → build a dev client **locally** on the Mac via
-  `nix develop <dotfiles>#android` (`expo run:android`), no EAS cloud needed.
-  Verify early. The Pixel is **dev-client-only** (a standalone build embeds JS and
-  ignores Metro).
+- **Slice 3 is JS-only against native modules already shipped for Projects.**
+  The installed dev client already needs `@expo/ui` for the Projects sheet and
+  fields, so reusing `Sheet`, `TextInput`, and `Button` requires no dependency or
+  native configuration change. Verify through the dev client + Metro on the
+  Pixel. Rebuild only if the installed client proves it lacks the module. Slice
+  4's datetimepicker can still require a fresh dev-client build.
 - **On-device testing:** Pixel (USB-attached), driven with Maestro on the
   **personal profile / user 0 only**. Dev box has no workerd and no Android
   emulator — verify touched packages directly (`pnpm --filter ... test/lint/typecheck`).
 
 ---
 
-## Slice 3 — Detail bottom sheet (edit moves into it) — NEXT
+## Slice 3 — Edit-only detail bottom sheet — SHIPPED
 
-**Goal:** tapping a capture opens a Todoist-style slide-up sheet where you edit
-its text. Inline tap-to-edit is removed (editing lives in the sheet); tapping the
-circle still processes.
+### Goal and scope
 
-Research that shaped it (NN/g bottom sheets): a bottom sheet is the right pattern
-for a short edit/detail task; give an explicit Close (X); support Back/Esc to
-dismiss (the grab handle alone is missed and collides with the notification drawer).
+Tapping a Capture's text area opens the shared slide-up sheet and lets the user
+edit that Capture's one-line text. This slice moves the existing edit capability
+out of the row; it does not add scheduling, metadata, deletion, processing, or
+another Capture field. Slice 4 adds scheduling later.
 
-- **Mobile UI** (`apps/agent-mobile/src/app/(signed-in)/index.tsx`): tap row →
-  `@expo/ui` `BottomSheet` (native — NOT `@gorhom/bottom-sheet` or a hand-rolled
-  Reanimated sheet; `@expo/ui` is already a dep and this is exactly the skill's
-  guidance). v1 contents: editable text field that commits `PATCH { text }` via the
-  existing `edit` verb. Explicit Close (X). Extend the existing `BackHandler` chain
-  so Back dismisses the sheet first (before the app's other back behavior). Remove
-  the inline tap-to-edit path; tap-circle still processes, long-press still drags,
-  swipe-right still postpones.
-- **Web UI** (`apps/agent-web/src/pages/HomePage.tsx`): click row → bottom-anchored
-  slide-up sheet (new to `agent-web` — no sheet component exists; add a minimal one
-  under `components/ui` rather than pulling in shadcn/`@zero/ui`). Same edit field +
-  Close + Esc/Back to dismiss. Remove inline edit.
-- **Build:** native (`@expo/ui BottomSheet`) → fresh local dev client build before
-  the Pixel. Verify early.
-- **Tests:** the edit path already has coverage; add a render test that the screen
-  mounts with the sheet lib mocked (jest passthrough if needed). Gesture/sheet
-  interaction verified on-device (Maestro, user 0).
-- **Docs:** `docs/entities/capture.md` — note editing happens in the detail sheet.
-- **Changelog** (web + mobile): "Tap a capture to open it in a slide-up view and
-  edit it there."
+The row keeps its existing independent controls and gestures:
 
-**Acceptance:** tap opens the sheet; edit commits optimistically and syncs; Close,
-Back, Esc all dismiss; inline edit gone with no lost capability.
+- circle: Process;
+- mobile swipe right / web Tomorrow button: postpone;
+- mobile long-press / web grip: reorder;
+- text area: open detail sheet.
+
+No server, route, REST adapter, collection, schema, dependency, or shared sheet
+change is needed. Both apps already call the optimistic, offline-replaying
+`api.edit(id, text)` verb, and Projects already shipped the generic `Sheet`
+module on both platforms.
+
+### Interaction decisions
+
+- The sheet contains one single-line text field seeded from the selected Capture
+  and an explicit **Done** action. The field receives focus when the sheet opens;
+  no visible heading repeats the action already implied by the field and sheet.
+- Keep the draft in the screen alongside `selectedId`, rather than inside a row.
+  This removes editing state from every list row and gives all dismissal paths
+  access to the current draft.
+- Done, Enter/the keyboard Done key, Close, backdrop dismissal, Esc (web), and
+  native sheet dismissal all run the same `commitAndClose` callback. It trims the
+  draft, writes only when the result is non-empty and changed, then closes. An
+  empty edit leaves the stored text unchanged. This preserves implicit saving
+  while preventing a typed change from being lost through a non-button dismissal.
+- The write remains optimistic. A persistence failure uses the screen's existing
+  write-error channel after the sheet closes. The editor does not add loading,
+  success, or disabled states.
+- If the selected Capture disappears during a refetch, derive it from the live
+  list and close the sheet. Do not retain a stale detached copy.
+
+### Implementation
+
+1. **Mobile opens one native edit sheet without disturbing gestures.** In
+   `apps/agent-mobile/src/app/(signed-in)/index.tsx`, simplify `CaptureRow` to a
+   display row: remove its `editing`, `editText`, and inline `TextInput` interface;
+   keep its inline `Gesture.Pan`; bind the text area's `onPress` to open and
+   `onLongPress` to `useReorderableDrag`. Add screen-level selected-id + draft
+   state, `commitAndClose`, and a small keyed `CaptureDetail` body built from the
+   existing universal `@expo/ui` `Column`, `Text`, `TextInput`, and `Button`.
+   Render it inside the existing `@/components/ui/sheet`. Put the selected-sheet
+   branch first in the existing `BackHandler` chain so hardware Back dismisses it
+   before quick-add behavior.
+2. **Web opens the same conceptual editor through the Radix sheet.** In
+   `apps/agent-web/src/pages/HomePage.tsx`, remove `Row`'s local inline-edit state
+   and optional `onEdit` interface. Make its text area a real button that opens
+   the selected Capture while the grip, Process circle, and Tomorrow button keep
+   their own actions. Render the existing `@/components/ui/sheet` with
+   screen-reader title `Edit capture`, the shared screen draft in `Input`, and
+   Done. Route the
+   sheet's Close/Esc/backdrop callback and Enter through `commitAndClose`.
+3. **Keep the sheet modules unchanged.** The existing entity-agnostic wrappers
+   already hide Radix / `@expo/ui` details behind their small interfaces. Capture
+   content belongs in the screen, like `ProjectDetail`; adding Capture-specific
+   props to either Sheet would weaken that seam.
+
+### Tests
+
+- **Mobile:** update `apps/agent-mobile/src/app/(signed-in)/__tests__/index.test.tsx`
+  so the current inline-edit tests open the mocked BottomSheet, assert the field
+  is seeded, submit changed text, and observe the optimistic row +
+  `editCapture(id, text)` call. Retain unchanged coverage and add empty-draft
+  coverage. Extend the shared `@expo/ui` jest mock with a queryable `TextInput`
+  and Done `Button` if needed. Add a BackHandler assertion that the sheet closes
+  before quick-add handling. Gesture behavior remains covered by existing wiring
+  tests and gets a device smoke test.
+- **Web:** add `apps/agent-web/src/pages/HomePage.test.tsx`, following
+  `ProjectsPage.test.tsx`: inject a fresh in-memory `CapturesApi`, render the real
+  page, open the sheet, edit, commit, and assert the row changes. Cover unchanged
+  or empty text as a no-op and verify Esc/Close dismisses. Do not test Radix
+  implementation details beyond the behavior exposed by `Sheet`.
+- Run tests, typecheck, and lint for `@zero/agent-core`, `@zero/agent-web`, and
+  `@zero/agent-mobile`. Run mobile Jest with `--runInBand`. This box cannot run
+  the whole-repo `workerd` checks.
+- Verify web sheet focus, Enter, Close, Esc, backdrop, Process, Tomorrow, and drag
+  in a browser. Verify mobile tap, edit, Done/Back/dismiss, Process, swipe-right,
+  and long-press reorder on the attached Pixel through the development client +
+  Metro and Maestro (user 0).
+
+### Documentation and release notes
+
+- Update `docs/entities/capture.md`: editing now happens in the detail sheet;
+  inline editing is removed.
+- Update `docs/todo-app.md` and this plan to mark Slice 3 shipped; leave Slice 4
+  as the next scheduler slice.
+- Load the `changelog` skill, then add the same user-facing outcome to
+  `apps/agent-web/CHANGELOG.md` and `apps/agent-mobile/CHANGELOG.md` in the feature
+  change. Do not edit `apps/agent-api/CHANGELOG.md`; the agent product is
+  unaffected.
+
+### Skills to use during implementation
+
+- `expo-overview` + `expo-ui` — confirm SDK 57 native `BottomSheet`, `TextInput`,
+  and `Button` usage against installed types.
+- `impeccable` — preserve the incumbent list and sheet visual system; run its
+  detector once after the web UI is complete.
+- `testing` — update mobile behavior tests and add the web test through each
+  screen's public interaction surface.
+- `browse` — verify keyboard, focus, and dismissal behavior in the web sheet.
+- `changelog` — write both product release notes before editing either changelog.
+- `reproducible-locally` — collect package-test and Pixel/Maestro evidence.
+- `git-commit` + `open-pr` — commit the complete vertical slice and open one PR.
+
+### Acceptance criteria
+
+- Tapping Capture text opens an edit-only bottom sheet on web and mobile with the
+  current text focused.
+- Changed, non-empty text saves through the existing optimistic/offline path on
+  Done, Enter, Close, or dismissal; the row shows the edited text.
+- Empty and unchanged drafts issue no write and preserve the stored text.
+- Close, Esc/backdrop (web), and native dismissal/Back close the sheet.
+- Process, postpone, and reorder retain their current behavior and remain
+  separate from opening the sheet.
+- No inline editor remains, no backend/shared-data-layer code changes, and Slice
+  4 scheduling stays out of scope.
+- Both changelogs, Capture docs, and roadmap status ship in the same PR; affected
+  tests, lint, typecheck, browser verification, and Pixel verification pass.
 
 ## Slice 4 — Full scheduler in the sheet (chips + calendar)
 
