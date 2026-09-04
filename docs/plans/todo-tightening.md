@@ -133,15 +133,31 @@ places. It concentrates complexity → it earns its keep. The interface is small
 (three members) and the behavior behind it (deferred commit, cancel, leak-free
 cleanup) is the whole point — a deep module.
 
+Placement depends on slice 3's decision. **Outcome:** the hook landed per-app
+(one copy in each app's `screen-hooks` module), not in agent-core — see slice 3.
+
 Placement depends on slice 3's decision. If agent-core takes a React peer
-(recommended), the hook lives there and both surfaces share it. If not, extract
-it once per surface (still removes the within-file doubling, just not the
-cross-surface copy). Prefer the shared version.
+(recommended at plan time), the hook lives there and both surfaces share it. If
+not, extract it once per surface (still removes the within-file doubling, just
+not the cross-surface copy).
 
-### Slice 3 — Give agent-core a React peer dep and share the cross-surface hooks
+### Slice 3 — Share the cross-surface hooks
 
-The move that unlocks true sharing. Add `react` as a `peerDependency` (and dev
-dependency) of `@zero/agent-core`, then house the React hooks there:
+**Outcome (what shipped):** the hooks live in one `screen-hooks` module **per
+app** (`apps/agent-web/src/lib/screen-hooks.ts` and the mobile mirror), and
+`@zero/agent-core` stays React-free. The agent-core-peer approach below was tried
+first and reverted: a source-linked workspace lib that calls React hooks resolves
+its **own** React copy (agent-core's devDep 19.2.8 vs the mobile app's pinned
+19.2.3), and two React instances trip the rules-of-hooks dispatcher — it broke
+the mobile jest suite immediately and would risk the same in the Metro/Vite
+bundles, which cannot be verified on this box. Per-app copies of ~30 lines of
+trivial hooks are the safe trade. The pure constants/helpers still live in
+agent-core (slice 1); only the React hooks are per-app.
+
+The original (rejected) plan follows for the record.
+
+Add `react` as a `peerDependency` (and dev dependency) of `@zero/agent-core`,
+then house the React hooks there:
 `useDelayed`, `useLoadError`, `useForegroundRefetch(api)` (the AppState /
 visibilitychange effect, injected with the platform's foreground signal), the
 `useUndoableLeave` hook from slice 2, and optionally a `useWriteError()` returning
