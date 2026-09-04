@@ -1,5 +1,5 @@
-// What the Captures list region should show, decided once and shared by the web
-// and mobile screens so the local-first rule lives in one tested place.
+// What an entity's list region should show, decided once and shared by every
+// web and mobile screen so the local-first rule lives in one tested place.
 //
 // The rule: never hide existing rows behind a spinner. The persisted collection
 // hydrates the local snapshot into `data` before its network sync marks the
@@ -7,13 +7,13 @@
 // on the row count (not `isLoading`) paints the stale snapshot at once and lets
 // the sync update it in place. The spinner shows only when there is genuinely
 // nothing yet, which also stops an empty-state flash before hydration.
-export type CapturesView = "rows" | "loading" | "empty" | "error";
+export type ListView = "rows" | "loading" | "empty" | "error";
 
-export function capturesView(state: {
+export function listView(state: {
   count: number;
   isLoading: boolean;
   loadError: string | null;
-}): CapturesView {
+}): ListView {
   if (state.count > 0) return "rows";
   if (state.isLoading) return "loading";
   if (state.loadError) return "error";

@@ -2,12 +2,9 @@
 // outcome-oriented container with a status, distinct from a Capture (untyped) and
 // a Task (a dated next-action). Standalone from the agent's Store on purpose so
 // it does not widen the agent's interface, and separate from DbCaptureStore /
-// DbTaskStore because the entities have different verbs. See
+// DbTaskStore because the entities have different verbs (do-orm is the shared
+// layer; a store holds only domain verbs, see docs/storage.md). See
 // docs/entities/project.md.
-//
-// Slice A1 wires `add` and `list`; A2 adds `setStatus`; A3 adds `edit`
-// (title/icon/description). The icon/description columns exist from A1's
-// migration, so A3 needs no migration.
 
 import { asc, eq, ne, type Database } from "do-orm";
 

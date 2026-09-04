@@ -2,7 +2,7 @@ import { UserButton } from '@clerk/expo/native';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
-  capturesView,
+  listView,
   capturesLocalToday,
   orderKeyBetween,
   tomorrow,
@@ -42,7 +42,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
-import { useCapturesApi } from '@/lib/use-captures-api';
+import { useCapturesApi } from '@/lib/captures-collection';
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -330,7 +330,7 @@ function Captures({
   // Gate the list on the row count, not isLoading: a hydrated snapshot must
   // paint even while the network sync is still pending, so opening Captures
   // never blinks to a spinner over stale rows.
-  const view = capturesView({ count: list.length, isLoading, loadError });
+  const view = listView({ count: list.length, isLoading, loadError });
   // Show a load error only when there's nothing on screen, so a failed
   // background refetch stays silent behind the last-good Captures.
   const error = writeError ?? (list.length === 0 ? loadError : null);

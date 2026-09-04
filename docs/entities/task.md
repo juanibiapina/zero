@@ -29,7 +29,7 @@ one list (Todoist-style) and never adopted the separate Today tab. The Today tab
 was removed from both web and mobile; the app is one Captures list again. All
 Task machinery below stays in the tree, unreferenced by any UI: the `tasks`
 table + migration, `DbTaskStore`, `/api/tasks`, the `@zero/agent-core` Task data
-layer (`createTasksApi`, `todayView`, `dueToday`, `localToday`), and both
+layer (`createTasksApi`, `dueToday`, `localToday`), and both
 `tasks-collection.ts`. Nothing is deleted, so re-enabling Task once Projects and
 the agent exist should be roughly a one-screen change. The scheduling behavior a
 single list still wants (postpone to a day, reorder) is being folded into
@@ -91,8 +91,8 @@ speculative columns before their behavior is designed.
   a Task dated today on Today. Same bar, same speed; the intent is the segment
   you are in. Tap a row's circle to Complete.
 - **Storage** — the server domain store is `DbTaskStore` (domain methods
-  `add` / `list` = open tasks / `complete`), a sibling of `DbCaptureStore`; the
-  duplication is deliberate (Rule of Three: extract a shared base at entity #3).
+  `add` / `list` = open tasks / `complete`), a per-entity store like
+  `DbCaptureStore` (do-orm is the shared layer; a store holds only domain verbs).
   See `docs/storage.md` for how data is saved on both the server and the client.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, all open Tasks (`completedAt IS NULL`),
@@ -118,8 +118,8 @@ speculative columns before their behavior is designed.
 ## Shared view rule
 
 The Today list region gates on the row count, not the collection's `isLoading`,
-via the shared `todayView` helper in `@zero/agent-core` (same rule as
-`inboxView`: rows whenever present; the spinner only when empty and loading). The
+via the shared `listView` helper in `@zero/agent-core` (one rule for every
+entity list: rows whenever present; the spinner only when empty and loading). The
 persisted collection hydrates the local snapshot before the network sync marks
 the collection ready, so gating on `isLoading` would hide a hydrated snapshot
 behind a spinner until the network answered.

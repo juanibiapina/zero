@@ -1,5 +1,17 @@
 // @zero/agent-core — shared, platform-agnostic app code.
-// The Capture data layer (TanStack DB collection factory) shared by web + mobile.
+
+// The shared collection plumbing every entity is built on: the offline
+// collection factory's injected types and the list-region view rule.
+export {
+  reconcileWrites,
+  type EntityApiDeps,
+  type StartOfflineExecutor,
+  type WarnFn,
+  type Write,
+} from "./collection/base";
+export { listView, type ListView } from "./collection/view";
+
+// The Capture data layer (TanStack DB collection) shared by web + mobile.
 export type { Capture } from "./captures/types";
 export {
   CAPTURES_QUERY_KEY,
@@ -8,10 +20,7 @@ export {
   createPersistedApi,
   type CapturesApi,
   type CapturesRest,
-  type StartOfflineExecutor,
-  type WarnFn,
 } from "./captures/collection";
-export { capturesView, type CapturesView } from "./captures/view";
 export {
   localToday as capturesLocalToday,
   tomorrow,
@@ -20,35 +29,29 @@ export {
 export { upcomingSections, type UpcomingSection } from "./captures/upcoming";
 export { compareByOrder, orderKeyBetween } from "./captures/order";
 
-// The Task data layer (Today list), a sibling of the Capture layer.
+// The Task data layer (Today list).
 export type { Task } from "./tasks/types";
 export {
   TASKS_QUERY_KEY,
   createTasksApi,
   createInMemoryTasksApi,
   createPersistedTasksApi,
-  tasksReconcileWrites,
   type TasksApi,
   type TasksRest,
-  type TaskWrite,
 } from "./tasks/collection";
-export { todayView, type TodayView } from "./tasks/view";
 export { dueToday, localToday } from "./tasks/today";
 
-// The Project data layer (Projects list), a sibling of the Task layer.
+// The Project data layer (Projects list).
 export type { Project, ProjectStatus } from "./projects/types";
 export {
   PROJECTS_QUERY_KEY,
   createProjectsApi,
   createInMemoryProjectsApi,
   createPersistedProjectsApi,
-  projectsReconcileWrites,
   type ProjectsApi,
   type ProjectsRest,
   type ProjectEditFields,
-  type ProjectWrite,
 } from "./projects/collection";
-export { projectsView, type ProjectsView } from "./projects/view";
 export {
   projectsByStatus,
   PROJECT_SECTION_ORDER,

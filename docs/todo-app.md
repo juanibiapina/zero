@@ -50,14 +50,19 @@ of allowed interactions vs blacklist of forbidden ones.
 The thing to watch is duplicated CRUD boilerplate across future stores, not
 specificity; do-orm + a Rule-of-Three base covers it when the time comes.
 
-**Rule-of-Three status (2026-08-30):** **Task** is entity #2, built as a
-deliberate structural sibling of Capture at every layer — `DbTaskStore` mirrors
-`DbCaptureStore`, the tasks collection mirrors the captures collection, the
-mobile `tasks-collection.ts` mirrors `captures-collection.ts` (with its own
-SQLite + outbox files), and the web/mobile Today panel mirrors the Captures panel.
-The duplication is intentional and kept identical on purpose, so extracting a
-shared base (store, collection factory, list screen) is mechanical when entity
-**#3** lands. Do not extract before then.
+**Rule-of-Three status (2026-09-04, extracted):** Task (#2) and Project (#3) were
+built as deliberate structural siblings of Capture at every layer, and with three
+in hand the client plumbing was extracted (plan:
+`docs/plans/todo-rule-of-three-extraction.md`). What moved: the offline
+collection factory (`packages/agent-core/src/collection/base.ts`: in-memory
+fallback, persisted local-first sync, reconcile-after-write, outbox wiring,
+client-minted id/createdAt), the list-region view rule (`listView`), and the
+per-surface wiring (`apps/agent-mobile/src/lib/entity-api.ts`,
+`apps/agent-web/src/lib/entity-api.ts`). Each entity's collection file is now a
+verb table over that factory. What stayed per entity on purpose: the domain
+verbs and their optimistic drafts, the REST contracts, and the server stores
+(do-orm is already the generic layer; the leftover overlap is two 3-line idioms).
+See `docs/storage.md`.
 
 **Collapse to one list (decided 2026-08-31):** the Capture/Task split proved
 premature. The user works in a single list the way they do in Todoist and never
@@ -171,7 +176,7 @@ Capture no longer flickers — the row never blinks out-and-back while the write
 settles.
 
 Captures loads local-first and reconciles the server in the background; the
-shared `capturesView` helper in `@zero/agent-core` gates the list on the row count
+shared `listView` helper in `@zero/agent-core` gates the list on the row count
 so a hydrated snapshot shows at once. See `docs/storage.md` for the mechanics.
 
 Shipped (2026-08-30): **Task**, the first typed entity, and the **Today** view
@@ -179,8 +184,8 @@ over it (plan: `docs/plans/todo-task-entity.md`). Built as a sibling of the
 Capture stack, web first, then mobile: a `tasks` table + `/api/tasks` in the
 per-user UserDO (add is exactly-once on the client-minted id; complete flips
 `completedAt`; list returns open tasks); a shared `@zero/agent-core` Task type,
-`createTasksApi` collection (local-first, offline outbox), and `todayView` /
-`dueToday` / `localToday` helpers; and a **Captures | Today** segmented control on
+`createTasksApi` collection (local-first, offline outbox), and `dueToday` /
+`localToday` helpers; and a **Captures | Today** segmented control on
 both web (`/captures`) and mobile home. The active segment is the entry target: the
 quick-add mints a Capture on Captures and a Task dated today on Today; the circle
 completes. Timezone lives on the client (server returns all open tasks; the live
@@ -214,7 +219,7 @@ source of truth: `docs/entities/project.md`). Built as a third full sibling of
 Capture/Task, web first then mobile: a `projects` table + `/api/projects` in the
 per-user UserDO (`add` is exactly-once on the client-minted id; `list` is
 oldest-first), a shared `@zero/agent-core` `Project` type, `createProjectsApi`
-collection (local-first, offline outbox), and a `projectsView` count-gate helper;
+collection (local-first, offline outbox), and the shared `listView` count-gate;
 a name-only create with outcome-naming helper text over a flat list on web
 (`/projects`, a `SideNav` entry) and mobile (a `NativeTabs` Projects tab). First on-device run of the new native tab needs a fresh EAS dev build.
 
@@ -240,7 +245,7 @@ dismisses it. The `icon`/`description` columns existed from A1, so A3 needed no
 migration. This completes **slice A** (the hand-managed Project entity: no AI, no
 Task membership). The mobile `@expo/ui` `TextInput` is native, so on-device
 verification needs an EAS dev build. The Rule-of-Three extraction of the shared
-plumbing (never the domain verbs) is now the due follow-up, before slice B.
+plumbing (never the domain verbs) followed as its own change.
 
 In flight (details in `docs/plans/`):
 
@@ -251,9 +256,6 @@ In flight (details in `docs/plans/`):
 
 Next:
 
-- **Rule-of-Three extraction** — with Capture/Task/Project shipped, extract the
-  shared offline collection factory, the `*View` count-gate, and the
-  id/createdAt/dedupe conventions (never the domain verbs). Due before slice B.
 - **Capture → Task** — Process a Capture into a Task (adds `sourceCaptureId`; not
   yet designed; the richest data-model slice).
 - **Reschedule a Task** — swipe-to-tomorrow / pick a future date (v1 dates every

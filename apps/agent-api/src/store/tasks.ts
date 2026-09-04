@@ -3,7 +3,8 @@
 // is standalone from the agent's Store on purpose so it does not widen the
 // agent's interface, and separate from DbCaptureStore because the two entities
 // have different verbs: a Capture is processed (clarified out), a Task is
-// completed (done).
+// completed (done). do-orm is the shared layer; a store holds only domain verbs
+// (see docs/storage.md).
 
 import { asc, eq, isNull, type Database } from "do-orm";
 

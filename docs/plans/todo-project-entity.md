@@ -487,12 +487,12 @@ slice), the `docs/todo-app.md` tracking + entity wiki, the slice-A status in
 + `apps/agent-mobile/CHANGELOG.md` — for the capability that slice ships, from the
 user's perspective.
 
-### Follow-up (NOT a vertical slice) — Rule-of-Three extraction
+### Follow-up (NOT a vertical slice) — Rule-of-Three extraction — SHIPPED
 
-After A3, with three siblings (Capture, Task, Project) in hand, extract the shared
+After A3, with three siblings (Capture, Task, Project) in hand, the shared
 plumbing (offline collection factory, `*View` count-gate, id/createdAt/dedupe
-conventions) — never the domain verbs. Internal refactor, no user value, its own
-change before slice B.
+conventions, per-surface wiring) was extracted — never the domain verbs. Plan:
+`docs/plans/todo-rule-of-three-extraction.md`.
 
 ## Test strategy
 

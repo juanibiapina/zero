@@ -1,32 +1,33 @@
-import {
-  createCollection,
-  safeRandomUUID,
-  type Collection,
-  type SyncConfig,
-  type Transaction,
-} from "@tanstack/db";
-import { queryCollectionOptions } from "@tanstack/query-db-collection";
+import type { Collection, Transaction } from "@tanstack/db";
 import type { QueryClient } from "@tanstack/react-query";
-import {
-  persistedCollectionOptions,
-  type PersistedCollectionPersistence,
-} from "@tanstack/db-sqlite-persistence-core";
+import type { PersistedCollectionPersistence } from "@tanstack/db-sqlite-persistence-core";
 
-// StartOfflineExecutor and WarnFn are generic offline/logging infra shared with
-// the Capture and Task data layers (not domain-specific), so the Project layer
-// reuses them instead of re-declaring them. The domain logic below is a
-// deliberate sibling of tasks/collection.ts; extract a shared base at the
-// Rule-of-Three follow-up, per docs/todo-app.md.
-import type { StartOfflineExecutor, WarnFn } from "../captures/collection";
+import {
+  createEntityApi,
+  createInMemoryEntityApi,
+  createPersistedEntityApi,
+  entityQueryKey,
+  verbsFor,
+  type EntityApi,
+  type EntityApiDeps,
+  type EntitySpec,
+  type StartOfflineExecutor,
+  type WarnFn,
+} from "../collection/base";
 import type { Project, ProjectStatus } from "./types";
+
+// The Project data layer: the Project verbs (add, setStatus, edit) over the
+// shared collection factory in ../collection/base. Everything about offline
+// persistence, reconcile and readiness lives there; this file holds only what
+// is Project-specific.
 
 // The name-only creation defaults, matching what the server fills. Kept here so
 // the optimistic row is identical to the server row (no temp-to-real swap).
 const DEFAULT_ICON = "📁";
 
-// The two REST calls the A1 collection needs, already auth-bound by the caller.
-// Web injects same-origin cookie closures (no token); mobile injects closures
-// that carry the Clerk Bearer token. setStatus (A2) and edit (A3) extend this.
+// The REST calls the collection needs, already auth-bound by the caller. Web
+// injects same-origin cookie closures (no token); mobile injects closures that
+// carry the Clerk Bearer token.
 export type ProjectsRest = {
   fetchProjects: () => Promise<Project[]>;
   // The client mints the project's id (a stable UUID), so the optimistic row and
@@ -51,9 +52,9 @@ export type ProjectEditFields = {
 };
 
 // One handle over the Project data layer. Both Projects screens read
-// `collection` through a live query and write with `add` / `setStatus`, which
-// return the underlying transaction so the page can surface a write error via
-// `tx.isPersisted.promise`.
+// `collection` through a live query and write with `add` / `setStatus` / `edit`,
+// which return the underlying transaction so the page can surface a write error
+// via `tx.isPersisted.promise`.
 export type ProjectsApi = {
   collection: Collection<Project, string>;
   add: (title: string) => Transaction;
@@ -65,82 +66,14 @@ export type ProjectsApi = {
   subscribeLoadError: (cb: () => void) => () => void;
 };
 
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
+// The react-query key the in-memory collection reads through. Distinct from the
+// Capture and Task keys so the collections never share a cache entry.
+export const PROJECTS_QUERY_KEY = entityQueryKey("projects");
 
-// The sync write messages that reconcile the synced base to the server's project
-// list: update each row already present, insert each new one, and delete any key
-// the server no longer returns. Pure so the diff is unit-tested without the
-// persistence stack.
-export type ProjectWrite =
-  | { type: "insert" | "update"; value: Project }
-  | { type: "delete"; key: string };
-export function projectsReconcileWrites(
-  currentKeys: Iterable<string>,
-  server: readonly Project[],
-): ProjectWrite[] {
-  const present = new Set(currentKeys);
-  const serverIds = new Set(server.map((p) => p.id));
-  const writes: ProjectWrite[] = [];
-  for (const p of server) {
-    writes.push({ type: present.has(p.id) ? "update" : "insert", value: p });
-  }
-  for (const key of present) {
-    if (!serverIds.has(key)) writes.push({ type: "delete", key });
-  }
-  return writes;
-}
-
-const noopWarn: WarnFn = () => {};
-
-// The react-query key the collection reads through. Distinct from the Capture
-// and Task keys so the collections never share a cache entry.
-export const PROJECTS_QUERY_KEY = ["projects"];
-const SCHEMA_VERSION = 1;
-
-// The optimistic row's id is a client-minted UUID the server persists verbatim,
-// so this id never changes: no temp-to-real swap, no flicker. The other fields
-// match the server's creation defaults (icon 📁, description null, status next).
-// `safeRandomUUID` works on browser and React Native.
-function optimisticProject(title: string): Project {
-  return {
-    id: safeRandomUUID(),
-    title,
-    icon: DEFAULT_ICON,
-    description: null,
-    status: "next",
-    createdAt: new Date().toISOString(),
-  };
-}
-
-// The optimistic mutator for a status change: set the row's status in place so
-// the list re-groups immediately (and a move to 'done' drops it once the server
-// reconcile confirms). The new status is read back off the mutation in the write
-// handler, which then calls setProjectStatus.
-function setStatusDraft(status: ProjectStatus) {
-  return (draft: Project): void => {
-    draft.status = status;
-  };
-}
-
-// The optimistic mutator for an edit: set each present field on the row in place
-// so the sheet and the list row reflect the change immediately. The changed
-// fields are read back off the mutation in the write handler, which then calls
-// editProject.
-function editDraft(fields: ProjectEditFields) {
-  return (draft: Project): void => {
-    if (fields.title !== undefined) draft.title = fields.title;
-    if (fields.icon !== undefined) draft.icon = fields.icon;
-    if (fields.description !== undefined) draft.description = fields.description;
-  };
-}
-
-// Pick the edited fields out of a mutation's changed-field set, for the write
-// handlers. Only the fields an edit may touch (title/icon/description) are
-// forwarded to the server; status has its own verb. Reading `changes` (not the
-// whole row) means an icon-only edit sends only `{ icon }`, never clobbering a
-// title with a stale value.
+// Pick the edited fields out of a mutation's changed-field set. Only the fields
+// an edit may touch (title/icon/description) are forwarded to the server; status
+// has its own verb. Reading `changes` (not the whole row) means an icon-only
+// edit sends only `{ icon }`, never clobbering a title with a stale value.
 function editFieldsFromChanges(changes: Partial<Project>): ProjectEditFields {
   const fields: ProjectEditFields = {};
   if ("title" in changes && changes.title !== undefined)
@@ -151,337 +84,115 @@ function editFieldsFromChanges(changes: Partial<Project>): ProjectEditFields {
   return fields;
 }
 
-type ProjectWriteUtils = {
-  writeUpsert: (data: Project | Project[]) => void;
-  writeDelete: (keys: string | string[]) => void;
-  writeBatch: (cb: () => void) => void;
-};
-function writeUtils(
-  collection: Collection<Project, string>,
-): ProjectWriteUtils | undefined {
-  return (collection as { utils?: Partial<ProjectWriteUtils> }).utils as
-    | ProjectWriteUtils
-    | undefined;
+// The verb table. Each key is the outbox mutationFn name (durable: a queued
+// offline write replays by it), so the keys never change. One collection.update
+// backs both setStatus and edit; the in-memory path tells them apart by the
+// changed field set: status changed → setProjectStatus, else editProject.
+export function projectsSpec(rest: ProjectsRest) {
+  const v = verbsFor<Project>();
+  const verbs = {
+    addProject: v.insert<{ title: string }>({
+      // The other fields match the server's creation defaults (icon 📁,
+      // description null, status next), so the optimistic row is the server row.
+      row: ({ title }) => ({
+        title,
+        icon: DEFAULT_ICON,
+        description: null,
+        status: "next",
+      }),
+      persist: (row) => rest.addProject({ id: row.id, title: row.title }),
+    }),
+    setProjectStatus: v.update<{ id: string; status: ProjectStatus }>({
+      id: ({ id }) => id,
+      // Set the status in place so the list re-groups immediately (a move to
+      // 'done' drops the row once the server confirms).
+      draft:
+        ({ status }) =>
+        (draft) => {
+          draft.status = status;
+        },
+      matches: ({ changes }) => "status" in changes,
+      persist: (id, { modified }) => rest.setProjectStatus(id, modified.status),
+    }),
+    editProject: v.update<{ id: string; fields: ProjectEditFields }>({
+      id: ({ id }) => id,
+      // Set each present field in place so the sheet and the row reflect the
+      // change immediately.
+      draft:
+        ({ fields }) =>
+        (draft) => {
+          if (fields.title !== undefined) draft.title = fields.title;
+          if (fields.icon !== undefined) draft.icon = fields.icon;
+          if (fields.description !== undefined)
+            draft.description = fields.description;
+        },
+      matches: () => true,
+      persist: (id, { changes }) =>
+        rest.editProject(id, editFieldsFromChanges(changes)),
+      // An edit commits on every blur; do not re-pull the list each time.
+      refetchAfter: false,
+    }),
+  };
+  const spec: EntitySpec<Project, typeof verbs> = {
+    name: "projects",
+    fetch: () => rest.fetchProjects(),
+    verbs,
+    // A project set to 'done' leaves the working set the server returns.
+    leavesCollection: (p) => p.status === "done",
+  };
+  return spec;
 }
 
-// Reconcile the synced base to the server's authoritative result, in place, by
-// each row's stable id. Every write handler calls this AFTER its REST call and
-// BEFORE it returns (before the optimistic overlay is released), so the base
-// already holds the server's row when the overlay drops. That is what prevents
-// flicker. See tasks/collection.ts for the full rationale.
-function reconcile(
-  collection: Collection<Project, string>,
-  delta: { upsert?: Project[]; remove?: string[] },
-): void {
-  const utils = writeUtils(collection);
-  if (!utils) return;
-  utils.writeBatch(() => {
-    if (delta.upsert?.length) utils.writeUpsert(delta.upsert);
-    if (delta.remove?.length) utils.writeDelete(delta.remove);
-  });
+function toProjectsApi(
+  api: EntityApi<Project, ReturnType<typeof projectsSpec>["verbs"]>,
+): ProjectsApi {
+  return {
+    collection: api.collection,
+    add: (title) => api.actions.addProject({ title }),
+    setStatus: (id, status) => api.actions.setProjectStatus({ id, status }),
+    edit: (id, fields) => api.actions.editProject({ id, fields }),
+    offline: api.offline,
+    refetch: api.refetch,
+    getLoadError: api.getLoadError,
+    subscribeLoadError: api.subscribeLoadError,
+  };
 }
 
-// Fallback: an in-memory Query Collection whose own handlers call the REST API
-// and roll back on failure. Used when durable persistence is unavailable
-// (private browsing on web, or the jest / no-native-SQLite environment) so the
-// Projects list never hard-crashes; offline writes are not durable in this mode.
+// In-memory fallback (no durable offline writes); see the shared factory.
 export function createInMemoryProjectsApi(deps: {
   queryClient: QueryClient;
   rest: ProjectsRest;
 }): ProjectsApi {
-  const { queryClient, rest } = deps;
-  const collection = createCollection(
-    queryCollectionOptions({
-      queryClient,
-      queryKey: PROJECTS_QUERY_KEY,
-      queryFn: () => rest.fetchProjects(),
-      getKey: (p: Project) => p.id,
-      onInsert: async ({ transaction }) => {
-        for (const m of transaction.mutations) {
-          const real = await rest.addProject({
-            id: m.modified.id,
-            title: m.modified.title,
-          });
-          reconcile(collection, { upsert: [real] });
-        }
-        return { refetch: false };
-      },
-      onUpdate: async ({ transaction }) => {
-        // One collection.update backs both setStatus and edit; disambiguate by
-        // the changed field set (m.changes), not m.modified — an edit leaves
-        // status untouched. status changed → setProjectStatus; else → editProject.
-        for (const m of transaction.mutations) {
-          if ("status" in m.changes) {
-            const updated = await rest.setProjectStatus(
-              String(m.key),
-              m.modified.status,
-            );
-            // A move to 'done' leaves the working set: the server stops
-            // returning it, so remove it here; otherwise upsert the reconciled
-            // row.
-            if (updated.status === "done") {
-              reconcile(collection, { remove: [updated.id] });
-            } else {
-              reconcile(collection, { upsert: [updated] });
-            }
-          } else {
-            const updated = await rest.editProject(
-              String(m.key),
-              editFieldsFromChanges(m.changes),
-            );
-            reconcile(collection, { upsert: [updated] });
-          }
-        }
-        return { refetch: false };
-      },
+  return toProjectsApi(
+    createInMemoryEntityApi({
+      spec: projectsSpec(deps.rest),
+      queryClient: deps.queryClient,
     }),
   );
-
-  const refetchUtil = (
-    collection as { utils?: { refetch?: () => Promise<unknown> } }
-  ).utils?.refetch;
-
-  return {
-    collection,
-    add: (title) => collection.insert(optimisticProject(title)),
-    setStatus: (id, status) => collection.update(id, setStatusDraft(status)),
-    edit: (id, fields) => collection.update(id, editDraft(fields)),
-    offline: false,
-    refetch: async () => {
-      if (refetchUtil) {
-        await refetchUtil();
-      } else {
-        await queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY });
-      }
-    },
-    getLoadError: () => {
-      const state = queryClient.getQueryState(PROJECTS_QUERY_KEY);
-      return state?.status === "error" && state.error
-        ? messageOf(state.error)
-        : null;
-    },
-    subscribeLoadError: (cb) => queryClient.getQueryCache().subscribe(cb),
-  };
 }
 
-// Durable offline mode: local-first. A persisted SQLite collection whose custom
-// sync marks ready from the local snapshot immediately, then fetches the project
-// list in the background and reconciles it into the synced base. Writes go
-// through an offline outbox that retries when the network returns. This is a
-// sibling of createPersistedTasksApi; see that file for the full
-// readiness/flicker rationale.
+// Durable offline mode; see the shared factory.
 export function createPersistedProjectsApi(deps: {
-  queryClient: QueryClient;
   rest: ProjectsRest;
   persistence: PersistedCollectionPersistence;
   startOfflineExecutor: StartOfflineExecutor;
   onWarn?: WarnFn;
 }): ProjectsApi {
-  const { rest, persistence, startOfflineExecutor, onWarn = noopWarn } = deps;
-
-  type SyncStart = Parameters<SyncConfig<Project, string>["sync"]>[0];
-  type Controls = Pick<SyncStart, "begin" | "write" | "commit">;
-  let controls: Controls | null = null;
-
-  let loadError: string | null = null;
-  const errorListeners = new Set<() => void>();
-  const setLoadError = (next: string | null) => {
-    if (next === loadError) return;
-    loadError = next;
-    for (const cb of errorListeners) cb();
-  };
-
-  // Forward-referenced by the closures below and assigned once after
-  // `createCollection` returns; it cannot be `const` because `sync` (passed into
-  // `createCollection`) reads it back through `reconcileList`.
-  // eslint-disable-next-line prefer-const
-  let collection: Collection<Project, string>;
-
-  const reconcileOne = (p: Project) => {
-    if (!controls) return;
-    controls.begin();
-    controls.write({
-      type: collection.has(p.id) ? "update" : "insert",
-      value: p,
-    });
-    void controls.commit();
-  };
-
-  const reconcileList = (server: Project[]) => {
-    if (!controls) return;
-    controls.begin();
-    for (const write of projectsReconcileWrites(collection.keys(), server)) {
-      controls.write(write);
-    }
-    void controls.commit();
-  };
-
-  const fetchAndReconcile = async () => {
-    try {
-      const rows = await rest.fetchProjects();
-      setLoadError(null);
-      reconcileList(rows);
-    } catch (err) {
-      setLoadError(messageOf(err));
-    }
-  };
-
-  const sync: SyncConfig<Project, string> = {
-    sync: (params) => {
-      controls = {
-        begin: params.begin,
-        write: params.write,
-        commit: params.commit,
-      };
-      params.markReady();
-      void fetchAndReconcile();
-      return () => {
-        controls = null;
-      };
-    },
-  };
-
-  collection = createCollection(
-    persistedCollectionOptions<Project, string>({
-      id: "projects",
-      getKey: (p: Project) => p.id,
-      schemaVersion: SCHEMA_VERSION,
-      persistence,
-      sync,
+  return toProjectsApi(
+    createPersistedEntityApi({
+      spec: projectsSpec(deps.rest),
+      persistence: deps.persistence,
+      startOfflineExecutor: deps.startOfflineExecutor,
+      onWarn: deps.onWarn,
     }),
   );
-
-  const offline = startOfflineExecutor({
-    collections: { projects: collection },
-    mutationFns: {
-      addProject: async ({ transaction }) => {
-        for (const m of transaction.mutations) {
-          const id = m.modified.id;
-          const title = m.modified.title;
-          if (typeof id === "string" && typeof title === "string") {
-            const real = await rest.addProject({ id, title });
-            reconcileOne(real);
-          }
-        }
-        await fetchAndReconcile();
-      },
-      setProjectStatus: async ({ transaction }) => {
-        for (const m of transaction.mutations) {
-          const status = m.modified.status;
-          if (typeof status === "string") {
-            const updated = await rest.setProjectStatus(
-              String(m.key),
-              status as ProjectStatus,
-            );
-            reconcileOne(updated);
-          }
-        }
-        // A move to 'done' drops the row; the refetch reconcile removes it.
-        await fetchAndReconcile();
-      },
-      // Own mutationFn (keyed by name), so no field disambiguation here. The
-      // outbox types fields as unknown; the row carries the edited values.
-      editProject: async ({ transaction }) => {
-        for (const m of transaction.mutations) {
-          const title = m.modified.title;
-          const icon = m.modified.icon;
-          const description = m.modified.description;
-          if (typeof title === "string" && typeof icon === "string") {
-            const updated = await rest.editProject(String(m.key), {
-              title,
-              icon,
-              description: (description ?? null) as string | null,
-            });
-            reconcileOne(updated);
-          }
-        }
-      },
-    },
-    onLeadershipChange: (isLeader) => {
-      if (!isLeader) {
-        onWarn(
-          "projects: another instance holds the offline outbox; this one is online-only",
-        );
-      }
-    },
-  });
-
-  const addAction = offline.createOfflineAction<{ title: string }>({
-    mutationFnName: "addProject",
-    onMutate: ({ title }) => {
-      collection.insert(optimisticProject(title));
-    },
-  });
-  const setStatusAction = offline.createOfflineAction<{
-    id: string;
-    status: ProjectStatus;
-  }>({
-    mutationFnName: "setProjectStatus",
-    onMutate: ({ id, status }) => {
-      collection.update(id, setStatusDraft(status));
-    },
-  });
-  const editAction = offline.createOfflineAction<{
-    id: string;
-    fields: ProjectEditFields;
-  }>({
-    mutationFnName: "editProject",
-    onMutate: ({ id, fields }) => {
-      collection.update(id, editDraft(fields));
-    },
-  });
-
-  return {
-    collection,
-    add: (title) => addAction({ title }),
-    setStatus: (id, status) => setStatusAction({ id, status }),
-    edit: (id, fields) => editAction({ id, fields }),
-    offline: true,
-    refetch: () => fetchAndReconcile(),
-    getLoadError: () => loadError,
-    subscribeLoadError: (cb) => {
-      errorListeners.add(cb);
-      return () => errorListeners.delete(cb);
-    },
-  };
 }
 
-// Build the Project data layer: try durable offline persistence, fall back to
-// the in-memory Query Collection if persistence cannot start (private browsing /
-// no native SQLite). `persistence` is a thunk because opening the local database
-// is async and may throw.
-export async function createProjectsApi(deps: {
-  queryClient: QueryClient;
-  rest: ProjectsRest;
-  persistence?: () =>
-    | Promise<PersistedCollectionPersistence>
-    | PersistedCollectionPersistence;
-  startOfflineExecutor?: StartOfflineExecutor;
-  onWarn?: WarnFn;
-}): Promise<ProjectsApi> {
-  const {
-    queryClient,
-    rest,
-    persistence,
-    startOfflineExecutor,
-    onWarn = noopWarn,
-  } = deps;
-  if (persistence && startOfflineExecutor) {
-    try {
-      const resolved = await persistence();
-      return createPersistedProjectsApi({
-        queryClient,
-        rest,
-        persistence: resolved,
-        startOfflineExecutor,
-        onWarn,
-      });
-    } catch (err) {
-      onWarn(
-        "projects: offline SQL persistence unavailable, using in-memory fallback",
-        err,
-      );
-    }
-  }
-  return createInMemoryProjectsApi({ queryClient, rest });
+// Build the Project data layer: durable offline persistence when it can start,
+// else the in-memory fallback.
+export async function createProjectsApi(
+  deps: EntityApiDeps & { rest: ProjectsRest },
+): Promise<ProjectsApi> {
+  const { rest, ...base } = deps;
+  return toProjectsApi(await createEntityApi({ spec: projectsSpec(rest), ...base }));
 }

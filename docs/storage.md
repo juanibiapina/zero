@@ -25,9 +25,15 @@ re-syncs from the server whenever it is missing or reset.
 The client keeps a durable local copy so the UI paints instantly offline and
 reconciles with the server in the background.
 
-- Each entity is a **TanStack DB collection**. Reads persist to a local SQLite
-  database for offline use; writes go through an **offline outbox** that retries
-  on reconnect.
+- Each entity is a **TanStack DB collection**, built from the one shared factory
+  in `@zero/agent-core` (`src/collection/base.ts`). An entity describes itself
+  with a spec — its name, how to fetch its working set, and a **verb table**
+  (an insert verb plus update verbs, each with its optimistic draft and its REST
+  call) — and the factory supplies everything below: reads persist to a local
+  SQLite database for offline use; writes go through an **offline outbox** that
+  retries on reconnect. The verb names are the outbox's mutationFn names and the
+  entity name is the local table id, so both are part of the durable contract
+  and never renamed.
 - **One local database file for the whole app: `zero-app.sqlite`.** TanStack DB
   derives a separate table per collection from its collection id (recorded in a
   `collection_registry` table), so every entity gets its own table inside the one

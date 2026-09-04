@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
-  capturesView,
+  listView,
   capturesLocalToday,
   orderKeyBetween,
   tomorrow,
@@ -174,7 +174,7 @@ function CapturesReady({ api }: { api: CapturesApi }) {
     },
     [api, list],
   );
-  const view = capturesView({ count: list.length, isLoading, loadError: null });
+  const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   return (
