@@ -3,6 +3,7 @@ import { createProjectsApi, type ProjectsApi } from "@zero/agent-core";
 import { defineWebEntityApi } from "./entity-api";
 import {
   addProject,
+  deleteProject,
   editProject,
   fetchProjects,
   setProjectStatus,
@@ -14,6 +15,12 @@ export type { ProjectsApi };
 export const getProjectsApi = defineWebEntityApi((deps) =>
   createProjectsApi({
     ...deps,
-    rest: { fetchProjects, addProject, setProjectStatus, editProject },
+    rest: {
+      fetchProjects,
+      addProject,
+      setProjectStatus,
+      editProject,
+      deleteProject,
+    },
   }),
 );

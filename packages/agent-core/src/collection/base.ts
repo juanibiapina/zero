@@ -64,9 +64,21 @@ export type UpdateVerb<Row extends EntityRow, Args> = {
   refetchAfter?: boolean;
 };
 
+// A verb that permanently removes a row by its stable id. `persist` issues the
+// server delete and returns nothing (no row to reconcile). The optimistic path
+// drops the row at once and rolls it back if `persist` throws. Distinct from an
+// update that leaves the working set (a `done` status): delete hard-removes the
+// row, it does not just fall out of a filtered list.
+export type DeleteVerb<Args> = {
+  kind: "delete";
+  id: (args: Args) => string;
+  persist: (id: string) => Promise<void>;
+};
+
 export type Verb<Row extends EntityRow, Args> =
   | InsertVerb<Row, Args>
-  | UpdateVerb<Row, Args>;
+  | UpdateVerb<Row, Args>
+  | DeleteVerb<Args>;
 
 // Any verb table. `never` as the args bound lets a verb typed with concrete
 // args satisfy it (function parameters are contravariant).
@@ -79,7 +91,9 @@ export type VerbArgs<V> = V extends { kind: "insert"; row: (args: infer A) => un
   ? A
   : V extends { kind: "update"; id: (args: infer A) => string }
     ? A
-    : never;
+    : V extends { kind: "delete"; id: (args: infer A) => string }
+      ? A
+      : never;
 
 // Typed verb constructors for one row type. `const v = verbsFor<Project>()`,
 // then `v.insert<{ title: string }>({ ... })` gives each verb its precise Args
@@ -93,6 +107,9 @@ export function verbsFor<Row extends EntityRow>() {
     update: <Args>(
       verb: Omit<UpdateVerb<Row, Args>, "kind">,
     ): UpdateVerb<Row, Args> => ({ kind: "update", ...verb }),
+    delete: <Args>(
+      verb: Omit<DeleteVerb<Args>, "kind">,
+    ): DeleteVerb<Args> => ({ kind: "delete", ...verb }),
   };
 }
 
@@ -222,6 +239,16 @@ function insertVerbOf<Row extends EntityRow>(
   throw new Error(`${name}: no insert verb`);
 }
 
+function deleteVerbOf<Row extends EntityRow>(
+  name: string,
+  verbs: LooseVerbs<Row>,
+): DeleteVerb<unknown> {
+  for (const verb of Object.values(verbs)) {
+    if (verb.kind === "delete") return verb;
+  }
+  throw new Error(`${name}: no delete verb`);
+}
+
 function routeUpdate<Row extends EntityRow>(
   name: string,
   verbs: LooseVerbs<Row>,
@@ -315,6 +342,15 @@ export function createInMemoryEntityApi<
         }
         return { refetch: false };
       },
+      onDelete: async ({ transaction }) => {
+        // The optimistic overlay already removed the row; issue the server
+        // delete and let a failure roll the removal back. Nothing to reconcile.
+        const verb = deleteVerbOf(spec.name, verbs);
+        for (const m of transaction.mutations) {
+          await verb.persist(String(m.key));
+        }
+        return { refetch: false };
+      },
     }),
   );
 
@@ -324,11 +360,16 @@ export function createInMemoryEntityApi<
 
   const actions = {} as Record<string, (args: unknown) => Transaction>;
   for (const [name, verb] of Object.entries(verbs)) {
-    actions[name] =
-      verb.kind === "insert"
-        ? (args) => collection.insert(mintRow<Row>(verb.row(args)))
-        : (args) =>
-            collection.update(verb.id(args), asDraft(verb.draft(args)));
+    if (verb.kind === "insert") {
+      actions[name] = (args) => collection.insert(mintRow<Row>(verb.row(args)));
+    } else if (verb.kind === "update") {
+      actions[name] = (args) =>
+        collection.update(verb.id(args), asDraft(verb.draft(args)));
+    } else {
+      // collection.delete is typed Transaction<any>; narrow to the map's type.
+      actions[name] = (args) =>
+        collection.delete(verb.id(args)) as Transaction;
+    }
   }
 
   return {
@@ -481,15 +522,21 @@ export function createPersistedEntityApi<
         if (verb.kind === "insert") {
           const real = await verb.persist(m.modified as Row);
           reconcileOne(real);
-        } else {
+        } else if (verb.kind === "update") {
           const updated = await verb.persist(String(m.key), {
             changes: m.changes as Partial<Row>,
             modified: m.modified as Row,
           });
           reconcileOne(updated);
+        } else {
+          // Delete: the optimistic overlay already dropped the row; issue the
+          // server delete. Nothing to reconcile back in.
+          await verb.persist(String(m.key));
         }
       }
-      if (verb.kind === "insert" || verb.refetchAfter !== false) {
+      // Re-pull after an insert, or an update that asked for it; a delete has
+      // nothing to re-pull (the row is gone).
+      if (verb.kind === "insert" || (verb.kind === "update" && verb.refetchAfter !== false)) {
         await fetchAndReconcile();
       }
     };
@@ -510,16 +557,21 @@ export function createPersistedEntityApi<
 
   const actions = {} as Record<string, (args: unknown) => Transaction>;
   for (const [name, verb] of Object.entries(verbs)) {
+    const onMutate =
+      verb.kind === "insert"
+        ? (args: unknown) => {
+            collection.insert(mintRow<Row>(verb.row(args)));
+          }
+        : verb.kind === "update"
+          ? (args: unknown) => {
+              collection.update(verb.id(args), asDraft(verb.draft(args)));
+            }
+          : (args: unknown) => {
+              collection.delete(verb.id(args));
+            };
     actions[name] = offline.createOfflineAction<unknown>({
       mutationFnName: name,
-      onMutate:
-        verb.kind === "insert"
-          ? (args) => {
-              collection.insert(mintRow<Row>(verb.row(args)));
-            }
-          : (args) => {
-              collection.update(verb.id(args), asDraft(verb.draft(args)));
-            },
+      onMutate,
     });
   }
 

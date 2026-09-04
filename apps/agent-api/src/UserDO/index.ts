@@ -194,6 +194,10 @@ export class UserDO extends DurableObject<Env> {
     return this.projects.edit(id, fields);
   }
 
+  deleteProject(id: string): boolean {
+    return this.projects.delete(id);
+  }
+
   // --- Conversations and messages ---
 
   resetConversation(chatId: number, topicId: number): void {

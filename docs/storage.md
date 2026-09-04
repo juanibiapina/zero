@@ -28,8 +28,9 @@ reconciles with the server in the background.
 - Each entity is a **TanStack DB collection**, built from the one shared factory
   in `@zero/agent-core` (`src/collection/base.ts`). An entity describes itself
   with a spec — its name, how to fetch its working set, and a **verb table**
-  (an insert verb plus update verbs, each with its optimistic draft and its REST
-  call) — and the factory supplies everything below: reads persist to a local
+  (an insert verb, update verbs each with its optimistic draft, and an optional
+  delete verb — each with its REST call) — and the factory supplies everything
+  below: reads persist to a local
   SQLite database for offline use; writes go through an **offline outbox** that
   retries on reconnect. The verb names are the outbox's mutationFn names and the
   entity name is the local table id, so both are part of the durable contract

@@ -320,3 +320,21 @@ export async function editProject(
   const body = (await res.json()) as { project: Project };
   return body.project;
 }
+
+// Permanently delete a project. The server answers 204 whether or not the row
+// existed (idempotent), so a replayed offline delete resolves cleanly.
+export async function deleteProject(
+  getToken: TokenGetter,
+  id: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<void> {
+  const res = await apiFetch(
+    getToken,
+    `/api/projects/${id}`,
+    { method: 'DELETE' },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`DELETE /api/projects/${id} failed: ${res.status}`);
+  }
+}

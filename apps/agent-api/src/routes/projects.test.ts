@@ -52,6 +52,12 @@ const fakeUserDO = (seed: Project[] = []) => {
         project.description = fields.description;
       return project;
     },
+    deleteProject(id: string): boolean {
+      const i = projects.findIndex((p) => p.id === id);
+      if (i < 0) return false;
+      projects.splice(i, 1);
+      return true;
+    },
     _projects: projects,
   };
 };
@@ -293,5 +299,26 @@ describe("PATCH /api/projects/{id}", () => {
       patch({ title: "x" }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+const del = (): RequestInit => ({ method: "DELETE" });
+
+describe("DELETE /api/projects/{id}", () => {
+  it("permanently removes the project", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/projects/id-1", del());
+    expect(res.status).toBe(204);
+
+    const list = await app.request("/api/projects");
+    expect(await list.json()).toEqual({ projects: [] });
+  });
+
+  it("returns 204 for an unknown id (idempotent)", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+    const res = await app.request("/api/projects/nope", del());
+    expect(res.status).toBe(204);
   });
 });

@@ -247,6 +247,14 @@ Task membership). The mobile `@expo/ui` `TextInput` is native, so on-device
 verification needs an EAS dev build. The Rule-of-Three extraction of the shared
 plumbing (never the domain verbs) followed as its own change.
 
+Shipped (post-A3): **delete a Project**, distinct from `done`. A destructive
+Delete button in the detail sheet drops the row behind the same ~5s Undo as
+`done`, then hard-removes it server-side (`DbProjectStore.delete` +
+`DELETE /api/projects/{id}`, 204 and idempotent so an offline replay is safe).
+Offline-safe on web and mobile. This added the shared collection factory's first
+`delete` verb kind (`packages/agent-core/src/collection/base.ts`), so every
+future entity gets optimistic delete + offline outbox for free.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add

@@ -122,4 +122,15 @@ export class DbProjectStore {
     const row = this.db.get(projects, { where: eq("id", id) });
     return row ? toProject(row) : null;
   }
+
+  // Permanently remove a project by id. Distinct from setStatus('done'), which
+  // keeps the row (out of the working list) — delete hard-removes it. Idempotent
+  // on the id: deleting a missing project is a no-op, so a replayed offline
+  // delete (a retry after a lost ACK) is safe. Returns whether a row existed.
+  delete(id: string): boolean {
+    const existing = this.db.get(projects, { where: eq("id", id) });
+    if (!existing) return false;
+    this.db.delete(projects, { where: eq("id", id) });
+    return true;
+  }
 }

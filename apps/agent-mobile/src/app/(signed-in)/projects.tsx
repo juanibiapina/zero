@@ -107,16 +107,17 @@ function useLoadError(api: {
 // sheet. While mid-Done it is struck-through with an Undo instead of tappable.
 function ProjectRow({
   item,
-  pendingDone,
+  pending,
   onOpen,
-  onUndoDone,
+  onUndo,
 }: {
   item: Project;
-  pendingDone: boolean;
+  // Mid-Done or mid-Delete: struck-through with an Undo instead of tappable.
+  pending: boolean;
   onOpen: (p: Project) => void;
-  onUndoDone: (id: string) => void;
+  onUndo: (id: string) => void;
 }) {
-  if (pendingDone) {
+  if (pending) {
     return (
       <View className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
         <Text className="text-xl">{item.icon}</Text>
@@ -127,7 +128,7 @@ function ProjectRow({
           accessibilityRole="button"
           accessibilityLabel="Undo"
           hitSlop={8}
-          onPress={() => onUndoDone(item.id)}
+          onPress={() => onUndo(item.id)}
         >
           <Text className="font-semibold text-primary">Undo</Text>
         </Pressable>
@@ -208,10 +209,12 @@ function ProjectDetail({
   project,
   onEdit,
   onPickStatus,
+  onDelete,
 }: {
   project: Project;
   onEdit: (id: string, fields: ProjectEditFields) => void;
   onPickStatus: (status: ProjectStatus) => void;
+  onDelete: () => void;
 }) {
   const [title, setTitle] = useState(project.title);
   const [description, setDescription] = useState(project.description ?? '');
@@ -265,6 +268,18 @@ function ProjectDetail({
       />
 
       <StatusGroup current={project.status} onPick={onPickStatus} />
+
+      {/* Destructive: hard-delete the project (distinct from Done, which keeps
+          it). Leaves a brief Undo window before it commits. A plain Pressable
+          with red text, since @expo/ui Button has no destructive role. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Delete project"
+        onPress={onDelete}
+        className="items-center py-3"
+      >
+        <Text className="font-semibold text-red-600">Delete project</Text>
+      </Pressable>
     </Column>
   );
 }
@@ -327,14 +342,21 @@ function Projects({
     Partial<Record<ProjectStatus, boolean>>
   >({});
   const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
   const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
   useEffect(() => {
     const timers = doneTimers.current;
+    const dTimers = deleteTimers.current;
     return () => {
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
+      for (const t of dTimers.values()) clearTimeout(t);
+      dTimers.clear();
     };
   }, []);
 
@@ -394,6 +416,53 @@ function Projects({
       return next;
     });
   }, []);
+
+  // Delete mirrors Done: the row leaves after a DONE_UNDO_MS Undo window, then
+  // the hard delete commits. Deleting is destructive and has no server-side
+  // undo, so the client window is the only guard against a mis-tap.
+  const commitDelete = useCallback(
+    (id: string) => {
+      setWriteError(null);
+      const tx = api.remove(id);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    },
+    [api],
+  );
+  const startDelete = useCallback(
+    (id: string) => {
+      setPendingDelete((prev) => new Set(prev).add(id));
+      const timer = setTimeout(() => {
+        deleteTimers.current.delete(id);
+        setPendingDelete((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        commitDelete(id);
+      }, DONE_UNDO_MS);
+      deleteTimers.current.set(id, timer);
+    },
+    [commitDelete],
+  );
+  const undoDelete = useCallback((id: string) => {
+    const timer = deleteTimers.current.get(id);
+    if (timer) clearTimeout(timer);
+    deleteTimers.current.delete(id);
+    setPendingDelete((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  // Route an Undo tap to the pending action that owns the row.
+  const onUndo = useCallback(
+    (id: string) => {
+      if (pendingDelete.has(id)) undoDelete(id);
+      else undoDone(id);
+    },
+    [pendingDelete, undoDelete, undoDone],
+  );
 
   const onPickStatus = useCallback(
     (project: Project, status: ProjectStatus) => {
@@ -510,9 +579,9 @@ function Projects({
           renderItem={({ item }) => (
             <ProjectRow
               item={item}
-              pendingDone={pendingDone.has(item.id)}
+              pending={pendingDone.has(item.id) || pendingDelete.has(item.id)}
               onOpen={(p) => setSelectedId(p.id)}
-              onUndoDone={undoDone}
+              onUndo={onUndo}
             />
           )}
           ItemSeparatorComponent={() => <View className="h-3" />}
@@ -527,6 +596,10 @@ function Projects({
             project={selected}
             onEdit={commitEdit}
             onPickStatus={(status) => onPickStatus(selected, status)}
+            onDelete={() => {
+              setSelectedId(null);
+              startDelete(selected.id);
+            }}
           />
         ) : null}
       </Sheet>

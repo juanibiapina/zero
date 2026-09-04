@@ -198,5 +198,34 @@ export const createProjectsRoutes = () => {
     return c.json({ project }, 200);
   });
 
+  const deleteRoute = createRoute({
+    method: "delete",
+    path: "/api/projects/{id}",
+    tags: ["Projects"],
+    summary: "Permanently delete a project",
+    request: {
+      params: z.object({ id: z.string() }),
+    },
+    responses: {
+      204: {
+        description: "Deleted (or already absent)",
+      },
+    },
+  });
+
+  // DELETE hard-removes the project (distinct from PATCH status 'done', which
+  // keeps the row out of the working list). Idempotent on the id: a missing row
+  // still returns 204, so a replayed offline delete (a retry after a lost ACK)
+  // never makes the client's outbox throw and retry forever. Unlike the PATCH
+  // route there is no 404.
+  router.openapi(deleteRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const userDO = getUserDO(c.env, userId);
+    await userDO.deleteProject(id);
+    log("project_deleted", { clerk_user_id: userId });
+    return c.body(null, 204);
+  });
+
   return router;
 };

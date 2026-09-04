@@ -110,6 +110,8 @@ const mockEditProject =
   jest.fn<
     (getToken: unknown, id: string, fields: ProjectEditFields) => Promise<Project>
   >();
+const mockDeleteProject =
+  jest.fn<(getToken: unknown, id: string) => Promise<void>>();
 jest.mock('@/lib/api', () => ({
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: (getToken: unknown, project: { id: string; title: string }) =>
@@ -118,6 +120,8 @@ jest.mock('@/lib/api', () => ({
     mockSetProjectStatus(getToken, id, status),
   editProject: (getToken: unknown, id: string, fields: ProjectEditFields) =>
     mockEditProject(getToken, id, fields),
+  deleteProject: (getToken: unknown, id: string) =>
+    mockDeleteProject(getToken, id),
 }));
 
 const project = (
@@ -154,6 +158,7 @@ describe('ProjectsScreen', () => {
     mockAddProject.mockClear();
     mockSetProjectStatus.mockClear();
     mockEditProject.mockClear();
+    mockDeleteProject.mockClear();
   });
 
   it('shows the fetched projects with their icons', async () => {
@@ -358,6 +363,69 @@ describe('ProjectsScreen', () => {
     expect(mockSetProjectStatus).not.toHaveBeenCalled();
     await waitFor(() => expect(queryByLabelText('Undo')).toBeNull());
     expect(getByLabelText('Run a 5K')).toBeTruthy();
+  });
+
+  it('defers Delete behind an Undo and does not commit when undone', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);
+
+    const { getByText, getByLabelText, queryByLabelText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('Run a 5K')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Run a 5K'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Delete project'));
+    });
+
+    // The row is held with an Undo affordance; nothing is deleted yet.
+    await waitFor(() => expect(getByLabelText('Undo')).toBeTruthy());
+    expect(mockDeleteProject).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Undo'));
+    });
+
+    // Undone: no delete ever fires and the row is tappable again.
+    expect(mockDeleteProject).not.toHaveBeenCalled();
+    await waitFor(() => expect(queryByLabelText('Undo')).toBeNull());
+    expect(getByLabelText('Run a 5K')).toBeTruthy();
+  });
+
+  it('commits Delete after the undo window elapses', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetToken.mockResolvedValue('tok');
+      mockFetchProjects.mockResolvedValue([
+        project('1', 'Run a 5K', '🏃', 'next'),
+      ]);
+      mockDeleteProject.mockImplementation(async () => {
+        mockFetchProjects.mockResolvedValue([]);
+      });
+
+      const { getByLabelText } = await renderScreen();
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        fireEvent.press(getByLabelText('Run a 5K'));
+      });
+      await act(async () => {
+        fireEvent.press(getByLabelText('Delete project'));
+      });
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+
+      expect(mockDeleteProject).toHaveBeenCalledTimes(1);
+      expect(mockDeleteProject.mock.calls[0][1]).toBe('1');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('commits Done after the undo window elapses', async () => {

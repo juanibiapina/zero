@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-04: Delete a project from its detail sheet. It leaves your list right away with a few seconds to Undo before it's gone for good.
 - 2026-09-04: Give a project an icon, rename it, or add notes right from its detail sheet. Your changes save on their own and sync across your devices.
 - 2026-09-04: Organize your projects by status. They're grouped into Active, Next, Waiting, and Backlog (each collapsible, with a count); tap a project to open its details and pick a new status. Marking one Done clears it from the list, with a few seconds to Undo.
 - 2026-09-04: New Projects section: name a project by the outcome you want to reach and see all your projects in one list. Your projects are saved and sync across your devices.

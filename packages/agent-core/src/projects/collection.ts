@@ -41,6 +41,9 @@ export type ProjectsRest = {
   // Edit a project's title/icon/description (only the present fields). Idempotent
   // on the id, so a replayed offline edit re-applies the same values.
   editProject: (id: string, fields: ProjectEditFields) => Promise<Project>;
+  // Permanently delete a project. Idempotent on the id: a replayed delete of an
+  // already-removed project resolves without error.
+  deleteProject: (id: string) => Promise<void>;
 };
 
 // The fields a detail-sheet edit may change. Status is a separate verb
@@ -60,6 +63,7 @@ export type ProjectsApi = {
   add: (title: string) => Transaction;
   setStatus: (id: string, status: ProjectStatus) => Transaction;
   edit: (id: string, fields: ProjectEditFields) => Transaction;
+  remove: (id: string) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
   getLoadError: () => string | null;
@@ -132,6 +136,10 @@ export function projectsSpec(rest: ProjectsRest) {
       // An edit commits on every blur; do not re-pull the list each time.
       refetchAfter: false,
     }),
+    deleteProject: v.delete<{ id: string }>({
+      id: ({ id }) => id,
+      persist: (id) => rest.deleteProject(id),
+    }),
   };
   const spec: EntitySpec<Project, typeof verbs> = {
     name: "projects",
@@ -151,6 +159,7 @@ function toProjectsApi(
     add: (title) => api.actions.addProject({ title }),
     setStatus: (id, status) => api.actions.setProjectStatus({ id, status }),
     edit: (id, fields) => api.actions.editProject({ id, fields }),
+    remove: (id) => api.actions.deleteProject({ id }),
     offline: api.offline,
     refetch: api.refetch,
     getLoadError: api.getLoadError,

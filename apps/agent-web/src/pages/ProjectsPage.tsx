@@ -123,19 +123,27 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // The open detail sheet's project id, and the set of projects mid-Done (shown
-  // struck-through with Undo until the timer commits them). Timers are cleared
-  // on unmount so a pending Done never fires against a torn-down page.
+  // The open detail sheet's project id, and the sets of projects mid-Done and
+  // mid-Delete (both shown struck-through with Undo until the timer commits
+  // them). Timers are cleared on unmount so a pending action never fires against
+  // a torn-down page.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
   const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
   useEffect(() => {
     const timers = doneTimers.current;
+    const dTimers = deleteTimers.current;
     return () => {
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
+      for (const t of dTimers.values()) clearTimeout(t);
+      dTimers.clear();
     };
   }, []);
 
@@ -205,6 +213,53 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
       return next;
     });
   }, []);
+
+  // Delete mirrors Done: the row leaves after a DONE_UNDO_MS Undo window, then
+  // the hard delete commits. Deleting is destructive and has no server-side
+  // undo, so the client window is the only guard against a mis-tap.
+  const commitDelete = useCallback(
+    (id: string) => {
+      setError(null);
+      const tx = api.remove(id);
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    },
+    [api],
+  );
+  const startDelete = useCallback(
+    (id: string) => {
+      setPendingDelete((prev) => new Set(prev).add(id));
+      const timer = setTimeout(() => {
+        deleteTimers.current.delete(id);
+        setPendingDelete((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        commitDelete(id);
+      }, DONE_UNDO_MS);
+      deleteTimers.current.set(id, timer);
+    },
+    [commitDelete],
+  );
+  const undoDelete = useCallback((id: string) => {
+    const timer = deleteTimers.current.get(id);
+    if (timer) clearTimeout(timer);
+    deleteTimers.current.delete(id);
+    setPendingDelete((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  // Route an Undo tap to the pending action that owns the row.
+  const onUndo = useCallback(
+    (id: string) => {
+      if (pendingDelete.has(id)) undoDelete(id);
+      else undoDone(id);
+    },
+    [pendingDelete, undoDelete, undoDone],
+  );
 
   const onPickStatus = useCallback(
     (project: Project, status: ProjectStatus) => {
@@ -284,9 +339,10 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
               key={section.status}
               status={section.status}
               projects={section.projects}
-              pendingDone={pendingDone}
+              pending={pendingDone}
+              pendingDelete={pendingDelete}
               onOpen={(p) => setSelectedId(p.id)}
-              onUndoDone={undoDone}
+              onUndo={onUndo}
             />
           ))}
         </div>
@@ -304,6 +360,10 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
             project={selected}
             onEdit={commitEdit}
             onPickStatus={(status) => onPickStatus(selected, status)}
+            onDelete={() => {
+              setSelectedId(null);
+              startDelete(selected.id);
+            }}
           />
         )}
       </Sheet>
@@ -334,15 +394,19 @@ function CheckIcon({ className }: { className?: string }) {
 function ProjectSectionView({
   status,
   projects,
-  pendingDone,
+  pending,
+  pendingDelete,
   onOpen,
-  onUndoDone,
+  onUndo,
 }: {
   status: ProjectStatus;
   projects: Project[];
-  pendingDone: Set<string>;
+  // Projects mid-Done (struck-through with Undo).
+  pending: Set<string>;
+  // Projects mid-Delete (also struck-through with Undo).
+  pendingDelete: Set<string>;
   onOpen: (p: Project) => void;
-  onUndoDone: (id: string) => void;
+  onUndo: (id: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(
     status === "backlog" && projects.length > BACKLOG_COLLAPSE_THRESHOLD,
@@ -373,19 +437,19 @@ function ProjectSectionView({
       {!collapsed && (
         <ul className="space-y-3">
           {projects.map((item) => {
-            const isPendingDone = pendingDone.has(item.id);
+            const isPending = pending.has(item.id) || pendingDelete.has(item.id);
             return (
               <li key={item.id}>
                 <div
                   className={cn(
                     "flex items-center gap-3 rounded-xl border bg-card px-4 py-4",
-                    isPendingDone && "opacity-60",
+                    isPending && "opacity-60",
                   )}
                 >
                   <span className="shrink-0 text-xl" aria-hidden>
                     {item.icon}
                   </span>
-                  {isPendingDone ? (
+                  {isPending ? (
                     <>
                       <span className="flex-1 text-base text-muted-foreground line-through">
                         {item.title}
@@ -393,7 +457,7 @@ function ProjectSectionView({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onUndoDone(item.id)}
+                        onClick={() => onUndo(item.id)}
                       >
                         Undo
                       </Button>
@@ -425,10 +489,12 @@ function ProjectDetail({
   project,
   onEdit,
   onPickStatus,
+  onDelete,
 }: {
   project: Project;
   onEdit: (id: string, fields: ProjectEditFields) => void;
   onPickStatus: (status: ProjectStatus) => void;
+  onDelete: () => void;
 }) {
   const [title, setTitle] = useState(project.title);
   const [description, setDescription] = useState(project.description ?? "");
@@ -514,6 +580,18 @@ function ProjectDetail({
       </div>
 
       <StatusGroup current={project.status} onPick={onPickStatus} />
+
+      {/* Destructive: hard-delete the project (distinct from Done, which keeps
+          it). Leaves a brief Undo window before it commits. */}
+      <div className="border-t pt-4">
+        <Button
+          variant="ghost"
+          className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onDelete}
+        >
+          Delete project
+        </Button>
+      </div>
     </div>
   );
 }

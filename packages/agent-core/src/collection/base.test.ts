@@ -35,7 +35,7 @@ const note = (id: string, over: Partial<Note> = {}): Note => ({
 // reconciling refetch resolve on separate ticks (where a flicker would show).
 function fakeServer(initial: Note[]) {
   const rows = initial.map((n) => ({ ...n }));
-  const calls = { add: 0, finish: 0, edit: 0, tag: 0 };
+  const calls = { add: 0, finish: 0, edit: 0, tag: 0, del: 0 };
   const find = (id: string) => {
     const row = rows.find((n) => n.id === id);
     if (!row) throw new Error(`no note ${id}`);
@@ -76,6 +76,12 @@ function fakeServer(initial: Note[]) {
       row.tag = tag;
       return { ...row };
     },
+    del: async (id: string) => {
+      await sleep(5);
+      calls.del++;
+      const i = rows.findIndex((n) => n.id === id);
+      if (i >= 0) rows.splice(i, 1);
+    },
   };
 }
 
@@ -114,6 +120,10 @@ function notesSpec(server: ReturnType<typeof fakeServer>) {
         },
       matches: () => true,
       persist: (id, { modified }) => server.edit(id, modified.text),
+    }),
+    deleteNote: v.delete<{ id: string }>({
+      id: ({ id }) => id,
+      persist: (id) => server.del(id),
     }),
   };
   const spec: EntitySpec<Note, typeof verbs> = {
@@ -187,7 +197,7 @@ describe("createInMemoryEntityApi", () => {
       .promise;
     await sleep(50);
 
-    expect(server.calls).toEqual({ add: 0, finish: 0, edit: 1, tag: 1 });
+    expect(server.calls).toEqual({ add: 0, finish: 0, edit: 1, tag: 1, del: 0 });
     const row = api.collection.get("s1")!;
     expect(row.tag).toBe("home");
     expect(row.text).toBe("renamed");
@@ -208,10 +218,44 @@ describe("createInMemoryEntityApi", () => {
     expectNoFlicker(snapshots, "alpha");
   });
 
+  it("deletes a row, calling the delete verb's persist, without flicker", async () => {
+    const server = fakeServer([
+      note("s1", { text: "alpha" }),
+      note("s2", { text: "beta" }),
+    ]);
+    const { api, open, snapshots, record } = await ready(server);
+
+    const tx = api.actions.deleteNote({ id: "s1" });
+    await tx.isPersisted.promise;
+    await sleep(50);
+    record();
+
+    expect(open.toArray.map((n: Note) => n.text)).toEqual(["beta"]);
+    expect(api.collection.has("s1")).toBe(false);
+    expect(server.calls.del).toBe(1);
+    expectNoFlicker(snapshots, "alpha");
+  });
+
+  it("rolls a delete back into the collection when the server rejects it", async () => {
+    const server = fakeServer([note("s1", { text: "alpha" })]);
+    server.del = async () => {
+      throw new Error("boom");
+    };
+    const { api } = await ready(server);
+
+    const tx = api.actions.deleteNote({ id: "s1" });
+    await expect(tx.isPersisted.promise).rejects.toThrow("boom");
+    await sleep(50);
+
+    // The optimistic removal is reverted, so the row is back.
+    expect(api.collection.has("s1")).toBe(true);
+  });
+
   it("exposes one action per verb, keyed by the verb's (outbox) name", async () => {
     const { api } = await ready(fakeServer([]));
     expect(Object.keys(api.actions).sort()).toEqual([
       "addNote",
+      "deleteNote",
       "editNote",
       "finishNote",
       "tagNote",

@@ -151,4 +151,25 @@ describe("DbProjectStore", () => {
   it("returns null when editing a missing project", () => {
     expect(makeStore().edit("nope", { title: "x" })).toBeNull();
   });
+
+  it("permanently deletes a project", () => {
+    const store = makeStore();
+    store.add("id-1", "keep");
+    store.add("id-2", "remove");
+
+    const existed = store.delete("id-2");
+
+    expect(existed).toBe(true);
+    expect(store.list().map((p) => p.id)).toEqual(["id-1"]);
+  });
+
+  it("treats deleting a missing project as a no-op", () => {
+    const store = makeStore();
+    store.add("id-1", "keep");
+
+    // Idempotent: a replayed delete of an already-gone project must not throw
+    // and must report that nothing existed.
+    expect(store.delete("nope")).toBe(false);
+    expect(store.list().map((p) => p.id)).toEqual(["id-1"]);
+  });
 });

@@ -55,6 +55,12 @@ function fakeRest(initial: Project[]): ProjectsRest {
       if (fields.description !== undefined) row.description = fields.description;
       return { ...row };
     },
+    deleteProject: async (id) => {
+      await sleep(5);
+      const i = server.findIndex((p) => p.id === id);
+      // Idempotent: deleting a missing row is a no-op (like the server's 204).
+      if (i >= 0) server.splice(i, 1);
+    },
   };
 }
 
@@ -163,6 +169,20 @@ describe("projects collection", () => {
     // An edit never changes status, and never drops the row.
     expect(row?.status).toBe("active");
   });
+
+  it("removes a project from the collection when deleted", async () => {
+    const api = createInMemoryProjectsApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([project("s1", { title: "gone" })]),
+    });
+    await api.collection.stateWhenReady();
+
+    const tx = api.remove("s1");
+    await tx.isPersisted.promise;
+    await sleep(50);
+
+    expect(api.collection.has("s1")).toBe(false);
+  });
 });
 
 // The outbox persists queued offline writes by these names and the local cache
@@ -173,6 +193,7 @@ describe("projects durable names", () => {
     expect(spec.name).toBe("projects");
     expect(Object.keys(spec.verbs).sort()).toEqual([
       "addProject",
+      "deleteProject",
       "editProject",
       "setProjectStatus",
     ]);
