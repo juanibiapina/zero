@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
+import { useForegroundRefetch } from "@/lib/screen-hooks";
 import { type Capture } from "@/lib/captures";
 
 // Upcoming lists captures scheduled for a future day, grouped into day sections.
@@ -55,13 +56,7 @@ function UpcomingReady({ api }: { api: CapturesApi }) {
 
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void api.refetch();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [api]);
+  useForegroundRefetch(api.refetch);
 
   const onProcess = useCallback(
     (item: Capture) => {

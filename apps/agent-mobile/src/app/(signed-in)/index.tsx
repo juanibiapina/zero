@@ -14,7 +14,6 @@ import {
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AppState,
   BackHandler,
   Pressable,
   StyleSheet,
@@ -45,6 +44,11 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
+import {
+  useDelayed,
+  useForegroundRefetch,
+  useLoadError,
+} from '@/lib/screen-hooks';
 
 // Vertical gap between carded rows.
 function Separator() {
@@ -211,38 +215,6 @@ function CaptureRow({
   );
 }
 
-// True only after `active` has held continuously for `ms`. Resets the moment
-// `active` goes false, so a fast hydrate never trips it.
-function useDelayed(active: boolean, ms: number): boolean {
-  const [elapsed, setElapsed] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => setElapsed(true), ms);
-    // Reset in cleanup (not the effect body) so re-entering the active state
-    // waits out the delay again, without a synchronous setState on mount.
-    return () => {
-      clearTimeout(t);
-      setElapsed(false);
-    };
-  }, [active, ms]);
-  return active && elapsed;
-}
-
-// Read a data layer's load (sync) error from its own channel. Returns the
-// message only while an error is the current state.
-function useLoadError(api: {
-  getLoadError: () => string | null;
-  subscribeLoadError: (cb: () => void) => () => void;
-}): string | null {
-  const [error, setError] = useState<string | null>(() => api.getLoadError());
-  useEffect(() => {
-    const read = () => setError(api.getLoadError());
-    read();
-    return api.subscribeLoadError(read);
-  }, [api]);
-  return error;
-}
-
 // Captures is the sole list: unclarified raw thoughts. The quick-add creates a
 // Capture; tap a row's circle to Process it.
 export default function HomeScreen() {
@@ -312,12 +284,7 @@ function Captures({
 
   // Refresh when the app returns to the foreground, so a list changed elsewhere
   // (Telegram, another device) shows up without a cold start.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void api.refetch();
-    });
-    return () => sub.remove();
-  }, [api]);
+  useForegroundRefetch(api.refetch);
   // Gate the list on the row count, not isLoading: a hydrated snapshot must
   // paint even while the network sync is still pending, so opening Captures
   // never blinks to a spinner over stale rows.

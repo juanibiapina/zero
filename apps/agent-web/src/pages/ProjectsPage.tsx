@@ -18,23 +18,9 @@ import {
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
+import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
-
-// True only after `active` has held continuously for `ms`. Resets the moment
-// `active` goes false, so a fast hydrate never trips it.
-function useDelayed(active: boolean, ms: number): boolean {
-  const [elapsed, setElapsed] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => setElapsed(true), ms);
-    return () => {
-      clearTimeout(t);
-      setElapsed(false);
-    };
-  }, [active, ms]);
-  return active && elapsed;
-}
 
 // Projects is a status-grouped list of outcome-oriented containers. The add
 // field creates a Project by name; tapping a row opens a detail sheet where the
@@ -99,13 +85,7 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
     };
   }, []);
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void api.refetch();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [api]);
+  useForegroundRefetch(api.refetch);
 
   const onAdd = useCallback(() => {
     const trimmed = title.trim();

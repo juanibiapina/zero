@@ -31,22 +31,8 @@ import {
   visibleCaptures,
 } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
+import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { type Capture } from "@/lib/captures";
-
-// True only after `active` has held continuously for `ms`. Resets the moment
-// `active` goes false, so a fast hydrate never trips it.
-function useDelayed(active: boolean, ms: number): boolean {
-  const [elapsed, setElapsed] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => setElapsed(true), ms);
-    return () => {
-      clearTimeout(t);
-      setElapsed(false);
-    };
-  }, [active, ms]);
-  return active && elapsed;
-}
 
 // Captures is the sole list: one fast place to drop any raw thought and Process
 // it later. The add bar creates a Capture; tap a row's circle to Process.
@@ -89,13 +75,7 @@ function CapturesReady({ api }: { api: CapturesApi }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void api.refetch();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [api]);
+  useForegroundRefetch(api.refetch);
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();

@@ -18,7 +18,6 @@ import {
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AppState,
   BackHandler,
   Pressable,
   SectionList,
@@ -31,36 +30,15 @@ import { QuickAdd } from '@/components/quick-add';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
+import {
+  useDelayed,
+  useForegroundRefetch,
+  useLoadError,
+} from '@/lib/screen-hooks';
 
 // Helper text (not the placeholder): teach outcome-based naming, the one
 // deliberate act of creating a project.
 const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done.";
-
-function useDelayed(active: boolean, ms: number): boolean {
-  const [elapsed, setElapsed] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    const t = setTimeout(() => setElapsed(true), ms);
-    return () => {
-      clearTimeout(t);
-      setElapsed(false);
-    };
-  }, [active, ms]);
-  return active && elapsed;
-}
-
-function useLoadError(api: {
-  getLoadError: () => string | null;
-  subscribeLoadError: (cb: () => void) => () => void;
-}): string | null {
-  const [error, setError] = useState<string | null>(() => api.getLoadError());
-  useEffect(() => {
-    const read = () => setError(api.getLoadError());
-    read();
-    return api.subscribeLoadError(read);
-  }, [api]);
-  return error;
-}
 
 // A project row: emoji icon + title, a single tap target that opens the detail
 // sheet. While mid-Done it is struck-through with an Undo instead of tappable.
@@ -320,12 +298,7 @@ function Projects({
   }, []);
 
   // Refresh when the app returns to the foreground.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void api.refetch();
-    });
-    return () => sub.remove();
-  }, [api]);
+  useForegroundRefetch(api.refetch);
 
   const commitStatus = useCallback(
     (id: string, status: ProjectStatus) => {
