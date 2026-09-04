@@ -34,6 +34,18 @@ function fakeRest(initial: Project[]): ProjectsRest {
       server.push(project);
       return { ...project };
     },
+    setProjectStatus: async (id, status) => {
+      await sleep(5);
+      const row = server.find((p) => p.id === id);
+      if (!row) throw new Error(`no project ${id}`);
+      row.status = status;
+      // A done project leaves the working set the server returns.
+      if (status === "done") {
+        const i = server.indexOf(row);
+        if (i >= 0) server.splice(i, 1);
+      }
+      return { ...row, status };
+    },
   };
 }
 
@@ -90,6 +102,34 @@ describe("projects collection", () => {
     const finalTitles = list.toArray.map((p: Project) => p.title);
     expect([...finalTitles].sort()).toEqual(["alpha", "beta"]);
     expectNoFlicker(snapshots, "beta");
+  });
+
+  it("changes a project's status in place", async () => {
+    const api = createInMemoryProjectsApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([project("s1", { status: "next" })]),
+    });
+    await api.collection.stateWhenReady();
+
+    const tx = api.setStatus("s1", "active");
+    await tx.isPersisted.promise;
+    await sleep(50);
+
+    expect(api.collection.get("s1")?.status).toBe("active");
+  });
+
+  it("removes a project from the collection once it is done", async () => {
+    const api = createInMemoryProjectsApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([project("s1", { status: "next" })]),
+    });
+    await api.collection.stateWhenReady();
+
+    const tx = api.setStatus("s1", "done");
+    await tx.isPersisted.promise;
+    await sleep(50);
+
+    expect(api.collection.has("s1")).toBe(false);
   });
 });
 

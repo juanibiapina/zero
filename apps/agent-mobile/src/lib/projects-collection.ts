@@ -6,7 +6,12 @@ import {
   type StartOfflineExecutor,
 } from '@zero/agent-core';
 
-import { addProject, fetchProjects, type TokenGetter } from './api';
+import {
+  addProject,
+  fetchProjects,
+  setProjectStatus,
+  type TokenGetter,
+} from './api';
 import { getAppOutbox, getAppPersistence } from './db';
 
 // The current Clerk token getter, kept in a module ref so the singleton api is
@@ -51,6 +56,7 @@ function makeRest(getToken: TokenGetter): ProjectsRest {
   return {
     fetchProjects: () => fetchProjects(getToken),
     addProject: (project) => addProject(getToken, project),
+    setProjectStatus: (id, status) => setProjectStatus(getToken, id, status),
   };
 }
 

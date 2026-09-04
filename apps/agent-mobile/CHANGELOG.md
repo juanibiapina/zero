@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-04: Organize your projects by status. They're grouped into Active, Next, Waiting, and Backlog (each collapsible, with a count); tap a project to open its details and pick a new status. Marking one Done clears it from the list, with a few seconds to Undo. Works offline.
 - 2026-09-04: New Projects tab: name a project by the outcome you want to reach and see all your projects in one list. Creating a project works offline and syncs across your devices.
 - 2026-09-03: The quick-add box now sits right above the keyboard instead of floating in the middle of the screen.
 - 2026-09-02: New Upcoming tab lists captures scheduled for a future day, grouped by day (Tomorrow and beyond). Tap a capture's circle to process it or its text to edit.

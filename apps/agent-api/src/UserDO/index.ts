@@ -11,6 +11,7 @@ import {
   DbProjectStore,
   type Project,
   type ProjectDefaults,
+  type ProjectStatus,
 } from "../store/projects";
 import {
   SystemTopicStore,
@@ -182,6 +183,10 @@ export class UserDO extends DurableObject<Env> {
 
   listProjects(): Project[] {
     return this.projects.list();
+  }
+
+  setProjectStatus(id: string, status: ProjectStatus): Project | null {
+    return this.projects.setStatus(id, status);
   }
 
   // --- Conversations and messages ---

@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
-import { projectsView } from "@zero/agent-core";
+import {
+  projectsByStatus,
+  projectsView,
+  type ProjectStatus,
+} from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
+import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
 
 function messageOf(err: unknown): string {
@@ -16,6 +22,33 @@ function messageOf(err: unknown): string {
 // normal load paints straight to the list with no spinner flash; the text only
 // appears on a genuinely slow first load (empty cache waiting on the network).
 const LOADING_TEXT_DELAY_MS = 1000;
+
+// How long a project sits struck-through with an Undo affordance after the user
+// sets it Done, before it commits and leaves the working list. Long enough to
+// reverse a mistaken finish; short enough not to linger.
+const DONE_UNDO_MS = 5000;
+
+// A Backlog with more than this many projects collapses by default (it is the
+// "someday" pile and must stay out of the way). Active/Next/Waiting start open.
+const BACKLOG_COLLAPSE_THRESHOLD = 5;
+
+// The five states in fixed order, with their labels. Active/Next/Waiting/Backlog
+// are the working sections; Done is terminal (chosen from the sheet, never a
+// section).
+const STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: "Active",
+  next: "Next",
+  waiting: "Waiting",
+  backlog: "Backlog",
+  done: "Done",
+};
+const ALL_STATUSES: ProjectStatus[] = [
+  "active",
+  "next",
+  "waiting",
+  "backlog",
+  "done",
+];
 
 // True only after `active` has held continuously for `ms`. Resets the moment
 // `active` goes false, so a fast hydrate never trips it.
@@ -32,8 +65,9 @@ function useDelayed(active: boolean, ms: number): boolean {
   return active && elapsed;
 }
 
-// Projects is a flat list of outcome-oriented containers. The add field creates
-// a Project by name; status, icon, and notes are enriched later (slices A2/A3).
+// Projects is a status-grouped list of outcome-oriented containers. The add
+// field creates a Project by name; tapping a row opens a detail sheet where the
+// status is changed (icon/title/notes editing is slice A3).
 export function ProjectsPage() {
   return (
     <div className="min-h-screen bg-background">
@@ -70,6 +104,22 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // The open detail sheet's project id, and the set of projects mid-Done (shown
+  // struck-through with Undo until the timer commits them). Timers are cleared
+  // on unmount so a pending Done never fires against a torn-down page.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
+  const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  useEffect(() => {
+    const timers = doneTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === "visible") void api.refetch();
@@ -88,9 +138,65 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
     inputRef.current?.focus();
   }, [api, title]);
 
-  const list = projects ?? [];
+  const commitStatus = useCallback(
+    (id: string, status: ProjectStatus) => {
+      setError(null);
+      const tx = api.setStatus(id, status);
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    },
+    [api],
+  );
+
+  // Setting Done does not write immediately: hold the row struck-through with an
+  // Undo for DONE_UNDO_MS, then commit. Undo clears the timer and the row stays.
+  const startDone = useCallback(
+    (id: string) => {
+      setPendingDone((prev) => new Set(prev).add(id));
+      const timer = setTimeout(() => {
+        doneTimers.current.delete(id);
+        setPendingDone((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        commitStatus(id, "done");
+      }, DONE_UNDO_MS);
+      doneTimers.current.set(id, timer);
+    },
+    [commitStatus],
+  );
+  const undoDone = useCallback((id: string) => {
+    const timer = doneTimers.current.get(id);
+    if (timer) clearTimeout(timer);
+    doneTimers.current.delete(id);
+    setPendingDone((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const onPickStatus = useCallback(
+    (project: Project, status: ProjectStatus) => {
+      setSelectedId(null);
+      if (status === project.status) return;
+      if (status === "done") {
+        startDone(project.id);
+      } else {
+        commitStatus(project.id, status);
+      }
+    },
+    [commitStatus, startDone],
+  );
+
+  const list = useMemo(() => projects ?? [], [projects]);
+  const sections = useMemo(() => projectsByStatus(list), [list]);
   const view = projectsView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
+
+  const selected = selectedId
+    ? (list.find((p) => p.id === selectedId) ?? null)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -142,20 +248,174 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
           No projects yet. Name your first outcome.
         </p>
       ) : (
-        <ul className="space-y-3">
-          {list.map((item: Project) => (
-            <li
-              key={item.id}
-              className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4"
-            >
-              <span className="shrink-0 text-xl" aria-hidden>
-                {item.icon}
-              </span>
-              <span className="flex-1 text-base">{item.title}</span>
-            </li>
+        <div className="space-y-6">
+          {sections.map((section) => (
+            <ProjectSectionView
+              key={section.status}
+              status={section.status}
+              projects={section.projects}
+              pendingDone={pendingDone}
+              onOpen={(p) => setSelectedId(p.id)}
+              onUndoDone={undoDone}
+            />
           ))}
+        </div>
+      )}
+
+      <Sheet
+        open={selected != null}
+        onClose={() => setSelectedId(null)}
+        title={selected?.title ?? "Project"}
+        srOnlyTitle={selected == null}
+      >
+        {selected && (
+          <StatusGroup
+            current={selected.status}
+            onPick={(status) => onPickStatus(selected, status)}
+          />
+        )}
+      </Sheet>
+    </div>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+// One collapsible status section: a header with a count and a chevron, and the
+// rows beneath it when expanded. Backlog starts collapsed when large; the other
+// working statuses start open. Collapse is local UI state (not persisted).
+function ProjectSectionView({
+  status,
+  projects,
+  pendingDone,
+  onOpen,
+  onUndoDone,
+}: {
+  status: ProjectStatus;
+  projects: Project[];
+  pendingDone: Set<string>;
+  onOpen: (p: Project) => void;
+  onUndoDone: (id: string) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(
+    status === "backlog" && projects.length > BACKLOG_COLLAPSE_THRESHOLD,
+  );
+  return (
+    <section className="space-y-3">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        aria-expanded={!collapsed}
+        className="flex w-full items-center gap-2 text-sm font-semibold text-muted-foreground"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={cn("size-4 transition-transform", collapsed && "-rotate-90")}
+          aria-hidden
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+        <span>{STATUS_LABELS[status]}</span>
+        <span className="text-muted-foreground/70">· {projects.length}</span>
+      </button>
+      {!collapsed && (
+        <ul className="space-y-3">
+          {projects.map((item) => {
+            const isPendingDone = pendingDone.has(item.id);
+            return (
+              <li key={item.id}>
+                <div
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border bg-card px-4 py-4",
+                    isPendingDone && "opacity-60",
+                  )}
+                >
+                  <span className="shrink-0 text-xl" aria-hidden>
+                    {item.icon}
+                  </span>
+                  {isPendingDone ? (
+                    <>
+                      <span className="flex-1 text-base text-muted-foreground line-through">
+                        {item.title}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onUndoDone(item.id)}
+                      >
+                        Undo
+                      </Button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onOpen(item)}
+                      className="flex-1 text-left text-base"
+                    >
+                      {item.title}
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
+    </section>
+  );
+}
+
+// The Status group in the detail sheet: the five states as selectable rows, the
+// current one marked. Tapping the current status is a no-op (the caller closes
+// the sheet); tapping another changes it.
+function StatusGroup({
+  current,
+  onPick,
+}: {
+  current: ProjectStatus;
+  onPick: (status: ProjectStatus) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium text-muted-foreground">Status</p>
+      <ul className="divide-y rounded-xl border">
+        {ALL_STATUSES.map((status) => {
+          const isCurrent = status === current;
+          return (
+            <li key={status}>
+              <button
+                type="button"
+                onClick={() => onPick(status)}
+                aria-pressed={isCurrent}
+                className="flex w-full items-center justify-between px-4 py-3 text-left text-base transition-colors hover:bg-accent"
+              >
+                <span>{STATUS_LABELS[status]}</span>
+                {isCurrent && <CheckIcon className="size-5 text-primary" />}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

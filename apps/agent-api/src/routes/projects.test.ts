@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { OpenAPIHono } from "@hono/zod-openapi";
 
 import type { Env } from "../types";
-import type { Project, ProjectDefaults } from "../store/projects";
+import type {
+  Project,
+  ProjectDefaults,
+  ProjectStatus,
+} from "../store/projects";
 import { createProjectsRoutes } from "./projects";
 
 // A well-formed UUID the client mints; the route body requires uuid shape.
@@ -28,7 +32,13 @@ const fakeUserDO = (seed: Project[] = []) => {
       return project;
     },
     listProjects(): Project[] {
-      return projects;
+      return projects.filter((p) => p.status !== "done");
+    },
+    setProjectStatus(id: string, status: ProjectStatus): Project | null {
+      const project = projects.find((p) => p.id === id);
+      if (!project) return null;
+      project.status = status;
+      return project;
     },
     _projects: projects,
   };
@@ -147,5 +157,67 @@ describe("POST /api/projects", () => {
       post({ id: UUID_1, title: "Run a 5K", status: "someday" }),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+const patch = (body: unknown): RequestInit => ({
+  method: "PATCH",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+const seedProject = (over: Partial<Project> = {}): Project => ({
+  id: "id-1",
+  title: "Run a 5K",
+  icon: "📁",
+  description: null,
+  status: "next",
+  createdAt: "2023-11-14T22:13:20.001Z",
+  ...over,
+});
+
+describe("PATCH /api/projects/{id}", () => {
+  it("changes a project's status", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/projects/id-1", patch({ status: "active" }));
+
+    expect(res.status).toBe(200);
+    const body: { project: Project } = await res.json();
+    expect(body.project.status).toBe("active");
+  });
+
+  it("drops a project from the list once its status is done", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    await app.request("/api/projects/id-1", patch({ status: "done" }));
+    const res = await app.request("/api/projects");
+
+    expect(await res.json()).toEqual({ projects: [] });
+  });
+
+  it("rejects a body with no fields to update", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+    const res = await app.request("/api/projects/id-1", patch({}));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an unknown status", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+    const res = await app.request(
+      "/api/projects/id-1",
+      patch({ status: "someday" }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+    const res = await app.request("/api/projects/nope", patch({ status: "active" }));
+    expect(res.status).toBe(404);
   });
 });

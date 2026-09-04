@@ -79,4 +79,28 @@ describe("DbProjectStore", () => {
 
     expect(store.list()).toEqual([a, b]);
   });
+
+  it("changes a project's status and returns the updated row", () => {
+    const store = makeStore();
+    store.add("id-1", "Run a 5K");
+
+    const updated = store.setStatus("id-1", "active");
+
+    expect(updated?.status).toBe("active");
+    expect(store.list()[0].status).toBe("active");
+  });
+
+  it("returns null when setting the status of a missing project", () => {
+    expect(makeStore().setStatus("nope", "active")).toBeNull();
+  });
+
+  it("drops a project from the list once its status is done", () => {
+    const store = makeStore();
+    store.add("id-1", "keep");
+    store.add("id-2", "finish");
+
+    store.setStatus("id-2", "done");
+
+    expect(store.list().map((p) => p.id)).toEqual(["id-1"]);
+  });
 });

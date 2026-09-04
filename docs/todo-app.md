@@ -97,8 +97,9 @@ third entity, now being built (slice A1 shipped). Everything else below
   Goal-oriented (baby, diploma, buy a house, watch a movie), sometimes
   maintenance-oriented (a "baby maintenance" project should maybe not exist). Has
   a nice icon (baby face, diploma) and a status (active / next / waiting / backlog
-  / done). Slice A1 shipped name-only create + a flat list on both surfaces; the
-  status model, detail sheet, and enrichment follow in A2/A3. Vision beyond that:
+  / done). Slices A1 + A2 shipped: name-only create, a status-grouped list, and a
+  detail sheet where the status is changed (Done + inline Undo) on both surfaces;
+  enrichment (icon/title/notes editing) follows in A3. Vision beyond that:
   can contain Todos, agent sessions, documents. Can spin off other Projects and
   even People. Notify dependent Projects when they move; can unblock them. Idea:
   project "slots", start with one slot to teach the game.
@@ -214,11 +215,20 @@ per-user UserDO (`add` is exactly-once on the client-minted id; `list` is
 oldest-first), a shared `@zero/agent-core` `Project` type, `createProjectsApi`
 collection (local-first, offline outbox), and a `projectsView` count-gate helper;
 a name-only create with outcome-naming helper text over a flat list on web
-(`/projects`, a `SideNav` entry) and mobile (a `NativeTabs` Projects tab). The
-`icon`/`description`/`status` fields exist in the data with defaults (icon 📁,
-status `next`) but have no UI yet — the status model lands in A2, enrichment in
-A3. First on-device run of the new native tab needs a fresh EAS dev build. A
-Rule-of-Three extraction of the shared plumbing (never the domain verbs) is the
+(`/projects`, a `SideNav` entry) and mobile (a `NativeTabs` Projects tab). First on-device run of the new native tab needs a fresh EAS dev build.
+
+Shipped (slice A2, plan `todo-project-entity-a2.md`): the five-status model.
+`DbProjectStore.setStatus` + `PATCH /api/projects/{id}` (list now scoped to the
+non-`done` working set), a pure `projectsByStatus` grouping helper, and
+`api.setStatus` in the collection (offline-replaying). On both surfaces the list
+is grouped into collapsible Active / Next / Waiting / Backlog sections (counts,
+hide-empty, Backlog collapsed when large), and a tap opens a detail bottom sheet
+with a Status group; setting `done` removes the row with an inline ~5s Undo. The
+detail sheet is a generic reusable primitive — web on `@radix-ui/react-dialog`,
+mobile on the universal `@expo/ui` `BottomSheet` — shared with the Captures
+detail sheet. Enrichment (icon/title/description editing in the sheet) is A3; the
+`icon`/`description` fields exist in the data with defaults and still have no UI.
+A Rule-of-Three extraction of the shared plumbing (never the domain verbs) is the
 tracked follow-up after A3.
 
 In flight (details in `docs/plans/`):

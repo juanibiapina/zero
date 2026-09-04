@@ -48,6 +48,11 @@ export {
   type ProjectWrite,
 } from "./projects/collection";
 export { projectsView, type ProjectsView } from "./projects/view";
+export {
+  projectsByStatus,
+  PROJECT_SECTION_ORDER,
+  type ProjectSection,
+} from "./projects/sections";
 
 // Silent automatic timezone sync (shared core; per-surface adapters).
 export {

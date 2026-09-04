@@ -21,19 +21,23 @@ and `projects` table, a sibling of `DbCaptureStore` / `DbTaskStore`.
 
 The name is `Project`.
 
-## Status: building (slice A1 shipped)
+## Status: building (slices A1 + A2 shipped)
 
 Project is being built in vertical slices (plan: `docs/plans/todo-project-entity.md`).
 
 - **A1 (shipped):** create a Project by name and see a flat list, on web
   (`/projects`) and mobile (a Projects tab). Persists and syncs; mobile create
-  works offline. No status UI, no detail sheet, no AI.
-- **A2 (next):** the five-status model becomes real — grouped sections, a detail
-  bottom sheet with a Status group, `done` + inline Undo.
-- **A3:** enrich in the sheet — emoji icon picker, editable title, description.
+  works offline.
+- **A2 (shipped):** the five-status model is real — the list is grouped into
+  Active / Next / Waiting / Backlog sections (counts, collapse, hide-empty), a
+  detail bottom sheet holds a Status group, and setting `done` removes a project
+  from the working list with an inline Undo (~5s). Ships on web and mobile,
+  offline-safe.
+- **A3 (next):** enrich in the sheet — emoji icon picker, editable title,
+  description.
 
-The status, icon, and description fields already exist in the data (with
-defaults) so A2/A3 need no migration; only their UI is deferred.
+The icon and description fields already exist in the data (with defaults) so A3
+needs no migration; only its UI is deferred.
 
 ## What it is
 
@@ -84,33 +88,43 @@ no speculative columns before their behavior is designed.
   fills the defaults (icon 📁, description null, status `next`). New projects
   land visible in the working set. Creating is name-only and fast, like a
   Capture.
-- **List** — all projects, oldest first. A1 returns every row (all `next`); once
-  statuses can change (A2) the list scopes to the non-`done` working set and
-  groups by status.
+- **List** — the working set: every non-`done` project, oldest first. The client
+  groups them into status sections (`projectsByStatus`).
+- **Set status** — move a Project to any of the five states. Setting `done` is
+  terminal and drops it from the working list. One `setStatus` verb carries every
+  transition.
 
 ## Interactions (per system)
 
 - **UI** — web `/projects` (`apps/agent-web`, a `SideNav` entry) and the mobile
-  Projects tab (`apps/agent-mobile`, a `NativeTabs` trigger). Both are a name-only
-  quick-add over a flat list of rows (emoji icon + title). The create field
-  carries persistent helper text teaching outcome-based naming — helper text, not
-  the placeholder. Rows are display-only in A1; tapping to open a detail sheet is
-  A2.
+  Projects tab (`apps/agent-mobile`, a `NativeTabs` trigger). A name-only
+  quick-add (with persistent helper text teaching outcome-based naming — helper
+  text, not the placeholder) over a status-grouped list: collapsible Active /
+  Next / Waiting / Backlog sections with counts, empty sections hidden, Backlog
+  collapsed when large. A row is a single tap target that opens a **detail bottom
+  sheet** (web: `@radix-ui/react-dialog`; mobile: the universal `@expo/ui`
+  `BottomSheet`) holding a **Status group** — the five states, current one marked.
+  Setting `done` leaves the row briefly struck-through with an inline **Undo**
+  (~5s) before it leaves the list. The sheet is a generic, entity-agnostic
+  primitive (`components/ui/sheet.tsx`), shared with the Captures detail sheet.
 - **Storage** — the server domain store is `DbProjectStore` (domain methods
-  `add` / `list`), a sibling of `DbCaptureStore` / `DbTaskStore`; the duplication
-  is deliberate and removed by a Rule-of-Three extraction after A3. See
-  `docs/storage.md`.
+  `add` / `list` / `setStatus`), a sibling of `DbCaptureStore` / `DbTaskStore`;
+  the duplication is deliberate and removed by a Rule-of-Three extraction after
+  A3. See `docs/storage.md`.
 - **API** — per-user isolated:
-  - `GET /api/projects` → `{ projects }`, oldest-first.
+  - `GET /api/projects` → `{ projects }`, the non-`done` working set, oldest-first.
   - `POST /api/projects { id, title, icon?, description?, status? }` →
     `201 { project }`; the client normally sends only `id` + `title` and the
     server fills the defaults. `400` on empty title, a non-UUID id, or an unknown
     status.
-  - Logs `project_added`.
+  - `PATCH /api/projects/{id} { status }` → `200 { project }`; `400` (no fields /
+    unknown status) / `404`. Setting `done` drops the row from the list.
+  - Logs `project_added` and `project_status_changed`.
 - **Data layer** — a TanStack DB collection (`createProjectsApi` in
   `@zero/agent-core`), a sibling of the Task layer: in-memory fallback plus
-  durable persisted offline mode with an outbox, and a pure
-  `projectsReconcileWrites` diff. See `docs/storage.md`.
+  durable persisted offline mode with an outbox (`addProject` /
+  `setProjectStatus` replay offline), and pure `projectsReconcileWrites` /
+  `projectsByStatus` helpers. See `docs/storage.md`.
 - **Other entities** — none wired yet. Task membership (`projectId` on `tasks`)
   is slice B; the AI Capture → Project conversion is a later slice.
 
@@ -125,9 +139,6 @@ snapshot behind a spinner.
 
 ## Next
 
-- **Status model in the UI (A2)** — grouped Active / Next / Waiting / Backlog
-  sections with counts and collapse; a detail bottom sheet with a Status group;
-  `done` removes a project from the working list with an inline Undo.
 - **Enrich (A3)** — emoji icon picker, editable title, description, all in the
   detail sheet.
 - **Task → Project (slice B)** — a Task belongs to a Project (adds `projectId` on

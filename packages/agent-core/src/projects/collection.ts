@@ -18,7 +18,7 @@ import {
 // deliberate sibling of tasks/collection.ts; extract a shared base at the
 // Rule-of-Three follow-up, per docs/todo-app.md.
 import type { StartOfflineExecutor, WarnFn } from "../captures/collection";
-import type { Project } from "./types";
+import type { Project, ProjectStatus } from "./types";
 
 // The name-only creation defaults, matching what the server fills. Kept here so
 // the optimistic row is identical to the server row (no temp-to-real swap).
@@ -34,15 +34,19 @@ export type ProjectsRest = {
   // add (offline outbox replay) re-sends the same id and gets the stored row
   // back, not a second project.
   addProject: (project: { id: string; title: string }) => Promise<Project>;
+  // Move a project to another status (including the terminal 'done', which drops
+  // it from the working list). Idempotent on the id.
+  setProjectStatus: (id: string, status: ProjectStatus) => Promise<Project>;
 };
 
 // One handle over the Project data layer. Both Projects screens read
-// `collection` through a live query and write with `add`, which returns the
-// underlying transaction so the page can surface a write error via
+// `collection` through a live query and write with `add` / `setStatus`, which
+// return the underlying transaction so the page can surface a write error via
 // `tx.isPersisted.promise`.
 export type ProjectsApi = {
   collection: Collection<Project, string>;
   add: (title: string) => Transaction;
+  setStatus: (id: string, status: ProjectStatus) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
   getLoadError: () => string | null;
@@ -95,6 +99,16 @@ function optimisticProject(title: string): Project {
     description: null,
     status: "next",
     createdAt: new Date().toISOString(),
+  };
+}
+
+// The optimistic mutator for a status change: set the row's status in place so
+// the list re-groups immediately (and a move to 'done' drops it once the server
+// reconcile confirms). The new status is read back off the mutation in the write
+// handler, which then calls setProjectStatus.
+function setStatusDraft(status: ProjectStatus) {
+  return (draft: Project): void => {
+    draft.status = status;
   };
 }
 
@@ -153,6 +167,22 @@ export function createInMemoryProjectsApi(deps: {
         }
         return { refetch: false };
       },
+      onUpdate: async ({ transaction }) => {
+        for (const m of transaction.mutations) {
+          const updated = await rest.setProjectStatus(
+            String(m.key),
+            m.modified.status,
+          );
+          // A move to 'done' leaves the working set: the server stops returning
+          // it, so remove it here; otherwise upsert the reconciled row.
+          if (updated.status === "done") {
+            reconcile(collection, { remove: [updated.id] });
+          } else {
+            reconcile(collection, { upsert: [updated] });
+          }
+        }
+        return { refetch: false };
+      },
     }),
   );
 
@@ -163,6 +193,7 @@ export function createInMemoryProjectsApi(deps: {
   return {
     collection,
     add: (title) => collection.insert(optimisticProject(title)),
+    setStatus: (id, status) => collection.update(id, setStatusDraft(status)),
     offline: false,
     refetch: async () => {
       if (refetchUtil) {
@@ -282,6 +313,20 @@ export function createPersistedProjectsApi(deps: {
         }
         await fetchAndReconcile();
       },
+      setProjectStatus: async ({ transaction }) => {
+        for (const m of transaction.mutations) {
+          const status = m.modified.status;
+          if (typeof status === "string") {
+            const updated = await rest.setProjectStatus(
+              String(m.key),
+              status as ProjectStatus,
+            );
+            reconcileOne(updated);
+          }
+        }
+        // A move to 'done' drops the row; the refetch reconcile removes it.
+        await fetchAndReconcile();
+      },
     },
     onLeadershipChange: (isLeader) => {
       if (!isLeader) {
@@ -298,10 +343,20 @@ export function createPersistedProjectsApi(deps: {
       collection.insert(optimisticProject(title));
     },
   });
+  const setStatusAction = offline.createOfflineAction<{
+    id: string;
+    status: ProjectStatus;
+  }>({
+    mutationFnName: "setProjectStatus",
+    onMutate: ({ id, status }) => {
+      collection.update(id, setStatusDraft(status));
+    },
+  });
 
   return {
     collection,
     add: (title) => addAction({ title }),
+    setStatus: (id, status) => setStatusAction({ id, status }),
     offline: true,
     refetch: () => fetchAndReconcile(),
     getLoadError: () => loadError,

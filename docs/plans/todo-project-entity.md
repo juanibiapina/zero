@@ -406,6 +406,8 @@ The walking skeleton: the whole stack proven on the thinnest path. Detailed plan
 `docs/plans/todo-project-entity-a1.md`. Shipped as described (name-only create +
 flat list on both surfaces; the full `projects` table incl. status/icon/
 description defaults landed in migration `0046`, with only `add`/`list` wired).
+On `main` (commit `807e8d7`); web verified locally and auto-deploying; mobile
+not device-verified yet (needs an EAS dev build for the new native tab).
 
 - **User value:** jot a project by name and see your projects. Replaces the raw
   notes list.
@@ -425,9 +427,17 @@ description defaults landed in migration `0046`, with only `add`/`list` wired).
   empty disabled). **Acceptance:** create a project on web and mobile; it lists,
   persists across reload, syncs; mobile add works offline with no dup on replay.
 
-### A2 — Status: group + change (web + mobile)
+### A2 — Status: group + change (web + mobile) — SHIPPED
 
-The core: the five-status model becomes real.
+The core: the five-status model becomes real. Shipped as described (detailed
+plan: `docs/plans/todo-project-entity-a2.md`). Server `setStatus` + `PATCH
+/api/projects/{id}` with `list()` scoped to non-`done`; a pure `projectsByStatus`
+grouping helper and `api.setStatus` in the collection (offline-replaying); on both
+surfaces a status-grouped collapsible list and a reusable detail bottom sheet
+(web `@radix-ui/react-dialog`, mobile universal `@expo/ui` `BottomSheet`) with a
+Status group; `done` removes the row with an inline ~5s Undo. Web verified via
+package tests + typecheck + lint; mobile via jest + typecheck + lint (on-device
+Maestro after an EAS dev build, since the `@expo/ui` sheet is native).
 
 - **User value:** organize projects across Active/Next/Waiting/Backlog, move them,
   finish them.

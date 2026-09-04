@@ -193,3 +193,36 @@ jest.mock('react-native-keyboard-controller', () => {
     }),
   };
 });
+
+// @expo/ui renders real native views (requireNativeView), which is unavailable
+// under jest — like Clerk's UserButton. Provide a minimal mock that renders the
+// pieces the sheet content uses as plain, queryable RN elements: BottomSheet
+// shows its children only while presented; Button is a Pressable whose
+// accessibilityLabel is its `label`. Defined with React.createElement (no JSX)
+// so NativeWind's babel transform does not touch the factory.
+const mockReactForExpoUi = require('react');
+jest.mock('@expo/ui', () => {
+  const { View, Text: RNText, Pressable } = require('react-native');
+  const Host = ({ children }) =>
+    mockReactForExpoUi.createElement(View, null, children);
+  const Column = ({ children }) =>
+    mockReactForExpoUi.createElement(View, null, children);
+  const Text = ({ children }) =>
+    mockReactForExpoUi.createElement(RNText, null, children);
+  const Button = ({ label, onPress, children }) =>
+    mockReactForExpoUi.createElement(
+      Pressable,
+      { accessibilityRole: 'button', accessibilityLabel: label, onPress },
+      children ??
+        (label != null ? mockReactForExpoUi.createElement(RNText, null, label) : null),
+    );
+  const BottomSheet = ({ isPresented, children }) =>
+    isPresented
+      ? mockReactForExpoUi.createElement(
+          View,
+          { accessibilityLabel: 'sheet' },
+          children,
+        )
+      : null;
+  return { __esModule: true, Host, Column, Text, Button, BottomSheet };
+});

@@ -1,21 +1,26 @@
 import { UserButton } from '@clerk/expo/native';
+import { Button, Column, Text as UIText } from '@expo/ui';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
+  projectsByStatus,
   projectsView,
   type Project,
   type ProjectsApi,
+  type ProjectStatus,
 } from '@zero/agent-core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   BackHandler,
-  FlatList,
+  Pressable,
+  SectionList,
   type TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 
 import { QuickAdd } from '@/components/quick-add';
+import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/use-projects-api';
 
@@ -31,6 +36,29 @@ const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done."
 // text, so a cached cold start never flashes it. Mirrors the Captures screen.
 const LOADING_TEXT_DELAY_MS = 1000;
 
+// How long a project sits struck-through with Undo after being set Done, before
+// it commits and leaves the working list.
+const DONE_UNDO_MS = 5000;
+
+// A Backlog larger than this collapses by default (the "someday" pile, kept out
+// of the way). Active/Next/Waiting start open.
+const BACKLOG_COLLAPSE_THRESHOLD = 5;
+
+const STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: 'Active',
+  next: 'Next',
+  waiting: 'Waiting',
+  backlog: 'Backlog',
+  done: 'Done',
+};
+const ALL_STATUSES: ProjectStatus[] = [
+  'active',
+  'next',
+  'waiting',
+  'backlog',
+  'done',
+];
+
 function useDelayed(active: boolean, ms: number): boolean {
   const [elapsed, setElapsed] = useState(false);
   useEffect(() => {
@@ -44,8 +72,6 @@ function useDelayed(active: boolean, ms: number): boolean {
   return active && elapsed;
 }
 
-// Read a data layer's load (sync) error from its own channel. Returns the
-// message only while an error is the current state.
 function useLoadError(api: {
   getLoadError: () => string | null;
   subscribeLoadError: (cb: () => void) => () => void;
@@ -59,23 +85,106 @@ function useLoadError(api: {
   return error;
 }
 
-// A read-only project row: emoji icon + title. Status, notes, and editing are
-// enriched later (slices A2/A3) from a detail sheet.
-function ProjectRow({ item }: { item: Project }) {
+// A project row: emoji icon + title, a single tap target that opens the detail
+// sheet. While mid-Done it is struck-through with an Undo instead of tappable.
+function ProjectRow({
+  item,
+  pendingDone,
+  onOpen,
+  onUndoDone,
+}: {
+  item: Project;
+  pendingDone: boolean;
+  onOpen: (p: Project) => void;
+  onUndoDone: (id: string) => void;
+}) {
+  if (pendingDone) {
+    return (
+      <View className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+        <Text className="text-xl">{item.icon}</Text>
+        <Text className="flex-1 text-base text-neutral-400 line-through">
+          {item.title}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Undo"
+          hitSlop={8}
+          onPress={() => onUndoDone(item.id)}
+        >
+          <Text className="font-semibold text-primary">Undo</Text>
+        </Pressable>
+      </View>
+    );
+  }
   return (
-    <View className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+      onPress={() => onOpen(item)}
+      className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
+    >
       <Text className="text-xl">{item.icon}</Text>
       <Text className="flex-1 text-base text-neutral-900">{item.title}</Text>
-    </View>
+    </Pressable>
   );
 }
 
-function Separator() {
-  return <View className="h-3" />;
+// A collapsible sticky section header: label, count, and a collapse toggle.
+function SectionHeader({
+  status,
+  count,
+  collapsed,
+  onToggle,
+}: {
+  status: ProjectStatus;
+  count: number;
+  collapsed: boolean;
+  onToggle: (status: ProjectStatus, current: boolean) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${STATUS_LABELS[status]}, ${count}`}
+      onPress={() => onToggle(status, collapsed)}
+      className="flex-row items-center gap-2 bg-white py-2"
+    >
+      <Text className="text-sm font-semibold text-neutral-500">
+        {collapsed ? '▸' : '▾'} {STATUS_LABELS[status]}
+      </Text>
+      <Text className="text-sm text-neutral-400">· {count}</Text>
+    </Pressable>
+  );
 }
 
-// Projects is entity #3: a flat list of outcome-oriented containers. The
-// quick-add creates a Project by name; status/icon/notes come later.
+// The Status group rendered inside the native sheet, built with @expo/ui so it
+// is a real native control tree. The current status is a filled button (its
+// mark); the others are outlined. Tapping the current one is a no-op the caller
+// handles by just closing the sheet.
+function StatusGroup({
+  current,
+  onPick,
+}: {
+  current: ProjectStatus;
+  onPick: (status: ProjectStatus) => void;
+}) {
+  return (
+    <Column spacing={8}>
+      <UIText>Status</UIText>
+      {ALL_STATUSES.map((status) => (
+        <Button
+          key={status}
+          variant={status === current ? 'filled' : 'outlined'}
+          onPress={() => onPick(status)}
+          label={status === current ? `${STATUS_LABELS[status]} ✓` : STATUS_LABELS[status]}
+        />
+      ))}
+    </Column>
+  );
+}
+
+// Projects is entity #3: outcome-oriented containers grouped by status. The
+// quick-add creates one by name; tapping a row opens the detail sheet where the
+// status is changed (icon/title/notes editing is slice A3).
 export default function ProjectsScreen() {
   const projectsApi = useProjectsApi();
 
@@ -118,13 +227,31 @@ function Projects({
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
   );
-  const list = projects ?? [];
+  const list = useMemo(() => projects ?? [], [projects]);
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  // Refresh when the app returns to the foreground, so a list changed elsewhere
-  // shows up without a cold start.
+  // The open sheet's project id; the projects mid-Done; and per-section collapse
+  // overrides (only sections the user explicitly toggled; the rest fall back to
+  // the default below). Collapse is client-only UI state (not persisted).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [collapseOverride, setCollapseOverride] = useState<
+    Partial<Record<ProjectStatus, boolean>>
+  >({});
+  const [pendingDone, setPendingDone] = useState<Set<string>>(new Set());
+  const doneTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  useEffect(() => {
+    const timers = doneTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
+  // Refresh when the app returns to the foreground.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') void api.refetch();
@@ -132,24 +259,117 @@ function Projects({
     return () => sub.remove();
   }, [api]);
 
+  const commitStatus = useCallback(
+    (id: string, status: ProjectStatus) => {
+      setWriteError(null);
+      const tx = api.setStatus(id, status);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    },
+    [api],
+  );
+
+  // Done defers the write: hold the row struck-through with Undo for
+  // DONE_UNDO_MS, then commit. Undo clears the timer and the row stays.
+  const startDone = useCallback(
+    (id: string) => {
+      setPendingDone((prev) => new Set(prev).add(id));
+      const timer = setTimeout(() => {
+        doneTimers.current.delete(id);
+        setPendingDone((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        commitStatus(id, 'done');
+      }, DONE_UNDO_MS);
+      doneTimers.current.set(id, timer);
+    },
+    [commitStatus],
+  );
+  const undoDone = useCallback((id: string) => {
+    const timer = doneTimers.current.get(id);
+    if (timer) clearTimeout(timer);
+    doneTimers.current.delete(id);
+    setPendingDone((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const onPickStatus = useCallback(
+    (project: Project, status: ProjectStatus) => {
+      setSelectedId(null);
+      if (status === project.status) return;
+      if (status === 'done') {
+        startDone(project.id);
+      } else {
+        commitStatus(project.id, status);
+      }
+    },
+    [commitStatus, startDone],
+  );
+
+  const onToggle = useCallback((status: ProjectStatus, current: boolean) => {
+    setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
+  }, []);
+
   const view = projectsView({ count: list.length, isLoading, loadError });
   const error = writeError ?? (list.length === 0 ? loadError : null);
+  const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
+  const grouped = useMemo(() => projectsByStatus(list), [list]);
+
+  // Collapse is derived, not stored: a section uses the user's explicit override
+  // when present, else the default (a large Backlog starts collapsed; the other
+  // working statuses start open). A collapsed section keeps its header (with the
+  // count) but renders no rows.
+  const sections = useMemo(
+    () =>
+      grouped.map((s) => {
+        const count = s.projects.length;
+        const isCollapsed =
+          collapseOverride[s.status] ??
+          (s.status === 'backlog' && count > BACKLOG_COLLAPSE_THRESHOLD);
+        return {
+          status: s.status,
+          count,
+          data: isCollapsed ? [] : s.projects,
+          collapsed: isCollapsed,
+        };
+      }),
+    [grouped, collapseOverride],
+  );
+
+  // Android back: dismiss the sheet, then close the quick-add, before leaving.
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (selectedId) {
+        setSelectedId(null);
+        return true;
+      }
+      if (adding) {
+        setText('');
+        setAdding(false);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [selectedId, adding]);
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
-      // Submitting an empty input closes the quick-add bar.
       setAdding(false);
       return;
     }
     setWriteError(null);
     const tx = api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    // Keep the bar open and cleared for rapid, repeated creation.
     setText('');
   }, [text, api]);
 
@@ -158,20 +378,9 @@ function Projects({
     setAdding(false);
   }, []);
 
-  // Android hardware / navigation back: close the open bar instead of leaving
-  // the screen. Empty bar closes silently (no unsaved-text confirm in A1).
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (adding) {
-        closeAdd();
-        return true;
-      }
-      return false;
-    });
-    return () => sub.remove();
-  }, [adding, closeAdd]);
-
-  const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
+  const selected = selectedId
+    ? (list.find((p) => p.id === selectedId) ?? null)
+    : null;
 
   return (
     <>
@@ -183,21 +392,44 @@ function Projects({
         ) : (
           <View className="flex-1" />
         )
+      ) : view === 'empty' ? (
+        <Text variant="subtitle">No projects yet. Name your first outcome.</Text>
       ) : (
-        <FlatList
+        <SectionList
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 96 }}
-          data={list}
+          sections={sections}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ProjectRow item={item} />}
-          ItemSeparatorComponent={Separator}
-          ListEmptyComponent={
-            <Text variant="subtitle">
-              No projects yet. Name your first outcome.
-            </Text>
-          }
+          stickySectionHeadersEnabled
+          renderSectionHeader={({ section }) => (
+            <SectionHeader
+              status={section.status}
+              count={section.count}
+              collapsed={section.collapsed}
+              onToggle={onToggle}
+            />
+          )}
+          renderItem={({ item }) => (
+            <ProjectRow
+              item={item}
+              pendingDone={pendingDone.has(item.id)}
+              onOpen={(p) => setSelectedId(p.id)}
+              onUndoDone={undoDone}
+            />
+          )}
+          ItemSeparatorComponent={() => <View className="h-3" />}
+          SectionSeparatorComponent={() => <View className="h-2" />}
         />
       )}
+
+      <Sheet open={selected != null} onClose={() => setSelectedId(null)}>
+        {selected ? (
+          <StatusGroup
+            current={selected.status}
+            onPick={(status) => onPickStatus(selected, status)}
+          />
+        ) : null}
+      </Sheet>
 
       <QuickAdd
         open={adding}

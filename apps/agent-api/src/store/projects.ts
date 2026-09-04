@@ -9,7 +9,7 @@
 // later. The status column exists now (default 'next') so those slices need no
 // migration.
 
-import { asc, eq, type Database } from "do-orm";
+import { asc, eq, ne, type Database } from "do-orm";
 
 import { projects } from "../UserDO/db/schema";
 
@@ -82,11 +82,22 @@ export class DbProjectStore {
     return project;
   }
 
-  // All projects, oldest first. A1 lists every row (all are 'next'); A2 scopes
-  // this to the non-'done' working set once statuses can change.
+  // The working set: every non-'done' project, oldest first. 'done' is terminal
+  // and drops out of the list (the client re-groups the four working statuses
+  // into sections and animates the row out). The `projects_open` partial index
+  // covers this filter.
   list(): Project[] {
     return this.db
-      .all(projects, { orderBy: asc("createdAt") })
+      .all(projects, { where: ne("status", "done"), orderBy: asc("createdAt") })
       .map(toProject);
+  }
+
+  // Move a project to another status (including to/from the terminal 'done').
+  // Returns the updated row, or null when no row has that id. One verb carries
+  // every transition; the caller decides which of the five states to pass.
+  setStatus(id: string, status: ProjectStatus): Project | null {
+    this.db.update(projects, { status }, { where: eq("id", id) });
+    const row = this.db.get(projects, { where: eq("id", id) });
+    return row ? toProject(row) : null;
   }
 }

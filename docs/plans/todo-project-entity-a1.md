@@ -1,5 +1,12 @@
 # Slice A1 — Project create & list (web + mobile) — SHIPPED 2026-09-04
 
+> **State:** on `main` (commit `807e8d7`), pushed. Server + agent-core + web +
+> mobile tests green; typecheck + lint pass on all four packages. Web verified
+> locally (`/projects`, worker on :8790). The web change auto-deploys via the
+> `zero-api` Workers Builds connector (agent-web ships as its assets). **Mobile
+> is not device-verified yet** — the new `NativeTabs` Projects tab needs a fresh
+> EAS dev build, then a Maestro run on the Pixel 7.
+
 Detailed implementation plan for **slice A1** of `docs/plans/todo-project-entity.md`
 (itself slice A of `docs/plans/todo-capture-to-project-ai.md`). A1 is the walking
 skeleton: the whole five-layer stack proven on the thinnest path — a user jots a
