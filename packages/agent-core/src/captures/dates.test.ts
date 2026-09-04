@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { localToday, tomorrow, visibleCaptures } from "./dates";
+import { dayLabel, localToday, tomorrow, visibleCaptures } from "./dates";
 import type { Capture } from "./types";
 
 const cap = (
@@ -45,6 +45,28 @@ describe("tomorrow", () => {
     // 2024-03-10 is a US DST spring-forward day; noon-UTC parsing avoids a
     // same-date result.
     expect(tomorrow("2024-03-10")).toBe("2024-03-11");
+  });
+});
+
+describe("dayLabel", () => {
+  const today = "2024-03-09";
+
+  it("labels the next day 'Tomorrow'", () => {
+    expect(dayLabel("2024-03-10", today)).toBe("Tomorrow");
+  });
+
+  it("labels a further day with weekday and date, not 'Tomorrow'", () => {
+    // 2024-03-15 is a Friday; parsed from local parts so the weekday is stable.
+    const label = dayLabel("2024-03-15", today);
+    expect(label).not.toBe("Tomorrow");
+    expect(label).toMatch(/Friday/);
+    expect(label).toMatch(/15/);
+  });
+
+  it("parses the day from local parts, so the weekday does not slip a day", () => {
+    // new Date("2024-03-10") would read as UTC midnight and could render as the
+    // 9th in a negative-offset zone; local parsing keeps it the 10th.
+    expect(dayLabel("2024-03-11", "2024-03-09")).toMatch(/11/);
   });
 });
 

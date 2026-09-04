@@ -3,7 +3,8 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
   capturesLocalToday,
-  tomorrow,
+  dayLabel,
+  messageOf,
   upcomingSections,
   type Capture,
   type CapturesApi,
@@ -13,28 +14,6 @@ import { Pressable, SectionList, TextInput, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-// A YYYY-MM-DD day rendered as its local date. Parsed from local parts (not
-// `new Date(iso)`, which reads the string as UTC midnight and can slip a day).
-function parseLocalDay(date: string): Date {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-// The section header label: "Tomorrow" for the next day, else weekday + date in
-// the device locale (e.g. "Friday, 4 Sep").
-function dayLabel(date: string, today: string): string {
-  if (date === tomorrow(today)) return 'Tomorrow';
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  }).format(parseLocalDay(date));
-}
 
 // One upcoming row: tap the circle to Process, tap the text to edit inline. No
 // drag-reorder or swipe — ordering across days has no meaning here, so this is a

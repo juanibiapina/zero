@@ -5,69 +5,21 @@ import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
+  ALL_STATUSES,
+  BACKLOG_COLLAPSE_THRESHOLD,
+  DONE_UNDO_MS,
+  ICON_CHOICES,
+  LOADING_TEXT_DELAY_MS,
+  messageOf,
   projectsByStatus,
   listView,
+  STATUS_LABELS,
   type ProjectEditFields,
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-// How long a list may sit empty-and-loading before it shows the "Loading…"
-// text. The local snapshot hydrates the cached rows in well under this, so a
-// normal load paints straight to the list with no spinner flash; the text only
-// appears on a genuinely slow first load (empty cache waiting on the network).
-const LOADING_TEXT_DELAY_MS = 1000;
-
-// How long a project sits struck-through with an Undo affordance after the user
-// sets it Done, before it commits and leaves the working list. Long enough to
-// reverse a mistaken finish; short enough not to linger.
-const DONE_UNDO_MS = 5000;
-
-// A Backlog with more than this many projects collapses by default (it is the
-// "someday" pile and must stay out of the way). Active/Next/Waiting start open.
-const BACKLOG_COLLAPSE_THRESHOLD = 5;
-
-// The five states in fixed order, with their labels. Active/Next/Waiting/Backlog
-// are the working sections; Done is terminal (chosen from the sheet, never a
-// section).
-const STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: "Active",
-  next: "Next",
-  waiting: "Waiting",
-  backlog: "Backlog",
-  done: "Done",
-};
-const ALL_STATUSES: ProjectStatus[] = [
-  "active",
-  "next",
-  "waiting",
-  "backlog",
-  "done",
-];
-
-// A small curated icon set (not a full emoji keyboard) so a project's icon
-// renders identically across platforms. Covers the vision's examples (baby,
-// diploma, house…) plus a neutral default.
-const ICON_CHOICES = [
-  "📁",
-  "👶",
-  "🎓",
-  "🏠",
-  "🎬",
-  "✈️",
-  "📚",
-  "💼",
-  "❤️",
-  "💪",
-  "🧳",
-  "🎯",
-];
 
 // True only after `active` has held continuously for `ms`. Resets the moment
 // `active` goes false, so a fast hydrate never trips it.

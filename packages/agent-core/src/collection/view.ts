@@ -9,6 +9,13 @@
 // nothing yet, which also stops an empty-state flash before hydration.
 export type ListView = "rows" | "loading" | "empty" | "error";
 
+// How long a list may sit empty-and-loading before it shows the "Loading…" text.
+// The local snapshot hydrates cached rows in well under this, so a normal load
+// paints straight to the list with no spinner flash; the text only appears on a
+// genuinely slow first load (empty cache waiting on the network). Shared by every
+// list screen so the delay is tuned in one place.
+export const LOADING_TEXT_DELAY_MS = 1000;
+
 export function listView(state: {
   count: number;
   isLoading: boolean;

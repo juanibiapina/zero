@@ -3,7 +3,9 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
   listView,
+  LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  messageOf,
   orderKeyBetween,
   tomorrow,
   visibleCaptures,
@@ -43,10 +45,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 // Vertical gap between carded rows.
 function Separator() {
@@ -212,13 +210,6 @@ function CaptureRow({
     </View>
   );
 }
-
-// How long a list may sit empty-and-loading before it shows the "Loading…"
-// text. The local SQLite snapshot hydrates the cached rows in well under this,
-// so a normal cold start paints straight to the list with no spinner flash; the
-// text only appears on a genuinely slow first load (empty cache waiting on the
-// network).
-const LOADING_TEXT_DELAY_MS = 1000;
 
 // True only after `active` has held continuously for `ms`. Resets the moment
 // `active` goes false, so a fast hydrate never trips it.

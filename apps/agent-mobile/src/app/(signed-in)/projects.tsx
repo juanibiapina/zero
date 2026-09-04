@@ -2,8 +2,15 @@ import { UserButton } from '@clerk/expo/native';
 import { Button, Column, Row, Text as UIText, TextInput } from '@expo/ui';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
+  ALL_STATUSES,
+  BACKLOG_COLLAPSE_THRESHOLD,
+  DONE_UNDO_MS,
+  ICON_CHOICES,
+  LOADING_TEXT_DELAY_MS,
+  messageOf,
   projectsByStatus,
   listView,
+  STATUS_LABELS,
   type Project,
   type ProjectEditFields,
   type ProjectsApi,
@@ -25,57 +32,9 @@ import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
 
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 // Helper text (not the placeholder): teach outcome-based naming, the one
 // deliberate act of creating a project.
 const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done.";
-
-// How long a list may sit empty-and-loading before it shows the "Loading…"
-// text, so a cached cold start never flashes it. Mirrors the Captures screen.
-const LOADING_TEXT_DELAY_MS = 1000;
-
-// How long a project sits struck-through with Undo after being set Done, before
-// it commits and leaves the working list.
-const DONE_UNDO_MS = 5000;
-
-// A Backlog larger than this collapses by default (the "someday" pile, kept out
-// of the way). Active/Next/Waiting start open.
-const BACKLOG_COLLAPSE_THRESHOLD = 5;
-
-const STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: 'Active',
-  next: 'Next',
-  waiting: 'Waiting',
-  backlog: 'Backlog',
-  done: 'Done',
-};
-const ALL_STATUSES: ProjectStatus[] = [
-  'active',
-  'next',
-  'waiting',
-  'backlog',
-  'done',
-];
-
-// A small curated icon set (not a full emoji keyboard) so a project's icon
-// renders identically across platforms.
-const ICON_CHOICES = [
-  '📁',
-  '👶',
-  '🎓',
-  '🏠',
-  '🎬',
-  '✈️',
-  '📚',
-  '💼',
-  '❤️',
-  '💪',
-  '🧳',
-  '🎯',
-];
 
 function useDelayed(active: boolean, ms: number): boolean {
   const [elapsed, setElapsed] = useState(false);

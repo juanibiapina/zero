@@ -23,23 +23,15 @@ import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
   listView,
+  LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  messageOf,
   orderKeyBetween,
   tomorrow,
   visibleCaptures,
 } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { type Capture } from "@/lib/captures";
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-// How long a list may sit empty-and-loading before it shows the "Loading…"
-// text. The local snapshot hydrates the cached rows in well under this, so a
-// normal load paints straight to the list with no spinner flash; the text only
-// appears on a genuinely slow first load (empty cache waiting on the network).
-const LOADING_TEXT_DELAY_MS = 1000;
 
 // True only after `active` has held continuously for `ms`. Resets the moment
 // `active` goes false, so a fast hydrate never trips it.

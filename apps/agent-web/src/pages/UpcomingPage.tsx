@@ -3,35 +3,14 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import {
   capturesLocalToday,
-  tomorrow,
+  dayLabel,
+  messageOf,
   upcomingSections,
 } from "@zero/agent-core";
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { type Capture } from "@/lib/captures";
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-// A YYYY-MM-DD day parsed from local parts (not `new Date(iso)`, which reads the
-// string as UTC midnight and can slip a day).
-function parseLocalDay(date: string): Date {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-// The section header: "Tomorrow" for the next day, else weekday + date in the
-// browser locale (e.g. "Friday, 4 Sep").
-function dayLabel(date: string, today: string): string {
-  if (date === tomorrow(today)) return "Tomorrow";
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    day: "numeric",
-    month: "short",
-  }).format(parseLocalDay(date));
-}
 
 // Upcoming lists captures scheduled for a future day, grouped into day sections.
 // The complement of Captures: what has shown up stays there, what is still ahead

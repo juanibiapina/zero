@@ -29,6 +29,25 @@ export function tomorrow(today: string): string {
   return `${yy}-${mm}-${dd}`;
 }
 
+// A YYYY-MM-DD day parsed from its local parts (not `new Date(iso)`, which reads
+// the string as UTC midnight and can slip a day). Backs the Upcoming day labels.
+export function parseLocalDay(date: string): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// The Upcoming section header for a YYYY-MM-DD day: "Tomorrow" for the next day,
+// else weekday + date in the device/browser locale (e.g. "Friday, 4 Sep").
+// Shared so the web and mobile Upcoming lists label days identically.
+export function dayLabel(date: string, today: string): string {
+  if (date === tomorrow(today)) return "Tomorrow";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  }).format(parseLocalDay(date));
+}
+
 // The optimistic client-side hide, mirroring the server filter: keep open
 // captures with no show-up date or a date that has arrived, so a plain capture
 // always shows and an overdue one rolls in silently (no red — Things-3 gentle
