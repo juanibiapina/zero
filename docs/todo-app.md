@@ -305,6 +305,12 @@ In flight (details in `docs/plans/`):
 
 Next:
 
+- **Project detail as a destination** — a project opens its own screen (web
+  `/projects/:id` route; mobile a pushed screen within the Projects tab), not a
+  bottom sheet, leading with its tasks and what it's waiting on. This also fixes
+  the broken mobile task/waiting renderer (raw React Native rows inside an
+  `@expo/ui` sheet host; a pushed RN screen removes the host). Plan:
+  `docs/plans/todo-project-detail-rework.md`.
 - **Reschedule a Task** — swipe-to-tomorrow / pick a future date (v1 dates every
   Task today with no way to change it).
 - **AI Capture → Project** — swipe a Capture, propose a Project, confirm (the
