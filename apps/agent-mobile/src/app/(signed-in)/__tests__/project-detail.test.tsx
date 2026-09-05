@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  waitFor,
+  type RenderResult,
+} from '@testing-library/react-native';
 import { Pressable, Text as RNText, View } from 'react-native';
 
 import type { Project, ProjectStatus, Task, WaitingCondition } from '@/lib/api';
@@ -10,6 +16,16 @@ import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
 
 import ProjectDetailScreen from '../projects/[id]';
+
+// Trigger pull-to-refresh: the scroll host carries the RefreshControl element on
+// its `refreshControl` prop, so invoke that control's onRefresh the way a real
+// pull would.
+const pullToRefresh = (screen: RenderResult) => {
+  const [scroll] = screen.container.queryAll(
+    (n) => n.props?.refreshControl != null,
+  );
+  scroll.props.refreshControl.props.onRefresh();
+};
 
 const mockGetToken = jest.fn<() => Promise<string | null>>();
 jest.mock('@clerk/expo', () => ({
@@ -294,6 +310,22 @@ describe('ProjectDetailScreen', () => {
 
     expect(mockRequestLeave).toHaveBeenCalledWith('1', 'delete');
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-pulls the project when the screen is pulled to refresh', async () => {
+    const screen = await renderScreen();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Project title').props.value).toBe('Run a 5K'),
+    );
+
+    const before = mockFetchProjects.mock.calls.length;
+    await act(async () => {
+      pullToRefresh(screen);
+    });
+
+    await waitFor(() =>
+      expect(mockFetchProjects.mock.calls.length).toBeGreaterThan(before),
+    );
   });
 
   it('offers a way back when the project id is unknown', async () => {

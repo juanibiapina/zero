@@ -1,6 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  waitFor,
+  type RenderResult,
+} from '@testing-library/react-native';
 import { BackHandler, View } from 'react-native';
 
 import type { Capture, Task } from '@/lib/api';
@@ -10,6 +16,16 @@ import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
 
 import HomeScreen from '../index';
+
+// Trigger pull-to-refresh: the scroll host carries the RefreshControl element on
+// its `refreshControl` prop, so invoke that control's onRefresh the way a real
+// pull would.
+const pullToRefresh = (screen: RenderResult) => {
+  const [scroll] = screen.container.queryAll(
+    (n) => n.props?.refreshControl != null,
+  );
+  scroll.props.refreshControl.props.onRefresh();
+};
 
 const mockGetToken = jest.fn<() => Promise<string | null>>();
 jest.mock('@clerk/expo', () => ({
@@ -717,5 +733,22 @@ describe('HomeScreen', () => {
 
     expect(queryByText('Discard changes?')).toBeNull();
     expect(queryByPlaceholderText('Capture a thought')).toBeNull();
+  });
+
+  it('re-pulls the captures when the list is pulled to refresh', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('buy milk')).toBeTruthy());
+
+    const before = mockFetchCaptures.mock.calls.length;
+    await act(async () => {
+      pullToRefresh(screen);
+    });
+
+    await waitFor(() =>
+      expect(mockFetchCaptures.mock.calls.length).toBeGreaterThan(before),
+    );
   });
 });

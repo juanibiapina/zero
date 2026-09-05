@@ -53,6 +53,38 @@ export function useForegroundRefetch(refetch: () => void | Promise<void>): void 
   }, [refetch]);
 }
 
+// Pull-to-refresh spinner state for a list screen. `onRefresh` sets `refreshing`
+// true, awaits the caller's refetch (a screen composes one call over every
+// collection it shows), then clears the spinner — in a `finally` so a failed
+// pull still stops spinning (the load-error channel surfaces the failure). A
+// ref guards the trailing setState so a late resolve never lands on a torn-down
+// screen. The RefreshControl's `refreshing` is controlled, so it stays up until
+// this settles.
+export function usePullRefresh(refetch: () => Promise<unknown>): {
+  refreshing: boolean;
+  onRefresh: () => void;
+} {
+  const [refreshing, setRefreshing] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void (async () => {
+      try {
+        await refetch();
+      } finally {
+        if (mounted.current) setRefreshing(false);
+      }
+    })();
+  }, [refetch]);
+  return { refreshing, onRefresh };
+}
+
 // A deferred, undoable "row leaves the list" action. `start(id, commit)` holds
 // the id in `pending` (the row renders struck-through with an Undo) for `ms`,
 // then runs `commit` (the real write) and drops it. `undo(id)` cancels the
