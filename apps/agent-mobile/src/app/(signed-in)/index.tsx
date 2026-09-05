@@ -5,12 +5,16 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  homeTasks,
+  localToday,
   messageOf,
   orderKeyBetween,
   tomorrow,
   visibleCaptures,
   type Capture,
   type CapturesApi,
+  type Task,
+  type TasksApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -44,10 +48,11 @@ import { useResolveClassNames } from 'uniwind';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
-import { CheckCircle } from '@/components/ui/list-row';
+import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
+import { useTasksApi } from '@/lib/tasks-collection';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -230,10 +235,80 @@ function CaptureDetail({
   );
 }
 
-// Captures is the sole list: unclarified raw thoughts. The quick-add creates a
-// Capture; tap a row's circle to Process it.
+// One task row in the Home top region: a complete circle and the text. The
+// availability rule (which tasks show) lives in the shared homeTasks seam.
+function TaskRow({
+  item,
+  onComplete,
+}: {
+  item: Task;
+  onComplete: (item: Task) => void;
+}) {
+  return (
+    <ListRow
+      leading={
+        <CheckCircle
+          label={`Complete "${item.text}"`}
+          onPress={() => onComplete(item)}
+        />
+      }
+    >
+      <Text>{item.text}</Text>
+    </ListRow>
+  );
+}
+
+// The Home top region: the tasks you have taken on, rendered above the capture
+// inbox as the list header. Slice 1 shows every open task; later slices gate it
+// by project and selection through homeTasks.
+function TasksTop({
+  api,
+  onError,
+}: {
+  api: TasksApi;
+  onError: (message: string) => void;
+}) {
+  const { data: tasks } = useLiveQuery((q) =>
+    q
+      .from({ t: api.collection })
+      .where(({ t }) => isNull(t.completedAt))
+      .orderBy(({ t }) => t.createdAt, 'asc'),
+  );
+  useForegroundRefetch(api.refetch);
+  const list = useMemo(() => homeTasks(tasks ?? []), [tasks]);
+  const onComplete = useCallback(
+    (item: Task) => {
+      const tx = api.complete(item.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, onError],
+  );
+  return (
+    <View>
+      <Text variant="caption" className="px-screen-x pb-1 pt-2">
+        Today
+      </Text>
+      {list.length === 0 ? (
+        <Text variant="subtitle" className="px-screen-x pb-2">
+          No tasks yet. Add one to work on today.
+        </Text>
+      ) : (
+        list.map((item) => (
+          <TaskRow key={item.id} item={item} onComplete={onComplete} />
+        ))
+      )}
+      <Text variant="caption" className="px-screen-x pb-1 pt-3">
+        Inbox
+      </Text>
+    </View>
+  );
+}
+
+// Home is two regions: the tasks you have taken on (TasksTop) above the capture
+// inbox. The quick-add defaults to a capture and can switch to a task.
 export default function HomeScreen() {
   const capturesApi = useCapturesApi();
+  const tasksApi = useTasksApi();
 
   // Measure the gap from this screen's content bottom to the window bottom (the
   // native bottom tab bar plus the system gesture inset), fed to the
@@ -250,9 +325,13 @@ export default function HomeScreen() {
 
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
-      <ScreenHeader title="Captures" />
-      {capturesApi ? (
-        <Captures api={capturesApi} bottomOffset={bottomOffset} />
+      <ScreenHeader title="Home" />
+      {capturesApi && tasksApi ? (
+        <Captures
+          api={capturesApi}
+          tasksApi={tasksApi}
+          bottomOffset={bottomOffset}
+        />
       ) : (
         <View className="flex-1" />
       )}
@@ -260,13 +339,18 @@ export default function HomeScreen() {
   );
 }
 
+type AddMode = 'capture' | 'task';
+
 function Captures({
   api,
+  tasksApi,
   bottomOffset,
 }: {
   api: CapturesApi;
+  tasksApi: TasksApi;
   bottomOffset: number;
 }) {
+  const [mode, setMode] = useState<AddMode>('capture');
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: api.collection })
@@ -332,11 +416,13 @@ function Captures({
     }
     setWriteError(null);
     // Optimistic: the row appears at once; surface a failure if the write loses.
-    const tx = api.add(trimmed);
+    // The mode decides where it lands: a task dated today, or a capture.
+    const tx =
+      mode === 'task' ? tasksApi.add(trimmed, localToday()) : api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    // Keep the bar open and cleared for rapid, repeated capture.
+    // Keep the bar open and cleared for rapid, repeated entry.
     setText('');
-  }, [text, api]);
+  }, [text, api, tasksApi, mode]);
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -475,6 +561,9 @@ function Captures({
           renderItem={renderItem}
           itemLayoutAnimation={LinearTransition.duration(200)}
           onReorder={onReorder}
+          ListHeaderComponent={
+            <TasksTop api={tasksApi} onError={setWriteError} />
+          }
           ListEmptyComponent={
             <Text variant="subtitle" className="px-screen-x">
               No captures yet. Capture something.
@@ -499,6 +588,9 @@ function Captures({
       <QuickAdd
         open={adding}
         text={text}
+        mode={mode}
+        onModeChange={setMode}
+        placeholder={mode === 'task' ? 'Add a task' : 'Capture a thought'}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
         onSubmit={() => onAdd()}

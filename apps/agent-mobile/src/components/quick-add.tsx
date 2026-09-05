@@ -7,9 +7,14 @@ import { useResolveClassNames } from 'uniwind';
 import { QuickAddBar } from '@/components/quick-add-bar';
 import { Fab } from '@/components/ui/fab';
 
+export type QuickAddMode = 'capture' | 'task';
+
 export type QuickAddProps = {
   open: boolean;
   text: string;
+  // When provided, the bar shows a Capture/Task toggle above the input.
+  mode?: QuickAddMode;
+  onModeChange?: (mode: QuickAddMode) => void;
   onChangeText: (text: string) => void;
   // Collapsed FAB tapped: request opening the bar.
   onOpen: () => void;
@@ -44,6 +49,8 @@ export type QuickAddProps = {
 export function QuickAdd({
   open,
   text,
+  mode,
+  onModeChange,
   onChangeText,
   onOpen,
   onSubmit,
@@ -86,6 +93,8 @@ export function QuickAdd({
           >
             <QuickAddBar
               value={text}
+              mode={mode}
+              onModeChange={onModeChange}
               onChangeText={onChangeText}
               onSubmit={onSubmit}
               busy={busy}

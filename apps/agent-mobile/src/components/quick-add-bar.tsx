@@ -1,12 +1,18 @@
 import { type Ref } from 'react';
-import { type TextInput, View } from 'react-native';
+import { Pressable, type TextInput, View } from 'react-native';
 
 import { Fab } from '@/components/ui/fab';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
+import { cn } from '@/lib/cn';
+
+export type QuickAddBarMode = 'capture' | 'task';
 
 export type QuickAddBarProps = {
   value: string;
+  // When provided, a Capture/Task toggle shows above the input.
+  mode?: QuickAddBarMode;
+  onModeChange?: (mode: QuickAddBarMode) => void;
   onChangeText: (text: string) => void;
   // Fired by both the keyboard "done" key and the Add button.
   onSubmit: () => void;
@@ -27,6 +33,8 @@ export type QuickAddBarProps = {
 // those.
 export function QuickAddBar({
   value,
+  mode,
+  onModeChange,
   onChangeText,
   onSubmit,
   busy,
@@ -38,6 +46,30 @@ export function QuickAddBar({
 }: QuickAddBarProps) {
   return (
     <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
+      {mode && onModeChange ? (
+        <View className="mb-2 flex-row gap-2">
+          {(['capture', 'task'] as const).map((m) => (
+            <Pressable
+              key={m}
+              accessibilityRole="button"
+              accessibilityLabel={m === 'task' ? 'Add a task' : 'Add a capture'}
+              accessibilityState={{ selected: mode === m }}
+              onPress={() => onModeChange(m)}
+              className={cn(
+                'rounded-full px-3 py-1',
+                mode === m ? 'bg-accent' : 'bg-surface-muted',
+              )}
+            >
+              <Text
+                variant="caption"
+                className={cn('capitalize', mode === m && 'text-on-accent')}
+              >
+                {m}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       {helperText ? (
         <Text variant="caption" className="mb-2">
           {helperText}

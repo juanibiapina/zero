@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { BackHandler, View } from 'react-native';
 
-import type { Capture } from '@/lib/api';
+import type { Capture, Task } from '@/lib/api';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
+import { resetTasksApiForTest } from '@/lib/tasks-collection';
 
 import HomeScreen from '../index';
 
@@ -42,6 +43,16 @@ const mockReorderCapture =
   jest.fn<
     (getToken: unknown, id: string, sortKey: string) => Promise<Capture>
   >();
+const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
+const mockAddTask =
+  jest.fn<
+    (
+      getToken: unknown,
+      task: { id: string; text: string; showUpDate: string },
+    ) => Promise<Task>
+  >();
+const mockCompleteTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 jest.mock('@/lib/api', () => ({
   fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
   addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
@@ -54,7 +65,21 @@ jest.mock('@/lib/api', () => ({
     mockRescheduleCapture(getToken, id, showUpDate),
   reorderCapture: (getToken: unknown, id: string, sortKey: string) =>
     mockReorderCapture(getToken, id, sortKey),
+  fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
+  addTask: (
+    getToken: unknown,
+    task: { id: string; text: string; showUpDate: string },
+  ) => mockAddTask(getToken, task),
+  completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
 }));
+
+const taskRow = (id: string, text: string): Task => ({
+  id,
+  text,
+  showUpDate: '2023-01-01',
+  createdAt: '2023-01-01T00:00:00.000Z',
+  completedAt: null,
+});
 
 const capture = (
   id: string,
@@ -91,7 +116,72 @@ const renderScreen = () => {
 describe('HomeScreen', () => {
   beforeEach(() => {
     resetCapturesApiForTest();
+    resetTasksApiForTest();
     mockEditCapture.mockReset();
+    mockAddTask.mockReset();
+    mockCompleteTask.mockReset();
+    mockFetchTasks.mockReset();
+    mockFetchTasks.mockResolvedValue([]);
+  });
+
+  it('adds a task from the Task quick-add mode', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockAddTask.mockImplementation(async (_g, task) => {
+      const added: Task = {
+        id: task.id,
+        text: task.text,
+        showUpDate: task.showUpDate,
+        createdAt: '2023-01-01T00:00:00.000Z',
+        completedAt: null,
+      };
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const { getByLabelText, getByPlaceholderText, getByText } =
+      await renderScreen();
+    await waitFor(() =>
+      expect(getByText('No captures yet. Capture something.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Capture'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a task'));
+    });
+    const input = getByPlaceholderText('Add a task');
+    await act(async () => {
+      fireEvent.changeText(input, 'call the dentist');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(getByText('call the dentist')).toBeTruthy());
+    expect(mockAddTask).toHaveBeenCalledTimes(1);
+    expect(mockAddTask.mock.calls[0][1].text).toBe('call the dentist');
+  });
+
+  it('completes a task from the Home top region', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return { ...taskRow('1', 'mail the letter'), completedAt: '2023-01-02T00:00:00.000Z' };
+    });
+
+    const { getByLabelText, getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "mail the letter"'));
+    });
+
+    await waitFor(() => expect(queryByText('mail the letter')).toBeNull());
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1);
   });
 
   it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {
