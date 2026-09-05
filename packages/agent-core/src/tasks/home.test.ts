@@ -10,6 +10,7 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
     showUpDate: over.showUpDate ?? "2026-01-01",
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
+    projectId: over.projectId ?? null,
   };
 }
 

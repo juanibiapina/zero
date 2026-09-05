@@ -229,6 +229,9 @@ export const tasks = table("tasks", {
   showUpDate: column.text().notNull(),
   createdAt: column.text().notNull(),
   completedAt: column.text(),
+  // The Project this task belongs to, or NULL when the task is loose. See
+  // migration 0047.
+  projectId: column.text(),
 });
 
 // Projects: the third entity of the todo app (the Todoist replacement). A named,

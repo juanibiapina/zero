@@ -78,19 +78,21 @@ const taskRow = (id: string, text: string): Task => ({
   showUpDate: "2023-01-01",
   createdAt: `2023-01-0${id}T00:00:00.000Z`,
   completedAt: null,
+  projectId: null,
 });
 
 function fakeTasksRest(initial: Task[]): TasksRest {
   const server = initial.map((item) => ({ ...item }));
   return {
     fetchTasks: async () => server.map((item) => ({ ...item })),
-    addTask: async ({ id, text, showUpDate }) => {
+    addTask: async ({ id, text, showUpDate, projectId }) => {
       const row: Task = {
         id,
         text,
         showUpDate,
         createdAt: new Date().toISOString(),
         completedAt: null,
+        projectId,
       };
       server.push(row);
       return { ...row };

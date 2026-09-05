@@ -200,7 +200,7 @@ export async function fetchTasks(
 
 export async function addTask(
   getToken: TokenGetter,
-  task: { id: string; text: string; showUpDate: string },
+  task: { id: string; text: string; showUpDate: string; projectId: string | null },
   baseUrl: string = API_BASE_URL,
 ): Promise<Task> {
   const res = await apiFetch(

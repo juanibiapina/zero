@@ -166,8 +166,13 @@ export class UserDO extends DurableObject<Env> {
     return this.captures.reorder(id, sortKey);
   }
 
-  addTask(id: string, text: string, showUpDate: string): Task {
-    return this.tasks.add(id, text, showUpDate);
+  addTask(
+    id: string,
+    text: string,
+    showUpDate: string,
+    projectId: string | null = null,
+  ): Task {
+    return this.tasks.add(id, text, showUpDate, projectId);
   }
 
   listTasks(): Task[] {

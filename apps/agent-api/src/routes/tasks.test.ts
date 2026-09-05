@@ -13,7 +13,12 @@ const fakeUserDO = (seed: Task[] = []) => {
   const tasks = [...seed];
   let n = seed.length;
   return {
-    addTask(id: string, text: string, showUpDate: string): Task {
+    addTask(
+      id: string,
+      text: string,
+      showUpDate: string,
+      projectId: string | null = null,
+    ): Task {
       const existingById = tasks.find((t) => t.id === id);
       if (existingById) return existingById;
       const task: Task = {
@@ -22,6 +27,7 @@ const fakeUserDO = (seed: Task[] = []) => {
         showUpDate,
         createdAt: new Date(1700000000000 + ++n).toISOString(),
         completedAt: null,
+        projectId,
       };
       tasks.push(task);
       return task;
@@ -69,6 +75,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   showUpDate: "2023-11-14",
   createdAt: "2023-11-14T22:13:20.001Z",
   completedAt: null,
+  projectId: null,
   ...over,
 });
 

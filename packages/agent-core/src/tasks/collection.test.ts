@@ -19,7 +19,7 @@ function fakeRest(initial: Task[]): TasksRest {
       await sleep(5);
       return server.filter((t) => t.completedAt == null).map((t) => ({ ...t }));
     },
-    addTask: async ({ id, text, showUpDate }) => {
+    addTask: async ({ id, text, showUpDate, projectId }) => {
       await sleep(5);
       const existing = server.find((t) => t.id === id);
       if (existing) return { ...existing };
@@ -29,6 +29,7 @@ function fakeRest(initial: Task[]): TasksRest {
         showUpDate,
         createdAt: new Date().toISOString(),
         completedAt: null,
+        projectId,
       };
       server.push(task);
       return { ...task };
@@ -64,6 +65,7 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   showUpDate: "2020-01-01",
   createdAt: "2020-01-01T00:00:00.000Z",
   completedAt: null,
+  projectId: null,
   ...over,
 });
 

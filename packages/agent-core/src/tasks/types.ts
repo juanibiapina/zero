@@ -11,4 +11,6 @@ export type Task = {
   showUpDate: string;
   createdAt: string;
   completedAt: string | null;
+  // The Project this task belongs to, or null when the task is loose.
+  projectId: string | null;
 };

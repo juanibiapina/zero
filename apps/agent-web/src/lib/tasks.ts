@@ -18,6 +18,7 @@ export async function addTask(task: {
   id: string;
   text: string;
   showUpDate: string;
+  projectId: string | null;
 }): Promise<Task> {
   const res = await fetch("/api/tasks", {
     method: "POST",

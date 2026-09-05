@@ -19,6 +19,8 @@ export interface Task {
   showUpDate: string;
   createdAt: string;
   completedAt: string | null;
+  // The Project this task belongs to, or null when the task is loose.
+  projectId: string | null;
 }
 
 // Project a stored row back to the client-facing Task shape.
@@ -28,6 +30,7 @@ function toTask(row: {
   showUpDate: string;
   createdAt: string;
   completedAt: string | null;
+  projectId: string | null;
 }): Task {
   return {
     id: row.id,
@@ -35,6 +38,7 @@ function toTask(row: {
     showUpDate: row.showUpDate,
     createdAt: row.createdAt,
     completedAt: row.completedAt,
+    projectId: row.projectId,
   };
 }
 
@@ -44,7 +48,12 @@ export class DbTaskStore {
   // The client mints the task id, so the add is exactly-once on the id alone: a
   // replay (a retried write after a lost ACK) re-sends the same id and gets the
   // already-stored row back instead of inserting a second one.
-  add(id: string, text: string, showUpDate: string): Task {
+  add(
+    id: string,
+    text: string,
+    showUpDate: string,
+    projectId: string | null = null,
+  ): Task {
     const existingById = this.db.get(tasks, { where: eq("id", id) });
     if (existingById) return toTask(existingById);
     const task: Task = {
@@ -53,6 +62,7 @@ export class DbTaskStore {
       showUpDate,
       createdAt: new Date().toISOString(),
       completedAt: null,
+      projectId,
     };
     this.db.insert(tasks, task);
     return task;

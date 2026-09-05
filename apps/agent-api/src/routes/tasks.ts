@@ -15,6 +15,7 @@ const TaskSchema = z.object({
   showUpDate: z.string(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
+  projectId: z.string().nullable(),
 });
 
 // A local calendar day, YYYY-MM-DD. The client mints it in the user's timezone.
@@ -61,6 +62,9 @@ export const createTasksRoutes = () => {
               id: z.string().uuid(),
               text: z.string().min(1),
               showUpDate: ShowUpDate,
+              // Optional: the Project this task belongs to. Omitted/absent for a
+              // loose task.
+              projectId: z.string().uuid().nullable().optional(),
             }),
           },
         },
@@ -84,12 +88,12 @@ export const createTasksRoutes = () => {
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, text, showUpDate } = c.req.valid("json");
+    const { id, text, showUpDate, projectId } = c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
     const userDO = getUserDO(c.env, userId);
-    const task = await userDO.addTask(id, text, showUpDate);
+    const task = await userDO.addTask(id, text, showUpDate, projectId ?? null);
     log("task_added", { clerk_user_id: userId });
     return c.json({ task }, 201);
   });
