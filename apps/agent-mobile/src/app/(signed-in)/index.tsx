@@ -5,6 +5,7 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  DONE_UNDO_MS,
   homeTasks,
   localToday,
   messageOf,
@@ -51,6 +52,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
+import { Input } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
@@ -62,6 +64,7 @@ import {
   useDelayed,
   useForegroundRefetch,
   useLoadError,
+  useUndoableLeave,
 } from '@/lib/screen-hooks';
 
 // Strong ease-out for the commit slide (from the Expo animation recipe).
@@ -243,13 +246,53 @@ function CaptureDetail({
 // availability rule (which tasks show) lives in the shared homeTasks seam.
 function TaskRow({
   item,
+  leaving,
   onComplete,
   onPark,
+  onUndo,
+  onAddWaiting,
 }: {
   item: Task;
+  leaving: boolean;
   onComplete: (item: Task) => void;
   onPark: (item: Task) => void;
+  onUndo: (item: Task) => void;
+  onAddWaiting: (item: Task) => void;
 }) {
+  // Completing leaves the task in place ~5s with Undo (and, for a project task,
+  // a "+ Waiting" shortcut) before the write commits.
+  if (leaving) {
+    return (
+      <ListRow
+        trailing={
+          <View className="flex-row items-center gap-3">
+            {item.projectId ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Add waiting condition for "${item.text}"`}
+                hitSlop={8}
+                onPress={() => onAddWaiting(item)}
+              >
+                <Text className="text-[13px] text-foreground-muted">
+                  + Waiting
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Undo"
+              hitSlop={8}
+              onPress={() => onUndo(item)}
+            >
+              <Text className="text-[13px] font-semibold text-accent">Undo</Text>
+            </Pressable>
+          </View>
+        }
+      >
+        <Text className="text-foreground-muted line-through">{item.text}</Text>
+      </ListRow>
+    );
+  }
   return (
     <ListRow
       leading={
@@ -305,16 +348,23 @@ function TasksTop({
     q.from({ w: waitsApi.collection }),
   );
   useForegroundRefetch(api.refetch);
+  const done = useUndoableLeave(DONE_UNDO_MS);
+  const [waitingFor, setWaitingFor] = useState<{ projectId: string } | null>(
+    null,
+  );
+  const [condText, setCondText] = useState('');
   const list = useMemo(
     () => homeTasks(tasks ?? [], projects ?? [], conditions ?? []),
     [tasks, projects, conditions],
   );
   const onComplete = useCallback(
     (item: Task) => {
-      const tx = api.complete(item.id);
-      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      done.start(item.id, () => {
+        const tx = api.complete(item.id);
+        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      });
     },
-    [api, onError],
+    [api, done, onError],
   );
   const onPark = useCallback(
     (item: Task) => {
@@ -323,6 +373,19 @@ function TasksTop({
     },
     [api, onError],
   );
+  const onUndo = useCallback((item: Task) => done.undo(item.id), [done]);
+  const onAddWaiting = useCallback((item: Task) => {
+    if (item.projectId) setWaitingFor({ projectId: item.projectId });
+  }, []);
+  const addCondition = useCallback(() => {
+    const trimmed = condText.trim();
+    const target = waitingFor;
+    setWaitingFor(null);
+    setCondText('');
+    if (!target || !trimmed) return;
+    const tx = waitsApi.add(target.projectId, 'free-text', { text: trimmed });
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  }, [condText, waitingFor, waitsApi, onError]);
   return (
     <View>
       <Text variant="caption" className="px-screen-x pb-1 pt-2">
@@ -337,14 +400,42 @@ function TasksTop({
           <TaskRow
             key={item.id}
             item={item}
+            leaving={done.pending.has(item.id)}
             onComplete={onComplete}
             onPark={onPark}
+            onUndo={onUndo}
+            onAddWaiting={onAddWaiting}
           />
         ))
       )}
       <Text variant="caption" className="px-screen-x pb-1 pt-3">
         Inbox
       </Text>
+
+      <Sheet
+        open={waitingFor != null}
+        onClose={() => {
+          setWaitingFor(null);
+          setCondText('');
+        }}
+      >
+        <Column spacing={12}>
+          <Input
+            value={condText}
+            onChangeText={setCondText}
+            onSubmitEditing={addCondition}
+            returnKeyType="done"
+            placeholder="e.g. the letter comes back"
+            accessibilityLabel="Waiting condition"
+          />
+          <Button
+            label="Add waiting condition"
+            variant="filled"
+            style={{ height: 48, borderRadius: 14 }}
+            onPress={addCondition}
+          />
+        </Column>
+      </Sheet>
     </View>
   );
 }

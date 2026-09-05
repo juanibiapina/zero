@@ -184,24 +184,41 @@ describe('HomeScreen', () => {
     expect(mockAddTask.mock.calls[0][1].text).toBe('call the dentist');
   });
 
-  it('completes a task from the Home top region', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-    mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
-    mockCompleteTask.mockImplementation(async () => {
-      mockFetchTasks.mockResolvedValue([]);
-      return { ...taskRow('1', 'mail the letter'), completedAt: '2023-01-02T00:00:00.000Z' };
-    });
+  it('completes a task from the Home top region after the undo window', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetToken.mockResolvedValue('tok');
+      mockFetchCaptures.mockResolvedValue([]);
+      mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
+      mockCompleteTask.mockImplementation(async () => {
+        mockFetchTasks.mockResolvedValue([]);
+        return {
+          ...taskRow('1', 'mail the letter'),
+          completedAt: '2023-01-02T00:00:00.000Z',
+        };
+      });
 
-    const { getByLabelText, getByText, queryByText } = await renderScreen();
-    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
+      const { getByLabelText, getByText } = await renderScreen();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      expect(getByText('mail the letter')).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.press(getByLabelText('Complete "mail the letter"'));
-    });
+      // Completing leaves the row in place with an Undo; the write is deferred.
+      await act(async () => {
+        fireEvent.press(getByLabelText('Complete "mail the letter"'));
+      });
+      expect(getByLabelText('Undo')).toBeTruthy();
+      expect(mockCompleteTask).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(queryByText('mail the letter')).toBeNull());
-    expect(mockCompleteTask).toHaveBeenCalledTimes(1);
+      // After the undo window the completion commits.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      expect(mockCompleteTask).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {

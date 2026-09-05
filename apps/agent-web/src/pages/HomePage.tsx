@@ -26,6 +26,7 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  DONE_UNDO_MS,
   homeTasks,
   localToday,
   messageOf,
@@ -37,7 +38,11 @@ import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
-import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
+import {
+  useDelayed,
+  useForegroundRefetch,
+  useUndoableLeave,
+} from "@/lib/screen-hooks";
 import { type Capture } from "@/lib/captures";
 import { type Task } from "@/lib/tasks";
 
@@ -160,12 +165,23 @@ function TasksSection({
   );
   useForegroundRefetch(api.refetch);
 
+  // Completing leaves the task in place ~5s with Undo (and, for a project task,
+  // a "+ Waiting condition" shortcut) before the write commits.
+  const done = useUndoableLeave(DONE_UNDO_MS);
+  const [waitingFor, setWaitingFor] = useState<{
+    projectId: string;
+    label: string;
+  } | null>(null);
+  const [condText, setCondText] = useState("");
+
   const onComplete = useCallback(
     (item: Task) => {
-      const tx = api.complete(item.id);
-      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      done.start(item.id, () => {
+        const tx = api.complete(item.id);
+        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      });
     },
-    [api, onError],
+    [api, done, onError],
   );
 
   // Park a project task straight from Home (send it back to the project screen).
@@ -177,6 +193,16 @@ function TasksSection({
     },
     [api, onError],
   );
+
+  const addCondition = useCallback(() => {
+    const trimmed = condText.trim();
+    const target = waitingFor;
+    setWaitingFor(null);
+    setCondText("");
+    if (!target || !trimmed) return;
+    const tx = waitsApi.add(target.projectId, "free-text", { text: trimmed });
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  }, [condText, waitingFor, waitsApi, onError]);
 
   const list = homeTasks(tasks ?? [], projects ?? [], conditions ?? []);
   const view = listView({ count: list.length, isLoading, loadError: null });
@@ -192,32 +218,101 @@ function TasksSection({
         </p>
       ) : (
         <ul className="space-y-3">
-          {list.map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4"
-            >
-              <button
-                type="button"
-                aria-label={`Complete "${item.text}"`}
-                className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
-                onClick={() => onComplete(item)}
-              />
-              <span className="flex-1 text-left text-base">{item.text}</span>
-              {item.projectId && (
-                <button
-                  type="button"
-                  aria-label={`Park "${item.text}"`}
-                  className="shrink-0 text-lg leading-none text-amber-500"
-                  onClick={() => onPark(item)}
-                >
-                  ★
-                </button>
-              )}
-            </li>
-          ))}
+          {list.map((item) => {
+            const leaving = done.pending.has(item.id);
+            return (
+              <li
+                key={item.id}
+                className={
+                  "flex items-center gap-3 rounded-xl border bg-card px-4 py-4" +
+                  (leaving ? " opacity-70" : "")
+                }
+              >
+                {leaving ? (
+                  <>
+                    <span className="flex-1 text-left text-base text-muted-foreground line-through">
+                      {item.text}
+                    </span>
+                    {item.projectId && (
+                      <button
+                        type="button"
+                        className="shrink-0 text-sm text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          setWaitingFor({
+                            projectId: item.projectId as string,
+                            label: item.text,
+                          })
+                        }
+                      >
+                        + Waiting condition
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="shrink-0 text-sm font-medium text-primary"
+                      onClick={() => done.undo(item.id)}
+                    >
+                      Undo
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`Complete "${item.text}"`}
+                      className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
+                      onClick={() => onComplete(item)}
+                    />
+                    <span className="flex-1 text-left text-base">
+                      {item.text}
+                    </span>
+                    {item.projectId && (
+                      <button
+                        type="button"
+                        aria-label={`Park "${item.text}"`}
+                        className="shrink-0 text-lg leading-none text-amber-500"
+                        onClick={() => onPark(item)}
+                      >
+                        ★
+                      </button>
+                    )}
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      <Sheet
+        open={waitingFor != null}
+        onClose={() => {
+          setWaitingFor(null);
+          setCondText("");
+        }}
+        title="What is it waiting on?"
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            addCondition();
+          }}
+        >
+          <Input
+            autoFocus
+            value={condText}
+            aria-label="Waiting condition"
+            placeholder="e.g. the letter comes back"
+            onChange={(e) => setCondText(e.target.value)}
+          />
+          <div className="flex justify-end">
+            <Button type="submit" disabled={condText.trim() === ""}>
+              Add waiting condition
+            </Button>
+          </div>
+        </form>
+      </Sheet>
     </section>
   );
 }
