@@ -1,10 +1,12 @@
 import { Button, Column, Row, Text as UIText, TextInput } from '@expo/ui';
+import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
   ALL_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
   DONE_UNDO_MS,
   ICON_CHOICES,
+  localToday,
   LOADING_TEXT_DELAY_MS,
   messageOf,
   projectsByStatus,
@@ -14,6 +16,8 @@ import {
   type ProjectEditFields,
   type ProjectsApi,
   type ProjectStatus,
+  type Task,
+  type TasksApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -26,10 +30,12 @@ import {
 } from 'react-native';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
-import { ListRow } from '@/components/ui/list-row';
+import { CheckCircle, ListRow } from '@/components/ui/list-row';
+import { Input } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
+import { useTasksApi } from '@/lib/tasks-collection';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -140,18 +146,85 @@ function StatusGroup({
   );
 }
 
+// The project's tasks, groomed inside the sheet: complete one with its circle,
+// or add a new one (parked by default — grooming is collect-then-take-on, so a
+// project-screen task is not surfaced on the Home top region until taken on).
+// Reads the shared tasks collection filtered to this project. RN rows live
+// inside the @expo/ui Column, like the Delete Pressable below.
+function ProjectTasks({
+  api,
+  projectId,
+  onError,
+}: {
+  api: TasksApi;
+  projectId: string;
+  onError: (message: string) => void;
+}) {
+  const labelColor = useColor('--color-foreground-secondary');
+  const { data: tasks } = useLiveQuery((q) =>
+    q
+      .from({ t: api.collection })
+      .where(({ t }) => isNull(t.completedAt))
+      .orderBy(({ t }) => t.createdAt, 'asc'),
+  );
+  const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
+  const [text, setText] = useState('');
+
+  // Plain handlers: the React Compiler memoizes them, so no manual useCallback.
+  const onAdd = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const tx = api.add(trimmed, localToday(), projectId);
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    setText('');
+  };
+
+  const onComplete = (id: string) => {
+    const tx = api.complete(id);
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  };
+
+  return (
+    <Column spacing={8}>
+      <UIText textStyle={{ color: labelColor, fontSize: 13 }}>Tasks</UIText>
+      {list.map((t) => (
+        <View key={t.id} className="flex-row items-center gap-3">
+          <CheckCircle
+            label={`Complete "${t.text}"`}
+            onPress={() => onComplete(t.id)}
+          />
+          <Text className="flex-1">{t.text}</Text>
+        </View>
+      ))}
+      <Input
+        value={text}
+        onChangeText={setText}
+        onSubmitEditing={onAdd}
+        returnKeyType="done"
+        blurOnSubmit={false}
+        placeholder="Add a task to this project…"
+        accessibilityLabel="Add a task to this project"
+      />
+    </Column>
+  );
+}
+
 // The detail sheet body (native @expo/ui tree): an icon picker, an editable
-// title and notes field, and the Status group. Edits commit on blur/submit and
-// keep the sheet open; only a status pick dismisses it. Keyed by project id at
-// the call site, so the seeded field state resets per project. Colors come from
-// tokens via useColor (@expo/ui takes string colors, not classes).
+// title and notes field, the project's tasks, and the Status group. Edits commit
+// on blur/submit and keep the sheet open; only a status pick dismisses it. Keyed
+// by project id at the call site, so the seeded field state resets per project.
+// Colors come from tokens via useColor (@expo/ui takes string colors, not classes).
 function ProjectDetail({
   project,
+  tasksApi,
+  onError,
   onEdit,
   onPickStatus,
   onDelete,
 }: {
   project: Project;
+  tasksApi: TasksApi;
+  onError: (message: string) => void;
   onEdit: (id: string, fields: ProjectEditFields) => void;
   onPickStatus: (status: ProjectStatus) => void;
   onDelete: () => void;
@@ -223,6 +296,8 @@ function ProjectDetail({
         textStyle={inputText}
       />
 
+      <ProjectTasks api={tasksApi} projectId={project.id} onError={onError} />
+
       <StatusGroup current={project.status} onPick={onPickStatus} />
 
       {/* Destructive: hard-delete the project (distinct from Done). Leaves a
@@ -244,6 +319,7 @@ function ProjectDetail({
 // quick-add creates one by name; tapping a row opens the detail sheet.
 export default function ProjectsScreen() {
   const projectsApi = useProjectsApi();
+  const tasksApi = useTasksApi();
 
   const { height: windowHeight } = useWindowDimensions();
   const rootRef = useRef<View>(null);
@@ -257,8 +333,8 @@ export default function ProjectsScreen() {
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
       <ScreenHeader title="Projects" />
-      {projectsApi ? (
-        <Projects api={projectsApi} bottomOffset={bottomOffset} />
+      {projectsApi && tasksApi ? (
+        <Projects api={projectsApi} tasksApi={tasksApi} bottomOffset={bottomOffset} />
       ) : (
         <View className="flex-1" />
       )}
@@ -268,9 +344,11 @@ export default function ProjectsScreen() {
 
 function Projects({
   api,
+  tasksApi,
   bottomOffset,
 }: {
   api: ProjectsApi;
+  tasksApi: TasksApi;
   bottomOffset: number;
 }) {
   const { data: projects, isLoading } = useLiveQuery((q) =>
@@ -463,6 +541,8 @@ function Projects({
           <ProjectDetail
             key={selected.id}
             project={selected}
+            tasksApi={tasksApi}
+            onError={setWriteError}
             onEdit={commitEdit}
             onPickStatus={(status) => onPickStatus(selected, status)}
             onDelete={() => {

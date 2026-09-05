@@ -9,8 +9,9 @@ import {
   View,
 } from 'react-native';
 
-import type { Project, ProjectEditFields, ProjectStatus } from '@/lib/api';
+import type { Project, ProjectEditFields, ProjectStatus, Task } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
+import { resetTasksApiForTest } from '@/lib/tasks-collection';
 
 import ProjectsScreen from '../projects';
 
@@ -112,6 +113,16 @@ const mockEditProject =
   >();
 const mockDeleteProject =
   jest.fn<(getToken: unknown, id: string) => Promise<void>>();
+const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
+const mockAddTask =
+  jest.fn<
+    (
+      getToken: unknown,
+      task: { id: string; text: string; showUpDate: string; projectId: string | null },
+    ) => Promise<Task>
+  >();
+const mockCompleteTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 jest.mock('@/lib/api', () => ({
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: (getToken: unknown, project: { id: string; title: string }) =>
@@ -122,6 +133,12 @@ jest.mock('@/lib/api', () => ({
     mockEditProject(getToken, id, fields),
   deleteProject: (getToken: unknown, id: string) =>
     mockDeleteProject(getToken, id),
+  fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
+  addTask: (
+    getToken: unknown,
+    task: { id: string; text: string; showUpDate: string; projectId: string | null },
+  ) => mockAddTask(getToken, task),
+  completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
 }));
 
 const project = (
@@ -155,10 +172,53 @@ const renderScreen = () => {
 describe('ProjectsScreen', () => {
   beforeEach(() => {
     resetProjectsApiForTest();
+    resetTasksApiForTest();
     mockAddProject.mockClear();
     mockSetProjectStatus.mockClear();
     mockEditProject.mockClear();
     mockDeleteProject.mockClear();
+    mockAddTask.mockReset();
+    mockCompleteTask.mockReset();
+    mockFetchTasks.mockReset();
+    mockFetchTasks.mockResolvedValue([]);
+  });
+
+  it('adds a task to a project from its detail sheet', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);
+    mockAddTask.mockImplementation(async (_t, task) => {
+      const added: Task = {
+        id: task.id,
+        text: task.text,
+        showUpDate: task.showUpDate,
+        createdAt: '2023-01-01T00:00:00.000Z',
+        completedAt: null,
+        projectId: task.projectId,
+      };
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const { getByText, getByLabelText, getByPlaceholderText } =
+      await renderScreen();
+    await waitFor(() => expect(getByText('Run a 5K')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Run a 5K'));
+    });
+    const input = getByPlaceholderText('Add a task to this project…');
+    await act(async () => {
+      fireEvent.changeText(input, 'buy running shoes');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() =>
+      expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
+    );
+    expect(mockAddTask).toHaveBeenCalledTimes(1);
+    expect(mockAddTask.mock.calls[0][1].projectId).toBe('1');
   });
 
   it('shows the fetched projects with their icons', async () => {
