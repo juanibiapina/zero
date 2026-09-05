@@ -35,6 +35,7 @@ import {
 } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
+import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { type Capture } from "@/lib/captures";
 import { type Task } from "@/lib/tasks";
@@ -46,10 +47,12 @@ import { type Task } from "@/lib/tasks";
 export function HomePage() {
   const [capturesApi, setCapturesApi] = useState<CapturesApi | null>(null);
   const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
+  const [projectsApi, setProjectsApi] = useState<ProjectsApi | null>(null);
   useEffect(() => {
     let live = true;
     void getCapturesApi().then((a) => live && setCapturesApi(a));
     void getTasksApi().then((a) => live && setTasksApi(a));
+    void getProjectsApi().then((a) => live && setProjectsApi(a));
     return () => {
       live = false;
     };
@@ -59,8 +62,12 @@ export function HomePage() {
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
           <h1 className="text-2xl font-bold tracking-tight">Today</h1>
-          {capturesApi && tasksApi ? (
-            <MergedHome capturesApi={capturesApi} tasksApi={tasksApi} />
+          {capturesApi && tasksApi && projectsApi ? (
+            <MergedHome
+              capturesApi={capturesApi}
+              tasksApi={tasksApi}
+              projectsApi={projectsApi}
+            />
           ) : (
             <div className="min-h-24" />
           )}
@@ -75,9 +82,11 @@ type AddMode = "capture" | "task";
 function MergedHome({
   capturesApi,
   tasksApi,
+  projectsApi,
 }: {
   capturesApi: CapturesApi;
   tasksApi: TasksApi;
+  projectsApi: ProjectsApi;
 }) {
   const [mode, setMode] = useState<AddMode>("capture");
   const [text, setText] = useState("");
@@ -109,7 +118,11 @@ function MergedHome({
       />
       {error && <ErrorText>{error}</ErrorText>}
 
-      <TasksSection api={tasksApi} onError={setError} />
+      <TasksSection
+        api={tasksApi}
+        projectsApi={projectsApi}
+        onError={setError}
+      />
       <CapturesSection api={capturesApi} onError={setError} />
     </div>
   );
@@ -117,9 +130,11 @@ function MergedHome({
 
 function TasksSection({
   api,
+  projectsApi,
   onError,
 }: {
   api: TasksApi;
+  projectsApi: ProjectsApi;
   onError: (m: string) => void;
 }) {
   const { data: tasks, isLoading } = useLiveQuery((q) =>
@@ -127,6 +142,9 @@ function TasksSection({
       .from({ t: api.collection })
       .where(({ t }) => isNull(t.completedAt))
       .orderBy(({ t }) => t.createdAt, "asc"),
+  );
+  const { data: projects } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
   );
   useForegroundRefetch(api.refetch);
 
@@ -138,7 +156,7 @@ function TasksSection({
     [api, onError],
   );
 
-  const list = homeTasks(tasks ?? []);
+  const list = homeTasks(tasks ?? [], projects ?? []);
   const view = listView({ count: list.length, isLoading, loadError: null });
 
   return (

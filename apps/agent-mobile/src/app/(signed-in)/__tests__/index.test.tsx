@@ -6,6 +6,7 @@ import { BackHandler, View } from 'react-native';
 import type { Capture, Task } from '@/lib/api';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
+import { resetProjectsApiForTest } from '@/lib/projects-collection';
 
 import HomeScreen from '../index';
 
@@ -71,6 +72,13 @@ jest.mock('@/lib/api', () => ({
     task: { id: string; text: string; showUpDate: string },
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
+  // The Home top region reads projects (for the project-active gate); it never
+  // mutates them here, so a fetch returning [] is enough.
+  fetchProjects: () => Promise.resolve([]),
+  addProject: () => Promise.reject(new Error('not used')),
+  setProjectStatus: () => Promise.reject(new Error('not used')),
+  editProject: () => Promise.reject(new Error('not used')),
+  deleteProject: () => Promise.resolve(),
 }));
 
 const taskRow = (id: string, text: string): Task => ({
@@ -118,6 +126,7 @@ describe('HomeScreen', () => {
   beforeEach(() => {
     resetCapturesApiForTest();
     resetTasksApiForTest();
+    resetProjectsApiForTest();
     mockEditCapture.mockReset();
     mockAddTask.mockReset();
     mockCompleteTask.mockReset();

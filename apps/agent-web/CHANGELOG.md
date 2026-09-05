@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-05: Your Today list shows tasks from active projects (plus loose tasks); a project's tasks stay hidden until you make it active, so only what you're working on surfaces.
 - 2026-09-05: Add tasks to a project and complete them from the project's detail sheet, so a project holds the work toward its outcome.
 - 2026-09-05: The Captures section is now Today, with two parts: your tasks for today on top and your capture inbox below. The quick-add creates a capture by default; switch it to Task to add a task instead.
 - 2026-09-05: The app now follows your device's light or dark appearance automatically.

@@ -3,10 +3,13 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient } from "@tanstack/react-query";
 import {
   createInMemoryApi,
+  createInMemoryProjectsApi,
   createInMemoryTasksApi,
   type Capture,
   type CapturesApi,
   type CapturesRest,
+  type ProjectsApi,
+  type ProjectsRest,
   type Task,
   type TasksApi,
   type TasksRest,
@@ -19,6 +22,7 @@ import { HomePage } from "./HomePage";
 const h = vi.hoisted(() => ({
   api: null as CapturesApi | null,
   tasksApi: null as TasksApi | null,
+  projectsApi: null as ProjectsApi | null,
 }));
 vi.mock("@/lib/captures-collection", () => ({
   getCapturesApi: () => Promise.resolve(h.api),
@@ -26,6 +30,28 @@ vi.mock("@/lib/captures-collection", () => ({
 vi.mock("@/lib/tasks-collection", () => ({
   getTasksApi: () => Promise.resolve(h.tasksApi),
 }));
+vi.mock("@/lib/projects-collection", () => ({
+  getProjectsApi: () => Promise.resolve(h.projectsApi),
+}));
+
+const emptyProjectsRest: ProjectsRest = {
+  fetchProjects: async () => [],
+  addProject: async ({ id, title }) => ({
+    id,
+    title,
+    icon: "📁",
+    description: null,
+    status: "next",
+    createdAt: new Date().toISOString(),
+  }),
+  setProjectStatus: async (id) => {
+    throw new Error(`no project ${id}`);
+  },
+  editProject: async (id) => {
+    throw new Error(`no project ${id}`);
+  },
+  deleteProject: async () => {},
+};
 
 const capture = (id: string, text: string): Capture => ({
   id,
@@ -115,12 +141,17 @@ function setApi(initial: Capture[], tasks: Task[] = []) {
     queryClient: new QueryClient(),
     rest: fakeTasksRest(tasks),
   });
+  h.projectsApi = createInMemoryProjectsApi({
+    queryClient: new QueryClient(),
+    rest: emptyProjectsRest,
+  });
 }
 
 describe("HomePage", () => {
   afterEach(() => {
     h.api = null;
     h.tasksApi = null;
+    h.projectsApi = null;
   });
 
   it("adds a task from the Task quick-add mode", async () => {

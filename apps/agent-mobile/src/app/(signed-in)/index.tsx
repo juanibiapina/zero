@@ -13,6 +13,7 @@ import {
   visibleCaptures,
   type Capture,
   type CapturesApi,
+  type ProjectsApi,
   type Task,
   type TasksApi,
 } from '@zero/agent-core';
@@ -53,6 +54,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
+import { useProjectsApi } from '@/lib/projects-collection';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -263,9 +265,11 @@ function TaskRow({
 // by project and selection through homeTasks.
 function TasksTop({
   api,
+  projectsApi,
   onError,
 }: {
   api: TasksApi;
+  projectsApi: ProjectsApi;
   onError: (message: string) => void;
 }) {
   const { data: tasks } = useLiveQuery((q) =>
@@ -274,8 +278,11 @@ function TasksTop({
       .where(({ t }) => isNull(t.completedAt))
       .orderBy(({ t }) => t.createdAt, 'asc'),
   );
+  const { data: projects } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
+  );
   useForegroundRefetch(api.refetch);
-  const list = useMemo(() => homeTasks(tasks ?? []), [tasks]);
+  const list = useMemo(() => homeTasks(tasks ?? [], projects ?? []), [tasks, projects]);
   const onComplete = useCallback(
     (item: Task) => {
       const tx = api.complete(item.id);
@@ -309,6 +316,7 @@ function TasksTop({
 export default function HomeScreen() {
   const capturesApi = useCapturesApi();
   const tasksApi = useTasksApi();
+  const projectsApi = useProjectsApi();
 
   // Measure the gap from this screen's content bottom to the window bottom (the
   // native bottom tab bar plus the system gesture inset), fed to the
@@ -326,10 +334,11 @@ export default function HomeScreen() {
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
       <ScreenHeader title="Today" />
-      {capturesApi && tasksApi ? (
+      {capturesApi && tasksApi && projectsApi ? (
         <Captures
           api={capturesApi}
           tasksApi={tasksApi}
+          projectsApi={projectsApi}
           bottomOffset={bottomOffset}
         />
       ) : (
@@ -344,10 +353,12 @@ type AddMode = 'capture' | 'task';
 function Captures({
   api,
   tasksApi,
+  projectsApi,
   bottomOffset,
 }: {
   api: CapturesApi;
   tasksApi: TasksApi;
+  projectsApi: ProjectsApi;
   bottomOffset: number;
 }) {
   const [mode, setMode] = useState<AddMode>('capture');
@@ -562,7 +573,11 @@ function Captures({
           itemLayoutAnimation={LinearTransition.duration(200)}
           onReorder={onReorder}
           ListHeaderComponent={
-            <TasksTop api={tasksApi} onError={setWriteError} />
+            <TasksTop
+              api={tasksApi}
+              projectsApi={projectsApi}
+              onError={setWriteError}
+            />
           }
           ListEmptyComponent={
             <Text variant="subtitle" className="px-screen-x">
