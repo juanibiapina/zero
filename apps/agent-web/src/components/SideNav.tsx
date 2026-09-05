@@ -64,7 +64,7 @@ function FolderIcon({ className }: { className?: string }) {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/captures", label: "Captures", icon: InboxIcon },
+  { to: "/captures", label: "Today", icon: InboxIcon },
   { to: "/upcoming", label: "Upcoming", icon: CalendarIcon },
   { to: "/projects", label: "Projects", icon: FolderIcon },
 ];

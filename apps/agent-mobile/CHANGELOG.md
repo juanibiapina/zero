@@ -2,7 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
-- 2026-09-05: Home now shows your tasks for today on top and your capture inbox below. The add box creates a capture by default; switch it to Task to add a task instead.
+- 2026-09-05: The Captures tab is now Today, showing your tasks for today on top and your capture inbox below. The add box creates a capture by default; switch it to Task to add a task instead.
 - 2026-09-05: The app now follows your phone's light or dark appearance automatically.
 - 2026-09-05: Fresh look across the app: a cleaner, denser task list with lighter dividers instead of boxed cards, a round add button, an add box that sits flush above the keyboard, and the tab bar in the app's colors.
 - 2026-09-04: Tap a capture's text to edit it in a detail sheet. Changes save when you finish or close the sheet, work offline, and sync across your devices.

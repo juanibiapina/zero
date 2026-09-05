@@ -58,7 +58,7 @@ export function HomePage() {
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
-          <h1 className="text-2xl font-bold tracking-tight">Home</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Today</h1>
           {capturesApi && tasksApi ? (
             <MergedHome capturesApi={capturesApi} tasksApi={tasksApi} />
           ) : (
@@ -144,7 +144,7 @@ function TasksSection({
   return (
     <section className="space-y-3" aria-label="Tasks">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Today
+        Tasks
       </h2>
       {view === "empty" || view === "loading" ? (
         <p className="text-sm text-muted-foreground">

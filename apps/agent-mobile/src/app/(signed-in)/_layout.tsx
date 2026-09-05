@@ -47,8 +47,9 @@ export default function SignedInLayout() {
     return <Redirect href="/sign-in" />;
   }
 
-  // Three sections: Captures (what has shown up), Upcoming (future-dated
-  // captures, grouped by day), and Projects (outcome-oriented containers). Each
+  // Three sections: Today (tasks on top, the capture inbox below), Upcoming
+  // (future-dated captures, grouped by day), and Projects (outcome-oriented
+  // containers). Each
   // tab is a screen file whose name matches its Trigger `name`, so a new tab is a
   // new file plus one more Trigger. NativeTabs
   // is a native navigator, so its first use needs a fresh EAS dev build to
@@ -57,7 +58,7 @@ export default function SignedInLayout() {
     <NativeTabs tintColor={accent} backgroundColor={surface} iconColor={iconColor}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Icon sf="tray.full" md="inbox" />
-        <NativeTabs.Trigger.Label>Captures</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Today</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="upcoming">
         <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />

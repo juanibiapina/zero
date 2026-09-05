@@ -286,7 +286,7 @@ function TasksTop({
   return (
     <View>
       <Text variant="caption" className="px-screen-x pb-1 pt-2">
-        Today
+        Tasks
       </Text>
       {list.length === 0 ? (
         <Text variant="subtitle" className="px-screen-x pb-2">
@@ -325,7 +325,7 @@ export default function HomeScreen() {
 
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
-      <ScreenHeader title="Home" />
+      <ScreenHeader title="Today" />
       {capturesApi && tasksApi ? (
         <Captures
           api={capturesApi}
