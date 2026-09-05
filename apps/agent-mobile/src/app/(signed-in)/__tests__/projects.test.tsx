@@ -13,6 +13,7 @@ import type { Project, ProjectEditFields, ProjectStatus, Task } from '@/lib/api'
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
+import { resetCapturesApiForTest } from '@/lib/captures-collection';
 import type { WaitingCondition } from '@/lib/api';
 
 import ProjectsScreen from '../projects';
@@ -164,6 +165,13 @@ jest.mock('@/lib/api', () => ({
   resolveWaitingCondition: (_getToken: unknown, id: string) =>
     mockResolveWaitingCondition(id),
   deleteWaitingCondition: () => Promise.resolve(),
+  // Projects loads captures (for the refine banner's Done); [] is enough here.
+  fetchCaptures: () => Promise.resolve([]),
+  addCapture: () => Promise.reject(new Error('not used')),
+  processCapture: () => Promise.reject(new Error('not used')),
+  editCapture: () => Promise.reject(new Error('not used')),
+  rescheduleCapture: () => Promise.reject(new Error('not used')),
+  reorderCapture: () => Promise.reject(new Error('not used')),
   fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
   addTask: (
     getToken: unknown,
@@ -205,6 +213,7 @@ describe('ProjectsScreen', () => {
     resetProjectsApiForTest();
     resetTasksApiForTest();
     resetWaitsApiForTest();
+    resetCapturesApiForTest();
     mockFetchWaits.mockReset();
     mockFetchWaits.mockResolvedValue([]);
     mockAddWaitingCondition.mockReset();

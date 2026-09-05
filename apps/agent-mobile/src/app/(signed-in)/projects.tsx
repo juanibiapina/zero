@@ -39,6 +39,9 @@ import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
+import { useCapturesApi } from '@/lib/captures-collection';
+import { refiningCaptureId, stopRefine } from '@/lib/refine-session';
+import { RefineBanner } from '@/components/refine-banner';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -182,7 +185,8 @@ function ProjectTasks({
   const onAdd = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const tx = api.add(trimmed, localToday(), projectId);
+    // Parked (takenOnAt null); linked to the capture when refining.
+    const tx = api.add(trimmed, localToday(), projectId, null, refiningCaptureId());
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     setText('');
   };
@@ -514,6 +518,7 @@ function Projects({
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
+  const capturesApi = useCapturesApi();
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -639,10 +644,21 @@ function Projects({
       return;
     }
     setWriteError(null);
-    const tx = api.add(trimmed);
+    // When refining a capture, the new project links back to it.
+    const tx = api.add(trimmed, refiningCaptureId());
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     setText('');
   }, [text, api]);
+
+  const onFinishRefine = useCallback(
+    (captureId: string) => {
+      if (!capturesApi) return;
+      const tx = capturesApi.process(captureId);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+      stopRefine();
+    },
+    [capturesApi],
+  );
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -655,6 +671,7 @@ function Projects({
 
   return (
     <>
+      <RefineBanner onFinish={onFinishRefine} />
       {error ? (
         <Text variant="error" className="px-screen-x">
           {error}

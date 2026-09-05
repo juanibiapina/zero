@@ -89,10 +89,12 @@ the Today top region (`PATCH /api/tasks/{id} { takenOnAt }`, verbs
 `takeOn` / `park`). A project-screen add lands parked; the Home quick-add mints
 loose tasks.
 
-### Deferred columns
+### Provenance
 
-`sourceCaptureId` (the Capture->Task transition) is deliberately **not** a column
-yet; it arrives in a later slice of `docs/plans/todo-availability-model.md`.
+`sourceCaptureId` (nullable, migration 0050) is the capture a task was refined
+from, or null. Set when a task is created during a **Refine** session (see
+`docs/entities/capture.md`); the shared `Task` type carries it optionally
+(write-mostly provenance).
 
 ## Behavior
 

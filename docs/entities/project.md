@@ -177,8 +177,10 @@ no speculative columns before their behavior is designed.
 - **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
   migration 0047): the detail sheet lists the project's open tasks and has an
   inline add-task field (grooming). A task added from a project is parked
-  (grooming is collect-then-take-on). The AI Capture → Project conversion is a
-  later slice.
+  (grooming is collect-then-take-on). **Waiting conditions** attach to a project
+  (see `docs/entities/waiting-condition.md`). **Refine provenance**:
+  `sourceCaptureId` (migration 0050) records the capture a project was refined
+  from. The AI Capture → Project conversion is a later slice.
 
 ## Shared view rule
 

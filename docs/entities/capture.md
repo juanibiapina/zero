@@ -170,10 +170,19 @@ tools; it never names this view.
   shared `listView` helper in `@zero/agent-core` encodes the rule (rows whenever
   present; spinner only when empty and loading).
 
+## Refine (Capture -> Tasks/Projects)
+
+A capture is refined into real work through a **Refine** session (slice 8 of
+`docs/plans/todo-availability-model.md`): starting it from a capture pins it in a
+banner across Today and Projects; every task and project created while it is
+active carries the capture's id as `sourceCaptureId`; **Done** processes the
+capture (drains it from the inbox), and one capture can fan out into several
+tasks and projects. A shared client `refine-session` store holds the active
+capture; there is no server "refine" concept beyond the provenance column and
+the ordinary `process`.
+
 ## Next
 
-- Process a Capture into a **Task** (the Capture->Task transition; the richest
-  data-model slice, not yet designed). See `docs/entities/task.md`.
 - Recurring capture.
 - Likely never (not used in Todoist today): subtasks, priorities, labels.
 

@@ -59,6 +59,12 @@ import { useCapturesApi } from '@/lib/captures-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
+import {
+  refiningCaptureId,
+  startRefine,
+  stopRefine,
+} from '@/lib/refine-session';
+import { RefineBanner } from '@/components/refine-banner';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -206,10 +212,12 @@ function CaptureDetail({
   draft,
   onChangeDraft,
   onDone,
+  onRefine,
 }: {
   draft: string;
   onChangeDraft: (text: string) => void;
   onDone: () => void;
+  onRefine: () => void;
 }) {
   const surfaceMuted = useColor('--color-surface-muted');
   const foreground = useColor('--color-foreground');
@@ -237,6 +245,12 @@ function CaptureDetail({
         variant="filled"
         style={{ height: 48, borderRadius: 14 }}
         onPress={onDone}
+      />
+      <Button
+        label="Refine into tasks & projects"
+        variant="outlined"
+        style={{ height: 48, borderRadius: 14 }}
+        onPress={onRefine}
       />
     </Column>
   );
@@ -562,11 +576,22 @@ function Captures({
     // Optimistic: the row appears at once; surface a failure if the write loses.
     // The mode decides where it lands: a task dated today, or a capture.
     const tx =
-      mode === 'task' ? tasksApi.add(trimmed, localToday()) : api.add(trimmed);
+      mode === 'task'
+        ? tasksApi.add(trimmed, localToday(), null, null, refiningCaptureId())
+        : api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     // Keep the bar open and cleared for rapid, repeated entry.
     setText('');
   }, [text, api, tasksApi, mode]);
+
+  const onFinishRefine = useCallback(
+    (captureId: string) => {
+      const tx = api.process(captureId);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+      stopRefine();
+    },
+    [api],
+  );
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -679,6 +704,7 @@ function Captures({
 
   return (
     <>
+      <RefineBanner onFinish={onFinishRefine} />
       {error ? (
         <Text variant="error" className="px-screen-x">
           {error}
@@ -728,6 +754,10 @@ function Captures({
             draft={draft}
             onChangeDraft={setDraft}
             onDone={commitAndClose}
+            onRefine={() => {
+              startRefine(selected.id, selected.text);
+              setSelectedId(null);
+            }}
           />
         ) : null}
       </Sheet>
