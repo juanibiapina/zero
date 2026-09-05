@@ -71,11 +71,18 @@ it does not carry a Project, a priority, or subtasks.
 The partial index `tasks_today` on `("showUpDate")` `WHERE "completedAt" IS NULL`
 serves the open-tasks query (mirrors `captures_inbox`).
 
+### Project membership
+
+`projectId` (nullable, migration 0047) is the Project a task belongs to, or null
+when the task is loose. Set at creation: the Home quick-add mints loose tasks;
+the project detail sheet's add-task field mints tasks under that project. The
+shared `Task` type, `/api/tasks`, and `createTasksApi` all carry it.
+
 ### Deferred columns
 
-`projectId` and `sourceCaptureId` are deliberately **not** columns yet. They
-arrive with the Project entity and the Capture->Task transition respectively; no
-speculative columns before their behavior is designed.
+`takenOnAt` (curation) and `sourceCaptureId` (the Capture->Task transition) are
+deliberately **not** columns yet; they arrive in later slices of
+`docs/plans/todo-availability-model.md`.
 
 ## Behavior
 

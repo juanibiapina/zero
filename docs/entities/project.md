@@ -160,8 +160,11 @@ no speculative columns before their behavior is designed.
   a row whose status becomes `done` leaves the collection at once. `deleteProject`
   is the shared factory's `delete` verb kind — it optimistically drops the row and
   issues the `DELETE`, rolling back on failure. See `docs/storage.md`.
-- **Other entities** — none wired yet. Task membership (`projectId` on `tasks`)
-  is slice B; the AI Capture → Project conversion is a later slice.
+- **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
+  migration 0047): the detail sheet lists the project's open tasks and has an
+  inline add-task field (grooming). A task added from a project is parked
+  (grooming is collect-then-take-on). The AI Capture → Project conversion is a
+  later slice.
 
 ## Shared view rule
 
