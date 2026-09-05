@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
@@ -157,6 +151,10 @@ function ProjectDetailReady({
         onDelete={() => leave("delete")}
       />
 
+      {/* The description is the project's statement of intent — why this outcome
+          matters. It sits directly under the title, above the work. */}
+      <ProjectDescription project={project} onEdit={commitEdit} />
+
       <ProjectTasks api={tasksApi} projectId={project.id} onError={setError} />
 
       <ProjectWaits
@@ -166,8 +164,6 @@ function ProjectDetailReady({
         projects={list}
         onError={setError}
       />
-
-      <ProjectNotes project={project} onEdit={commitEdit} />
     </div>
   );
 }
@@ -654,19 +650,17 @@ function ProjectWaits({
   );
 }
 
-// Notes are secondary: an "Add notes" affordance when empty, an editable field
-// once opened. Commits on blur (not per keystroke) and can be cleared to null.
-function ProjectNotes({
+// The project's description: its statement of intent, an always-visible editable
+// subtitle under the title (above the work). Commits on blur (not per keystroke)
+// and can be cleared to null. Seeded once at mount (single-project route).
+function ProjectDescription({
   project,
   onEdit,
 }: {
   project: Project;
   onEdit: (id: string, fields: ProjectEditFields) => void;
 }) {
-  // Seeded once and keyed by project id at the call site (see ProjectHeader).
-  const [open, setOpen] = useState((project.description ?? "") !== "");
   const [description, setDescription] = useState(project.description ?? "");
-  const ref = useRef<HTMLTextAreaElement>(null);
 
   const commit = () => {
     const next = description.trim() === "" ? null : description;
@@ -674,34 +668,15 @@ function ProjectNotes({
     onEdit(project.id, { description: next });
   };
 
-  if (!open) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="text-muted-foreground"
-        onClick={() => {
-          setOpen(true);
-          requestAnimationFrame(() => ref.current?.focus());
-        }}
-      >
-        + Add notes
-      </Button>
-    );
-  }
-
   return (
-    <section className="space-y-1">
-      <h2 className="text-sm font-semibold text-muted-foreground">Notes</h2>
-      <textarea
-        ref={ref}
-        value={description}
-        rows={3}
-        placeholder="A sentence of intent (optional)"
-        onChange={(e) => setDescription(e.target.value)}
-        onBlur={commit}
-        className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-      />
-    </section>
+    <textarea
+      value={description}
+      aria-label="Project description"
+      rows={2}
+      placeholder="What outcome are you after, and why does it matter?"
+      onChange={(e) => setDescription(e.target.value)}
+      onBlur={commit}
+      className="w-full resize-none border-0 bg-transparent p-0 text-base text-muted-foreground outline-none placeholder:text-muted-foreground/60 focus-visible:ring-0"
+    />
   );
 }

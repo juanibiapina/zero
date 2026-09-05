@@ -166,6 +166,10 @@ function ProjectDetail({
           }}
         />
 
+        {/* The description is the project's statement of intent — why this
+            outcome matters. It sits under the title, above the work. */}
+        <ProjectDescription project={project} onEdit={commitEdit} />
+
         <ProjectTasks api={tasksApi} projectId={project.id} onError={setError} />
 
         <ProjectWaits
@@ -174,8 +178,6 @@ function ProjectDetail({
           tasks={tasks}
           onError={setError}
         />
-
-        <ProjectNotes project={project} onEdit={commitEdit} />
       </ScrollView>
     </View>
   );
@@ -482,16 +484,16 @@ function ProjectWaits({
   );
 }
 
-// Notes are secondary: an "Add notes" affordance when empty, an editable field
-// once opened. Commits on blur; can be cleared to null.
-function ProjectNotes({
+// The project's description: its statement of intent, an always-visible editable
+// field under the title (above the work). Commits on blur; can be cleared to
+// null.
+function ProjectDescription({
   project,
   onEdit,
 }: {
   project: Project;
   onEdit: (fields: ProjectEditFields) => void;
 }) {
-  const [open, setOpen] = useState((project.description ?? '') !== '');
   const [description, setDescription] = useState(project.description ?? '');
 
   const commit = () => {
@@ -500,36 +502,17 @@ function ProjectNotes({
     onEdit({ description: next });
   };
 
-  if (!open) {
-    return (
-      <View className="px-screen-x">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add notes"
-          hitSlop={8}
-          onPress={() => setOpen(true)}
-        >
-          <Text className="text-[14px] text-foreground-muted">+ Add notes</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
-    <View className="px-screen-x">
-      <Text variant="section" className="pb-2">
-        Notes
-      </Text>
-      <View className="rounded-xl bg-surface-muted px-4 py-3">
-        <Input
-          value={description}
-          onChangeText={setDescription}
-          onBlur={commit}
-          multiline
-          placeholder="A sentence of intent (optional)"
-          accessibilityLabel="Project notes"
-        />
-      </View>
+    <View className="px-screen-x pb-4">
+      <Input
+        value={description}
+        onChangeText={setDescription}
+        onBlur={commit}
+        multiline
+        placeholder="What outcome are you after, and why does it matter?"
+        accessibilityLabel="Project description"
+        className="text-[15px] text-foreground-muted"
+      />
     </View>
   );
 }

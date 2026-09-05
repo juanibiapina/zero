@@ -147,9 +147,10 @@ no speculative columns before their behavior is designed.
   a compact header (a de-emphasized emoji icon that opens its picker on tap, the
   **title** as an editable heading, a read-only **derived-status pill**, and a
   "⋯" **actions menu** with the status moves and **Delete project**), then the
-  project's **tasks** (complete, take-on/park, inline add), then its **waiting
-  conditions** (add revealed on "+"), with **notes** as a secondary "Add notes"
-  expander. Field edits commit on blur/submit (the icon on tap). Choosing **Mark
+  project's **description** — its statement of intent, an always-visible editable
+  field directly under the title — then the project's **tasks** (complete,
+  take-on/park, inline add), then its **waiting conditions** (add revealed on
+  "+"). Field edits commit on blur/submit (the icon on tap). Choosing **Mark
   done** or **Delete project** returns to the list and leaves the row briefly
   struck-through with an inline **Undo** (~5s) before it leaves (delete then
   hard-removes it server-side). Sheets/menus still serve the short
