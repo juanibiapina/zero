@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Todo model prototype — availability, blockers, clarify</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --ink: #e7e9ee; --dim: #9aa3b2; --accent: #6ea8fe; --good: #4ade80;
+    --warn: #fbbf24; --bad: #f87171; --chip: #262b36;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .note { color: var(--dim); font-size: 12px; }
+  header button.reset {
+    margin-left: auto; background: var(--chip); color: var(--dim);
+    border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; cursor: pointer;
+  }
+  .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: calc(100vh - 52px); }
+  .col { padding: 18px 20px; }
+  .col.home { border-right: 1px solid var(--line); }
+  .region-label {
+    text-transform: uppercase; letter-spacing: .08em; font-size: 11px;
+    color: var(--dim); margin: 22px 0 8px; font-weight: 700;
+  }
+  .region-label:first-child { margin-top: 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;
+  }
+  .card.sub { background: var(--panel2); }
+  .card .grow { flex: 1; min-width: 0; }
+  .card .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .muted { color: var(--dim); }
+  .tiny { font-size: 12px; }
+  .pill {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--chip);
+    color: var(--dim); border: 1px solid var(--line); white-space: nowrap;
+  }
+  .pill.active { color: var(--good); border-color: #2f5d43; }
+  .pill.next { color: var(--accent); }
+  .pill.waiting { color: var(--warn); border-color: #6b551c; }
+  .pill.backlog { color: var(--dim); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot-active { background: var(--good); }
+  .dot-next { background: var(--accent); }
+  .dot-waiting { background: var(--warn); }
+  .dot-backlog { background: #4b5361; }
+  .dot-done { background: #4b5361; }
+  button, select, input {
+    font: inherit; color: var(--ink);
+  }
+  .btn {
+    background: var(--chip); border: 1px solid var(--line); border-radius: 7px;
+    padding: 5px 10px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #0b1220; border-color: var(--accent); font-weight: 600; }
+  .btn.ghost { background: transparent; }
+  .btn.danger { color: var(--bad); }
+  .btn.small { padding: 3px 8px; font-size: 12px; }
+  select, input[type=text] {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px;
+  }
+  input[type=text]::placeholder { color: #5b6474; }
+  .check {
+    width: 20px; height: 20px; border-radius: 50%; border: 2px solid #4b5361;
+    cursor: pointer; flex: none; display: grid; place-items: center; color: transparent;
+  }
+  .check:hover { border-color: var(--good); }
+  .check.done { background: var(--good); border-color: var(--good); color: #06210f; }
+  .star { cursor: pointer; font-size: 15px; color: #4b5361; background: none; border: none; }
+  .star.on { color: var(--warn); }
+  .adder { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+  .adder .row { display: flex; gap: 8px; align-items: center; }
+  .adder .row + .row { margin-top: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { background: var(--panel2); border: none; padding: 6px 12px; cursor: pointer; color: var(--dim); }
+  .seg button.on { background: var(--accent); color: #0b1220; font-weight: 600; }
+  .empty { color: var(--dim); font-style: italic; padding: 6px 2px; }
+  .blocker {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px;
+    background: #241d10; border: 1px solid #6b551c; margin-top: 6px; font-size: 12px;
+  }
+  .blocker.resolved { background: #12251a; border-color: #2f5d43; }
+  .blocker .grow { flex: 1; }
+  .kind-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+  details.proj { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; padding: 8px 12px; }
+  details.proj summary { cursor: pointer; display: flex; align-items: center; gap: 10px; list-style: none; }
+  details.proj summary::-webkit-details-marker { display: none; }
+  .proj-body { padding: 8px 2px 2px; border-top: 1px solid var(--line); margin-top: 8px; }
+  .field { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .hint { color: var(--dim); font-size: 12px; margin: 2px 0 10px; }
+  .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 10; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; width: 460px; max-width: 92vw; max-height: 86vh; overflow: auto; }
+  .modal h3 { margin: 0 0 4px; }
+  .willrow { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; margin-top: 6px; font-size: 13px; }
+  .flash { animation: flash 1.1s ease; }
+  @keyframes flash { 0% { background: #2b3a22; } 100% { background: inherit; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Todo model prototype</h1>
+  <span class="note">Home = today. Top: tasks (availability-gated). Bottom: capture inbox. Backstage: projects, blockers, curation. Throwaway — reload resets.</span>
+  <button class="reset" id="reset">Reset data</button>
+</header>
+
+<div id="refineBar" style="display:none"></div>
+
+<div class="wrap">
+  <div class="col home">
+    <div class="region-label">Today · Tasks</div>
+    <div id="topRegion"></div>
+
+    <div class="region-label">Capture inbox</div>
+    <div class="adder" id="adder"></div>
+    <div id="captureRegion"></div>
+  </div>
+
+  <div class="col backstage">
+    <div class="region-label">Projects <span class="muted tiny">(a project's tasks reach the top only while it's <b>active</b>)</span></div>
+    <div id="projects"></div>
+    <div class="field">
+      <input type="text" id="newProjTitle" placeholder="New project outcome (e.g. Send tax letter)" style="flex:1" />
+      <button class="btn" id="addProj">Add project</button>
+    </div>
+
+    <div class="region-label">Curation <span class="muted tiny">(pick which eligible tasks show at the top — no cap; you choose)</span></div>
+    <div id="curation"></div>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+const uid = () => Math.random().toString(36).slice(2, 9);
+const today = () => new Date().toISOString().slice(0,10);
+const STATUSES = ["active","next","waiting","backlog"]; // 'done' hidden from working views
+
+function seed() {
+  const pLetter = { id: uid(), icon:"📮", title:"Send tax letter", status:"active", blockers:[] };
+  const p5k     = { id: uid(), icon:"🏃", title:"Run a 5K under 30 min", status:"next", blockers:[] };
+  const pHouse  = { id: uid(), icon:"🏠", title:"Buy a house", status:"backlog", blockers:[] };
+  return {
+    projects: [pLetter, p5k, pHouse],
+    tasks: [
+      { id: uid(), title:"Draft the letter", projectId:pLetter.id, selected:true,  done:false, src:null },
+      { id: uid(), title:"Mail the letter",  projectId:pLetter.id, selected:true,  done:false, src:null },
+      { id: uid(), title:"File the response",projectId:pLetter.id, selected:false, done:false, src:null },
+      { id: uid(), title:"Buy running shoes",projectId:p5k.id,     selected:false, done:false, src:null },
+      { id: uid(), title:"Call the dentist", projectId:null,       selected:true,  done:false, src:null },
+    ],
+    captures: [
+      { id: uid(), text:"idea: plan a weekend trip", showUpDate:null, done:false },
+      { id: uid(), text:"buy milk", showUpDate:null, done:false },
+      { id: uid(), text:"look into standing desks", showUpDate:null, done:false },
+    ],
+  };
+}
+let S = seed();
+
+// No persistence — this is a throwaway prototype. Reload or Reset restores the seed.
+function save(){}
+
+const proj = id => S.projects.find(p => p.id === id);
+const openBlockers = p => p.blockers.filter(b => !b.resolved);
+
+// --- resolution engine: code resolves structured conditions; free-text needs a click ---
+function evaluate(){
+  for (const p of S.projects){
+    for (const b of p.blockers){
+      if (b.resolved) continue;
+      if (b.kind === "task-done"){
+        const t = S.tasks.find(t => t.id === b.refId);
+        if (t && t.done) b.resolved = true;
+      } else if (b.kind === "project-status"){
+        const rp = proj(b.refId);
+        if (rp && rp.status === b.targetStatus) b.resolved = true;
+      }
+      // free-text: only a manual/AI click resolves it
+    }
+    // Derive the in-play status. backlog and done are deliberate parking states,
+    // set by hand and never auto-changed.
+    if (p.status === "done" || p.status === "backlog") continue;
+    if (openBlockers(p).length > 0) { p.status = "waiting"; continue; }       // blocked
+    const hasSelectedOpen = S.tasks.some(t => t.projectId === p.id && !t.done && t.selected);
+    p.status = hasSelectedOpen ? "active" : "next"; // next = "come groom / take on more tasks"
+  }
+  save();
+}
+
+// --- availability: what reaches the top ---
+function topTasks(){
+  return S.tasks.filter(t =>
+    !t.done &&
+    (t.projectId === null || proj(t.projectId)?.status === "active") &&
+    t.selected
+  );
+}
+function inboxCaptures(){
+  const d = today();
+  return S.captures.filter(c => !c.done && (!c.showUpDate || c.showUpDate <= d));
+}
+// eligible-but-not-selected tasks (the curation pool)
+function curationPool(){
+  // Groomable pool: loose tasks + tasks in in-play projects (active or next).
+  // Selecting a task in a 'next' project promotes that project to active.
+  return S.tasks.filter(t =>
+    !t.done &&
+    (t.projectId === null || ["active","next"].includes(proj(t.projectId)?.status))
+  );
+}
+
+// ---------- rendering ----------
+function el(html){ const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstElementChild; }
+
+let refining = null; // the Capture currently being refined, if any
+
+// Refine mode: instead of a builder modal, the capture becomes a working context.
+// You use the real app (create projects, groom tasks, add loose tasks); everything
+// created during the session links back to the capture (src). "Done" consumes it.
+function renderRefineBar(){
+  const bar = document.getElementById("refineBar");
+  if (!refining){ bar.style.display = "none"; bar.innerHTML = ""; return; }
+  bar.style.cssText = "display:flex; align-items:center; gap:12px; padding:10px 20px; background:#20304a; border-bottom:1px solid #33507d; color:#dbe6ff;";
+  bar.innerHTML = `<span>🔧 <b>Refining:</b> “${escapeHtml(refining.text)}” — create projects &amp; tasks anywhere in the app; they link back to this capture.</span>
+    <button class="btn small primary" id="refineDone" style="margin-left:auto">Done — consume capture</button>
+    <button class="btn small ghost" id="refineCancel">Cancel</button>`;
+  document.getElementById("refineDone").onclick = () => { refining.done = true; refining = null; render(); };
+  document.getElementById("refineCancel").onclick = () => { refining = null; render(); };
+}
+
+let addMode = "capture"; // capture (default) | task
+let addProjectId = ""; // '' = no project
+
+function renderAdder(){
+  const projOpts = ['<option value="">(no project)</option>']
+    .concat(S.projects.filter(p=>p.status!=="done").map(p=>`<option value="${p.id}" ${p.id===addProjectId?"selected":""}>${p.icon} ${escapeHtml(p.title)}</option>`))
+    .join("");
+  const a = document.getElementById("adder");
+  a.innerHTML = `
+    <div class="row">
+      <div class="seg">
+        <button data-mode="capture" class="${addMode==="capture"?"on":""}">Capture</button>
+        <button data-mode="task" class="${addMode==="task"?"on":""}">Task</button>
+      </div>
+      <input type="text" id="addText" style="flex:1" placeholder="${addMode==="task" ? "New task…" : "Dump a raw thought…"}" />
+      <button class="btn primary" id="addBtn">Add</button>
+    </div>
+    ${addMode==="task" ? `<div class="row"><span class="tiny muted">Project:</span><select id="addProjSel">${projOpts}</select></div>` : ``}
+    <div class="hint">${addMode==="task"
+      ? "“+” defaults to a task. Pick a project inline, or leave it loose. Lands at the top when active + selected."
+      : "A capture is a raw, uncommitted line. It lands in the inbox below and is clarified later into tasks/projects."}</div>
+  `;
+  a.querySelectorAll(".seg button").forEach(b => b.onclick = () => { addMode = b.dataset.mode; renderAdder(); document.getElementById("addText").focus(); });
+  const sel = document.getElementById("addProjSel"); if (sel) sel.onchange = e => addProjectId = e.target.value;
+  const doAdd = () => {
+    const text = document.getElementById("addText").value.trim();
+    if (!text) return;
+    if (addMode === "task"){
+      S.tasks.push({ id: uid(), title:text, projectId: addProjectId || null, selected:true, done:false, src: refining ? refining.id : null });
+    } else {
+      S.captures.push({ id: uid(), text, showUpDate:null, done:false });
+    }
+    render();
+    setTimeout(()=>document.getElementById("addText").focus(),0);
+  };
+  document.getElementById("addBtn").onclick = doAdd;
+  document.getElementById("addText").onkeydown = e => { if (e.key === "Enter") doAdd(); };
+}
+
+const LINGER_MS = 5000;
+
+// Complete a task: it stays IN PLACE, struck-through, with Undo + "+ Waiting condition"
+// for ~5s, then settles (leaves the list). After that window, add a waiting condition
+// from the project card on the right — that is its durable home.
+function complete(t){
+  t.done = true; t.lingering = true;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { if (t.lingering){ t.lingering = false; render(); } }, LINGER_MS);
+  render();
+}
+function undo(t){ clearTimeout(t._timer); t.done = false; t.lingering = false; render(); }
+
+function renderTop(){
+  const c = document.getElementById("topRegion");
+  // One ordered list, in stable array order, so a just-completed task keeps its exact slot.
+  const rows = S.tasks.filter(t =>
+    (t.done && t.lingering) ||
+    (!t.done && t.selected && (t.projectId === null || proj(t.projectId)?.status === "active"))
+  );
+  if (!rows.length){ c.innerHTML = `<div class="empty">Nothing selected for today. Curate tasks from active projects on the right.</div>`; return; }
+  c.innerHTML = "";
+  for (const t of rows){
+    const p = t.projectId ? proj(t.projectId) : null;
+    if (t.done && t.lingering){
+      const row = el(`<div class="card" style="opacity:.8">
+        <div class="check done" title="Completed">✓</div>
+        <div class="grow"><div class="title" style="text-decoration:line-through;color:var(--dim)">${escapeHtml(t.title)}</div></div>
+        ${p ? `<button class="btn small addWait" title="What is “${escapeHtml(p.title)}” now waiting on?">+ Waiting condition</button>` : `<span class="tiny muted">loose · no project</span>`}
+        <button class="btn small ghost undoBtn">Undo</button>
+      </div>`);
+      const aw = row.querySelector(".addWait"); if (aw) aw.onclick = () => openWaiting(p);
+      row.querySelector(".undoBtn").onclick = () => undo(t);
+      c.appendChild(row);
+    } else {
+      const row = el(`<div class="card">
+        <div class="check" title="Complete">✓</div>
+        <div class="grow"><div class="title">${escapeHtml(t.title)}</div></div>
+        ${p ? `<span class="pill">${p.icon} ${escapeHtml(p.title)}</span>` : `<span class="pill">loose</span>`}
+        <button class="star on" title="Selected for today — click to unselect">★</button>
+      </div>`);
+      row.querySelector(".check").onclick = () => complete(t);
+      row.querySelector(".star").onclick = () => { t.selected = false; render(); };
+      c.appendChild(row);
+    }
+  }
+}
+
+function renderCaptures(){
+  const c = document.getElementById("captureRegion");
+  const cs = inboxCaptures();
+  if (!cs.length){ c.innerHTML = `<div class="empty">Inbox empty. Add a capture above.</div>`; return; }
+  c.innerHTML = "";
+  for (const cap of cs){
+    const isRef = refining === cap;
+    const dim = refining && !isRef;
+    const row = el(`<div class="card sub" style="${dim?"opacity:.4;":""}${isRef?"border-color:#33507d;":""}">
+      <div class="grow"><div class="title">${escapeHtml(cap.text)}</div></div>
+      ${isRef
+        ? `<span class="tiny" style="color:var(--accent)">refining… use the bar above</span>`
+        : (refining ? `` : `<button class="btn small" data-act="refine">Refine →</button>
+                            <button class="btn small" data-act="postpone">Postpone</button>
+                            <button class="btn small ghost" data-act="del" title="Trash">✕</button>`)}
+    </div>`);
+    const rf = row.querySelector('[data-act=refine]'); if (rf) rf.onclick = () => { refining = cap; render(); };
+    const pp = row.querySelector('[data-act=postpone]'); if (pp) pp.onclick = () => { cap.showUpDate = tomorrow(); render(); };
+    const dl = row.querySelector('[data-act=del]'); if (dl) dl.onclick = () => { cap.done = true; render(); };
+    c.appendChild(row);
+  }
+}
+
+const expandedProjects = new Set();
+let projectsInit = false;
+
+function renderProjects(){
+  const c = document.getElementById("projects");
+  if (!projectsInit){ S.projects.forEach(p => { if (p.status === "active") expandedProjects.add(p.id); }); projectsInit = true; }
+  c.innerHTML = "";
+  const working = S.projects.filter(p => p.status !== "done");
+  if (!working.length){ c.innerHTML = `<div class="empty">No projects.</div>`; }
+  for (const p of working){
+    const tasks = S.tasks.filter(t => t.projectId === p.id && !t.done);
+    const d = el(`<details class="proj" data-pid="${p.id}" ${expandedProjects.has(p.id)?"open":""}>
+      <summary>
+        <span class="status-dot dot-${p.status}"></span>
+        <span>${p.icon} <b>${escapeHtml(p.title)}</b></span>
+        <span class="pill ${p.status}">${p.status}</span>
+        <span class="muted tiny" style="margin-left:auto">${tasks.length} open task${tasks.length===1?"":"s"}</span>
+      </summary>
+      <div class="proj-body">
+        <div class="hint">Status is <b>derived</b>: <b>active</b> = has a selected task · <b>next</b> = groom / take on more · <b>waiting</b> = has an open waiting condition. Backlog & done are set by hand.</div>
+        <div class="field">
+          ${p.status==="backlog"
+            ? `<button class="btn small toPlay">▶ Put in play</button>`
+            : `<button class="btn small toBacklog">Move to backlog</button>`}
+          <button class="btn small toDone">Mark done</button>
+        </div>
+        <div class="tiny muted" style="margin-top:8px">Tasks <span class="muted">(★ = take on now)</span></div>
+        <div class="ptasks"></div>
+        <div class="field">
+          <input type="text" class="ptaskTitle" placeholder="Add a task to this project…" style="flex:1" />
+          <button class="btn small ptaskAdd">+ Task</button>
+        </div>
+        <div class="blockers" style="margin-top:8px"></div>
+        <div class="field">
+          <button class="btn small addBlk">+ Waiting condition</button>
+        </div>
+      </div>
+    </details>`);
+    const toPlay = d.querySelector(".toPlay"); if (toPlay) toPlay.onclick = () => { p.status = "next"; render(); };
+    const toBacklog = d.querySelector(".toBacklog"); if (toBacklog) toBacklog.onclick = () => { p.status = "backlog"; render(); };
+    d.querySelector(".toDone").onclick = () => { p.status = "done"; render(); };
+    d.addEventListener("toggle", () => { if (d.open) expandedProjects.add(p.id); else expandedProjects.delete(p.id); });
+    // Task list + inline add (grooming happens here)
+    const ptasks = d.querySelector(".ptasks");
+    if (!tasks.length) ptasks.innerHTML = `<div class="empty tiny">No tasks yet. Add some to groom this project.</div>`;
+    for (const t of tasks){
+      const trow = el(`<div class="willrow">
+        <button class="star ${t.selected?"on":""}" title="Take on now / park">★</button>
+        <span class="grow">${escapeHtml(t.title)}</span>
+        <span class="tiny muted">${t.selected?"on top":"parked"}</span>
+      </div>`);
+      trow.querySelector(".star").onclick = () => { t.selected = !t.selected; render(); };
+      ptasks.appendChild(trow);
+    }
+    const addPTask = () => {
+      const inp = d.querySelector(".ptaskTitle"); const v = inp.value.trim(); if(!v) return;
+      // New tasks land parked (grooming = collect, then take on): star to surface them.
+      S.tasks.push({ id:uid(), title:v, projectId:p.id, selected:false, done:false, src: refining ? refining.id : null });
+      render();
+    };
+    d.querySelector(".ptaskAdd").onclick = addPTask;
+    d.querySelector(".ptaskTitle").onkeydown = e => { if (e.key === "Enter") addPTask(); };
+    const blk = d.querySelector(".blockers");
+    for (const b of p.blockers){
+      const label = blockerLabel(b);
+      const brow = el(`<div class="blocker ${b.resolved?"resolved":""}">
+        <span class="kind-tag">${b.kind}</span>
+        <span class="grow">${escapeHtml(label)}</span>
+        ${b.resolved
+          ? `<span class="tiny" style="color:var(--good)">resolved${b.kind!=="free-text"?" by code":""}</span>`
+          : (b.kind==="free-text"
+              ? `<button class="btn small" data-r="me">Resolve</button><button class="btn small" data-r="ai" title="AI reads content and resolves">AI resolve</button>`
+              : `<span class="tiny muted">code will auto-resolve</span>`)}
+      </div>`);
+      const rm = brow.querySelector('[data-r=me]'); if (rm) rm.onclick = () => { b.resolved = true; render(); };
+      const ra = brow.querySelector('[data-r=ai]'); if (ra) ra.onclick = () => { b.resolved = true; render(); };
+      blk.appendChild(brow);
+    }
+    d.querySelector(".addBlk").onclick = () => openWaiting(p);
+    c.appendChild(d);
+  }
+}
+
+function blockerLabel(b){
+  if (b.kind === "free-text") return b.text;
+  if (b.kind === "task-done"){ const t = S.tasks.find(t=>t.id===b.refId); return `until task “${t?t.title:"?"}” is done`; }
+  if (b.kind === "project-status"){ const p = proj(b.refId); return `until project “${p?p.title:"?"}” is ${b.targetStatus}`; }
+  return "";
+}
+
+function renderCuration(){
+  const c = document.getElementById("curation");
+  const pool = curationPool();
+  if (!pool.length){ c.innerHTML = `<div class="empty">No eligible tasks. Activate a project or add a loose task.</div>`; return; }
+  c.innerHTML = "";
+  for (const t of pool){
+    const p = t.projectId ? proj(t.projectId) : null;
+    const row = el(`<div class="card sub">
+      <button class="star ${t.selected?"on":""}" title="Toggle: show at top today">★</button>
+      <div class="grow"><div class="title">${escapeHtml(t.title)}</div></div>
+      ${p ? `<span class="pill">${p.icon} ${escapeHtml(p.title)}</span>` : `<span class="pill">loose</span>`}
+      <span class="tiny muted">${t.selected?"on top":"parked"}</span>
+    </div>`);
+    row.querySelector(".star").onclick = () => { t.selected = !t.selected; render(); };
+    c.appendChild(row);
+  }
+}
+
+// ---------- modals ----------
+function closeModal(){ document.getElementById("modalRoot").innerHTML = ""; }
+
+function openWaiting(p){
+  const root = document.getElementById("modalRoot");
+  const taskOpts = S.tasks.filter(t=>!t.done).map(t=>`<option value="${t.id}">${escapeHtml(t.title)}</option>`).join("");
+  const projOpts = S.projects.filter(x=>x.id!==p.id && x.status!=="done").map(x=>`<option value="${x.id}">${x.icon} ${escapeHtml(x.title)}</option>`).join("");
+  const m = el(`<div class="modal-back"><div class="modal">
+    <h3>What is “${escapeHtml(p.title)}” waiting on?</h3>
+    <div class="hint">A waiting condition is what the project waits on. Structured kinds auto-resolve in code; a free-text reason is resolved by you or the AI. Any open condition puts the project in waiting.</div>
+    <div class="field"><span class="tiny muted">Kind:</span>
+      <select id="bKind">
+        <option value="free-text">free-text / external condition</option>
+        <option value="task-done">until a task is done (code-resolved)</option>
+        <option value="project-status">until a project reaches a status (code-resolved)</option>
+      </select>
+    </div>
+    <div id="bParams" class="field"></div>
+    <div class="field" style="justify-content:flex-end; margin-top:14px">
+      <button class="btn ghost" id="bCancel">Cancel</button>
+      <button class="btn primary" id="bAdd">Add waiting condition</button>
+    </div>
+  </div></div>`);
+  root.appendChild(m);
+  const params = m.querySelector("#bParams");
+  function drawParams(){
+    const k = m.querySelector("#bKind").value;
+    if (k === "free-text") params.innerHTML = `<input type="text" id="bText" style="flex:1" placeholder="e.g. the letter comes back" />`;
+    else if (k === "task-done") params.innerHTML = `<span class="tiny muted">Task:</span><select id="bRef">${taskOpts}</select>`;
+    else params.innerHTML = `<span class="tiny muted">Project:</span><select id="bRef">${projOpts}</select> <span class="tiny muted">reaches</span><select id="bTarget">${STATUSES.map(s=>`<option value="${s}">${s}</option>`).join("")}<option value="done">done</option></select>`;
+  }
+  drawParams();
+  m.querySelector("#bKind").onchange = drawParams;
+  m.querySelector("#bCancel").onclick = closeModal;
+  m.querySelector("#bAdd").onclick = () => {
+    const k = m.querySelector("#bKind").value;
+    const b = { id:uid(), kind:k, resolved:false };
+    if (k === "free-text"){ b.text = (m.querySelector("#bText").value.trim()||"(unspecified reason)"); }
+    else if (k === "task-done"){ b.refId = m.querySelector("#bRef").value; }
+    else { b.refId = m.querySelector("#bRef").value; b.targetStatus = m.querySelector("#bTarget").value; }
+    p.blockers.push(b);
+    closeModal(); render();
+  };
+}
+
+// ---------- helpers ----------
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function tomorrow(){ const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+
+document.getElementById("addProj").onclick = () => {
+  const t = document.getElementById("newProjTitle").value.trim(); if(!t) return;
+  S.projects.push({ id:uid(), icon:"📁", title:t, status:"next", blockers:[], src: refining ? refining.id : null });
+  document.getElementById("newProjTitle").value = ""; render();
+};
+document.getElementById("newProjTitle").onkeydown = e => { if (e.key==="Enter") document.getElementById("addProj").click(); };
+document.getElementById("reset").onclick = () => { S = seed(); expandedProjects.clear(); projectsInit = false; render(); };
+
+function render(){
+  evaluate();
+  renderRefineBar(); renderAdder(); renderTop(); renderCaptures(); renderProjects(); renderCuration();
+  save();
+}
+render();
+</script>
+</body>
+</html>
