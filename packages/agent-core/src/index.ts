@@ -45,6 +45,7 @@ export {
   type TasksRest,
 } from "./tasks/collection";
 export { dueToday, localToday } from "./tasks/today";
+export { homeTasks } from "./tasks/home";
 
 // The Project data layer (Projects list).
 export type { Project, ProjectStatus } from "./projects/types";
