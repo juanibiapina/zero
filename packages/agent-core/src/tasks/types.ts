@@ -11,4 +11,12 @@ export type Task = {
   showUpDate: string;
   createdAt: string;
   completedAt: string | null;
+  // The Project this task belongs to, or null when the task is loose.
+  projectId: string | null;
+  // When the user took this task on (curated it onto Home), or null when parked.
+  // Only gates project tasks; loose tasks always show on Home.
+  takenOnAt: string | null;
+  // The capture this task was refined from, or null. Optional so existing rows
+  // and optimistic drafts need not carry it.
+  sourceCaptureId?: string | null;
 };

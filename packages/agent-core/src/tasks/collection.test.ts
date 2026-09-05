@@ -19,7 +19,7 @@ function fakeRest(initial: Task[]): TasksRest {
       await sleep(5);
       return server.filter((t) => t.completedAt == null).map((t) => ({ ...t }));
     },
-    addTask: async ({ id, text, showUpDate }) => {
+    addTask: async ({ id, text, showUpDate, projectId, takenOnAt }) => {
       await sleep(5);
       const existing = server.find((t) => t.id === id);
       if (existing) return { ...existing };
@@ -29,8 +29,17 @@ function fakeRest(initial: Task[]): TasksRest {
         showUpDate,
         createdAt: new Date().toISOString(),
         completedAt: null,
+        projectId,
+        takenOnAt,
       };
       server.push(task);
+      return { ...task };
+    },
+    setTaskTakenOn: async (id, takenOnAt) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      task.takenOnAt = takenOnAt;
       return { ...task };
     },
     completeTask: async (id) => {
@@ -64,6 +73,8 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   showUpDate: "2020-01-01",
   createdAt: "2020-01-01T00:00:00.000Z",
   completedAt: null,
+  projectId: null,
+  takenOnAt: null,
   ...over,
 });
 
@@ -139,6 +150,10 @@ describe("tasks durable names", () => {
   it("keeps the collection id and outbox mutationFn names", () => {
     const spec = tasksSpec(fakeRest([]));
     expect(spec.name).toBe("tasks");
-    expect(Object.keys(spec.verbs).sort()).toEqual(["addTask", "completeTask"]);
+    expect(Object.keys(spec.verbs).sort()).toEqual([
+      "addTask",
+      "completeTask",
+      "setTakenOn",
+    ]);
   });
 });

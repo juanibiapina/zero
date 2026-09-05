@@ -34,7 +34,11 @@ export type ProjectsRest = {
   // the server's row share one key and the server dedupes on the id: a retried
   // add (offline outbox replay) re-sends the same id and gets the stored row
   // back, not a second project.
-  addProject: (project: { id: string; title: string }) => Promise<Project>;
+  addProject: (project: {
+    id: string;
+    title: string;
+    sourceCaptureId: string | null;
+  }) => Promise<Project>;
   // Move a project to another status (including the terminal 'done', which drops
   // it from the working list). Idempotent on the id.
   setProjectStatus: (id: string, status: ProjectStatus) => Promise<Project>;
@@ -60,7 +64,7 @@ export type ProjectEditFields = {
 // via `tx.isPersisted.promise`.
 export type ProjectsApi = {
   collection: Collection<Project, string>;
-  add: (title: string) => Transaction;
+  add: (title: string, sourceCaptureId?: string | null) => Transaction;
   setStatus: (id: string, status: ProjectStatus) => Transaction;
   edit: (id: string, fields: ProjectEditFields) => Transaction;
   remove: (id: string) => Transaction;
@@ -95,16 +99,22 @@ function editFieldsFromChanges(changes: Partial<Project>): ProjectEditFields {
 export function projectsSpec(rest: ProjectsRest) {
   const v = verbsFor<Project>();
   const verbs = {
-    addProject: v.insert<{ title: string }>({
+    addProject: v.insert<{ title: string; sourceCaptureId: string | null }>({
       // The other fields match the server's creation defaults (icon 📁,
       // description null, status next), so the optimistic row is the server row.
-      row: ({ title }) => ({
+      row: ({ title, sourceCaptureId }) => ({
         title,
         icon: DEFAULT_ICON,
         description: null,
         status: "next",
+        sourceCaptureId,
       }),
-      persist: (row) => rest.addProject({ id: row.id, title: row.title }),
+      persist: (row) =>
+        rest.addProject({
+          id: row.id,
+          title: row.title,
+          sourceCaptureId: row.sourceCaptureId ?? null,
+        }),
     }),
     setProjectStatus: v.update<{ id: string; status: ProjectStatus }>({
       id: ({ id }) => id,
@@ -156,7 +166,8 @@ function toProjectsApi(
 ): ProjectsApi {
   return {
     collection: api.collection,
-    add: (title) => api.actions.addProject({ title }),
+    add: (title, sourceCaptureId = null) =>
+      api.actions.addProject({ title, sourceCaptureId }),
     setStatus: (id, status) => api.actions.setProjectStatus({ id, status }),
     edit: (id, fields) => api.actions.editProject({ id, fields }),
     remove: (id) => api.actions.deleteProject({ id }),

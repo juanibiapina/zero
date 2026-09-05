@@ -27,6 +27,7 @@ const fakeUserDO = (seed: Project[] = []) => {
         description: opts.description ?? null,
         status: opts.status ?? "next",
         createdAt: new Date(1700000000000 + ++n).toISOString(),
+        sourceCaptureId: opts.sourceCaptureId ?? null,
       };
       projects.push(project);
       return project;
@@ -102,6 +103,7 @@ describe("GET /api/projects", () => {
         description: null,
         status: "next",
         createdAt: "2023-11-14T22:13:20.001Z",
+        sourceCaptureId: null,
       },
     ]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -118,6 +120,7 @@ describe("GET /api/projects", () => {
           description: null,
           status: "next",
           createdAt: "2023-11-14T22:13:20.001Z",
+          sourceCaptureId: null,
         },
       ],
     });
@@ -191,6 +194,7 @@ const seedProject = (over: Partial<Project> = {}): Project => ({
   description: null,
   status: "next",
   createdAt: "2023-11-14T22:13:20.001Z",
+  sourceCaptureId: null,
   ...over,
 });
 

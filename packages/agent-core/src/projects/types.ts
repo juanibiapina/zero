@@ -17,4 +17,7 @@ export type Project = {
   description: string | null;
   status: ProjectStatus;
   createdAt: string;
+  // The capture this project was refined from, or null. Optional so existing
+  // rows and optimistic drafts need not carry it.
+  sourceCaptureId?: string | null;
 };

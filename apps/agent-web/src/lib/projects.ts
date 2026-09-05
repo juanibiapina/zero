@@ -21,6 +21,7 @@ export async function fetchProjects(): Promise<Project[]> {
 export async function addProject(project: {
   id: string;
   title: string;
+  sourceCaptureId: string | null;
 }): Promise<Project> {
   const res = await fetch("/api/projects", {
     method: "POST",

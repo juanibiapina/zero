@@ -5,12 +5,19 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  DONE_UNDO_MS,
+  homeTasks,
+  localToday,
   messageOf,
   orderKeyBetween,
   tomorrow,
   visibleCaptures,
   type Capture,
   type CapturesApi,
+  type ProjectsApi,
+  type Task,
+  type TasksApi,
+  type WaitsApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -44,15 +51,26 @@ import { useResolveClassNames } from 'uniwind';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
-import { CheckCircle } from '@/components/ui/list-row';
+import { CheckCircle, ListRow } from '@/components/ui/list-row';
+import { Input } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
+import { useTasksApi } from '@/lib/tasks-collection';
+import { useProjectsApi } from '@/lib/projects-collection';
+import { useWaitsApi } from '@/lib/waits-collection';
+import {
+  refiningCaptureId,
+  startRefine,
+  stopRefine,
+} from '@/lib/refine-session';
+import { RefineBanner } from '@/components/refine-banner';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
   useForegroundRefetch,
   useLoadError,
+  useUndoableLeave,
 } from '@/lib/screen-hooks';
 
 // Strong ease-out for the commit slide (from the Expo animation recipe).
@@ -194,10 +212,12 @@ function CaptureDetail({
   draft,
   onChangeDraft,
   onDone,
+  onRefine,
 }: {
   draft: string;
   onChangeDraft: (text: string) => void;
   onDone: () => void;
+  onRefine: () => void;
 }) {
   const surfaceMuted = useColor('--color-surface-muted');
   const foreground = useColor('--color-foreground');
@@ -226,14 +246,221 @@ function CaptureDetail({
         style={{ height: 48, borderRadius: 14 }}
         onPress={onDone}
       />
+      <Button
+        label="Refine into tasks & projects"
+        variant="outlined"
+        style={{ height: 48, borderRadius: 14 }}
+        onPress={onRefine}
+      />
     </Column>
   );
 }
 
-// Captures is the sole list: unclarified raw thoughts. The quick-add creates a
-// Capture; tap a row's circle to Process it.
+// One task row in the Home top region: a complete circle and the text. The
+// availability rule (which tasks show) lives in the shared homeTasks seam.
+function TaskRow({
+  item,
+  leaving,
+  onComplete,
+  onPark,
+  onUndo,
+  onAddWaiting,
+}: {
+  item: Task;
+  leaving: boolean;
+  onComplete: (item: Task) => void;
+  onPark: (item: Task) => void;
+  onUndo: (item: Task) => void;
+  onAddWaiting: (item: Task) => void;
+}) {
+  // Completing leaves the task in place ~5s with Undo (and, for a project task,
+  // a "+ Waiting" shortcut) before the write commits.
+  if (leaving) {
+    return (
+      <ListRow
+        trailing={
+          <View className="flex-row items-center gap-3">
+            {item.projectId ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Add waiting condition for "${item.text}"`}
+                hitSlop={8}
+                onPress={() => onAddWaiting(item)}
+              >
+                <Text className="text-[13px] text-foreground-muted">
+                  + Waiting
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Undo"
+              hitSlop={8}
+              onPress={() => onUndo(item)}
+            >
+              <Text className="text-[13px] font-semibold text-accent">Undo</Text>
+            </Pressable>
+          </View>
+        }
+      >
+        <Text className="text-foreground-muted line-through">{item.text}</Text>
+      </ListRow>
+    );
+  }
+  return (
+    <ListRow
+      leading={
+        <CheckCircle
+          label={`Complete "${item.text}"`}
+          onPress={() => onComplete(item)}
+        />
+      }
+      // A project task carries a park star (send it back to the project screen);
+      // a loose task has none — it is an immediate to-do, not curated.
+      trailing={
+        item.projectId ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Park "${item.text}"`}
+            hitSlop={8}
+            onPress={() => onPark(item)}
+          >
+            <Text className="text-[18px] text-accent">★</Text>
+          </Pressable>
+        ) : undefined
+      }
+    >
+      <Text>{item.text}</Text>
+    </ListRow>
+  );
+}
+
+// The Home top region: the tasks you have taken on, rendered above the capture
+// inbox as the list header. Slice 1 shows every open task; later slices gate it
+// by project and selection through homeTasks.
+function TasksTop({
+  api,
+  projectsApi,
+  waitsApi,
+  onError,
+}: {
+  api: TasksApi;
+  projectsApi: ProjectsApi;
+  waitsApi: WaitsApi;
+  onError: (message: string) => void;
+}) {
+  const { data: tasks } = useLiveQuery((q) =>
+    q
+      .from({ t: api.collection })
+      .where(({ t }) => isNull(t.completedAt))
+      .orderBy(({ t }) => t.createdAt, 'asc'),
+  );
+  const { data: projects } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
+  );
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
+  );
+  useForegroundRefetch(api.refetch);
+  const done = useUndoableLeave(DONE_UNDO_MS);
+  const [waitingFor, setWaitingFor] = useState<{ projectId: string } | null>(
+    null,
+  );
+  const [condText, setCondText] = useState('');
+  const list = useMemo(
+    () => homeTasks(tasks ?? [], projects ?? [], conditions ?? []),
+    [tasks, projects, conditions],
+  );
+  const onComplete = useCallback(
+    (item: Task) => {
+      done.start(item.id, () => {
+        const tx = api.complete(item.id);
+        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      });
+    },
+    [api, done, onError],
+  );
+  const onPark = useCallback(
+    (item: Task) => {
+      const tx = api.park(item.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, onError],
+  );
+  const onUndo = useCallback((item: Task) => done.undo(item.id), [done]);
+  const onAddWaiting = useCallback((item: Task) => {
+    if (item.projectId) setWaitingFor({ projectId: item.projectId });
+  }, []);
+  const addCondition = useCallback(() => {
+    const trimmed = condText.trim();
+    const target = waitingFor;
+    setWaitingFor(null);
+    setCondText('');
+    if (!target || !trimmed) return;
+    const tx = waitsApi.add(target.projectId, 'free-text', { text: trimmed });
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  }, [condText, waitingFor, waitsApi, onError]);
+  return (
+    <View>
+      <Text variant="caption" className="px-screen-x pb-1 pt-2">
+        Tasks
+      </Text>
+      {list.length === 0 ? (
+        <Text variant="subtitle" className="px-screen-x pb-2">
+          No tasks yet. Add one to work on today.
+        </Text>
+      ) : (
+        list.map((item) => (
+          <TaskRow
+            key={item.id}
+            item={item}
+            leaving={done.pending.has(item.id)}
+            onComplete={onComplete}
+            onPark={onPark}
+            onUndo={onUndo}
+            onAddWaiting={onAddWaiting}
+          />
+        ))
+      )}
+      <Text variant="caption" className="px-screen-x pb-1 pt-3">
+        Inbox
+      </Text>
+
+      <Sheet
+        open={waitingFor != null}
+        onClose={() => {
+          setWaitingFor(null);
+          setCondText('');
+        }}
+      >
+        <Column spacing={12}>
+          <Input
+            value={condText}
+            onChangeText={setCondText}
+            onSubmitEditing={addCondition}
+            returnKeyType="done"
+            placeholder="e.g. the letter comes back"
+            accessibilityLabel="Waiting condition"
+          />
+          <Button
+            label="Add waiting condition"
+            variant="filled"
+            style={{ height: 48, borderRadius: 14 }}
+            onPress={addCondition}
+          />
+        </Column>
+      </Sheet>
+    </View>
+  );
+}
+
+// Home is two regions: the tasks you have taken on (TasksTop) above the capture
+// inbox. The quick-add defaults to a capture and can switch to a task.
 export default function HomeScreen() {
   const capturesApi = useCapturesApi();
+  const tasksApi = useTasksApi();
+  const projectsApi = useProjectsApi();
+  const waitsApi = useWaitsApi();
 
   // Measure the gap from this screen's content bottom to the window bottom (the
   // native bottom tab bar plus the system gesture inset), fed to the
@@ -250,9 +477,15 @@ export default function HomeScreen() {
 
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
-      <ScreenHeader title="Captures" />
-      {capturesApi ? (
-        <Captures api={capturesApi} bottomOffset={bottomOffset} />
+      <ScreenHeader title="Today" />
+      {capturesApi && tasksApi && projectsApi && waitsApi ? (
+        <Captures
+          api={capturesApi}
+          tasksApi={tasksApi}
+          projectsApi={projectsApi}
+          waitsApi={waitsApi}
+          bottomOffset={bottomOffset}
+        />
       ) : (
         <View className="flex-1" />
       )}
@@ -260,13 +493,22 @@ export default function HomeScreen() {
   );
 }
 
+type AddMode = 'capture' | 'task';
+
 function Captures({
   api,
+  tasksApi,
+  projectsApi,
+  waitsApi,
   bottomOffset,
 }: {
   api: CapturesApi;
+  tasksApi: TasksApi;
+  projectsApi: ProjectsApi;
+  waitsApi: WaitsApi;
   bottomOffset: number;
 }) {
+  const [mode, setMode] = useState<AddMode>('capture');
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: api.collection })
@@ -332,11 +574,24 @@ function Captures({
     }
     setWriteError(null);
     // Optimistic: the row appears at once; surface a failure if the write loses.
-    const tx = api.add(trimmed);
+    // The mode decides where it lands: a task dated today, or a capture.
+    const tx =
+      mode === 'task'
+        ? tasksApi.add(trimmed, localToday(), null, null, refiningCaptureId())
+        : api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    // Keep the bar open and cleared for rapid, repeated capture.
+    // Keep the bar open and cleared for rapid, repeated entry.
     setText('');
-  }, [text, api]);
+  }, [text, api, tasksApi, mode]);
+
+  const onFinishRefine = useCallback(
+    (captureId: string) => {
+      const tx = api.process(captureId);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+      stopRefine();
+    },
+    [api],
+  );
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -449,6 +704,7 @@ function Captures({
 
   return (
     <>
+      <RefineBanner onFinish={onFinishRefine} />
       {error ? (
         <Text variant="error" className="px-screen-x">
           {error}
@@ -475,6 +731,14 @@ function Captures({
           renderItem={renderItem}
           itemLayoutAnimation={LinearTransition.duration(200)}
           onReorder={onReorder}
+          ListHeaderComponent={
+            <TasksTop
+              api={tasksApi}
+              projectsApi={projectsApi}
+              waitsApi={waitsApi}
+              onError={setWriteError}
+            />
+          }
           ListEmptyComponent={
             <Text variant="subtitle" className="px-screen-x">
               No captures yet. Capture something.
@@ -490,6 +754,10 @@ function Captures({
             draft={draft}
             onChangeDraft={setDraft}
             onDone={commitAndClose}
+            onRefine={() => {
+              startRefine(selected.id, selected.text);
+              setSelectedId(null);
+            }}
           />
         ) : null}
       </Sheet>
@@ -499,6 +767,9 @@ function Captures({
       <QuickAdd
         open={adding}
         text={text}
+        mode={mode}
+        onModeChange={setMode}
+        placeholder={mode === 'task' ? 'Add a task' : 'Capture a thought'}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
         onSubmit={() => onAdd()}

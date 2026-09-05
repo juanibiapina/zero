@@ -19,6 +19,12 @@ export interface Task {
   showUpDate: string;
   createdAt: string;
   completedAt: string | null;
+  // The Project this task belongs to, or null when the task is loose.
+  projectId: string | null;
+  // When the user took this task on (curated it onto Home), or null when parked.
+  takenOnAt: string | null;
+  // The capture this task was refined from, or null.
+  sourceCaptureId: string | null;
 }
 
 // Project a stored row back to the client-facing Task shape.
@@ -28,6 +34,9 @@ function toTask(row: {
   showUpDate: string;
   createdAt: string;
   completedAt: string | null;
+  projectId: string | null;
+  takenOnAt: string | null;
+  sourceCaptureId: string | null;
 }): Task {
   return {
     id: row.id,
@@ -35,6 +44,9 @@ function toTask(row: {
     showUpDate: row.showUpDate,
     createdAt: row.createdAt,
     completedAt: row.completedAt,
+    projectId: row.projectId,
+    takenOnAt: row.takenOnAt,
+    sourceCaptureId: row.sourceCaptureId,
   };
 }
 
@@ -44,7 +56,14 @@ export class DbTaskStore {
   // The client mints the task id, so the add is exactly-once on the id alone: a
   // replay (a retried write after a lost ACK) re-sends the same id and gets the
   // already-stored row back instead of inserting a second one.
-  add(id: string, text: string, showUpDate: string): Task {
+  add(
+    id: string,
+    text: string,
+    showUpDate: string,
+    projectId: string | null = null,
+    takenOnAt: string | null = null,
+    sourceCaptureId: string | null = null,
+  ): Task {
     const existingById = this.db.get(tasks, { where: eq("id", id) });
     if (existingById) return toTask(existingById);
     const task: Task = {
@@ -53,9 +72,21 @@ export class DbTaskStore {
       showUpDate,
       createdAt: new Date().toISOString(),
       completedAt: null,
+      projectId,
+      takenOnAt,
+      sourceCaptureId,
     };
     this.db.insert(tasks, task);
     return task;
+  }
+
+  // Take a task on (takenOnAt = a timestamp) or park it (takenOnAt = null). One
+  // verb carries both; idempotent on the id, so a replayed offline write is
+  // safe. Returns the updated row, or null when no row has that id.
+  setTakenOn(id: string, takenOnAt: string | null): Task | null {
+    this.db.update(tasks, { takenOnAt }, { where: eq("id", id) });
+    const row = this.db.get(tasks, { where: eq("id", id) });
+    return row ? toTask(row) : null;
   }
 
   // All open tasks (completedAt IS NULL), oldest first. The due-today date filter

@@ -4,12 +4,22 @@ import type {
   ProjectEditFields,
   ProjectStatus,
   Task,
+  WaitingCondition,
+  WaitingConditionKind,
 } from '@zero/agent-core';
 
 import { API_BASE_URL } from './env';
 
-// The Capture, Task and Project entity types are shared across web + mobile.
-export type { Capture, Project, ProjectEditFields, ProjectStatus, Task };
+// The shared entity types (web + mobile).
+export type {
+  Capture,
+  Project,
+  ProjectEditFields,
+  ProjectStatus,
+  Task,
+  WaitingCondition,
+  WaitingConditionKind,
+};
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
@@ -200,7 +210,14 @@ export async function fetchTasks(
 
 export async function addTask(
   getToken: TokenGetter,
-  task: { id: string; text: string; showUpDate: string },
+  task: {
+    id: string;
+    text: string;
+    showUpDate: string;
+    projectId: string | null;
+    takenOnAt: string | null;
+    sourceCaptureId: string | null;
+  },
   baseUrl: string = API_BASE_URL,
 ): Promise<Task> {
   const res = await apiFetch(
@@ -238,6 +255,29 @@ export async function completeTask(
   return body.task;
 }
 
+export async function setTaskTakenOn(
+  getToken: TokenGetter,
+  id: string,
+  takenOnAt: string | null,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ takenOnAt }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
 // Project REST helpers: siblings of the Task ones above, hitting /api/projects.
 // The client sends only id + title; the server fills the defaults (icon 📁,
 // description null, status next).
@@ -255,7 +295,7 @@ export async function fetchProjects(
 
 export async function addProject(
   getToken: TokenGetter,
-  project: { id: string; title: string },
+  project: { id: string; title: string; sourceCaptureId: string | null },
   baseUrl: string = API_BASE_URL,
 ): Promise<Project> {
   const res = await apiFetch(
@@ -336,5 +376,82 @@ export async function deleteProject(
   );
   if (!res.ok) {
     throw new Error(`DELETE /api/projects/${id} failed: ${res.status}`);
+  }
+}
+
+// Waiting-condition REST helpers: siblings of the project ones above, hitting
+// /api/waits. See docs/entities/waiting-condition.md.
+export async function fetchWaits(
+  getToken: TokenGetter,
+  baseUrl: string = API_BASE_URL,
+): Promise<WaitingCondition[]> {
+  const res = await apiFetch(getToken, '/api/waits', {}, baseUrl);
+  if (!res.ok) {
+    throw new Error(`GET /api/waits failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { conditions: WaitingCondition[] };
+  return body.conditions;
+}
+
+export async function addWaitingCondition(
+  getToken: TokenGetter,
+  condition: {
+    id: string;
+    projectId: string;
+    kind: WaitingConditionKind;
+    text: string | null;
+    refId: string | null;
+    targetStatus: string | null;
+  },
+  baseUrl: string = API_BASE_URL,
+): Promise<WaitingCondition> {
+  const res = await apiFetch(
+    getToken,
+    '/api/waits',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(condition),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/waits failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { condition: WaitingCondition };
+  return body.condition;
+}
+
+export async function resolveWaitingCondition(
+  getToken: TokenGetter,
+  id: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<WaitingCondition> {
+  const res = await apiFetch(
+    getToken,
+    `/api/waits/${id}/resolve`,
+    { method: 'POST' },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/waits/${id}/resolve failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { condition: WaitingCondition };
+  return body.condition;
+}
+
+export async function deleteWaitingCondition(
+  getToken: TokenGetter,
+  id: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<void> {
+  const res = await apiFetch(
+    getToken,
+    `/api/waits/${id}`,
+    { method: 'DELETE' },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`DELETE /api/waits/${id} failed: ${res.status}`);
   }
 }

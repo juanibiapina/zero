@@ -460,6 +460,20 @@ export function createPersistedEntityApi<
     void controls.commit();
   };
 
+  // Remove a row from the synced base by id, after a server delete. The delete's
+  // optimistic overlay is released when its transaction confirms, and the synced
+  // base still holds the row (optimistic mutations never touch the base), so
+  // without this the deleted row reappears until the next fetch. Guarded on the
+  // base holding the key — but the key is checked against the collection, whose
+  // effective state already dropped the row via the optimistic overlay, so the
+  // delete is issued unconditionally (a base delete of an absent key is a no-op).
+  const reconcileRemove = (id: string) => {
+    if (!controls) return;
+    controls.begin();
+    controls.write({ type: "delete", key: id });
+    void controls.commit();
+  };
+
   // Replace the synced rows with the server's authoritative list: upsert each
   // server row and delete any synced row the server no longer returns. Deletes
   // hit only the synced base, so a pending optimistic row (not yet in the base)
@@ -529,9 +543,12 @@ export function createPersistedEntityApi<
           });
           reconcileOne(updated);
         } else {
-          // Delete: the optimistic overlay already dropped the row; issue the
-          // server delete. Nothing to reconcile back in.
+          // Delete: issue the server delete, then remove the row from the synced
+          // base too. The optimistic overlay drop is released when this
+          // transaction confirms and the base still holds the row, so without
+          // this reconcile the deleted row reappears until the next fetch.
           await verb.persist(String(m.key));
+          reconcileRemove(String(m.key));
         }
       }
       // Re-pull after an insert, or an update that asked for it; a delete has

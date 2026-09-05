@@ -15,6 +15,12 @@ import {
   type ProjectStatus,
 } from "../store/projects";
 import {
+  DbWaitingConditionStore,
+  type WaitingCondition,
+  type WaitingConditionFields,
+  type WaitingConditionKind,
+} from "../store/waiting-conditions";
+import {
   SystemTopicStore,
   systemTopicsFingerprint,
 } from "../store/system-topics";
@@ -103,6 +109,7 @@ export class UserDO extends DurableObject<Env> {
   private captures: DbCaptureStore;
   private tasks: DbTaskStore;
   private projects: DbProjectStore;
+  private waitingConditions: DbWaitingConditionStore;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -113,6 +120,7 @@ export class UserDO extends DurableObject<Env> {
     this.captures = new DbCaptureStore(this.db);
     this.tasks = new DbTaskStore(this.db);
     this.projects = new DbProjectStore(this.db);
+    this.waitingConditions = new DbWaitingConditionStore(this.db);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
@@ -166,8 +174,26 @@ export class UserDO extends DurableObject<Env> {
     return this.captures.reorder(id, sortKey);
   }
 
-  addTask(id: string, text: string, showUpDate: string): Task {
-    return this.tasks.add(id, text, showUpDate);
+  addTask(
+    id: string,
+    text: string,
+    showUpDate: string,
+    projectId: string | null = null,
+    takenOnAt: string | null = null,
+    sourceCaptureId: string | null = null,
+  ): Task {
+    return this.tasks.add(
+      id,
+      text,
+      showUpDate,
+      projectId,
+      takenOnAt,
+      sourceCaptureId,
+    );
+  }
+
+  setTaskTakenOn(id: string, takenOnAt: string | null): Task | null {
+    return this.tasks.setTakenOn(id, takenOnAt);
   }
 
   listTasks(): Task[] {
@@ -196,6 +222,29 @@ export class UserDO extends DurableObject<Env> {
 
   deleteProject(id: string): boolean {
     return this.projects.delete(id);
+  }
+
+  // --- Waiting conditions ---
+
+  addWaitingCondition(
+    id: string,
+    projectId: string,
+    kind: WaitingConditionKind,
+    fields?: WaitingConditionFields,
+  ): WaitingCondition {
+    return this.waitingConditions.add(id, projectId, kind, fields);
+  }
+
+  listWaitingConditions(): WaitingCondition[] {
+    return this.waitingConditions.listOpen();
+  }
+
+  resolveWaitingCondition(id: string): WaitingCondition | null {
+    return this.waitingConditions.resolve(id);
+  }
+
+  deleteWaitingCondition(id: string): boolean {
+    return this.waitingConditions.delete(id);
   }
 
   // --- Conversations and messages ---

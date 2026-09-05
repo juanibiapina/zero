@@ -45,6 +45,7 @@ export {
   type TasksRest,
 } from "./tasks/collection";
 export { dueToday, localToday } from "./tasks/today";
+export { homeTasks } from "./tasks/home";
 
 // The Project data layer (Projects list).
 export type { Project, ProjectStatus } from "./projects/types";
@@ -62,6 +63,23 @@ export {
   PROJECT_SECTION_ORDER,
   type ProjectSection,
 } from "./projects/sections";
+export {
+  projectDisplayStatus,
+  conditionSatisfied,
+  unresolvedConditions,
+} from "./projects/derive";
+
+// The WaitingCondition data layer (why a project is waiting).
+export type { WaitingCondition, WaitingConditionKind } from "./waits/types";
+export {
+  WAITS_QUERY_KEY,
+  createWaitsApi,
+  createInMemoryWaitsApi,
+  createPersistedWaitsApi,
+  type WaitsApi,
+  type WaitsRest,
+  type WaitingConditionFields,
+} from "./waits/collection";
 export {
   ALL_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,

@@ -34,8 +34,13 @@ export type TasksRest = {
     id: string;
     text: string;
     showUpDate: string;
+    projectId: string | null;
+    takenOnAt: string | null;
+    sourceCaptureId: string | null;
   }) => Promise<Task>;
   completeTask: (id: string) => Promise<Task>;
+  // Take a task on (a timestamp) or park it (null). Idempotent on the id.
+  setTaskTakenOn: (id: string, takenOnAt: string | null) => Promise<Task>;
 };
 
 // One handle over the Today data layer. Both Today screens read `collection`
@@ -46,9 +51,20 @@ export type TasksApi = {
   collection: Collection<Task, string>;
   // `showUpDate` is the caller's local today (YYYY-MM-DD); v1 always dates a new
   // task today, but the field is explicit so a future reschedule can pass another
-  // day without changing this seam.
-  add: (text: string, showUpDate: string) => Transaction;
+  // day without changing this seam. `projectId` is the Project the task belongs
+  // to, or null/omitted for a loose task (the Home quick-add).
+  add: (
+    text: string,
+    showUpDate: string,
+    projectId?: string | null,
+    takenOnAt?: string | null,
+    sourceCaptureId?: string | null,
+  ) => Transaction;
   complete: (id: string) => Transaction;
+  // Curation: take a task on (surface it on Home) or park it. `takeOn` stamps a
+  // timestamp now; `park` clears it.
+  takeOn: (id: string) => Transaction;
+  park: (id: string) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
   getLoadError: () => string | null;
@@ -64,10 +80,30 @@ export const TASKS_QUERY_KEY = entityQueryKey("tasks");
 export function tasksSpec(rest: TasksRest) {
   const v = verbsFor<Task>();
   const verbs = {
-    addTask: v.insert<{ text: string; showUpDate: string }>({
-      row: ({ text, showUpDate }) => ({ text, showUpDate, completedAt: null }),
+    addTask: v.insert<{
+      text: string;
+      showUpDate: string;
+      projectId: string | null;
+      takenOnAt: string | null;
+      sourceCaptureId: string | null;
+    }>({
+      row: ({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }) => ({
+        text,
+        showUpDate,
+        projectId,
+        takenOnAt,
+        sourceCaptureId,
+        completedAt: null,
+      }),
       persist: (row) =>
-        rest.addTask({ id: row.id, text: row.text, showUpDate: row.showUpDate }),
+        rest.addTask({
+          id: row.id,
+          text: row.text,
+          showUpDate: row.showUpDate,
+          projectId: row.projectId,
+          takenOnAt: row.takenOnAt,
+          sourceCaptureId: row.sourceCaptureId ?? null,
+        }),
     }),
     completeTask: v.update<{ id: string }>({
       id: ({ id }) => id,
@@ -76,6 +112,16 @@ export function tasksSpec(rest: TasksRest) {
       },
       matches: ({ modified }) => modified.completedAt != null,
       persist: (id) => rest.completeTask(id),
+    }),
+    setTakenOn: v.update<{ id: string; takenOnAt: string | null }>({
+      id: ({ id }) => id,
+      draft:
+        ({ takenOnAt }) =>
+        (draft) => {
+          draft.takenOnAt = takenOnAt;
+        },
+      matches: () => true,
+      persist: (id, { modified }) => rest.setTaskTakenOn(id, modified.takenOnAt),
     }),
   };
   const spec: EntitySpec<Task, typeof verbs> = {
@@ -91,8 +137,12 @@ function toTasksApi(
 ): TasksApi {
   return {
     collection: api.collection,
-    add: (text, showUpDate) => api.actions.addTask({ text, showUpDate }),
+    add: (text, showUpDate, projectId = null, takenOnAt = null, sourceCaptureId = null) =>
+      api.actions.addTask({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }),
     complete: (id) => api.actions.completeTask({ id }),
+    takeOn: (id) =>
+      api.actions.setTakenOn({ id, takenOnAt: new Date().toISOString() }),
+    park: (id) => api.actions.setTakenOn({ id, takenOnAt: null }),
     offline: api.offline,
     refetch: api.refetch,
     getLoadError: api.getLoadError,

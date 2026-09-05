@@ -22,19 +22,21 @@ them.
 The name is `Task`, not the wiki's earlier "Todo" (which collides with the app
 name).
 
-## Status: parked (removed from the UI)
+## Status: returning via the availability model (slice 1)
 
-Task is **dormant**. The Capture/Task split proved premature — the user works in
-one list (Todoist-style) and never adopted the separate Today tab. The Today tab
-was removed from both web and mobile; the app is one Captures list again. All
-Task machinery below stays in the tree, unreferenced by any UI: the `tasks`
-table + migration, `DbTaskStore`, `/api/tasks`, the `@zero/agent-core` Task data
-layer (`createTasksApi`, `dueToday`, `localToday`), and both
-`tasks-collection.ts`. Nothing is deleted, so re-enabling Task once Projects and
-the agent exist should be roughly a one-screen change. The scheduling behavior a
-single list still wants (postpone to a day, reorder) is being folded into
-Capture instead — see `docs/todo-app.md`. The rest of this file describes Task as
-built, for when it returns.
+Task was parked for a while — the Capture/Task split proved premature and the
+separate Today tab was removed. It is now **coming back** as part of the
+availability model (`docs/plans/todo-availability-model.md`). Slice 1 re-surfaces
+Task on Home: the Home screen is two regions — the tasks you have taken on on top,
+the capture inbox below — and the quick-add gains a Capture/Task toggle (capture
+stays the default). Which tasks show on top is decided by the pure `homeTasks`
+seam in `@zero/agent-core`; slice 1 shows every open task, and later slices gate
+it by project membership (`projectId`) and selection (`takenOnAt`).
+
+The old "Today" (a `showUpDate <= today` filter) is **not** the gate anymore:
+availability replaces the date gate, so `homeTasks` ignores `showUpDate`. The
+column stays for a future reschedule. The sections below describe Task as built;
+the new columns arrive in later slices.
 
 ## What it is
 
@@ -69,11 +71,30 @@ it does not carry a Project, a priority, or subtasks.
 The partial index `tasks_today` on `("showUpDate")` `WHERE "completedAt" IS NULL`
 serves the open-tasks query (mirrors `captures_inbox`).
 
-### Deferred columns
+### Project membership
 
-`projectId` and `sourceCaptureId` are deliberately **not** columns yet. They
-arrive with the Project entity and the Capture->Task transition respectively; no
-speculative columns before their behavior is designed.
+`projectId` (nullable, migration 0047) is the Project a task belongs to, or null
+when the task is loose. Set at creation: the Home quick-add mints loose tasks;
+the project detail sheet's add-task field mints tasks under that project. The
+shared `Task` type, `/api/tasks`, and `createTasksApi` all carry it.
+
+### Curation
+
+`takenOnAt` (nullable, migration 0048) is when the user took the task on
+(curated it onto Home), or null when parked. It **only gates project tasks**:
+`homeTasks` shows a project task when its project is active **and** `takenOnAt`
+is set; a loose task always shows (it is an immediate to-do, with no project
+screen to live on when hidden). Set via the star on the project detail sheet and
+the Today top region (`PATCH /api/tasks/{id} { takenOnAt }`, verbs
+`takeOn` / `park`). A project-screen add lands parked; the Home quick-add mints
+loose tasks.
+
+### Provenance
+
+`sourceCaptureId` (nullable, migration 0050) is the capture a task was refined
+from, or null. Set when a task is created during a **Refine** session (see
+`docs/entities/capture.md`); the shared `Task` type carries it optionally
+(write-mostly provenance).
 
 ## Behavior
 

@@ -229,6 +229,14 @@ export const tasks = table("tasks", {
   showUpDate: column.text().notNull(),
   createdAt: column.text().notNull(),
   completedAt: column.text(),
+  // The Project this task belongs to, or NULL when the task is loose. See
+  // migration 0047.
+  projectId: column.text(),
+  // When the user took this task on (curated it onto Home), or NULL when parked.
+  // Only gates project tasks; loose tasks always show. See migration 0048.
+  takenOnAt: column.text(),
+  // The capture this task was refined from, or NULL. See migration 0050.
+  sourceCaptureId: column.text(),
 });
 
 // Projects: the third entity of the todo app (the Todoist replacement). A named,
@@ -248,5 +256,22 @@ export const projects = table("projects", {
   description: column.text(),
   // One of active/next/waiting/backlog/done. 'done' is terminal.
   status: column.text().notNull().default("next"),
+  createdAt: column.text().notNull(),
+  // The capture this project was refined from, or NULL. See migration 0050.
+  sourceCaptureId: column.text(),
+});
+
+// Waiting conditions: why a project is waiting (see migration 0049). Owned by
+// DbWaitingConditionStore. Open conditions are the rows where resolvedAt IS
+// NULL; structured kinds (task-done, project-status) are derived-satisfied on
+// the client and never persist resolvedAt.
+export const waitingConditions = table("waiting_conditions", {
+  id: column.text().notNull().primaryKey(),
+  projectId: column.text().notNull(),
+  kind: column.text().notNull(),
+  text: column.text(),
+  refId: column.text(),
+  targetStatus: column.text(),
+  resolvedAt: column.text(),
   createdAt: column.text().notNull(),
 });

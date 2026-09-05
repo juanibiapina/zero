@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { BackHandler, View } from 'react-native';
 
-import type { Capture } from '@/lib/api';
+import type { Capture, Task } from '@/lib/api';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
+import { resetTasksApiForTest } from '@/lib/tasks-collection';
+import { resetProjectsApiForTest } from '@/lib/projects-collection';
+import { resetWaitsApiForTest } from '@/lib/waits-collection';
 
 import HomeScreen from '../index';
 
@@ -42,6 +45,16 @@ const mockReorderCapture =
   jest.fn<
     (getToken: unknown, id: string, sortKey: string) => Promise<Capture>
   >();
+const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
+const mockAddTask =
+  jest.fn<
+    (
+      getToken: unknown,
+      task: { id: string; text: string; showUpDate: string },
+    ) => Promise<Task>
+  >();
+const mockCompleteTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 jest.mock('@/lib/api', () => ({
   fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
   addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
@@ -54,7 +67,35 @@ jest.mock('@/lib/api', () => ({
     mockRescheduleCapture(getToken, id, showUpDate),
   reorderCapture: (getToken: unknown, id: string, sortKey: string) =>
     mockReorderCapture(getToken, id, sortKey),
+  fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
+  addTask: (
+    getToken: unknown,
+    task: { id: string; text: string; showUpDate: string },
+  ) => mockAddTask(getToken, task),
+  completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
+  // The Home top region reads projects (for the project-active gate); it never
+  // mutates them here, so a fetch returning [] is enough.
+  fetchProjects: () => Promise.resolve([]),
+  addProject: () => Promise.reject(new Error('not used')),
+  setProjectStatus: () => Promise.reject(new Error('not used')),
+  editProject: () => Promise.reject(new Error('not used')),
+  deleteProject: () => Promise.resolve(),
+  // Waiting conditions feed the Home gate; a fetch returning [] is enough.
+  fetchWaits: () => Promise.resolve([]),
+  addWaitingCondition: () => Promise.reject(new Error('not used')),
+  resolveWaitingCondition: () => Promise.reject(new Error('not used')),
+  deleteWaitingCondition: () => Promise.resolve(),
 }));
+
+const taskRow = (id: string, text: string): Task => ({
+  id,
+  text,
+  showUpDate: '2023-01-01',
+  createdAt: '2023-01-01T00:00:00.000Z',
+  completedAt: null,
+  projectId: null,
+  takenOnAt: null,
+});
 
 const capture = (
   id: string,
@@ -91,7 +132,93 @@ const renderScreen = () => {
 describe('HomeScreen', () => {
   beforeEach(() => {
     resetCapturesApiForTest();
+    resetTasksApiForTest();
+    resetProjectsApiForTest();
+    resetWaitsApiForTest();
     mockEditCapture.mockReset();
+    mockAddTask.mockReset();
+    mockCompleteTask.mockReset();
+    mockFetchTasks.mockReset();
+    mockFetchTasks.mockResolvedValue([]);
+  });
+
+  it('adds a task from the Task quick-add mode', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockAddTask.mockImplementation(async (_g, task) => {
+      const added: Task = {
+        id: task.id,
+        text: task.text,
+        showUpDate: task.showUpDate,
+        createdAt: '2023-01-01T00:00:00.000Z',
+        completedAt: null,
+        projectId: null,
+        takenOnAt: null,
+      };
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const { getByLabelText, getByPlaceholderText, getByText } =
+      await renderScreen();
+    await waitFor(() =>
+      expect(getByText('No captures yet. Capture something.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Capture'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a task'));
+    });
+    const input = getByPlaceholderText('Add a task');
+    await act(async () => {
+      fireEvent.changeText(input, 'call the dentist');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(getByText('call the dentist')).toBeTruthy());
+    expect(mockAddTask).toHaveBeenCalledTimes(1);
+    expect(mockAddTask.mock.calls[0][1].text).toBe('call the dentist');
+  });
+
+  it('completes a task from the Home top region after the undo window', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetToken.mockResolvedValue('tok');
+      mockFetchCaptures.mockResolvedValue([]);
+      mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
+      mockCompleteTask.mockImplementation(async () => {
+        mockFetchTasks.mockResolvedValue([]);
+        return {
+          ...taskRow('1', 'mail the letter'),
+          completedAt: '2023-01-02T00:00:00.000Z',
+        };
+      });
+
+      const { getByLabelText, getByText } = await renderScreen();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      expect(getByText('mail the letter')).toBeTruthy();
+
+      // Completing leaves the row in place with an Undo; the write is deferred.
+      await act(async () => {
+        fireEvent.press(getByLabelText('Complete "mail the letter"'));
+      });
+      expect(getByLabelText('Undo')).toBeTruthy();
+      expect(mockCompleteTask).not.toHaveBeenCalled();
+
+      // After the undo window the completion commits.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      expect(mockCompleteTask).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {

@@ -56,6 +56,19 @@ A named container with a status: `title`, an `icon` (emoji), an optional
 take defaults and are enriched later from the detail sheet (icon picker, editable
 title and notes).
 
+## Derived status (slice 5)
+
+The stored `status` column is only the deliberate parking value: `backlog` and
+`done` are set by hand. The three in-play states are **derived on the client**
+from the project's tasks by `projectDisplayStatus` (in `@zero/agent-core`): a
+project shows as `active` while it has a taken-on, open task, else `next` ("come
+groom / take on more"); `waiting` (an open waiting condition) will take
+precedence in slice 6. The list groups by this derived status (`projectsByStatus`
+takes a `statusOf` mapper). The detail sheet's status control is now three manual
+moves — **Put in play** (writes `next`), **Move to backlog**, **Mark done** — not
+a five-way picker. No status migration: the column stays; the display is
+computed. See `docs/plans/todo-availability-model.md`.
+
 ## Vocabulary
 
 - **Project** — the item (table `projects`, type `Project`).
@@ -64,7 +77,8 @@ title and notes).
   create field teaches this through helper text.
 - **Status** — one of `active` (being worked now), `next` (on deck), `waiting`
   (blocked on someone/something), `backlog` (someday pile), `done` (finished).
-  `done` is terminal. Defaults to `next` at creation.
+  `done` is terminal. Defaults to `next` at creation. **`active`/`next` are now
+  derived, not hand-set** (see Derived status).
 - **Icon** — a single emoji, defaulting to 📁, changed later from the detail
   sheet.
 
@@ -160,8 +174,13 @@ no speculative columns before their behavior is designed.
   a row whose status becomes `done` leaves the collection at once. `deleteProject`
   is the shared factory's `delete` verb kind — it optimistically drops the row and
   issues the `DELETE`, rolling back on failure. See `docs/storage.md`.
-- **Other entities** — none wired yet. Task membership (`projectId` on `tasks`)
-  is slice B; the AI Capture → Project conversion is a later slice.
+- **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
+  migration 0047): the detail sheet lists the project's open tasks and has an
+  inline add-task field (grooming). A task added from a project is parked
+  (grooming is collect-then-take-on). **Waiting conditions** attach to a project
+  (see `docs/entities/waiting-condition.md`). **Refine provenance**:
+  `sourceCaptureId` (migration 0050) records the capture a project was refined
+  from. The AI Capture → Project conversion is a later slice.
 
 ## Shared view rule
 

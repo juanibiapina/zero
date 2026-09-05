@@ -2,6 +2,15 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-05: Deleting a project now removes it from the list right away, instead of quietly coming back until the next refresh.
+- 2026-09-05: Refine a capture into real work. Open a capture and tap "Refine into tasks & projects" — a banner pins it while you add tasks on Today and projects on the Projects tab, all linked back to that capture. Tap Done to clear it from your inbox.
+- 2026-09-05: Finishing a task on Today leaves it in place for a few seconds with Undo — and, for a task in a project, a "+ Waiting" shortcut so you can record what the project is now waiting on the moment you finish the task that triggered it.
+- 2026-09-05: Say what a project is waiting on. Add a waiting condition in its detail sheet and the project shows as Waiting with its tasks hidden from Today; resolve it to bring them back. A task/project condition clears itself when that task is done or that project reaches its status.
+- 2026-09-05: Projects now sort themselves: a project shows as Active while one of its tasks is taken on, and drops to Next once you've cleared them — a nudge to groom and take on more. Backlog and Done stay yours to set (the detail sheet now offers Put in play / Move to backlog / Mark done).
+- 2026-09-05: Choose which of a project's tasks you're taking on: star a task in the project to put it on Today, and star it again on Today to park it. No fixed limit — you decide how much shows up. Loose tasks always show.
+- 2026-09-05: Your Today list shows tasks from active projects (plus loose tasks); a project's tasks stay hidden until you make it active, so only what you're working on surfaces.
+- 2026-09-05: Add tasks to a project and complete them from the project's detail sheet, so a project holds the work toward its outcome.
+- 2026-09-05: The Captures tab is now Today, showing your tasks for today on top and your capture inbox below. The add box creates a capture by default; switch it to Task to add a task instead.
 - 2026-09-05: The app now follows your phone's light or dark appearance automatically.
 - 2026-09-05: Fresh look across the app: a cleaner, denser task list with lighter dividers instead of boxed cards, a round add button, an add box that sits flush above the keyboard, and the tab bar in the app's colors.
 - 2026-09-04: Tap a capture's text to edit it in a detail sheet. Changes save when you finish or close the sheet, work offline, and sync across your devices.
