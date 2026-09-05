@@ -15,8 +15,8 @@ jest.mock('@clerk/expo', () => ({
 
 // The native Clerk button renders a platform view via requireNativeView, which
 // is unavailable under jest. Stub it with a queryable element. The component is
-// defined at module scope (mock-prefixed) so the jest.mock factory needs no
-// createElement/JSX, which NativeWind's babel transform would reject inside it.
+// defined at module scope (mock-prefixed) so the hoisted jest.mock factory needs
+// no in-factory JSX (which would reference React out of scope).
 const mockUserButton = () => <View accessibilityLabel="Account" />;
 jest.mock('@clerk/expo/native', () => ({
   UserButton: () => mockUserButton(),

@@ -16,7 +16,7 @@ export type ConfirmDialogProps = {
 // Centered confirm dialog rendered as an in-tree absolute overlay (NOT an RN
 // Modal) so a focused input behind it keeps focus and the keyboard stays up.
 // Tapping the scrim cancels. Two right-aligned text buttons; the confirm can be
-// tinted destructive (red).
+// tinted destructive.
 export function ConfirmDialog({
   title,
   message,
@@ -31,11 +31,11 @@ export function ConfirmDialog({
       {/* Scrim: tap outside the card to cancel. */}
       <Pressable
         accessibilityLabel="Dismiss dialog"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-scrim"
         onPress={onCancel}
       />
-      <View className="mx-8 w-full max-w-sm rounded-2xl bg-white p-6">
-        <Text variant="title">{title}</Text>
+      <View className="mx-8 w-full max-w-sm rounded-dialog bg-surface p-6 shadow-lg">
+        <Text className="text-[20px] font-medium text-foreground">{title}</Text>
         <Text variant="subtitle" className="mt-2">
           {message}
         </Text>
@@ -46,7 +46,7 @@ export function ConfirmDialog({
             hitSlop={8}
             onPress={onCancel}
           >
-            <Text className="font-semibold text-primary">{cancelLabel}</Text>
+            <Text className="font-semibold text-accent">{cancelLabel}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -57,7 +57,7 @@ export function ConfirmDialog({
             <Text
               className={cn(
                 'font-semibold',
-                destructive ? 'text-red-600' : 'text-primary',
+                destructive ? 'text-danger' : 'text-accent',
               )}
             >
               {confirmLabel}

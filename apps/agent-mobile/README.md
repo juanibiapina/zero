@@ -35,29 +35,43 @@ locally (pnpm isolated installs keep them scoped to this app):
 
 ## Styling and UI
 
-The app styles with **NativeWind v4** (Tailwind for React Native), matching the
-web packages (`agent-web`, `dashboard-web`, `landing`), which use Tailwind +
-shadcn. You write `className="..."` on React Native components.
+The app styles with **Uniwind** (Tailwind CSS **v4** for React Native), the same
+Tailwind vocabulary as the web packages (`agent-web`, `dashboard-web`,
+`landing`). You write `className="..."` on React Native components; Uniwind maps
+it to styles through a Metro transform (no Babel preset).
 
-- **Tailwind version**: NativeWind v4 pairs with **Tailwind CSS v3**, so this app
-  pins its own `tailwindcss@3` devDep, separate from the web packages on
-  Tailwind 4. NativeWind v5 (Tailwind 4) is still preview — do not adopt it here.
-- **Config files**: `babel.config.js` (NativeWind JSX runtime + preset),
-  `metro.config.js` (`withNativeWind`, CSS entry `./global.css`),
-  `tailwind.config.js` (design tokens live in `theme.extend`), `global.css`
-  (Tailwind directives, imported once in `src/app/_layout.tsx`),
-  `nativewind-env.d.ts` (types for `className` + the CSS side-effect import).
-- **pnpm note**: `react-native-css-interop` (NativeWind's engine) is listed as a
-  direct dependency so Metro can resolve it under pnpm's strict `node_modules`.
-  Without it, bundling fails with `Unable to resolve module
-  react-native-css-interop/jsx-runtime`.
-- **No native module**: NativeWind adds no native code, so changing styles never
-  needs an EAS rebuild — only `expo start --clear`.
-- **Components**: shared UI lives in `src/components/ui/` (e.g. `Text`, `Input`,
-  `Fab`), composed with the `cn()` helper in `src/lib/cn.ts` (clsx +
-  tailwind-merge), the same pattern as the web shadcn components.
+- **Design tokens live in `global.css`.** The `@theme` block is the single source
+  of every color, type size, and named spacing/radius (`--color-foreground`,
+  `--color-accent`, `--text-title`, `--spacing-screen-x`, `--radius-dialog`, …).
+  React Native reads them as classes (`bg-surface`, `text-foreground`,
+  `text-title`, `px-screen-x`). No hex, font size, or spacing literal lives in a
+  screen — change the token, not the screen.
+- **String-typed color props read the token, not a class.** `@expo/ui`
+  (`style`/`textStyle`), `NativeTabs` colors, `placeholderTextColor`, and
+  `android_ripple` take a color string, not a `className`. Read the token with
+  `useColor('--color-...')` from `src/lib/theme.ts` (a typed wrapper over
+  Uniwind's `useCSSVariable`). Animated.View and `KeyboardStickyView` are not
+  RN-core, so Uniwind does not map `className` onto them — use
+  `useResolveClassNames(...)` (a resolved style) or an inline style there.
+- **Config files**: `metro.config.js` (`withUniwindConfig`, **outermost** wrapper,
+  `cssEntryFile: './global.css'`, generates `src/uniwind-types.d.ts`),
+  `babel.config.js` (Expo preset + the reanimated worklets plugin only — no
+  styling preset), `global.css` (`@import 'tailwindcss'; @import 'uniwind';` plus
+  the `@theme` tokens, imported once in `src/app/_layout.tsx`),
+  `src/uniwind-types.d.ts` (generated `className`/theme typings; committed so
+  `typecheck` needs no Metro run — regenerate with `pnpm run uniwind:types`).
+- **No native module**: Uniwind (free tier) is a Metro transform + JS runtime
+  and adds no native code, so changing styles never needs an EAS rebuild — only
+  `expo start --clear` after a config change.
+- **Components**: shared UI lives in `src/components/ui/` (`Text`, `Input`, `Fab`,
+  `CheckCircle`, `ListRow`, `ConfirmDialog`, `Sheet`) plus `ScreenHeader`,
+  composed with the `cn()` helper in `src/lib/cn.ts` (clsx + tailwind-merge).
+  `ListRow`/`CheckCircle` are the flat list-row shape shared by the three tabs.
+- **Light theme only, for now.** `userInterfaceStyle` is pinned to `light` in
+  `app.json` so the native chrome matches the light-only content. Dark mode is a
+  future `@variant dark { … }` block in `global.css` plus dropping that pin.
 
-### UI stack: `@expo/ui` vs NativeWind vs FlatList
+### UI stack: `@expo/ui` vs Uniwind vs FlatList
 
 Follow the `expo-ui` skill: reach for native `@expo/ui` controls first, and fall
 back only where the native component does not fit.
@@ -81,8 +95,8 @@ back only where the native component does not fit.
   rapid-capture discard flow. The `Fab` is a floating circular button, not a
   native `Button` shape.
 - **Verify a bundle without a device**: `pnpm exec expo export --platform android
-  --output-dir /tmp/x` compiles through Metro + Babel and surfaces NativeWind
-  wiring errors that typecheck alone misses.
+  --output-dir /tmp/x` compiles through Metro + Babel + Uniwind and surfaces
+  styling/bundle wiring errors that typecheck alone misses.
 
 ## Authentication and environment
 

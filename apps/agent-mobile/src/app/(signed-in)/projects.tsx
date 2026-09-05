@@ -1,4 +1,3 @@
-import { UserButton } from '@clerk/expo/native';
 import { Button, Column, Row, Text as UIText, TextInput } from '@expo/ui';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -25,11 +24,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-
 import { QuickAdd } from '@/components/quick-add';
+import { ScreenHeader } from '@/components/screen-header';
+import { ListRow } from '@/components/ui/list-row';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
+import { useColor } from '@/lib/theme';
 import {
   useDelayed,
   useForegroundRefetch,
@@ -37,12 +38,12 @@ import {
   useUndoableLeave,
 } from '@/lib/screen-hooks';
 
-// Helper text (not the placeholder): teach outcome-based naming, the one
-// deliberate act of creating a project.
+// Helper text (not the placeholder): teach outcome-based naming.
 const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done.";
 
 // A project row: emoji icon + title, a single tap target that opens the detail
-// sheet. While mid-Done it is struck-through with an Undo instead of tappable.
+// sheet. While mid-Done/Delete it is struck-through with an Undo instead of
+// tappable.
 function ProjectRow({
   item,
   pending,
@@ -50,39 +51,40 @@ function ProjectRow({
   onUndo,
 }: {
   item: Project;
-  // Mid-Done or mid-Delete: struck-through with an Undo instead of tappable.
   pending: boolean;
   onOpen: (p: Project) => void;
   onUndo: (id: string) => void;
 }) {
+  const icon = (
+    <View className="w-[22px] items-center">
+      <Text className="text-[20px]">{item.icon}</Text>
+    </View>
+  );
+
   if (pending) {
     return (
-      <View className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
-        <Text className="text-xl">{item.icon}</Text>
-        <Text className="flex-1 text-base text-neutral-400 line-through">
-          {item.title}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Undo"
-          hitSlop={8}
-          onPress={() => onUndo(item.id)}
-        >
-          <Text className="font-semibold text-primary">Undo</Text>
-        </Pressable>
-      </View>
+      <ListRow
+        leading={icon}
+        trailing={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Undo"
+            hitSlop={8}
+            onPress={() => onUndo(item.id)}
+          >
+            <Text className="font-semibold text-accent">Undo</Text>
+          </Pressable>
+        }
+      >
+        <Text className="text-foreground-muted line-through">{item.title}</Text>
+      </ListRow>
     );
   }
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={item.title}
-      onPress={() => onOpen(item)}
-      className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
-    >
-      <Text className="text-xl">{item.icon}</Text>
-      <Text className="flex-1 text-base text-neutral-900">{item.title}</Text>
-    </Pressable>
+    <ListRow leading={icon} accessibilityLabel={item.title} onPress={() => onOpen(item)}>
+      <Text>{item.title}</Text>
+    </ListRow>
   );
 }
 
@@ -103,20 +105,18 @@ function SectionHeader({
       accessibilityRole="button"
       accessibilityLabel={`${STATUS_LABELS[status]}, ${count}`}
       onPress={() => onToggle(status, collapsed)}
-      className="flex-row items-center gap-2 bg-white py-2"
+      className="flex-row items-center gap-2 border-b border-divider bg-background px-screen-x pb-2 pt-6"
     >
-      <Text className="text-sm font-semibold text-neutral-500">
+      <Text variant="section">
         {collapsed ? '▸' : '▾'} {STATUS_LABELS[status]}
       </Text>
-      <Text className="text-sm text-neutral-400">· {count}</Text>
+      <Text variant="caption">· {count}</Text>
     </Pressable>
   );
 }
 
-// The Status group rendered inside the native sheet, built with @expo/ui so it
-// is a real native control tree. The current status is a filled button (its
-// mark); the others are outlined. Tapping the current one is a no-op the caller
-// handles by just closing the sheet.
+// The Status group inside the sheet (native @expo/ui tree). The current status
+// is a filled button; the others are outlined.
 function StatusGroup({
   current,
   onPick,
@@ -124,9 +124,10 @@ function StatusGroup({
   current: ProjectStatus;
   onPick: (status: ProjectStatus) => void;
 }) {
+  const labelColor = useColor('--color-foreground-secondary');
   return (
     <Column spacing={8}>
-      <UIText>Status</UIText>
+      <UIText textStyle={{ color: labelColor, fontSize: 13 }}>Status</UIText>
       {ALL_STATUSES.map((status) => (
         <Button
           key={status}
@@ -140,9 +141,10 @@ function StatusGroup({
 }
 
 // The detail sheet body (native @expo/ui tree): an icon picker, an editable
-// title and notes field, and the Status group. Edits commit on blur/submit (not
-// per keystroke) and keep the sheet open; only a status pick dismisses it. Keyed
-// by project id at the call site, so the seeded field state resets per project.
+// title and notes field, and the Status group. Edits commit on blur/submit and
+// keep the sheet open; only a status pick dismisses it. Keyed by project id at
+// the call site, so the seeded field state resets per project. Colors come from
+// tokens via useColor (@expo/ui takes string colors, not classes).
 function ProjectDetail({
   project,
   onEdit,
@@ -156,6 +158,18 @@ function ProjectDetail({
 }) {
   const [title, setTitle] = useState(project.title);
   const [description, setDescription] = useState(project.description ?? '');
+
+  const labelColor = useColor('--color-foreground-secondary');
+  const surfaceMuted = useColor('--color-surface-muted');
+  const foreground = useColor('--color-foreground');
+  const label = { color: labelColor, fontSize: 13 } as const;
+  const inputStyle = {
+    backgroundColor: surfaceMuted,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  } as const;
+  const inputText = { color: foreground, fontSize: 16 } as const;
 
   const commitTitle = useCallback(() => {
     const trimmed = title.trim();
@@ -174,7 +188,7 @@ function ProjectDetail({
 
   return (
     <Column spacing={12}>
-      <UIText>Icon</UIText>
+      <UIText textStyle={label}>Icon</UIText>
       <Row spacing={8}>
         {ICON_CHOICES.map((icon) => (
           <Button
@@ -186,7 +200,7 @@ function ProjectDetail({
         ))}
       </Row>
 
-      <UIText>Title</UIText>
+      <UIText textStyle={label}>Title</UIText>
       <TextInput
         defaultValue={project.title}
         onChangeText={setTitle}
@@ -194,37 +208,40 @@ function ProjectDetail({
         returnKeyType="done"
         onSubmitEditing={commitTitle}
         placeholder="Project name"
+        style={inputStyle}
+        textStyle={inputText}
       />
 
-      <UIText>Notes</UIText>
+      <UIText textStyle={label}>Notes</UIText>
       <TextInput
         defaultValue={project.description ?? ''}
         onChangeText={setDescription}
         onBlur={commitDescription}
         multiline
         placeholder="A sentence of intent (optional)"
+        style={inputStyle}
+        textStyle={inputText}
       />
 
       <StatusGroup current={project.status} onPick={onPickStatus} />
 
-      {/* Destructive: hard-delete the project (distinct from Done, which keeps
-          it). Leaves a brief Undo window before it commits. A plain Pressable
-          with red text, since @expo/ui Button has no destructive role. */}
+      {/* Destructive: hard-delete the project (distinct from Done). Leaves a
+          brief Undo window before it commits. A plain Pressable with danger
+          text, since @expo/ui Button has no destructive role. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Delete project"
         onPress={onDelete}
         className="items-center py-3"
       >
-        <Text className="font-semibold text-red-600">Delete project</Text>
+        <Text className="font-semibold text-danger">Delete project</Text>
       </Pressable>
     </Column>
   );
 }
 
 // Projects is entity #3: outcome-oriented containers grouped by status. The
-// quick-add creates one by name; tapping a row opens the detail sheet where the
-// status is changed (icon/title/notes editing is slice A3).
+// quick-add creates one by name; tapping a row opens the detail sheet.
 export default function ProjectsScreen() {
   const projectsApi = useProjectsApi();
 
@@ -238,16 +255,8 @@ export default function ProjectsScreen() {
   }, [windowHeight]);
 
   return (
-    <View
-      ref={rootRef}
-      onLayout={measureBottomGap}
-      className="flex-1 px-6 pt-16"
-    >
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text variant="title">Projects</Text>
-        <UserButton />
-      </View>
-
+    <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
+      <ScreenHeader title="Projects" />
       {projectsApi ? (
         <Projects api={projectsApi} bottomOffset={bottomOffset} />
       ) : (
@@ -272,20 +281,14 @@ function Projects({
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  // The open sheet's project id; the projects mid-Done; and per-section collapse
-  // overrides (only sections the user explicitly toggled; the rest fall back to
-  // the default below). Collapse is client-only UI state (not persisted).
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapseOverride, setCollapseOverride] = useState<
     Partial<Record<ProjectStatus, boolean>>
   >({});
-  // Two deferred-undo channels: one for Done, one for Delete. Both hold a row
-  // struck-through with an Undo for DONE_UNDO_MS before committing; the hook
-  // owns the timers and their cleanup.
+  // Two deferred-undo channels: one for Done, one for Delete.
   const done = useUndoableLeave(DONE_UNDO_MS);
   const del = useUndoableLeave(DONE_UNDO_MS);
 
-  // Refresh when the app returns to the foreground.
   useForegroundRefetch(api.refetch);
 
   const commitStatus = useCallback(
@@ -297,8 +300,7 @@ function Projects({
     [api],
   );
 
-  // Edit a project's icon/title/notes from the sheet. Unlike a status pick, an
-  // edit keeps the sheet open so several fields can change.
+  // Edit a project's icon/title/notes from the sheet; keeps the sheet open.
   const commitEdit = useCallback(
     (id: string, fields: ProjectEditFields) => {
       setWriteError(null);
@@ -308,9 +310,6 @@ function Projects({
     [api],
   );
 
-  // Setting Done and deleting both defer their write behind a DONE_UNDO_MS Undo
-  // window (delete is destructive with no server-side undo, so the window is the
-  // only guard against a mis-tap).
   const startDelete = useCallback(
     (id: string) => {
       del.start(id, () => {
@@ -322,7 +321,6 @@ function Projects({
     [del, api],
   );
 
-  // Route an Undo tap to the pending action that owns the row.
   const onUndo = useCallback(
     (id: string) => {
       if (del.pending.has(id)) del.undo(id);
@@ -355,9 +353,7 @@ function Projects({
   const grouped = useMemo(() => projectsByStatus(list), [list]);
 
   // Collapse is derived, not stored: a section uses the user's explicit override
-  // when present, else the default (a large Backlog starts collapsed; the other
-  // working statuses start open). A collapsed section keeps its header (with the
-  // count) but renders no rows.
+  // when present, else the default (a large Backlog starts collapsed).
   const sections = useMemo(
     () =>
       grouped.map((s) => {
@@ -418,16 +414,24 @@ function Projects({
 
   return (
     <>
-      {error ? <Text variant="error">{error}</Text> : null}
+      {error ? (
+        <Text variant="error" className="px-screen-x">
+          {error}
+        </Text>
+      ) : null}
 
       {view === 'loading' ? (
         showLoadingText ? (
-          <Text variant="subtitle">Loading your projects…</Text>
+          <Text variant="subtitle" className="px-screen-x">
+            Loading your projects…
+          </Text>
         ) : (
           <View className="flex-1" />
         )
       ) : view === 'empty' ? (
-        <Text variant="subtitle">No projects yet. Name your first outcome.</Text>
+        <Text variant="subtitle" className="px-screen-x">
+          No projects yet. Name your first outcome.
+        </Text>
       ) : (
         <SectionList
           style={{ flex: 1 }}
@@ -451,8 +455,6 @@ function Projects({
               onUndo={onUndo}
             />
           )}
-          ItemSeparatorComponent={() => <View className="h-3" />}
-          SectionSeparatorComponent={() => <View className="h-2" />}
         />
       )}
 

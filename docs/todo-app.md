@@ -168,7 +168,7 @@ third entity, now being built (slice A1 shipped). Everything else below
 Shipped (on main, device-verified): the Capture list (Captures) on mobile
 (`apps/agent-mobile`) and web (unlinked `/captures`) — add a Capture, Process it
 out of Captures — backed by the `captures` table and `/api/captures` in the
-per-user UserDO. Mobile UI on NativeWind v4 + `@expo/ui`; Clerk sign-in with a
+per-user UserDO. Mobile UI on Uniwind (Tailwind 4) + `@expo/ui`; Clerk sign-in with a
 native user button. The Captures data layer runs on TanStack DB (see
 `docs/storage.md`). Captures carry a client-minted UUID id (stable end to end,
 and the sole idempotency key for offline replay), so adding and processing a

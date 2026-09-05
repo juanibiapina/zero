@@ -35,8 +35,8 @@ jest.mock('@clerk/expo/native', () => ({
 // accessibility name, so label-based queries match the real control; the mock
 // `BottomSheet` renders its children only when presented, like the real sheet.
 // Each mock is a hoisted `Mock`-prefixed component (jest permits a mock factory
-// to reference those) so its JSX is transformed at module scope where the
-// NativeWind helper is in scope.
+// to reference those) so its JSX lives at module scope, not inside the hoisted
+// factory where a React reference would be out of scope.
 function MockView({ children }: { children?: ReactNode }) {
   return <View>{children}</View>;
 }
