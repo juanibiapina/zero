@@ -3,6 +3,20 @@ import { describe, expect, it } from "vitest";
 import { homeTasks } from "./home";
 import type { Task } from "./types";
 import type { Project } from "../projects/types";
+import type { WaitingCondition } from "../waits/types";
+
+function freeTextCondition(projectId: string): WaitingCondition {
+  return {
+    id: "c",
+    projectId,
+    kind: "free-text",
+    text: "the letter comes back",
+    refId: null,
+    targetStatus: null,
+    resolvedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+}
 
 function task(over: Partial<Task> & Pick<Task, "id">): Task {
   return {
@@ -70,6 +84,28 @@ describe("homeTasks", () => {
       [project("p", "active")],
     );
     expect(out).toEqual([]);
+  });
+
+  it("hides a taken-on task when its project has an unresolved condition", () => {
+    const out = homeTasks(
+      [task({ id: "t", projectId: "p", takenOnAt: "2026-01-02T00:00:00.000Z" })],
+      [project("p", "active")],
+      [freeTextCondition("p")],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("shows the task again once the condition is resolved", () => {
+    const resolved = {
+      ...freeTextCondition("p"),
+      resolvedAt: "2026-01-03T00:00:00.000Z",
+    };
+    const out = homeTasks(
+      [task({ id: "t", projectId: "p", takenOnAt: "2026-01-02T00:00:00.000Z" })],
+      [project("p", "active")],
+      [resolved],
+    );
+    expect(out.map((t) => t.id)).toEqual(["t"]);
   });
 
   it("shows a loose task regardless of takenOnAt", () => {

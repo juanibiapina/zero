@@ -16,6 +16,7 @@ import { createAdminRoutes } from "./routes/admin";
 import { createCapturesRoutes } from "./routes/captures";
 import { createTasksRoutes } from "./routes/tasks";
 import { createProjectsRoutes } from "./routes/projects";
+import { createWaitsRoutes } from "./routes/waits";
 
 type Variables = {
   userId: string;
@@ -86,6 +87,7 @@ export const createApp = () => {
   app.route("/", createCapturesRoutes());
   app.route("/", createTasksRoutes());
   app.route("/", createProjectsRoutes());
+  app.route("/", createWaitsRoutes());
 
   return app;
 };
