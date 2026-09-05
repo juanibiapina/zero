@@ -279,6 +279,18 @@ Shipped:
 
 In flight (details in `docs/plans/`):
 
+- `todo-availability-model.md` — **the "what shows up" model**, implemented as 8
+  vertical slices on branch `feat/todo-availability-model` (PR pending, not yet
+  on main). What it does: Today is one screen with tasks on top and the capture
+  inbox below; a Task belongs to a Project (`projectId`) and is groomed in the
+  project sheet; the Today top region is a computed view (`homeTasks`) gated by
+  the project's derived display status and per-task curation (`takenOnAt`, a
+  take-on/park star); a project's `active`/`next`/`waiting` status is derived
+  (`projectDisplayStatus`) from its taken-on tasks and its **waiting conditions**
+  (the new fourth entity: `docs/entities/waiting-condition.md`); completing a task
+  lingers with Undo + a waiting-condition shortcut; and a capture is **Refined**
+  into tasks/projects (`sourceCaptureId`), consumed on Done. Shipped web + mobile
+  with unit/route/page tests; mobile on-device verification (EAS/Maestro) pending.
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add
   the mobile offline outbox (phase 3). Code-complete on a branch, device-verified,
   with the offline decision gate still open.
@@ -286,12 +298,13 @@ In flight (details in `docs/plans/`):
 
 Next:
 
-- **Capture → Task** — Process a Capture into a Task (adds `sourceCaptureId`; not
-  yet designed; the richest data-model slice).
 - **Reschedule a Task** — swipe-to-tomorrow / pick a future date (v1 dates every
   Task today with no way to change it).
-- **Task → Project (slice B)** — Task belongs to a Project (adds `projectId`).
-- later: agent `create_task` tool, recurring capture, recurring Tasks.
+- **AI Capture → Project** — swipe a Capture, propose a Project, confirm (the
+  content-driven half of Refine; `docs/plans/todo-capture-to-project-ai.md`).
+- **AI-resolve a waiting condition** — from email/calendar/content.
+- later: agent `create_task` tool, recurring capture, recurring Tasks,
+  structured waiting-condition kinds on mobile.
 
 Dev infra: a physical Pixel 7 is USB-attached to the dev box and driven with the
 Maestro CLI for on-device verification (see `apps/agent-mobile/README.md`). Rules
