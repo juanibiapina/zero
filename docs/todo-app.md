@@ -305,9 +305,10 @@ In flight (details in `docs/plans/`):
 
 Next:
 
-- **Project detail as a destination** — a project opens its own screen (web
-  `/projects/:id` route; mobile a pushed screen within the Projects tab), not a
-  bottom sheet, leading with its tasks and what it's waiting on. This also fixes
+- **Project detail as a destination** (implemented on a branch, PR pending;
+  mobile on-device verification still pending) — a project opens its own screen
+  (web `/projects/:id` route; mobile a pushed screen within the Projects tab),
+  not a bottom sheet, leading with its tasks and what it's waiting on. Also fixes
   the broken mobile task/waiting renderer (raw React Native rows inside an
   `@expo/ui` sheet host; a pushed RN screen removes the host). Plan:
   `docs/plans/todo-project-detail-rework.md`.

@@ -65,7 +65,7 @@ project's tasks leave Today.
 
 ## Interactions (per system)
 
-- **UI** — the project detail sheet gains a **Waiting-on** section: the open
+- **UI** — the project screen gains a **Waiting-on** section: the open
   conditions (each with Resolve for free-text, or an "auto" tag for structured,
   and a delete), plus an add control. Web offers all three kinds (free-text +
   task/project pickers); mobile adds free-text (structured kinds are web-first

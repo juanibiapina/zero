@@ -53,8 +53,8 @@ slice B (Task-under-Project).
 
 A named container with a status: `title`, an `icon` (emoji), an optional
 `description`, and a `status`. At creation only the title is asked for; the rest
-take defaults and are enriched later from the detail sheet (icon picker, editable
-title and notes).
+take defaults and are enriched later on the project's own screen (icon picker,
+editable title and notes).
 
 ## Derived status (slice 5)
 
@@ -64,7 +64,7 @@ from the project's tasks by `projectDisplayStatus` (in `@zero/agent-core`): a
 project shows as `active` while it has a taken-on, open task, else `next` ("come
 groom / take on more"); `waiting` (an open waiting condition) will take
 precedence in slice 6. The list groups by this derived status (`projectsByStatus`
-takes a `statusOf` mapper). The detail sheet's status control is now three manual
+takes a `statusOf` mapper). The project screen's actions menu offers three manual
 moves — **Put in play** (writes `next`), **Move to backlog**, **Mark done** — not
 a five-way picker. No status migration: the column stays; the display is
 computed. See `docs/plans/todo-availability-model.md`.
@@ -135,17 +135,27 @@ no speculative columns before their behavior is designed.
   quick-add (with persistent helper text teaching outcome-based naming — helper
   text, not the placeholder) over a status-grouped list: collapsible Active /
   Next / Waiting / Backlog sections with counts, empty sections hidden, Backlog
-  collapsed when large. A row is a single tap target that opens a **detail bottom
-  sheet** (web: `@radix-ui/react-dialog`; mobile: the universal `@expo/ui`
-  `BottomSheet`) holding a curated **emoji icon picker**, an editable **title**
-  and **notes** field, a **Status group** — the five states, current one
-  marked — and a destructive **Delete project** button. Field edits commit on
-  blur/submit (the icon on tap) and keep the sheet open; a status pick dismisses
-  it. Setting `done`, or tapping **Delete project**, dismisses the sheet and
-  leaves the row briefly struck-through with an inline **Undo** (~5s) before it
-  leaves the list (delete then hard-removes it server-side). The sheet is a
-  generic, entity-agnostic primitive (`components/ui/sheet.tsx`), shared with the
-  Captures detail sheet.
+  collapsed when large. A row is a single tap target that **navigates to the
+  project's own screen** — a destination, not a bottom sheet (web: a
+  `/projects/:id` route within the app shell; mobile: a screen pushed within the
+  Projects tab, keeping the tab bar, with native Back). A project is a place you
+  work, and the bottom-sheet guidance is explicit that a transient sheet is for
+  short interactions, not a surface you dwell on and navigate within; a pushed
+  React Native screen also avoids hosting raw RN rows inside an `@expo/ui` native
+  tree (the bug that broke the old mobile detail sheet's task/waiting rows). See
+  `docs/plans/todo-project-detail-rework.md`. The screen leads with the **work**:
+  a compact header (a de-emphasized emoji icon that opens its picker on tap, the
+  **title** as an editable heading, a read-only **derived-status pill**, and a
+  "⋯" **actions menu** with the status moves and **Delete project**), then the
+  project's **tasks** (complete, take-on/park, inline add), then its **waiting
+  conditions** (add revealed on "+"), with **notes** as a secondary "Add notes"
+  expander. Field edits commit on blur/submit (the icon on tap). Choosing **Mark
+  done** or **Delete project** returns to the list and leaves the row briefly
+  struck-through with an inline **Undo** (~5s) before it leaves (delete then
+  hard-removes it server-side). Sheets/menus still serve the short
+  sub-interactions here (the icon picker and the status/delete actions on mobile
+  are each a pure `@expo/ui` sheet); the **Captures** detail — a single leaf
+  item — is still a bottom sheet (`components/ui/sheet.tsx`).
 - **Storage** — the server domain store is `DbProjectStore` (domain methods
   `add` / `list` / `setStatus` / `edit` / `delete`), a per-entity store like
   `DbCaptureStore` / `DbTaskStore` (do-orm is the shared layer; a store holds
@@ -175,7 +185,7 @@ no speculative columns before their behavior is designed.
   is the shared factory's `delete` verb kind — it optimistically drops the row and
   issues the `DELETE`, rolling back on failure. See `docs/storage.md`.
 - **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
-  migration 0047): the detail sheet lists the project's open tasks and has an
+  migration 0047): the project screen lists the project's open tasks and has an
   inline add-task field (grooming). A task added from a project is parked
   (grooming is collect-then-take-on). **Waiting conditions** attach to a project
   (see `docs/entities/waiting-condition.md`). **Refine provenance**:
