@@ -26,45 +26,159 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
+  homeTasks,
+  localToday,
   messageOf,
   orderKeyBetween,
   tomorrow,
   visibleCaptures,
 } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
+import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { type Capture } from "@/lib/captures";
+import { type Task } from "@/lib/tasks";
 
-// Captures is the sole list: one fast place to drop any raw thought and Process
-// it later. The add bar creates a Capture; tap a row's circle to Process.
+// Home is one screen, two regions: the top holds the tasks you have taken on
+// (availability-gated by homeTasks), the bottom is the raw capture inbox. The
+// quick-add defaults to a capture (the frictionless dump) and can switch to a
+// task. See docs/plans/todo-availability-model.md.
 export function HomePage() {
+  const [capturesApi, setCapturesApi] = useState<CapturesApi | null>(null);
+  const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
+  useEffect(() => {
+    let live = true;
+    void getCapturesApi().then((a) => live && setCapturesApi(a));
+    void getTasksApi().then((a) => live && setTasksApi(a));
+    return () => {
+      live = false;
+    };
+  }, []);
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
-          <h1 className="text-2xl font-bold tracking-tight">Captures</h1>
-          <CapturesPanel />
+          <h1 className="text-2xl font-bold tracking-tight">Home</h1>
+          {capturesApi && tasksApi ? (
+            <MergedHome capturesApi={capturesApi} tasksApi={tasksApi} />
+          ) : (
+            <div className="min-h-24" />
+          )}
         </div>
       </main>
     </div>
   );
 }
 
-function CapturesPanel() {
-  const [api, setApi] = useState<CapturesApi | null>(null);
-  useEffect(() => {
-    let live = true;
-    void getCapturesApi().then((a) => {
-      if (live) setApi(a);
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
-  return api ? <CapturesReady api={api} /> : <div className="min-h-24" />;
+type AddMode = "capture" | "task";
+
+function MergedHome({
+  capturesApi,
+  tasksApi,
+}: {
+  capturesApi: CapturesApi;
+  tasksApi: TasksApi;
+}) {
+  const [mode, setMode] = useState<AddMode>("capture");
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const onAdd = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setError(null);
+    const tx =
+      mode === "task"
+        ? tasksApi.add(trimmed, localToday())
+        : capturesApi.add(trimmed);
+    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    setText("");
+    inputRef.current?.focus();
+  }, [capturesApi, tasksApi, mode, text]);
+
+  return (
+    <div className="space-y-6">
+      <QuickAdd
+        mode={mode}
+        value={text}
+        onModeChange={setMode}
+        onChange={setText}
+        onSubmit={onAdd}
+        inputRef={inputRef}
+      />
+      {error && <ErrorText>{error}</ErrorText>}
+
+      <TasksSection api={tasksApi} onError={setError} />
+      <CapturesSection api={capturesApi} onError={setError} />
+    </div>
+  );
 }
 
-function CapturesReady({ api }: { api: CapturesApi }) {
+function TasksSection({
+  api,
+  onError,
+}: {
+  api: TasksApi;
+  onError: (m: string) => void;
+}) {
+  const { data: tasks, isLoading } = useLiveQuery((q) =>
+    q
+      .from({ t: api.collection })
+      .where(({ t }) => isNull(t.completedAt))
+      .orderBy(({ t }) => t.createdAt, "asc"),
+  );
+  useForegroundRefetch(api.refetch);
+
+  const onComplete = useCallback(
+    (item: Task) => {
+      const tx = api.complete(item.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, onError],
+  );
+
+  const list = homeTasks(tasks ?? []);
+  const view = listView({ count: list.length, isLoading, loadError: null });
+
+  return (
+    <section className="space-y-3" aria-label="Tasks">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Today
+      </h2>
+      {view === "empty" || view === "loading" ? (
+        <p className="text-sm text-muted-foreground">
+          No tasks yet. Add one to work on today.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {list.map((item) => (
+            <li
+              key={item.id}
+              className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4"
+            >
+              <button
+                type="button"
+                aria-label={`Complete "${item.text}"`}
+                className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
+                onClick={() => onComplete(item)}
+              />
+              <span className="flex-1 text-left text-base">{item.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function CapturesSection({
+  api,
+  onError,
+}: {
+  api: CapturesApi;
+  onError: (m: string) => void;
+}) {
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: api.collection })
@@ -72,47 +186,32 @@ function CapturesReady({ api }: { api: CapturesApi }) {
       .orderBy(({ c }) => c.createdAt, "asc"),
   );
 
-  const [text, setText] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const closingDetailRef = useRef(false);
 
   useForegroundRefetch(api.refetch);
 
-  const onAdd = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setError(null);
-    const tx = api.add(trimmed);
-    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    setText("");
-    inputRef.current?.focus();
-  }, [api, text]);
-
   const onProcess = useCallback(
     (item: Capture) => {
-      setError(null);
       const tx = api.process(item.id);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     },
-    [api],
+    [api, onError],
   );
 
   const onReschedule = useCallback(
     (item: Capture) => {
-      setError(null);
       const tx = api.reschedule(item.id, tomorrow(capturesLocalToday()));
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     },
-    [api],
+    [api, onError],
   );
 
-  // The server returns every open capture (Captures and Upcoming share the same
-  // set); this pass keeps only the ones that have shown up, so a just-postponed
-  // row leaves the list at once and future-dated rows stay in Upcoming. Overdue
-  // rolls in; no red. Ordered by the manual sort key.
+  // The server returns every open capture (Home inbox and Upcoming share the
+  // same set); this pass keeps only the ones that have shown up, so a
+  // just-postponed row leaves the list at once and future-dated rows stay in
+  // Upcoming. Overdue rolls in. Ordered by the manual sort key.
   const list = visibleCaptures(captures ?? [], capturesLocalToday());
   const selected = selectedId
     ? (list.find((item) => item.id === selectedId) ?? null)
@@ -124,28 +223,21 @@ function CapturesReady({ api }: { api: CapturesApi }) {
     setSelectedId(item.id);
   }, []);
 
-  // Close first, then write only a changed, non-empty draft. Every sheet
-  // dismissal path and form submit calls this same callback.
   const commitAndClose = useCallback(() => {
     if (closingDetailRef.current) return;
     closingDetailRef.current = true;
     setSelectedId(null);
     const trimmed = draft.trim();
     if (!selected || !trimmed || trimmed === selected.text) return;
-    setError(null);
     const tx = api.edit(selected.id, trimmed);
-    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-  }, [api, draft, selected]);
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  }, [api, draft, selected, onError]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Drop: mint a key strictly between the moved row's new neighbors and persist
-  // it. arrayMove gives the post-drop order, from which the neighbors' keys (or
-  // null at an end) bound the new key. Optimistic setSortKey + the re-sort land
-  // it in place; surface a write error like the other verbs.
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -157,28 +249,19 @@ function CapturesReady({ api }: { api: CapturesApi }) {
       const pos = moved.findIndex((c) => c.id === active.id);
       const prev = moved[pos - 1]?.sortKey ?? null;
       const next = moved[pos + 1]?.sortKey ?? null;
-      setError(null);
       const tx = api.reorder(String(active.id), orderKeyBetween(prev, next));
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     },
-    [api, list],
+    [api, list, onError],
   );
   const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   return (
-    <div className="space-y-6">
-      <QuickAdd
-        value={text}
-        placeholder="Capture a thought"
-        ariaLabel="Capture a thought"
-        onChange={setText}
-        onSubmit={onAdd}
-        inputRef={inputRef}
-      />
-
-      {error && <ErrorText>{error}</ErrorText>}
-
+    <section className="space-y-3" aria-label="Capture inbox">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Inbox
+      </h2>
       {view === "loading" ? (
         showLoadingText ? (
           <p className="text-sm text-muted-foreground">Loading your captures…</p>
@@ -247,51 +330,76 @@ function CapturesReady({ api }: { api: CapturesApi }) {
           </form>
         ) : null}
       </Sheet>
-    </div>
+    </section>
   );
 }
 
 function QuickAdd({
+  mode,
   value,
-  placeholder,
-  ariaLabel,
+  onModeChange,
   onChange,
   onSubmit,
   inputRef,
 }: {
+  mode: AddMode;
   value: string;
-  placeholder: string;
-  ariaLabel: string;
+  onModeChange: (m: AddMode) => void;
   onChange: (v: string) => void;
   onSubmit: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
-    <form
-      className="flex items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit();
-      }}
-    >
-      <Input
-        ref={inputRef}
-        autoFocus
-        value={value}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        className="h-11"
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <Button
-        type="submit"
-        size="lg"
-        className="h-11 min-w-20"
-        disabled={value.trim() === ""}
+    <div className="space-y-2">
+      <div
+        role="radiogroup"
+        aria-label="What to add"
+        className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-sm"
       >
-        Add
-      </Button>
-    </form>
+        {(["capture", "task"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={mode === m}
+            className={
+              "rounded-md px-3 py-1 capitalize transition-colors " +
+              (mode === m
+                ? "bg-background font-medium shadow-sm"
+                : "text-muted-foreground")
+            }
+            onClick={() => onModeChange(m)}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit();
+        }}
+      >
+        <Input
+          ref={inputRef}
+          autoFocus
+          value={value}
+          placeholder={mode === "task" ? "Add a task" : "Capture a thought"}
+          aria-label={mode === "task" ? "Add a task" : "Capture a thought"}
+          className="h-11"
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Button
+          type="submit"
+          size="lg"
+          className="h-11 min-w-20"
+          disabled={value.trim() === ""}
+        >
+          Add
+        </Button>
+      </form>
+    </div>
   );
 }
 
