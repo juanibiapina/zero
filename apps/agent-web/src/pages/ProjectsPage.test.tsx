@@ -5,8 +5,8 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createInMemoryApi,
@@ -26,11 +26,13 @@ import {
 } from "@zero/agent-core";
 
 import { ProjectsPage } from "./ProjectsPage";
+import { ProjectDetailPage } from "./ProjectDetailPage";
 
-// The page reads its data layers through getProjectsApi() / getTasksApi(); hand
+// The pages read their data layers through getProjectsApi() / getTasksApi(); hand
 // each a fresh in-memory collection per test (backed by an array "server"), so
-// the real ProjectsPage, the shared collections, and the undoable-leave hook are
-// all exercised without OPFS or the network.
+// the real pages, the shared collections, and the undoable-leave hook are all
+// exercised without OPFS or the network. The list and the detail page share the
+// same singleton collections, so navigating between them reads one source.
 const h = vi.hoisted(() => ({
   api: null as ProjectsApi | null,
   tasksApi: null as TasksApi | null,
@@ -194,6 +196,26 @@ function setApi(initial: Project[], tasks: Task[] = []) {
   });
 }
 
+// Render the projects list + detail routes together so a row tap really
+// navigates to /projects/:id and a Done/Delete really hands back to the list.
+function renderApp(entries: string[] = ["/projects"]) {
+  return render(
+    <MemoryRouter initialEntries={entries}>
+      <Routes>
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/projects/:id" element={<ProjectDetailPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// Open a project's detail screen by clicking its list row.
+async function openDetail(title: string) {
+  fireEvent.click(await screen.findByText(title));
+  // The detail screen owns the task composer; wait for it to render.
+  await screen.findByRole("textbox", { name: "Add a task to this project" });
+}
+
 describe("ProjectsPage", () => {
   afterEach(() => {
     h.api = null;
@@ -203,35 +225,33 @@ describe("ProjectsPage", () => {
     vi.useRealTimers();
   });
 
-  it("adds a free-text waiting condition, marking the project Waiting", async () => {
-    setApi([project("1", "Send tax letter", "next")]);
-    render(<ProjectsPage />);
-    fireEvent.click(await screen.findByText("Send tax letter"));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.change(
-      within(dialog).getByRole("textbox", { name: "Waiting condition" }),
-      { target: { value: "the letter comes back" } },
-    );
-    await act(async () => {
-      fireEvent.click(
-        within(dialog).getByRole("button", { name: "+ Waiting condition" }),
-      );
-    });
-    // The project moves to the Waiting section.
-    await waitFor(() => expect(screen.getByText("Waiting")).toBeInTheDocument());
+  it("shows the fetched projects with their icons", async () => {
+    setApi([project("1", "Run a 5K", "next", "🏃")]);
+    renderApp();
+    expect(await screen.findByText("Run a 5K")).toBeInTheDocument();
+    expect(screen.getByText("🏃")).toBeInTheDocument();
   });
 
-  it("adds a task to a project from its detail sheet", async () => {
+  it("navigates from a list row to the project's own screen", async () => {
     setApi([project("1", "Run a 5K", "next")]);
-    render(<ProjectsPage />);
-    fireEvent.click(await screen.findByText("Run a 5K"));
-    const dialog = await screen.findByRole("dialog");
-    const input = within(dialog).getByRole("textbox", {
+    renderApp();
+    await openDetail("Run a 5K");
+    // The editable title heading is a detail-only affordance.
+    expect(
+      screen.getByRole("textbox", { name: "Project title" }),
+    ).toHaveValue("Run a 5K");
+  });
+
+  it("adds a task to a project from its detail screen", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp();
+    await openDetail("Run a 5K");
+    const input = screen.getByRole("textbox", {
       name: "Add a task to this project",
     });
     fireEvent.change(input, { target: { value: "buy running shoes" } });
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
     });
     await waitFor(() =>
       expect(
@@ -240,21 +260,52 @@ describe("ProjectsPage", () => {
     );
   });
 
-  it("shows the fetched projects with their icons", async () => {
-    setApi([project("1", "Run a 5K", "next", "🏃")]);
-    render(<ProjectsPage />);
-    expect(await screen.findByText("Run a 5K")).toBeInTheDocument();
-    expect(screen.getByText("🏃")).toBeInTheDocument();
+  it("adds a free-text waiting condition from the detail screen", async () => {
+    setApi([project("1", "Send tax letter", "next")]);
+    renderApp();
+    await openDetail("Send tax letter");
+    // The builder is revealed only after '+ Waiting condition'.
+    fireEvent.click(
+      screen.getByRole("button", { name: "+ Waiting condition" }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Waiting condition" }),
+      { target: { value: "the letter comes back" } },
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+    });
+    await waitFor(() =>
+      expect(screen.getByText("the letter comes back")).toBeInTheDocument(),
+    );
   });
 
-  it("moves a project to backlog from the detail sheet", async () => {
-    setApi([project("1", "Run a 5K", "next")]);
-    render(<ProjectsPage />);
-    fireEvent.click(await screen.findByText("Run a 5K"));
+  it("changes the project icon from the detail screen picker", async () => {
+    setApi([project("1", "Run a 5K", "next", "🏃")]);
+    renderApp();
+    await openDetail("Run a 5K");
+    // The picker is hidden until the icon is tapped (de-emphasized).
+    expect(screen.queryByRole("button", { name: "Set icon 🎓" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Change icon" }));
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Move to backlog" }));
+      fireEvent.click(screen.getByRole("button", { name: "Set icon 🎓" }));
     });
-    // Moved to Backlog: the Backlog section header appears.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Change icon" })).toHaveTextContent(
+        "🎓",
+      ),
+    );
+  });
+
+  it("moves a project to backlog from the overflow menu", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp();
+    await openDetail("Run a 5K");
+    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Move to backlog" }));
+    });
+    // The derived-status pill in the header now reads Backlog.
     await waitFor(() => expect(screen.getByText("Backlog")).toBeInTheDocument());
   });
 
@@ -274,21 +325,37 @@ describe("ProjectsPage", () => {
         },
       ],
     );
-    render(<ProjectsPage />);
+    renderApp();
     await waitFor(() => expect(screen.getByText("Active")).toBeInTheDocument());
   });
 
-  it("defers Delete behind an Undo and does not commit when undone", async () => {
+  it("marks a project done from detail and holds it on the list with Undo", async () => {
     setApi([project("1", "Run a 5K", "next")]);
-    render(<ProjectsPage />);
-    fireEvent.click(await screen.findByText("Run a 5K"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
-
-    // The row is held with an Undo; nothing is deleted yet.
+    renderApp();
+    await openDetail("Run a 5K");
+    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Mark done" }));
+    });
+    // Back on the list, the row is held with an Undo; nothing committed yet.
     const undo = await screen.findByRole("button", { name: "Undo" });
     fireEvent.click(undo);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull(),
+    );
+    expect(screen.getByText("Run a 5K")).toBeInTheDocument();
+  });
 
-    // Undone: the row is tappable again and no Undo remains.
+  it("deletes a project from detail, deferred behind an Undo on the list", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp();
+    await openDetail("Run a 5K");
+    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
+    });
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    fireEvent.click(undo);
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Undo" })).toBeNull(),
     );
@@ -298,19 +365,33 @@ describe("ProjectsPage", () => {
   it("commits Delete after the undo window elapses", async () => {
     vi.useFakeTimers();
     setApi([project("1", "Run a 5K", "next")]);
-    render(<ProjectsPage />);
-    // Flush the async getProjectsApi + first fetch under fake timers.
+    renderApp();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     fireEvent.click(screen.getByText("Run a 5K"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
-
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
+    // Let the list remount and its leave effect arm the Undo timer before the
+    // window elapses.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
-
-    // The row is gone after the window commits the hard delete.
     expect(screen.queryByText("Run a 5K")).toBeNull();
+  });
+
+  it("redirects to the list when the project id is unknown", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp(["/projects/nope"]);
+    // After the collection loads without a match, it falls back to the list.
+    expect(
+      await screen.findByRole("heading", { name: "Projects" }),
+    ).toBeInTheDocument();
   });
 });

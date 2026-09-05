@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-05: A project now opens its own page instead of a pop-up panel. The page leads with the project's tasks and what it's waiting on; its title is editable at the top, the icon is tucked away until you want it, and status changes and delete live in a "⋯" menu.
 - 2026-09-05: Deleting a project now removes it from the list right away, instead of quietly coming back until the next refresh.
 - 2026-09-05: Refine a capture into real work. Hover a capture and click Refine (or open it and choose Refine) — a banner pins it while you create tasks on Today and projects on Projects, all linked back to that capture. Click Done to clear it from your inbox.
 - 2026-09-05: Finishing a task on Today leaves it in place for a few seconds with Undo — and, for a task in a project, a "+ Waiting condition" shortcut so you can record what the project is now waiting on the moment you finish the task that triggered it.

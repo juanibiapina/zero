@@ -24,6 +24,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { HomePage } from "./pages/HomePage";
 import { UpcomingPage } from "./pages/UpcomingPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { AdminPage } from "./pages/AdminPage";
 import { UserDetailPage } from "./pages/UserDetailPage";
 
@@ -61,6 +62,8 @@ function AuthGate() {
         <Route path="upcoming" element={<UpcomingPage />} />
         {/* Unlinked like Captures; the Projects list (entity #3). */}
         <Route path="projects" element={<ProjectsPage />} />
+        {/* A project opens its own screen (a destination, not a sheet). */}
+        <Route path="projects/:id" element={<ProjectDetailPage />} />
         <Route path="onboarding" element={<OnboardingRoute />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users/:userId" element={<UserDetailPage />} />
