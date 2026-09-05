@@ -63,6 +63,13 @@ reconciles with the server in the background.
   the collection falls back to an in-memory Query Collection. The durable path
   only runs on a standalone build, so verify offline/loading behavior on a
   `preview`/`production` build.
+- **A delete reconciles the row out of the synced base**, not just the optimistic
+  overlay. The overlay is released when the delete transaction confirms, and the
+  base still holds the row (optimistic mutations never touch the base), so a
+  delete that only issues the server call makes the row reappear until the next
+  fetch. The durable path's delete mutationFn therefore removes the row from the
+  base after the REST call; the in-memory fallback does not hit this, so a delete
+  bug can pass every in-memory test and only show on a real backend.
 
 ## The cache is disposable
 

@@ -273,24 +273,31 @@ is no longer untested.
 
 Shipped:
 
+- **The "what shows up" availability model** (plan:
+  `docs/plans/todo-availability-model.md`; merged via PR #69), built as 8 vertical
+  slices, web + mobile. Today is one screen with tasks on top and the capture
+  inbox below; a Task belongs to a Project (`projectId`, migration 0047) and is
+  groomed in the project sheet; the Today top region is a computed view
+  (`homeTasks`) gated by the project's derived display status and per-task
+  curation (`takenOnAt`, migration 0048, a take-on/park star); a project's
+  `active`/`next`/`waiting` status is **derived** (`projectDisplayStatus`) from its
+  taken-on tasks and its **waiting conditions** — the new fourth entity
+  (`waiting_conditions`, migration 0049; `docs/entities/waiting-condition.md`),
+  free-text (human/AI-resolved) or task-done / project-status (code-resolved);
+  completing a task lingers with Undo + a "+ Waiting condition" shortcut; and a
+  capture is **Refined** into tasks/projects (`sourceCaptureId`, migration 0050),
+  consumed on Done. The availability rule and derivation live in two pure, tested
+  modules in `@zero/agent-core` (`homeTasks`, `projectDisplayStatus` +
+  `conditionSatisfied`/`unresolvedConditions`). Shipped with unit/route/page tests;
+  mobile on-device verification (EAS/Maestro) still pending. Also fixed a
+  pre-existing durable-collection bug where a deleted row reappeared until refresh
+  (see `docs/storage.md`).
 - **Automatic appearance.** Mobile and web follow the system light or dark
   preference, including native/browser chrome. See `todo-dark-mode.md` for the
   implementation and device proof.
 
 In flight (details in `docs/plans/`):
 
-- `todo-availability-model.md` — **the "what shows up" model**, implemented as 8
-  vertical slices on branch `feat/todo-availability-model` (PR pending, not yet
-  on main). What it does: Today is one screen with tasks on top and the capture
-  inbox below; a Task belongs to a Project (`projectId`) and is groomed in the
-  project sheet; the Today top region is a computed view (`homeTasks`) gated by
-  the project's derived display status and per-task curation (`takenOnAt`, a
-  take-on/park star); a project's `active`/`next`/`waiting` status is derived
-  (`projectDisplayStatus`) from its taken-on tasks and its **waiting conditions**
-  (the new fourth entity: `docs/entities/waiting-condition.md`); completing a task
-  lingers with Undo + a waiting-condition shortcut; and a capture is **Refined**
-  into tasks/projects (`sourceCaptureId`), consumed on Done. Shipped web + mobile
-  with unit/route/page tests; mobile on-device verification (EAS/Maestro) pending.
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add
   the mobile offline outbox (phase 3). Code-complete on a branch, device-verified,
   with the offline decision gate still open.
