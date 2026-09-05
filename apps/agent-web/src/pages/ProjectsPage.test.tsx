@@ -1,23 +1,40 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createInMemoryProjectsApi,
+  createInMemoryTasksApi,
   type Project,
   type ProjectsApi,
   type ProjectsRest,
   type ProjectStatus,
+  type Task,
+  type TasksApi,
+  type TasksRest,
 } from "@zero/agent-core";
 
 import { ProjectsPage } from "./ProjectsPage";
 
-// The page reads its data layer through getProjectsApi(); hand it a fresh
-// in-memory collection per test (backed by an array "server"), so the real
-// ProjectsPage, the shared collection, and the undoable-leave hook are all
-// exercised without OPFS or the network.
-const h = vi.hoisted(() => ({ api: null as ProjectsApi | null }));
+// The page reads its data layers through getProjectsApi() / getTasksApi(); hand
+// each a fresh in-memory collection per test (backed by an array "server"), so
+// the real ProjectsPage, the shared collections, and the undoable-leave hook are
+// all exercised without OPFS or the network.
+const h = vi.hoisted(() => ({
+  api: null as ProjectsApi | null,
+  tasksApi: null as TasksApi | null,
+}));
 vi.mock("@/lib/projects-collection", () => ({
   getProjectsApi: () => Promise.resolve(h.api),
+}));
+vi.mock("@/lib/tasks-collection", () => ({
+  getTasksApi: () => Promise.resolve(h.tasksApi),
 }));
 
 const project = (
@@ -65,17 +82,66 @@ function fakeRest(initial: Project[]): ProjectsRest {
   };
 }
 
-function setApi(initial: Project[]) {
+function fakeTasksRest(initial: Task[]): TasksRest {
+  const server = initial.map((t) => ({ ...t }));
+  return {
+    fetchTasks: async () => server.map((t) => ({ ...t })),
+    addTask: async ({ id, text, showUpDate, projectId }) => {
+      const row: Task = {
+        id,
+        text,
+        showUpDate,
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        projectId,
+      };
+      server.push(row);
+      return { ...row };
+    },
+    completeTask: async (id) => {
+      const row = server.find((t) => t.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.completedAt = new Date().toISOString();
+      return { ...row };
+    },
+  };
+}
+
+function setApi(initial: Project[], tasks: Task[] = []) {
   h.api = createInMemoryProjectsApi({
     queryClient: new QueryClient(),
     rest: fakeRest(initial),
+  });
+  h.tasksApi = createInMemoryTasksApi({
+    queryClient: new QueryClient(),
+    rest: fakeTasksRest(tasks),
   });
 }
 
 describe("ProjectsPage", () => {
   afterEach(() => {
     h.api = null;
+    h.tasksApi = null;
     vi.useRealTimers();
+  });
+
+  it("adds a task to a project from its detail sheet", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByText("Run a 5K"));
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByRole("textbox", {
+      name: "Add a task to this project",
+    });
+    fireEvent.change(input, { target: { value: "buy running shoes" } });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: 'Complete "buy running shoes"' }),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("shows the fetched projects with their icons", async () => {

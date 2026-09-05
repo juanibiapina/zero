@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
+import { isNull } from "@tanstack/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
@@ -9,6 +10,7 @@ import {
   BACKLOG_COLLAPSE_THRESHOLD,
   DONE_UNDO_MS,
   ICON_CHOICES,
+  localToday,
   LOADING_TEXT_DELAY_MS,
   messageOf,
   projectsByStatus,
@@ -18,6 +20,7 @@ import {
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
+import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import {
   useDelayed,
   useForegroundRefetch,
@@ -25,6 +28,7 @@ import {
 } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
+import { type Task } from "@/lib/tasks";
 
 // Projects is a status-grouped list of outcome-oriented containers. The add
 // field creates a Project by name; tapping a row opens a detail sheet where the
@@ -44,19 +48,29 @@ export function ProjectsPage() {
 
 function ProjectsPanel() {
   const [api, setApi] = useState<ProjectsApi | null>(null);
+  const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
   useEffect(() => {
     let live = true;
-    void getProjectsApi().then((a) => {
-      if (live) setApi(a);
-    });
+    void getProjectsApi().then((a) => live && setApi(a));
+    void getTasksApi().then((a) => live && setTasksApi(a));
     return () => {
       live = false;
     };
   }, []);
-  return api ? <ProjectsReady api={api} /> : <div className="min-h-24" />;
+  return api && tasksApi ? (
+    <ProjectsReady api={api} tasksApi={tasksApi} />
+  ) : (
+    <div className="min-h-24" />
+  );
 }
 
-function ProjectsReady({ api }: { api: ProjectsApi }) {
+function ProjectsReady({
+  api,
+  tasksApi,
+}: {
+  api: ProjectsApi;
+  tasksApi: TasksApi;
+}) {
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, "asc"),
   );
@@ -228,6 +242,8 @@ function ProjectsReady({ api }: { api: ProjectsApi }) {
           <ProjectDetail
             key={selected.id}
             project={selected}
+            tasksApi={tasksApi}
+            onError={setError}
             onEdit={commitEdit}
             onPickStatus={(status) => onPickStatus(selected, status)}
             onDelete={() => {
@@ -352,13 +368,98 @@ function ProjectSectionView({
 // description, and the Status group. Edits commit on blur / Enter (not per
 // keystroke) and keep the sheet open; only a status pick dismisses it. Keyed by
 // project id at the call site, so the seeded field state resets between projects.
+// The project's tasks, groomed in place: complete one with its circle, add a new
+// one (parked by default — grooming is collect-then-take-on, so a
+// project-screen task is not surfaced on Home until it is taken on). Reads the
+// shared tasks collection filtered to this project.
+function ProjectTasks({
+  api,
+  projectId,
+  onError,
+}: {
+  api: TasksApi;
+  projectId: string;
+  onError: (message: string) => void;
+}) {
+  const { data: tasks } = useLiveQuery((q) =>
+    q
+      .from({ t: api.collection })
+      .where(({ t }) => isNull(t.completedAt))
+      .orderBy(({ t }) => t.createdAt, "asc"),
+  );
+  const [text, setText] = useState("");
+  const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
+
+  const onAdd = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const tx = api.add(trimmed, localToday(), projectId);
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    setText("");
+  }, [api, text, projectId, onError]);
+
+  const onComplete = useCallback(
+    (id: string) => {
+      const tx = api.complete(id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, onError],
+  );
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-muted-foreground">Tasks</p>
+      {list.length > 0 && (
+        <ul className="space-y-2">
+          {list.map((t) => (
+            <li
+              key={t.id}
+              className="flex items-center gap-3 rounded-lg border px-3 py-2"
+            >
+              <button
+                type="button"
+                aria-label={`Complete "${t.text}"`}
+                className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
+                onClick={() => onComplete(t.id)}
+              />
+              <span className="flex-1 text-sm">{t.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onAdd();
+        }}
+      >
+        <Input
+          value={text}
+          placeholder="Add a task to this project…"
+          aria-label="Add a task to this project"
+          className="h-10"
+          onChange={(e) => setText(e.target.value)}
+        />
+        <Button type="submit" size="sm" disabled={text.trim() === ""}>
+          Add
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 function ProjectDetail({
   project,
+  tasksApi,
+  onError,
   onEdit,
   onPickStatus,
   onDelete,
 }: {
   project: Project;
+  tasksApi: TasksApi;
+  onError: (message: string) => void;
   onEdit: (id: string, fields: ProjectEditFields) => void;
   onPickStatus: (status: ProjectStatus) => void;
   onDelete: () => void;
@@ -445,6 +546,12 @@ function ProjectDetail({
           className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
       </div>
+
+      <ProjectTasks
+        api={tasksApi}
+        projectId={project.id}
+        onError={onError}
+      />
 
       <StatusGroup current={project.status} onPick={onPickStatus} />
 
