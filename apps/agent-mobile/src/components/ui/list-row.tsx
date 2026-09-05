@@ -49,6 +49,9 @@ export function ListRow({
   const ripple = useColor('--color-ripple');
   return (
     <View className="bg-background">
+      {/* Keeps the Android-only string token available to useColor without
+          affecting layout or appearance. */}
+      <View className="hidden bg-ripple" />
       <Pressable
         accessibilityRole={onPress ? 'button' : undefined}
         accessibilityLabel={accessibilityLabel}

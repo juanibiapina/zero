@@ -17,7 +17,7 @@ describe('CheckCircle', () => {
 
 describe('ListRow', () => {
   it('renders leading, body, and trailing slots', async () => {
-    const { getByText } = await render(
+    const { getByText, toJSON } = await render(
       <ListRow
         leading={<Text>icon</Text>}
         trailing={<Text>undo</Text>}
@@ -29,6 +29,7 @@ describe('ListRow', () => {
     expect(getByText('icon')).toBeTruthy();
     expect(getByText('body')).toBeTruthy();
     expect(getByText('undo')).toBeTruthy();
+    expect(JSON.stringify(toJSON())).toContain('bg-ripple');
   });
 
   it('fires onPress and onLongPress from the row', async () => {

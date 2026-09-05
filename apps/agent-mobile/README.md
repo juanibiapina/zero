@@ -40,19 +40,26 @@ Tailwind vocabulary as the web packages (`agent-web`, `dashboard-web`,
 `landing`). You write `className="..."` on React Native components; Uniwind maps
 it to styles through a Metro transform (no Babel preset).
 
-- **Design tokens live in `global.css`.** The `@theme` block is the single source
-  of every color, type size, and named spacing/radius (`--color-foreground`,
-  `--color-accent`, `--text-title`, `--spacing-screen-x`, `--radius-dialog`, …).
-  React Native reads them as classes (`bg-surface`, `text-foreground`,
-  `text-title`, `px-screen-x`). No hex, font size, or spacing literal lives in a
-  screen — change the token, not the screen.
+- **Design tokens live in `global.css`.** Static `@theme` values own spacing,
+  type, and radius; matching `@variant light` / `@variant dark` blocks own every
+  semantic color and elevation (`--color-foreground`, `--color-accent`,
+  `--shadow-raised`, `--text-title`, `--spacing-screen-x`, `--radius-dialog`,
+  …). The app follows only the phone's system preference: no theme toggle or
+  stored override. React Native reads them as classes (`bg-surface`,
+  `text-foreground`, `text-title`, `px-screen-x`). No hex, font size, or spacing
+  literal lives in a screen — change the token, not the screen.
 - **String-typed color props read the token, not a class.** `@expo/ui`
-  (`style`/`textStyle`), `NativeTabs` colors, `placeholderTextColor`, and
-  `android_ripple` take a color string, not a `className`. Read the token with
+  (`style`/`textStyle`), `NativeTabs` colors, and `android_ripple` take a color
+  string, not a `className`. Read a semantic token with
   `useColor('--color-...')` from `src/lib/theme.ts` (a typed wrapper over
-  Uniwind's `useCSSVariable`). Animated.View and `KeyboardStickyView` are not
-  RN-core, so Uniwind does not map `className` onto them — use
-  `useResolveClassNames(...)` (a resolved style) or an inline style there.
+  Uniwind's `useCSSVariable`). A runtime-only adaptive token must be used by a
+  class or declared in `@theme static`; `ListRow` contains a hidden
+  `bg-ripple` consumer so its Android-only ripple token remains available.
+  `TextInput` has `placeholderTextColorClassName`, so inputs use
+  `text-placeholder` directly.
+  Animated.View and `KeyboardStickyView` are not RN-core, so Uniwind does not
+  map `className` onto them — use `useResolveClassNames(...)` (a resolved style)
+  or an inline style there.
 - **Config files**: `metro.config.js` (`withUniwindConfig`, **outermost** wrapper,
   `cssEntryFile: './global.css'`, generates `src/uniwind-types.d.ts`),
   `babel.config.js` (Expo preset + the reanimated worklets plugin only — no
@@ -67,9 +74,11 @@ it to styles through a Metro transform (no Babel preset).
   `CheckCircle`, `ListRow`, `ConfirmDialog`, `Sheet`) plus `ScreenHeader`,
   composed with the `cn()` helper in `src/lib/cn.ts` (clsx + tailwind-merge).
   `ListRow`/`CheckCircle` are the flat list-row shape shared by the three tabs.
-- **Light theme only, for now.** `userInterfaceStyle` is pinned to `light` in
-  `app.json` so the native chrome matches the light-only content. Dark mode is a
-  future `@variant dark { … }` block in `global.css` plus dropping that pin.
+- **System appearance is automatic.** `userInterfaceStyle` is `automatic` in
+  `app.json`; Uniwind's light/dark variants update content, tabs, string color
+  props, status icons, and native chrome together. This configuration is native:
+  a fresh `development` dev-client build is required before device testing.
+  Pure CSS/JS token changes then hot-reload normally.
 
 ### UI stack: `@expo/ui` vs Uniwind vs FlatList
 
@@ -367,6 +376,23 @@ adb shell am start -a android.intent.action.VIEW \
 ```
 
 Pure-JS changes hot-reload; only new native modules need a fresh EAS dev build.
+
+### Verify system appearance
+
+`userInterfaceStyle` changes native configuration, so first install a fresh
+**development** dev-client build. With Metro running, switch the attached Pixel
+and capture each appearance:
+
+```bash
+adb shell cmd uimode night yes
+maestro test apps/agent-mobile/.maestro/dev/screens.yaml
+adb shell cmd uimode night no
+```
+
+While the app stays open, switch `yes`, `no`, then `yes`: content, NativeTabs,
+status icons, keyboard, and native sheets must update together. Restore `night
+no` when finished. Use only this development client; never install a preview or
+production build on the Pixel.
 
 ## Builds
 

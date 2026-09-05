@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-05: The app now follows your device's light or dark appearance automatically.
 - 2026-09-04: Tap a capture's text to edit it in a detail sheet. Changes save when you finish or close the sheet and sync across your devices.
 - 2026-09-04: Delete a project from its detail sheet. It leaves your list right away with a few seconds to Undo before it's gone for good.
 - 2026-09-04: Give a project an icon, rename it, or add notes right from its detail sheet. Your changes save on their own and sync across your devices.

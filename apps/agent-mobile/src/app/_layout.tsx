@@ -5,6 +5,7 @@ import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -12,6 +13,7 @@ import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 import { createQueryClient, setupAppStateFocus } from '@/lib/query-client';
+import { useColor } from '@/lib/theme';
 
 // Uniwind: importing the Tailwind entry once at the root registers the theme
 // tokens and styles for every className in the app.
@@ -26,11 +28,13 @@ export default function RootLayout() {
       'Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in the environment (see apps/agent-mobile/README.md).',
     );
   }
+  const backgroundColor = useColor('--color-background');
   // One client for the app's lifetime; refetch queries on foreground.
   const [queryClient] = useState(createQueryClient);
   useEffect(() => setupAppStateFocus(), []);
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
+      <StatusBar style="auto" />
       <ClerkProvider
         publishableKey={publishableKey}
         tokenCache={tokenCache}
@@ -40,7 +44,12 @@ export default function RootLayout() {
             {/* Honor the OS "reduce motion" setting: disable animations when the
                 user asks, keep them otherwise. */}
             <ReducedMotionConfig mode={ReduceMotion.System} />
-            <Stack screenOptions={{ headerShown: false }} />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor },
+              }}
+            />
           </KeyboardProvider>
         </QueryClientProvider>
       </ClerkProvider>

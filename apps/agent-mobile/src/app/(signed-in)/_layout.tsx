@@ -2,7 +2,7 @@ import { useAuth } from '@clerk/expo';
 import { Redirect } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, View } from 'react-native';
 import { useColor } from '../../lib/theme';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
@@ -37,7 +37,7 @@ export default function SignedInLayout() {
 
   if (!isLoaded) {
     return (
-      <View style={styles.center}>
+      <View className="flex-1 items-center justify-center bg-background">
         <ActivityIndicator />
       </View>
     );
@@ -70,11 +70,3 @@ export default function SignedInLayout() {
     </NativeTabs>
   );
 }
-
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

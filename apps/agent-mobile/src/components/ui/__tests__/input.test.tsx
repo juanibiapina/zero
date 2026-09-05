@@ -16,7 +16,9 @@ describe('Input', () => {
     const { getByPlaceholderText } = await render(
       <Input placeholder="Add a todo" onChangeText={onChangeText} />,
     );
-    fireEvent.changeText(getByPlaceholderText('Add a todo'), 'milk');
+    const input = getByPlaceholderText('Add a todo');
+    expect(input.props.placeholderTextColorClassName).toBe('text-placeholder');
+    fireEvent.changeText(input, 'milk');
     expect(onChangeText).toHaveBeenCalledWith('milk');
   });
 });

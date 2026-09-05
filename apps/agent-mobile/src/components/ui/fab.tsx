@@ -31,7 +31,7 @@ export function Fab({
       accessibilityLabel={label}
       disabled={disabled}
       className={cn(
-        'items-center justify-center rounded-full bg-accent shadow-lg',
+        'items-center justify-center rounded-full bg-accent shadow-raised',
         SIZES[size],
         disabled && 'opacity-40',
         className,

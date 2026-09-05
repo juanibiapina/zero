@@ -73,13 +73,10 @@ later. Sharing one token file between the two is a named follow-up.
   "<text>"'`, and assert the `"Captures"` title. A real Pixel 7 is attached to
   the `mini` host for on-device screenshots via `maestro` (see the README's
   "Physical device testing"). This dev box cannot run an emulator.
-- **Light theme first.** `app.json` sets `userInterfaceStyle: "automatic"`,
-  but no screen sets a background color or a dark palette, so on a phone in
-  dark mode the native chrome (tab bar, sheet, window background) goes dark
-  while the content stays hard-coded light. Todoist's default is a light
-  theme. This plan ships the light `@theme` block and pins
-  `userInterfaceStyle: "light"` so chrome and content agree. Dark mode is the
-  first follow-up: an `@variant dark { … }` block and dropping the pin.
+- **Automatic appearance (completed 2026-09-05).** `app.json` uses
+  `userInterfaceStyle: "automatic"`; matching `@variant light` and
+  `@variant dark` tokens keep content and native chrome in step. See
+  `todo-dark-mode.md` for implementation and device-proof details.
 - **In-flight plan to keep consistent:** `docs/plans/todo-capture-animations.md`
   documents `babel.config.js` as having the `nativewind/babel` preset. Phase 1
   removes that preset; update that plan's babel note in the same change.
@@ -390,8 +387,8 @@ mocked sheet's `accessibilityLabel="sheet"` in tests.
 4. Phase 2 screenshots show: flat rows with hairline dividers, 22dp check
    circles, 26pt bold screen titles under the safe area, circular accent FAB,
    keyboard-docked full-width quick-add surface with a borderless input,
-   section headers with a divider, tab bar tinted with the accent, no dark
-   chrome on a dark-mode phone.
+   section headers with a divider, and tab bar tinted with the accent. Native
+   chrome and content match in both system appearances.
 5. `lint`, `typecheck`, `test`, and `expo export --platform android` pass;
    the two release Maestro flows pass on the Pixel.
 6. Every string in "Strings that must not change" is unchanged.
@@ -423,13 +420,17 @@ mocked sheet's `accessibilityLabel="sheet"` in tests.
 - **Free-tier limits.** No `className` animations and re-render on theme
   change; neither is used or needed. Uniwind Pro is commercial; do not adopt
   it without a separate decision.
-- **Dark-mode phones.** Pinning `light` is a deliberate interim; the
-  follow-up is an `@variant dark` block plus dropping the pin, listed in
-  `docs/todo-app.md`.
+- **Dark-mode phones (resolved 2026-09-05).** Matching light/dark tokens and
+  `userInterfaceStyle: "automatic"` now keep the app and native chrome aligned;
+  see `todo-dark-mode.md`.
+
+## Completed follow-up
+
+- Automatic light/dark appearance — shipped 2026-09-05; see
+  `todo-dark-mode.md`.
 
 ## Follow-ups (out of scope here)
 
-- Dark theme (`@variant dark { … }` in `global.css`, drop the `light` pin).
 - Share one token CSS file between `apps/agent-web` and `apps/agent-mobile`
   (Uniwind converts the web's `oklch()` values).
 - Upcoming rows edit inline while Captures rows open a sheet; unify on the

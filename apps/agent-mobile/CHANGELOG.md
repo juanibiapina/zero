@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-05: The app now follows your phone's light or dark appearance automatically.
 - 2026-09-05: Fresh look across the app: a cleaner, denser task list with lighter dividers instead of boxed cards, a round add button, an add box that sits flush above the keyboard, and the tab bar in the app's colors.
 - 2026-09-04: Tap a capture's text to edit it in a detail sheet. Changes save when you finish or close the sheet, work offline, and sync across your devices.
 - 2026-09-04: Delete a project from its detail sheet. It leaves your list right away with a few seconds to Undo before it's gone for good. Works offline.

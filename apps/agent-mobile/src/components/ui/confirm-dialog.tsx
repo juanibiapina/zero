@@ -34,7 +34,7 @@ export function ConfirmDialog({
         className="absolute inset-0 bg-scrim"
         onPress={onCancel}
       />
-      <View className="mx-8 w-full max-w-sm rounded-dialog bg-surface p-6 shadow-lg">
+      <View className="mx-8 w-full max-w-sm rounded-dialog bg-surface p-6 shadow-raised">
         <Text className="text-[20px] font-medium text-foreground">{title}</Text>
         <Text variant="subtitle" className="mt-2">
           {message}

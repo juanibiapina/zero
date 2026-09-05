@@ -37,7 +37,7 @@ export function QuickAddBar({
   helperText,
 }: QuickAddBarProps) {
   return (
-    <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-lg">
+    <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
       {helperText ? (
         <Text variant="caption" className="mb-2">
           {helperText}

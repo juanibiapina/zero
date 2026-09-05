@@ -271,6 +271,12 @@ agent-core stays React-free. `apps/agent-web` also gained a Vitest +
 `@testing-library/react` toolchain and a `ProjectsPage` suite, so the web surface
 is no longer untested.
 
+Shipped:
+
+- **Automatic appearance.** Mobile and web follow the system light or dark
+  preference, including native/browser chrome. See `todo-dark-mode.md` for the
+  implementation and device proof.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add

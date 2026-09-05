@@ -1,6 +1,5 @@
 import { forwardRef } from 'react';
 import { TextInput, type TextInputProps } from 'react-native';
-import { useColor } from '@/lib/theme';
 
 import { cn } from '@/lib/cn';
 
@@ -16,12 +15,11 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
   { className, ...props },
   ref,
 ) {
-  const placeholder = useColor('--color-placeholder');
   return (
     <TextInput
       ref={ref}
       className={cn('text-body text-foreground', className)}
-      placeholderTextColor={placeholder}
+      placeholderTextColorClassName="text-placeholder"
       {...props}
     />
   );
