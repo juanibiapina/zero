@@ -156,6 +156,16 @@ function TasksSection({
     [api, onError],
   );
 
+  // Park a project task straight from Home (send it back to the project screen).
+  // Loose tasks have no star — they are immediate to-dos, not curated.
+  const onPark = useCallback(
+    (item: Task) => {
+      const tx = api.park(item.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, onError],
+  );
+
   const list = homeTasks(tasks ?? [], projects ?? []);
   const view = listView({ count: list.length, isLoading, loadError: null });
 
@@ -182,6 +192,16 @@ function TasksSection({
                 onClick={() => onComplete(item)}
               />
               <span className="flex-1 text-left text-base">{item.text}</span>
+              {item.projectId && (
+                <button
+                  type="button"
+                  aria-label={`Park "${item.text}"`}
+                  className="shrink-0 text-lg leading-none text-amber-500"
+                  onClick={() => onPark(item)}
+                >
+                  ★
+                </button>
+              )}
             </li>
           ))}
         </ul>

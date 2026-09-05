@@ -10,6 +10,7 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   createdAt: "2024-01-10T00:00:00.000Z",
   completedAt: null,
   projectId: null,
+  takenOnAt: null,
   ...over,
 });
 

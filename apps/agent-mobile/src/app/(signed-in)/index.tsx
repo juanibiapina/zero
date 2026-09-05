@@ -242,9 +242,11 @@ function CaptureDetail({
 function TaskRow({
   item,
   onComplete,
+  onPark,
 }: {
   item: Task;
   onComplete: (item: Task) => void;
+  onPark: (item: Task) => void;
 }) {
   return (
     <ListRow
@@ -253,6 +255,20 @@ function TaskRow({
           label={`Complete "${item.text}"`}
           onPress={() => onComplete(item)}
         />
+      }
+      // A project task carries a park star (send it back to the project screen);
+      // a loose task has none — it is an immediate to-do, not curated.
+      trailing={
+        item.projectId ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Park "${item.text}"`}
+            hitSlop={8}
+            onPress={() => onPark(item)}
+          >
+            <Text className="text-[18px] text-accent">★</Text>
+          </Pressable>
+        ) : undefined
       }
     >
       <Text>{item.text}</Text>
@@ -290,6 +306,13 @@ function TasksTop({
     },
     [api, onError],
   );
+  const onPark = useCallback(
+    (item: Task) => {
+      const tx = api.park(item.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, onError],
+  );
   return (
     <View>
       <Text variant="caption" className="px-screen-x pb-1 pt-2">
@@ -301,7 +324,12 @@ function TasksTop({
         </Text>
       ) : (
         list.map((item) => (
-          <TaskRow key={item.id} item={item} onComplete={onComplete} />
+          <TaskRow
+            key={item.id}
+            item={item}
+            onComplete={onComplete}
+            onPark={onPark}
+          />
         ))
       )}
       <Text variant="caption" className="px-screen-x pb-1 pt-3">

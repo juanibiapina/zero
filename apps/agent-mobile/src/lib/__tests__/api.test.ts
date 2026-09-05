@@ -271,6 +271,7 @@ const task = (id: string, text: string): Task => ({
   showUpDate: '2023-01-01',
   completedAt: null,
   projectId: null,
+  takenOnAt: null,
 });
 
 describe('fetchTasks', () => {
@@ -309,7 +310,13 @@ describe('addTask', () => {
 
     const result = await addTask(
       getToken,
-      { id: 'tid-1', text: 'call plumber', showUpDate: '2023-01-01', projectId: null },
+      {
+        id: 'tid-1',
+        text: 'call plumber',
+        showUpDate: '2023-01-01',
+        projectId: null,
+        takenOnAt: null,
+      },
       'https://example.test',
     );
 
@@ -322,6 +329,7 @@ describe('addTask', () => {
       text: 'call plumber',
       showUpDate: '2023-01-01',
       projectId: null,
+      takenOnAt: null,
     });
   });
 });

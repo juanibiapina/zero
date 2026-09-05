@@ -232,6 +232,9 @@ export const tasks = table("tasks", {
   // The Project this task belongs to, or NULL when the task is loose. See
   // migration 0047.
   projectId: column.text(),
+  // When the user took this task on (curated it onto Home), or NULL when parked.
+  // Only gates project tasks; loose tasks always show. See migration 0048.
+  takenOnAt: column.text(),
 });
 
 // Projects: the third entity of the todo app (the Todoist replacement). A named,

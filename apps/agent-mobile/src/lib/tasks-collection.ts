@@ -1,6 +1,12 @@
 import { createTasksApi, type TasksApi, type TasksRest } from '@zero/agent-core';
 
-import { addTask, completeTask, fetchTasks, type TokenGetter } from './api';
+import {
+  addTask,
+  completeTask,
+  fetchTasks,
+  setTaskTakenOn,
+  type TokenGetter,
+} from './api';
 import { defineMobileEntityApi } from './entity-api';
 
 // The mobile Task data layer: the shared factory bound to the Clerk token. No
@@ -13,6 +19,7 @@ function makeRest(getToken: TokenGetter): TasksRest {
     fetchTasks: () => fetchTasks(getToken),
     addTask: (task) => addTask(getToken, task),
     completeTask: (id) => completeTask(getToken, id),
+    setTaskTakenOn: (id, takenOnAt) => setTaskTakenOn(getToken, id, takenOnAt),
   };
 }
 

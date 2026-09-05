@@ -105,13 +105,14 @@ const taskRow = (id: string, text: string): Task => ({
   createdAt: `2023-01-0${id}T00:00:00.000Z`,
   completedAt: null,
   projectId: null,
+  takenOnAt: null,
 });
 
 function fakeTasksRest(initial: Task[]): TasksRest {
   const server = initial.map((item) => ({ ...item }));
   return {
     fetchTasks: async () => server.map((item) => ({ ...item })),
-    addTask: async ({ id, text, showUpDate, projectId }) => {
+    addTask: async ({ id, text, showUpDate, projectId, takenOnAt }) => {
       const row: Task = {
         id,
         text,
@@ -119,6 +120,7 @@ function fakeTasksRest(initial: Task[]): TasksRest {
         createdAt: new Date().toISOString(),
         completedAt: null,
         projectId,
+        takenOnAt,
       };
       server.push(row);
       return { ...row };
@@ -127,6 +129,12 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       const row = server.find((item) => item.id === id);
       if (!row) throw new Error(`no task ${id}`);
       row.completedAt = new Date().toISOString();
+      return { ...row };
+    },
+    setTaskTakenOn: async (id, takenOnAt) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.takenOnAt = takenOnAt;
       return { ...row };
     },
   };

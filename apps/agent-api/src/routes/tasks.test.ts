@@ -18,6 +18,7 @@ const fakeUserDO = (seed: Task[] = []) => {
       text: string,
       showUpDate: string,
       projectId: string | null = null,
+      takenOnAt: string | null = null,
     ): Task {
       const existingById = tasks.find((t) => t.id === id);
       if (existingById) return existingById;
@@ -28,6 +29,7 @@ const fakeUserDO = (seed: Task[] = []) => {
         createdAt: new Date(1700000000000 + ++n).toISOString(),
         completedAt: null,
         projectId,
+        takenOnAt,
       };
       tasks.push(task);
       return task;
@@ -39,6 +41,12 @@ const fakeUserDO = (seed: Task[] = []) => {
       const task = tasks.find((t) => t.id === id);
       if (!task) return null;
       task.completedAt = new Date(1700000000000).toISOString();
+      return task;
+    },
+    setTaskTakenOn(id: string, takenOnAt: string | null): Task | null {
+      const task = tasks.find((t) => t.id === id);
+      if (!task) return null;
+      task.takenOnAt = takenOnAt;
       return task;
     },
     _tasks: tasks,
@@ -76,6 +84,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   createdAt: "2023-11-14T22:13:20.001Z",
   completedAt: null,
   projectId: null,
+  takenOnAt: null,
   ...over,
 });
 

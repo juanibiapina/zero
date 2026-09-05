@@ -12,6 +12,7 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? null,
+    takenOnAt: over.takenOnAt ?? null,
   };
 }
 
@@ -55,12 +56,28 @@ describe("homeTasks", () => {
     expect(out.map((t) => t.id)).toEqual(["loose"]);
   });
 
-  it("shows a task whose project is active", () => {
+  it("shows a taken-on task whose project is active", () => {
     const out = homeTasks(
-      [task({ id: "t", projectId: "p" })],
+      [task({ id: "t", projectId: "p", takenOnAt: "2026-01-01T00:00:00.000Z" })],
       [project("p", "active")],
     );
     expect(out.map((t) => t.id)).toEqual(["t"]);
+  });
+
+  it("hides a parked task even when its project is active", () => {
+    const out = homeTasks(
+      [task({ id: "t", projectId: "p", takenOnAt: null })],
+      [project("p", "active")],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("shows a loose task regardless of takenOnAt", () => {
+    const out = homeTasks(
+      [task({ id: "loose", projectId: null, takenOnAt: null })],
+      [],
+    );
+    expect(out.map((t) => t.id)).toEqual(["loose"]);
   });
 
   it("hides a task whose project is not active", () => {

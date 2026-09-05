@@ -171,8 +171,13 @@ export class UserDO extends DurableObject<Env> {
     text: string,
     showUpDate: string,
     projectId: string | null = null,
+    takenOnAt: string | null = null,
   ): Task {
-    return this.tasks.add(id, text, showUpDate, projectId);
+    return this.tasks.add(id, text, showUpDate, projectId, takenOnAt);
+  }
+
+  setTaskTakenOn(id: string, takenOnAt: string | null): Task | null {
+    return this.tasks.setTakenOn(id, takenOnAt);
   }
 
   listTasks(): Task[] {

@@ -184,6 +184,12 @@ function ProjectTasks({
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
 
+  // Take a task on (surface it on Home while the project is active) or park it.
+  const onToggleTakenOn = (t: Task) => {
+    const tx = t.takenOnAt ? api.park(t.id) : api.takeOn(t.id);
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  };
+
   return (
     <Column spacing={8}>
       <UIText textStyle={{ color: labelColor, fontSize: 13 }}>Tasks</UIText>
@@ -194,6 +200,24 @@ function ProjectTasks({
             onPress={() => onComplete(t.id)}
           />
           <Text className="flex-1">{t.text}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              t.takenOnAt ? `Park "${t.text}"` : `Take on "${t.text}"`
+            }
+            hitSlop={8}
+            onPress={() => onToggleTakenOn(t)}
+          >
+            <Text
+              className={
+                t.takenOnAt
+                  ? 'text-[18px] text-accent'
+                  : 'text-[18px] text-foreground-muted'
+              }
+            >
+              {t.takenOnAt ? '★' : '☆'}
+            </Text>
+          </Pressable>
         </View>
       ))}
       <Input

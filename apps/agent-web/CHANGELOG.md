@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-05: Choose which of a project's tasks you're taking on: star a task in the project to put it on Today, and star it again on Today to park it. No fixed limit — you decide how much shows up. Loose tasks always show.
 - 2026-09-05: Your Today list shows tasks from active projects (plus loose tasks); a project's tasks stay hidden until you make it active, so only what you're working on surfaces.
 - 2026-09-05: Add tasks to a project and complete them from the project's detail sheet, so a project holds the work toward its outcome.
 - 2026-09-05: The Captures section is now Today, with two parts: your tasks for today on top and your capture inbox below. The quick-add creates a capture by default; switch it to Task to add a task instead.

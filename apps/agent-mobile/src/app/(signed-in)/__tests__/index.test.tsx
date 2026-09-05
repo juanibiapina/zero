@@ -88,6 +88,7 @@ const taskRow = (id: string, text: string): Task => ({
   createdAt: '2023-01-01T00:00:00.000Z',
   completedAt: null,
   projectId: null,
+  takenOnAt: null,
 });
 
 const capture = (
@@ -145,6 +146,7 @@ describe('HomeScreen', () => {
         createdAt: '2023-01-01T00:00:00.000Z',
         completedAt: null,
         projectId: null,
+        takenOnAt: null,
       };
       mockFetchTasks.mockResolvedValue([added]);
       return added;

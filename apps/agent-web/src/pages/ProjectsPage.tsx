@@ -406,6 +406,15 @@ function ProjectTasks({
     [api, onError],
   );
 
+  // Take a task on (surface it on Home while the project is active) or park it.
+  const onToggleTakenOn = useCallback(
+    (t: Task) => {
+      const tx = t.takenOnAt ? api.park(t.id) : api.takeOn(t.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, onError],
+  );
+
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-muted-foreground">Tasks</p>
@@ -423,6 +432,22 @@ function ProjectTasks({
                 onClick={() => onComplete(t.id)}
               />
               <span className="flex-1 text-sm">{t.text}</span>
+              <button
+                type="button"
+                aria-label={
+                  t.takenOnAt ? `Park "${t.text}"` : `Take on "${t.text}"`
+                }
+                aria-pressed={t.takenOnAt != null}
+                className={cn(
+                  "shrink-0 text-lg leading-none transition-colors",
+                  t.takenOnAt
+                    ? "text-amber-500"
+                    : "text-muted-foreground/40 hover:text-muted-foreground",
+                )}
+                onClick={() => onToggleTakenOn(t)}
+              >
+                {t.takenOnAt ? "★" : "☆"}
+              </button>
             </li>
           ))}
         </ul>

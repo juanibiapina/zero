@@ -78,11 +78,21 @@ when the task is loose. Set at creation: the Home quick-add mints loose tasks;
 the project detail sheet's add-task field mints tasks under that project. The
 shared `Task` type, `/api/tasks`, and `createTasksApi` all carry it.
 
+### Curation
+
+`takenOnAt` (nullable, migration 0048) is when the user took the task on
+(curated it onto Home), or null when parked. It **only gates project tasks**:
+`homeTasks` shows a project task when its project is active **and** `takenOnAt`
+is set; a loose task always shows (it is an immediate to-do, with no project
+screen to live on when hidden). Set via the star on the project detail sheet and
+the Today top region (`PATCH /api/tasks/{id} { takenOnAt }`, verbs
+`takeOn` / `park`). A project-screen add lands parked; the Home quick-add mints
+loose tasks.
+
 ### Deferred columns
 
-`takenOnAt` (curation) and `sourceCaptureId` (the Capture->Task transition) are
-deliberately **not** columns yet; they arrive in later slices of
-`docs/plans/todo-availability-model.md`.
+`sourceCaptureId` (the Capture->Task transition) is deliberately **not** a column
+yet; it arrives in a later slice of `docs/plans/todo-availability-model.md`.
 
 ## Behavior
 

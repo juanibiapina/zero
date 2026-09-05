@@ -86,7 +86,7 @@ function fakeTasksRest(initial: Task[]): TasksRest {
   const server = initial.map((t) => ({ ...t }));
   return {
     fetchTasks: async () => server.map((t) => ({ ...t })),
-    addTask: async ({ id, text, showUpDate, projectId }) => {
+    addTask: async ({ id, text, showUpDate, projectId, takenOnAt }) => {
       const row: Task = {
         id,
         text,
@@ -94,6 +94,7 @@ function fakeTasksRest(initial: Task[]): TasksRest {
         createdAt: new Date().toISOString(),
         completedAt: null,
         projectId,
+        takenOnAt,
       };
       server.push(row);
       return { ...row };
@@ -102,6 +103,12 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       const row = server.find((t) => t.id === id);
       if (!row) throw new Error(`no task ${id}`);
       row.completedAt = new Date().toISOString();
+      return { ...row };
+    },
+    setTaskTakenOn: async (id, takenOnAt) => {
+      const row = server.find((t) => t.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.takenOnAt = takenOnAt;
       return { ...row };
     },
   };

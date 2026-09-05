@@ -16,6 +16,7 @@ const TaskSchema = z.object({
   createdAt: z.string(),
   completedAt: z.string().nullable(),
   projectId: z.string().nullable(),
+  takenOnAt: z.string().nullable(),
 });
 
 // A local calendar day, YYYY-MM-DD. The client mints it in the user's timezone.
@@ -65,6 +66,10 @@ export const createTasksRoutes = () => {
               // Optional: the Project this task belongs to. Omitted/absent for a
               // loose task.
               projectId: z.string().uuid().nullable().optional(),
+              // Optional: when the task was taken on (curated onto Home). The
+              // Home quick-add sends a timestamp; a project-screen add omits it
+              // (parked).
+              takenOnAt: z.string().nullable().optional(),
             }),
           },
         },
@@ -88,14 +93,64 @@ export const createTasksRoutes = () => {
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, text, showUpDate, projectId } = c.req.valid("json");
+    const { id, text, showUpDate, projectId, takenOnAt } = c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
     const userDO = getUserDO(c.env, userId);
-    const task = await userDO.addTask(id, text, showUpDate, projectId ?? null);
+    const task = await userDO.addTask(
+      id,
+      text,
+      showUpDate,
+      projectId ?? null,
+      takenOnAt ?? null,
+    );
     log("task_added", { clerk_user_id: userId });
     return c.json({ task }, 201);
+  });
+
+  const takenOnRoute = createRoute({
+    method: "patch",
+    path: "/api/tasks/{id}",
+    tags: ["Tasks"],
+    summary: "Take a task on (curate onto Home) or park it",
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          "application/json": {
+            // takenOnAt: a timestamp to take on, or null to park. Idempotent on
+            // the id, so a replayed offline write is safe.
+            schema: z.object({ takenOnAt: z.string().nullable() }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: z.object({ task: TaskSchema }) },
+        },
+        description: "The updated task",
+      },
+      404: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "No task with that id",
+      },
+    },
+  });
+
+  router.openapi(takenOnRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const { takenOnAt } = c.req.valid("json");
+    const userDO = getUserDO(c.env, userId);
+    const task = await userDO.setTaskTakenOn(id, takenOnAt);
+    if (!task) return c.json({ error: "task not found" }, 404);
+    log("task_taken_on", { clerk_user_id: userId });
+    return c.json({ task }, 200);
   });
 
   const completeRoute = createRoute({
