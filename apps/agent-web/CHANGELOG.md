@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-05: Deleting a project now removes it from the list right away, instead of quietly coming back until the next refresh.
 - 2026-09-05: Refine a capture into real work. Hover a capture and click Refine (or open it and choose Refine) — a banner pins it while you create tasks on Today and projects on Projects, all linked back to that capture. Click Done to clear it from your inbox.
 - 2026-09-05: Finishing a task on Today leaves it in place for a few seconds with Undo — and, for a task in a project, a "+ Waiting condition" shortcut so you can record what the project is now waiting on the moment you finish the task that triggered it.
 - 2026-09-05: Say what a project is waiting on. Add a waiting condition in its detail sheet — free text ("the letter comes back"), until a task is done, or until another project reaches a status — and the project shows as Waiting with its tasks hidden from Today. The task/project conditions clear themselves automatically; resolve a free-text one by hand.
