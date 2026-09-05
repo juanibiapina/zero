@@ -1,0 +1,28 @@
+# Dev-only screenshot sweep for the UI pass. NOT run by any workflow (ci/ and
+# release/ are the automated folders). Run it on the attached Pixel to capture
+# before/after screenshots of every screen state:
+#
+#   maestro test apps/agent-mobile/.maestro/dev/screens.yaml
+#
+# Screenshots land under ~/.maestro/tests/<timestamp>/. launchApp has no
+# clearState, so it keeps the signed-in session. Assumes the app is signed in
+# and sitting on the Captures tab.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Captures'
+    timeout: 45000
+- takeScreenshot: 01-captures
+# Quick-add open with the keyboard up.
+- tapOn: '^Capture$'
+- takeScreenshot: 02-captures-quickadd
+- inputText: 'Screenshot sweep row'
+- takeScreenshot: 03-captures-quickadd-text
+- hideKeyboard
+# Upcoming tab.
+- tapOn: 'Upcoming'
+- takeScreenshot: 04-upcoming
+# Projects tab: list, then a detail sheet.
+- tapOn: 'Projects'
+- takeScreenshot: 05-projects

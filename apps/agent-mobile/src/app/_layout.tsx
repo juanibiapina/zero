@@ -13,8 +13,8 @@ import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 import { createQueryClient, setupAppStateFocus } from '@/lib/query-client';
 
-// NativeWind: importing the Tailwind entry once at the root registers the
-// styles for every className in the app.
+// Uniwind: importing the Tailwind entry once at the root registers the theme
+// tokens and styles for every className in the app.
 import '../../global.css';
 
 export default function RootLayout() {

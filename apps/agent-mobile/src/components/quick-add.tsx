@@ -2,10 +2,10 @@ import { type Ref } from 'react';
 import { Pressable, type TextInput } from 'react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useResolveClassNames } from 'uniwind';
 
 import { QuickAddBar } from '@/components/quick-add-bar';
 import { Fab } from '@/components/ui/fab';
-import { Text } from '@/components/ui/text';
 
 export type QuickAddProps = {
   open: boolean;
@@ -21,29 +21,26 @@ export type QuickAddProps = {
   busy?: boolean;
   inputRef?: Ref<TextInput>;
   // Wording of the collapsed FAB and the input placeholder. Defaults keep the
-  // Capture copy so existing callers need no change; the Today list overrides
+  // Capture copy so existing callers need no change; the Projects list overrides
   // both. The FAB label doubles as its accessibility label.
   fabLabel?: string;
   placeholder?: string;
-  // An optional persistent hint shown above the input while the bar is open
-  // (e.g. the Projects screen teaches outcome-based naming). Omitted by the
-  // Capture/Today callers, which need no hint.
+  // An optional persistent hint shown above the input while the bar is open.
   helperText?: string;
   // Distance (dp) from the screen's content bottom to the window bottom — the
-  // native bottom tab bar plus the system gesture inset. The screen is inset
-  // above the tab bar, but the keyboard-sticky bar lifts by the full keyboard
-  // height (measured from the window bottom), so without this it over-lifts by
-  // exactly this gap and floats above the keyboard. Added back as the open
-  // offset so the bar docks flush to the keyboard. The caller measures it.
+  // native bottom tab bar plus the system gesture inset. The keyboard-sticky
+  // bar lifts by the full keyboard height (from the window bottom), so without
+  // this it over-lifts by exactly this gap and floats above the keyboard. Added
+  // back as the open offset so the bar docks flush to the keyboard.
   bottomOffset?: number;
 };
 
 // Transition layer between two independent, reusable elements: the collapsed
 // `Fab` (plus button) and the expanded `QuickAddBar`. It owns ONLY the motion —
-// cross-fading the two elements as `open` flips and keeping the open bar stuck to
-// the keyboard — and knows nothing about capture state. The elements know nothing
-// about the animation. Decoupled by design so either can be reused or restyled
-// without touching the other.
+// cross-fading the two as `open` flips and keeping the open bar stuck to the
+// keyboard — and knows nothing about capture state. Animated.View and
+// KeyboardStickyView are not RN core components, so Uniwind does not map
+// `className` onto them; their layout comes from resolved styles / inline style.
 export function QuickAdd({
   open,
   text,
@@ -58,6 +55,12 @@ export function QuickAdd({
   helperText,
   bottomOffset = 0,
 }: QuickAddProps) {
+  // Collapsed FAB wrapper: pinned bottom-right; box-none lets taps through to
+  // the list everywhere except the FAB itself.
+  const fabWrapStyle = useResolveClassNames(
+    'absolute inset-x-0 bottom-0 items-end px-screen-x pb-6',
+  );
+
   return (
     <>
       {/* Backdrop: only present while open; tap outside to dismiss. */}
@@ -71,23 +74,16 @@ export function QuickAdd({
 
       {open ? (
         // KeyboardStickyView tracks the keyboard and handles Android
-        // edge-to-edge insets, keeping the bar glued to the keyboard as it
-        // opens and closes. A hand-rolled translateY misaligns here (the bar/+
-        // was left floating when the keyboard dismissed).
+        // edge-to-edge insets, keeping the bar glued to the keyboard as it opens
+        // and closes. A hand-rolled translateY misaligns here.
         <KeyboardStickyView
           offset={{ opened: bottomOffset }}
-          className="absolute inset-x-0 bottom-0"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
         >
           <Animated.View
             entering={FadeIn.duration(200)}
             exiting={FadeOut.duration(150)}
-            className="px-4 pb-4"
           >
-            {helperText ? (
-              <Text variant="subtitle" className="mb-2 px-1">
-                {helperText}
-              </Text>
-            ) : null}
             <QuickAddBar
               value={text}
               onChangeText={onChangeText}
@@ -96,16 +92,15 @@ export function QuickAdd({
               inputRef={inputRef}
               fabLabel={fabLabel}
               placeholder={placeholder}
+              helperText={helperText}
             />
           </Animated.View>
         </KeyboardStickyView>
       ) : (
-        // Collapsed FAB, pinned bottom-right. box-none lets taps through to the
-        // list everywhere except the FAB itself.
         <Animated.View
           entering={FadeIn.duration(200)}
           exiting={FadeOut.duration(150)}
-          className="absolute inset-x-0 bottom-0 items-end px-6 pb-6"
+          style={fabWrapStyle}
           pointerEvents="box-none"
         >
           <Fab label={fabLabel} onPress={onOpen} />

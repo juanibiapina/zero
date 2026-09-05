@@ -73,7 +73,7 @@ export default function SignInScreen() {
   const e2e = process.env.EXPO_PUBLIC_E2E === '1';
 
   return (
-    <View className="flex-1 items-center justify-center gap-4 px-6">
+    <View className="flex-1 items-center justify-center gap-4 bg-background px-6">
       <Text variant="title">Zero Agent</Text>
       <Text variant="subtitle">Sign in with your Zero account.</Text>
       {/* Each @expo/ui tree needs its own Host; matchContents sizes it to the

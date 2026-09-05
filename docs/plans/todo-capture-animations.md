@@ -55,11 +55,13 @@ Reanimated errors clearly if you use the old `react-native-reanimated/plugin`
 name — use `react-native-worklets/plugin`.
 
 - Add `plugins: ['react-native-worklets/plugin']` to `babel.config.js` (only
-  plugin, so it is last). GitHub issue #8231 shows this exact config
-  (babel-preset-expo + `jsxImportSource: 'nativewind'` + `nativewind/babel`
-  + the worklets plugin) working.
+  plugin, so it is last). **Already done**: `babel.config.js` now is
+  `babel-preset-expo` + the worklets plugin. There is **no styling babel preset**
+  anymore — the app moved from NativeWind to Uniwind, which is a Metro transform
+  and needs no Babel preset (an earlier version of this note referenced
+  `jsxImportSource: 'nativewind'` + `nativewind/babel`, which are gone).
 - Config change ⇒ needs `expo start --clear` (fresh Metro cache), like the
-  NativeWind cache gotcha already recorded above.
+  Metro/Uniwind cache gotcha recorded in the README.
 - **No new EAS build expected**: reanimated + worklets native modules autolink
   from `package.json` and were present when dev build 11 was cut. **Verify on
   device**: if animations crash or no-op after `--clear`, the native module is
@@ -168,7 +170,7 @@ behaviors. Do not assert interpolated style values.
 
 - `pnpm --filter @zero/agent-mobile test | typecheck | lint`, then
   `expo export --platform android` (bundles locally; catches worklets/reanimated
-  resolve errors like the NativeWind engine gotcha did).
+  and Uniwind resolve errors).
 - Device: reload over Metro with `expo start --dev-client --clear`. Confirm
   (A) marking done fades the row and rows below slide up; (B) tapping `+` morphs
   it into the bar rising on the keyboard, and dismiss collapses it back to the

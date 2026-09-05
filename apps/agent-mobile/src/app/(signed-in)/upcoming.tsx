@@ -1,4 +1,3 @@
-import { UserButton } from '@clerk/expo/native';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -10,14 +9,15 @@ import {
   type CapturesApi,
 } from '@zero/agent-core';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, SectionList, TextInput, View } from 'react-native';
+import { SectionList, TextInput, View } from 'react-native';
 
+import { ScreenHeader } from '@/components/screen-header';
+import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
 
 // One upcoming row: tap the circle to Process, tap the text to edit inline. No
-// drag-reorder or swipe — ordering across days has no meaning here, so this is a
-// plain row (unlike the Captures list's gesture-driven row).
+// drag-reorder or swipe — ordering across days has no meaning here.
 function UpcomingRow({
   item,
   editing,
@@ -36,18 +36,18 @@ function UpcomingRow({
   onStartEdit: (item: Capture) => void;
 }) {
   return (
-    <View className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
-      <Pressable
-        accessibilityLabel={`Process "${item.text}"`}
-        className="h-7 w-7 rounded-full border-2 border-neutral-400"
-        hitSlop={8}
-        onPress={() => onProcess(item)}
-      />
+    <ListRow
+      leading={
+        <CheckCircle label={`Process "${item.text}"`} onPress={() => onProcess(item)} />
+      }
+      onPress={editing ? undefined : () => onStartEdit(item)}
+      accessibilityLabel={`Edit "${item.text}"`}
+    >
       {editing ? (
         <TextInput
           autoFocus
           accessibilityLabel={`Edit "${item.text}"`}
-          className="flex-1 text-base text-neutral-900"
+          className="text-body text-foreground"
           value={editText}
           onChangeText={onChangeEditText}
           onSubmitEditing={() => onEditSubmit(item)}
@@ -55,15 +55,9 @@ function UpcomingRow({
           returnKeyType="done"
         />
       ) : (
-        <Pressable
-          className="flex-1"
-          accessibilityLabel={`Edit "${item.text}"`}
-          onPress={() => onStartEdit(item)}
-        >
-          <Text>{item.text}</Text>
-        </Pressable>
+        <Text>{item.text}</Text>
       )}
-    </View>
+    </ListRow>
   );
 }
 
@@ -74,12 +68,8 @@ export default function UpcomingScreen() {
   const capturesApi = useCapturesApi();
 
   return (
-    <View className="flex-1 px-6 pt-16">
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text variant="title">Upcoming</Text>
-        <UserButton />
-      </View>
-
+    <View className="flex-1 bg-background">
+      <ScreenHeader title="Upcoming" />
       {capturesApi ? <Upcoming api={capturesApi} /> : <View className="flex-1" />}
     </View>
   );
@@ -148,7 +138,11 @@ function Upcoming({ api }: { api: CapturesApi }) {
 
   return (
     <>
-      {writeError ? <Text variant="error">{writeError}</Text> : null}
+      {writeError ? (
+        <Text variant="error" className="px-screen-x">
+          {writeError}
+        </Text>
+      ) : null}
 
       <SectionList
         style={{ flex: 1 }}
@@ -157,14 +151,16 @@ function Upcoming({ api }: { api: CapturesApi }) {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         renderSectionHeader={({ section }) => (
-          <Text variant="subtitle" className="mb-3 mt-4">
-            {dayLabel(section.date, today)}
-          </Text>
+          <View className="bg-background px-screen-x pb-2 pt-6">
+            <Text variant="section">{dayLabel(section.date, today)}</Text>
+            <View className="mt-2 h-px bg-divider" />
+          </View>
         )}
-        ItemSeparatorComponent={() => <View className="h-3" />}
         stickySectionHeadersEnabled={false}
         ListEmptyComponent={
-          <Text variant="subtitle">Nothing scheduled ahead.</Text>
+          <Text variant="subtitle" className="px-screen-x">
+            Nothing scheduled ahead.
+          </Text>
         }
       />
     </>

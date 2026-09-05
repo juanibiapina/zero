@@ -1,4 +1,3 @@
-import { UserButton } from '@clerk/expo/native';
 import { Button, Column, TextInput } from '@expo/ui';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
@@ -40,22 +39,21 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
+import { useResolveClassNames } from 'uniwind';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
+import { ScreenHeader } from '@/components/screen-header';
+import { CheckCircle } from '@/components/ui/list-row';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
+import { useColor } from '@/lib/theme';
 import {
   useDelayed,
   useForegroundRefetch,
   useLoadError,
 } from '@/lib/screen-hooks';
-
-// Vertical gap between carded rows.
-function Separator() {
-  return <View className="h-3" />;
-}
 
 // Strong ease-out for the commit slide (from the Expo animation recipe).
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -73,20 +71,19 @@ function project(velocity: number, decelerationRate = 0.998): number {
 // One Captures row: long-press the text to drag-reorder, swipe right to
 // postpone, tap the circle to process, tap the text to open its detail sheet.
 // The swipe is a swipe-to-commit (one decisive swipe = the action), so it is a
-// hand-built Gesture.Pan, not ReanimatedSwipeable (which is for swipe-to-reveal action
-// buttons and orphans its action layer when the row is removed). The "Tomorrow"
-// background is a child of this wrapper, so it unmounts with the row — no ghost.
+// hand-built Gesture.Pan, not ReanimatedSwipeable. The row is flat (Todoist
+// style): the sliding card is opaque so it covers the "Tomorrow" reveal beneath
+// it, and a hairline divider sits under the row and does not move with the
+// swipe. Animated.View is not an RN core component, so Uniwind does not map
+// `className` onto it — its static styling comes from a resolved class list.
 //
 // Reorder is triggered by a plain RN `Pressable onLongPress={drag}` (JS
 // Pressability), NOT a gesture-handler Gesture.LongPress. This is deliberate and
 // load-bearing: react-native-reorderable-list tracks the drag with a single pan
 // gesture on the whole list, and a competing GH gesture in this row's own
-// GestureDetector would block that list pan from activating — the row would lift
-// (armed) but never follow the finger. A JS long-press does not participate in
-// GH arbitration, so the list pan is free to track. The row's GestureDetector
-// therefore carries ONLY the horizontal swipe; horizontal move = swipe, hold =
-// drag, vertical move = list scroll/drag. Extracted to its own component so the
-// screen's memoized callbacks stay clean.
+// GestureDetector would block that list pan from activating. A JS long-press
+// does not participate in GH arbitration, so the list pan is free to track. The
+// row's GestureDetector therefore carries ONLY the horizontal swipe.
 function CaptureRow({
   item,
   onProcess,
@@ -100,22 +97,23 @@ function CaptureRow({
 }) {
   const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
-  // Starts the reorderable-list drag for this row; bound to the text's RN
-  // `onLongPress` (see the note above — must be a JS long-press, not a GH
-  // gesture). Must be called from inside a row rendered by ReorderableList.
   const drag = useReorderableDrag();
-  // The card's horizontal offset. 0 at rest (covering the green background);
-  // grows rightward as the user swipes, revealing "Tomorrow" underneath.
+  // The card's horizontal offset. 0 at rest (covering the reveal); grows
+  // rightward as the user swipes, revealing "Tomorrow" underneath.
   const x = useSharedValue(0);
   // Where the card was when this drag started, so a grab mid-animation continues
   // smoothly instead of jumping to 0.
   const startX = useSharedValue(0);
 
+  // Opaque flat card styling. Resolved from classes because Animated.View is not
+  // Uniwind-mapped; combined with the animated transform below.
+  const cardStyle = useResolveClassNames(
+    'flex-row items-center gap-3 bg-background px-screen-x py-row-y',
+  );
+
   // Built inline (no useMemo) so the React Compiler owns the memoization; a
-  // silent skip of this leaf row is harmless, unlike a manual-memo mismatch.
+  // silent skip of this leaf row is harmless.
   const pan = Gesture.Pan()
-    // Right-only, and declaring the axis keeps the pan from stealing the list's
-    // vertical scroll. A tap has no horizontal travel, so it never activates.
     .activeOffsetX(12)
     .onStart(() => {
       startX.set(x.get());
@@ -138,7 +136,6 @@ function CaptureRow({
           ),
         );
       } else {
-        // Snap back.
         x.set(
           withSpring(0, {
             duration: 300,
@@ -155,24 +152,19 @@ function CaptureRow({
   }));
 
   return (
-    <View className="overflow-hidden rounded-2xl">
+    <View className="overflow-hidden bg-background">
       {/* Revealed as the card slides right. Left-aligned so the label shows in
           the gap the card opens. */}
       <View
         style={StyleSheet.absoluteFill}
-        className="flex-row items-center rounded-2xl bg-emerald-600 px-4"
+        className="flex-row items-center bg-swipe-postpone px-screen-x"
       >
-        <Text className="font-medium text-white">Tomorrow</Text>
+        <Text className="font-medium text-on-accent">Tomorrow</Text>
       </View>
       <GestureDetector gesture={pan}>
-        <Animated.View
-          style={rowStyle}
-          className="flex-row items-center gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4"
-        >
-          <Pressable
-            accessibilityLabel={`Process "${item.text}"`}
-            className="h-7 w-7 rounded-full border-2 border-neutral-400"
-            hitSlop={8}
+        <Animated.View style={[cardStyle, rowStyle]}>
+          <CheckCircle
+            label={`Process "${item.text}"`}
             onPress={() => onProcess(item)}
           />
           <Pressable
@@ -181,23 +173,23 @@ function CaptureRow({
             accessibilityLabel={`Edit "${item.text}"`}
             onPress={() => onOpen(item)}
             // Long-press the text body to start a reorder drag (Todoist-style).
-            // JS Pressability, so it does not block the list's pan (see note
-            // on CaptureRow). delayLongPress matches the platform default.
+            // JS Pressability, so it does not block the list's pan.
             onLongPress={() => drag()}
             delayLongPress={500}
           >
             <Text>{item.text}</Text>
           </Pressable>
-          {/* TODO(haptics): Haptics.impactAsync(Light) on commit once
-              expo-haptics is added (native module → needs a dev-client rebuild). */}
         </Animated.View>
       </GestureDetector>
+      {/* Divider sits below the row and does not move with the swipe. */}
+      <View className="ml-[50px] h-px bg-divider" />
     </View>
   );
 }
 
 // Native edit-only sheet body. Keyed by capture id at the call site so the
-// uncontrolled native field reseeds when another capture opens.
+// uncontrolled native field reseeds when another capture opens. Colors come from
+// tokens via useColor (@expo/ui takes string colors, not classes).
 function CaptureDetail({
   draft,
   onChangeDraft,
@@ -207,6 +199,8 @@ function CaptureDetail({
   onChangeDraft: (text: string) => void;
   onDone: () => void;
 }) {
+  const surfaceMuted = useColor('--color-surface-muted');
+  const foreground = useColor('--color-foreground');
   return (
     <Column spacing={20}>
       <TextInput
@@ -220,10 +214,10 @@ function CaptureDetail({
           height: 72,
           paddingHorizontal: 18,
           paddingVertical: 14,
-          borderRadius: 16,
-          backgroundColor: '#f5f5f5',
+          borderRadius: 12,
+          backgroundColor: surfaceMuted,
         }}
-        textStyle={{ fontSize: 19, fontWeight: '500', lineHeight: 26 }}
+        textStyle={{ fontSize: 18, fontWeight: '500', lineHeight: 24, color: foreground }}
         testID="capture-edit-input"
       />
       <Button
@@ -242,9 +236,8 @@ export default function HomeScreen() {
   const capturesApi = useCapturesApi();
 
   // Measure the gap from this screen's content bottom to the window bottom (the
-  // native bottom tab bar plus the system gesture inset). The screen is inset
-  // above the tab bar, so the keyboard-sticky quick-add over-lifts by this gap;
-  // it is fed back as the bar's open offset so it docks to the keyboard. See
+  // native bottom tab bar plus the system gesture inset), fed to the
+  // keyboard-sticky quick-add so it docks to the keyboard. See
   // QuickAdd.bottomOffset.
   const { height: windowHeight } = useWindowDimensions();
   const rootRef = useRef<View>(null);
@@ -256,18 +249,8 @@ export default function HomeScreen() {
   }, [windowHeight]);
 
   return (
-    <View
-      ref={rootRef}
-      onLayout={measureBottomGap}
-      className="flex-1 px-6 pt-16"
-    >
-      <View className="mb-4 flex-row items-center justify-between">
-        <Text variant="title">Captures</Text>
-        {/* No wrapper: a rounded-full/overflow-hidden mask crops the native
-            avatar off-center. */}
-        <UserButton />
-      </View>
-
+    <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
+      <ScreenHeader title="Captures" />
       {capturesApi ? (
         <Captures api={capturesApi} bottomOffset={bottomOffset} />
       ) : (
@@ -292,9 +275,7 @@ function Captures({
   );
   // The server returns every open capture (Captures and Upcoming share the same
   // set); this pass keeps only the ones that have shown up, so a just-postponed
-  // row leaves the list at once and future-dated rows stay in Upcoming. Overdue
-  // rolls in; no red. Memoized so the render-phase filter (and its localToday
-  // read) stays out of the React Compiler's path for the screen's callbacks.
+  // row leaves the list at once and future-dated rows stay in Upcoming.
   const list = useMemo(
     () => visibleCaptures(captures ?? [], capturesLocalToday()),
     [captures],
@@ -303,15 +284,12 @@ function Captures({
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  // Refresh when the app returns to the foreground, so a list changed elsewhere
-  // (Telegram, another device) shows up without a cold start.
+  // Refresh when the app returns to the foreground.
   useForegroundRefetch(api.refetch);
   // Gate the list on the row count, not isLoading: a hydrated snapshot must
-  // paint even while the network sync is still pending, so opening Captures
-  // never blinks to a spinner over stale rows.
+  // paint even while the network sync is still pending.
   const view = listView({ count: list.length, isLoading, loadError });
-  // Show a load error only when there's nothing on screen, so a failed
-  // background refetch stays silent behind the last-good Captures.
+  // Show a load error only when there's nothing on screen.
   const error = writeError ?? (list.length === 0 ? loadError : null);
 
   const [text, setText] = useState('');
@@ -376,13 +354,11 @@ function Captures({
     }
   }, [text, closeAdd]);
 
-  // First Android Back press with the keyboard up is swallowed by the OS to
-  // hide the keyboard and never reaches BackHandler. So treat "keyboard hidden
-  // while the quick-add is open" as a dismiss request, giving the Todoist
-  // single-back behavior: with unsaved text, confirm before discarding; with an
-  // empty input, close the bar (previously it stayed open, needing a second
-  // Back). Guard on `adding` (not confirming) so the hide that fires while
-  // closing (input unmounts) doesn't re-trigger.
+  // First Android Back press with the keyboard up is swallowed by the OS to hide
+  // the keyboard and never reaches BackHandler. So treat "keyboard hidden while
+  // the quick-add is open" as a dismiss request (the Todoist single-back
+  // behavior). Guard on `adding` (not confirming) so the hide that fires while
+  // closing doesn't re-trigger.
   useEffect(() => {
     const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
       if (!adding || confirmingDiscard) return;
@@ -396,8 +372,7 @@ function Captures({
   }, [adding, confirmingDiscard, text, closeAdd]);
 
   // Android hardware / navigation back button, for the cases where the keyboard
-  // is already down (dialog open, or bar open after the keyboard was hidden).
-  // Returning true consumes the event so the OS does not navigate away.
+  // is already down. Returning true consumes the event.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (selected) {
@@ -441,8 +416,7 @@ function Captures({
 
   // Drop: mint a key strictly between the moved row's new neighbors and persist
   // it. reorderItems gives the post-drop order; the neighbors' keys (or null at
-  // an end) bound the new key. Optimistic setSortKey + the re-sort land it in
-  // place; surface a write error like the other verbs.
+  // an end) bound the new key.
   const onReorder = useCallback(
     ({ from, to }: ReorderableListReorderEvent) => {
       if (from === to) return;
@@ -470,38 +444,39 @@ function Captures({
     [onProcess, onReschedule, openDetail],
   );
 
-  // Only surface the loading text once the snapshot has had time to hydrate;
-  // otherwise a cached cold start would flash it for the sub-second the rows
-  // take to arrive.
+  // Only surface the loading text once the snapshot has had time to hydrate.
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
   return (
     <>
-      {error ? <Text variant="error">{error}</Text> : null}
+      {error ? (
+        <Text variant="error" className="px-screen-x">
+          {error}
+        </Text>
+      ) : null}
 
       {view === 'loading' ? (
         showLoadingText ? (
-          <Text variant="subtitle">Loading your captures…</Text>
+          <Text variant="subtitle" className="px-screen-x">
+            Loading your captures…
+          </Text>
         ) : (
           <View className="flex-1" />
         )
       ) : (
-        // ReorderableList extends FlatList (so it still virtualizes the
-        // unbounded Captures list) and adds long-press drag-to-reorder with its
-        // own drop indicator and autoscroll. itemLayoutAnimation slides the
-        // remaining rows closed when one is processed or postponed; onReorder
-        // fires once on drop with the from/to indices.
+        // ReorderableList extends FlatList (so it still virtualizes the unbounded
+        // Captures list) and adds long-press drag-to-reorder. itemLayoutAnimation
+        // slides the remaining rows closed when one is processed or postponed.
         <ReorderableList
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 96 }}
           data={list}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          ItemSeparatorComponent={Separator}
           itemLayoutAnimation={LinearTransition.duration(200)}
           onReorder={onReorder}
           ListEmptyComponent={
-            <Text variant="subtitle">
+            <Text variant="subtitle" className="px-screen-x">
               No captures yet. Capture something.
             </Text>
           }
@@ -520,8 +495,7 @@ function Captures({
       </Sheet>
 
       {/* Transition layer: cross-fades the plus FAB and the quick-add bar and
-          lifts the bar with the keyboard. It owns the motion; this screen owns
-          the state. */}
+          lifts the bar with the keyboard. */}
       <QuickAdd
         open={adding}
         text={text}
@@ -543,8 +517,7 @@ function Captures({
           destructive
           onCancel={() => {
             setConfirmingDiscard(false);
-            // The Back that opened this dialog also hid the keyboard; refocus to
-            // bring it back so editing continues seamlessly.
+            // The Back that opened this dialog also hid the keyboard; refocus.
             inputRef.current?.focus();
           }}
           onConfirm={closeAdd}

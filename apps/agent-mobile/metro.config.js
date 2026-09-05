@@ -1,9 +1,10 @@
-// Metro config: wrap Expo's default config with NativeWind so it processes the
-// Tailwind CSS entry. `getDefaultConfig` keeps SDK 54+ pnpm-workspace
-// auto-detection, so no custom monorepo Metro wiring is needed.
+// Metro config: wrap Expo's default config with Uniwind so it processes the
+// Tailwind 4 CSS entry and generates className typings. `getDefaultConfig`
+// keeps SDK 54+ pnpm-workspace auto-detection, so no custom monorepo Metro
+// wiring is needed. `withUniwindConfig` must be the OUTERMOST wrapper.
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
-const { withNativeWind } = require('nativewind/metro');
+const { withUniwindConfig } = require('uniwind/metro');
 
 const config = getDefaultConfig(__dirname);
 
@@ -34,4 +35,7 @@ if (process.env.EXPO_PUBLIC_E2E_FAKE_AUTH === '1') {
   };
 }
 
-module.exports = withNativeWind(config, { input: './global.css' });
+module.exports = withUniwindConfig(config, {
+  cssEntryFile: './global.css',
+  dtsFile: './src/uniwind-types.d.ts',
+});

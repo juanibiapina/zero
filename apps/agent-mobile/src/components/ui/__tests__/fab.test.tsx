@@ -17,4 +17,18 @@ describe('Fab', () => {
     fireEvent.press(getByLabelText('Add todo'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  it('does not call onPress when disabled', async () => {
+    const onPress = jest.fn();
+    const { getByLabelText } = await render(
+      <Fab label="Add todo" disabled onPress={onPress} />,
+    );
+    fireEvent.press(getByLabelText('Add todo'));
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('renders the small size', async () => {
+    const { getByLabelText } = await render(<Fab label="Add todo" size="sm" />);
+    expect(getByLabelText('Add todo')).toBeTruthy();
+  });
 });

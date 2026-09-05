@@ -3,7 +3,7 @@ import { Redirect } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
-
+import { useColor } from '../../lib/theme';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
 // Keep the server's stored timezone equal to this device's, silently. Built once
@@ -29,6 +29,9 @@ function useTimezoneSync(enabled: boolean): void {
 
 export default function SignedInLayout() {
   const { isLoaded, isSignedIn } = useAuth();
+  const accent = useColor('--color-accent');
+  const surface = useColor('--color-surface');
+  const iconColor = useColor('--color-foreground-secondary');
 
   useTimezoneSync(isLoaded && isSignedIn);
 
@@ -51,7 +54,7 @@ export default function SignedInLayout() {
   // is a native navigator, so its first use needs a fresh EAS dev build to
   // appear on device (pure-JS reload will not show it).
   return (
-    <NativeTabs>
+    <NativeTabs tintColor={accent} backgroundColor={surface} iconColor={iconColor}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Icon sf="tray.full" md="inbox" />
         <NativeTabs.Trigger.Label>Captures</NativeTabs.Trigger.Label>

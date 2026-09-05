@@ -1,4 +1,35 @@
 /* global jest */
+// uniwind: styling is a Metro transform plus a CSS runtime, neither present
+// under jest (no Metro, no generated artifacts). Its `react-native` entry is
+// untransformed TypeScript in a nested node_modules, so it cannot be required
+// directly here. Mock the hooks the app uses: className props are inert strings
+// in tests, and useColor (src/lib/theme) reads through useCSSVariable, so this
+// covers it too. Colors resolve to undefined, which is harmless for rendering.
+jest.mock('uniwind', () => ({
+  useCSSVariable: () => undefined,
+  useResolveClassNames: () => ({}),
+  useUniwind: () => ({ themeName: 'light' }),
+  withUniwind: (component) => component,
+  Uniwind: { getCSSVariable: () => undefined },
+}));
+
+// react-native-safe-area-context needs a SafeAreaProvider (expo-router mounts
+// one in the app, but tests render screens directly). Provide zero insets and a
+// fixed frame so useSafeAreaInsets works headless. Passthroughs return children
+// directly (no JSX) so no transform runs inside the factory.
+jest.mock('react-native-safe-area-context', () => {
+  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
+  const frame = { x: 0, y: 0, width: 390, height: 844 };
+  const Passthrough = ({ children }) => children ?? null;
+  return {
+    SafeAreaProvider: Passthrough,
+    SafeAreaView: Passthrough,
+    useSafeAreaInsets: () => insets,
+    useSafeAreaFrame: () => frame,
+    initialWindowMetrics: { insets, frame },
+  };
+});
+
 // react-native-reanimated 4 pulls in react-native-worklets, whose native module
 // is absent under jest ("Cannot read properties of undefined (reading
 // 'loadUnpackers')"), and its own shipped mock imports the same failing
@@ -7,8 +38,8 @@
 // no-ops, so a removed row unmounts immediately) and the layout-animation
 // builders / hooks are inert. The factory creates NO element (Animated.View
 // aliases the RN View, which ignores the extra entering/exiting/layout props),
-// so NativeWind's babel transform has nothing to wrap and won't inject an
-// out-of-scope _ReactNativeCSSInterop reference into the mock factory.
+// which also keeps JSX out of the hoisted jest.mock factory (a factory runs
+// before imports, so an in-factory JSX/React reference can be out of scope).
 jest.mock('react-native-reanimated', () => {
   const { View, FlatList } = require('react-native');
   const builder = () => {
@@ -76,7 +107,7 @@ jest.mock('react-native-worklets', () => ({
 // react-native-gesture-handler is a native module; mock the pieces the screen
 // uses (the row's Gesture.Pan + GestureDetector, and the root view) so the tree
 // renders without native bindings. GestureDetector/RootView return children
-// directly (no JSX) to avoid NativeWind's babel transform inside the factory.
+// directly (no JSX) since a hoisted jest.mock factory can't safely hold JSX.
 // The swipe gesture itself is verified on-device (Maestro), not in jest.
 jest.mock('react-native-gesture-handler', () => {
   const makeGesture = () => {
@@ -125,9 +156,9 @@ jest.mock('react-native-gesture-handler', () => {
 // no-op, and reorderItems is the real pure array move. The drag is verified
 // on-device (Maestro), not in jest.
 // Defined at MODULE scope (mock-prefixed) so the jest.mock factory may reference
-// it — a jest.mock factory cannot contain createElement/JSX, because NativeWind's
-// babel transform injects an out-of-scope interop ref there. React.createElement
-// (no JSX/className) keeps NativeWind from touching this. It renders a plain
+// it — a hoisted jest.mock factory runs before imports, so an in-factory JSX
+// reference to React can be out of scope. React.createElement via the
+// mock-prefixed require sidesteps that. It renders a plain
 // FlatList (so rows still render for tests) and stashes the list's onReorder on a
 // global, so a test can drive a reorder without the native gesture
 // (global.__reorderableOnReorder({from,to})); the drag itself is verified
@@ -161,8 +192,8 @@ jest.mock('react-native-reorderable-list', () => {
 // react-native-keyboard-controller is a native module; mock it for jest so the
 // component tree renders without the native bindings. The published package
 // excludes its own __mocks__, so provide a minimal passthrough here. The
-// passthroughs return their children directly (no JSX / createElement) to avoid
-// NativeWind's babel transform inside the mock factory.
+// passthroughs return their children directly (no JSX / createElement), which a
+// hoisted jest.mock factory can't safely hold.
 jest.mock('react-native-keyboard-controller', () => {
   const Passthrough = ({ children }) => children ?? null;
   // Track keyboard listeners so tests can drive keyboard events. Fire them via
@@ -199,7 +230,7 @@ jest.mock('react-native-keyboard-controller', () => {
 // pieces the sheet content uses as plain, queryable RN elements: BottomSheet
 // shows its children only while presented; Button is a Pressable whose
 // accessibilityLabel is its `label`. Defined with React.createElement (no JSX)
-// so NativeWind's babel transform does not touch the factory.
+// since a hoisted jest.mock factory can't safely hold JSX.
 const mockReactForExpoUi = require('react');
 jest.mock('@expo/ui', () => {
   const {

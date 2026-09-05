@@ -1,3 +1,61 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@import 'uniwind';
+
+/* Design tokens — the single source of every color, type size, and named
+   spacing/radius in the app. React Native reads them through Tailwind classes
+   (bg-surface, text-foreground, …); @expo/ui and other string-typed color
+   props (NativeTabs, placeholderTextColor, android_ripple) read the same
+   variables through useCSSVariable / Uniwind.getCSSVariable. Values are a
+   close read of Todoist's Android light theme; the Zero blue accent is kept. */
+@theme {
+  /* Surfaces */
+  --color-background: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f5f5f5;
+  --color-divider: #eeeeee;
+
+  /* Text */
+  --color-foreground: #202020;
+  --color-foreground-secondary: #808080;
+  --color-foreground-muted: #b3b3b3;
+  --color-placeholder: #9ca3af;
+
+  /* Lines and controls */
+  --color-border: #e5e5e5;
+  --color-checkbox: #999999;
+
+  /* Accent and status */
+  --color-accent: #208aef;
+  --color-on-accent: #ffffff;
+  --color-danger: #dc4c3e;
+  --color-swipe-postpone: #ad6200;
+
+  /* Overlays */
+  --color-scrim: rgb(0 0 0 / 0.4);
+  --color-ripple: rgb(0 0 0 / 0.08);
+
+  /* Named spacing steps (rely on Tailwind's 4-point scale for the rest) */
+  --spacing-screen-x: 16px;
+  --spacing-row-y: 12px;
+
+  /* Type ramp: size + line-height + weight per named style */
+  --text-title: 26px;
+  --text-title--line-height: 32px;
+  --text-title--font-weight: 700;
+
+  --text-section: 15px;
+  --text-section--line-height: 20px;
+  --text-section--font-weight: 600;
+
+  --text-body: 16px;
+  --text-body--line-height: 22px;
+
+  --text-subtitle: 14px;
+  --text-subtitle--line-height: 20px;
+
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
+
+  /* Dialog corner (Material) */
+  --radius-dialog: 28px;
+}
