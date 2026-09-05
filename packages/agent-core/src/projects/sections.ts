@@ -20,17 +20,25 @@ export const PROJECT_SECTION_ORDER: readonly ProjectStatus[] = [
 // oldest-first and never empty (empty groups are omitted from the result).
 export type ProjectSection = { status: ProjectStatus; projects: Project[] };
 
-export function projectsByStatus(list: readonly Project[]): ProjectSection[] {
+// `statusOf` maps a project to the status it should be grouped under. It
+// defaults to the stored `status`, but callers pass the derived display status
+// (projectDisplayStatus) so the list groups by active/next as taken-on tasks
+// change, not by the stored column.
+export function projectsByStatus(
+  list: readonly Project[],
+  statusOf: (p: Project) => ProjectStatus = (p) => p.status,
+): ProjectSection[] {
   const byStatus = new Map<ProjectStatus, Project[]>();
   for (const p of list) {
+    const status = statusOf(p);
     // Defensive: a stray 'done' row (the server should not return one) is never
     // grouped into a section.
-    if (p.status === "done") continue;
-    const bucket = byStatus.get(p.status);
+    if (status === "done") continue;
+    const bucket = byStatus.get(status);
     if (bucket) {
       bucket.push(p);
     } else {
-      byStatus.set(p.status, [p]);
+      byStatus.set(status, [p]);
     }
   }
   const sections: ProjectSection[] = [];

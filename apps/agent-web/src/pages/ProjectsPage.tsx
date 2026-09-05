@@ -6,13 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
-  ALL_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
   DONE_UNDO_MS,
   ICON_CHOICES,
   localToday,
   LOADING_TEXT_DELAY_MS,
   messageOf,
+  projectDisplayStatus,
   projectsByStatus,
   listView,
   STATUS_LABELS,
@@ -73,6 +73,10 @@ function ProjectsReady({
 }) {
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, "asc"),
+  );
+  // Open tasks drive each project's derived display status (active vs next).
+  const { data: openTasks } = useLiveQuery((q) =>
+    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
   );
 
   const [title, setTitle] = useState("");
@@ -154,7 +158,11 @@ function ProjectsReady({
   );
 
   const list = useMemo(() => projects ?? [], [projects]);
-  const sections = useMemo(() => projectsByStatus(list), [list]);
+  const tasks = useMemo(() => openTasks ?? [], [openTasks]);
+  const sections = useMemo(
+    () => projectsByStatus(list, (p) => projectDisplayStatus(p, tasks)),
+    [list, tasks],
+  );
   // A row is "leaving" if either channel (Done or Delete) holds it; both render
   // it struck-through with an Undo.
   const pending = useMemo(
@@ -254,23 +262,6 @@ function ProjectsReady({
         )}
       </Sheet>
     </div>
-  );
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
   );
 }
 
@@ -578,7 +569,7 @@ function ProjectDetail({
         onError={onError}
       />
 
-      <StatusGroup current={project.status} onPick={onPickStatus} />
+      <StatusControls status={project.status} onPick={onPickStatus} />
 
       {/* Destructive: hard-delete the project (distinct from Done, which keeps
           it). Leaves a brief Undo window before it commits. */}
@@ -595,37 +586,44 @@ function ProjectDetail({
   );
 }
 
-// The Status group in the detail sheet: the five states as selectable rows, the
-// current one marked. Tapping the current status is a no-op (the caller closes
-// the sheet); tapping another changes it.
-function StatusGroup({
-  current,
+// The status control in the detail sheet. active/next/waiting are now derived
+// (from taken-on tasks and waiting conditions), so the sheet only offers the
+// deliberate manual moves: put a backlog project in play, park an in-play one to
+// backlog, or mark it done. Each dismisses the sheet.
+function StatusControls({
+  status,
   onPick,
 }: {
-  current: ProjectStatus;
+  status: ProjectStatus;
   onPick: (status: ProjectStatus) => void;
 }) {
   return (
-    <div>
-      <p className="mb-2 text-sm font-medium text-muted-foreground">Status</p>
-      <ul className="divide-y rounded-xl border">
-        {ALL_STATUSES.map((status) => {
-          const isCurrent = status === current;
-          return (
-            <li key={status}>
-              <button
-                type="button"
-                onClick={() => onPick(status)}
-                aria-pressed={isCurrent}
-                className="flex w-full items-center justify-between px-4 py-3 text-left text-base transition-colors hover:bg-accent"
-              >
-                <span>{STATUS_LABELS[status]}</span>
-                {isCurrent && <CheckIcon className="size-5 text-primary" />}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-muted-foreground">Status</p>
+      {status === "backlog" ? (
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => onPick("next")}
+        >
+          Put in play
+        </Button>
+      ) : (
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => onPick("backlog")}
+        >
+          Move to backlog
+        </Button>
+      )}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => onPick("done")}
+      >
+        Mark done
+      </Button>
     </div>
   );
 }

@@ -158,14 +158,34 @@ describe("ProjectsPage", () => {
     expect(screen.getByText("🏃")).toBeInTheDocument();
   });
 
-  it("changes a project status from the detail sheet", async () => {
+  it("moves a project to backlog from the detail sheet", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     render(<ProjectsPage />);
     fireEvent.click(await screen.findByText("Run a 5K"));
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Active" }));
+      fireEvent.click(screen.getByRole("button", { name: "Move to backlog" }));
     });
-    // Moved to Active: the section header for Active now shows a count.
+    // Moved to Backlog: the Backlog section header appears.
+    await waitFor(() => expect(screen.getByText("Backlog")).toBeInTheDocument());
+  });
+
+  it("shows a project as Active once one of its tasks is taken on", async () => {
+    // A 'next' project with a taken-on open task derives to Active.
+    setApi(
+      [project("1", "Run a 5K", "next")],
+      [
+        {
+          id: "t1",
+          text: "buy shoes",
+          showUpDate: "2023-01-01",
+          createdAt: "2023-01-01T00:00:00.000Z",
+          completedAt: null,
+          projectId: "1",
+          takenOnAt: "2023-01-02T00:00:00.000Z",
+        },
+      ],
+    );
+    render(<ProjectsPage />);
     await waitFor(() => expect(screen.getByText("Active")).toBeInTheDocument());
   });
 

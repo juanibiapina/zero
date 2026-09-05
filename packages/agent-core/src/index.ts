@@ -63,6 +63,7 @@ export {
   PROJECT_SECTION_ORDER,
   type ProjectSection,
 } from "./projects/sections";
+export { projectDisplayStatus } from "./projects/derive";
 export {
   ALL_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,

@@ -2,13 +2,13 @@ import { Button, Column, Row, Text as UIText, TextInput } from '@expo/ui';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
-  ALL_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
   DONE_UNDO_MS,
   ICON_CHOICES,
   localToday,
   LOADING_TEXT_DELAY_MS,
   messageOf,
+  projectDisplayStatus,
   projectsByStatus,
   listView,
   STATUS_LABELS,
@@ -123,25 +123,30 @@ function SectionHeader({
 
 // The Status group inside the sheet (native @expo/ui tree). The current status
 // is a filled button; the others are outlined.
-function StatusGroup({
-  current,
+// active/next/waiting are derived (from taken-on tasks and waiting conditions),
+// so the sheet only offers the deliberate manual moves: put a backlog project in
+// play, park an in-play one to backlog, or mark it done.
+function StatusControls({
+  status,
   onPick,
 }: {
-  current: ProjectStatus;
+  status: ProjectStatus;
   onPick: (status: ProjectStatus) => void;
 }) {
   const labelColor = useColor('--color-foreground-secondary');
   return (
     <Column spacing={8}>
       <UIText textStyle={{ color: labelColor, fontSize: 13 }}>Status</UIText>
-      {ALL_STATUSES.map((status) => (
+      {status === 'backlog' ? (
+        <Button variant="outlined" onPress={() => onPick('next')} label="Put in play" />
+      ) : (
         <Button
-          key={status}
-          variant={status === current ? 'filled' : 'outlined'}
-          onPress={() => onPick(status)}
-          label={status === current ? `${STATUS_LABELS[status]} ✓` : STATUS_LABELS[status]}
+          variant="outlined"
+          onPress={() => onPick('backlog')}
+          label="Move to backlog"
         />
-      ))}
+      )}
+      <Button variant="outlined" onPress={() => onPick('done')} label="Mark done" />
     </Column>
   );
 }
@@ -322,7 +327,7 @@ function ProjectDetail({
 
       <ProjectTasks api={tasksApi} projectId={project.id} onError={onError} />
 
-      <StatusGroup current={project.status} onPick={onPickStatus} />
+      <StatusControls status={project.status} onPick={onPickStatus} />
 
       {/* Destructive: hard-delete the project (distinct from Done). Leaves a
           brief Undo window before it commits. A plain Pressable with danger
@@ -378,7 +383,12 @@ function Projects({
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
   );
+  // Open tasks drive each project's derived display status (active vs next).
+  const { data: openTasks } = useLiveQuery((q) =>
+    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
   const list = useMemo(() => projects ?? [], [projects]);
+  const tasks = useMemo(() => openTasks ?? [], [openTasks]);
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -452,7 +462,10 @@ function Projects({
   const error = writeError ?? (list.length === 0 ? loadError : null);
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
-  const grouped = useMemo(() => projectsByStatus(list), [list]);
+  const grouped = useMemo(
+    () => projectsByStatus(list, (p) => projectDisplayStatus(p, tasks)),
+    [list, tasks],
+  );
 
   // Collapse is derived, not stored: a section uses the user's explicit override
   // when present, else the default (a large Backlog starts collapsed).

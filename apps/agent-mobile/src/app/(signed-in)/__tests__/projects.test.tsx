@@ -344,7 +344,7 @@ describe('ProjectsScreen', () => {
     await waitFor(() => expect(getByLabelText('Next, 1')).toBeTruthy());
   });
 
-  it('changes a project status from the detail sheet', async () => {
+  it('moves a project to backlog from the detail sheet', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);
     mockSetProjectStatus.mockImplementation(async (_t, id, status) => {
@@ -357,18 +357,18 @@ describe('ProjectsScreen', () => {
 
     await waitFor(() => expect(getByText('Run a 5K')).toBeTruthy());
 
-    // Tap the row to open the detail sheet, then pick Active.
+    // Tap the row to open the detail sheet, then park it to Backlog.
     await act(async () => {
       fireEvent.press(getByLabelText('Run a 5K'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('Active'));
+      fireEvent.press(getByLabelText('Move to backlog'));
     });
 
     expect(mockSetProjectStatus).toHaveBeenCalledTimes(1);
     expect(mockSetProjectStatus.mock.calls[0][1]).toBe('1');
-    expect(mockSetProjectStatus.mock.calls[0][2]).toBe('active');
-    await waitFor(() => expect(getByLabelText('Active, 1')).toBeTruthy());
+    expect(mockSetProjectStatus.mock.calls[0][2]).toBe('backlog');
+    await waitFor(() => expect(getByLabelText('Backlog, 1')).toBeTruthy());
   });
 
   it('changes a project icon from the detail sheet', async () => {
@@ -409,7 +409,7 @@ describe('ProjectsScreen', () => {
       fireEvent.press(getByLabelText('Run a 5K'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('Done'));
+      fireEvent.press(getByLabelText('Mark done'));
     });
 
     // The row is held with an Undo affordance; nothing is written yet.
@@ -511,7 +511,7 @@ describe('ProjectsScreen', () => {
         fireEvent.press(getByLabelText('Run a 5K'));
       });
       await act(async () => {
-        fireEvent.press(getByLabelText('Done'));
+        fireEvent.press(getByLabelText('Mark done'));
       });
 
       await act(async () => {
