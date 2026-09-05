@@ -7,6 +7,7 @@ import type { Capture, Task } from '@/lib/api';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
+import { resetWaitsApiForTest } from '@/lib/waits-collection';
 
 import HomeScreen from '../index';
 
@@ -79,6 +80,11 @@ jest.mock('@/lib/api', () => ({
   setProjectStatus: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.resolve(),
+  // Waiting conditions feed the Home gate; a fetch returning [] is enough.
+  fetchWaits: () => Promise.resolve([]),
+  addWaitingCondition: () => Promise.reject(new Error('not used')),
+  resolveWaitingCondition: () => Promise.reject(new Error('not used')),
+  deleteWaitingCondition: () => Promise.resolve(),
 }));
 
 const taskRow = (id: string, text: string): Task => ({
@@ -128,6 +134,7 @@ describe('HomeScreen', () => {
     resetCapturesApiForTest();
     resetTasksApiForTest();
     resetProjectsApiForTest();
+    resetWaitsApiForTest();
     mockEditCapture.mockReset();
     mockAddTask.mockReset();
     mockCompleteTask.mockReset();

@@ -18,6 +18,8 @@ import {
   type ProjectStatus,
   type Task,
   type TasksApi,
+  type WaitingCondition,
+  type WaitsApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -36,6 +38,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
+import { useWaitsApi } from '@/lib/waits-collection';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -238,6 +241,103 @@ function ProjectTasks({
   );
 }
 
+// A human label for a waiting condition.
+function conditionLabel(
+  c: WaitingCondition,
+  tasks: Task[],
+  projects: Project[],
+): string {
+  if (c.kind === 'free-text') return c.text ?? '(unspecified)';
+  if (c.kind === 'task-done') {
+    const t = tasks.find((x) => x.id === c.refId);
+    return `until “${t?.text ?? '?'}” is done`;
+  }
+  const p = projects.find((x) => x.id === c.refId);
+  return `until “${p?.title ?? '?'}” is ${c.targetStatus}`;
+}
+
+// The waiting conditions for a project: list the open ones (resolve/delete) and
+// add a free-text one. Structured kinds (task-done, project-status) are created
+// on web for now; here they still render with a label and auto-resolve in code.
+function ProjectWaits({
+  project,
+  waitsApi,
+  tasksApi,
+  projects,
+  onError,
+}: {
+  project: Project;
+  waitsApi: WaitsApi;
+  tasksApi: TasksApi;
+  projects: Project[];
+  onError: (message: string) => void;
+}) {
+  const labelColor = useColor('--color-foreground-secondary');
+  const { data: allConditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
+  );
+  const { data: openTasks } = useLiveQuery((q) =>
+    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
+  const list = (allConditions ?? []).filter(
+    (c: WaitingCondition) => c.projectId === project.id,
+  );
+  const tasks = openTasks ?? [];
+  const [text, setText] = useState('');
+
+  const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  };
+  const onAdd = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    write(waitsApi.add(project.id, 'free-text', { text: trimmed }));
+    setText('');
+  };
+
+  return (
+    <Column spacing={8}>
+      <UIText textStyle={{ color: labelColor, fontSize: 13 }}>Waiting on</UIText>
+      {list.map((c) => (
+        <View key={c.id} className="flex-row items-center gap-2">
+          <Text className="flex-1 text-[14px]">
+            {conditionLabel(c, tasks, projects)}
+          </Text>
+          {c.kind === 'free-text' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Resolve condition"
+              hitSlop={8}
+              onPress={() => write(waitsApi.resolve(c.id))}
+            >
+              <Text className="text-[13px] font-semibold text-accent">Resolve</Text>
+            </Pressable>
+          ) : (
+            <Text className="text-[12px] text-foreground-muted">auto</Text>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Delete condition"
+            hitSlop={8}
+            onPress={() => write(waitsApi.remove(c.id))}
+          >
+            <Text className="text-[16px] text-foreground-muted">✕</Text>
+          </Pressable>
+        </View>
+      ))}
+      <Input
+        value={text}
+        onChangeText={setText}
+        onSubmitEditing={onAdd}
+        returnKeyType="done"
+        blurOnSubmit={false}
+        placeholder="Waiting on… (e.g. the letter comes back)"
+        accessibilityLabel="Waiting condition"
+      />
+    </Column>
+  );
+}
+
 // The detail sheet body (native @expo/ui tree): an icon picker, an editable
 // title and notes field, the project's tasks, and the Status group. Edits commit
 // on blur/submit and keep the sheet open; only a status pick dismisses it. Keyed
@@ -246,6 +346,8 @@ function ProjectTasks({
 function ProjectDetail({
   project,
   tasksApi,
+  waitsApi,
+  allProjects,
   onError,
   onEdit,
   onPickStatus,
@@ -253,6 +355,8 @@ function ProjectDetail({
 }: {
   project: Project;
   tasksApi: TasksApi;
+  waitsApi: WaitsApi;
+  allProjects: Project[];
   onError: (message: string) => void;
   onEdit: (id: string, fields: ProjectEditFields) => void;
   onPickStatus: (status: ProjectStatus) => void;
@@ -327,6 +431,14 @@ function ProjectDetail({
 
       <ProjectTasks api={tasksApi} projectId={project.id} onError={onError} />
 
+      <ProjectWaits
+        project={project}
+        waitsApi={waitsApi}
+        tasksApi={tasksApi}
+        projects={allProjects}
+        onError={onError}
+      />
+
       <StatusControls status={project.status} onPick={onPickStatus} />
 
       {/* Destructive: hard-delete the project (distinct from Done). Leaves a
@@ -349,6 +461,7 @@ function ProjectDetail({
 export default function ProjectsScreen() {
   const projectsApi = useProjectsApi();
   const tasksApi = useTasksApi();
+  const waitsApi = useWaitsApi();
 
   const { height: windowHeight } = useWindowDimensions();
   const rootRef = useRef<View>(null);
@@ -362,8 +475,13 @@ export default function ProjectsScreen() {
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
       <ScreenHeader title="Projects" />
-      {projectsApi && tasksApi ? (
-        <Projects api={projectsApi} tasksApi={tasksApi} bottomOffset={bottomOffset} />
+      {projectsApi && tasksApi && waitsApi ? (
+        <Projects
+          api={projectsApi}
+          tasksApi={tasksApi}
+          waitsApi={waitsApi}
+          bottomOffset={bottomOffset}
+        />
       ) : (
         <View className="flex-1" />
       )}
@@ -374,10 +492,12 @@ export default function ProjectsScreen() {
 function Projects({
   api,
   tasksApi,
+  waitsApi,
   bottomOffset,
 }: {
   api: ProjectsApi;
   tasksApi: TasksApi;
+  waitsApi: WaitsApi;
   bottomOffset: number;
 }) {
   const { data: projects, isLoading } = useLiveQuery((q) =>
@@ -387,8 +507,13 @@ function Projects({
   const { data: openTasks } = useLiveQuery((q) =>
     q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
   );
+  // Open waiting conditions make a project display as waiting.
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
+  );
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
+  const conds = useMemo(() => conditions ?? [], [conditions]);
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -463,8 +588,9 @@ function Projects({
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
   const grouped = useMemo(
-    () => projectsByStatus(list, (p) => projectDisplayStatus(p, tasks)),
-    [list, tasks],
+    () =>
+      projectsByStatus(list, (p) => projectDisplayStatus(p, tasks, conds, list)),
+    [list, tasks, conds],
   );
 
   // Collapse is derived, not stored: a section uses the user's explicit override
@@ -579,6 +705,8 @@ function Projects({
             key={selected.id}
             project={selected}
             tasksApi={tasksApi}
+            waitsApi={waitsApi}
+            allProjects={list}
             onError={setWriteError}
             onEdit={commitEdit}
             onPickStatus={(status) => onPickStatus(selected, status)}

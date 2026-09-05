@@ -12,6 +12,8 @@ import {
 import type { Project, ProjectEditFields, ProjectStatus, Task } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
+import { resetWaitsApiForTest } from '@/lib/waits-collection';
+import type { WaitingCondition } from '@/lib/api';
 
 import ProjectsScreen from '../projects';
 
@@ -123,6 +125,20 @@ const mockAddTask =
   >();
 const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
+const mockAddWaitingCondition =
+  jest.fn<
+    (condition: {
+      id: string;
+      projectId: string;
+      kind: string;
+      text: string | null;
+      refId: string | null;
+      targetStatus: string | null;
+    }) => Promise<WaitingCondition>
+  >();
+const mockResolveWaitingCondition =
+  jest.fn<(id: string) => Promise<WaitingCondition>>();
 jest.mock('@/lib/api', () => ({
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: (getToken: unknown, project: { id: string; title: string }) =>
@@ -133,6 +149,21 @@ jest.mock('@/lib/api', () => ({
     mockEditProject(getToken, id, fields),
   deleteProject: (getToken: unknown, id: string) =>
     mockDeleteProject(getToken, id),
+  fetchWaits: () => mockFetchWaits(),
+  addWaitingCondition: (
+    _getToken: unknown,
+    condition: {
+      id: string;
+      projectId: string;
+      kind: string;
+      text: string | null;
+      refId: string | null;
+      targetStatus: string | null;
+    },
+  ) => mockAddWaitingCondition(condition),
+  resolveWaitingCondition: (_getToken: unknown, id: string) =>
+    mockResolveWaitingCondition(id),
+  deleteWaitingCondition: () => Promise.resolve(),
   fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
   addTask: (
     getToken: unknown,
@@ -173,6 +204,11 @@ describe('ProjectsScreen', () => {
   beforeEach(() => {
     resetProjectsApiForTest();
     resetTasksApiForTest();
+    resetWaitsApiForTest();
+    mockFetchWaits.mockReset();
+    mockFetchWaits.mockResolvedValue([]);
+    mockAddWaitingCondition.mockReset();
+    mockResolveWaitingCondition.mockReset();
     mockAddProject.mockClear();
     mockSetProjectStatus.mockClear();
     mockEditProject.mockClear();
@@ -342,6 +378,47 @@ describe('ProjectsScreen', () => {
     const { getByLabelText } = await renderScreen();
 
     await waitFor(() => expect(getByLabelText('Next, 1')).toBeTruthy());
+  });
+
+  it('adds a free-text waiting condition, marking the project Waiting', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Send tax letter', '📮', 'next'),
+    ]);
+    mockAddWaitingCondition.mockImplementation(async (condition) => {
+      const added: WaitingCondition = {
+        ...condition,
+        kind: condition.kind as WaitingCondition['kind'],
+        resolvedAt: null,
+        createdAt: '2023-01-01T00:00:00.000Z',
+      };
+      mockFetchWaits.mockResolvedValue([added]);
+      return added;
+    });
+
+    const { getByText, getByLabelText, getByPlaceholderText } =
+      await renderScreen();
+    await waitFor(() => expect(getByText('Send tax letter')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Send tax letter'));
+    });
+    const input = getByPlaceholderText(
+      'Waiting on… (e.g. the letter comes back)',
+    );
+    await act(async () => {
+      fireEvent.changeText(input, 'the letter comes back');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    expect(mockAddWaitingCondition).toHaveBeenCalledTimes(1);
+    expect(mockAddWaitingCondition.mock.calls[0][0].text).toBe(
+      'the letter comes back',
+    );
+    // The project moves to the Waiting section.
+    await waitFor(() => expect(getByLabelText('Waiting, 1')).toBeTruthy());
   });
 
   it('moves a project to backlog from the detail sheet', async () => {

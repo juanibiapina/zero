@@ -16,6 +16,7 @@ import {
   type ProjectsApi,
   type Task,
   type TasksApi,
+  type WaitsApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -55,6 +56,7 @@ import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useProjectsApi } from '@/lib/projects-collection';
+import { useWaitsApi } from '@/lib/waits-collection';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -282,10 +284,12 @@ function TaskRow({
 function TasksTop({
   api,
   projectsApi,
+  waitsApi,
   onError,
 }: {
   api: TasksApi;
   projectsApi: ProjectsApi;
+  waitsApi: WaitsApi;
   onError: (message: string) => void;
 }) {
   const { data: tasks } = useLiveQuery((q) =>
@@ -297,8 +301,14 @@ function TasksTop({
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: projectsApi.collection }),
   );
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
+  );
   useForegroundRefetch(api.refetch);
-  const list = useMemo(() => homeTasks(tasks ?? [], projects ?? []), [tasks, projects]);
+  const list = useMemo(
+    () => homeTasks(tasks ?? [], projects ?? [], conditions ?? []),
+    [tasks, projects, conditions],
+  );
   const onComplete = useCallback(
     (item: Task) => {
       const tx = api.complete(item.id);
@@ -345,6 +355,7 @@ export default function HomeScreen() {
   const capturesApi = useCapturesApi();
   const tasksApi = useTasksApi();
   const projectsApi = useProjectsApi();
+  const waitsApi = useWaitsApi();
 
   // Measure the gap from this screen's content bottom to the window bottom (the
   // native bottom tab bar plus the system gesture inset), fed to the
@@ -362,11 +373,12 @@ export default function HomeScreen() {
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
       <ScreenHeader title="Today" />
-      {capturesApi && tasksApi && projectsApi ? (
+      {capturesApi && tasksApi && projectsApi && waitsApi ? (
         <Captures
           api={capturesApi}
           tasksApi={tasksApi}
           projectsApi={projectsApi}
+          waitsApi={waitsApi}
           bottomOffset={bottomOffset}
         />
       ) : (
@@ -382,11 +394,13 @@ function Captures({
   api,
   tasksApi,
   projectsApi,
+  waitsApi,
   bottomOffset,
 }: {
   api: CapturesApi;
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
+  waitsApi: WaitsApi;
   bottomOffset: number;
 }) {
   const [mode, setMode] = useState<AddMode>('capture');
@@ -604,6 +618,7 @@ function Captures({
             <TasksTop
               api={tasksApi}
               projectsApi={projectsApi}
+              waitsApi={waitsApi}
               onError={setWriteError}
             />
           }

@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-05: Say what a project is waiting on. Add a waiting condition in its detail sheet — free text ("the letter comes back"), until a task is done, or until another project reaches a status — and the project shows as Waiting with its tasks hidden from Today. The task/project conditions clear themselves automatically; resolve a free-text one by hand.
 - 2026-09-05: Projects now sort themselves: a project shows as Active while one of its tasks is taken on, and drops to Next once you've cleared them — a nudge to groom and take on more. Backlog and Done stay yours to set (the detail sheet now offers Put in play / Move to backlog / Mark done).
 - 2026-09-05: Choose which of a project's tasks you're taking on: star a task in the project to put it on Today, and star it again on Today to park it. No fixed limit — you decide how much shows up. Loose tasks always show.
 - 2026-09-05: Your Today list shows tasks from active projects (plus loose tasks); a project's tasks stay hidden until you make it active, so only what you're working on surfaces.
