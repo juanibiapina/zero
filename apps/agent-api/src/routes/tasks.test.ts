@@ -19,6 +19,7 @@ const fakeUserDO = (seed: Task[] = []) => {
       showUpDate: string,
       projectId: string | null = null,
       takenOnAt: string | null = null,
+      sourceCaptureId: string | null = null,
     ): Task {
       const existingById = tasks.find((t) => t.id === id);
       if (existingById) return existingById;
@@ -30,6 +31,7 @@ const fakeUserDO = (seed: Task[] = []) => {
         completedAt: null,
         projectId,
         takenOnAt,
+        sourceCaptureId,
       };
       tasks.push(task);
       return task;
@@ -85,6 +87,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   completedAt: null,
   projectId: null,
   takenOnAt: null,
+  sourceCaptureId: null,
   ...over,
 });
 

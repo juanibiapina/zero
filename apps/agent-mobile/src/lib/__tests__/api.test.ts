@@ -316,6 +316,7 @@ describe('addTask', () => {
         showUpDate: '2023-01-01',
         projectId: null,
         takenOnAt: null,
+        sourceCaptureId: null,
       },
       'https://example.test',
     );
@@ -330,6 +331,7 @@ describe('addTask', () => {
       showUpDate: '2023-01-01',
       projectId: null,
       takenOnAt: null,
+      sourceCaptureId: null,
     });
   });
 });

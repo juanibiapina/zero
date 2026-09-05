@@ -9,9 +9,11 @@ import {
 } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import {
+  createInMemoryApi,
   createInMemoryProjectsApi,
   createInMemoryTasksApi,
   createInMemoryWaitsApi,
+  type CapturesApi,
   type Project,
   type ProjectsApi,
   type ProjectsRest,
@@ -33,6 +35,7 @@ const h = vi.hoisted(() => ({
   api: null as ProjectsApi | null,
   tasksApi: null as TasksApi | null,
   waitsApi: null as WaitsApi | null,
+  capturesApi: null as CapturesApi | null,
 }));
 vi.mock("@/lib/projects-collection", () => ({
   getProjectsApi: () => Promise.resolve(h.api),
@@ -42,6 +45,9 @@ vi.mock("@/lib/tasks-collection", () => ({
 }));
 vi.mock("@/lib/waits-collection", () => ({
   getWaitsApi: () => Promise.resolve(h.waitsApi),
+}));
+vi.mock("@/lib/captures-collection", () => ({
+  getCapturesApi: () => Promise.resolve(h.capturesApi),
 }));
 
 function fakeWaitsRest(): WaitsRest {
@@ -160,6 +166,32 @@ function setApi(initial: Project[], tasks: Task[] = []) {
     queryClient: new QueryClient(),
     rest: fakeWaitsRest(),
   });
+  h.capturesApi = createInMemoryApi({
+    queryClient: new QueryClient(),
+    rest: {
+      fetchCaptures: async () => [],
+      addCapture: async ({ id, text }) => ({
+        id,
+        text,
+        createdAt: new Date().toISOString(),
+        processedAt: null,
+        showUpDate: null,
+        sortKey: null,
+      }),
+      processCapture: async (id) => {
+        throw new Error(`no capture ${id}`);
+      },
+      editCapture: async (id) => {
+        throw new Error(`no capture ${id}`);
+      },
+      rescheduleCapture: async (id) => {
+        throw new Error(`no capture ${id}`);
+      },
+      reorderCapture: async (id) => {
+        throw new Error(`no capture ${id}`);
+      },
+    },
+  });
 }
 
 describe("ProjectsPage", () => {
@@ -167,6 +199,7 @@ describe("ProjectsPage", () => {
     h.api = null;
     h.tasksApi = null;
     h.waitsApi = null;
+    h.capturesApi = null;
     vi.useRealTimers();
   });
 

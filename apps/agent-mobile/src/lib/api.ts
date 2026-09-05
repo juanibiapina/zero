@@ -216,6 +216,7 @@ export async function addTask(
     showUpDate: string;
     projectId: string | null;
     takenOnAt: string | null;
+    sourceCaptureId: string | null;
   },
   baseUrl: string = API_BASE_URL,
 ): Promise<Task> {
@@ -294,7 +295,7 @@ export async function fetchProjects(
 
 export async function addProject(
   getToken: TokenGetter,
-  project: { id: string; title: string },
+  project: { id: string; title: string; sourceCaptureId: string | null },
   baseUrl: string = API_BASE_URL,
 ): Promise<Project> {
   const res = await apiFetch(

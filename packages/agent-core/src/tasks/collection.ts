@@ -36,6 +36,7 @@ export type TasksRest = {
     showUpDate: string;
     projectId: string | null;
     takenOnAt: string | null;
+    sourceCaptureId: string | null;
   }) => Promise<Task>;
   completeTask: (id: string) => Promise<Task>;
   // Take a task on (a timestamp) or park it (null). Idempotent on the id.
@@ -57,6 +58,7 @@ export type TasksApi = {
     showUpDate: string,
     projectId?: string | null,
     takenOnAt?: string | null,
+    sourceCaptureId?: string | null,
   ) => Transaction;
   complete: (id: string) => Transaction;
   // Curation: take a task on (surface it on Home) or park it. `takeOn` stamps a
@@ -83,12 +85,14 @@ export function tasksSpec(rest: TasksRest) {
       showUpDate: string;
       projectId: string | null;
       takenOnAt: string | null;
+      sourceCaptureId: string | null;
     }>({
-      row: ({ text, showUpDate, projectId, takenOnAt }) => ({
+      row: ({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }) => ({
         text,
         showUpDate,
         projectId,
         takenOnAt,
+        sourceCaptureId,
         completedAt: null,
       }),
       persist: (row) =>
@@ -98,6 +102,7 @@ export function tasksSpec(rest: TasksRest) {
           showUpDate: row.showUpDate,
           projectId: row.projectId,
           takenOnAt: row.takenOnAt,
+          sourceCaptureId: row.sourceCaptureId ?? null,
         }),
     }),
     completeTask: v.update<{ id: string }>({
@@ -132,8 +137,8 @@ function toTasksApi(
 ): TasksApi {
   return {
     collection: api.collection,
-    add: (text, showUpDate, projectId = null, takenOnAt = null) =>
-      api.actions.addTask({ text, showUpDate, projectId, takenOnAt }),
+    add: (text, showUpDate, projectId = null, takenOnAt = null, sourceCaptureId = null) =>
+      api.actions.addTask({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }),
     complete: (id) => api.actions.completeTask({ id }),
     takeOn: (id) =>
       api.actions.setTakenOn({ id, takenOnAt: new Date().toISOString() }),

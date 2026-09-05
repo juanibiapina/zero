@@ -22,6 +22,8 @@ export interface Project {
   description: string | null;
   status: ProjectStatus;
   createdAt: string;
+  // The capture this project was refined from, or null.
+  sourceCaptureId: string | null;
 }
 
 // The defaults a name-only create applies. Creation stays fast (just a title);
@@ -35,6 +37,7 @@ export type ProjectDefaults = {
   icon?: string;
   description?: string | null;
   status?: ProjectStatus;
+  sourceCaptureId?: string | null;
 };
 
 // The fields a later edit may change (title/icon/description). Status is its own
@@ -54,6 +57,7 @@ function toProject(row: {
   description: string | null;
   status: string;
   createdAt: string;
+  sourceCaptureId: string | null;
 }): Project {
   return {
     id: row.id,
@@ -62,6 +66,7 @@ function toProject(row: {
     description: row.description,
     status: row.status as ProjectStatus,
     createdAt: row.createdAt,
+    sourceCaptureId: row.sourceCaptureId,
   };
 }
 
@@ -83,6 +88,7 @@ export class DbProjectStore {
       description: opts.description ?? null,
       status: opts.status ?? DEFAULT_STATUS,
       createdAt: new Date().toISOString(),
+      sourceCaptureId: opts.sourceCaptureId ?? null,
     };
     this.db.insert(projects, project);
     return project;

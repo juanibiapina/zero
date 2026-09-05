@@ -43,6 +43,8 @@ import {
   useForegroundRefetch,
   useUndoableLeave,
 } from "@/lib/screen-hooks";
+import { refiningCaptureId, startRefine, stopRefine } from "@/lib/refine-session";
+import { RefineBanner } from "@/components/RefineBanner";
 import { type Capture } from "@/lib/captures";
 import { type Task } from "@/lib/tasks";
 
@@ -110,15 +112,25 @@ function MergedHome({
     setError(null);
     const tx =
       mode === "task"
-        ? tasksApi.add(trimmed, localToday())
+        ? tasksApi.add(trimmed, localToday(), null, null, refiningCaptureId())
         : capturesApi.add(trimmed);
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     setText("");
     inputRef.current?.focus();
   }, [capturesApi, tasksApi, mode, text]);
 
+  const onFinishRefine = useCallback(
+    (captureId: string) => {
+      const tx = capturesApi.process(captureId);
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      stopRefine();
+    },
+    [capturesApi],
+  );
+
   return (
     <div className="space-y-6">
+      <RefineBanner onFinish={onFinishRefine} />
       <QuickAdd
         mode={mode}
         value={text}
@@ -437,6 +449,7 @@ function CapturesSection({
                   onAction={() => onProcess(item)}
                   onOpen={() => openDetail(item)}
                   onReschedule={() => onReschedule(item)}
+                  onRefine={() => startRefine(item.id, item.text)}
                 />
               ))}
             </ul>
@@ -575,6 +588,7 @@ function Row({
   onAction,
   onOpen,
   onReschedule,
+  onRefine,
 }: {
   // Stable capture id; the sortable key for dnd-kit.
   id: string;
@@ -584,6 +598,8 @@ function Row({
   onOpen: () => void;
   // When provided, a "Tomorrow" button (shown on hover/focus) postpones the row.
   onReschedule?: () => void;
+  // When provided, a "Refine" button starts a refine session for this capture.
+  onRefine?: () => void;
 }) {
   // Drag reorder: only the grip handle carries the drag listeners, so the
   // circle (process), text (detail sheet) and "Tomorrow" button keep their own
@@ -632,6 +648,16 @@ function Row({
       >
         {text}
       </button>
+      {onRefine && (
+        <button
+          type="button"
+          aria-label={`Refine "${text}"`}
+          className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          onClick={onRefine}
+        >
+          Refine
+        </button>
+      )}
       {onReschedule && (
         <button
           type="button"

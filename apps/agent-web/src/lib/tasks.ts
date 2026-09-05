@@ -20,6 +20,7 @@ export async function addTask(task: {
   showUpDate: string;
   projectId: string | null;
   takenOnAt: string | null;
+  sourceCaptureId: string | null;
 }): Promise<Task> {
   const res = await fetch("/api/tasks", {
     method: "POST",

@@ -17,6 +17,7 @@ const TaskSchema = z.object({
   completedAt: z.string().nullable(),
   projectId: z.string().nullable(),
   takenOnAt: z.string().nullable(),
+  sourceCaptureId: z.string().nullable(),
 });
 
 // A local calendar day, YYYY-MM-DD. The client mints it in the user's timezone.
@@ -70,6 +71,8 @@ export const createTasksRoutes = () => {
               // Home quick-add sends a timestamp; a project-screen add omits it
               // (parked).
               takenOnAt: z.string().nullable().optional(),
+              // Optional: the capture this task was refined from.
+              sourceCaptureId: z.string().uuid().nullable().optional(),
             }),
           },
         },
@@ -93,7 +96,8 @@ export const createTasksRoutes = () => {
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, text, showUpDate, projectId, takenOnAt } = c.req.valid("json");
+    const { id, text, showUpDate, projectId, takenOnAt, sourceCaptureId } =
+      c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
@@ -104,6 +108,7 @@ export const createTasksRoutes = () => {
       showUpDate,
       projectId ?? null,
       takenOnAt ?? null,
+      sourceCaptureId ?? null,
     );
     log("task_added", { clerk_user_id: userId });
     return c.json({ task }, 201);

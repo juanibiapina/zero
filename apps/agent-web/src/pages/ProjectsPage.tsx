@@ -22,7 +22,10 @@ import {
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
+import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { type WaitingCondition, type WaitingConditionKind } from "@zero/agent-core";
+import { refiningCaptureId, stopRefine } from "@/lib/refine-session";
+import { RefineBanner } from "@/components/RefineBanner";
 import {
   useDelayed,
   useForegroundRefetch,
@@ -52,17 +55,24 @@ function ProjectsPanel() {
   const [api, setApi] = useState<ProjectsApi | null>(null);
   const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
   const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
+  const [capturesApi, setCapturesApi] = useState<CapturesApi | null>(null);
   useEffect(() => {
     let live = true;
     void getProjectsApi().then((a) => live && setApi(a));
     void getTasksApi().then((a) => live && setTasksApi(a));
     void getWaitsApi().then((a) => live && setWaitsApi(a));
+    void getCapturesApi().then((a) => live && setCapturesApi(a));
     return () => {
       live = false;
     };
   }, []);
-  return api && tasksApi && waitsApi ? (
-    <ProjectsReady api={api} tasksApi={tasksApi} waitsApi={waitsApi} />
+  return api && tasksApi && waitsApi && capturesApi ? (
+    <ProjectsReady
+      api={api}
+      tasksApi={tasksApi}
+      waitsApi={waitsApi}
+      capturesApi={capturesApi}
+    />
   ) : (
     <div className="min-h-24" />
   );
@@ -72,10 +82,12 @@ function ProjectsReady({
   api,
   tasksApi,
   waitsApi,
+  capturesApi,
 }: {
   api: ProjectsApi;
   tasksApi: TasksApi;
   waitsApi: WaitsApi;
+  capturesApi: CapturesApi;
 }) {
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, "asc"),
@@ -106,11 +118,21 @@ function ProjectsReady({
     const trimmed = title.trim();
     if (!trimmed) return;
     setError(null);
-    const tx = api.add(trimmed);
+    // When refining a capture, the new project links back to it.
+    const tx = api.add(trimmed, refiningCaptureId());
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     setTitle("");
     inputRef.current?.focus();
   }, [api, title]);
+
+  const onFinishRefine = useCallback(
+    (captureId: string) => {
+      const tx = capturesApi.process(captureId);
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      stopRefine();
+    },
+    [capturesApi],
+  );
 
   const commitStatus = useCallback(
     (id: string, status: ProjectStatus) => {
@@ -192,6 +214,7 @@ function ProjectsReady({
 
   return (
     <div className="space-y-6">
+      <RefineBanner onFinish={onFinishRefine} />
       <form
         className="space-y-1"
         onSubmit={(e) => {
@@ -400,7 +423,8 @@ function ProjectTasks({
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const tx = api.add(trimmed, localToday(), projectId);
+    // Parked (takenOnAt null); linked to the capture when refining.
+    const tx = api.add(trimmed, localToday(), projectId, null, refiningCaptureId());
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     setText("");
   }, [api, text, projectId, onError]);

@@ -23,6 +23,8 @@ export interface Task {
   projectId: string | null;
   // When the user took this task on (curated it onto Home), or null when parked.
   takenOnAt: string | null;
+  // The capture this task was refined from, or null.
+  sourceCaptureId: string | null;
 }
 
 // Project a stored row back to the client-facing Task shape.
@@ -34,6 +36,7 @@ function toTask(row: {
   completedAt: string | null;
   projectId: string | null;
   takenOnAt: string | null;
+  sourceCaptureId: string | null;
 }): Task {
   return {
     id: row.id,
@@ -43,6 +46,7 @@ function toTask(row: {
     completedAt: row.completedAt,
     projectId: row.projectId,
     takenOnAt: row.takenOnAt,
+    sourceCaptureId: row.sourceCaptureId,
   };
 }
 
@@ -58,6 +62,7 @@ export class DbTaskStore {
     showUpDate: string,
     projectId: string | null = null,
     takenOnAt: string | null = null,
+    sourceCaptureId: string | null = null,
   ): Task {
     const existingById = this.db.get(tasks, { where: eq("id", id) });
     if (existingById) return toTask(existingById);
@@ -69,6 +74,7 @@ export class DbTaskStore {
       completedAt: null,
       projectId,
       takenOnAt,
+      sourceCaptureId,
     };
     this.db.insert(tasks, task);
     return task;

@@ -24,6 +24,7 @@ const ProjectSchema = z.object({
   description: z.string().nullable(),
   status: ProjectStatus,
   createdAt: z.string(),
+  sourceCaptureId: z.string().nullable(),
 });
 
 export const createProjectsRoutes = () => {
@@ -70,6 +71,8 @@ export const createProjectsRoutes = () => {
               icon: z.string().min(1).optional(),
               description: z.string().nullable().optional(),
               status: ProjectStatus.optional(),
+              // Optional: the capture this project was refined from.
+              sourceCaptureId: z.string().uuid().nullable().optional(),
             }),
           },
         },
@@ -93,7 +96,8 @@ export const createProjectsRoutes = () => {
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, title, icon, description, status } = c.req.valid("json");
+    const { id, title, icon, description, status, sourceCaptureId } =
+      c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
@@ -102,6 +106,7 @@ export const createProjectsRoutes = () => {
       icon,
       description,
       status,
+      sourceCaptureId,
     });
     log("project_added", { clerk_user_id: userId });
     return c.json({ project }, 201);

@@ -235,6 +235,8 @@ export const tasks = table("tasks", {
   // When the user took this task on (curated it onto Home), or NULL when parked.
   // Only gates project tasks; loose tasks always show. See migration 0048.
   takenOnAt: column.text(),
+  // The capture this task was refined from, or NULL. See migration 0050.
+  sourceCaptureId: column.text(),
 });
 
 // Projects: the third entity of the todo app (the Todoist replacement). A named,
@@ -255,6 +257,8 @@ export const projects = table("projects", {
   // One of active/next/waiting/backlog/done. 'done' is terminal.
   status: column.text().notNull().default("next"),
   createdAt: column.text().notNull(),
+  // The capture this project was refined from, or NULL. See migration 0050.
+  sourceCaptureId: column.text(),
 });
 
 // Waiting conditions: why a project is waiting (see migration 0049). Owned by
