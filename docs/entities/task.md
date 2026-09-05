@@ -22,19 +22,21 @@ them.
 The name is `Task`, not the wiki's earlier "Todo" (which collides with the app
 name).
 
-## Status: parked (removed from the UI)
+## Status: returning via the availability model (slice 1)
 
-Task is **dormant**. The Capture/Task split proved premature — the user works in
-one list (Todoist-style) and never adopted the separate Today tab. The Today tab
-was removed from both web and mobile; the app is one Captures list again. All
-Task machinery below stays in the tree, unreferenced by any UI: the `tasks`
-table + migration, `DbTaskStore`, `/api/tasks`, the `@zero/agent-core` Task data
-layer (`createTasksApi`, `dueToday`, `localToday`), and both
-`tasks-collection.ts`. Nothing is deleted, so re-enabling Task once Projects and
-the agent exist should be roughly a one-screen change. The scheduling behavior a
-single list still wants (postpone to a day, reorder) is being folded into
-Capture instead — see `docs/todo-app.md`. The rest of this file describes Task as
-built, for when it returns.
+Task was parked for a while — the Capture/Task split proved premature and the
+separate Today tab was removed. It is now **coming back** as part of the
+availability model (`docs/plans/todo-availability-model.md`). Slice 1 re-surfaces
+Task on Home: the Home screen is two regions — the tasks you have taken on on top,
+the capture inbox below — and the quick-add gains a Capture/Task toggle (capture
+stays the default). Which tasks show on top is decided by the pure `homeTasks`
+seam in `@zero/agent-core`; slice 1 shows every open task, and later slices gate
+it by project membership (`projectId`) and selection (`takenOnAt`).
+
+The old "Today" (a `showUpDate <= today` filter) is **not** the gate anymore:
+availability replaces the date gate, so `homeTasks` ignores `showUpDate`. The
+column stays for a future reschedule. The sections below describe Task as built;
+the new columns arrive in later slices.
 
 ## What it is
 
