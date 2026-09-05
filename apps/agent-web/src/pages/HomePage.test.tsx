@@ -5,6 +5,7 @@ import {
   createInMemoryApi,
   createInMemoryProjectsApi,
   createInMemoryTasksApi,
+  createInMemoryWaitsApi,
   type Capture,
   type CapturesApi,
   type CapturesRest,
@@ -13,6 +14,8 @@ import {
   type Task,
   type TasksApi,
   type TasksRest,
+  type WaitsApi,
+  type WaitsRest,
 } from "@zero/agent-core";
 
 import { HomePage } from "./HomePage";
@@ -23,6 +26,7 @@ const h = vi.hoisted(() => ({
   api: null as CapturesApi | null,
   tasksApi: null as TasksApi | null,
   projectsApi: null as ProjectsApi | null,
+  waitsApi: null as WaitsApi | null,
 }));
 vi.mock("@/lib/captures-collection", () => ({
   getCapturesApi: () => Promise.resolve(h.api),
@@ -33,6 +37,22 @@ vi.mock("@/lib/tasks-collection", () => ({
 vi.mock("@/lib/projects-collection", () => ({
   getProjectsApi: () => Promise.resolve(h.projectsApi),
 }));
+vi.mock("@/lib/waits-collection", () => ({
+  getWaitsApi: () => Promise.resolve(h.waitsApi),
+}));
+
+const emptyWaitsRest: WaitsRest = {
+  fetchWaits: async () => [],
+  addWaitingCondition: async (c) => ({
+    ...c,
+    resolvedAt: null,
+    createdAt: new Date().toISOString(),
+  }),
+  resolveWaitingCondition: async (id) => {
+    throw new Error(`no condition ${id}`);
+  },
+  deleteWaitingCondition: async () => {},
+};
 
 const emptyProjectsRest: ProjectsRest = {
   fetchProjects: async () => [],
@@ -153,6 +173,10 @@ function setApi(initial: Capture[], tasks: Task[] = []) {
     queryClient: new QueryClient(),
     rest: emptyProjectsRest,
   });
+  h.waitsApi = createInMemoryWaitsApi({
+    queryClient: new QueryClient(),
+    rest: emptyWaitsRest,
+  });
 }
 
 describe("HomePage", () => {
@@ -160,6 +184,7 @@ describe("HomePage", () => {
     h.api = null;
     h.tasksApi = null;
     h.projectsApi = null;
+    h.waitsApi = null;
   });
 
   it("adds a task from the Task quick-add mode", async () => {

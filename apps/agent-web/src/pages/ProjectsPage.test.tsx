@@ -11,6 +11,7 @@ import { QueryClient } from "@tanstack/react-query";
 import {
   createInMemoryProjectsApi,
   createInMemoryTasksApi,
+  createInMemoryWaitsApi,
   type Project,
   type ProjectsApi,
   type ProjectsRest,
@@ -18,6 +19,8 @@ import {
   type Task,
   type TasksApi,
   type TasksRest,
+  type WaitsApi,
+  type WaitsRest,
 } from "@zero/agent-core";
 
 import { ProjectsPage } from "./ProjectsPage";
@@ -29,6 +32,7 @@ import { ProjectsPage } from "./ProjectsPage";
 const h = vi.hoisted(() => ({
   api: null as ProjectsApi | null,
   tasksApi: null as TasksApi | null,
+  waitsApi: null as WaitsApi | null,
 }));
 vi.mock("@/lib/projects-collection", () => ({
   getProjectsApi: () => Promise.resolve(h.api),
@@ -36,6 +40,35 @@ vi.mock("@/lib/projects-collection", () => ({
 vi.mock("@/lib/tasks-collection", () => ({
   getTasksApi: () => Promise.resolve(h.tasksApi),
 }));
+vi.mock("@/lib/waits-collection", () => ({
+  getWaitsApi: () => Promise.resolve(h.waitsApi),
+}));
+
+function fakeWaitsRest(): WaitsRest {
+  const server: import("@zero/agent-core").WaitingCondition[] = [];
+  return {
+    fetchWaits: async () => server.map((c) => ({ ...c })),
+    addWaitingCondition: async (c) => {
+      const row = {
+        ...c,
+        resolvedAt: null,
+        createdAt: new Date().toISOString(),
+      };
+      server.push(row);
+      return { ...row };
+    },
+    resolveWaitingCondition: async (id) => {
+      const row = server.find((c) => c.id === id);
+      if (!row) throw new Error(`no condition ${id}`);
+      row.resolvedAt = new Date().toISOString();
+      return { ...row };
+    },
+    deleteWaitingCondition: async (id) => {
+      const i = server.findIndex((c) => c.id === id);
+      if (i >= 0) server.splice(i, 1);
+    },
+  };
+}
 
 const project = (
   id: string,
@@ -123,13 +156,36 @@ function setApi(initial: Project[], tasks: Task[] = []) {
     queryClient: new QueryClient(),
     rest: fakeTasksRest(tasks),
   });
+  h.waitsApi = createInMemoryWaitsApi({
+    queryClient: new QueryClient(),
+    rest: fakeWaitsRest(),
+  });
 }
 
 describe("ProjectsPage", () => {
   afterEach(() => {
     h.api = null;
     h.tasksApi = null;
+    h.waitsApi = null;
     vi.useRealTimers();
+  });
+
+  it("adds a free-text waiting condition, marking the project Waiting", async () => {
+    setApi([project("1", "Send tax letter", "next")]);
+    render(<ProjectsPage />);
+    fireEvent.click(await screen.findByText("Send tax letter"));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: "Waiting condition" }),
+      { target: { value: "the letter comes back" } },
+    );
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "+ Waiting condition" }),
+      );
+    });
+    // The project moves to the Waiting section.
+    await waitFor(() => expect(screen.getByText("Waiting")).toBeInTheDocument());
   });
 
   it("adds a task to a project from its detail sheet", async () => {

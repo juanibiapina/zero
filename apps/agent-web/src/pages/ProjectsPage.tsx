@@ -21,6 +21,8 @@ import {
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
+import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
+import { type WaitingCondition, type WaitingConditionKind } from "@zero/agent-core";
 import {
   useDelayed,
   useForegroundRefetch,
@@ -49,16 +51,18 @@ export function ProjectsPage() {
 function ProjectsPanel() {
   const [api, setApi] = useState<ProjectsApi | null>(null);
   const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
+  const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
   useEffect(() => {
     let live = true;
     void getProjectsApi().then((a) => live && setApi(a));
     void getTasksApi().then((a) => live && setTasksApi(a));
+    void getWaitsApi().then((a) => live && setWaitsApi(a));
     return () => {
       live = false;
     };
   }, []);
-  return api && tasksApi ? (
-    <ProjectsReady api={api} tasksApi={tasksApi} />
+  return api && tasksApi && waitsApi ? (
+    <ProjectsReady api={api} tasksApi={tasksApi} waitsApi={waitsApi} />
   ) : (
     <div className="min-h-24" />
   );
@@ -67,9 +71,11 @@ function ProjectsPanel() {
 function ProjectsReady({
   api,
   tasksApi,
+  waitsApi,
 }: {
   api: ProjectsApi;
   tasksApi: TasksApi;
+  waitsApi: WaitsApi;
 }) {
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, "asc"),
@@ -77,6 +83,10 @@ function ProjectsReady({
   // Open tasks drive each project's derived display status (active vs next).
   const { data: openTasks } = useLiveQuery((q) =>
     q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
+  // Open waiting conditions make a project display as waiting.
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
   );
 
   const [title, setTitle] = useState("");
@@ -159,9 +169,13 @@ function ProjectsReady({
 
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
+  const conds = useMemo(() => conditions ?? [], [conditions]);
   const sections = useMemo(
-    () => projectsByStatus(list, (p) => projectDisplayStatus(p, tasks)),
-    [list, tasks],
+    () =>
+      projectsByStatus(list, (p) =>
+        projectDisplayStatus(p, tasks, conds, list),
+      ),
+    [list, tasks, conds],
   );
   // A row is "leaving" if either channel (Done or Delete) holds it; both render
   // it struck-through with an Undo.
@@ -251,6 +265,8 @@ function ProjectsReady({
             key={selected.id}
             project={selected}
             tasksApi={tasksApi}
+            waitsApi={waitsApi}
+            allProjects={list}
             onError={setError}
             onEdit={commitEdit}
             onPickStatus={(status) => onPickStatus(selected, status)}
@@ -465,9 +481,185 @@ function ProjectTasks({
   );
 }
 
+// A human label for a waiting condition.
+function conditionLabel(
+  c: WaitingCondition,
+  tasks: Task[],
+  projects: Project[],
+): string {
+  if (c.kind === "free-text") return c.text ?? "(unspecified)";
+  if (c.kind === "task-done") {
+    const t = tasks.find((x) => x.id === c.refId);
+    return `until “${t?.text ?? "?"}” is done`;
+  }
+  const p = projects.find((x) => x.id === c.refId);
+  return `until “${p?.title ?? "?"}” is ${c.targetStatus}`;
+}
+
+// The waiting conditions for a project: list the open ones and add a new one.
+// Structured kinds (task-done, project-status) clear themselves in code; a
+// free-text one is resolved by hand (or later the AI).
+function ProjectWaits({
+  project,
+  waitsApi,
+  tasks,
+  projects,
+  onError,
+}: {
+  project: Project;
+  waitsApi: WaitsApi;
+  tasks: Task[];
+  projects: Project[];
+  onError: (message: string) => void;
+}) {
+  const { data: allConditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
+  );
+  const list = (allConditions ?? []).filter(
+    (c: WaitingCondition) => c.projectId === project.id,
+  );
+
+  const [kind, setKind] = useState<WaitingConditionKind>("free-text");
+  const [text, setText] = useState("");
+  const [refId, setRefId] = useState("");
+  const [targetStatus, setTargetStatus] = useState<ProjectStatus>("done");
+
+  const otherProjects = projects.filter((p) => p.id !== project.id);
+  const openTasks = tasks.filter((t) => t.completedAt == null);
+
+  const write = (tx: { isPersisted: { promise: Promise<unknown> } }): void => {
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  };
+
+  const onAdd = () => {
+    if (kind === "free-text") {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      write(waitsApi.add(project.id, "free-text", { text: trimmed }));
+    } else if (kind === "task-done") {
+      if (!refId) return;
+      write(waitsApi.add(project.id, "task-done", { refId }));
+    } else {
+      if (!refId) return;
+      write(waitsApi.add(project.id, "project-status", { refId, targetStatus }));
+    }
+    setText("");
+    setRefId("");
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-muted-foreground">Waiting on</p>
+      {list.length > 0 && (
+        <ul className="space-y-1">
+          {list.map((c) => (
+            <li
+              key={c.id}
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+            >
+              <span className="flex-1">{conditionLabel(c, tasks, projects)}</span>
+              {c.kind === "free-text" ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => write(waitsApi.resolve(c.id))}
+                >
+                  Resolve
+                </Button>
+              ) : (
+                <span className="text-xs text-muted-foreground">auto</span>
+              )}
+              <button
+                type="button"
+                aria-label={`Delete condition`}
+                className="text-muted-foreground/60 hover:text-foreground"
+                onClick={() => write(waitsApi.remove(c.id))}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="space-y-2 rounded-lg border p-2">
+        <select
+          aria-label="Condition kind"
+          value={kind}
+          onChange={(e) => setKind(e.target.value as WaitingConditionKind)}
+          className="h-9 w-full rounded-md border bg-transparent px-2 text-sm"
+        >
+          <option value="free-text">Free text / external</option>
+          <option value="task-done">Until a task is done</option>
+          <option value="project-status">Until a project reaches a status</option>
+        </select>
+        {kind === "free-text" && (
+          <Input
+            value={text}
+            aria-label="Waiting condition"
+            placeholder="e.g. the letter comes back"
+            className="h-9"
+            onChange={(e) => setText(e.target.value)}
+          />
+        )}
+        {kind === "task-done" && (
+          <select
+            aria-label="Task"
+            value={refId}
+            onChange={(e) => setRefId(e.target.value)}
+            className="h-9 w-full rounded-md border bg-transparent px-2 text-sm"
+          >
+            <option value="">Pick a task…</option>
+            {openTasks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.text}
+              </option>
+            ))}
+          </select>
+        )}
+        {kind === "project-status" && (
+          <div className="flex gap-2">
+            <select
+              aria-label="Project"
+              value={refId}
+              onChange={(e) => setRefId(e.target.value)}
+              className="h-9 flex-1 rounded-md border bg-transparent px-2 text-sm"
+            >
+              <option value="">Pick a project…</option>
+              {otherProjects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.icon} {p.title}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Target status"
+              value={targetStatus}
+              onChange={(e) => setTargetStatus(e.target.value as ProjectStatus)}
+              className="h-9 rounded-md border bg-transparent px-2 text-sm"
+            >
+              {(["active", "next", "waiting", "backlog", "done"] as const).map(
+                (s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABELS[s]}
+                  </option>
+                ),
+              )}
+            </select>
+          </div>
+        )}
+        <Button size="sm" variant="outline" className="w-full" onClick={onAdd}>
+          + Waiting condition
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ProjectDetail({
   project,
   tasksApi,
+  waitsApi,
+  allProjects,
   onError,
   onEdit,
   onPickStatus,
@@ -475,11 +667,16 @@ function ProjectDetail({
 }: {
   project: Project;
   tasksApi: TasksApi;
+  waitsApi: WaitsApi;
+  allProjects: Project[];
   onError: (message: string) => void;
   onEdit: (id: string, fields: ProjectEditFields) => void;
   onPickStatus: (status: ProjectStatus) => void;
   onDelete: () => void;
 }) {
+  const { data: openTasks } = useLiveQuery((q) =>
+    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
   const [title, setTitle] = useState(project.title);
   const [description, setDescription] = useState(project.description ?? "");
 
@@ -566,6 +763,14 @@ function ProjectDetail({
       <ProjectTasks
         api={tasksApi}
         projectId={project.id}
+        onError={onError}
+      />
+
+      <ProjectWaits
+        project={project}
+        waitsApi={waitsApi}
+        tasks={openTasks ?? []}
+        projects={allProjects}
         onError={onError}
       />
 
