@@ -22,7 +22,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
+  Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   type TextInput as RNTextInput,
   useWindowDimensions,
@@ -70,6 +72,7 @@ import {
   useDelayed,
   useForegroundRefetch,
   useLoadError,
+  usePullRefresh,
   useUndoableLeave,
 } from '@/lib/screen-hooks';
 
@@ -528,6 +531,40 @@ function Captures({
 
   // Refresh when the app returns to the foreground.
   useForegroundRefetch(api.refetch);
+
+  const accent = useColor('--color-accent');
+  // A pull re-pulls every list Home shows: the captures inbox plus the tasks
+  // header's tasks, and the projects/waits that derive which tasks are available.
+  const refetchAll = useCallback(
+    () =>
+      Promise.all([
+        api.refetch(),
+        tasksApi.refetch(),
+        projectsApi.refetch(),
+        waitsApi.refetch(),
+      ]),
+    [api, tasksApi, projectsApi, waitsApi],
+  );
+  const { refreshing, onRefresh } = usePullRefresh(refetchAll);
+  // On Android the SwipeRefreshLayout behind RefreshControl fires while a row is
+  // dragged vertically, so a reorder would spuriously trip the refresh spinner.
+  // Disable the control for the duration of a drag (keeping it on if a refresh
+  // is already running so the spinner does not vanish). iOS has no such conflict.
+  // Home starts drags via a JS long-press, not the list pan's own long-press, so
+  // the library's activateAfterLongPress mitigation does not apply here.
+  const [refreshEnabled, setRefreshEnabled] = useState(true);
+  const onDragStart = useCallback(() => {
+    'worklet';
+    if (Platform.OS === 'android' && !refreshing) {
+      scheduleOnRN(setRefreshEnabled, false);
+    }
+  }, [refreshing]);
+  const onDragEnd = useCallback(() => {
+    'worklet';
+    if (Platform.OS === 'android') {
+      scheduleOnRN(setRefreshEnabled, true);
+    }
+  }, []);
   // Gate the list on the row count, not isLoading: a hydrated snapshot must
   // paint even while the network sync is still pending.
   const view = listView({ count: list.length, isLoading, loadError });
@@ -726,11 +763,22 @@ function Captures({
         <ReorderableList
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 96 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              enabled={refreshEnabled}
+              tintColor={accent}
+              colors={[accent]}
+            />
+          }
           data={list}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           itemLayoutAnimation={LinearTransition.duration(200)}
           onReorder={onReorder}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
           ListHeaderComponent={
             <TasksTop
               api={tasksApi}

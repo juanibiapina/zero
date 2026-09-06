@@ -9,12 +9,14 @@ import {
   type CapturesApi,
 } from '@zero/agent-core';
 import { useCallback, useMemo, useState } from 'react';
-import { SectionList, TextInput, View } from 'react-native';
+import { RefreshControl, SectionList, TextInput, View } from 'react-native';
 
 import { ScreenHeader } from '@/components/screen-header';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
+import { usePullRefresh } from '@/lib/screen-hooks';
+import { useColor } from '@/lib/theme';
 
 // One upcoming row: tap the circle to Process, tap the text to edit inline. No
 // drag-reorder or swipe — ordering across days has no meaning here.
@@ -121,6 +123,9 @@ function Upcoming({ api }: { api: CapturesApi }) {
     setEditingId(item.id);
   }, []);
 
+  const accent = useColor('--color-accent');
+  const { refreshing, onRefresh } = usePullRefresh(api.refetch);
+
   const renderItem = useCallback(
     ({ item }: { item: Capture }) => (
       <UpcomingRow
@@ -147,6 +152,14 @@ function Upcoming({ api }: { api: CapturesApi }) {
       <SectionList
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 96 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={accent}
+            colors={[accent]}
+          />
+        }
         sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

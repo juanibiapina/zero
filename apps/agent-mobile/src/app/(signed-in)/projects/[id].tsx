@@ -18,7 +18,7 @@ import {
   type WaitsApi,
 } from '@zero/agent-core';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
 import { refiningCaptureId } from '@/lib/refine-session';
 import { requestProjectLeave } from '@/lib/project-leave';
+import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
 // A project's own screen (pushed within the Projects tab). This is a plain React
@@ -114,6 +115,15 @@ function ProjectDetail({
     [api, project],
   );
 
+  const accent = useColor('--color-accent');
+  // The header's derived status reads tasks and waits, so a pull re-pulls all
+  // three lists this screen shows.
+  const refetchAll = useCallback(
+    () => Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]),
+    [api, tasksApi, waitsApi],
+  );
+  const { refreshing, onRefresh } = usePullRefresh(refetchAll);
+
   // Still hydrating the collection: hold a blank screen rather than flash a
   // not-found.
   if (projects === undefined) {
@@ -141,6 +151,14 @@ function ProjectDetail({
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 96 }}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={accent}
+            colors={[accent]}
+          />
+        }
       >
         {error ? (
           <Text variant="error" className="px-screen-x pb-2">

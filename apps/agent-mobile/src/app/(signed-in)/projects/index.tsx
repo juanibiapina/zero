@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
   Pressable,
+  RefreshControl,
   SectionList,
   type TextInput as RNTextInput,
   useWindowDimensions,
@@ -40,8 +41,10 @@ import {
   useDelayed,
   useForegroundRefetch,
   useLoadError,
+  usePullRefresh,
   useUndoableLeave,
 } from '@/lib/screen-hooks';
+import { useColor } from '@/lib/theme';
 
 // Helper text (not the placeholder): teach outcome-based naming.
 const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done.";
@@ -192,6 +195,15 @@ function Projects({
   const del = useUndoableLeave(DONE_UNDO_MS);
 
   useForegroundRefetch(api.refetch);
+
+  const accent = useColor('--color-accent');
+  // A project's display status is derived from its tasks and waits, so a pull
+  // re-pulls all three lists that this screen shows.
+  const refetchAll = useCallback(
+    () => Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]),
+    [api, tasksApi, waitsApi],
+  );
+  const { refreshing, onRefresh } = usePullRefresh(refetchAll);
 
   const commitStatus = useCallback(
     (id: string, status: ProjectStatus) => {
@@ -346,6 +358,14 @@ function Projects({
         <SectionList
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 96 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={accent}
+              colors={[accent]}
+            />
+          }
           sections={sections}
           keyExtractor={(item) => item.id}
           stickySectionHeadersEnabled

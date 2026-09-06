@@ -1,6 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  waitFor,
+  type RenderResult,
+} from '@testing-library/react-native';
 
 import type { Project, ProjectStatus } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
@@ -9,6 +15,17 @@ import { resetWaitsApiForTest } from '@/lib/waits-collection';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
 
 import ProjectsScreen from '../projects';
+
+// Trigger pull-to-refresh: the scroll host carries the RefreshControl element on
+// its `refreshControl` prop (the test renderer exposes host nodes only, so the
+// RefreshControl itself is not a queryable node), so invoke that control's
+// onRefresh the way a real pull would.
+const pullToRefresh = (screen: RenderResult) => {
+  const [scroll] = screen.container.queryAll(
+    (n) => n.props?.refreshControl != null,
+  );
+  scroll.props.refreshControl.props.onRefresh();
+};
 
 const mockGetToken = jest.fn<() => Promise<string | null>>();
 jest.mock('@clerk/expo', () => ({
@@ -184,5 +201,22 @@ describe('ProjectsScreen (list)', () => {
     const { getByLabelText } = await renderScreen();
 
     await waitFor(() => expect(getByLabelText('Next, 1')).toBeTruthy());
+  });
+
+  it('re-pulls the projects when the list is pulled to refresh', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('Run a 5K')).toBeTruthy());
+
+    const before = mockFetchProjects.mock.calls.length;
+    await act(async () => {
+      pullToRefresh(screen);
+    });
+
+    await waitFor(() =>
+      expect(mockFetchProjects.mock.calls.length).toBeGreaterThan(before),
+    );
   });
 });
