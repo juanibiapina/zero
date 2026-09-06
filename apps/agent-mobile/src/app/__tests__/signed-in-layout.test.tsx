@@ -74,7 +74,7 @@ describe('SignedInLayout', () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
     const { getByText } = await render(<SignedInLayout />);
     expect(getByText(/^tabs/)).toBeTruthy();
-    expect(getByText('Today')).toBeTruthy();
+    expect(getByText('Home')).toBeTruthy();
     expect(getByText('Upcoming')).toBeTruthy();
   });
 

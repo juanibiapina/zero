@@ -271,6 +271,19 @@ agent-core stays React-free. `apps/agent-web` also gained a Vitest +
 `@testing-library/react` toolchain and a `ProjectsPage` suite, so the web surface
 is no longer untested.
 
+Shipped (2026-09-06): **Home** — the Today screen reworked (plan:
+`docs/plans/todo-home-rework.md`). Renamed Today → Home on both surfaces (web nav
++ mobile tab; the `/captures` route is unchanged). The empty region is now one
+Clarify → Engage pipeline: a plate with tasks shows the tasks (each project task
+badged with its project's icon); an empty plate with captures shows the inbox
+alone; an empty plate *and* inbox shows a state-driven call to action from the
+projects' derived statuses — **Plan your day** (Next/Waiting exist, with a
+`N Next · M Waiting` summary), **Bring a project forward** (only Backlog/Done), or
+**Create your first project** (none) — each routing to Projects. The whole
+gate-and-mapping is one shared pure seam `homeCallToAction` in `@zero/agent-core`
+(with `homeCallToActionCopy` so web and mobile show identical words), unit-tested;
+web and mobile screen tests cover the rename, the CTA cases, and the badge.
+
 Shipped:
 
 - **The "what shows up" availability model** (plan:

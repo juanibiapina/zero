@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { stopRefine, useRefineSession } from "@/lib/refine-session";
 
 // The refine session banner: pinned while a capture is being refined into tasks
-// and projects. Done consumes the capture; Cancel leaves it. Shown on Today and
+// and projects. Done consumes the capture; Cancel leaves it. Shown on Home and
 // Projects (the session is shared), so a refine can span both. `onFinish`
 // processes the capture (each page passes its own captures data layer).
 export function RefineBanner({

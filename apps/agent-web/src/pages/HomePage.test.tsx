@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createInMemoryApi,
@@ -9,6 +10,7 @@ import {
   type Capture,
   type CapturesApi,
   type CapturesRest,
+  type Project,
   type ProjectsApi,
   type ProjectsRest,
   type Task,
@@ -160,7 +162,24 @@ function fakeTasksRest(initial: Task[]): TasksRest {
   };
 }
 
-function setApi(initial: Capture[], tasks: Task[] = []) {
+function fakeProjectsRest(initial: Project[]): ProjectsRest {
+  const server = initial.map((item) => ({ ...item }));
+  return {
+    ...emptyProjectsRest,
+    fetchProjects: async () => server.map((item) => ({ ...item })),
+  };
+}
+
+const projectRow = (id: string, over: Partial<Project> = {}): Project => ({
+  id,
+  title: over.title ?? id,
+  icon: over.icon ?? "📁",
+  description: over.description ?? null,
+  status: over.status ?? "next",
+  createdAt: over.createdAt ?? "2023-01-01T00:00:00.000Z",
+});
+
+function setApi(initial: Capture[], tasks: Task[] = [], projects: Project[] = []) {
   h.api = createInMemoryApi({
     queryClient: new QueryClient(),
     rest: fakeRest(initial),
@@ -171,7 +190,7 @@ function setApi(initial: Capture[], tasks: Task[] = []) {
   });
   h.projectsApi = createInMemoryProjectsApi({
     queryClient: new QueryClient(),
-    rest: emptyProjectsRest,
+    rest: fakeProjectsRest(projects),
   });
   h.waitsApi = createInMemoryWaitsApi({
     queryClient: new QueryClient(),
@@ -187,9 +206,65 @@ describe("HomePage", () => {
     h.waitsApi = null;
   });
 
+  it("titles the screen Home", async () => {
+    setApi([]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+    expect(
+      await screen.findByRole("heading", { name: "Home", level: 1 }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the plan CTA when plate and inbox are empty and a project is next", async () => {
+    setApi([], [], [projectRow("p", { status: "next" })]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    const cta = await screen.findByRole("link", { name: "Plan your day" });
+    expect(cta).toHaveAttribute("href", "/projects");
+    expect(screen.getByText("1 Next")).toBeInTheDocument();
+  });
+
+  it("shows the create CTA when there are no projects", async () => {
+    setApi([]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    expect(
+      await screen.findByRole("link", { name: "Create your first project" }),
+    ).toHaveAttribute("href", "/projects");
+  });
+
+  it("shows the inbox and no CTA when the plate is empty but captures exist", async () => {
+    setApi([capture("1", "buy milk")], [], [projectRow("p", { status: "next" })]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    expect(
+      await screen.findByRole("button", { name: 'Edit "buy milk"' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Plan your day" }),
+    ).toBeNull();
+  });
+
+  it("badges a project task on the plate with its project icon", async () => {
+    setApi(
+      [],
+      [
+        {
+          ...taskRow("1", "mail the letter"),
+          projectId: "p",
+          takenOnAt: "2023-01-02T00:00:00.000Z",
+        },
+      ],
+      [projectRow("p", { status: "next", icon: "🎓" })],
+    );
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    await screen.findByRole("button", { name: 'Complete "mail the letter"' });
+    expect(screen.getByText("🎓")).toBeInTheDocument();
+  });
+
   it("adds a task from the Task quick-add mode", async () => {
     setApi([]);
-    render(<HomePage />);
+    render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(await screen.findByRole("radio", { name: "task" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Add a task" }), {
@@ -208,7 +283,7 @@ describe("HomePage", () => {
 
   it("completes a task from the top region", async () => {
     setApi([], [taskRow("1", "mail the letter")]);
-    render(<HomePage />);
+    render(<HomePage />, { wrapper: MemoryRouter });
 
     const complete = await screen.findByRole("button", {
       name: 'Complete "mail the letter"',
@@ -226,7 +301,7 @@ describe("HomePage", () => {
 
   it("edits a capture from its detail sheet", async () => {
     setApi([capture("1", "buy milk")]);
-    render(<HomePage />);
+    render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
@@ -248,7 +323,7 @@ describe("HomePage", () => {
 
   it("preserves the stored text when the sheet draft is empty", async () => {
     setApi([capture("1", "buy milk")]);
-    render(<HomePage />);
+    render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
@@ -266,7 +341,7 @@ describe("HomePage", () => {
 
   it("commits a changed draft when Escape dismisses the sheet", async () => {
     setApi([capture("1", "buy milk")]);
-    render(<HomePage />);
+    render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
@@ -289,7 +364,7 @@ describe("HomePage", () => {
 
   it("closes an unchanged capture with the sheet Close button", async () => {
     setApi([capture("1", "buy milk")]);
-    render(<HomePage />);
+    render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),

@@ -22,17 +22,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
+import { Link } from "react-router";
 import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
   DONE_UNDO_MS,
+  homeCallToAction,
+  homeCallToActionCopy,
   homeTasks,
+  ICON_CHOICES,
   localToday,
   messageOf,
   orderKeyBetween,
   tomorrow,
   visibleCaptures,
+  type HomeCallToAction,
 } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
@@ -71,7 +76,7 @@ export function HomePage() {
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
-          <h1 className="text-2xl font-bold tracking-tight">Today</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Home</h1>
           {capturesApi && tasksApi && projectsApi && waitsApi ? (
             <MergedHome
               capturesApi={capturesApi}
@@ -128,6 +133,39 @@ function MergedHome({
     [capturesApi],
   );
 
+  // The whole-screen empty-region gate. Home reads all four collections, computes
+  // the plate (homeTasks) and the visible inbox, and asks the shared seam whether
+  // a call to action should replace them. A non-null result means the plate and
+  // inbox are both empty (the "all clear" state); null means render the plate and
+  // inbox normally. See docs/plans/todo-home-rework.md.
+  const { data: tasks, isLoading: tasksLoading } = useLiveQuery((q) =>
+    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
+  const { data: projects, isLoading: projectsLoading } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
+  );
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
+  );
+  const { data: openCaptures, isLoading: capturesLoading } = useLiveQuery((q) =>
+    q.from({ c: capturesApi.collection }).where(({ c }) => isNull(c.processedAt)),
+  );
+  const plate = homeTasks(tasks ?? [], projects ?? [], conditions ?? []);
+  const captureCount = visibleCaptures(
+    openCaptures ?? [],
+    capturesLocalToday(),
+  ).length;
+  const cta = homeCallToAction(
+    plate.length,
+    captureCount,
+    projects ?? [],
+    tasks ?? [],
+    conditions ?? [],
+  );
+  // Do not flash the CTA on a returning user while the local snapshot hydrates:
+  // during hydration every collection reads empty, which would render "create".
+  const hydrating = tasksLoading || projectsLoading || capturesLoading;
+
   return (
     <div className="space-y-6">
       <RefineBanner onFinish={onFinishRefine} />
@@ -141,14 +179,45 @@ function MergedHome({
       />
       {error && <ErrorText>{error}</ErrorText>}
 
-      <TasksSection
-        api={tasksApi}
-        projectsApi={projectsApi}
-        waitsApi={waitsApi}
-        onError={setError}
-      />
-      <CapturesSection api={capturesApi} onError={setError} />
+      {cta ? (
+        hydrating ? (
+          <div className="min-h-24" />
+        ) : (
+          <CallToAction action={cta} />
+        )
+      ) : (
+        <>
+          <TasksSection
+            api={tasksApi}
+            projectsApi={projectsApi}
+            waitsApi={waitsApi}
+            onError={setError}
+          />
+          <CapturesSection api={capturesApi} onError={setError} />
+        </>
+      )}
     </div>
+  );
+}
+
+// The "all clear" state: shown only when the plate and inbox are both empty. Its
+// framing and destination are chosen by the shared homeCallToAction seam from the
+// projects' derived states; every case routes to Projects.
+function CallToAction({ action }: { action: HomeCallToAction }) {
+  const { title, body, button } = homeCallToActionCopy(action);
+  return (
+    <section
+      aria-label="Next step"
+      className="flex flex-col items-center gap-4 rounded-2xl border border-dashed bg-card/50 px-6 py-12 text-center"
+    >
+      <div className="space-y-1">
+        <p className="text-lg font-semibold">{title}</p>
+        <p className="text-sm text-muted-foreground">{body}</p>
+      </div>
+      <Button asChild size="lg" className="rounded-xl">
+        <Link to="/projects">{button}</Link>
+      </Button>
+    </section>
   );
 }
 
@@ -163,7 +232,7 @@ function TasksSection({
   waitsApi: WaitsApi;
   onError: (m: string) => void;
 }) {
-  const { data: tasks, isLoading } = useLiveQuery((q) =>
+  const { data: tasks } = useLiveQuery((q) =>
     q
       .from({ t: api.collection })
       .where(({ t }) => isNull(t.completedAt))
@@ -217,18 +286,20 @@ function TasksSection({
   }, [condText, waitingFor, waitsApi, onError]);
 
   const list = homeTasks(tasks ?? [], projects ?? [], conditions ?? []);
-  const view = listView({ count: list.length, isLoading, loadError: null });
+  // The project a task belongs to lends its icon as a small context badge; a
+  // loose task shows none. Default to the neutral icon if the project's is unset.
+  const iconOf = (projectId: string): string =>
+    (projects ?? []).find((p) => p.id === projectId)?.icon ?? ICON_CHOICES[0];
+
+  // Empty is not this section's concern: when the plate is empty the parent
+  // renders the inbox alone or the all-clear CTA, so the Tasks section simply
+  // does not appear.
+  if (list.length === 0) return null;
 
   return (
     <section className="space-y-3" aria-label="Tasks">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Tasks
-      </h2>
-      {view === "empty" || view === "loading" ? (
-        <p className="text-sm text-muted-foreground">
-          No tasks yet. Add one to work on today.
-        </p>
-      ) : (
+      <h2 className="text-sm font-semibold text-foreground">Tasks</h2>
+      {(
         <ul className="space-y-3">
           {list.map((item) => {
             const leaving = done.pending.has(item.id);
@@ -275,6 +346,14 @@ function TasksSection({
                       className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
                       onClick={() => onComplete(item)}
                     />
+                    {item.projectId && (
+                      <span
+                        aria-hidden
+                        className="shrink-0 text-base leading-none"
+                      >
+                        {iconOf(item.projectId)}
+                      </span>
+                    )}
                     <span className="flex-1 text-left text-base">
                       {item.text}
                     </span>
@@ -416,9 +495,7 @@ function CapturesSection({
 
   return (
     <section className="space-y-3" aria-label="Capture inbox">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Inbox
-      </h2>
+      <h2 className="text-sm font-medium text-muted-foreground">Inbox</h2>
       {view === "loading" ? (
         showLoadingText ? (
           <p className="text-sm text-muted-foreground">Loading your captures…</p>

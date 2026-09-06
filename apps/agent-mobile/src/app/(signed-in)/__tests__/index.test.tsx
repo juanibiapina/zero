@@ -61,6 +61,8 @@ const mockReorderCapture =
   jest.fn<
     (getToken: unknown, id: string, sortKey: string) => Promise<Capture>
   >();
+const mockFetchProjects =
+  jest.fn<(getToken: unknown) => Promise<unknown[]>>();
 const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
 const mockAddTask =
   jest.fn<
@@ -89,9 +91,9 @@ jest.mock('@/lib/api', () => ({
     task: { id: string; text: string; showUpDate: string },
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
-  // The Home top region reads projects (for the project-active gate); it never
-  // mutates them here, so a fetch returning [] is enough.
-  fetchProjects: () => Promise.resolve([]),
+  // The Home top region reads projects (for the project-active gate and the
+  // all-clear call to action).
+  fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: () => Promise.reject(new Error('not used')),
   setProjectStatus: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
@@ -156,6 +158,57 @@ describe('HomeScreen', () => {
     mockCompleteTask.mockReset();
     mockFetchTasks.mockReset();
     mockFetchTasks.mockResolvedValue([]);
+    mockFetchProjects.mockReset();
+    mockFetchProjects.mockResolvedValue([]);
+  });
+
+  it('titles the screen Home', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    const { getByText } = await renderScreen();
+    await waitFor(() => expect(getByText('Home')).toBeTruthy());
+  });
+
+  it('shows the create call to action when plate and inbox are empty', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    const { getByText } = await renderScreen();
+    await waitFor(() =>
+      expect(getByText('Create your first project')).toBeTruthy(),
+    );
+  });
+
+  it('shows the inbox and no call to action when a capture is present', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    const { getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+    expect(queryByText('Create your first project')).toBeNull();
+  });
+
+  it('badges a project task on the plate with its project icon', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p',
+        title: 'Diploma',
+        icon: '🎓',
+        description: null,
+        status: 'next',
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+    mockFetchTasks.mockResolvedValue([
+      {
+        ...taskRow('1', 'mail the letter'),
+        projectId: 'p',
+        takenOnAt: '2023-01-02T00:00:00.000Z',
+      },
+    ]);
+    const { getByText } = await renderScreen();
+    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
+    expect(getByText('🎓')).toBeTruthy();
   });
 
   it('adds a task from the Task quick-add mode', async () => {
@@ -178,7 +231,7 @@ describe('HomeScreen', () => {
     const { getByLabelText, getByPlaceholderText, getByText } =
       await renderScreen();
     await waitFor(() =>
-      expect(getByText('No captures yet. Capture something.')).toBeTruthy(),
+      expect(getByText('Create your first project')).toBeTruthy(),
     );
 
     await act(async () => {
@@ -259,7 +312,7 @@ describe('HomeScreen', () => {
       // The cached snapshot hydrates fast, so the loading text is held back at
       // first: no spinner flash, and the empty message is not shown either.
       expect(queryByText('Loading your captures…')).toBeNull();
-      expect(queryByText('No captures yet. Capture something.')).toBeNull();
+      expect(queryByText('Create your first project')).toBeNull();
 
       // Only a genuinely slow, still-pending fetch surfaces the loading text,
       // once the delay elapses.
@@ -274,7 +327,7 @@ describe('HomeScreen', () => {
       await act(async () => {});
 
       expect(
-        getByText('No captures yet. Capture something.'),
+        getByText('Create your first project'),
       ).toBeTruthy();
       expect(queryByText('Loading your captures…')).toBeNull();
     } finally {
@@ -547,7 +600,7 @@ describe('HomeScreen', () => {
     // the just-added item.
     await waitFor(() =>
       expect(
-        getByText('No captures yet. Capture something.'),
+        getByText('Create your first project'),
       ).toBeTruthy(),
     );
 
@@ -581,7 +634,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() =>
       expect(
-        getByText('No captures yet. Capture something.'),
+        getByText('Create your first project'),
       ).toBeTruthy(),
     );
 
@@ -626,7 +679,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() =>
       expect(
-        getByText('No captures yet. Capture something.'),
+        getByText('Create your first project'),
       ).toBeTruthy(),
     );
 
@@ -659,7 +712,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() =>
       expect(
-        getByText('No captures yet. Capture something.'),
+        getByText('Create your first project'),
       ).toBeTruthy(),
     );
 
@@ -687,7 +740,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() =>
       expect(
-        getByText('No captures yet. Capture something.'),
+        getByText('Create your first project'),
       ).toBeTruthy(),
     );
 
@@ -720,7 +773,7 @@ describe('HomeScreen', () => {
 
     await waitFor(() =>
       expect(
-        getByText('No captures yet. Capture something.'),
+        getByText('Create your first project'),
       ).toBeTruthy(),
     );
 

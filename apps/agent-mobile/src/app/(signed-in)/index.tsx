@@ -6,7 +6,10 @@ import {
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
   DONE_UNDO_MS,
+  homeCallToAction,
+  homeCallToActionCopy,
   homeTasks,
+  ICON_CHOICES,
   localToday,
   messageOf,
   orderKeyBetween,
@@ -14,11 +17,14 @@ import {
   visibleCaptures,
   type Capture,
   type CapturesApi,
+  type HomeCallToAction,
+  type Project,
   type ProjectsApi,
   type Task,
   type TasksApi,
   type WaitsApi,
 } from '@zero/agent-core';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
@@ -264,6 +270,7 @@ function CaptureDetail({
 function TaskRow({
   item,
   leaving,
+  icon,
   onComplete,
   onPark,
   onUndo,
@@ -271,11 +278,24 @@ function TaskRow({
 }: {
   item: Task;
   leaving: boolean;
+  // The task's project icon, or null for a loose task (shows no badge).
+  icon: string | null;
   onComplete: (item: Task) => void;
   onPark: (item: Task) => void;
   onUndo: (item: Task) => void;
   onAddWaiting: (item: Task) => void;
 }) {
+  // A project task leads with its project's icon as a small context badge; a
+  // loose task shows none.
+  const body =
+    icon != null ? (
+      <View className="flex-row items-center gap-2">
+        <Text className="text-[16px]">{icon}</Text>
+        <Text className="flex-1">{item.text}</Text>
+      </View>
+    ) : (
+      <Text>{item.text}</Text>
+    );
   // Completing leaves the task in place ~5s with Undo (and, for a project task,
   // a "+ Waiting" shortcut) before the write commits.
   if (leaving) {
@@ -333,47 +353,40 @@ function TaskRow({
         ) : undefined
       }
     >
-      <Text>{item.text}</Text>
+      {body}
     </ListRow>
   );
 }
 
 // The Home top region: the tasks you have taken on, rendered above the capture
-// inbox as the list header. Slice 1 shows every open task; later slices gate it
-// by project and selection through homeTasks.
+// inbox as the list header. Availability (which tasks show) lives in homeTasks;
+// this renders the plate and hides itself (and its "Tasks" caption) when empty —
+// the parent then shows the inbox alone or the all-clear call to action.
 function TasksTop({
+  plate,
+  projects,
   api,
-  projectsApi,
   waitsApi,
   onError,
 }: {
+  plate: Task[];
+  projects: Project[];
   api: TasksApi;
-  projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
   onError: (message: string) => void;
 }) {
-  const { data: tasks } = useLiveQuery((q) =>
-    q
-      .from({ t: api.collection })
-      .where(({ t }) => isNull(t.completedAt))
-      .orderBy(({ t }) => t.createdAt, 'asc'),
-  );
-  const { data: projects } = useLiveQuery((q) =>
-    q.from({ p: projectsApi.collection }),
-  );
-  const { data: conditions } = useLiveQuery((q) =>
-    q.from({ w: waitsApi.collection }),
-  );
   useForegroundRefetch(api.refetch);
   const done = useUndoableLeave(DONE_UNDO_MS);
   const [waitingFor, setWaitingFor] = useState<{ projectId: string } | null>(
     null,
   );
   const [condText, setCondText] = useState('');
-  const list = useMemo(
-    () => homeTasks(tasks ?? [], projects ?? [], conditions ?? []),
-    [tasks, projects, conditions],
-  );
+  const list = plate;
+  // A project task's icon (defaulting to the neutral one); a loose task has none.
+  const iconOf = (item: Task): string | null =>
+    item.projectId == null
+      ? null
+      : (projects.find((p) => p.id === item.projectId)?.icon ?? ICON_CHOICES[0]);
   const onComplete = useCallback(
     (item: Task) => {
       done.start(item.id, () => {
@@ -405,26 +418,25 @@ function TasksTop({
   }, [condText, waitingFor, waitsApi, onError]);
   return (
     <View>
-      <Text variant="caption" className="px-screen-x pb-1 pt-2">
-        Tasks
-      </Text>
-      {list.length === 0 ? (
-        <Text variant="subtitle" className="px-screen-x pb-2">
-          No tasks yet. Add one to work on today.
-        </Text>
-      ) : (
-        list.map((item) => (
-          <TaskRow
-            key={item.id}
-            item={item}
-            leaving={done.pending.has(item.id)}
-            onComplete={onComplete}
-            onPark={onPark}
-            onUndo={onUndo}
-            onAddWaiting={onAddWaiting}
-          />
-        ))
-      )}
+      {list.length > 0 ? (
+        <>
+          <Text variant="caption" className="px-screen-x pb-1 pt-2">
+            Tasks
+          </Text>
+          {list.map((item) => (
+            <TaskRow
+              key={item.id}
+              item={item}
+              icon={iconOf(item)}
+              leaving={done.pending.has(item.id)}
+              onComplete={onComplete}
+              onPark={onPark}
+              onUndo={onUndo}
+              onAddWaiting={onAddWaiting}
+            />
+          ))}
+        </>
+      ) : null}
       <Text variant="caption" className="px-screen-x pb-1 pt-3">
         Inbox
       </Text>
@@ -457,6 +469,33 @@ function TasksTop({
   );
 }
 
+// The all-clear state on Home: shown only when the plate and inbox are both
+// empty. The shared homeCallToAction seam picks the framing from the projects'
+// derived states; every case routes to the Projects tab.
+function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
+  const { title, body, button } = homeCallToActionCopy(action);
+  return (
+    <View className="flex-1 items-center justify-center gap-4 px-screen-x">
+      <View className="items-center gap-1">
+        <Text variant="title" className="text-center">
+          {title}
+        </Text>
+        {body ? (
+          <Text variant="subtitle" className="text-center">
+            {body}
+          </Text>
+        ) : null}
+      </View>
+      <Button
+        label={button}
+        variant="filled"
+        style={{ height: 48, borderRadius: 14, paddingHorizontal: 20 }}
+        onPress={() => router.navigate('/projects')}
+      />
+    </View>
+  );
+}
+
 // Home is two regions: the tasks you have taken on (TasksTop) above the capture
 // inbox. The quick-add defaults to a capture and can switch to a task.
 export default function HomeScreen() {
@@ -480,7 +519,7 @@ export default function HomeScreen() {
 
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
-      <ScreenHeader title="Today" />
+      <ScreenHeader title="Home" />
       {capturesApi && tasksApi && projectsApi && waitsApi ? (
         <Captures
           api={capturesApi}
@@ -525,6 +564,33 @@ function Captures({
     () => visibleCaptures(captures ?? [], capturesLocalToday()),
     [captures],
   );
+
+  // The plate (tasks taken on) and the projects/conditions that derive it. Read
+  // here so Home can gate the whole empty region through the shared seam: a
+  // non-null call to action means the plate and inbox are both empty.
+  const { data: tasks, isLoading: tasksLoading } = useLiveQuery((q) =>
+    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
+  const { data: projects, isLoading: projectsLoading } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
+  );
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
+  );
+  const plate = useMemo(
+    () => homeTasks(tasks ?? [], projects ?? [], conditions ?? []),
+    [tasks, projects, conditions],
+  );
+  const cta = homeCallToAction(
+    plate.length,
+    list.length,
+    projects ?? [],
+    tasks ?? [],
+    conditions ?? [],
+  );
+  // Do not flash the CTA while the local snapshot hydrates (every collection
+  // reads empty then, which would look like "create").
+  const hydrating = isLoading || tasksLoading || projectsLoading;
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -756,6 +822,12 @@ function Captures({
         ) : (
           <View className="flex-1" />
         )
+      ) : cta && !loadError ? (
+        hydrating ? (
+          <View className="flex-1" />
+        ) : (
+          <HomeCallToActionView action={cta} />
+        )
       ) : (
         // ReorderableList extends FlatList (so it still virtualizes the unbounded
         // Captures list) and adds long-press drag-to-reorder. itemLayoutAnimation
@@ -781,8 +853,9 @@ function Captures({
           onDragEnd={onDragEnd}
           ListHeaderComponent={
             <TasksTop
+              plate={plate}
+              projects={projects ?? []}
               api={tasksApi}
-              projectsApi={projectsApi}
               waitsApi={waitsApi}
               onError={setWriteError}
             />

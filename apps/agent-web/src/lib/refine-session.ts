@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 // A refine session: the capture the user is currently refining into tasks and
 // projects. Module-level (a tiny observable) so it is shared across pages —
-// start it from a capture on Today, then create tasks there or projects on the
+// start it from a capture on Home, then create tasks there or projects on the
 // Projects page, and everything created while it is active links back to the
 // capture. "Done" consumes the capture. See
 // docs/plans/todo-availability-model.md (slice 8).

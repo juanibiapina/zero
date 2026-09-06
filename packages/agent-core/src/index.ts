@@ -68,6 +68,12 @@ export {
   conditionSatisfied,
   unresolvedConditions,
 } from "./projects/derive";
+export {
+  homeCallToAction,
+  homeCallToActionCopy,
+  type HomeCallToAction,
+  type HomeCallToActionCopy,
+} from "./projects/call-to-action";
 
 // The WaitingCondition data layer (why a project is waiting).
 export type { WaitingCondition, WaitingConditionKind } from "./waits/types";
