@@ -149,8 +149,10 @@ no speculative columns before their behavior is designed.
   "⋯" **actions menu** with the status moves and **Delete project**), then the
   project's **description** — its statement of intent, an always-visible editable
   field directly under the title — then the project's **tasks** (complete,
-  take-on/park, inline add), then its **waiting conditions** (add revealed on
-  "+"). Field edits commit on blur/submit (the icon on tap). Choosing **Mark
+  take-on/park; a task is added from a plus button (a FAB) that opens a
+  **task-only** quick-add bar docked to the keyboard — no capture mode, so
+  captures are not selectable here), then its **waiting conditions** (add
+  revealed on "+"). Field edits commit on blur/submit (the icon on tap). Choosing **Mark
   done** or **Delete project** returns to the list and leaves the row briefly
   struck-through with an inline **Undo** (~5s) before it leaves (delete then
   hard-removes it server-side). Sheets/menus still serve the short
@@ -186,9 +188,9 @@ no speculative columns before their behavior is designed.
   is the shared factory's `delete` verb kind — it optimistically drops the row and
   issues the `DELETE`, rolling back on failure. See `docs/storage.md`.
 - **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
-  migration 0047): the project screen lists the project's open tasks and has an
-  inline add-task field (grooming). A task added from a project is parked
-  (grooming is collect-then-take-on). **Waiting conditions** attach to a project
+  migration 0047): the project screen lists the project's open tasks and adds one
+  from a plus-button quick-add bar (grooming). A task added from a project is
+  parked (grooming is collect-then-take-on). **Waiting conditions** attach to a project
   (see `docs/entities/waiting-condition.md`). **Refine provenance**:
   `sourceCaptureId` (migration 0050) records the capture a project was refined
   from. The AI Capture → Project conversion is a later slice.

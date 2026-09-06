@@ -17,11 +17,20 @@ import {
   type WaitingCondition,
   type WaitsApi,
 } from '@zero/agent-core';
-import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  BackHandler,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  type TextInput as RNTextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
+import { QuickAdd } from '@/components/quick-add';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useProjectsApi } from '@/lib/projects-collection';
@@ -80,6 +89,26 @@ function ProjectDetail({
   const back = useCallback(() => router.back(), [router]);
   const [error, setError] = useState<string | null>(null);
 
+  // Adding a task is a plus FAB that expands into the shared keyboard-docked
+  // quick-add bar (like Home and the Projects list), not an inline field. The
+  // bar is task-only — no capture mode — so what you add here lands in this
+  // project. See docs/plans/todo-project-task-add-fab.md.
+  const [text, setText] = useState('');
+  const [adding, setAdding] = useState(false);
+  const inputRef = useRef<RNTextInput>(null);
+
+  // Measure the gap from this screen's content bottom to the window bottom (the
+  // native bottom tab bar plus the system gesture inset), fed to the
+  // keyboard-sticky quick-add so it docks flush to the keyboard.
+  const { height: windowHeight } = useWindowDimensions();
+  const rootRef = useRef<View>(null);
+  const [bottomOffset, setBottomOffset] = useState(0);
+  const measureBottomGap = useCallback(() => {
+    rootRef.current?.measureInWindow((_x, y, _w, h) => {
+      setBottomOffset(Math.max(0, windowHeight - (y + h)));
+    });
+  }, [windowHeight]);
+
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
   );
@@ -115,6 +144,46 @@ function ProjectDetail({
     [api, project],
   );
 
+  const onAdd = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      // Submitting an empty input closes the quick-add bar.
+      setAdding(false);
+      return;
+    }
+    if (!project) return;
+    setError(null);
+    // Parked by default (takenOnAt null) — grooming is collect-then-take-on;
+    // linked to the capture when refining. Keep the bar open and cleared for
+    // rapid entry.
+    const tx = tasksApi.add(
+      trimmed,
+      localToday(),
+      project.id,
+      null,
+      refiningCaptureId(),
+    );
+    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    setText('');
+  }, [text, tasksApi, project]);
+
+  const closeAdd = useCallback(() => {
+    setText('');
+    setAdding(false);
+  }, []);
+
+  // Android hardware Back closes the quick-add before it pops the screen.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (adding) {
+        closeAdd();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [adding, closeAdd]);
+
   const accent = useColor('--color-accent');
   // The header's derived status reads tasks and waits, so a pull re-pulls all
   // three lists this screen shows.
@@ -145,7 +214,11 @@ function ProjectDetail({
   const displayStatus = projectDisplayStatus(project, tasks, conds, list);
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      ref={rootRef}
+      onLayout={measureBottomGap}
+      className="flex-1 bg-background"
+    >
       <BackRow onBack={back} />
       <ScrollView
         style={{ flex: 1 }}
@@ -197,6 +270,22 @@ function ProjectDetail({
           onError={setError}
         />
       </ScrollView>
+
+      {/* Task-only quick-add: no capture mode, so it adds a task to this
+          project. */}
+      <QuickAdd
+        open={adding}
+        text={text}
+        onChangeText={setText}
+        onOpen={() => setAdding(true)}
+        onSubmit={onAdd}
+        onRequestClose={closeAdd}
+        busy={false}
+        inputRef={inputRef}
+        fabLabel="Add a task"
+        placeholder="Add a task to this project…"
+        bottomOffset={bottomOffset}
+      />
     </View>
   );
 }
@@ -351,16 +440,6 @@ function ProjectTasks({
       .orderBy(({ t }) => t.createdAt, 'asc'),
   );
   const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
-  const [text, setText] = useState('');
-
-  const onAdd = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    // Parked (takenOnAt null); linked to the capture when refining.
-    const tx = api.add(trimmed, localToday(), projectId, null, refiningCaptureId());
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-    setText('');
-  };
 
   const onComplete = (tid: string) => {
     const tx = api.complete(tid);
@@ -399,17 +478,6 @@ function ProjectTasks({
           </Pressable>
         </View>
       ))}
-      <View className="mt-1 rounded-xl bg-surface-muted px-4 py-3">
-        <Input
-          value={text}
-          onChangeText={setText}
-          onSubmitEditing={onAdd}
-          returnKeyType="done"
-          blurOnSubmit={false}
-          placeholder="Add a task to this project…"
-          accessibilityLabel="Add a task to this project"
-        />
-      </View>
     </View>
   );
 }

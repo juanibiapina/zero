@@ -295,6 +295,13 @@ Shipped:
 - **Automatic appearance.** Mobile and web follow the system light or dark
   preference, including native/browser chrome. See `todo-dark-mode.md` for the
   implementation and device proof.
+- **Mobile task add on a project is a plus FAB** (not an inline field): the
+  project screen's task composer moved to the shared plus button / keyboard-docked
+  quick-add bar, task-only (no capture mode, so captures aren't selectable there).
+  Tasks-only rework of one screen; no data/API/collection change. Plan:
+  `docs/plans/todo-project-task-add-fab.md`. Device-verified on the Pixel 7 (dev
+  client + Maestro): FAB adds a parked task, bar docks above the tab bar, Back
+  closes the bar before popping.
 
 In flight (details in `docs/plans/`):
 

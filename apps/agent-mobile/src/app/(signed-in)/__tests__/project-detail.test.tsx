@@ -200,6 +200,11 @@ describe('ProjectDetailScreen', () => {
     const { getByLabelText, getByPlaceholderText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
+    // Adding is a plus FAB that expands into the quick-add bar.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a task'));
+    });
+
     const input = getByPlaceholderText('Add a task to this project…');
     await act(async () => {
       fireEvent.changeText(input, 'buy running shoes');

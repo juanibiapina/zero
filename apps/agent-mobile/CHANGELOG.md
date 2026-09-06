@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-06: Add a task to a project with the round + button on the project's screen. It opens an add box that sits flush above the keyboard, the same way you add anywhere else in the app; the old add field at the bottom of the task list is gone.
 - 2026-09-06: Pull down on any list — Today, Upcoming, Projects, or a project's screen — to refresh it.
 - 2026-09-05: Tapping a project now opens its own screen (with a Back button and the tab bar still there) instead of a pop-up sheet — and its tasks and waiting conditions now show up correctly, which they didn't before. The screen leads with the project's tasks and what it's waiting on; its title is editable at the top, the icon is tucked behind a tap, and status changes and delete live in a "⋯" menu.
 - 2026-09-05: Deleting a project now removes it from the list right away, instead of quietly coming back until the next refresh.
