@@ -186,6 +186,16 @@ describe('HomeScreen', () => {
     expect(queryByText('Create your first project')).toBeNull();
   });
 
+  it('hides the inbox caption when there are tasks but no captures', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
+    const { getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
+    expect(queryByText('Inbox')).toBeNull();
+    expect(queryByText('No captures yet. Capture something.')).toBeNull();
+  });
+
   it('badges a project task on the plate with its project icon', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchCaptures.mockResolvedValue([]);

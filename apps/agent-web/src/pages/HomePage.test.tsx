@@ -244,6 +244,17 @@ describe("HomePage", () => {
     ).toBeNull();
   });
 
+  it("hides the inbox section when there are tasks but no captures", async () => {
+    setApi([], [taskRow("1", "mail the letter")]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    await screen.findByRole("button", { name: 'Complete "mail the letter"' });
+    expect(screen.queryByText("Inbox")).toBeNull();
+    expect(
+      screen.queryByText("No captures yet. Capture something."),
+    ).toBeNull();
+  });
+
   it("badges a project task on the plate with its project icon", async () => {
     setApi(
       [],

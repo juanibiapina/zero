@@ -493,6 +493,11 @@ function CapturesSection({
   const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
+  // An empty inbox shows nothing: the both-empty "all clear" state is the CTA
+  // (handled by the parent), and a plate-with-tasks + empty inbox needs no
+  // "no captures" message. So the Inbox section only appears once it has rows.
+  if (view === "empty") return null;
+
   return (
     <section className="space-y-3" aria-label="Capture inbox">
       <h2 className="text-sm font-medium text-muted-foreground">Inbox</h2>
@@ -502,10 +507,6 @@ function CapturesSection({
         ) : (
           <div className="min-h-24" />
         )
-      ) : view === "empty" ? (
-        <p className="text-sm text-muted-foreground">
-          No captures yet. Capture something.
-        </p>
       ) : (
         <DndContext
           sensors={sensors}

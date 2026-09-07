@@ -365,12 +365,16 @@ function TaskRow({
 function TasksTop({
   plate,
   projects,
+  hasCaptures,
   api,
   waitsApi,
   onError,
 }: {
   plate: Task[];
   projects: Project[];
+  // Whether the inbox has any visible capture. The "Inbox" caption only shows
+  // when it does — an empty inbox below a plate of tasks shows nothing.
+  hasCaptures: boolean;
   api: TasksApi;
   waitsApi: WaitsApi;
   onError: (message: string) => void;
@@ -437,9 +441,11 @@ function TasksTop({
           ))}
         </>
       ) : null}
-      <Text variant="caption" className="px-screen-x pb-1 pt-3">
-        Inbox
-      </Text>
+      {hasCaptures ? (
+        <Text variant="caption" className="px-screen-x pb-1 pt-3">
+          Inbox
+        </Text>
+      ) : null}
 
       <Sheet
         open={waitingFor != null}
@@ -855,15 +861,11 @@ function Captures({
             <TasksTop
               plate={plate}
               projects={projects ?? []}
+              hasCaptures={list.length > 0}
               api={tasksApi}
               waitsApi={waitsApi}
               onError={setWriteError}
             />
-          }
-          ListEmptyComponent={
-            <Text variant="subtitle" className="px-screen-x">
-              No captures yet. Capture something.
-            </Text>
           }
         />
       )}
