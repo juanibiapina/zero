@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-08: A new project suggests emoji icons for itself. Create a project and, by the time you open the icon picker, a row of suggested icons based on its name is already there — tap one to use it. Refresh recomputes them (handy after you add a description), and the full emoji picker is always right below.
 - 2026-09-08: Create a project straight from Home. The quick-add now has a Project option alongside Capture and Task; adding one keeps you on Home and shows a toast with a link to open the new project.
 - 2026-09-08: Starring a task on a waiting project brings the project back to active, even while it is still waiting on something; finishing that task returns the project to waiting.
 - 2026-09-08: Pick any emoji as a project's icon. Opening the icon picker now offers a searchable list of every standard emoji, instead of a small fixed set.

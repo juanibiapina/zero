@@ -4,9 +4,25 @@ import { z } from "zod";
 import { log } from "../log";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
+import { createModel } from "../agents/model";
+import { suggestProjectIcons } from "../agents/icon-suggest";
 
 type Variables = {
   userId: string;
+};
+
+// The AI icon-suggestion seam, injectable so the route is testable without a
+// real model. The default builds a per-user model tagged `icon_suggest` (low
+// effort) and asks it for emoji; it never throws (a soft miss returns []).
+export type SuggestIcons = (
+  env: Env,
+  userId: string,
+  input: { title: string; description?: string | null },
+) => Promise<string[]>;
+
+const defaultSuggestIcons: SuggestIcons = async (env, userId, input) => {
+  const model = await createModel(env, userId, "icon_suggest");
+  return suggestProjectIcons(model, input);
 };
 
 const ProjectStatus = z.enum([
@@ -27,7 +43,10 @@ const ProjectSchema = z.object({
   sourceCaptureId: z.string().nullable(),
 });
 
-export const createProjectsRoutes = () => {
+export const createProjectsRoutes = (
+  deps: { suggestIcons?: SuggestIcons } = {},
+) => {
+  const suggestIcons = deps.suggestIcons ?? defaultSuggestIcons;
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
   const listRoute = createRoute({
@@ -110,6 +129,54 @@ export const createProjectsRoutes = () => {
     });
     log("project_added", { clerk_user_id: userId });
     return c.json({ project }, 201);
+  });
+
+  const iconSuggestRoute = createRoute({
+    method: "post",
+    path: "/api/projects/icon-suggestions",
+    tags: ["Projects"],
+    summary: "Suggest emoji icons for a project from its title/description",
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              title: z.string().min(1),
+              description: z.string().nullable().optional(),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": {
+            schema: z.object({ icons: z.array(z.string()) }),
+          },
+        },
+        description:
+          "Suggested single-emoji icons; an empty array is a soft miss.",
+      },
+      400: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "Empty title",
+      },
+    },
+  });
+
+  // Stateless on purpose: it reads/writes no `projects` row, so it is a plain
+  // route (not a collection verb). Both the create-time pre-warm and the
+  // fetch-on-open fallback call it. A soft miss (`[]`) is a 200; only an
+  // unexpected throw is a 500.
+  router.openapi(iconSuggestRoute, async (c) => {
+    const userId = c.get("userId");
+    const { title, description } = c.req.valid("json");
+    const icons = await suggestIcons(c.env, userId, { title, description });
+    log("project_icon_suggested", { clerk_user_id: userId, count: icons.length });
+    return c.json({ icons }, 200);
   });
 
   const editRoute = createRoute({

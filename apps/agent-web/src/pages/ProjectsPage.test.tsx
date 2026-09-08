@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   fireEvent,
@@ -28,6 +28,7 @@ import {
 
 import { ProjectsPage } from "./ProjectsPage";
 import { ProjectDetailPage } from "./ProjectDetailPage";
+import { __resetIconSuggestions } from "@/lib/icon-suggestions";
 
 // The pages read their data layers through getProjectsApi() / getTasksApi(); hand
 // each a fresh in-memory collection per test (backed by an array "server"), so
@@ -432,6 +433,142 @@ describe("ProjectsPage", () => {
     // After the collection loads without a match, it falls back to the list.
     expect(
       await screen.findByRole("heading", { name: "Projects" }),
+    ).toBeInTheDocument();
+  });
+});
+
+// The AI icon-suggestion feature: a pre-warmed shortcut above the manual picker.
+// The suggestion endpoint is a same-origin fetch, mocked here; the per-device
+// cache is a module singleton, reset between tests.
+describe("project icon suggestions", () => {
+  const fetchMock = vi.fn();
+
+  const respondIcons = (icons: string[]) =>
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ icons }),
+    });
+
+  const suggestionCalls = () =>
+    fetchMock.mock.calls.filter(
+      ([url]) => String(url) === "/api/projects/icon-suggestions",
+    );
+
+  const openIconPicker = async (title: string) => {
+    await openDetail(title);
+    fireEvent.click(screen.getByRole("button", { name: "Change icon" }));
+  };
+
+  afterEach(() => {
+    h.api = null;
+    h.tasksApi = null;
+    h.waitsApi = null;
+    h.capturesApi = null;
+    __resetIconSuggestions();
+    fetchMock.mockReset();
+    vi.useRealTimers();
+  });
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    respondIcons(["🌟", "🚀"]);
+  });
+
+  it("pre-warms suggestions when a project is created", async () => {
+    setApi([]);
+    renderApp();
+    fireEvent.change(await screen.findByRole("textbox", { name: "New project" }), {
+      target: { value: "Run a 5K" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+    await waitFor(() => expect(suggestionCalls().length).toBe(1));
+    const [, init] = suggestionCalls()[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: "Run a 5K",
+      description: null,
+    });
+  });
+
+  it("fetches on open when the cache is empty and shows chips", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp();
+    await openIconPicker("Run a 5K");
+    // The fetch-on-open fallback fires because nothing warmed this project.
+    await waitFor(() => expect(suggestionCalls().length).toBe(1));
+    expect(
+      await screen.findByRole("button", { name: "Use suggested icon 🌟" }),
+    ).toBeInTheDocument();
+  });
+
+  it("applies a tapped suggestion through the edit path", async () => {
+    setApi([project("1", "Run a 5K", "next", "🏃")]);
+    renderApp();
+    await openIconPicker("Run a 5K");
+    const chip = await screen.findByRole("button", {
+      name: "Use suggested icon 🚀",
+    });
+    await act(async () => {
+      fireEvent.click(chip);
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Change icon" }),
+      ).toHaveTextContent("🚀"),
+    );
+  });
+
+  it("shows a loading state while the request is in flight", async () => {
+    let resolve!: (v: { icons: string[] }) => void;
+    fetchMock.mockReturnValue(
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          new Promise<{ icons: string[] }>((r) => {
+            resolve = r;
+          }),
+      } as unknown as Response),
+    );
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp();
+    await openIconPicker("Run a 5K");
+    expect(
+      await screen.findByText("Loading suggested icons…"),
+    ).toBeInTheDocument();
+    await act(async () => {
+      resolve({ icons: ["🌟"] });
+    });
+    expect(
+      await screen.findByRole("button", { name: "Use suggested icon 🌟" }),
+    ).toBeInTheDocument();
+  });
+
+  it("refreshes suggestions on demand", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp();
+    await openIconPicker("Run a 5K");
+    await screen.findByRole("button", { name: "Use suggested icon 🌟" });
+    expect(suggestionCalls().length).toBe(1);
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Refresh suggested icons" }),
+      );
+    });
+    await waitFor(() => expect(suggestionCalls().length).toBe(2));
+  });
+
+  it("keeps the manual picker usable when suggestions fail", async () => {
+    fetchMock.mockRejectedValue(new Error("network down"));
+    setApi([project("1", "Run a 5K", "next")]);
+    renderApp();
+    await openIconPicker("Run a 5K");
+    // The soft-failure line appears and the full manual picker is still present.
+    expect(
+      await screen.findByText("Couldn't load suggestions"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Set icon 🎓" }),
     ).toBeInTheDocument();
   });
 });
