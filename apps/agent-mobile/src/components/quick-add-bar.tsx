@@ -6,7 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
 
-export type QuickAddBarMode = 'capture' | 'task';
+export type QuickAddBarMode = 'capture' | 'task' | 'project';
+
+// Accessibility labels for the mode-toggle pills.
+const MODE_LABELS: Record<QuickAddBarMode, string> = {
+  capture: 'Add a capture',
+  task: 'Add a task',
+  project: 'Add a project',
+};
 
 export type QuickAddBarProps = {
   value: string;
@@ -48,11 +55,11 @@ export function QuickAddBar({
     <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
       {mode && onModeChange ? (
         <View className="mb-2 flex-row gap-2">
-          {(['capture', 'task'] as const).map((m) => (
+          {(['capture', 'task', 'project'] as const).map((m) => (
             <Pressable
               key={m}
               accessibilityRole="button"
-              accessibilityLabel={m === 'task' ? 'Add a task' : 'Add a capture'}
+              accessibilityLabel={MODE_LABELS[m]}
               accessibilityState={{ selected: mode === m }}
               onPress={() => onModeChange(m)}
               className={cn(

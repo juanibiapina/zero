@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   listView,
   LOADING_TEXT_DELAY_MS,
@@ -35,6 +35,7 @@ import {
   localToday,
   messageOf,
   orderKeyBetween,
+  toast,
   tomorrow,
   visibleCaptures,
   type HomeCallToAction,
@@ -93,7 +94,15 @@ export function HomePage() {
   );
 }
 
-type AddMode = "capture" | "task";
+type AddMode = "capture" | "task" | "project";
+
+// The quick-add field's placeholder and accessible label per mode. Project mode
+// teaches outcome-based naming (the same idea as the Projects screen's helper).
+const ADD_PLACEHOLDER: Record<AddMode, string> = {
+  capture: "Capture a thought",
+  task: "Add a task",
+  project: "Name a project outcome",
+};
 
 function MergedHome({
   capturesApi,
@@ -110,11 +119,32 @@ function MergedHome({
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setError(null);
+    if (mode === "project") {
+      // Create the project but stay on Home; a toast is the escape hatch to jump
+      // to it. The id comes off the optimistic insert transaction so the toast
+      // can deep-link before the server round-trip finishes.
+      const tx = projectsApi.add(trimmed, refiningCaptureId());
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      const id = String(tx.mutations[0]?.key);
+      toast("Project created", {
+        description: trimmed,
+        action: {
+          label: "View",
+          onPress: () => {
+            void navigate(`/projects/${id}`);
+          },
+        },
+      });
+      setText("");
+      inputRef.current?.focus();
+      return;
+    }
     const tx =
       mode === "task"
         ? tasksApi.add(trimmed, localToday(), null, null, refiningCaptureId())
@@ -122,7 +152,7 @@ function MergedHome({
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     setText("");
     inputRef.current?.focus();
-  }, [capturesApi, tasksApi, mode, text]);
+  }, [capturesApi, tasksApi, projectsApi, mode, text, navigate]);
 
   const onFinishRefine = useCallback(
     (captureId: string) => {
@@ -592,7 +622,7 @@ function QuickAdd({
         aria-label="What to add"
         className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-sm"
       >
-        {(["capture", "task"] as const).map((m) => (
+        {(["capture", "task", "project"] as const).map((m) => (
           <button
             key={m}
             type="button"
@@ -621,8 +651,8 @@ function QuickAdd({
           ref={inputRef}
           autoFocus
           value={value}
-          placeholder={mode === "task" ? "Add a task" : "Capture a thought"}
-          aria-label={mode === "task" ? "Add a task" : "Capture a thought"}
+          placeholder={ADD_PLACEHOLDER[mode]}
+          aria-label={ADD_PLACEHOLDER[mode]}
           className="h-11"
           onChange={(e) => onChange(e.target.value)}
         />

@@ -14,6 +14,7 @@ import {
   SignIn,
   useAuth,
 } from "@clerk/react";
+import { Toaster } from "@/components/Toaster";
 import { CenteredPage } from "@/components/CenteredPage";
 import { Loading } from "@/components/Loading";
 import { DevToolbar } from "@/components/DevToolbar";
@@ -119,6 +120,9 @@ function AppShell() {
         <Outlet context={context} />
       </div>
       <DevToolbar onResetOnboarding={resetOnboarding} />
+      {/* App-wide toast host. Mounted inside the router so a toast action can
+          navigate. */}
+      <Toaster />
     </>
   );
 }

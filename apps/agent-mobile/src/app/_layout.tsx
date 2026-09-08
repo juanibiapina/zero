@@ -10,6 +10,9 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import { Toaster } from '@/components/toaster';
 
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
 import { createQueryClient, setupAppStateFocus } from '@/lib/query-client';
@@ -34,25 +37,30 @@ export default function RootLayout() {
   useEffect(() => setupAppStateFocus(), []);
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
-      <StatusBar style="auto" />
-      <ClerkProvider
-        publishableKey={publishableKey}
-        tokenCache={tokenCache}
-      >
-        <QueryClientProvider client={queryClient}>
-          <KeyboardProvider>
-            {/* Honor the OS "reduce motion" setting: disable animations when the
-                user asks, keep them otherwise. */}
-            <ReducedMotionConfig mode={ReduceMotion.System} />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor },
-              }}
-            />
-          </KeyboardProvider>
-        </QueryClientProvider>
-      </ClerkProvider>
+      <SafeAreaProvider>
+        <StatusBar style="auto" />
+        <ClerkProvider
+          publishableKey={publishableKey}
+          tokenCache={tokenCache}
+        >
+          <QueryClientProvider client={queryClient}>
+            <KeyboardProvider>
+              {/* Honor the OS "reduce motion" setting: disable animations when the
+                  user asks, keep them otherwise. */}
+              <ReducedMotionConfig mode={ReduceMotion.System} />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor },
+                }}
+              />
+            </KeyboardProvider>
+          </QueryClientProvider>
+        </ClerkProvider>
+        {/* App-wide toast host. Inside the gesture + safe-area providers so it
+            renders above content on every screen. */}
+        <Toaster />
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

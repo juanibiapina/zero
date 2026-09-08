@@ -1,0 +1,36 @@
+# Dev flow: create a project from the Home quick-add and follow the toast to it.
+# NOT run by any workflow (ci/ and release/ are the automated folders). Run on
+# the attached Pixel with the dev client + Metro:
+#
+#   maestro test apps/agent-mobile/.maestro/dev/project-toast.yaml
+#
+# launchApp has no clearState, so it keeps the signed-in session. Assumes the app
+# is signed in and sitting on Home.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: 'Home'
+    timeout: 45000
+# Open the quick-add (collapsed FAB is labelled "Capture").
+- tapOn: '^Capture$'
+# Switch to Project mode and name an outcome.
+- tapOn: 'Add a project'
+- inputText: 'Maestro toast project'
+- takeScreenshot: 01-project-quickadd
+# Submit with the "+" button. Its accessibility label reuses "Capture" (the
+# fab label), which also matches the capture pill, so target the second match
+# (pills render first, the submit button last).
+- tapOn:
+    text: '^Capture$'
+    index: 1
+# The toast names the project and offers a "View" link. It renders in an elevated
+# overlay whose bounds uiautomator misreports, so `tapOn: 'View'` lands off the
+# button — tap the button's on-screen position (top-right) instead, promptly
+# (the toast auto-dismisses after a few seconds).
+- assertVisible: 'Project created'
+- tapOn:
+    point: '88%,10%'
+# View opens the Projects tab, where the new project sits at the top.
+- assertVisible: 'Maestro toast project'
+- takeScreenshot: 03-projects

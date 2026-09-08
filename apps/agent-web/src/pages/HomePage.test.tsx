@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createInMemoryApi,
@@ -18,6 +18,7 @@ import {
   type TasksRest,
   type WaitsApi,
   type WaitsRest,
+  defaultToastController,
 } from "@zero/agent-core";
 
 import { HomePage } from "./HomePage";
@@ -42,6 +43,8 @@ vi.mock("@/lib/projects-collection", () => ({
 vi.mock("@/lib/waits-collection", () => ({
   getWaitsApi: () => Promise.resolve(h.waitsApi),
 }));
+
+
 
 const emptyWaitsRest: WaitsRest = {
   fetchWaits: async () => [],
@@ -204,6 +207,7 @@ describe("HomePage", () => {
     h.tasksApi = null;
     h.projectsApi = null;
     h.waitsApi = null;
+    defaultToastController.dismiss();
   });
 
   it("titles the screen Home", async () => {
@@ -290,6 +294,45 @@ describe("HomePage", () => {
         screen.getByRole("button", { name: 'Complete "call the dentist"' }),
       ).toBeInTheDocument(),
     );
+  });
+
+  it("creates a project from the Project mode, stays on Home, and toasts a link to it", async () => {
+    setApi([]);
+    let path = "";
+    function Probe() {
+      path = useLocation().pathname;
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <HomePage />
+        <Probe />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("radio", { name: "project" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Name a project outcome" }),
+      { target: { value: "ship the app" } },
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+
+    await waitFor(() =>
+      expect(defaultToastController.getSnapshot()).toHaveLength(1),
+    );
+    // Stays on Home; the toast is the only way to jump to the project.
+    expect(path).toBe("/");
+    const [t] = defaultToastController.getSnapshot();
+    expect(t.message).toBe("Project created");
+    expect(t.description).toBe("ship the app");
+    expect(t.action?.label).toBe("View");
+
+    await act(async () => {
+      t.action?.onPress();
+    });
+    await waitFor(() => expect(path).toMatch(/^\/projects\/.+/));
   });
 
   it("completes a task from the top region", async () => {

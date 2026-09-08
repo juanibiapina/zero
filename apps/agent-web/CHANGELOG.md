@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-08: Create a project straight from Home. The quick-add now has a Project option alongside Capture and Task; adding one keeps you on Home and shows a toast with a link to open the new project.
 - 2026-09-08: Starring a task on a waiting project brings the project back to active, even while it is still waiting on something; finishing that task returns the project to waiting.
 - 2026-09-08: Pick any emoji as a project's icon. Opening the icon picker now offers a searchable list of every standard emoji, instead of a small fixed set.
 

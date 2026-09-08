@@ -12,6 +12,27 @@ describe('QuickAddBar', () => {
     expect(getByLabelText('Capture')).toBeTruthy();
   });
 
+  it('offers capture, task, and project pills when a mode is set', async () => {
+    const onModeChange = jest.fn();
+    const { getByLabelText } = await render(
+      <QuickAddBar
+        value=""
+        mode="project"
+        onModeChange={onModeChange}
+        onChangeText={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+
+    expect(getByLabelText('Add a capture')).toBeTruthy();
+    expect(getByLabelText('Add a task')).toBeTruthy();
+    const project = getByLabelText('Add a project');
+    expect(project).toBeTruthy();
+
+    fireEvent.press(getByLabelText('Add a task'));
+    expect(onModeChange).toHaveBeenCalledWith('task');
+  });
+
   it('submits on the add button and on the keyboard done key', async () => {
     const onSubmit = jest.fn();
     const { getByLabelText, getByPlaceholderText } = await render(
