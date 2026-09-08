@@ -71,7 +71,11 @@ const fakeEnv = (userDO: ReturnType<typeof fakeUserDO>) =>
     },
   }) as unknown as Env;
 
-const buildApp = (env: Env, userId: string) => {
+const buildApp = (
+  env: Env,
+  userId: string,
+  deps?: Parameters<typeof createProjectsRoutes>[0],
+) => {
   const app = new OpenAPIHono<{
     Bindings: Env;
     Variables: { userId: string };
@@ -80,7 +84,7 @@ const buildApp = (env: Env, userId: string) => {
     c.set("userId", userId);
     await next();
   });
-  app.route("/", createProjectsRoutes());
+  app.route("/", createProjectsRoutes(deps));
   return {
     request: (path: string, init?: RequestInit) =>
       app.fetch(new Request(`http://localhost${path}`, init), env),
@@ -303,6 +307,61 @@ describe("PATCH /api/projects/{id}", () => {
       patch({ title: "x" }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/projects/icon-suggestions", () => {
+  it("returns single-emoji suggestions for a title", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc", {
+      suggestIcons: async () => ["🏃", "🎯"],
+    });
+    const res = await app.request(
+      "/api/projects/icon-suggestions",
+      post({ title: "Run a 5K" }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ icons: ["🏃", "🎯"] });
+  });
+
+  it("passes the user id, title and description to the suggester", async () => {
+    let seen: unknown;
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_xyz", {
+      suggestIcons: async (_env, userId, input) => {
+        seen = { userId, input };
+        return [];
+      },
+    });
+    await app.request(
+      "/api/projects/icon-suggestions",
+      post({ title: "Ship it", description: "to the store" }),
+    );
+    expect(seen).toEqual({
+      userId: "user_xyz",
+      input: { title: "Ship it", description: "to the store" },
+    });
+  });
+
+  it("returns 200 with an empty list when the model yields nothing usable", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc", {
+      suggestIcons: async () => [],
+    });
+    const res = await app.request(
+      "/api/projects/icon-suggestions",
+      post({ title: "Vague" }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ icons: [] });
+  });
+
+  it("rejects an empty title", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc", {
+      suggestIcons: async () => ["🏃"],
+    });
+    const res = await app.request(
+      "/api/projects/icon-suggestions",
+      post({ title: "" }),
+    );
+    expect(res.status).toBe(400);
   });
 });
 

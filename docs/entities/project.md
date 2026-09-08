@@ -33,10 +33,10 @@ Project was built in vertical slices (plan: `docs/plans/todo-project-entity.md`)
   detail bottom sheet holds a Status group, and setting `done` removes a project
   from the working list with an inline Undo (~5s). Ships on web and mobile,
   offline-safe.
-- **A3 (shipped):** enrich in the sheet — a curated emoji icon picker, an
-  editable title, and an editable description. Edits commit on blur/submit (the
-  icon on tap), keep the sheet open, persist, and sync offline. Ships on web and
-  mobile.
+- **A3 (shipped):** enrich in the sheet — a full emoji icon picker (web
+  `frimousse`, mobile `rn-emoji-keyboard`; any standard emoji), an editable title,
+  and an editable description. Edits commit on blur/submit (the icon on tap), keep
+  the sheet open, persist, and sync offline. Ships on web and mobile.
 - **Delete (shipped, post-A3):** permanently remove a Project from its detail
   sheet, distinct from `done`. A destructive button drops the row behind the same
   ~5s Undo as `done`, then hard-removes it (`DELETE /api/projects/{id}`, 204,
@@ -178,8 +178,14 @@ no speculative columns before their behavior is designed.
   - `DELETE /api/projects/{id}` → `204` (empty body). Idempotent: returns `204`
     whether or not the row existed, so a replayed offline delete never makes the
     outbox throw and retry forever (deliberately no `404`, unlike `PATCH`).
-  - Logs `project_added`, `project_status_changed`, `project_edited`, and
-    `project_deleted`.
+  - `POST /api/projects/icon-suggestions { title, description? }` →
+    `200 { icons }`, single-emoji suggestions; `400` on empty title. **Stateless**
+    on purpose: it reads/writes no project row (it is the first todo-app server
+    LLM call, not a collection verb), so both the create-time pre-warm and the
+    picker's fetch-on-open call it. A soft miss (the model returns nothing usable)
+    is still `200 { icons: [] }`.
+  - Logs `project_added`, `project_status_changed`, `project_edited`,
+    `project_deleted`, and `project_icon_suggested` (with the count).
 - **Data layer** — a TanStack DB collection (`createProjectsApi` in
   `@zero/agent-core`) built on the shared collection factory: a verb table
   (`addProject` / `setProjectStatus` / `editProject` / `deleteProject`, also the
@@ -189,6 +195,19 @@ no speculative columns before their behavior is designed.
   a row whose status becomes `done` leaves the collection at once. `deleteProject`
   is the shared factory's `delete` verb kind — it optimistically drops the row and
   issues the `DELETE`, rolling back on failure. See `docs/storage.md`.
+- **AI icon suggestion** — the first AI integration of the todo app. When a
+  project is created (name-only, so from the title alone), the app fires a
+  background request to the stateless `icon-suggestions` endpoint and caches the
+  result **on the device** (not synced; no server row). When the icon picker
+  opens, a "Suggested" row shows the cached emoji instantly (or "Loading suggested
+  icons…" if still in flight); tapping one applies it through the existing `edit`
+  path. A cache miss (a different device, an eviction, an offline creation)
+  fetches on open; a Refresh control recomputes after the title/description
+  changes. A failed or empty suggestion degrades silently to the full manual
+  picker below — it is logged, never surfaced as an error. The server call runs a
+  one-shot, tool-less model request (agent label `icon_suggest`, `low` effort);
+  the pure cache-staleness check is shared in `@zero/agent-core`, the persistence
+  and fetch are per surface. See `docs/plans/todo-project-icon-suggestions.md`.
 - **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
   migration 0047): the project screen lists the project's open tasks and adds one
   from a plus-button quick-add bar (grooming). A task added from a project is

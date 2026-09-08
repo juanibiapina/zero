@@ -50,6 +50,7 @@ import {
   useUndoableLeave,
 } from "@/lib/screen-hooks";
 import { refiningCaptureId, startRefine, stopRefine } from "@/lib/refine-session";
+import { requestIconSuggestions } from "@/lib/icon-suggestions";
 import { RefineBanner } from "@/components/RefineBanner";
 import { type Capture } from "@/lib/captures";
 import { type Task } from "@/lib/tasks";
@@ -132,6 +133,10 @@ function MergedHome({
       const tx = projectsApi.add(trimmed, refiningCaptureId());
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
       const id = String(tx.mutations[0]?.key);
+      // Pre-warm emoji icon suggestions in the background so the picker shows
+      // them instantly when the project is opened. Create is name-only, so the
+      // basis is the title alone. Fire-and-forget; a failure only costs the shortcut.
+      void requestIconSuggestions(id, { title: trimmed, description: null });
       toast("Project created", {
         description: trimmed,
         action: {

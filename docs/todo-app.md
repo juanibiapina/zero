@@ -341,6 +341,21 @@ Shipped:
   client + Maestro): FAB adds a parked task, bar docks above the tab bar, Back
   closes the bar before popping.
 
+- **AI icon suggestions for a Project** (web shipped; mobile is slice 2) — the
+  **first AI integration of the todo app**. Creating a project fires a background
+  request that suggests emoji icons from its title; the picker shows them
+  instantly from a device-local cache (or a brief loading line), tapping one
+  applies it through the existing `edit` path, and Refresh recomputes after the
+  title/description changes. The server side is a stateless
+  `POST /api/projects/icon-suggestions` that runs one tool-less model call
+  (`suggestProjectIcons` over the `AgentModel` seam, agent label `icon_suggest` at
+  `low` effort via the new `AGENT_EFFORT_OVERRIDES` map) and returns single-emoji
+  strings, so no new server-side state and a soft miss just returns `[]`. The
+  suggestions are an ephemeral client hint (no sync, no server row); the pure
+  staleness check lives in `@zero/agent-core`, the cache and fetch per surface.
+  Proves the todo app's first server LLM path end to end for heavier features
+  (Capture → Project). Plan: `docs/plans/todo-project-icon-suggestions.md`.
+
 In flight (details in `docs/plans/`):
 
 - `todo-tanstack-db.md` — share the Capture collection across web+mobile and add

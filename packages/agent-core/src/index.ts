@@ -47,6 +47,15 @@ export {
 export { dueToday, localToday } from "./tasks/today";
 export { homeTasks } from "./tasks/home";
 
+// The AI icon-suggestion hint (shared shape + pure staleness check; the cache
+// and fetch live per surface).
+export {
+  isBasisStale,
+  type IconSuggestionBasis,
+  type IconSuggestionStatus,
+  type CachedIconSuggestions,
+} from "./projects/icon-suggestions";
+
 // The Project data layer (Projects list).
 export type { Project, ProjectStatus } from "./projects/types";
 export {

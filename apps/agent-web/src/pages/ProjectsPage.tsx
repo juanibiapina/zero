@@ -21,6 +21,7 @@ import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { refiningCaptureId, stopRefine } from "@/lib/refine-session";
+import { requestIconSuggestions } from "@/lib/icon-suggestions";
 import { RefineBanner } from "@/components/RefineBanner";
 import {
   useDelayed,
@@ -120,6 +121,17 @@ function ProjectsReady({
     // When refining a capture, the new project links back to it.
     const tx = api.add(trimmed, refiningCaptureId());
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    // Pre-warm emoji icon suggestions in the background off the optimistic
+    // insert's id, so the picker shows them instantly when opened (create is
+    // name-only, so the basis is the title alone). Fire-and-forget; a failure
+    // only costs the shortcut.
+    const key = tx.mutations[0]?.key as string | number | undefined;
+    if (key !== undefined) {
+      void requestIconSuggestions(String(key), {
+        title: trimmed,
+        description: null,
+      });
+    }
     setTitle("");
     inputRef.current?.focus();
   }, [api, title]);

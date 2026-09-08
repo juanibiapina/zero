@@ -75,3 +75,23 @@ export async function deleteProject(id: string): Promise<void> {
     throw new Error(`DELETE /api/projects/${id} failed: ${res.status}`);
   }
 }
+
+// Ask the server for emoji icon suggestions for a project's title/description.
+// A plain fetch, not a collection mutation: it reads/writes no project row (the
+// server is stateless). The suggestions are cached on the device by the caller
+// (see lib/icon-suggestions.ts), never synced.
+export async function fetchIconSuggestions(input: {
+  title: string;
+  description?: string | null;
+}): Promise<string[]> {
+  const res = await fetch("/api/projects/icon-suggestions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/projects/icon-suggestions failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { icons: string[] };
+  return body.icons;
+}

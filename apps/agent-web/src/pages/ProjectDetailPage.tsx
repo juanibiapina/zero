@@ -12,6 +12,7 @@ import {
 import { ErrorText } from "@/components/ConnectionStatus";
 import { EmojiPicker } from "frimousse";
 import {
+  isBasisStale,
   localToday,
   messageOf,
   projectDisplayStatus,
@@ -21,6 +22,10 @@ import {
   type WaitingCondition,
   type WaitingConditionKind,
 } from "@zero/agent-core";
+import {
+  requestIconSuggestions,
+  useIconSuggestions,
+} from "@/lib/icon-suggestions";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
@@ -173,6 +178,91 @@ function ProjectDetailReady({
   );
 }
 
+// The pre-warmed AI icon suggestions, shown above the manual picker inside the
+// icon popover. The row only mounts when the popover opens, so its mount effect
+// is the fetch-on-open fallback: a cache miss here (a different device, an
+// eviction, an offline creation) fetches now; a warmed cache shows instantly.
+// A failed or empty result degrades to the manual picker below with no blocking.
+function SuggestedIconRow({
+  project,
+  onPick,
+}: {
+  project: Project;
+  onPick: (emoji: string) => void;
+}) {
+  const basis = useMemo(
+    () => ({ title: project.title, description: project.description }),
+    [project.title, project.description],
+  );
+  const cached = useIconSuggestions(project.id);
+
+  // Fetch-on-open: no-ops when an entry already exists (the create-time warm),
+  // so this only fires on a genuine cache miss.
+  useEffect(() => {
+    void requestIconSuggestions(project.id, basis);
+  }, [project.id, basis]);
+
+  const refresh = () => {
+    void requestIconSuggestions(project.id, basis, { force: true });
+  };
+
+  const status = cached?.status;
+  const icons = cached?.icons ?? [];
+  const stale = !!cached && status === "ready" && isBasisStale(cached.basis, basis);
+  const loading = !cached || status === "loading";
+
+  const RefreshButton = (
+    <button
+      type="button"
+      aria-label="Refresh suggested icons"
+      onClick={refresh}
+      className={cn(
+        "shrink-0 rounded-md px-1.5 py-1 text-sm transition-colors hover:bg-accent",
+        stale ? "text-foreground" : "text-muted-foreground",
+      )}
+    >
+      ↻
+    </button>
+  );
+
+  return (
+    <div className="flex min-h-9 items-center gap-1 border-b px-2 py-1.5">
+      <span className="mr-1 shrink-0 text-xs font-medium text-muted-foreground">
+        Suggested
+      </span>
+      {loading ? (
+        <span className="text-sm text-muted-foreground">
+          Loading suggested icons…
+        </span>
+      ) : icons.length > 0 ? (
+        <>
+          <div className="flex flex-wrap items-center gap-0.5">
+            {icons.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                aria-label={`Use suggested icon ${emoji}`}
+                onClick={() => onPick(emoji)}
+                className="flex size-8 items-center justify-center rounded-md text-lg hover:bg-accent"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <div className="ml-auto">{RefreshButton}</div>
+        </>
+      ) : (
+        <>
+          <span className="text-sm text-muted-foreground">
+            Couldn&apos;t load suggestions
+          </span>
+          <div className="ml-auto">{RefreshButton}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // The identity header: a de-emphasized icon (tap to reveal the picker), the
 // title as an editable heading (commit on blur / Enter), the derived-status
 // pill, and an overflow menu holding the occasional status moves + delete.
@@ -203,6 +293,13 @@ function ProjectHeader({
     onEdit(project.id, { title: trimmed });
   };
 
+  // Apply an icon (from a suggestion chip or the manual picker) and close the
+  // popover. A no-op edit is skipped so an unchanged pick does not churn.
+  const applyIcon = (emoji: string) => {
+    if (emoji !== project.icon) onEdit(project.id, { icon: emoji });
+    setPickingIcon(false);
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-3">
@@ -217,12 +314,12 @@ function ProjectHeader({
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-fit p-0">
+            {/* Pre-warmed AI suggestions sit above the full manual picker: an
+                additive shortcut, never a replacement. */}
+            <SuggestedIconRow project={project} onPick={applyIcon} />
             <EmojiPicker.Root
               className="isolate flex h-[368px] w-fit flex-col"
-              onEmojiSelect={({ emoji }) => {
-                if (emoji !== project.icon) onEdit(project.id, { icon: emoji });
-                setPickingIcon(false);
-              }}
+              onEmojiSelect={({ emoji }) => applyIcon(emoji)}
             >
               <EmojiPicker.Search
                 autoFocus

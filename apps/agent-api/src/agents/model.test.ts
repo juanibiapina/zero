@@ -6,6 +6,7 @@ import {
   providerFor,
   resolveModelSpec,
   AGENT_MODEL_OVERRIDES,
+  AGENT_EFFORT_OVERRIDES,
 } from "./model";
 import {
   promptCacheKey,
@@ -52,6 +53,19 @@ describe("resolveModelSpec", () => {
     expect(
       resolveModelSpec(makeEnv(), { agent: "interface", clerkUserId: "u" }),
     ).toEqual({ modelId: "gpt-5.6-luna", effort: "high" });
+  });
+
+  it("runs the icon_suggest agent at low effort, leaving others at high", () => {
+    expect(
+      resolveModelSpec(makeEnv(), { agent: "icon_suggest", clerkUserId: "u" })
+        .effort,
+    ).toBe("low");
+    expect(
+      resolveModelSpec(makeEnv(), { agent: "interface", clerkUserId: "u" })
+        .effort,
+    ).toBe("high");
+    // The default effort backs every label that has no override entry.
+    expect(AGENT_EFFORT_OVERRIDES.interface).toBeUndefined();
   });
 
   it("honors a per-agent override for that agent only", () => {
