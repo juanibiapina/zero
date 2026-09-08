@@ -9,16 +9,22 @@ import type { Project, ProjectStatus } from "./types";
 // docs/plans/todo-availability-model.md, slices 5-6):
 //
 //   - backlog / done: the stored value (manual parking).
-//   - waiting: has at least one unresolved waiting condition.
-//   - active: in play, unblocked, with a taken-on open task.
-//   - next: in play, unblocked, nothing taken on ("come groom / take on more").
+//   - active: in play, with a taken-on open task. This wins even over an
+//     unresolved waiting condition: taking a task on pulls the project back into
+//     active work. Completing that task drops it back to next, at which point an
+//     open condition surfaces as waiting.
+//   - waiting: in play, nothing taken on, and at least one unresolved condition.
+//   - next: in play, nothing taken on, no open condition ("come groom / take on
+//     more").
 //
 // conditionSatisfied / unresolvedConditions and projectDisplayStatus live in one
 // module on purpose: a `project-status` condition asks for another project's
 // status, so they are mutually recursive. To keep that finite, the condition
 // check compares against the project's *base* status (active/next/backlog/done,
 // ignoring waiting), so evaluating one project's waiting never re-enters
-// another's. All pure and in-process; tested directly through this interface.
+// another's. The base status doubling as the active check is also what lets a
+// taken-on task override waiting below. All pure and in-process; tested directly
+// through this interface.
 
 // active/next/backlog/done ignoring waiting conditions. The base used both by
 // conditionSatisfied (to avoid recursion) and by projectDisplayStatus.
@@ -78,11 +84,14 @@ export function projectDisplayStatus(
   conditions: WaitingCondition[] = [],
   projects: Project[] = [],
 ): ProjectStatus {
-  if (project.status === "backlog" || project.status === "done") {
-    return project.status;
+  const base = projectBaseStatus(project, tasks);
+  // backlog/done are terminal; an active project (a taken-on open task) stays
+  // active even with an open condition — taking a task on overrides waiting.
+  if (base !== "next") {
+    return base;
   }
   if (unresolvedConditions(project, conditions, tasks, projects).length > 0) {
     return "waiting";
   }
-  return projectBaseStatus(project, tasks);
+  return "next";
 }

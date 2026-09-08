@@ -306,7 +306,10 @@ Shipped:
   consumed on Done. The availability rule and derivation live in two pure, tested
   modules in `@zero/agent-core` (`homeTasks`, `projectDisplayStatus` +
   `conditionSatisfied`/`unresolvedConditions`). Shipped with unit/route/page tests;
-  mobile on-device verification (EAS/Maestro) still pending. Also fixed a
+  mobile on-device verification (EAS/Maestro) still pending. Refinement (2026-09-08):
+  a taken-on open task now overrides an open waiting condition — starring a task
+  on a waiting project brings it back to `active`, and completing that task
+  returns it to `waiting` (not `next`), since the condition is still open. Also fixed a
   pre-existing durable-collection bug where a deleted row reappeared until refresh
   (see `docs/storage.md`).
 - **Automatic appearance.** Mobile and web follow the system light or dark

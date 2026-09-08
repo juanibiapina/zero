@@ -204,17 +204,22 @@ resolved by hand (AI later).
   `conditionSatisfied(cond, tasks, projects)` (pure): free-text → satisfied iff
   `resolvedAt` set; task-done → referenced task completed; project-status →
   referenced project reached target. `unresolvedConditions(project, ...)` filters
-  to open-and-unsatisfied. `projectDisplayStatus` now returns `waiting` first when
-  any unresolved condition exists.
+  to open-and-unsatisfied. `projectDisplayStatus` returns `waiting` when an
+  unresolved condition exists **and nothing is taken on**; a taken-on open task
+  overrides waiting and keeps the project `active` (completing it reverts to
+  `waiting`, not `next`).
 - **UI:** the detail sheet lists conditions and gains **+ Waiting condition**
   (three kinds; free-text default) and a **Resolve** action on free-text ones
   (plus an "AI resolve" affordance stub — same action, labeled). This replaces the
   manual `waiting` status pick.
 - **Tests:** `conditionSatisfied` per kind; `projectDisplayStatus` with conditions;
   store + route contract.
-- **Acceptance:** adding a condition puts the project in `waiting` and hides its
-  tasks from Home; resolving the last one returns it to `active`/`next`; a
-  `task-done` condition clears itself when the referenced task completes.
+- **Acceptance:** adding a condition puts the project in `waiting` (when nothing
+  is taken on) and hides its tasks from Home; taking a task on overrides waiting
+  and brings the project (and task) back to `active`, and completing that task
+  returns it to `waiting`; resolving the last condition returns it to
+  `active`/`next`; a `task-done` condition clears itself when the referenced task
+  completes.
 
 ### Slice 7 — Complete-in-place linger + "+ Waiting condition" shortcut
 

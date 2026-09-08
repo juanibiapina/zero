@@ -85,10 +85,26 @@ describe("projectDisplayStatus", () => {
     ).toBe("next");
   });
 
-  it("is waiting when an unresolved condition exists, over active/next", () => {
+  it("is waiting when an unresolved condition exists and nothing is taken on", () => {
+    expect(
+      projectDisplayStatus(project("next"), [], [condition({})]),
+    ).toBe("waiting");
+  });
+
+  it("a taken-on open task overrides an unresolved condition (active, not waiting)", () => {
     const taken = task({ takenOnAt: "2026-01-02T00:00:00.000Z" });
     expect(
       projectDisplayStatus(project("next"), [taken], [condition({})]),
+    ).toBe("active");
+  });
+
+  it("drops back to waiting (not next) when the taken-on task is completed", () => {
+    const done = task({
+      takenOnAt: "2026-01-02T00:00:00.000Z",
+      completedAt: "2026-01-03T00:00:00.000Z",
+    });
+    expect(
+      projectDisplayStatus(project("next"), [done], [condition({})]),
     ).toBe("waiting");
   });
 

@@ -59,9 +59,13 @@ one module (`packages/agent-core/src/projects/derive.ts`) because a
 `project-status` condition asks for another project's status, so they are
 mutually recursive; the condition check compares against a project's *base*
 status (active/next/backlog/done, ignoring waiting) to keep that finite. A
-project with any unresolved condition displays `waiting`, which takes precedence
-over active/next; `homeTasks` gates on that derived status, so a waiting
-project's tasks leave Today.
+project with an unresolved condition displays `waiting` **only when nothing is
+taken on**: a taken-on open task makes the project display `active` even with an
+open condition (taking a task on overrides waiting). So the order is active
+(taken-on open task) → waiting (open condition, nothing taken on) → next.
+Completing that task drops the project back to waiting, not next, because the
+condition is still open. `homeTasks` gates on that derived status: a waiting
+project's tasks leave Today, and starring one brings it (and the task) back.
 
 ## Interactions (per system)
 

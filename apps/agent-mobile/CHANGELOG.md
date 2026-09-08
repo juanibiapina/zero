@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-08: Starring a task on a waiting project brings the project back to active, even while it is still waiting on something; finishing that task returns the project to waiting.
 - 2026-09-08: Searching in the project icon emoji picker now keeps the search box and matching emoji visible above the keyboard.
 
 - 2026-09-08: Pick any emoji as a project's icon. Tapping the icon now opens a full emoji picker with search, instead of a small fixed set.

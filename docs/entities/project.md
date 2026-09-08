@@ -62,8 +62,10 @@ The stored `status` column is only the deliberate parking value: `backlog` and
 `done` are set by hand. The three in-play states are **derived on the client**
 from the project's tasks by `projectDisplayStatus` (in `@zero/agent-core`): a
 project shows as `active` while it has a taken-on, open task, else `next` ("come
-groom / take on more"); `waiting` (an open waiting condition) will take
-precedence in slice 6. The list groups by this derived status (`projectsByStatus`
+groom / take on more"). An open waiting condition shows the project as `waiting`,
+but **a taken-on open task overrides waiting** — starring a task pulls a waiting
+project back to `active`; completing that task returns it to `waiting` (the
+condition is still open), not `next`. The list groups by this derived status (`projectsByStatus`
 takes a `statusOf` mapper). The project screen's actions menu offers three manual
 moves — **Put in play** (writes `next`), **Move to backlog**, **Mark done** — not
 a five-way picker. No status migration: the column stays; the display is
