@@ -14,6 +14,7 @@ import type { Project, ProjectStatus, Task, WaitingCondition } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
+import { __resetIconSuggestions } from '@/lib/icon-suggestions';
 
 import ProjectDetailScreen from '../projects/[id]';
 
@@ -117,6 +118,13 @@ const mockAddTask =
       task: { id: string; text: string; showUpDate: string; projectId: string | null },
     ) => Promise<Task>
   >();
+const mockFetchIconSuggestions =
+  jest.fn<
+    (
+      getToken: unknown,
+      input: { title: string; description?: string | null },
+    ) => Promise<string[]>
+  >();
 const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
 const mockAddWaitingCondition =
   jest.fn<
@@ -130,6 +138,10 @@ jest.mock('@/lib/api', () => ({
   editProject: (getToken: unknown, id: string, fields: Record<string, unknown>) =>
     mockEditProject(getToken, id, fields),
   deleteProject: () => Promise.resolve(),
+  fetchIconSuggestions: (
+    getToken: unknown,
+    input: { title: string; description?: string | null },
+  ) => mockFetchIconSuggestions(getToken, input),
   fetchWaits: () => mockFetchWaits(),
   addWaitingCondition: (
     _getToken: unknown,
@@ -198,6 +210,9 @@ describe('ProjectDetailScreen', () => {
     mockFetchProjects.mockReset();
     mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);
     mockGetToken.mockResolvedValue('tok');
+    __resetIconSuggestions();
+    mockFetchIconSuggestions.mockReset();
+    mockFetchIconSuggestions.mockResolvedValue(['🌟', '🚀']);
   });
 
   it('shows the project title as an editable heading', async () => {
@@ -283,9 +298,13 @@ describe('ProjectDetailScreen', () => {
     const { getByLabelText, queryByLabelText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Change icon')).toBeTruthy());
 
-    // The picker is behind the icon tap (de-emphasized).
+    // Tapping the icon opens the suggestion sheet; the full picker is behind
+    // "Browse all emoji".
     await act(async () => {
       fireEvent.press(getByLabelText('Change icon'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Browse all emoji'));
     });
     await act(async () => {
       fireEvent.press(getByLabelText('Pick emoji 🎓'));
@@ -295,6 +314,62 @@ describe('ProjectDetailScreen', () => {
     expect(mockEditProject.mock.calls[0][2]).toEqual({ icon: '🎓' });
     // Picking closes the picker.
     expect(queryByLabelText('Pick emoji 🎓')).toBeNull();
+  });
+
+  it('shows AI icon suggestions and applies a tapped one', async () => {
+    mockEditProject.mockImplementation(async (_t, id, fields) => ({
+      ...project('1', 'Run a 5K', (fields.icon as string) ?? '🏃', 'next'),
+    }));
+
+    const { getByLabelText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Change icon')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Change icon'));
+    });
+    // The sheet's fetch-on-open fires because nothing warmed this project.
+    await waitFor(() =>
+      expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(1),
+    );
+    const chip = await waitFor(() => getByLabelText('🌟'));
+    await act(async () => {
+      fireEvent.press(chip);
+    });
+
+    expect(mockEditProject).toHaveBeenCalledTimes(1);
+    expect(mockEditProject.mock.calls[0][2]).toEqual({ icon: '🌟' });
+  });
+
+  it('refreshes suggestions on demand', async () => {
+    const { getByLabelText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Change icon')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Change icon'));
+    });
+    await waitFor(() =>
+      expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(1),
+    );
+    await act(async () => {
+      fireEvent.press(getByLabelText('Refresh suggestions'));
+    });
+    await waitFor(() =>
+      expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(2),
+    );
+  });
+
+  it('keeps the full picker reachable when suggestions fail', async () => {
+    mockFetchIconSuggestions.mockRejectedValue(new Error('network down'));
+
+    const { getByLabelText, getByText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Change icon')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Change icon'));
+    });
+    await waitFor(() => expect(getByText("Couldn't load suggestions")).toBeTruthy());
+    // The escape hatch to the full manual picker is still present.
+    expect(getByLabelText('Browse all emoji')).toBeTruthy();
   });
 
   it('moves the project to backlog from the actions sheet', async () => {

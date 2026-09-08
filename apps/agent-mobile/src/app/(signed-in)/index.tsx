@@ -25,6 +25,7 @@ import {
   type TasksApi,
   type WaitsApi,
 } from '@zero/agent-core';
+import { useAuth } from '@clerk/expo';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -65,6 +66,7 @@ import { Input } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
+import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -568,6 +570,7 @@ function Captures({
   bottomOffset: number;
 }) {
   const [mode, setMode] = useState<AddMode>('capture');
+  const { getToken } = useAuth();
   const { data: captures, isLoading } = useLiveQuery((q) =>
     q
       .from({ c: api.collection })
@@ -700,6 +703,13 @@ function Captures({
       const tx = projectsApi.add(trimmed, refiningCaptureId());
       tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
       const id = String(tx.mutations[0]?.key);
+      // Pre-warm emoji icon suggestions so the picker shows them instantly when
+      // the project is opened. Create is name-only, so the basis is the title
+      // alone. Fire-and-forget; a failure only costs the shortcut.
+      void requestIconSuggestions(getToken, id, {
+        title: trimmed,
+        description: null,
+      });
       toast('Project created', {
         description: trimmed,
         action: {
@@ -723,7 +733,7 @@ function Captures({
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     // Keep the bar open and cleared for rapid, repeated entry.
     setText('');
-  }, [text, api, tasksApi, projectsApi, mode]);
+  }, [text, api, tasksApi, projectsApi, mode, getToken]);
 
   const onFinishRefine = useCallback(
     (captureId: string) => {

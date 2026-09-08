@@ -379,6 +379,34 @@ export async function deleteProject(
   }
 }
 
+// Ask the server for emoji icon suggestions for a project's title/description.
+// A plain call, not a collection mutation: the server is stateless (no project
+// row). The suggestions are cached on the device by the caller
+// (see lib/icon-suggestions.ts), never synced.
+export async function fetchIconSuggestions(
+  getToken: TokenGetter,
+  input: { title: string; description?: string | null },
+  baseUrl: string = API_BASE_URL,
+): Promise<string[]> {
+  const res = await apiFetch(
+    getToken,
+    '/api/projects/icon-suggestions',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(
+      `POST /api/projects/icon-suggestions failed: ${res.status}`,
+    );
+  }
+  const body = (await res.json()) as { icons: string[] };
+  return body.icons;
+}
+
 // Waiting-condition REST helpers: siblings of the project ones above, hitting
 // /api/waits. See docs/entities/waiting-condition.md.
 export async function fetchWaits(

@@ -114,6 +114,8 @@ jest.mock('@/lib/api', () => ({
     getToken: unknown,
     project: { id: string; title: string; sourceCaptureId: string | null },
   ) => mockAddProject(getToken, project),
+  // Creating a project from Home pre-warms icon suggestions in the background.
+  fetchIconSuggestions: () => Promise.resolve([]),
   setProjectStatus: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.resolve(),

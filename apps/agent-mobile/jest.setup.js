@@ -327,3 +327,11 @@ jest.mock('@expo/ui', () => {
     BottomSheet,
   };
 });
+
+// AsyncStorage has no native module under jest (it throws "NativeModule:
+// AsyncStorage is null" on import). Use the library's official in-memory jest
+// mock so the icon-suggestion cache (and any other AsyncStorage user) works
+// headless.
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
