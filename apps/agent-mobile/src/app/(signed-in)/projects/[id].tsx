@@ -1,4 +1,4 @@
-import { Button, Column, Row, Text as UIText } from '@expo/ui';
+import { Button, Column } from '@expo/ui';
 import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
@@ -21,6 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -29,7 +30,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import EmojiPicker, { type EmojiType } from 'rn-emoji-keyboard';
+import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
 import { QuickAdd } from '@/components/quick-add';
@@ -296,49 +297,49 @@ function ProjectDetail({
   );
 }
 
-// The identity header: a de-emphasized icon (tap to open the picker sheet), the
-// title as an editable heading (commit on blur / submit), a derived-status pill,
-// and a "⋯" that opens the status/delete actions sheet.
-function ProjectHeader({
+// One combined icon-picker surface, mirroring the web popover: the pre-warmed AI
+// suggestions on top, the full searchable emoji grid directly below, in a single
+// bottom sheet — no extra hop. It is a plain RN bottom sheet (a Modal + backdrop
+// + a tall bottom-anchored panel), NOT an @expo/ui native sheet, because it hosts
+// the raw-RN `EmojiKeyboard` (the inline, non-modal build of rn-emoji-keyboard);
+// hosting RN rows inside the @expo/ui native tree is the very bug this screen
+// avoids. The panel is fixed at 85% height so the keyboard's search bar (rendered
+// at the top with categoryPosition="top") stays above the on-screen keyboard.
+function IconPickerSheet({
   project,
-  displayStatus,
-  onEdit,
-  onStatus,
-  onDelete,
+  open,
+  onClose,
+  onPick,
 }: {
   project: Project;
-  displayStatus: ProjectStatus;
-  onEdit: (fields: ProjectEditFields) => void;
-  onStatus: (status: ProjectStatus) => void;
-  onDelete: () => void;
+  open: boolean;
+  onClose: () => void;
+  onPick: (emoji: string) => void;
 }) {
-  const [title, setTitle] = useState(project.title);
-  const [iconSheetOpen, setIconSheetOpen] = useState(false);
-  const [pickingIcon, setPickingIcon] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
-
-  // Pre-warmed AI icon suggestions, shown when the icon sheet opens above the
-  // "Browse all emoji" full picker. The sheet opening is the fetch-on-open
-  // fallback: a cache miss (a different device, an eviction, an offline
-  // creation) fetches now; a warmed cache shows instantly.
   const { getToken } = useAuth();
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  // The pre-warmed AI suggestions. Opening the sheet is the fetch-on-open
+  // fallback: a cache miss (a different device, an eviction, an offline creation)
+  // fetches now; a warmed cache shows instantly.
   const basis = useMemo(
     () => ({ title: project.title, description: project.description }),
     [project.title, project.description],
   );
   const cached = useIconSuggestions(project.id);
   useEffect(() => {
-    if (iconSheetOpen) void requestIconSuggestions(getToken, project.id, basis);
-  }, [iconSheetOpen, getToken, project.id, basis]);
-  const suggestLoading = !cached || cached.status === 'loading';
-  const suggestIcons = cached?.icons ?? [];
-  const suggestStale =
+    if (open) void requestIconSuggestions(getToken, project.id, basis);
+  }, [open, getToken, project.id, basis]);
+  const loading = !cached || cached.status === 'loading';
+  const icons = cached?.icons ?? [];
+  const stale =
     !!cached && cached.status === 'ready' && isBasisStale(cached.basis, basis);
-  const refreshSuggestions = () =>
+  const refresh = () =>
     void requestIconSuggestions(getToken, project.id, basis, { force: true });
 
-  // rn-emoji-keyboard owns its own modal, so it is themed by literal colors, not
-  // CSS vars — resolve the app tokens the same way the rest of the screen does.
+  // rn-emoji-keyboard is themed by literal colors, not CSS vars — resolve the app
+  // tokens the same way the rest of the screen does.
   const emojiTheme = {
     backdrop: useColor('--color-scrim'),
     knob: useColor('--color-divider'),
@@ -360,6 +361,102 @@ function ProjectHeader({
     emoji: { selected: useColor('--color-surface-muted') },
   };
 
+  return (
+    <Modal
+      visible={open}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close icon picker"
+        className="flex-1 bg-scrim"
+        onPress={onClose}
+      />
+      <View
+        style={{ height: Math.round(height * 0.85), paddingBottom: insets.bottom }}
+        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface"
+      >
+        {/* Suggested row on top — additive over the full grid below. */}
+        <View className="flex-row flex-wrap items-center gap-2 px-4 pt-3 pb-2">
+          <Text className="text-[12px] font-medium text-foreground-muted">
+            Suggested
+          </Text>
+          {loading ? (
+            <Text className="text-foreground-muted">Loading suggested icons…</Text>
+          ) : icons.length > 0 ? (
+            icons.map((emoji) => (
+              <Pressable
+                key={emoji}
+                accessibilityRole="button"
+                accessibilityLabel={`Use suggested icon ${emoji}`}
+                hitSlop={6}
+                onPress={() => onPick(emoji)}
+                className="rounded-md px-1.5 py-1"
+              >
+                <Text className="text-[22px]">{emoji}</Text>
+              </Pressable>
+            ))
+          ) : (
+            <Text className="text-foreground-muted">
+              Couldn&apos;t load suggestions
+            </Text>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Refresh suggested icons"
+            hitSlop={8}
+            onPress={refresh}
+            className="ml-auto rounded-md px-2 py-1"
+          >
+            <Text
+              className={
+                stale
+                  ? 'text-[16px] text-foreground'
+                  : 'text-[16px] text-foreground-muted'
+              }
+            >
+              ↻
+            </Text>
+          </Pressable>
+        </View>
+        <View className="h-px bg-divider" />
+        {/* The full searchable picker, inline (not its own modal), filling the
+            rest of the sheet. */}
+        <View className="flex-1">
+          <EmojiKeyboard
+            onEmojiSelected={(picked: EmojiType) => onPick(picked.emoji)}
+            enableSearchBar
+            enableRecentlyUsed={false}
+            theme={emojiTheme}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// The identity header: a de-emphasized icon (tap to open the picker sheet), the
+// title as an editable heading (commit on blur / submit), a derived-status pill,
+// and a "⋯" that opens the status/delete actions sheet.
+function ProjectHeader({
+  project,
+  displayStatus,
+  onEdit,
+  onStatus,
+  onDelete,
+}: {
+  project: Project;
+  displayStatus: ProjectStatus;
+  onEdit: (fields: ProjectEditFields) => void;
+  onStatus: (status: ProjectStatus) => void;
+  onDelete: () => void;
+}) {
+  const [title, setTitle] = useState(project.title);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+
   const commitTitle = () => {
     const trimmed = title.trim();
     if (trimmed === '' || trimmed === project.title) {
@@ -369,12 +466,11 @@ function ProjectHeader({
     onEdit({ title: trimmed });
   };
 
-  // Apply an icon (a suggestion chip or the manual picker) and close both the
-  // suggestion sheet and the full picker. A no-op edit is skipped.
+  // Apply an icon (a suggestion chip or the manual grid) and close the picker.
+  // A no-op edit is skipped.
   const applyIcon = (emoji: string) => {
     if (emoji !== project.icon) onEdit({ icon: emoji });
-    setIconSheetOpen(false);
-    setPickingIcon(false);
+    setPickerOpen(false);
   };
 
   return (
@@ -384,7 +480,7 @@ function ProjectHeader({
           accessibilityRole="button"
           accessibilityLabel="Change icon"
           hitSlop={8}
-          onPress={() => setIconSheetOpen(true)}
+          onPress={() => setPickerOpen(true)}
         >
           <Text className="text-[30px]">{project.icon}</Text>
         </Pressable>
@@ -415,61 +511,14 @@ function ProjectHeader({
         </View>
       </View>
 
-      {/* The full emoji picker owns its own modal (search over every standard
-          emoji), so it is not an @expo/ui sheet. */}
-      <EmojiPicker
-        open={pickingIcon}
-        onClose={() => setPickingIcon(false)}
-        enableSearchBar
-        enableRecentlyUsed={false}
-        // The picker is a bottom-anchored modal that does not lift for the
-        // on-screen keyboard, and focusing the search bar does not expand it. At
-        // the default 40% height the keyboard covers the whole sheet, hiding the
-        // search field and its results. A tall fixed sheet keeps the search bar
-        // (rendered at the top) and the matching emoji above the keyboard.
-        defaultHeight="85%"
-        expandable={false}
-        theme={emojiTheme}
-        onEmojiSelected={(picked: EmojiType) => applyIcon(picked.emoji)}
+      {/* One combined surface: AI suggestions on top, the full searchable emoji
+          grid below — mirroring the web popover, no second tap. */}
+      <IconPickerSheet
+        project={project}
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={applyIcon}
       />
-
-      {/* The AI icon suggestions, additive above the full picker. A pure @expo/ui
-          tree (Column/Row/Button/Text), never raw RN rows inside the native
-          sheet host. "Browse all emoji" opens the full rn-emoji-keyboard modal. */}
-      <Sheet open={iconSheetOpen} onClose={() => setIconSheetOpen(false)}>
-        <Column spacing={8}>
-          <UIText>Suggested icons</UIText>
-          {suggestLoading ? (
-            <UIText>Loading suggested icons…</UIText>
-          ) : suggestIcons.length > 0 ? (
-            <Row spacing={4}>
-              {suggestIcons.map((emoji) => (
-                <Button
-                  key={emoji}
-                  variant="outlined"
-                  label={emoji}
-                  onPress={() => applyIcon(emoji)}
-                />
-              ))}
-            </Row>
-          ) : (
-            <UIText>Couldn&apos;t load suggestions</UIText>
-          )}
-          <Button
-            variant="text"
-            label={suggestStale ? 'Refresh suggestions ↻' : 'Refresh suggestions'}
-            onPress={refreshSuggestions}
-          />
-          <Button
-            variant="outlined"
-            label="Browse all emoji"
-            onPress={() => {
-              setIconSheetOpen(false);
-              setPickingIcon(true);
-            }}
-          />
-        </Column>
-      </Sheet>
 
       <Sheet open={actionsOpen} onClose={() => setActionsOpen(false)}>
         <Column spacing={8}>

@@ -78,17 +78,16 @@ jest.mock('@expo/ui', () => ({
   BottomSheet: MockBottomSheet,
 }));
 
-// The full emoji picker owns a native modal; substitute a passthrough that, when
-// open, exposes one tappable emoji so the icon-pick wiring is unit-testable (the
-// real searchable picker is verified on-device).
-function MockEmojiPicker({
-  open,
+// The inline emoji keyboard (rn-emoji-keyboard's non-modal build) sits inside our
+// combined picker sheet; substitute a passthrough exposing one tappable emoji so
+// the manual-pick wiring is unit-testable (the real searchable grid is verified
+// on-device).
+function MockEmojiKeyboard({
   onEmojiSelected,
 }: {
-  open?: boolean;
   onEmojiSelected?: (emoji: { emoji: string }) => void;
 }) {
-  return open ? (
+  return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Pick emoji 🎓"
@@ -96,11 +95,11 @@ function MockEmojiPicker({
     >
       <RNText>🎓</RNText>
     </Pressable>
-  ) : null;
+  );
 }
 jest.mock('rn-emoji-keyboard', () => ({
   __esModule: true,
-  default: MockEmojiPicker,
+  EmojiKeyboard: MockEmojiKeyboard,
 }));
 
 const mockFetchProjects = jest.fn<() => Promise<Project[]>>();
@@ -295,16 +294,13 @@ describe('ProjectDetailScreen', () => {
       ...project('1', 'Run a 5K', (fields.icon as string) ?? '🏃', 'next'),
     }));
 
-    const { getByLabelText, queryByLabelText } = await renderScreen();
+    const { getByLabelText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Change icon')).toBeTruthy());
 
-    // Tapping the icon opens the suggestion sheet; the full picker is behind
-    // "Browse all emoji".
+    // Tapping the icon opens the combined picker; the full grid is inline, right
+    // below the suggestions.
     await act(async () => {
       fireEvent.press(getByLabelText('Change icon'));
-    });
-    await act(async () => {
-      fireEvent.press(getByLabelText('Browse all emoji'));
     });
     await act(async () => {
       fireEvent.press(getByLabelText('Pick emoji 🎓'));
@@ -312,11 +308,9 @@ describe('ProjectDetailScreen', () => {
 
     expect(mockEditProject).toHaveBeenCalledTimes(1);
     expect(mockEditProject.mock.calls[0][2]).toEqual({ icon: '🎓' });
-    // Picking closes the picker.
-    expect(queryByLabelText('Pick emoji 🎓')).toBeNull();
   });
 
-  it('shows AI icon suggestions and applies a tapped one', async () => {
+  it('shows AI icon suggestions on top and applies a tapped one', async () => {
     mockEditProject.mockImplementation(async (_t, id, fields) => ({
       ...project('1', 'Run a 5K', (fields.icon as string) ?? '🏃', 'next'),
     }));
@@ -331,7 +325,9 @@ describe('ProjectDetailScreen', () => {
     await waitFor(() =>
       expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(1),
     );
-    const chip = await waitFor(() => getByLabelText('🌟'));
+    const chip = await waitFor(() =>
+      getByLabelText('Use suggested icon 🌟'),
+    );
     await act(async () => {
       fireEvent.press(chip);
     });
@@ -351,14 +347,14 @@ describe('ProjectDetailScreen', () => {
       expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(1),
     );
     await act(async () => {
-      fireEvent.press(getByLabelText('Refresh suggestions'));
+      fireEvent.press(getByLabelText('Refresh suggested icons'));
     });
     await waitFor(() =>
       expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(2),
     );
   });
 
-  it('keeps the full picker reachable when suggestions fail', async () => {
+  it('keeps the full picker present when suggestions fail', async () => {
     mockFetchIconSuggestions.mockRejectedValue(new Error('network down'));
 
     const { getByLabelText, getByText } = await renderScreen();
@@ -368,8 +364,8 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Change icon'));
     });
     await waitFor(() => expect(getByText("Couldn't load suggestions")).toBeTruthy());
-    // The escape hatch to the full manual picker is still present.
-    expect(getByLabelText('Browse all emoji')).toBeTruthy();
+    // The full manual grid sits inline in the same sheet, always available.
+    expect(getByLabelText('Pick emoji 🎓')).toBeTruthy();
   });
 
   it('moves the project to backlog from the actions sheet', async () => {

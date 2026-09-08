@@ -2,7 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
-- 2026-09-08: A new project suggests emoji icons for itself. Create a project and, when you tap its icon, a row of suggested icons based on its name is already there — tap one to use it, or tap "Browse all emoji" for the full picker. Refresh recomputes them (handy after you add a description).
+- 2026-09-08: A new project suggests emoji icons for itself. Create a project and, when you tap its icon, a row of suggested icons based on its name sits right on top of the full emoji picker — tap a suggestion or search for any emoji, all in one sheet. Refresh recomputes them (handy after you add a description).
 - 2026-09-08: Create a project straight from Home. The quick-add now has a Project option alongside Capture and Task; adding one keeps you on Home and shows a toast with a View link that jumps to your Projects, where the new one is on top.
 - 2026-09-08: On an empty Home, the next-step button now appears (it was failing to render, leaving the suggested action unreachable).
 - 2026-09-08: Starring a task on a waiting project brings the project back to active, even while it is still waiting on something; finishing that task returns the project to waiting.
