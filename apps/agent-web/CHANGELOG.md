@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-08: Starring a task on a waiting project brings the project back to active, even while it is still waiting on something; finishing that task returns the project to waiting.
 - 2026-09-08: Pick any emoji as a project's icon. Opening the icon picker now offers a searchable list of every standard emoji, instead of a small fixed set.
 
 - 2026-09-06: The Today screen is now Home. When your plate and inbox are both empty, it shows a next step based on your projects — plan your day, bring a project forward from the backlog, or create your first project. Tasks you're working on now show their project's icon.

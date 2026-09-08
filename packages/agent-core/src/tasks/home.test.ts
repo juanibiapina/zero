@@ -86,26 +86,24 @@ describe("homeTasks", () => {
     expect(out).toEqual([]);
   });
 
-  it("hides a taken-on task when its project has an unresolved condition", () => {
+  it("shows a taken-on task even when its project has an unresolved condition", () => {
+    // Taking a task on overrides waiting: the project displays active again, so
+    // the task shows.
     const out = homeTasks(
       [task({ id: "t", projectId: "p", takenOnAt: "2026-01-02T00:00:00.000Z" })],
       [project("p", "active")],
       [freeTextCondition("p")],
     );
-    expect(out).toEqual([]);
+    expect(out.map((t) => t.id)).toEqual(["t"]);
   });
 
-  it("shows the task again once the condition is resolved", () => {
-    const resolved = {
-      ...freeTextCondition("p"),
-      resolvedAt: "2026-01-03T00:00:00.000Z",
-    };
+  it("hides a parked task on a project with an unresolved condition (waiting)", () => {
     const out = homeTasks(
-      [task({ id: "t", projectId: "p", takenOnAt: "2026-01-02T00:00:00.000Z" })],
-      [project("p", "active")],
-      [resolved],
+      [task({ id: "t", projectId: "p", takenOnAt: null })],
+      [project("p", "next")],
+      [freeTextCondition("p")],
     );
-    expect(out.map((t) => t.id)).toEqual(["t"]);
+    expect(out).toEqual([]);
   });
 
   it("shows a loose task regardless of takenOnAt", () => {
