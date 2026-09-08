@@ -8,6 +8,7 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 import { BackHandler, View } from 'react-native';
+import { defaultToastController } from '@zero/agent-core';
 
 import type { Capture, Task } from '@/lib/api';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
@@ -31,6 +32,14 @@ const mockGetToken = jest.fn<() => Promise<string | null>>();
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: mockGetToken }),
 }));
+
+// The screen navigates via the expo-router singleton; capture it.
+const mockNavigate = jest.fn<(href: string) => void>();
+jest.mock('expo-router', () => ({
+  router: { navigate: (href: string) => mockNavigate(href) },
+}));
+
+
 
 // The native Clerk button renders a platform view via requireNativeView, which
 // is unavailable under jest. Stub it with a queryable element. The component is
@@ -73,6 +82,13 @@ const mockAddTask =
   >();
 const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockAddProject =
+  jest.fn<
+    (
+      getToken: unknown,
+      project: { id: string; title: string; sourceCaptureId: string | null },
+    ) => Promise<unknown>
+  >();
 jest.mock('@/lib/api', () => ({
   fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
   addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
@@ -94,7 +110,10 @@ jest.mock('@/lib/api', () => ({
   // The Home top region reads projects (for the project-active gate and the
   // all-clear call to action).
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
-  addProject: () => Promise.reject(new Error('not used')),
+  addProject: (
+    getToken: unknown,
+    project: { id: string; title: string; sourceCaptureId: string | null },
+  ) => mockAddProject(getToken, project),
   setProjectStatus: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.resolve(),
@@ -160,6 +179,9 @@ describe('HomeScreen', () => {
     mockFetchTasks.mockResolvedValue([]);
     mockFetchProjects.mockReset();
     mockFetchProjects.mockResolvedValue([]);
+    mockAddProject.mockReset();
+    mockNavigate.mockReset();
+    defaultToastController.dismiss();
   });
 
   it('titles the screen Home', async () => {
@@ -261,6 +283,64 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(getByText('call the dentist')).toBeTruthy());
     expect(mockAddTask).toHaveBeenCalledTimes(1);
     expect(mockAddTask.mock.calls[0][1].text).toBe('call the dentist');
+  });
+
+  it('creates a project from the Project quick-add mode, stays on Home, and toasts a link to it', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockAddProject.mockImplementation(async (_g, project) => ({
+      id: project.id,
+      title: project.title,
+      icon: '📁',
+      description: null,
+      status: 'next',
+      createdAt: '2023-01-01T00:00:00.000Z',
+    }));
+
+    const { getByLabelText, getByPlaceholderText, getByText } =
+      await renderScreen();
+    await waitFor(() =>
+      expect(getByText('Create your first project')).toBeTruthy(),
+    );
+
+    // Open the quick-add and switch to Project mode.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Capture'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a project'));
+    });
+    const input = getByPlaceholderText('Name a project outcome');
+    await act(async () => {
+      fireEvent.changeText(input, 'ship the app');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(mockAddProject).toHaveBeenCalledTimes(1));
+    const minted = mockAddProject.mock.calls[0][1];
+    expect(minted.title).toBe('ship the app');
+
+    // Stays on Home: the quick-add bar is still open and cleared, no navigation yet.
+    expect(getByPlaceholderText('Name a project outcome').props.value).toBe('');
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    // Settle the optimistic insert (its persist reconciles the server row) so
+    // the transaction does not stay pending in @tanstack/db's global state and
+    // stall the next test's live queries.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // The toast carries the title and a View action that deep-links the project.
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].message).toBe('Project created');
+    expect(snap[0].description).toBe('ship the app');
+    expect(snap[0].action?.label).toBe('View');
+    snap[0].action?.onPress();
+    expect(mockNavigate).toHaveBeenCalledWith('/projects');
   });
 
   it('completes a task from the Home top region after the undo window', async () => {

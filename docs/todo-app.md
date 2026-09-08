@@ -288,6 +288,24 @@ gate-and-mapping is one shared pure seam `homeCallToAction` in `@zero/agent-core
 (with `homeCallToActionCopy` so web and mobile show identical words), unit-tested;
 web and mobile screen tests cover the rename, the CTA cases, and the badge.
 
+Shipped (2026-09-08): **create a Project from Home**. The Home quick-add gained a
+third **Project** option beside Capture and Task on both surfaces; submitting in
+that mode creates a name-only project, keeps the user on Home, and raises a toast
+with a **View** link (the id comes off the optimistic insert transaction). On web
+View opens the project's own detail; on mobile it opens the Projects tab (a direct
+cross-tab deep link to the detail is blocked by a NativeTabs bug, expo/expo#45786,
+that needs a native fix — revisit when it lands). The toast is our **own
+primitive**, not a library: a headless controller in `@zero/agent-core` (queue,
+timers, dedupe, observable snapshot) behind a tiny `toast()` + `<Toaster>`
+interface, with a thin per-surface renderer (web DOM + CSS, mobile RN +
+reanimated). We tried `sonner`/`sonner-native` first; sonner-native does not
+render on our New-Arch + react-native-screens stack (sonner-native#316), and
+react-native-toast-message has an open New-Arch regression (#583) — so no
+maintained library fit. Plans: `docs/plans/todo-home-create-project.md` (feature),
+`docs/plans/toast-primitive.md` (the primitive). Device-verified on the Pixel 7
+(Maestro): the toast renders and View lands on Projects; no EAS rebuild was needed
+(the mobile renderer adds no native module).
+
 Shipped:
 
 - **The "what shows up" availability model** (plan:

@@ -13,6 +13,7 @@ import {
   localToday,
   messageOf,
   orderKeyBetween,
+  toast,
   tomorrow,
   visibleCaptures,
   type Capture,
@@ -543,7 +544,15 @@ export default function HomeScreen() {
   );
 }
 
-type AddMode = 'capture' | 'task';
+type AddMode = 'capture' | 'task' | 'project';
+
+// The quick-add field's placeholder per mode. Project mode teaches
+// outcome-based naming, mirroring the Projects screen.
+const ADD_PLACEHOLDER: Record<AddMode, string> = {
+  capture: 'Capture a thought',
+  task: 'Add a task',
+  project: 'Name a project outcome',
+};
 
 function Captures({
   api,
@@ -684,6 +693,27 @@ function Captures({
       return;
     }
     setWriteError(null);
+    if (mode === 'project') {
+      // Create the project but stay on Home; a toast is the escape hatch to jump
+      // to it. The id comes off the optimistic insert transaction so the toast
+      // can deep-link before the server round-trip finishes.
+      const tx = projectsApi.add(trimmed, refiningCaptureId());
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+      const id = String(tx.mutations[0]?.key);
+      toast('Project created', {
+        description: trimmed,
+        action: {
+          label: 'View',
+          // Opens the Projects tab, where the new project sits at the top of its
+          // status group. A direct deep link to the project's own detail is
+          // blocked by a NativeTabs cross-tab bug (expo/expo#45786) that needs a
+          // native fix; revisit when it lands.
+          onPress: () => router.navigate('/projects'),
+        },
+      });
+      setText('');
+      return;
+    }
     // Optimistic: the row appears at once; surface a failure if the write loses.
     // The mode decides where it lands: a task dated today, or a capture.
     const tx =
@@ -693,7 +723,7 @@ function Captures({
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     // Keep the bar open and cleared for rapid, repeated entry.
     setText('');
-  }, [text, api, tasksApi, mode]);
+  }, [text, api, tasksApi, projectsApi, mode]);
 
   const onFinishRefine = useCallback(
     (captureId: string) => {
@@ -894,7 +924,7 @@ function Captures({
         text={text}
         mode={mode}
         onModeChange={setMode}
-        placeholder={mode === 'task' ? 'Add a task' : 'Capture a thought'}
+        placeholder={ADD_PLACEHOLDER[mode]}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
         onSubmit={() => onAdd()}

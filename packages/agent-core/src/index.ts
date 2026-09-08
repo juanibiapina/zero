@@ -94,6 +94,18 @@ export {
   STATUS_LABELS,
 } from "./projects/display";
 
+// The headless toast primitive (shared controller; per-surface <Toaster> adapters).
+export {
+  createToastController,
+  defaultToastController,
+  toast,
+  type Toast,
+  type ToastAction,
+  type ToastController,
+  type ToastControllerOptions,
+  type ToastInput,
+} from "./toast/controller";
+
 // Silent automatic timezone sync (shared core; per-surface adapters).
 export {
   createTimezoneSync,

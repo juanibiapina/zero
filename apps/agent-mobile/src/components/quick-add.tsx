@@ -7,7 +7,7 @@ import { useResolveClassNames } from 'uniwind';
 import { QuickAddBar } from '@/components/quick-add-bar';
 import { Fab } from '@/components/ui/fab';
 
-export type QuickAddMode = 'capture' | 'task';
+export type QuickAddMode = 'capture' | 'task' | 'project';
 
 export type QuickAddProps = {
   open: boolean;
