@@ -387,6 +387,13 @@ function ProjectHeader({
         onClose={() => setPickingIcon(false)}
         enableSearchBar
         enableRecentlyUsed={false}
+        // The picker is a bottom-anchored modal that does not lift for the
+        // on-screen keyboard, and focusing the search bar does not expand it. At
+        // the default 40% height the keyboard covers the whole sheet, hiding the
+        // search field and its results. A tall fixed sheet keeps the search bar
+        // (rendered at the top) and the matching emoji above the keyboard.
+        defaultHeight="85%"
+        expandable={false}
         theme={emojiTheme}
         onEmojiSelected={(picked: EmojiType) => {
           if (picked.emoji !== project.icon) onEdit({ icon: picked.emoji });

@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-08: Searching in the project icon emoji picker now keeps the search box and matching emoji visible above the keyboard.
+
 - 2026-09-08: Pick any emoji as a project's icon. Tapping the icon now opens a full emoji picker with search, instead of a small fixed set.
 
 - 2026-09-06: The Today tab is now Home. When your plate and inbox are both empty, it shows a next step based on your projects — plan your day, bring a project forward from the backlog, or create your first project. Tasks you're working on now show their project's icon.
