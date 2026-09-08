@@ -231,6 +231,13 @@ jest.mock('react-native-keyboard-controller', () => {
 // shows its children only while presented; Button is a Pressable whose
 // accessibilityLabel is its `label`. Defined with React.createElement (no JSX)
 // since a hoisted jest.mock factory can't safely hold JSX.
+//
+// The mock also enforces @expo/ui's host invariant: on Android every Jetpack
+// Compose component (Button, Column, Row, Text, TextInput) must be wrapped in a
+// `<Host>` or it fails to render with a Compose error banner. `Host` and
+// `BottomSheet` (which wraps its own Host natively) provide a context; the
+// hosted components throw when that context is absent. Without this guard a bare
+// `@expo/ui` component looks fine under jest but breaks on device.
 const mockReactForExpoUi = require('react');
 jest.mock('@expo/ui', () => {
   const {
@@ -239,21 +246,41 @@ jest.mock('@expo/ui', () => {
     TextInput: RNTextInput,
     Pressable,
   } = require('react-native');
+  const HostContext = mockReactForExpoUi.createContext(false);
+  const useHosted = (name) => {
+    if (!mockReactForExpoUi.useContext(HostContext)) {
+      throw new Error(
+        `@expo/ui ${name} must be rendered inside a <Host> (or a component that provides one, e.g. BottomSheet).`,
+      );
+    }
+  };
   const Host = ({ children }) =>
-    mockReactForExpoUi.createElement(View, null, children);
-  const Column = ({ children }) =>
-    mockReactForExpoUi.createElement(View, null, children);
-  const Row = ({ children }) =>
-    mockReactForExpoUi.createElement(View, null, children);
-  const Text = ({ children }) =>
-    mockReactForExpoUi.createElement(RNText, null, children);
-  const Button = ({ label, onPress, children }) =>
     mockReactForExpoUi.createElement(
+      HostContext.Provider,
+      { value: true },
+      mockReactForExpoUi.createElement(View, null, children),
+    );
+  const Column = ({ children }) => {
+    useHosted('Column');
+    return mockReactForExpoUi.createElement(View, null, children);
+  };
+  const Row = ({ children }) => {
+    useHosted('Row');
+    return mockReactForExpoUi.createElement(View, null, children);
+  };
+  const Text = ({ children }) => {
+    useHosted('Text');
+    return mockReactForExpoUi.createElement(RNText, null, children);
+  };
+  const Button = ({ label, onPress, children }) => {
+    useHosted('Button');
+    return mockReactForExpoUi.createElement(
       Pressable,
       { accessibilityRole: 'button', accessibilityLabel: label, onPress },
       children ??
         (label != null ? mockReactForExpoUi.createElement(RNText, null, label) : null),
     );
+  };
   const TextInput = ({
     value,
     defaultValue,
@@ -264,8 +291,9 @@ jest.mock('@expo/ui', () => {
     autoFocus,
     returnKeyType,
     testID,
-  }) =>
-    mockReactForExpoUi.createElement(RNTextInput, {
+  }) => {
+    useHosted('TextInput');
+    return mockReactForExpoUi.createElement(RNTextInput, {
       value: value ?? defaultValue,
       onChangeText,
       onBlur,
@@ -275,12 +303,17 @@ jest.mock('@expo/ui', () => {
       returnKeyType,
       testID,
     });
+  };
   const BottomSheet = ({ isPresented, children }) =>
     isPresented
       ? mockReactForExpoUi.createElement(
-          View,
-          { accessibilityLabel: 'sheet' },
-          children,
+          HostContext.Provider,
+          { value: true },
+          mockReactForExpoUi.createElement(
+            View,
+            { accessibilityLabel: 'sheet' },
+            children,
+          ),
         )
       : null;
   return {

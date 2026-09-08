@@ -1,4 +1,4 @@
-import { Button, Column, TextInput } from '@expo/ui';
+import { Button, Column, Host, TextInput } from '@expo/ui';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -492,12 +492,14 @@ function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
           </Text>
         ) : null}
       </View>
-      <Button
-        label={button}
-        variant="filled"
-        style={{ height: 48, borderRadius: 14, paddingHorizontal: 20 }}
-        onPress={() => router.navigate('/projects')}
-      />
+      <Host matchContents>
+        <Button
+          label={button}
+          variant="filled"
+          style={{ height: 48, borderRadius: 14, paddingHorizontal: 20 }}
+          onPress={() => router.navigate('/projects')}
+        />
+      </Host>
     </View>
   );
 }

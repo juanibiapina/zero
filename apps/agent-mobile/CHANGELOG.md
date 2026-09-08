@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-08: On an empty Home, the next-step button now appears (it was failing to render, leaving the suggested action unreachable).
 - 2026-09-08: Starring a task on a waiting project brings the project back to active, even while it is still waiting on something; finishing that task returns the project to waiting.
 - 2026-09-08: Searching in the project icon emoji picker now keeps the search box and matching emoji visible above the keyboard.
 
