@@ -4,9 +4,14 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ErrorText } from "@/components/ConnectionStatus";
 import {
-  ICON_CHOICES,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ErrorText } from "@/components/ConnectionStatus";
+import { EmojiPicker } from "frimousse";
+import {
   localToday,
   messageOf,
   projectDisplayStatus,
@@ -201,15 +206,68 @@ function ProjectHeader({
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-3">
-        <button
-          type="button"
-          aria-label="Change icon"
-          aria-expanded={pickingIcon}
-          onClick={() => setPickingIcon((v) => !v)}
-          className="shrink-0 rounded-lg px-1 text-3xl leading-none transition-colors hover:bg-accent"
-        >
-          {project.icon}
-        </button>
+        <Popover open={pickingIcon} onOpenChange={setPickingIcon}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Change icon"
+              className="shrink-0 rounded-lg px-1 text-3xl leading-none transition-colors hover:bg-accent"
+            >
+              {project.icon}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-fit p-0">
+            <EmojiPicker.Root
+              className="isolate flex h-[368px] w-fit flex-col"
+              onEmojiSelect={({ emoji }) => {
+                if (emoji !== project.icon) onEdit(project.id, { icon: emoji });
+                setPickingIcon(false);
+              }}
+            >
+              <EmojiPicker.Search
+                autoFocus
+                aria-label="Search emoji"
+                placeholder="Search emoji…"
+                className="z-10 mx-2 mt-2 mb-1 h-9 rounded-md border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              <EmojiPicker.Viewport className="relative flex-1 outline-hidden">
+                <EmojiPicker.Loading className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                  Loading…
+                </EmojiPicker.Loading>
+                <EmojiPicker.Empty className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                  No emoji found.
+                </EmojiPicker.Empty>
+                <EmojiPicker.List
+                  className="select-none pb-1.5"
+                  components={{
+                    CategoryHeader: ({ category, ...props }) => (
+                      <div
+                        className="bg-popover px-3 pt-3 pb-1.5 text-xs font-medium text-muted-foreground"
+                        {...props}
+                      >
+                        {category.label}
+                      </div>
+                    ),
+                    Row: ({ children, ...props }) => (
+                      <div className="scroll-my-1.5 px-1.5" {...props}>
+                        {children}
+                      </div>
+                    ),
+                    Emoji: ({ emoji, ...props }) => (
+                      <button
+                        aria-label={`Set icon ${emoji.emoji}`}
+                        className="flex size-8 items-center justify-center rounded-md text-lg data-[active]:bg-accent"
+                        {...props}
+                      >
+                        {emoji.emoji}
+                      </button>
+                    ),
+                  }}
+                />
+              </EmojiPicker.Viewport>
+            </EmojiPicker.Root>
+          </PopoverContent>
+        </Popover>
         <input
           value={title}
           aria-label="Project title"
@@ -242,32 +300,6 @@ function ProjectHeader({
           </OverflowMenu>
         </div>
       </div>
-
-      {pickingIcon && (
-        <div className="flex flex-wrap gap-2 rounded-lg border p-3">
-          {ICON_CHOICES.map((icon) => {
-            const isCurrent = icon === project.icon;
-            return (
-              <button
-                key={icon}
-                type="button"
-                aria-label={`Set icon ${icon}`}
-                aria-pressed={isCurrent}
-                onClick={() => {
-                  if (icon !== project.icon) onEdit(project.id, { icon });
-                  setPickingIcon(false);
-                }}
-                className={cn(
-                  "flex size-10 items-center justify-center rounded-lg border text-xl transition-colors hover:bg-accent",
-                  isCurrent && "border-primary ring-2 ring-primary",
-                )}
-              >
-                {icon}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

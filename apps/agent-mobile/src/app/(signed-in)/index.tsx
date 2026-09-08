@@ -9,7 +9,7 @@ import {
   homeCallToAction,
   homeCallToActionCopy,
   homeTasks,
-  ICON_CHOICES,
+  DEFAULT_ICON,
   localToday,
   messageOf,
   orderKeyBetween,
@@ -390,7 +390,7 @@ function TasksTop({
   const iconOf = (item: Task): string | null =>
     item.projectId == null
       ? null
-      : (projects.find((p) => p.id === item.projectId)?.icon ?? ICON_CHOICES[0]);
+      : (projects.find((p) => p.id === item.projectId)?.icon ?? DEFAULT_ICON);
   const onComplete = useCallback(
     (item: Task) => {
       done.start(item.id, () => {

@@ -31,7 +31,7 @@ import {
   homeCallToAction,
   homeCallToActionCopy,
   homeTasks,
-  ICON_CHOICES,
+  DEFAULT_ICON,
   localToday,
   messageOf,
   orderKeyBetween,
@@ -289,7 +289,7 @@ function TasksSection({
   // The project a task belongs to lends its icon as a small context badge; a
   // loose task shows none. Default to the neutral icon if the project's is unset.
   const iconOf = (projectId: string): string =>
-    (projects ?? []).find((p) => p.id === projectId)?.icon ?? ICON_CHOICES[0];
+    (projects ?? []).find((p) => p.id === projectId)?.icon ?? DEFAULT_ICON;
 
   // Empty is not this section's concern: when the plate is empty the parent
   // renders the inbox alone or the all-clear CTA, so the Tasks section simply

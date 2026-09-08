@@ -77,6 +77,31 @@ jest.mock('@expo/ui', () => ({
   BottomSheet: MockBottomSheet,
 }));
 
+// The full emoji picker owns a native modal; substitute a passthrough that, when
+// open, exposes one tappable emoji so the icon-pick wiring is unit-testable (the
+// real searchable picker is verified on-device).
+function MockEmojiPicker({
+  open,
+  onEmojiSelected,
+}: {
+  open?: boolean;
+  onEmojiSelected?: (emoji: { emoji: string }) => void;
+}) {
+  return open ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Pick emoji 🎓"
+      onPress={() => onEmojiSelected?.({ emoji: '🎓' })}
+    >
+      <RNText>🎓</RNText>
+    </Pressable>
+  ) : null;
+}
+jest.mock('rn-emoji-keyboard', () => ({
+  __esModule: true,
+  default: MockEmojiPicker,
+}));
+
 const mockFetchProjects = jest.fn<() => Promise<Project[]>>();
 const mockSetProjectStatus =
   jest.fn<(getToken: unknown, id: string, status: ProjectStatus) => Promise<Project>>();
@@ -250,12 +275,12 @@ describe('ProjectDetailScreen', () => {
     );
   });
 
-  it('changes the icon from the picker sheet', async () => {
+  it('changes the icon from the emoji picker', async () => {
     mockEditProject.mockImplementation(async (_t, id, fields) => ({
       ...project('1', 'Run a 5K', (fields.icon as string) ?? '🏃', 'next'),
     }));
 
-    const { getByLabelText } = await renderScreen();
+    const { getByLabelText, queryByLabelText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Change icon')).toBeTruthy());
 
     // The picker is behind the icon tap (de-emphasized).
@@ -263,11 +288,13 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Change icon'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('🎓'));
+      fireEvent.press(getByLabelText('Pick emoji 🎓'));
     });
 
     expect(mockEditProject).toHaveBeenCalledTimes(1);
     expect(mockEditProject.mock.calls[0][2]).toEqual({ icon: '🎓' });
+    // Picking closes the picker.
+    expect(queryByLabelText('Pick emoji 🎓')).toBeNull();
   });
 
   it('moves the project to backlog from the actions sheet', async () => {

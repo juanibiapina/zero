@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -51,6 +52,45 @@ vi.mock("@/lib/waits-collection", () => ({
 vi.mock("@/lib/captures-collection", () => ({
   getCapturesApi: () => Promise.resolve(h.capturesApi),
 }));
+
+// frimousse fetches its emoji data from a CDN at runtime, which never resolves
+// in jsdom. Substitute a minimal picker whose Root exposes one selectable emoji
+// so the icon-pick flow is exercised without the network (the real searchable
+// grid is verified in the browser).
+vi.mock("frimousse", () => {
+  const Root = ({
+    onEmojiSelect,
+    children,
+  }: {
+    onEmojiSelect?: (emoji: { emoji: string; label: string }) => void;
+    children?: ReactNode;
+  }) => (
+    <div>
+      <button
+        type="button"
+        aria-label="Set icon 🎓"
+        onClick={() => onEmojiSelect?.({ emoji: "🎓", label: "graduation cap" })}
+      >
+        🎓
+      </button>
+      {children}
+    </div>
+  );
+  const Passthrough = ({ children }: { children?: ReactNode }) => (
+    <div>{children}</div>
+  );
+  const Noop = () => null;
+  return {
+    EmojiPicker: {
+      Root,
+      Search: Noop,
+      Viewport: Passthrough,
+      Loading: Noop,
+      Empty: Noop,
+      List: Noop,
+    },
+  };
+});
 
 function fakeWaitsRest(): WaitsRest {
   const server: import("@zero/agent-core").WaitingCondition[] = [];

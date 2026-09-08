@@ -14,16 +14,13 @@ import {
   type StartOfflineExecutor,
   type WarnFn,
 } from "../collection/base";
+import { DEFAULT_ICON } from "./display";
 import type { Project, ProjectStatus } from "./types";
 
 // The Project data layer: the Project verbs (add, setStatus, edit) over the
 // shared collection factory in ../collection/base. Everything about offline
 // persistence, reconcile and readiness lives there; this file holds only what
 // is Project-specific.
-
-// The name-only creation defaults, matching what the server fills. Kept here so
-// the optimistic row is identical to the server row (no temp-to-real swap).
-const DEFAULT_ICON = "📁";
 
 // The REST calls the collection needs, already auth-bound by the caller. Web
 // injects same-origin cookie closures (no token); mobile injects closures that

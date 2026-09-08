@@ -2,6 +2,8 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-08: Pick any emoji as a project's icon. Opening the icon picker now offers a searchable list of every standard emoji, instead of a small fixed set.
+
 - 2026-09-06: The Today screen is now Home. When your plate and inbox are both empty, it shows a next step based on your projects — plan your day, bring a project forward from the backlog, or create your first project. Tasks you're working on now show their project's icon.
 
 - 2026-09-05: A project now opens its own page instead of a pop-up panel. The page leads with the project's tasks and what it's waiting on; its title is editable at the top, the icon is tucked away until you want it, and status changes and delete live in a "⋯" menu.

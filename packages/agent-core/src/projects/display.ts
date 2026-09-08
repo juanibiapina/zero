@@ -24,23 +24,12 @@ export const ALL_STATUSES: ProjectStatus[] = [
   "done",
 ];
 
-// A small curated icon set (not a full emoji keyboard) so a project's icon
-// renders identically across platforms. Covers the vision's examples (baby,
-// diploma, house…) plus a neutral default.
-export const ICON_CHOICES = [
-  "📁",
-  "👶",
-  "🎓",
-  "🏠",
-  "🎬",
-  "✈️",
-  "📚",
-  "💼",
-  "❤️",
-  "💪",
-  "🧳",
-  "🎯",
-];
+// The neutral default icon a project gets when none is chosen. The picker now
+// offers every standard emoji (searchable), so an icon is a native glyph the
+// platform renders — Apple and Google draw the same code point differently, an
+// accepted tradeoff. This is the single default shared by the surfaces; the
+// per-store creation defaults mirror it.
+export const DEFAULT_ICON = "📁";
 
 // A Backlog with more than this many projects collapses by default (it is the
 // "someday" pile and must stay out of the way). Active/Next/Waiting start open.

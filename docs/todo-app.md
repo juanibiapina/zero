@@ -104,8 +104,9 @@ third entity, now being built (slice A1 shipped). Everything else below
   a nice icon (baby face, diploma) and a status (active / next / waiting / backlog
   / done). Slices A1 + A2 shipped: name-only create, a status-grouped list, and a
   detail sheet where the status is changed (Done + inline Undo) on both surfaces;
-  slice A3 shipped enrichment in that sheet (curated emoji picker, editable title
-  and notes). Slice A (the hand-managed entity) is complete. Vision beyond that:
+  slice A3 shipped enrichment in that sheet (an emoji icon picker offering all
+  standard emoji with search, editable title and notes). Slice A (the
+  hand-managed entity) is complete. Vision beyond that:
   can contain Todos, agent sessions, documents. Can spin off other Projects and
   even People. Notify dependent Projects when they move; can unblock them. Idea:
   project "slots", start with one slot to teach the game.
@@ -238,10 +239,13 @@ Shipped (slice A3, plan `todo-project-entity-a3.md`): enrichment in the detail
 sheet. `DbProjectStore.edit` + a widened `PATCH /api/projects/{id}` carrying
 title/icon/description alongside status, and `api.edit` in the collection
 (offline-replaying; `setStatus` and `edit` share one update, disambiguated by the
-changed field set). The sheet gained a curated emoji icon picker, an editable
+changed field set). The sheet gained an emoji icon picker, an editable
 title, and an editable notes field on both surfaces; field edits commit on
 blur/submit (the icon on tap) and keep the sheet open, while a status pick still
-dismisses it. The `icon`/`description` columns existed from A1, so A3 needed no
+dismisses it. The icon picker later grew from a curated 12-emoji row into a
+searchable picker over every standard emoji (`frimousse` on web,
+`rn-emoji-keyboard` on mobile); the stored `icon` is still a single emoji
+string, and the neutral default is the shared `DEFAULT_ICON` (📁). The `icon`/`description` columns existed from A1, so A3 needed no
 migration. This completes **slice A** (the hand-managed Project entity: no AI, no
 Task membership). The mobile `@expo/ui` `TextInput` is native, so on-device
 verification needs an EAS dev build. The Rule-of-Three extraction of the shared
@@ -261,7 +265,7 @@ Upcoming × web + mobile) shared four copies of the same plumbing. The pure,
 UI-agnostic pieces moved into `@zero/agent-core` (`messageOf`,
 `LOADING_TEXT_DELAY_MS`, the Upcoming `dayLabel` helpers, and the Projects
 display data in `projects/display.ts`: `STATUS_LABELS`, `ALL_STATUSES`,
-`ICON_CHOICES`, `BACKLOG_COLLAPSE_THRESHOLD`, `DONE_UNDO_MS`). The React hooks
+`DEFAULT_ICON`, `BACKLOG_COLLAPSE_THRESHOLD`, `DONE_UNDO_MS`). The React hooks
 (`useDelayed`, `useLoadError`, `useForegroundRefetch`, and the `useUndoableLeave`
 hook that now backs both the Done and Delete undo timers) live in one
 `screen-hooks` module **per app**, not in `@zero/agent-core`: a workspace lib

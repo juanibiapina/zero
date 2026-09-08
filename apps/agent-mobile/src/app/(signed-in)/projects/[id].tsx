@@ -1,9 +1,8 @@
-import { Button, Column, Row, Text as UIText } from '@expo/ui';
+import { Button, Column } from '@expo/ui';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  ICON_CHOICES,
   localToday,
   messageOf,
   projectDisplayStatus,
@@ -28,6 +27,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import EmojiPicker, { type EmojiType } from 'rn-emoji-keyboard';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
 import { QuickAdd } from '@/components/quick-add';
@@ -309,7 +309,29 @@ function ProjectHeader({
   const [title, setTitle] = useState(project.title);
   const [pickingIcon, setPickingIcon] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const labelColor = useColor('--color-foreground-secondary');
+
+  // rn-emoji-keyboard owns its own modal, so it is themed by literal colors, not
+  // CSS vars — resolve the app tokens the same way the rest of the screen does.
+  const emojiTheme = {
+    backdrop: useColor('--color-scrim'),
+    knob: useColor('--color-divider'),
+    container: useColor('--color-surface'),
+    header: useColor('--color-foreground'),
+    skinTonesContainer: useColor('--color-surface-muted'),
+    category: {
+      icon: useColor('--color-foreground-muted'),
+      iconActive: useColor('--color-accent'),
+      container: useColor('--color-surface'),
+      containerActive: useColor('--color-surface-muted'),
+    },
+    search: {
+      background: useColor('--color-surface-muted'),
+      text: useColor('--color-foreground'),
+      placeholder: useColor('--color-placeholder'),
+      icon: useColor('--color-foreground-muted'),
+    },
+    emoji: { selected: useColor('--color-surface-muted') },
+  };
 
   const commitTitle = () => {
     const trimmed = title.trim();
@@ -358,25 +380,19 @@ function ProjectHeader({
         </View>
       </View>
 
-      {/* Short interaction → a pure @expo/ui sheet (no RN views inside). */}
-      <Sheet open={pickingIcon} onClose={() => setPickingIcon(false)}>
-        <Column spacing={12}>
-          <UIText textStyle={{ color: labelColor, fontSize: 13 }}>Icon</UIText>
-          <Row spacing={8}>
-            {ICON_CHOICES.map((icon) => (
-              <Button
-                key={icon}
-                variant={icon === project.icon ? 'filled' : 'outlined'}
-                onPress={() => {
-                  if (icon !== project.icon) onEdit({ icon });
-                  setPickingIcon(false);
-                }}
-                label={icon}
-              />
-            ))}
-          </Row>
-        </Column>
-      </Sheet>
+      {/* The full emoji picker owns its own modal (search over every standard
+          emoji), so it is not an @expo/ui sheet. */}
+      <EmojiPicker
+        open={pickingIcon}
+        onClose={() => setPickingIcon(false)}
+        enableSearchBar
+        enableRecentlyUsed={false}
+        theme={emojiTheme}
+        onEmojiSelected={(picked: EmojiType) => {
+          if (picked.emoji !== project.icon) onEdit({ icon: picked.emoji });
+          setPickingIcon(false);
+        }}
+      />
 
       <Sheet open={actionsOpen} onClose={() => setActionsOpen(false)}>
         <Column spacing={8}>
