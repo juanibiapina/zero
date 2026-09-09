@@ -49,6 +49,13 @@ function fakeRest(initial: Task[]): TasksRest {
       task.completedAt = new Date().toISOString();
       return { ...task };
     },
+    reopenTask: async (id) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      task.completedAt = null;
+      return { ...task };
+    },
   };
 }
 
@@ -142,6 +149,32 @@ describe("tasks collection", () => {
     expect(open.toArray.map((t: Task) => t.text)).toEqual(["beta"]);
     expectNoFlicker(snapshots, "alpha");
   });
+
+  it("reopening a completed task returns it to the open set", async () => {
+    const api = createInMemoryTasksApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([task("s1", { text: "alpha" })]),
+    });
+
+    const open = createLiveQueryCollection((q) =>
+      q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
+    );
+    open.subscribeChanges(() => {});
+
+    await api.collection.stateWhenReady();
+    await open.preload();
+    await sleep(50);
+
+    const done = api.complete("s1");
+    await done.isPersisted.promise;
+    await sleep(50);
+    expect(open.toArray.map((t: Task) => t.text)).toEqual([]);
+
+    const back = api.reopen("s1");
+    await back.isPersisted.promise;
+    await sleep(50);
+    expect(open.toArray.map((t: Task) => t.text)).toEqual(["alpha"]);
+  });
 });
 
 // The outbox persists queued offline writes by these names and the local cache
@@ -153,6 +186,7 @@ describe("tasks durable names", () => {
     expect(Object.keys(spec.verbs).sort()).toEqual([
       "addTask",
       "completeTask",
+      "reopenTask",
       "setTakenOn",
     ]);
   });

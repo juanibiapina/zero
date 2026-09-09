@@ -4,6 +4,7 @@ import {
   addTask,
   completeTask,
   fetchTasks,
+  reopenTask,
   setTaskTakenOn,
   type TokenGetter,
 } from './api';
@@ -19,6 +20,7 @@ function makeRest(getToken: TokenGetter): TasksRest {
     fetchTasks: () => fetchTasks(getToken),
     addTask: (task) => addTask(getToken, task),
     completeTask: (id) => completeTask(getToken, id),
+    reopenTask: (id) => reopenTask(getToken, id),
     setTaskTakenOn: (id, takenOnAt) => setTaskTakenOn(getToken, id, takenOnAt),
   };
 }

@@ -58,3 +58,12 @@ export async function completeTask(id: string): Promise<Task> {
   const body = (await res.json()) as { task: Task };
   return body.task;
 }
+
+export async function reopenTask(id: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/reopen`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`POST /api/tasks/${id}/reopen failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}

@@ -1,7 +1,13 @@
 import { createTasksApi, type TasksApi } from "@zero/agent-core";
 
 import { defineWebEntityApi } from "./entity-api";
-import { addTask, completeTask, fetchTasks, setTaskTakenOn } from "./tasks";
+import {
+  addTask,
+  completeTask,
+  fetchTasks,
+  reopenTask,
+  setTaskTakenOn,
+} from "./tasks";
 
 export type { TasksApi };
 
@@ -9,6 +15,6 @@ export type { TasksApi };
 export const getTasksApi = defineWebEntityApi((deps) =>
   createTasksApi({
     ...deps,
-    rest: { fetchTasks, addTask, completeTask, setTaskTakenOn },
+    rest: { fetchTasks, addTask, completeTask, reopenTask, setTaskTakenOn },
   }),
 );

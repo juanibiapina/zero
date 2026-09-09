@@ -39,6 +39,9 @@ export type TasksRest = {
     sourceCaptureId: string | null;
   }) => Promise<Task>;
   completeTask: (id: string) => Promise<Task>;
+  // The inverse of complete: clear completedAt so the task returns to the open
+  // list. Backs the Home task-complete Undo. Idempotent on the id.
+  reopenTask: (id: string) => Promise<Task>;
   // Take a task on (a timestamp) or park it (null). Idempotent on the id.
   setTaskTakenOn: (id: string, takenOnAt: string | null) => Promise<Task>;
 };
@@ -61,6 +64,9 @@ export type TasksApi = {
     sourceCaptureId?: string | null,
   ) => Transaction;
   complete: (id: string) => Transaction;
+  // Reverse a completion (Undo on the Home complete snackbar): the task returns
+  // to the open list.
+  reopen: (id: string) => Transaction;
   // Curation: take a task on (surface it on Home) or park it. `takeOn` stamps a
   // timestamp now; `park` clears it.
   takeOn: (id: string) => Transaction;
@@ -113,6 +119,17 @@ export function tasksSpec(rest: TasksRest) {
       matches: ({ modified }) => modified.completedAt != null,
       persist: (id) => rest.completeTask(id),
     }),
+    // Declared before setTakenOn (the catch-all) so the in-memory router picks it
+    // for a completedAt clear. completeTask matches first when completedAt is set,
+    // so a set and a clear route to the right verb.
+    reopenTask: v.update<{ id: string }>({
+      id: ({ id }) => id,
+      draft: () => (draft) => {
+        draft.completedAt = null;
+      },
+      matches: ({ changes }) => "completedAt" in changes,
+      persist: (id) => rest.reopenTask(id),
+    }),
     setTakenOn: v.update<{ id: string; takenOnAt: string | null }>({
       id: ({ id }) => id,
       draft:
@@ -140,6 +157,7 @@ function toTasksApi(
     add: (text, showUpDate, projectId = null, takenOnAt = null, sourceCaptureId = null) =>
       api.actions.addTask({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }),
     complete: (id) => api.actions.completeTask({ id }),
+    reopen: (id) => api.actions.reopenTask({ id }),
     takeOn: (id) =>
       api.actions.setTakenOn({ id, takenOnAt: new Date().toISOString() }),
     park: (id) => api.actions.setTakenOn({ id, takenOnAt: null }),
