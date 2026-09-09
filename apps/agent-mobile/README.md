@@ -431,21 +431,65 @@ Plugin at the Nix-store `aapt2` instead (the canonical fix from the nixpkgs
 manual). `ANDROID_HOME`/`ANDROID_SDK_ROOT`/`ANDROID_NDK_ROOT`/`JAVA_HOME` are set
 by the shell.
 
+`eas-cli` is **not installed** (no global, not a repo dependency). Invoke it with
+`pnpm dlx eas-cli@latest` — inside the Nix shell `pnpm`/`node` stay on `PATH` from
+the outer environment. It authenticates from the existing Expo session in
+`~/.expo/state.json` (no `EXPO_TOKEN` needed on this box); `eas whoami` should
+print `juanibiapina@gmail.com`.
+
 ```bash
 # from the zero repo root, on mini — builds the DEV CLIENT for this device
 export NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1
 nix develop ~/workspace/juanibiapina/dotfiles#android --command bash -c '
   cd apps/agent-mobile
-  eas build --platform android --profile development --local \
+  pnpm dlx eas-cli@latest build --platform android --profile development --local \
     --non-interactive --output /tmp/local-devclient.apk
 '
 adb install -r -d /tmp/local-devclient.apk
 ```
 
 Do **not** build `--profile preview`/`production` and `adb install` it here — a
-standalone build breaks hot-reload on this device (see the callout above). If you
-need a standalone APK as an artifact, build it (locally or via EAS/CI) and
-distribute/validate it elsewhere; never sideload it onto the mini Pixel.
+standalone build breaks hot-reload on this device (see the callout above). A
+standalone **preview** APK is a distributable artifact; build it locally and put
+it on Google Drive (next section) — never sideload it onto the mini Pixel.
+
+### Preview APK artifact → Google Drive (no EAS quota)
+
+The `preview` profile is a self-contained, sideloadable APK (production Clerk +
+`https://zero.juanibiapina.dev` API baked in) meant for handing to a real device,
+not for the dev-client Pixel. Build it the same way as the dev client, just with
+`--profile preview`, then publish it to Drive and drop the previous one. The build
+takes ~50 min on `mini` (gradle compiles native for all four ABIs). It runs with
+`appVersionSource: remote` + `autoIncrement`, so EAS bumps the remote
+`versionCode` (e.g. 54 → 55) and prints it; the app `version` is in
+`app.json` (`expo.version`, e.g. `1.0.0`).
+
+```bash
+# 1) Build (from the zero repo root, on mini). ~50 min.
+export NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1
+nix develop ~/workspace/juanibiapina/dotfiles#android --command bash -c '
+  cd apps/agent-mobile
+  pnpm dlx eas-cli@latest build --platform android --profile preview --local \
+    --non-interactive --output /tmp/zero-agent-preview.apk
+'
+# The log ends with "Incremented versionCode from N to N+1" and
+# "You can find the build artifacts in /tmp/zero-agent-preview.apk".
+
+# 2) Name it <version>-vc<versionCode>, matching the convention on Drive.
+mv /tmp/zero-agent-preview.apk /tmp/zero-agent-v1.0.0-vc55-preview.apk
+
+# 3) Publish to Drive (My Drive root) and make it link-shareable.
+gdcli juanibiapina@gmail.com upload /tmp/zero-agent-v1.0.0-vc55-preview.apk
+gdcli juanibiapina@gmail.com share <newFileId> --anyone
+
+# 4) Remove the previous APK so only the latest remains.
+gdcli juanibiapina@gmail.com ls --query "name contains '.apk' and trashed = false"
+gdcli juanibiapina@gmail.com delete <oldFileId>
+```
+
+Keep exactly **one** preview APK on Drive (the latest). `gdcli delete` moves the
+old one to Trash (recoverable). The shared `--anyone` link is what you open on a
+phone to install (allow "install from unknown sources").
 
 Notes:
 - `eas build --local` still fetches the signing keystore from EAS ("Using remote
