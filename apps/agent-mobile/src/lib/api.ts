@@ -124,6 +124,24 @@ export async function processCapture(
   return body.capture;
 }
 
+export async function unprocessCapture(
+  getToken: TokenGetter,
+  id: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Capture> {
+  const res = await apiFetch(
+    getToken,
+    `/api/captures/${id}/unprocess`,
+    { method: 'POST' },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/captures/${id}/unprocess failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { capture: Capture };
+  return body.capture;
+}
+
 export async function editCapture(
   getToken: TokenGetter,
   id: string,

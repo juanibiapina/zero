@@ -11,6 +11,7 @@ import {
   processCapture,
   reorderCapture,
   rescheduleCapture,
+  unprocessCapture,
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
@@ -24,6 +25,7 @@ function makeRest(getToken: TokenGetter): CapturesRest {
     fetchCaptures: () => fetchCaptures(getToken),
     addCapture: (capture) => addCapture(getToken, capture),
     processCapture: (id) => processCapture(getToken, id),
+    unprocessCapture: (id) => unprocessCapture(getToken, id),
     editCapture: (id, text) => editCapture(getToken, id, text),
     rescheduleCapture: (id, showUpDate) =>
       rescheduleCapture(getToken, id, showUpDate),

@@ -729,6 +729,18 @@ function Captures({
       setWriteError(null);
       const tx = api.process(item.id);
       tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+      // Same single bottom Undo snackbar as task-complete (shared 'undo' id, so
+      // only one shows at a time). Undo un-processes the capture back to the inbox.
+      toast('Completed', {
+        id: 'undo',
+        action: {
+          label: 'Undo',
+          onPress: () => {
+            const back = api.unprocess(item.id);
+            back.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+          },
+        },
+      });
     },
     [api],
   );

@@ -102,6 +102,12 @@ function fakeRest(initial: Capture[]): CapturesRest {
       row.processedAt = new Date().toISOString();
       return { ...row };
     },
+    unprocessCapture: async (id) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no capture ${id}`);
+      row.processedAt = null;
+      return { ...row };
+    },
     editCapture: async (id, text) => {
       const row = server.find((item) => item.id === id);
       if (!row) throw new Error(`no capture ${id}`);
@@ -356,6 +362,39 @@ describe("HomePage", () => {
       expect(
         screen.queryByRole("button", { name: 'Complete "mail the letter"' }),
       ).toBeNull(),
+    );
+  });
+
+  it("completes a capture, leaves it at once, and offers Undo that returns it", async () => {
+    setApi([capture("1", "buy milk")]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    const process = await screen.findByRole("button", {
+      name: 'Process "buy milk"',
+    });
+    await act(async () => {
+      fireEvent.click(process);
+    });
+
+    // The capture leaves the inbox immediately.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: 'Process "buy milk"' }),
+      ).toBeNull(),
+    );
+
+    // A single Undo toast is offered; tapping it returns the capture.
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].message).toBe("Completed");
+    expect(snap[0].action?.label).toBe("Undo");
+    await act(async () => {
+      snap[0].action?.onPress();
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: 'Process "buy milk"' }),
+      ).toBeInTheDocument(),
     );
   });
 

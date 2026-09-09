@@ -108,6 +108,15 @@ export class DbCaptureStore {
     return row ? toCapture(row) : null;
   }
 
+  // The inverse of process: clear processedAt so the capture returns to the
+  // inbox. Backs the capture-complete Undo. Idempotent on the id; returns the
+  // updated row, or null when no row has that id.
+  unprocess(id: string): Capture | null {
+    this.db.update(captures, { processedAt: null }, { where: eq("id", id) });
+    const row = this.db.get(captures, { where: eq("id", id) });
+    return row ? toCapture(row) : null;
+  }
+
   // Replace a capture's text. Same-key idempotent update (the client-minted id is
   // the primary key), so a replayed edit re-applies the same text harmlessly.
   // Only text changes; createdAt/processedAt and list position are untouched.
@@ -143,7 +152,7 @@ export class DbCaptureStore {
   // manual order starts out matching the old oldest-first order. Idempotent:
   // after the first run no NULL rows remain, so a second call is a cheap empty
   // select. Called from the UserDO constructor's init block. Keys every NULL
-  // row regardless of processedAt (cheap; there is no un-process path).
+  // row regardless of processedAt, so an unprocessed capture already has a key.
   backfillSortKeys(): void {
     const rows = this.db.all(captures, {
       where: isNull("sortKey"),
