@@ -102,6 +102,15 @@ export {
   STATUS_LABELS,
 } from "./projects/display";
 
+// The add-mode registry: what the quick-add box can create, shared web + mobile.
+export {
+  ADD_MODE_LABEL,
+  ADD_MODE_PLACEHOLDER,
+  ALL_ADD_MODES,
+  addModeA11yLabel,
+  type AddMode,
+} from "./quick-add/modes";
+
 // The headless toast primitive (shared controller; per-surface <Toaster> adapters).
 export {
   createToastController,

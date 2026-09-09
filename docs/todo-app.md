@@ -394,7 +394,13 @@ Shipped:
   Tasks-only rework of one screen; no data/API/collection change. Plan:
   `docs/plans/todo-project-task-add-fab.md`. Device-verified on the Pixel 7 (dev
   client + Maestro): FAB adds a parked task, bar docks above the tab bar, Back
-  closes the bar before popping.
+  closes the bar before popping. Follow-up: the bar now shows the single
+  interactive **Task** pill (the sole mode there), reading exactly like Home's.
+  The add-mode concept — its ids, pill copy, and placeholders, previously smeared
+  across a duplicate type, a labels map, and an `ADD_PLACEHOLDER` map on each Home
+  (web + mobile) — is now one pure registry (`@zero/agent-core`
+  `quick-add/modes.ts`) consumed by both surfaces; the quick-add bar renders
+  whatever `modes` it is handed and derives the placeholder from the selected mode.
 
 - **AI icon suggestions for a Project** (web + mobile shipped) — the
   **first AI integration of the todo app**. Creating a project fires a background

@@ -16,6 +16,7 @@ import {
   tomorrow,
   undoableAction,
   visibleCaptures,
+  type AddMode,
   type Capture,
   type CapturesApi,
   type HomeCallToAction,
@@ -463,16 +464,6 @@ export default function HomeScreen() {
   );
 }
 
-type AddMode = 'capture' | 'task' | 'project';
-
-// The quick-add field's placeholder per mode. Project mode teaches
-// outcome-based naming, mirroring the Projects screen.
-const ADD_PLACEHOLDER: Record<AddMode, string> = {
-  capture: 'Capture a thought',
-  task: 'Add a task',
-  project: 'Name an outcome',
-};
-
 function Captures({
   api,
   tasksApi,
@@ -857,7 +848,6 @@ function Captures({
         text={text}
         mode={mode}
         onModeChange={setMode}
-        placeholder={ADD_PLACEHOLDER[mode]}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
         onSubmit={() => onAdd()}

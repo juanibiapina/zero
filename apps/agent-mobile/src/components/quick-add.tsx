@@ -3,18 +3,20 @@ import { Pressable, type TextInput } from 'react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useResolveClassNames } from 'uniwind';
+import { type AddMode } from '@zero/agent-core';
 
 import { QuickAddBar } from '@/components/quick-add-bar';
 import { Fab } from '@/components/ui/fab';
 
-export type QuickAddMode = 'capture' | 'task' | 'project';
-
 export type QuickAddProps = {
   open: boolean;
   text: string;
-  // When provided, the bar shows a Capture/Task toggle above the input.
-  mode?: QuickAddMode;
-  onModeChange?: (mode: QuickAddMode) => void;
+  // When provided, the bar shows the mode pills above the input. `modes` chooses
+  // which pills are offered (default: all three); a single-element list is one
+  // interactive pill (the project screen's task-only add).
+  mode?: AddMode;
+  modes?: AddMode[];
+  onModeChange?: (mode: AddMode) => void;
   onChangeText: (text: string) => void;
   // Collapsed FAB tapped: request opening the bar.
   onOpen: () => void;
@@ -48,6 +50,7 @@ export function QuickAdd({
   open,
   text,
   mode,
+  modes,
   onModeChange,
   onChangeText,
   onOpen,
@@ -91,6 +94,7 @@ export function QuickAdd({
             <QuickAddBar
               value={text}
               mode={mode}
+              modes={modes}
               onModeChange={onModeChange}
               onChangeText={onChangeText}
               onSubmit={onSubmit}

@@ -289,11 +289,13 @@ function ProjectDetail({
         />
       </ScrollView>
 
-      {/* Task-only quick-add: no capture mode, so it adds a task to this
-          project. */}
+      {/* Task-only quick-add: it offers just the Task pill (the sole mode here),
+          which reads exactly like Home's, so it adds a task to this project. */}
       <QuickAdd
         open={adding}
         text={text}
+        mode="task"
+        modes={['task']}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
         onSubmit={onAdd}
@@ -301,7 +303,6 @@ function ProjectDetail({
         busy={false}
         inputRef={inputRef}
         fabLabel="Add a task"
-        placeholder="Add a task"
         bottomOffset={bottomOffset}
       />
     </View>

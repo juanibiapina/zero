@@ -24,6 +24,9 @@ import { Sheet } from "@/components/ui/sheet";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { Link, useNavigate } from "react-router";
 import {
+  ADD_MODE_LABEL,
+  ADD_MODE_PLACEHOLDER,
+  ALL_ADD_MODES,
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
@@ -38,6 +41,7 @@ import {
   tomorrow,
   undoableAction,
   visibleCaptures,
+  type AddMode,
   type HomeCallToAction,
 } from "@zero/agent-core";
 import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
@@ -90,16 +94,6 @@ export function HomePage() {
     </div>
   );
 }
-
-type AddMode = "capture" | "task" | "project";
-
-// The quick-add field's placeholder and accessible label per mode. Project mode
-// folds the outcome-based-naming guidance into the placeholder itself.
-const ADD_PLACEHOLDER: Record<AddMode, string> = {
-  capture: "Capture a thought",
-  task: "Add a task",
-  project: "Name an outcome",
-};
 
 function MergedHome({
   capturesApi,
@@ -541,21 +535,21 @@ function QuickAdd({
         aria-label="What to add"
         className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-sm"
       >
-        {(["capture", "task", "project"] as const).map((m) => (
+        {ALL_ADD_MODES.map((m) => (
           <button
             key={m}
             type="button"
             role="radio"
             aria-checked={mode === m}
             className={
-              "rounded-md px-3 py-1 capitalize transition-colors " +
+              "rounded-md px-3 py-1 transition-colors " +
               (mode === m
                 ? "bg-background font-medium shadow-sm"
                 : "text-muted-foreground")
             }
             onClick={() => onModeChange(m)}
           >
-            {m}
+            {ADD_MODE_LABEL[m]}
           </button>
         ))}
       </div>
@@ -570,8 +564,8 @@ function QuickAdd({
           ref={inputRef}
           autoFocus
           value={value}
-          placeholder={ADD_PLACEHOLDER[mode]}
-          aria-label={ADD_PLACEHOLDER[mode]}
+          placeholder={ADD_MODE_PLACEHOLDER[mode]}
+          aria-label={ADD_MODE_PLACEHOLDER[mode]}
           className="h-11"
           onChange={(e) => onChange(e.target.value)}
         />

@@ -253,13 +253,19 @@ describe('ProjectDetailScreen', () => {
       return added;
     });
 
-    const { getByLabelText, getByPlaceholderText } = await renderScreen();
+    const { getByLabelText, getByPlaceholderText, queryByLabelText } =
+      await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
     // Adding is a plus FAB that expands into the quick-add bar.
     await act(async () => {
       fireEvent.press(getByLabelText('Add a task'));
     });
+
+    // The bar offers the single interactive Task pill (the sole mode here), like
+    // Home's — and no capture/project pills.
+    expect(queryByLabelText('Add a capture')).toBeNull();
+    expect(queryByLabelText('Add a project')).toBeNull();
 
     const input = getByPlaceholderText('Add a task');
     await act(async () => {

@@ -1,29 +1,33 @@
 import { type Ref } from 'react';
 import { Pressable, type TextInput, View } from 'react-native';
+import {
+  ADD_MODE_LABEL,
+  ADD_MODE_PLACEHOLDER,
+  ALL_ADD_MODES,
+  addModeA11yLabel,
+  type AddMode,
+} from '@zero/agent-core';
 
 import { Fab } from '@/components/ui/fab';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
 
-export type QuickAddBarMode = 'capture' | 'task' | 'project';
-
-// Accessibility labels for the mode-toggle pills.
-const MODE_LABELS: Record<QuickAddBarMode, string> = {
-  capture: 'Add a capture',
-  task: 'Add a task',
-  project: 'Add a project',
-};
-
 export type QuickAddBarProps = {
   value: string;
-  // When provided, a Capture/Task toggle shows above the input.
-  mode?: QuickAddBarMode;
-  onModeChange?: (mode: QuickAddBarMode) => void;
+  // When set, the mode pills show above the input. The offered set is `modes`
+  // (default: all three); `mode` is the selected one and must be one of them. A
+  // single-element `modes` yields one interactive pill (the project screen's
+  // task-only add) that reads exactly like Home's — it is just the only option.
+  mode?: AddMode;
+  modes?: AddMode[];
+  onModeChange?: (mode: AddMode) => void;
   onChangeText: (text: string) => void;
   // Fired by both the keyboard "done" key and the Add button.
   onSubmit: () => void;
   busy?: boolean;
+  // Overrides the placeholder. Without it, a selected mode's placeholder comes
+  // from the registry; with no mode either, it falls back to the capture prompt.
   placeholder?: string;
   autoFocus?: boolean;
   inputRef?: Ref<TextInput>;
@@ -34,30 +38,34 @@ export type QuickAddBarProps = {
 // Presentational quick-add surface: a full-width panel with rounded top corners
 // docked to the keyboard, a borderless text field, and a small circular submit.
 // No animation, no keyboard or open/close logic — the transition layer owns
-// those.
+// those. The mode concept (ids, pill copy, placeholders) lives in the shared
+// add-mode registry, so this widget renders whatever modes it is handed.
 export function QuickAddBar({
   value,
   mode,
+  modes = ALL_ADD_MODES,
   onModeChange,
   onChangeText,
   onSubmit,
   busy,
-  placeholder = 'Capture a thought',
+  placeholder,
   autoFocus = true,
   inputRef,
   fabLabel = 'Capture',
 }: QuickAddBarProps) {
+  const resolvedPlaceholder =
+    placeholder ?? (mode ? ADD_MODE_PLACEHOLDER[mode] : 'Capture a thought');
   return (
     <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
-      {mode && onModeChange ? (
+      {mode ? (
         <View className="mb-2 flex-row gap-2">
-          {(['capture', 'task', 'project'] as const).map((m) => (
+          {modes.map((m) => (
             <Pressable
               key={m}
               accessibilityRole="button"
-              accessibilityLabel={MODE_LABELS[m]}
+              accessibilityLabel={addModeA11yLabel(m)}
               accessibilityState={{ selected: mode === m }}
-              onPress={() => onModeChange(m)}
+              onPress={() => onModeChange?.(m)}
               className={cn(
                 'rounded-full px-3 py-1',
                 mode === m ? 'bg-accent' : 'bg-surface-muted',
@@ -65,9 +73,9 @@ export function QuickAddBar({
             >
               <Text
                 variant="caption"
-                className={cn('capitalize', mode === m && 'text-on-accent')}
+                className={cn(mode === m && 'text-on-accent')}
               >
-                {m}
+                {ADD_MODE_LABEL[m]}
               </Text>
             </Pressable>
           ))}
@@ -77,7 +85,7 @@ export function QuickAddBar({
         <Input
           ref={inputRef}
           className="flex-1"
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}

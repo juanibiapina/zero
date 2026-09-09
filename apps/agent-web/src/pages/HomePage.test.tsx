@@ -293,7 +293,7 @@ describe("HomePage", () => {
     setApi([]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
-    fireEvent.click(await screen.findByRole("radio", { name: "task" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Task" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Add a task" }), {
       target: { value: "call the dentist" },
     });
@@ -322,7 +322,7 @@ describe("HomePage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("radio", { name: "project" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Project" }));
     fireEvent.change(
       screen.getByRole("textbox", { name: "Name an outcome" }),
       { target: { value: "ship the app" } },

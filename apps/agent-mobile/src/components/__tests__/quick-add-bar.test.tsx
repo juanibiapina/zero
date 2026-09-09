@@ -33,6 +33,42 @@ describe('QuickAddBar', () => {
     expect(onModeChange).toHaveBeenCalledWith('task');
   });
 
+  it('offers only the modes it is given, still interactive', async () => {
+    const onModeChange = jest.fn();
+    const { getByLabelText, queryByLabelText } = await render(
+      <QuickAddBar
+        value=""
+        mode="task"
+        modes={['task']}
+        onModeChange={onModeChange}
+        onChangeText={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+
+    // The Task pill is present and pressable (reads exactly like Home's)…
+    const task = getByLabelText('Add a task');
+    expect(task).toBeTruthy();
+    fireEvent.press(task);
+    expect(onModeChange).toHaveBeenCalledWith('task');
+    // …but it is the only pill: capture and project are not offered.
+    expect(queryByLabelText('Add a capture')).toBeNull();
+    expect(queryByLabelText('Add a project')).toBeNull();
+  });
+
+  it('derives the placeholder from the selected mode', async () => {
+    const { getByPlaceholderText } = await render(
+      <QuickAddBar
+        value=""
+        mode="project"
+        onModeChange={() => {}}
+        onChangeText={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+    expect(getByPlaceholderText('Name an outcome')).toBeTruthy();
+  });
+
   it('submits on the add button and on the keyboard done key', async () => {
     const onSubmit = jest.fn();
     const { getByLabelText, getByPlaceholderText } = await render(
