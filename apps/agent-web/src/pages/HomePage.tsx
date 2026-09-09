@@ -27,7 +27,6 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
-  DONE_UNDO_MS,
   homeCallToAction,
   homeCallToActionCopy,
   homeTasks,
@@ -44,11 +43,7 @@ import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
-import {
-  useDelayed,
-  useForegroundRefetch,
-  useUndoableLeave,
-} from "@/lib/screen-hooks";
+import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { refiningCaptureId, startRefine, stopRefine } from "@/lib/refine-session";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
 import { RefineBanner } from "@/components/RefineBanner";
@@ -281,23 +276,25 @@ function TasksSection({
   );
   useForegroundRefetch(api.refetch);
 
-  // Completing leaves the task in place ~5s with Undo (and, for a project task,
-  // a "+ Waiting condition" shortcut) before the write commits.
-  const done = useUndoableLeave(DONE_UNDO_MS);
-  const [waitingFor, setWaitingFor] = useState<{
-    projectId: string;
-    label: string;
-  } | null>(null);
-  const [condText, setCondText] = useState("");
-
+  // Completing commits immediately (the row leaves at once) and raises a single
+  // bottom Undo snackbar. A fixed toast id means a second completion replaces the
+  // first toast, so only one Undo is ever offered. Undo reopens the task.
   const onComplete = useCallback(
     (item: Task) => {
-      done.start(item.id, () => {
-        const tx = api.complete(item.id);
-        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      const tx = api.complete(item.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      toast("Completed", {
+        id: "undo",
+        action: {
+          label: "Undo",
+          onPress: () => {
+            const back = api.reopen(item.id);
+            back.isPersisted.promise.catch((e) => onError(messageOf(e)));
+          },
+        },
       });
     },
-    [api, done, onError],
+    [api, onError],
   );
 
   // Park a project task straight from Home (send it back to the project screen).
@@ -309,16 +306,6 @@ function TasksSection({
     },
     [api, onError],
   );
-
-  const addCondition = useCallback(() => {
-    const trimmed = condText.trim();
-    const target = waitingFor;
-    setWaitingFor(null);
-    setCondText("");
-    if (!target || !trimmed) return;
-    const tx = waitsApi.add(target.projectId, "free-text", { text: trimmed });
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-  }, [condText, waitingFor, waitsApi, onError]);
 
   const list = homeTasks(tasks ?? [], projects ?? [], conditions ?? []);
   // The project a task belongs to lends its icon as a small context badge; a
@@ -334,111 +321,37 @@ function TasksSection({
   return (
     <section className="space-y-3" aria-label="Tasks">
       <h2 className="text-sm font-semibold text-foreground">Tasks</h2>
-      {(
-        <ul className="space-y-3">
-          {list.map((item) => {
-            const leaving = done.pending.has(item.id);
-            return (
-              <li
-                key={item.id}
-                className={
-                  "flex items-center gap-3 rounded-xl border bg-card px-4 py-4" +
-                  (leaving ? " opacity-70" : "")
-                }
+      <ul className="space-y-3">
+        {list.map((item) => (
+          <li
+            key={item.id}
+            className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4"
+          >
+            <button
+              type="button"
+              aria-label={`Complete "${item.text}"`}
+              className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
+              onClick={() => onComplete(item)}
+            />
+            {item.projectId && (
+              <span aria-hidden className="shrink-0 text-base leading-none">
+                {iconOf(item.projectId)}
+              </span>
+            )}
+            <span className="flex-1 text-left text-base">{item.text}</span>
+            {item.projectId && (
+              <button
+                type="button"
+                aria-label={`Park "${item.text}"`}
+                className="shrink-0 text-lg leading-none text-amber-500"
+                onClick={() => onPark(item)}
               >
-                {leaving ? (
-                  <>
-                    <span className="flex-1 text-left text-base text-muted-foreground line-through">
-                      {item.text}
-                    </span>
-                    {item.projectId && (
-                      <button
-                        type="button"
-                        className="shrink-0 text-sm text-muted-foreground hover:text-foreground"
-                        onClick={() =>
-                          setWaitingFor({
-                            projectId: item.projectId as string,
-                            label: item.text,
-                          })
-                        }
-                      >
-                        + Waiting condition
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="shrink-0 text-sm font-medium text-primary"
-                      onClick={() => done.undo(item.id)}
-                    >
-                      Undo
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      aria-label={`Complete "${item.text}"`}
-                      className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
-                      onClick={() => onComplete(item)}
-                    />
-                    {item.projectId && (
-                      <span
-                        aria-hidden
-                        className="shrink-0 text-base leading-none"
-                      >
-                        {iconOf(item.projectId)}
-                      </span>
-                    )}
-                    <span className="flex-1 text-left text-base">
-                      {item.text}
-                    </span>
-                    {item.projectId && (
-                      <button
-                        type="button"
-                        aria-label={`Park "${item.text}"`}
-                        className="shrink-0 text-lg leading-none text-amber-500"
-                        onClick={() => onPark(item)}
-                      >
-                        ★
-                      </button>
-                    )}
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <Sheet
-        open={waitingFor != null}
-        onClose={() => {
-          setWaitingFor(null);
-          setCondText("");
-        }}
-        title="What is it waiting on?"
-      >
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            addCondition();
-          }}
-        >
-          <Input
-            autoFocus
-            value={condText}
-            aria-label="Waiting condition"
-            placeholder="e.g. the letter comes back"
-            onChange={(e) => setCondText(e.target.value)}
-          />
-          <div className="flex justify-end">
-            <Button type="submit" disabled={condText.trim() === ""}>
-              Add waiting condition
-            </Button>
-          </div>
-        </form>
-      </Sheet>
+                ★
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

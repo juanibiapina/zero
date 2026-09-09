@@ -27,16 +27,26 @@ function useToasts(): readonly Toast[] {
   );
 }
 
+// The native bottom tab bar's content height (excluding the safe-area inset,
+// which is added separately). The toast docks just above it, Todoist-style, so
+// it never hides the tabs.
+const TAB_BAR_HEIGHT = 49;
+
 export function Toaster() {
   const toasts = useToasts();
   const insets = useSafeAreaInsets();
   return (
     // box-none lets taps through everywhere except a toast row. Elevation +
-    // zIndex keep it above content and the native tab/stack surfaces.
+    // zIndex keep it above content and the native tab/stack surfaces. Anchored to
+    // the bottom, sitting just above the tab bar.
     <View
       pointerEvents="box-none"
       className="absolute inset-x-0 items-center gap-2 px-screen-x"
-      style={{ top: insets.top + 8, zIndex: 9999, elevation: 9999 }}
+      style={{
+        bottom: insets.bottom + TAB_BAR_HEIGHT + 8,
+        zIndex: 9999,
+        elevation: 9999,
+      }}
     >
       {toasts.map((t) => (
         <ToastRow key={t.id} toast={t} />

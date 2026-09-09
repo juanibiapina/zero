@@ -82,6 +82,8 @@ const mockAddTask =
   >();
 const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockReopenTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 const mockAddProject =
   jest.fn<
     (
@@ -107,6 +109,7 @@ jest.mock('@/lib/api', () => ({
     task: { id: string; text: string; showUpDate: string },
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
+  reopenTask: (getToken: unknown, id: string) => mockReopenTask(getToken, id),
   // The Home top region reads projects (for the project-active gate and the
   // all-clear call to action).
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
@@ -177,6 +180,7 @@ describe('HomeScreen', () => {
     mockEditCapture.mockReset();
     mockAddTask.mockReset();
     mockCompleteTask.mockReset();
+    mockReopenTask.mockReset();
     mockFetchTasks.mockReset();
     mockFetchTasks.mockResolvedValue([]);
     mockFetchProjects.mockReset();
@@ -345,41 +349,64 @@ describe('HomeScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/projects');
   });
 
-  it('completes a task from the Home top region after the undo window', async () => {
-    jest.useFakeTimers();
-    try {
-      mockGetToken.mockResolvedValue('tok');
-      mockFetchCaptures.mockResolvedValue([]);
-      mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
-      mockCompleteTask.mockImplementation(async () => {
-        mockFetchTasks.mockResolvedValue([]);
-        return {
-          ...taskRow('1', 'mail the letter'),
-          completedAt: '2023-01-02T00:00:00.000Z',
-        };
-      });
+  it('completes a task immediately and offers Undo in a toast that reopens it', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return {
+        ...taskRow('1', 'mail the letter'),
+        completedAt: '2023-01-02T00:00:00.000Z',
+      };
+    });
+    mockReopenTask.mockResolvedValue(taskRow('1', 'mail the letter'));
 
-      const { getByLabelText, getByText } = await renderScreen();
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(0);
-      });
-      expect(getByText('mail the letter')).toBeTruthy();
+    const { getByLabelText, getByText, queryByText } = await renderScreen();
+    expect(getByText('mail the letter')).toBeTruthy();
 
-      // Completing leaves the row in place with an Undo; the write is deferred.
-      await act(async () => {
-        fireEvent.press(getByLabelText('Complete "mail the letter"'));
-      });
-      expect(getByLabelText('Undo')).toBeTruthy();
-      expect(mockCompleteTask).not.toHaveBeenCalled();
+    // Completing commits the write at once and drops the row (no deferred window).
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "mail the letter"'));
+    });
+    await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(queryByText('mail the letter')).toBeNull());
 
-      // After the undo window the completion commits.
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(5000);
-      });
-      expect(mockCompleteTask).toHaveBeenCalledTimes(1);
-    } finally {
-      jest.useRealTimers();
-    }
+    // A single Undo toast is offered; tapping it reopens the task on the server.
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].message).toBe('Completed');
+    expect(snap[0].action?.label).toBe('Undo');
+    await act(async () => {
+      snap[0].action?.onPress();
+    });
+    await waitFor(() =>
+      expect(mockReopenTask).toHaveBeenCalledWith(expect.anything(), '1'),
+    );
+  });
+
+  it('shows only one Undo toast when a second task is completed', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([
+      taskRow('1', 'mail the letter'),
+      taskRow('2', 'call the bank'),
+    ]);
+    mockCompleteTask.mockImplementation(async (_t: unknown, id: string) => ({
+      ...taskRow(id, id),
+      completedAt: '2023-01-02T00:00:00.000Z',
+    }));
+
+    const { getByLabelText } = await renderScreen();
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "mail the letter"'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "call the bank"'));
+    });
+
+    // The fixed toast id means the second completion replaces the first toast.
+    expect(defaultToastController.getSnapshot()).toHaveLength(1);
   });
 
   it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {

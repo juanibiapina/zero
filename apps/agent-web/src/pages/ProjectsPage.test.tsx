@@ -187,6 +187,12 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       row.completedAt = new Date().toISOString();
       return { ...row };
     },
+    reopenTask: async (id) => {
+      const row = server.find((t) => t.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.completedAt = null;
+      return { ...row };
+    },
     setTaskTakenOn: async (id, takenOnAt) => {
       const row = server.find((t) => t.id === id);
       if (!row) throw new Error(`no task ${id}`);
@@ -370,7 +376,7 @@ describe("ProjectsPage", () => {
     await waitFor(() => expect(screen.getByText("Active")).toBeInTheDocument());
   });
 
-  it("marks a project done from detail and holds it on the list with Undo", async () => {
+  it("marks a project done from detail and it leaves the list immediately", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp();
     await openDetail("Run a 5K");
@@ -378,16 +384,15 @@ describe("ProjectsPage", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Mark done" }));
     });
-    // Back on the list, the row is held with an Undo; nothing committed yet.
-    const undo = await screen.findByRole("button", { name: "Undo" });
-    fireEvent.click(undo);
+    // Back on the list, the row is gone at once and there is no Undo affordance.
+    await screen.findByRole("heading", { name: "Projects" });
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull(),
+      expect(screen.queryByText("Run a 5K")).not.toBeInTheDocument(),
     );
-    expect(screen.getByText("Run a 5K")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
-  it("deletes a project from detail, deferred behind an Undo on the list", async () => {
+  it("deletes a project from detail and it leaves the list immediately", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp();
     await openDetail("Run a 5K");
@@ -395,36 +400,11 @@ describe("ProjectsPage", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
     });
-    const undo = await screen.findByRole("button", { name: "Undo" });
-    fireEvent.click(undo);
+    await screen.findByRole("heading", { name: "Projects" });
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull(),
+      expect(screen.queryByText("Run a 5K")).not.toBeInTheDocument(),
     );
-    expect(screen.getByText("Run a 5K")).toBeInTheDocument();
-  });
-
-  it("commits Delete after the undo window elapses", async () => {
-    vi.useFakeTimers();
-    setApi([project("1", "Run a 5K", "next")]);
-    renderApp();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    fireEvent.click(screen.getByText("Run a 5K"));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
-    // Let the list remount and its leave effect arm the Undo timer before the
-    // window elapses.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(screen.queryByText("Run a 5K")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
   it("redirects to the list when the project id is unknown", async () => {

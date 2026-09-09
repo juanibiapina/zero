@@ -5,7 +5,6 @@ import {
   listView,
   LOADING_TEXT_DELAY_MS,
   capturesLocalToday,
-  DONE_UNDO_MS,
   homeCallToAction,
   homeCallToActionCopy,
   homeTasks,
@@ -62,7 +61,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
-import { Input } from '@/components/ui/input';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
@@ -82,7 +80,6 @@ import {
   useForegroundRefetch,
   useLoadError,
   usePullRefresh,
-  useUndoableLeave,
 } from '@/lib/screen-hooks';
 
 // Strong ease-out for the commit slide (from the Expo animation recipe).
@@ -272,21 +269,15 @@ function CaptureDetail({
 // availability rule (which tasks show) lives in the shared homeTasks seam.
 function TaskRow({
   item,
-  leaving,
   icon,
   onComplete,
   onPark,
-  onUndo,
-  onAddWaiting,
 }: {
   item: Task;
-  leaving: boolean;
   // The task's project icon, or null for a loose task (shows no badge).
   icon: string | null;
   onComplete: (item: Task) => void;
   onPark: (item: Task) => void;
-  onUndo: (item: Task) => void;
-  onAddWaiting: (item: Task) => void;
 }) {
   // A project task leads with its project's icon as a small context badge; a
   // loose task shows none.
@@ -299,40 +290,8 @@ function TaskRow({
     ) : (
       <Text>{item.text}</Text>
     );
-  // Completing leaves the task in place ~5s with Undo (and, for a project task,
-  // a "+ Waiting" shortcut) before the write commits.
-  if (leaving) {
-    return (
-      <ListRow
-        trailing={
-          <View className="flex-row items-center gap-3">
-            {item.projectId ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Add waiting condition for "${item.text}"`}
-                hitSlop={8}
-                onPress={() => onAddWaiting(item)}
-              >
-                <Text className="text-[13px] text-foreground-muted">
-                  + Waiting
-                </Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Undo"
-              hitSlop={8}
-              onPress={() => onUndo(item)}
-            >
-              <Text className="text-[13px] font-semibold text-accent">Undo</Text>
-            </Pressable>
-          </View>
-        }
-      >
-        <Text className="text-foreground-muted line-through">{item.text}</Text>
-      </ListRow>
-    );
-  }
+  // Completing commits at once and the row leaves; a bottom Undo snackbar (owned
+  // by TasksTop) is the way back.
   return (
     <ListRow
       leading={
@@ -370,7 +329,6 @@ function TasksTop({
   projects,
   hasCaptures,
   api,
-  waitsApi,
   onError,
 }: {
   plate: Task[];
@@ -379,29 +337,34 @@ function TasksTop({
   // when it does — an empty inbox below a plate of tasks shows nothing.
   hasCaptures: boolean;
   api: TasksApi;
-  waitsApi: WaitsApi;
   onError: (message: string) => void;
 }) {
   useForegroundRefetch(api.refetch);
-  const done = useUndoableLeave(DONE_UNDO_MS);
-  const [waitingFor, setWaitingFor] = useState<{ projectId: string } | null>(
-    null,
-  );
-  const [condText, setCondText] = useState('');
   const list = plate;
   // A project task's icon (defaulting to the neutral one); a loose task has none.
   const iconOf = (item: Task): string | null =>
     item.projectId == null
       ? null
       : (projects.find((p) => p.id === item.projectId)?.icon ?? DEFAULT_ICON);
+  // Completing commits immediately (the row leaves at once) and raises a single
+  // bottom Undo snackbar. A fixed toast id means a second completion replaces the
+  // first toast, so only one Undo is ever offered. Undo reopens the task.
   const onComplete = useCallback(
     (item: Task) => {
-      done.start(item.id, () => {
-        const tx = api.complete(item.id);
-        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      const tx = api.complete(item.id);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      toast('Completed', {
+        id: 'undo',
+        action: {
+          label: 'Undo',
+          onPress: () => {
+            const back = api.reopen(item.id);
+            back.isPersisted.promise.catch((e) => onError(messageOf(e)));
+          },
+        },
       });
     },
-    [api, done, onError],
+    [api, onError],
   );
   const onPark = useCallback(
     (item: Task) => {
@@ -410,19 +373,6 @@ function TasksTop({
     },
     [api, onError],
   );
-  const onUndo = useCallback((item: Task) => done.undo(item.id), [done]);
-  const onAddWaiting = useCallback((item: Task) => {
-    if (item.projectId) setWaitingFor({ projectId: item.projectId });
-  }, []);
-  const addCondition = useCallback(() => {
-    const trimmed = condText.trim();
-    const target = waitingFor;
-    setWaitingFor(null);
-    setCondText('');
-    if (!target || !trimmed) return;
-    const tx = waitsApi.add(target.projectId, 'free-text', { text: trimmed });
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-  }, [condText, waitingFor, waitsApi, onError]);
   return (
     <View>
       {list.length > 0 ? (
@@ -435,11 +385,8 @@ function TasksTop({
               key={item.id}
               item={item}
               icon={iconOf(item)}
-              leaving={done.pending.has(item.id)}
               onComplete={onComplete}
               onPark={onPark}
-              onUndo={onUndo}
-              onAddWaiting={onAddWaiting}
             />
           ))}
         </>
@@ -449,31 +396,6 @@ function TasksTop({
           Inbox
         </Text>
       ) : null}
-
-      <Sheet
-        open={waitingFor != null}
-        onClose={() => {
-          setWaitingFor(null);
-          setCondText('');
-        }}
-      >
-        <Column spacing={12}>
-          <Input
-            value={condText}
-            onChangeText={setCondText}
-            onSubmitEditing={addCondition}
-            returnKeyType="done"
-            placeholder="e.g. the letter comes back"
-            accessibilityLabel="Waiting condition"
-          />
-          <Button
-            label="Add waiting condition"
-            variant="filled"
-            style={{ height: 48, borderRadius: 14 }}
-            onPress={addCondition}
-          />
-        </Column>
-      </Sheet>
     </View>
   );
 }
@@ -905,7 +827,6 @@ function Captures({
               projects={projects ?? []}
               hasCaptures={list.length > 0}
               api={tasksApi}
-              waitsApi={waitsApi}
               onError={setWriteError}
             />
           }

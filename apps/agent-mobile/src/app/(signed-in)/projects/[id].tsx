@@ -44,7 +44,6 @@ import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
 import { refiningCaptureId } from '@/lib/refine-session';
-import { requestProjectLeave } from '@/lib/project-leave';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
@@ -151,6 +150,15 @@ function ProjectDetail({
     [api, project],
   );
 
+  const commitDelete = useCallback(() => {
+    if (!project) return;
+    setError(null);
+    // The write lives on the shared projects data layer, not this screen, so it
+    // persists even though we pop away immediately — no toast, no deferred window.
+    const tx = api.remove(project.id);
+    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+  }, [api, project]);
+
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -252,14 +260,16 @@ function ProjectDetail({
           onEdit={commitEdit}
           onStatus={(status) => {
             if (status === 'done') {
-              requestProjectLeave(project.id, 'done');
+              // Marking done removes the project from the working list; commit
+              // immediately and pop back to it.
+              commitStatus(status);
               back();
             } else {
               commitStatus(status);
             }
           }}
           onDelete={() => {
-            requestProjectLeave(project.id, 'delete');
+            commitDelete();
             back();
           }}
         />

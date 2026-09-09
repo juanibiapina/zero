@@ -34,8 +34,3 @@ export const DEFAULT_ICON = "📁";
 // A Backlog with more than this many projects collapses by default (it is the
 // "someday" pile and must stay out of the way). Active/Next/Waiting start open.
 export const BACKLOG_COLLAPSE_THRESHOLD = 5;
-
-// How long a project sits struck-through with an Undo affordance after the user
-// sets it Done or deletes it, before the write commits and the row leaves the
-// list. Long enough to reverse a mistake; short enough not to linger.
-export const DONE_UNDO_MS = 5000;
