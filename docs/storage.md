@@ -70,6 +70,26 @@ reconciles with the server in the background.
   fetch. The durable path's delete mutationFn therefore removes the row from the
   base after the REST call; the in-memory fallback does not hit this, so a delete
   bug can pass every in-memory test and only show on a real backend.
+- **A row can leave the working set and come back — that needs a `revive` verb,
+  not an update.** The server returns only the open working set (tasks with
+  `completedAt IS NULL`, captures with `processedAt IS NULL`), so completing a
+  task or processing a capture makes the row leave: the trailing refetch
+  reconciles it out of the collection. The Undo on the complete/process snackbar
+  must bring it back, but an **update-by-id cannot** — by the time Undo runs the
+  row is gone and `collection.update` throws "key not found". So `reopen` /
+  `unprocess` are a fourth verb kind, **`revive`**: the inverse of a write that
+  leaves the working set. A revive carries the **full row** (the snackbar has it
+  in scope) so it can **re-insert** the row when absent, and updates it in place
+  when Undo is tapped before the eviction lands. It re-inserts with the row's own
+  id preserved (never a minted one), so it is the same row the server has, and its
+  REST call is the idempotent `reopen`/`unprocess` endpoint. Routing: the durable
+  outbox routes by the verb's name, but the in-memory builder routes by operation
+  type, so a revive tags its optimistic op with `{ verb: name }` metadata and both
+  `onInsert`/`onUpdate` route on it. This is the mirror of the delete caveat
+  above: an update-by-id Undo passes every in-memory test (the fallback keeps the
+  completed row until a refetch) yet fails on the real persisted backend, so it is
+  verified on-device. (A future simplification: tag every op with its verb name
+  and delete the changed-field `matches` routing entirely.)
 
 ## The cache is disposable
 

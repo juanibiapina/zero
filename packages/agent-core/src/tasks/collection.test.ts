@@ -170,10 +170,55 @@ describe("tasks collection", () => {
     await sleep(50);
     expect(open.toArray.map((t: Task) => t.text)).toEqual([]);
 
-    const back = api.reopen("s1");
+    const back = api.reopen(task("s1", { text: "alpha" }));
     await back.isPersisted.promise;
     await sleep(50);
     expect(open.toArray.map((t: Task) => t.text)).toEqual(["alpha"]);
+  });
+
+  it("reopens a task even after it was reconciled out of the collection", async () => {
+    // Reproduces the device bug: on the persisted path a foreground refetch (the
+    // open-only server list) evicts the completed row, so an update-by-id Undo
+    // threw "key not found". The in-memory path evicts the same way on refetch();
+    // revive must re-insert the row, calling reopenTask (not addTask).
+    let reopened = 0;
+    let added = 0;
+    const base = fakeRest([task("s1", { text: "alpha" })]);
+    const rest: TasksRest = {
+      ...base,
+      reopenTask: (id) => {
+        reopened += 1;
+        return base.reopenTask(id);
+      },
+      addTask: (t) => {
+        added += 1;
+        return base.addTask(t);
+      },
+    };
+    const api = createInMemoryTasksApi({ queryClient: new QueryClient(), rest });
+
+    const open = createLiveQueryCollection((q) =>
+      q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
+    );
+    open.subscribeChanges(() => {});
+    await api.collection.stateWhenReady();
+    await open.preload();
+    await sleep(50);
+
+    await api.complete("s1").isPersisted.promise;
+    await sleep(50);
+    // Evict the completed row the way a foreground refetch does on device.
+    await api.refetch();
+    await sleep(50);
+    expect(api.collection.has("s1")).toBe(false);
+
+    const back = api.reopen(task("s1", { text: "alpha" }));
+    await back.isPersisted.promise;
+    await sleep(50);
+
+    expect(open.toArray.map((t: Task) => t.text)).toEqual(["alpha"]);
+    expect(reopened).toBe(1);
+    expect(added).toBe(0);
   });
 });
 

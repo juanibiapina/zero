@@ -326,12 +326,71 @@ describe("captures collection", () => {
     await sleep(50);
     expect(captures.toArray.map((c: Capture) => c.text)).toEqual([]);
 
-    const back = api.unprocess("s1");
+    const back = api.unprocess({
+      id: "s1",
+      text: "alpha",
+      createdAt: "2020-01-01T00:00:00.000Z",
+      processedAt: null,
+      showUpDate: null,
+      sortKey: null,
+    });
     await back.isPersisted.promise;
     await sleep(50);
     expect(captures.toArray.map((c: Capture) => c.text)).toEqual(["alpha"]);
     // The clear routed to unprocessCapture, never the catch-all editCapture.
     expect(editSpy).not.toHaveBeenCalled();
+  });
+
+  it("unprocesses a capture even after it was reconciled out of the collection", async () => {
+    // The device bug in-memory: a foreground refetch (open-only list) evicts the
+    // processed capture, so an update-by-id Undo threw. Revive must re-insert it,
+    // calling unprocessCapture (not addCapture).
+    let unprocessed = 0;
+    let added = 0;
+    const base = fakeRest([
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: null },
+    ]);
+    const rest = {
+      ...base,
+      unprocessCapture: (id: string) => {
+        unprocessed += 1;
+        return base.unprocessCapture(id);
+      },
+      addCapture: (c: Parameters<typeof base.addCapture>[0]) => {
+        added += 1;
+        return base.addCapture(c);
+      },
+    };
+    const api = createInMemoryApi({ queryClient: new QueryClient(), rest });
+
+    const captures = createLiveQueryCollection((q) =>
+      q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+    );
+    captures.subscribeChanges(() => {});
+    await api.collection.stateWhenReady();
+    await captures.preload();
+    await sleep(50);
+
+    await api.process("s1").isPersisted.promise;
+    await sleep(50);
+    await api.refetch();
+    await sleep(50);
+    expect(api.collection.has("s1")).toBe(false);
+
+    const back = api.unprocess({
+      id: "s1",
+      text: "alpha",
+      createdAt: "2020-01-01T00:00:00.000Z",
+      processedAt: null,
+      showUpDate: null,
+      sortKey: null,
+    });
+    await back.isPersisted.promise;
+    await sleep(50);
+
+    expect(captures.toArray.map((c: Capture) => c.text)).toEqual(["alpha"]);
+    expect(unprocessed).toBe(1);
+    expect(added).toBe(0);
   });
 });
 

@@ -75,8 +75,33 @@ export type DeleteVerb<Args> = {
   persist: (id: string) => Promise<void>;
 };
 
+// A verb that brings a row BACK into the working set — the inverse of a write
+// that made it leave (complete/process, whose server list then stops returning
+// it, so the collection reconciled it out). An `update` cannot do this: by the
+// time it runs the row is gone from the collection and `collection.update`
+// throws "key not found". `revive` carries the FULL row (like an insert) so it
+// can re-insert when the row is absent, and updates in place when it is still
+// present (Undo tapped before the eviction landed). It is routed by per-op
+// metadata (`{ verb: name }`), not by the changed-field `matches` heuristic, so
+// it needs no `matches`. Screens never see this kind: an entity's public API maps
+// its own verb (reopen/unprocess) onto it. `refetchAfter` mirrors UpdateVerb.
+export type ReviveVerb<Row extends EntityRow, Args> = {
+  kind: "revive";
+  id: (args: Args) => string;
+  // The full row to re-insert when it is absent (id preserved, field cleared).
+  row: (args: Args) => Row;
+  // The in-place mutation when the row is still present.
+  draft: (args: Args) => (draft: Row) => void;
+  persist: (
+    id: string,
+    mutation: { changes: Partial<Row>; modified: Row },
+  ) => Promise<Row>;
+  refetchAfter?: boolean;
+};
+
 export type Verb<Row extends EntityRow, Args> =
   | InsertVerb<Row, Args>
+  | ReviveVerb<Row, Args>
   | UpdateVerb<Row, Args>
   | DeleteVerb<Args>;
 
@@ -91,9 +116,11 @@ export type VerbArgs<V> = V extends { kind: "insert"; row: (args: infer A) => un
   ? A
   : V extends { kind: "update"; id: (args: infer A) => string }
     ? A
-    : V extends { kind: "delete"; id: (args: infer A) => string }
+    : V extends { kind: "revive"; id: (args: infer A) => string }
       ? A
-      : never;
+      : V extends { kind: "delete"; id: (args: infer A) => string }
+        ? A
+        : never;
 
 // Typed verb constructors for one row type. `const v = verbsFor<Project>()`,
 // then `v.insert<{ title: string }>({ ... })` gives each verb its precise Args
@@ -107,6 +134,9 @@ export function verbsFor<Row extends EntityRow>() {
     update: <Args>(
       verb: Omit<UpdateVerb<Row, Args>, "kind">,
     ): UpdateVerb<Row, Args> => ({ kind: "update", ...verb }),
+    revive: <Args>(
+      verb: Omit<ReviveVerb<Row, Args>, "kind">,
+    ): ReviveVerb<Row, Args> => ({ kind: "revive", ...verb }),
     delete: <Args>(
       verb: Omit<DeleteVerb<Args>, "kind">,
     ): DeleteVerb<Args> => ({ kind: "delete", ...verb }),
@@ -229,6 +259,26 @@ function asDraft<Row extends EntityRow>(
   return draft as (draft: unknown) => void;
 }
 
+// The optimistic op for a revive, shared by both builders: update the row in
+// place when it is still present, else re-insert it (id preserved, so it is the
+// same row the server has). Both branches tag the op with `{ verb: name }` so the
+// in-memory builder can route it (the persisted builder routes by outbox name and
+// ignores the tag). `collection.insert` keys by `getKey = r.id`, so passing the
+// full row preserves the id — do NOT mint a new one here.
+function reviveAction<Row extends EntityRow>(
+  collection: Collection<Row, string>,
+  name: string,
+  verb: ReviveVerb<Row, unknown>,
+): (args: unknown) => Transaction {
+  return (args) => {
+    const id = verb.id(args);
+    const metadata = { verb: name };
+    return collection.has(id)
+      ? collection.update(id, { metadata }, asDraft(verb.draft(args)))
+      : collection.insert(verb.row(args), { metadata });
+  };
+}
+
 function insertVerbOf<Row extends EntityRow>(
   name: string,
   verbs: LooseVerbs<Row>,
@@ -258,6 +308,22 @@ function routeUpdate<Row extends EntityRow>(
     if (verb.kind === "update" && verb.matches(mutation)) return verb;
   }
   throw new Error(`${name}: no update verb matches ${Object.keys(mutation.changes).join(",")}`);
+}
+
+// A revive op tags its optimistic mutation with `{ verb: name }` so the
+// in-memory builder (which otherwise routes by operation type) can pick the
+// revive verb whether the op was an insert (row was evicted) or an update (row
+// still present). The persisted builder routes by the outbox mutationFn name and
+// ignores this. Only revive sets metadata today.
+type OpMetadata = { verb?: string };
+function reviveVerbFromMetadata<Row extends EntityRow>(
+  verbs: LooseVerbs<Row>,
+  metadata: unknown,
+): ReviveVerb<Row, unknown> | undefined {
+  const named = (metadata as OpMetadata | undefined)?.verb;
+  if (!named) return undefined;
+  const verb = verbs[named];
+  return verb?.kind === "revive" ? verb : undefined;
 }
 
 // The Query Collection's direct-write utils, which are not on the base
@@ -322,8 +388,24 @@ export function createInMemoryEntityApi<
         // server's row into the synced base before returning, so releasing the
         // optimistic overlay reveals the same-id row and never blinks; skip the
         // auto-refetch that would otherwise churn the whole list.
-        const verb = insertVerbOf(spec.name, verbs);
         for (const m of transaction.mutations) {
+          // A revive whose row was absent inserts optimistically; route it to the
+          // revive persist (reopen/unprocess), NOT the entity's add verb.
+          const revive = reviveVerbFromMetadata(verbs, m.metadata);
+          if (revive) {
+            const updated = await revive.persist(String(m.key), {
+              changes: m.changes,
+              modified: m.modified,
+            });
+            reconcile(
+              collection,
+              spec.leavesCollection?.(updated)
+                ? { remove: [updated.id] }
+                : { upsert: [updated] },
+            );
+            continue;
+          }
+          const verb = insertVerbOf(spec.name, verbs);
           const real = await verb.persist(m.modified);
           reconcile(collection, { upsert: [real] });
         }
@@ -332,7 +414,11 @@ export function createInMemoryEntityApi<
       onUpdate: async ({ transaction }) => {
         for (const m of transaction.mutations) {
           const mutation = { changes: m.changes, modified: m.modified };
-          const verb = routeUpdate(spec.name, verbs, mutation);
+          // A revive whose row was still present updates in place; route by its
+          // metadata. Everything else routes by the changed-field heuristic.
+          const verb =
+            reviveVerbFromMetadata(verbs, m.metadata) ??
+            routeUpdate(spec.name, verbs, mutation);
           const updated = await verb.persist(String(m.key), mutation);
           if (spec.leavesCollection?.(updated)) {
             reconcile(collection, { remove: [updated.id] });
@@ -365,6 +451,8 @@ export function createInMemoryEntityApi<
     } else if (verb.kind === "update") {
       actions[name] = (args) =>
         collection.update(verb.id(args), asDraft(verb.draft(args)));
+    } else if (verb.kind === "revive") {
+      actions[name] = reviveAction(collection, name, verb);
     } else {
       // collection.delete is typed Transaction<any>; narrow to the map's type.
       actions[name] = (args) =>
@@ -536,7 +624,10 @@ export function createPersistedEntityApi<
         if (verb.kind === "insert") {
           const real = await verb.persist(m.modified as Row);
           reconcileOne(real);
-        } else if (verb.kind === "update") {
+        } else if (verb.kind === "update" || verb.kind === "revive") {
+          // A revive persists exactly like an update (reopen/unprocess by id),
+          // whether the optimistic op was an insert (row was evicted) or an
+          // update (row still present); reconcileOne re-adds the server's row.
           const updated = await verb.persist(String(m.key), {
             changes: m.changes as Partial<Row>,
             modified: m.modified as Row,
@@ -551,9 +642,14 @@ export function createPersistedEntityApi<
           reconcileRemove(String(m.key));
         }
       }
-      // Re-pull after an insert, or an update that asked for it; a delete has
-      // nothing to re-pull (the row is gone).
-      if (verb.kind === "insert" || (verb.kind === "update" && verb.refetchAfter !== false)) {
+      // Re-pull after an insert, or an update/revive that asked for it; a delete
+      // has nothing to re-pull (the row is gone). A revive should refetch: the
+      // open list now includes the revived row, so it is retained.
+      if (
+        verb.kind === "insert" ||
+        ((verb.kind === "update" || verb.kind === "revive") &&
+          verb.refetchAfter !== false)
+      ) {
         await fetchAndReconcile();
       }
     };
@@ -583,9 +679,18 @@ export function createPersistedEntityApi<
           ? (args: unknown) => {
               collection.update(verb.id(args), asDraft(verb.draft(args)));
             }
-          : (args: unknown) => {
-              collection.delete(verb.id(args));
-            };
+          : verb.kind === "revive"
+            ? (() => {
+                // Same optimistic op as in-memory: update-if-present, else
+                // re-insert. The outbox routes by this verb's name, not the op.
+                const doRevive = reviveAction(collection, name, verb);
+                return (args: unknown) => {
+                  doRevive(args);
+                };
+              })()
+            : (args: unknown) => {
+                collection.delete(verb.id(args));
+              };
     actions[name] = offline.createOfflineAction<unknown>({
       mutationFnName: name,
       onMutate,

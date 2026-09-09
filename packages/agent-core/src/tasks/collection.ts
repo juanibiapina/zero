@@ -64,9 +64,11 @@ export type TasksApi = {
     sourceCaptureId?: string | null,
   ) => Transaction;
   complete: (id: string) => Transaction;
-  // Reverse a completion (Undo on the Home complete snackbar): the task returns
-  // to the open list.
-  reopen: (id: string) => Transaction;
+  // Reverse a completion (Undo on the complete snackbar): the task returns to the
+  // open list. Takes the whole task, not just its id, because completing it
+  // reconciles the row out of the collection (the server list is open-only), so
+  // Undo must be able to re-insert it — see the `revive` verb.
+  reopen: (task: Task) => Transaction;
   // Curation: take a task on (surface it on Home) or park it. `takeOn` stamps a
   // timestamp now; `park` clears it.
   takeOn: (id: string) => Transaction;
@@ -119,15 +121,16 @@ export function tasksSpec(rest: TasksRest) {
       matches: ({ modified }) => modified.completedAt != null,
       persist: (id) => rest.completeTask(id),
     }),
-    // Declared before setTakenOn (the catch-all) so the in-memory router picks it
-    // for a completedAt clear. completeTask matches first when completedAt is set,
-    // so a set and a clear route to the right verb.
-    reopenTask: v.update<{ id: string }>({
-      id: ({ id }) => id,
+    // A revive, not an update: completing the task reconciles it out of the
+    // collection (the server list is open-only), so Undo must re-insert the row
+    // when it is absent (and update it in place when Undo is tapped before the
+    // eviction lands). It carries the whole task so it can re-insert.
+    reopenTask: v.revive<Task>({
+      id: (task) => task.id,
+      row: (task) => ({ ...task, completedAt: null }),
       draft: () => (draft) => {
         draft.completedAt = null;
       },
-      matches: ({ changes }) => "completedAt" in changes,
       persist: (id) => rest.reopenTask(id),
     }),
     setTakenOn: v.update<{ id: string; takenOnAt: string | null }>({
@@ -157,7 +160,7 @@ function toTasksApi(
     add: (text, showUpDate, projectId = null, takenOnAt = null, sourceCaptureId = null) =>
       api.actions.addTask({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }),
     complete: (id) => api.actions.completeTask({ id }),
-    reopen: (id) => api.actions.reopenTask({ id }),
+    reopen: (task) => api.actions.reopenTask(task),
     takeOn: (id) =>
       api.actions.setTakenOn({ id, takenOnAt: new Date().toISOString() }),
     park: (id) => api.actions.setTakenOn({ id, takenOnAt: null }),

@@ -58,8 +58,10 @@ export type CapturesApi = {
   add: (text: string) => Transaction;
   process: (id: string) => Transaction;
   // Reverse a process (Undo on the capture-complete snackbar): the capture
-  // returns to the inbox.
-  unprocess: (id: string) => Transaction;
+  // returns to the inbox. Takes the whole capture, not just its id: processing it
+  // reconciles the row out of the collection (the server list is open-only), so
+  // Undo must be able to re-insert it — see the `revive` verb.
+  unprocess: (capture: Capture) => Transaction;
   // Replace a capture's text optimistically (same-key update on its stable id).
   edit: (id: string, text: string) => Transaction;
   // Set (or clear, with null) a capture's show-up date optimistically. Postpone
@@ -140,15 +142,16 @@ export function capturesSpec(rest: CapturesRest) {
       matches: ({ modified }) => modified.processedAt != null,
       persist: (id) => rest.processCapture(id),
     }),
-    // Declared before the catch-all editCapture so the in-memory router picks it
-    // for a processedAt clear. processCapture matches first when processedAt is
-    // set, so a set and a clear route to the right verb.
-    unprocessCapture: v.update<{ id: string }>({
-      id: ({ id }) => id,
+    // A revive, not an update: processing the capture reconciles it out of the
+    // collection (the server list is open-only), so Undo must re-insert the row
+    // when it is absent (and update it in place when Undo is tapped before the
+    // eviction lands). It carries the whole capture so it can re-insert.
+    unprocessCapture: v.revive<Capture>({
+      id: (capture) => capture.id,
+      row: (capture) => ({ ...capture, processedAt: null }),
       draft: () => (draft) => {
         draft.processedAt = null;
       },
-      matches: ({ changes }) => "processedAt" in changes,
       persist: (id) => rest.unprocessCapture(id),
     }),
     // Catch-all: an update that changed none of the above is a text edit.
@@ -178,7 +181,7 @@ function toCapturesApi(
     collection: api.collection,
     add: (text) => api.actions.addCapture({ text }),
     process: (id) => api.actions.processCapture({ id }),
-    unprocess: (id) => api.actions.unprocessCapture({ id }),
+    unprocess: (capture) => api.actions.unprocessCapture(capture),
     edit: (id, text) => api.actions.editCapture({ id, text }),
     reschedule: (id, showUpDate) =>
       api.actions.rescheduleCapture({ id, showUpDate }),
