@@ -59,6 +59,12 @@ const fakeUserDO = (seed: Capture[] = []) => {
       capture.sortKey = sortKey;
       return capture;
     },
+    unprocessCapture(id: string): Capture | null {
+      const capture = captures.find((c) => c.id === id);
+      if (!capture) return null;
+      capture.processedAt = null;
+      return capture;
+    },
     _captures: captures,
   };
 };
@@ -227,6 +233,61 @@ describe("POST /api/captures/{id}/process", () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
 
     const res = await app.request("/api/captures/nope/process", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/captures/{id}/unprocess", () => {
+  it("unprocesses a capture and returns it with processedAt cleared", async () => {
+    const userDO = fakeUserDO([
+      {
+        id: "id-1",
+        text: "buy milk",
+        createdAt: "2023-11-14T22:13:20.001Z",
+        processedAt: "2023-11-14T22:13:20.000Z",
+        showUpDate: null,
+        sortKey: "a0",
+      },
+    ]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/captures/id-1/unprocess", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(200);
+    const body: { capture: Capture } = await res.json();
+    expect(body.capture.id).toBe("id-1");
+    expect(body.capture.processedAt).toBeNull();
+  });
+
+  it("returns the unprocessed capture to a following Captures list", async () => {
+    const userDO = fakeUserDO([
+      {
+        id: "id-1",
+        text: "buy milk",
+        createdAt: "2023-11-14T22:13:20.001Z",
+        processedAt: "2023-11-14T22:13:20.000Z",
+        showUpDate: null,
+        sortKey: "a0",
+      },
+    ]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    await app.request("/api/captures/id-1/unprocess", { method: "POST" });
+    const res = await app.request("/api/captures");
+
+    const body: { captures: Capture[] } = await res.json();
+    expect(body.captures.map((c) => c.id)).toEqual(["id-1"]);
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+
+    const res = await app.request("/api/captures/nope/unprocess", {
       method: "POST",
     });
 

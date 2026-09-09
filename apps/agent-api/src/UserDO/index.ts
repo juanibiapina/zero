@@ -162,6 +162,10 @@ export class UserDO extends DurableObject<Env> {
     return this.captures.process(id);
   }
 
+  unprocessCapture(id: string): Capture | null {
+    return this.captures.unprocess(id);
+  }
+
   editCapture(id: string, text: string): Capture | null {
     return this.captures.editText(id, text);
   }

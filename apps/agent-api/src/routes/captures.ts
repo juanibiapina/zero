@@ -129,6 +129,44 @@ export const createCapturesRoutes = () => {
     return c.json({ capture }, 200);
   });
 
+  const unprocessRoute = createRoute({
+    method: "post",
+    path: "/api/captures/{id}/unprocess",
+    tags: ["Captures"],
+    summary: "Unprocess a capture, returning it to the Captures inbox",
+    request: {
+      params: z.object({ id: z.string() }),
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: z.object({ capture: CaptureSchema }) },
+        },
+        description: "The capture, now open (processedAt cleared)",
+      },
+      404: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "No capture with that id",
+      },
+    },
+  });
+
+  // The inverse of process: it backs the Undo on the capture-complete snackbar,
+  // so a mis-tapped process is one tap to reverse. Idempotent on the id.
+  router.openapi(unprocessRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const userDO = getUserDO(c.env, userId);
+    const capture = await userDO.unprocessCapture(id);
+    if (!capture) {
+      return c.json({ error: "capture not found" }, 404);
+    }
+    log("capture_unprocessed", { clerk_user_id: userId });
+    return c.json({ capture }, 200);
+  });
+
   const editRoute = createRoute({
     method: "patch",
     path: "/api/captures/{id}",
