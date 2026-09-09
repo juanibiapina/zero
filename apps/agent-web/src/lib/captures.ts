@@ -39,6 +39,15 @@ export async function processCapture(id: string): Promise<Capture> {
   return body.capture;
 }
 
+export async function unprocessCapture(id: string): Promise<Capture> {
+  const res = await fetch(`/api/captures/${id}/unprocess`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`POST /api/captures/${id}/unprocess failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { capture: Capture };
+  return body.capture;
+}
+
 export async function editCapture(id: string, text: string): Promise<Capture> {
   const res = await fetch(`/api/captures/${id}`, {
     method: "PATCH",

@@ -35,6 +35,9 @@ export type CapturesRest = {
   // token, so no separate key is sent.
   addCapture: (capture: { id: string; text: string }) => Promise<Capture>;
   processCapture: (id: string) => Promise<Capture>;
+  // The inverse of process: clears processedAt so the capture returns to the
+  // inbox. Backs the capture-complete Undo. Idempotent on the id.
+  unprocessCapture: (id: string) => Promise<Capture>;
   // Same-key update: sets the capture's text on its stable id and returns the
   // server row. Idempotent, so a replayed offline edit re-applies the same text.
   editCapture: (id: string, text: string) => Promise<Capture>;
@@ -54,6 +57,9 @@ export type CapturesApi = {
   collection: Collection<Capture, string>;
   add: (text: string) => Transaction;
   process: (id: string) => Transaction;
+  // Reverse a process (Undo on the capture-complete snackbar): the capture
+  // returns to the inbox.
+  unprocess: (id: string) => Transaction;
   // Replace a capture's text optimistically (same-key update on its stable id).
   edit: (id: string, text: string) => Transaction;
   // Set (or clear, with null) a capture's show-up date optimistically. Postpone
@@ -134,6 +140,17 @@ export function capturesSpec(rest: CapturesRest) {
       matches: ({ modified }) => modified.processedAt != null,
       persist: (id) => rest.processCapture(id),
     }),
+    // Declared before the catch-all editCapture so the in-memory router picks it
+    // for a processedAt clear. processCapture matches first when processedAt is
+    // set, so a set and a clear route to the right verb.
+    unprocessCapture: v.update<{ id: string }>({
+      id: ({ id }) => id,
+      draft: () => (draft) => {
+        draft.processedAt = null;
+      },
+      matches: ({ changes }) => "processedAt" in changes,
+      persist: (id) => rest.unprocessCapture(id),
+    }),
     // Catch-all: an update that changed none of the above is a text edit.
     editCapture: v.update<{ id: string; text: string }>({
       id: ({ id }) => id,
@@ -161,6 +178,7 @@ function toCapturesApi(
     collection: api.collection,
     add: (text) => api.actions.addCapture({ text }),
     process: (id) => api.actions.processCapture({ id }),
+    unprocess: (id) => api.actions.unprocessCapture({ id }),
     edit: (id, text) => api.actions.editCapture({ id, text }),
     reschedule: (id, showUpDate) =>
       api.actions.rescheduleCapture({ id, showUpDate }),

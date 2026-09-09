@@ -7,6 +7,7 @@ import {
   processCapture,
   reorderCapture,
   rescheduleCapture,
+  unprocessCapture,
 } from "./captures";
 import { defineWebEntityApi } from "./entity-api";
 
@@ -20,6 +21,7 @@ export const getCapturesApi = defineWebEntityApi((deps) =>
       fetchCaptures,
       addCapture,
       processCapture,
+      unprocessCapture,
       editCapture,
       rescheduleCapture,
       reorderCapture,

@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { createLiveQueryCollection, isNull } from "@tanstack/db";
 
@@ -40,6 +40,13 @@ function fakeRest(initial: Capture[]): CapturesRest {
       const capture = server.find((c) => c.id === id);
       if (!capture) throw new Error(`no capture ${id}`);
       capture.processedAt = new Date().toISOString();
+      return { ...capture };
+    },
+    unprocessCapture: async (id) => {
+      await sleep(5);
+      const capture = server.find((c) => c.id === id);
+      if (!capture) throw new Error(`no capture ${id}`);
+      capture.processedAt = null;
       return { ...capture };
     },
     editCapture: async (id, text) => {
@@ -297,6 +304,35 @@ describe("captures collection", () => {
     // No flicker: once alpha leaves it never comes back (same invariant as add).
     expectNoFlicker(snapshots, "alpha");
   });
+
+  it("unprocessing a capture returns it to the inbox, routing to unprocessCapture not edit", async () => {
+    const rest = fakeRest([
+      { id: "s1", text: "alpha", createdAt: "2020-01-01T00:00:00.000Z", processedAt: null, showUpDate: null, sortKey: null },
+    ]);
+    const editSpy = vi.spyOn(rest, "editCapture");
+    const api = createInMemoryApi({ queryClient: new QueryClient(), rest });
+
+    const captures = createLiveQueryCollection((q) =>
+      q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+    );
+    captures.subscribeChanges(() => {});
+
+    await api.collection.stateWhenReady();
+    await captures.preload();
+    await sleep(50);
+
+    const done = api.process("s1");
+    await done.isPersisted.promise;
+    await sleep(50);
+    expect(captures.toArray.map((c: Capture) => c.text)).toEqual([]);
+
+    const back = api.unprocess("s1");
+    await back.isPersisted.promise;
+    await sleep(50);
+    expect(captures.toArray.map((c: Capture) => c.text)).toEqual(["alpha"]);
+    // The clear routed to unprocessCapture, never the catch-all editCapture.
+    expect(editSpy).not.toHaveBeenCalled();
+  });
 });
 
 // The outbox persists queued offline writes by these names and the local cache
@@ -312,6 +348,7 @@ describe("captures durable names", () => {
       "processCapture",
       "reorderCapture",
       "rescheduleCapture",
+      "unprocessCapture",
     ]);
   });
 });
