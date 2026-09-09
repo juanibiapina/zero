@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useRouter } from 'expo-router';
@@ -30,6 +31,7 @@ import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
 import { ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
+import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -168,6 +170,7 @@ function Projects({
   bottomOffset: number;
 }) {
   const router = useRouter();
+  const { getToken } = useAuth();
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
   );
@@ -310,8 +313,18 @@ function Projects({
     // When refining a capture, the new project links back to it.
     const tx = api.add(trimmed, refiningCaptureId());
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    // Pre-warm emoji icon suggestions off the optimistic insert's id, so the
+    // picker shows them instantly when opened (create is name-only, so the basis
+    // is the title alone). Fire-and-forget; a failure only costs the shortcut.
+    const key = tx.mutations[0]?.key as string | number | undefined;
+    if (key !== undefined) {
+      void requestIconSuggestions(getToken, String(key), {
+        title: trimmed,
+        description: null,
+      });
+    }
     setText('');
-  }, [text, api]);
+  }, [text, api, getToken]);
 
   const onFinishRefine = useCallback(
     (captureId: string) => {

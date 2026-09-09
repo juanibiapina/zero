@@ -13,6 +13,7 @@ import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
+import { __resetIconSuggestions } from '@/lib/icon-suggestions';
 
 import ProjectsScreen from '../projects';
 
@@ -52,10 +53,21 @@ const mockAddProject =
   jest.fn<
     (getToken: unknown, project: { id: string; title: string }) => Promise<Project>
   >();
+const mockFetchIconSuggestions =
+  jest.fn<
+    (
+      getToken: unknown,
+      input: { title: string; description?: string | null },
+    ) => Promise<string[]>
+  >();
 jest.mock('@/lib/api', () => ({
   fetchProjects: () => mockFetchProjects(),
   addProject: (getToken: unknown, project: { id: string; title: string }) =>
     mockAddProject(getToken, project),
+  fetchIconSuggestions: (
+    getToken: unknown,
+    input: { title: string; description?: string | null },
+  ) => mockFetchIconSuggestions(getToken, input),
   setProjectStatus: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.resolve(),
@@ -115,6 +127,9 @@ describe('ProjectsScreen (list)', () => {
     mockAddProject.mockClear();
     mockFetchProjects.mockReset();
     mockFetchProjects.mockResolvedValue([]);
+    __resetIconSuggestions();
+    mockFetchIconSuggestions.mockReset();
+    mockFetchIconSuggestions.mockResolvedValue(['🌟']);
   });
 
   it('shows the fetched projects with their icons', async () => {
@@ -192,6 +207,15 @@ describe('ProjectsScreen (list)', () => {
     expect(mockAddProject).toHaveBeenCalledTimes(1);
     expect(mockAddProject.mock.calls[0][1].title).toBe('Have a baby');
     expect(getByPlaceholderText('Run a 5K under 30 min').props.value).toBe('');
+    // Creating a project pre-warms icon suggestions in the background off the
+    // title alone (create is name-only).
+    await waitFor(() =>
+      expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(1),
+    );
+    expect(mockFetchIconSuggestions.mock.calls[0][1]).toEqual({
+      title: 'Have a baby',
+      description: null,
+    });
   });
 
   it('groups projects under a status section header', async () => {

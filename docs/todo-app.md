@@ -341,12 +341,16 @@ Shipped:
   client + Maestro): FAB adds a parked task, bar docks above the tab bar, Back
   closes the bar before popping.
 
-- **AI icon suggestions for a Project** (web shipped; mobile is slice 2) — the
+- **AI icon suggestions for a Project** (web + mobile shipped) — the
   **first AI integration of the todo app**. Creating a project fires a background
   request that suggests emoji icons from its title; the picker shows them
   instantly from a device-local cache (or a brief loading line), tapping one
   applies it through the existing `edit` path, and Refresh recomputes after the
-  title/description changes. The server side is a stateless
+  title/description changes. Both surfaces put the suggested
+  row directly above the full picker in one surface: web in the `frimousse`
+  popover, mobile in a plain-RN bottom sheet hosting the inline
+  `rn-emoji-keyboard` `EmojiKeyboard` (not the `@expo/ui` native sheet, which
+  cannot host raw RN rows) with the chips on top and the searchable grid below. The server side is a stateless
   `POST /api/projects/icon-suggestions` that runs one tool-less model call
   (`suggestProjectIcons` over the `AgentModel` seam, agent label `icon_suggest` at
   `low` effort via the new `AGENT_EFFORT_OVERRIDES` map) and returns single-emoji
