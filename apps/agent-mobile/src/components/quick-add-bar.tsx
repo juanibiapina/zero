@@ -29,9 +29,6 @@ export type QuickAddBarProps = {
   inputRef?: Ref<TextInput>;
   // Accessibility label of the submit button. Defaults to the Capture wording.
   fabLabel?: string;
-  // Optional persistent hint shown above the input (e.g. Projects teaches
-  // outcome-based naming).
-  helperText?: string;
 };
 
 // Presentational quick-add surface: a full-width panel with rounded top corners
@@ -49,7 +46,6 @@ export function QuickAddBar({
   autoFocus = true,
   inputRef,
   fabLabel = 'Capture',
-  helperText,
 }: QuickAddBarProps) {
   return (
     <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
@@ -77,11 +73,6 @@ export function QuickAddBar({
           ))}
         </View>
       ) : null}
-      {helperText ? (
-        <Text variant="caption" className="mb-2">
-          {helperText}
-        </Text>
-      ) : null}
       <View className="flex-row items-center gap-2">
         <Input
           ref={inputRef}
@@ -90,7 +81,8 @@ export function QuickAddBar({
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}
-          // Keep the keyboard up after submit so many items can be captured fast.
+          // The caller closes the bar on a real submit; blurOnSubmit stays false
+          // only so an empty submit does not flap the keyboard before it closes.
           blurOnSubmit={false}
           returnKeyType="done"
           autoFocus={autoFocus}

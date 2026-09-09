@@ -94,11 +94,11 @@ export function HomePage() {
 type AddMode = "capture" | "task" | "project";
 
 // The quick-add field's placeholder and accessible label per mode. Project mode
-// teaches outcome-based naming (the same idea as the Projects screen's helper).
+// folds the outcome-based-naming guidance into the placeholder itself.
 const ADD_PLACEHOLDER: Record<AddMode, string> = {
   capture: "Capture a thought",
   task: "Add a task",
-  project: "Name a project outcome",
+  project: "Name an outcome",
 };
 
 function MergedHome({

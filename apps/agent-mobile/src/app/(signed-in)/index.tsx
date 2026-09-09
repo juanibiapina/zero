@@ -470,7 +470,7 @@ type AddMode = 'capture' | 'task' | 'project';
 const ADD_PLACEHOLDER: Record<AddMode, string> = {
   capture: 'Capture a thought',
   task: 'Add a task',
-  project: 'Name a project outcome',
+  project: 'Name an outcome',
 };
 
 function Captures({
@@ -605,6 +605,12 @@ function Captures({
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
   }, [api, draft, selected]);
 
+  const closeAdd = useCallback(() => {
+    setText('');
+    setConfirmingDiscard(false);
+    setAdding(false);
+  }, []);
+
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -638,7 +644,8 @@ function Captures({
           onPress: () => router.navigate('/projects'),
         },
       });
-      setText('');
+      // Close the quick-add after adding.
+      closeAdd();
       return;
     }
     // Optimistic: the row appears at once; surface a failure if the write loses.
@@ -648,9 +655,9 @@ function Captures({
         ? tasksApi.add(trimmed, localToday(), null, null, refiningCaptureId())
         : api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    // Keep the bar open and cleared for rapid, repeated entry.
-    setText('');
-  }, [text, api, tasksApi, projectsApi, mode, getToken]);
+    // Close the quick-add after adding.
+    closeAdd();
+  }, [text, api, tasksApi, projectsApi, mode, getToken, closeAdd]);
 
   const onFinishRefine = useCallback(
     (captureId: string) => {
@@ -660,12 +667,6 @@ function Captures({
     },
     [api],
   );
-
-  const closeAdd = useCallback(() => {
-    setText('');
-    setConfirmingDiscard(false);
-    setAdding(false);
-  }, []);
 
   // Dismissing the quick-add: with unsaved text, confirm before discarding;
   // with an empty input, close silently.

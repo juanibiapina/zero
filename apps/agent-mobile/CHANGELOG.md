@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-09: The quick-add box now closes as soon as you add something, on every screen, instead of staying open. It also shows a single, clearer prompt with no separate hint line — Projects and the New project box now say "Name an outcome".
 - 2026-09-09: Undo on the bottom bar now actually brings a completed task or a processed capture back on your phone. Before, the bar appeared but tapping Undo quietly did nothing once the row had left the list.
 - 2026-09-09: Completing a task on a project's own screen now shows the same bottom Undo bar as everywhere else, so a mis-tap is one tap to bring it back.
 - 2026-09-09: Completing a capture from your inbox (on Home or Upcoming) now shows the same bottom Undo bar that tasks do, so a mis-tap is one tap to bring it back. The Undo bar also sits clear above the tabs now, instead of overlapping them.

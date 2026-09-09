@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-09: The quick-add prompt is simpler and no longer shows a separate hint line — the Projects page and Home's Project mode now prompt "Name an outcome", and a project's task field prompts "Add a task".
 - 2026-09-09: Undo on the bottom bar now reliably brings a completed task or a processed capture back. Before, tapping Undo could quietly do nothing once the row had left the list.
 - 2026-09-09: Completing a task on a project's own page now shows the same bottom Undo bar as everywhere else, so a mis-click is one click to bring it back.
 - 2026-09-09: Completing a capture from your inbox (on Home or Upcoming) now shows the same Undo bar that tasks do, so a mis-tap is one click to bring it back.

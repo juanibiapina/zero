@@ -577,8 +577,8 @@ function ProjectTasks({
       >
         <Input
           value={text}
-          placeholder="Add a task to this project…"
-          aria-label="Add a task to this project"
+          placeholder="Add a task"
+          aria-label="Add a task"
           className="h-10"
           onChange={(e) => setText(e.target.value)}
         />

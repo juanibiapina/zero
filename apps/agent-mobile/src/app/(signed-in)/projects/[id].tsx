@@ -160,6 +160,11 @@ function ProjectDetail({
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
   }, [api, project]);
 
+  const closeAdd = useCallback(() => {
+    setText('');
+    setAdding(false);
+  }, []);
+
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -170,8 +175,7 @@ function ProjectDetail({
     if (!project) return;
     setError(null);
     // Parked by default (takenOnAt null) — grooming is collect-then-take-on;
-    // linked to the capture when refining. Keep the bar open and cleared for
-    // rapid entry.
+    // linked to the capture when refining.
     const tx = tasksApi.add(
       trimmed,
       localToday(),
@@ -180,13 +184,9 @@ function ProjectDetail({
       refiningCaptureId(),
     );
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    setText('');
-  }, [text, tasksApi, project]);
-
-  const closeAdd = useCallback(() => {
-    setText('');
-    setAdding(false);
-  }, []);
+    // Close the quick-add after adding.
+    closeAdd();
+  }, [text, tasksApi, project, closeAdd]);
 
   // Android hardware Back closes the quick-add before it pops the screen.
   useEffect(() => {
@@ -301,7 +301,7 @@ function ProjectDetail({
         busy={false}
         inputRef={inputRef}
         fabLabel="Add a task"
-        placeholder="Add a task to this project…"
+        placeholder="Add a task"
         bottomOffset={bottomOffset}
       />
     </View>

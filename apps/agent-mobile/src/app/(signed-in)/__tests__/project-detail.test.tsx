@@ -261,7 +261,7 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add a task'));
     });
 
-    const input = getByPlaceholderText('Add a task to this project…');
+    const input = getByPlaceholderText('Add a task');
     await act(async () => {
       fireEvent.changeText(input, 'buy running shoes');
     });
