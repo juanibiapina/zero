@@ -306,6 +306,25 @@ maintained library fit. Plans: `docs/plans/todo-home-create-project.md` (feature
 (Maestro): the toast renders and View lands on Projects; no EAS rebuild was needed
 (the mobile renderer adds no native module).
 
+Shipped (2026-09-09): **immediate complete/done/delete with one bottom Undo
+snackbar** (plan: `docs/plans/todo-delete-complete-redesign.md`). The old deferred
+model — the acted-on row lingered struck-through with an inline Undo for ~5s
+(`DONE_UNDO_MS`) before the write committed — is gone on both surfaces. It had two
+faults the user hit: the ghost row lingering, and (because the timer was cleared on
+unmount) switching tabs before the window elapsed silently dropped the write.
+Everything now commits **immediately** and the row leaves at once. Home
+task-complete raises a single global Undo snackbar (fixed toast id, so completing a
+second task replaces the first toast — only ever one Undo) that **reopens** the
+task on the server (`POST /api/tasks/{id}/reopen`, mirroring complete). Projects
+`done` and `delete` commit immediately from the detail screen's ⋯ menu with **no**
+toast — they are already three deliberate taps, so an Undo net is low value and the
+faithful project-restore path was not worth its cost. The mobile toaster moved to
+the **bottom** (above the tab bar), like Todoist. Removed: the deferred
+`useUndoableLeave` hook (both apps), the `project-leave` detail→list handoff, the
+`DONE_UNDO_MS` constant, and the Home "+ Waiting condition" inline shortcut (it only
+existed inside the old completion window; waiting conditions stay on the project
+screen).
+
 Shipped:
 
 - **The "what shows up" availability model** (plan:
