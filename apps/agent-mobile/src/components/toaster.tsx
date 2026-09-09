@@ -27,10 +27,12 @@ function useToasts(): readonly Toast[] {
   );
 }
 
-// The native bottom tab bar's content height (excluding the safe-area inset,
-// which is added separately). The toast docks just above it, Todoist-style, so
-// it never hides the tabs.
-const TAB_BAR_HEIGHT = 49;
+// The native Material bottom tab bar's content height (labelled tabs, ~80dp),
+// excluding the safe-area inset which is added separately. The toast docks a
+// comfortable margin above the whole bar, Todoist-style, so it never overlaps
+// the tabs.
+const TAB_BAR_HEIGHT = 80;
+const TOAST_GAP = 16;
 
 export function Toaster() {
   const toasts = useToasts();
@@ -38,12 +40,12 @@ export function Toaster() {
   return (
     // box-none lets taps through everywhere except a toast row. Elevation +
     // zIndex keep it above content and the native tab/stack surfaces. Anchored to
-    // the bottom, sitting just above the tab bar.
+    // the bottom, sitting clear above the tab bar.
     <View
       pointerEvents="box-none"
       className="absolute inset-x-0 items-center gap-2 px-screen-x"
       style={{
-        bottom: insets.bottom + TAB_BAR_HEIGHT + 8,
+        bottom: insets.bottom + TAB_BAR_HEIGHT + TOAST_GAP,
         zIndex: 9999,
         elevation: 9999,
       }}
