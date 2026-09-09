@@ -324,7 +324,7 @@ describe("HomePage", () => {
 
     fireEvent.click(await screen.findByRole("radio", { name: "project" }));
     fireEvent.change(
-      screen.getByRole("textbox", { name: "Name a project outcome" }),
+      screen.getByRole("textbox", { name: "Name an outcome" }),
       { target: { value: "ship the app" } },
     );
     await act(async () => {

@@ -161,7 +161,7 @@ function ProjectsReady({
             ref={inputRef}
             autoFocus
             value={title}
-            placeholder="Run a 5K under 30 min"
+            placeholder="Name an outcome"
             aria-label="New project"
             className="h-11"
             onChange={(e) => setTitle(e.target.value)}
@@ -175,11 +175,6 @@ function ProjectsReady({
             Add
           </Button>
         </div>
-        {/* Helper text (not the placeholder): teach outcome-based naming, the one
-            deliberate act of creating a project. */}
-        <p className="text-sm text-muted-foreground">
-          Name the outcome you'll reach, so you know when it's done.
-        </p>
       </form>
 
       {error && <ErrorText>{error}</ErrorText>}

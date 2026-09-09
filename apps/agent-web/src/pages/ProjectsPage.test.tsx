@@ -274,7 +274,7 @@ function renderApp(entries: string[] = ["/projects"]) {
 async function openDetail(title: string) {
   fireEvent.click(await screen.findByText(title));
   // The detail screen owns the task composer; wait for it to render.
-  await screen.findByRole("textbox", { name: "Add a task to this project" });
+  await screen.findByRole("textbox", { name: "Add a task" });
 }
 
 describe("ProjectsPage", () => {
@@ -309,7 +309,7 @@ describe("ProjectsPage", () => {
     renderApp();
     await openDetail("Run a 5K");
     const input = screen.getByRole("textbox", {
-      name: "Add a task to this project",
+      name: "Add a task",
     });
     fireEvent.change(input, { target: { value: "buy running shoes" } });
     await act(async () => {
