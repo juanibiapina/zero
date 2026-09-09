@@ -325,6 +325,16 @@ the **bottom** (above the tab bar), like Todoist. Removed: the deferred
 existed inside the old completion window; waiting conditions stay on the project
 screen).
 
+Shipped (2026-09-09, follow-up): the same single bottom Undo snackbar now covers
+**completing a capture** (the inbox "process" action) on Home and Upcoming, both
+surfaces. Processing commits immediately (it always did); the new part is the Undo,
+which **un-processes** the capture back to the inbox
+(`POST /api/captures/{id}/unprocess`, mirroring process — a `unprocess` verb in the
+Capture data layer that clears `processedAt`, routed before the catch-all text
+edit). One shared `'undo'` toast id across task-complete and capture-complete means
+only one Undo is ever on screen. The mobile toaster's bottom offset was also raised
+so it clears the native tab bar instead of overlapping it.
+
 Shipped:
 
 - **The "what shows up" availability model** (plan:
