@@ -5,6 +5,7 @@ import {
   capturesLocalToday,
   dayLabel,
   messageOf,
+  toast,
   upcomingSections,
 } from "@zero/agent-core";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,17 @@ function UpcomingReady({ api }: { api: CapturesApi }) {
       setError(null);
       const tx = api.process(item.id);
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      // Same single bottom Undo snackbar as elsewhere; Undo returns the capture.
+      toast("Completed", {
+        id: "undo",
+        action: {
+          label: "Undo",
+          onPress: () => {
+            const back = api.unprocess(item.id);
+            back.isPersisted.promise.catch((e) => setError(messageOf(e)));
+          },
+        },
+      });
     },
     [api],
   );

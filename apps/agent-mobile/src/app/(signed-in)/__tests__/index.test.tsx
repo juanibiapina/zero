@@ -60,6 +60,8 @@ const mockAddCapture =
   >();
 const mockProcessCapture =
   jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
+const mockUnprocessCapture =
+  jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
 const mockEditCapture =
   jest.fn<(getToken: unknown, id: string, text: string) => Promise<Capture>>();
 const mockRescheduleCapture =
@@ -97,6 +99,8 @@ jest.mock('@/lib/api', () => ({
     mockAddCapture(getToken, capture),
   processCapture: (getToken: unknown, id: string) =>
     mockProcessCapture(getToken, id),
+  unprocessCapture: (getToken: unknown, id: string) =>
+    mockUnprocessCapture(getToken, id),
   editCapture: (getToken: unknown, id: string, text: string) =>
     mockEditCapture(getToken, id, text),
   rescheduleCapture: (getToken: unknown, id: string, showUpDate: string | null) =>
@@ -559,6 +563,19 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(queryByText('buy milk')).toBeNull());
     expect(mockProcessCapture).toHaveBeenCalledTimes(1);
     expect(mockProcessCapture.mock.calls[0][1]).toBe('1');
+
+    // A single Undo toast is offered; tapping it un-processes the capture.
+    mockUnprocessCapture.mockResolvedValue(capture('1', 'buy milk'));
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].message).toBe('Completed');
+    expect(snap[0].action?.label).toBe('Undo');
+    await act(async () => {
+      snap[0].action?.onPress();
+    });
+    await waitFor(() =>
+      expect(mockUnprocessCapture).toHaveBeenCalledWith(expect.anything(), '1'),
+    );
   });
 
   it('edits a capture from its detail sheet and shows the new text', async () => {

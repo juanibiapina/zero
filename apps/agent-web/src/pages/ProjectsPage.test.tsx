@@ -230,6 +230,9 @@ function setApi(initial: Project[], tasks: Task[] = []) {
       processCapture: async (id) => {
         throw new Error(`no capture ${id}`);
       },
+      unprocessCapture: async (id) => {
+        throw new Error(`no capture ${id}`);
+      },
       editCapture: async (id) => {
         throw new Error(`no capture ${id}`);
       },
