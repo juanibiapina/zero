@@ -345,6 +345,22 @@ in `@zero/agent-core`, which owns the fixed `'undo'` toast id so "only one Undo 
 screen" is an enforced invariant rather than a copy-pasted literal. Plan:
 `docs/plans/todo-project-detail-undo-toast.md`.
 
+Shipped (2026-09-09, fix — device-verified on the Pixel 7): the Undo snackbar
+now actually **restores** the row on the persisted (device/web) path. On-device
+testing revealed that tapping Undo threw `CollectionOperationError: key not found`
+and did nothing: completing a task / processing a capture reconciles the row out
+of the collection (the server list is open-only), and the Undo was an
+`update`-by-id that cannot resurrect an evicted row. This had shipped broken in
+the 2026-09-09 snackbar work because the in-memory unit tests keep the row and
+never hit the eviction. Fix: `reopen`/`unprocess` are now a fourth collection verb
+kind, **`revive`**, that carries the full row and **re-inserts** it when absent
+(updates in place when Undo is tapped before the eviction lands), fixing Undo on
+all surfaces at once (Home + Upcoming + project screen for tasks; Home + Upcoming
+for captures). Verified on the Pixel 7 (reopen and unprocess both restore the row,
+`reopenTask`/`unprocessCapture` fire, no `CollectionOperationError`). Plan and
+design record: `docs/plans/todo-undo-restore-fix.md`, `docs/storage.md`. This is
+why every mobile change must be verified on the Pixel 7 (now a rule in `AGENTS.md`).
+
 Shipped:
 
 - **The "what shows up" availability model** (plan:

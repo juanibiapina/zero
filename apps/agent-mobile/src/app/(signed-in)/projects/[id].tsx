@@ -596,11 +596,11 @@ function ProjectTasks({
 
   // Completing commits immediately (the row leaves at once) and raises the same
   // single bottom Undo snackbar used on Home; Undo reopens the task.
-  const onComplete = (tid: string) => {
+  const onComplete = (task: Task) => {
     undoableAction({
       message: 'Completed',
-      act: () => api.complete(tid),
-      undo: () => api.reopen(tid),
+      act: () => api.complete(task.id),
+      undo: () => api.reopen(task),
       onError,
     });
   };
@@ -617,7 +617,7 @@ function ProjectTasks({
       </Text>
       {list.map((t) => (
         <View key={t.id} className="flex-row items-center gap-3 py-2">
-          <CheckCircle label={`Complete "${t.text}"`} onPress={() => onComplete(t.id)} />
+          <CheckCircle label={`Complete "${t.text}"`} onPress={() => onComplete(t)} />
           <Text className="flex-1">{t.text}</Text>
           <Pressable
             accessibilityRole="button"

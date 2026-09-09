@@ -355,7 +355,7 @@ function TasksTop({
       undoableAction({
         message: 'Completed',
         act: () => api.complete(item.id),
-        undo: () => api.reopen(item.id),
+        undo: () => api.reopen(item),
         onError,
       });
     },
@@ -727,7 +727,7 @@ function Captures({
       undoableAction({
         message: 'Completed',
         act: () => api.process(item.id),
-        undo: () => api.unprocess(item.id),
+        undo: () => api.unprocess(item),
         onError: setWriteError,
       });
     },

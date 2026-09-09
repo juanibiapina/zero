@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-09: Undo on the bottom bar now actually brings a completed task or a processed capture back on your phone. Before, the bar appeared but tapping Undo quietly did nothing once the row had left the list.
 - 2026-09-09: Completing a task on a project's own screen now shows the same bottom Undo bar as everywhere else, so a mis-tap is one tap to bring it back.
 - 2026-09-09: Completing a capture from your inbox (on Home or Upcoming) now shows the same bottom Undo bar that tasks do, so a mis-tap is one tap to bring it back. The Undo bar also sits clear above the tabs now, instead of overlapping them.
 - 2026-09-09: Completing a task, marking a project done, and deleting a project now happen right away, instead of leaving the row crossed out for a few seconds first. Switching tabs no longer cancels the action. Completing a task shows an Undo bar at the bottom (like the rest of the app) that brings the task back; a second completion replaces the bar, so there's only ever one. Marking a project done or deleting it — both already tucked in the project's "⋯" menu — just happen, with no Undo. The old "+ Waiting" shortcut that appeared while a task was finishing is gone; add waiting conditions on the project's screen.

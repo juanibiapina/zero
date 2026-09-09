@@ -514,11 +514,11 @@ function ProjectTasks({
   // Completing commits immediately (the row leaves at once) and raises the same
   // single bottom Undo snackbar used on Home; Undo reopens the task.
   const onComplete = useCallback(
-    (tid: string) => {
+    (task: Task) => {
       undoableAction({
         message: "Completed",
-        act: () => api.complete(tid),
-        undo: () => api.reopen(tid),
+        act: () => api.complete(task.id),
+        undo: () => api.reopen(task),
         onError,
       });
     },
@@ -547,7 +547,7 @@ function ProjectTasks({
                 type="button"
                 aria-label={`Complete "${t.text}"`}
                 className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
-                onClick={() => onComplete(t.id)}
+                onClick={() => onComplete(t)}
               />
               <span className="flex-1 text-sm">{t.text}</span>
               <button

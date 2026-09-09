@@ -102,7 +102,7 @@ function Upcoming({ api }: { api: CapturesApi }) {
       undoableAction({
         message: 'Completed',
         act: () => api.process(item.id),
-        undo: () => api.unprocess(item.id),
+        undo: () => api.unprocess(item),
         onError: setWriteError,
       });
     },
