@@ -14,6 +14,7 @@ import {
   orderKeyBetween,
   toast,
   tomorrow,
+  undoableAction,
   visibleCaptures,
   type Capture,
   type CapturesApi,
@@ -351,17 +352,11 @@ function TasksTop({
   // first toast, so only one Undo is ever offered. Undo reopens the task.
   const onComplete = useCallback(
     (item: Task) => {
-      const tx = api.complete(item.id);
-      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-      toast('Completed', {
-        id: 'undo',
-        action: {
-          label: 'Undo',
-          onPress: () => {
-            const back = api.reopen(item.id);
-            back.isPersisted.promise.catch((e) => onError(messageOf(e)));
-          },
-        },
+      undoableAction({
+        message: 'Completed',
+        act: () => api.complete(item.id),
+        undo: () => api.reopen(item.id),
+        onError,
       });
     },
     [api, onError],
@@ -727,19 +722,13 @@ function Captures({
   const onProcess = useCallback(
     (item: Capture) => {
       setWriteError(null);
-      const tx = api.process(item.id);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
       // Same single bottom Undo snackbar as task-complete (shared 'undo' id, so
       // only one shows at a time). Undo un-processes the capture back to the inbox.
-      toast('Completed', {
-        id: 'undo',
-        action: {
-          label: 'Undo',
-          onPress: () => {
-            const back = api.unprocess(item.id);
-            back.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-          },
-        },
+      undoableAction({
+        message: 'Completed',
+        act: () => api.process(item.id),
+        undo: () => api.unprocess(item.id),
+        onError: setWriteError,
       });
     },
     [api],

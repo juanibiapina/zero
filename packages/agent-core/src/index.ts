@@ -113,6 +113,7 @@ export {
   type ToastControllerOptions,
   type ToastInput,
 } from "./toast/controller";
+export { undoableAction } from "./toast/undoable";
 
 // Silent automatic timezone sync (shared core; per-surface adapters).
 export {

@@ -4,7 +4,7 @@ import {
   capturesLocalToday,
   dayLabel,
   messageOf,
-  toast,
+  undoableAction,
   upcomingSections,
   type Capture,
   type CapturesApi,
@@ -98,18 +98,12 @@ function Upcoming({ api }: { api: CapturesApi }) {
   const onProcess = useCallback(
     (item: Capture) => {
       setWriteError(null);
-      const tx = api.process(item.id);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
       // Same single bottom Undo snackbar as elsewhere; Undo returns the capture.
-      toast('Completed', {
-        id: 'undo',
-        action: {
-          label: 'Undo',
-          onPress: () => {
-            const back = api.unprocess(item.id);
-            back.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-          },
-        },
+      undoableAction({
+        message: 'Completed',
+        act: () => api.process(item.id),
+        undo: () => api.unprocess(item.id),
+        onError: setWriteError,
       });
     },
     [api],
