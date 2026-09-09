@@ -9,6 +9,7 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 import { Pressable, Text as RNText, View } from 'react-native';
+import { defaultToastController } from '@zero/agent-core';
 
 import type { Project, ProjectStatus, Task, WaitingCondition } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
@@ -126,6 +127,10 @@ const mockFetchIconSuggestions =
       input: { title: string; description?: string | null },
     ) => Promise<string[]>
   >();
+const mockCompleteTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockReopenTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
 const mockAddWaitingCondition =
   jest.fn<
@@ -156,8 +161,8 @@ jest.mock('@/lib/api', () => ({
     getToken: unknown,
     task: { id: string; text: string; showUpDate: string; projectId: string | null },
   ) => mockAddTask(getToken, task),
-  completeTask: () => Promise.reject(new Error('not used')),
-  reopenTask: () => Promise.reject(new Error('not used')),
+  completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
+  reopenTask: (getToken: unknown, id: string) => mockReopenTask(getToken, id),
   setTaskTakenOn: () => Promise.reject(new Error('not used')),
 }));
 
@@ -173,6 +178,16 @@ const project = (
   description: null,
   status,
   createdAt: '2023-01-01T00:00:00.000Z',
+});
+
+const taskRow = (id: string, text: string): Task => ({
+  id,
+  text,
+  showUpDate: '2023-01-01',
+  createdAt: '2023-01-01T00:00:00.000Z',
+  completedAt: null,
+  projectId: '1',
+  takenOnAt: null,
 });
 
 const renderScreen = () => {
@@ -201,6 +216,9 @@ describe('ProjectDetailScreen', () => {
     mockSetProjectStatus.mockClear();
     mockEditProject.mockClear();
     mockAddTask.mockReset();
+    mockCompleteTask.mockReset();
+    mockReopenTask.mockReset();
+    defaultToastController.dismiss();
     mockFetchTasks.mockReset();
     mockFetchTasks.mockResolvedValue([]);
     mockFetchWaits.mockReset();
@@ -255,6 +273,38 @@ describe('ProjectDetailScreen', () => {
       expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
     );
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('1');
+  });
+
+  it('completes a task and offers Undo in a toast that reopens it', async () => {
+    mockFetchTasks.mockResolvedValue([taskRow('t1', 'buy running shoes')]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return { ...taskRow('t1', 'buy running shoes'), completedAt: '2023-01-02T00:00:00.000Z' };
+    });
+    mockReopenTask.mockResolvedValue(taskRow('t1', 'buy running shoes'));
+
+    const { getByLabelText, queryByText } = await renderScreen();
+    await waitFor(() =>
+      expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "buy running shoes"'));
+    });
+    await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(queryByText('buy running shoes')).toBeNull());
+
+    // A single Undo toast is offered; tapping it reopens the task on the server.
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].message).toBe('Completed');
+    expect(snap[0].action?.label).toBe('Undo');
+    await act(async () => {
+      snap[0].action?.onPress();
+    });
+    await waitFor(() =>
+      expect(mockReopenTask).toHaveBeenCalledWith(expect.anything(), 't1'),
+    );
   });
 
   it('adds a free-text waiting condition', async () => {

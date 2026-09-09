@@ -14,6 +14,7 @@ import {
   createInMemoryProjectsApi,
   createInMemoryTasksApi,
   createInMemoryWaitsApi,
+  defaultToastController,
   type CapturesApi,
   type Project,
   type ProjectsApi,
@@ -131,6 +132,16 @@ const project = (
   description: null,
   status,
   createdAt: `2023-01-0${id.slice(-1)}T00:00:00.000Z`,
+});
+
+const task = (id: string, text: string, projectId: string): Task => ({
+  id,
+  text,
+  showUpDate: "2023-01-01",
+  createdAt: "2023-01-01T00:00:00.000Z",
+  completedAt: null,
+  projectId,
+  takenOnAt: null,
 });
 
 function fakeRest(initial: Project[]): ProjectsRest {
@@ -272,6 +283,7 @@ describe("ProjectsPage", () => {
     h.tasksApi = null;
     h.waitsApi = null;
     h.capturesApi = null;
+    defaultToastController.dismiss();
     vi.useRealTimers();
   });
 
@@ -302,6 +314,39 @@ describe("ProjectsPage", () => {
     fireEvent.change(input, { target: { value: "buy running shoes" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: 'Complete "buy running shoes"' }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("completes a task from the detail screen and offers Undo that reopens it", async () => {
+    setApi([project("1", "Run a 5K", "next")], [task("t1", "buy running shoes", "1")]);
+    renderApp();
+    await openDetail("Run a 5K");
+    const complete = await screen.findByRole("button", {
+      name: 'Complete "buy running shoes"',
+    });
+
+    await act(async () => {
+      fireEvent.click(complete);
+    });
+    // The row leaves immediately.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: 'Complete "buy running shoes"' }),
+      ).toBeNull(),
+    );
+
+    // A single Undo toast is offered; tapping it reopens the task, restoring the row.
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].message).toBe("Completed");
+    expect(snap[0].action?.label).toBe("Undo");
+    await act(async () => {
+      snap[0].action?.onPress();
     });
     await waitFor(() =>
       expect(

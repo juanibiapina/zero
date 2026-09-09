@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-09: Completing a task on a project's own page now shows the same bottom Undo bar as everywhere else, so a mis-click is one click to bring it back.
 - 2026-09-09: Completing a capture from your inbox (on Home or Upcoming) now shows the same Undo bar that tasks do, so a mis-tap is one click to bring it back.
 - 2026-09-09: Completing a task, marking a project done, and deleting a project now happen right away, instead of leaving the row crossed out for a few seconds first. Navigating away no longer cancels the action. Completing a task shows an Undo bar at the bottom that brings the task back; a second completion replaces the bar, so there's only ever one. Marking a project done or deleting it — both already in the project's "⋯" menu — just happen, with no Undo. The old "+ Waiting condition" shortcut that appeared while a task was finishing is gone; add waiting conditions on the project's page.
 - 2026-09-08: A new project suggests emoji icons for itself. Create a project and, by the time you open the icon picker, a row of suggested icons based on its name is already there — tap one to use it. Refresh recomputes them (handy after you add a description), and the full emoji picker is always right below.

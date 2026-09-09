@@ -9,6 +9,7 @@ import {
   messageOf,
   projectDisplayStatus,
   STATUS_LABELS,
+  undoableAction,
   type Project,
   type ProjectEditFields,
   type ProjectStatus,
@@ -593,9 +594,15 @@ function ProjectTasks({
   );
   const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
 
+  // Completing commits immediately (the row leaves at once) and raises the same
+  // single bottom Undo snackbar used on Home; Undo reopens the task.
   const onComplete = (tid: string) => {
-    const tx = api.complete(tid);
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    undoableAction({
+      message: 'Completed',
+      act: () => api.complete(tid),
+      undo: () => api.reopen(tid),
+      onError,
+    });
   };
 
   const onToggleTakenOn = (t: Task) => {

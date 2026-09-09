@@ -335,6 +335,16 @@ edit). One shared `'undo'` toast id across task-complete and capture-complete me
 only one Undo is ever on screen. The mobile toaster's bottom offset was also raised
 so it clears the native tab bar instead of overlapping it.
 
+Shipped (2026-09-09, follow-up): completing a task from a **project's own
+screen/page** now raises the same single bottom Undo snackbar (reopens the task) —
+previously the only complete/process action left with no Undo. In the same change
+the repeated "commit immediately + raise the shared Undo snackbar" wiring (four
+call sites: Home task-complete, Home/Upcoming capture-process, and now
+project-detail task-complete) was extracted into one shared `undoableAction` helper
+in `@zero/agent-core`, which owns the fixed `'undo'` toast id so "only one Undo on
+screen" is an enforced invariant rather than a copy-pasted literal. Plan:
+`docs/plans/todo-project-detail-undo-toast.md`.
+
 Shipped:
 
 - **The "what shows up" availability model** (plan:

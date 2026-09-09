@@ -17,6 +17,7 @@ import {
   messageOf,
   projectDisplayStatus,
   STATUS_LABELS,
+  undoableAction,
   type ProjectEditFields,
   type ProjectStatus,
   type WaitingCondition,
@@ -510,10 +511,16 @@ function ProjectTasks({
     setText("");
   }, [api, text, projectId, onError]);
 
+  // Completing commits immediately (the row leaves at once) and raises the same
+  // single bottom Undo snackbar used on Home; Undo reopens the task.
   const onComplete = useCallback(
     (tid: string) => {
-      const tx = api.complete(tid);
-      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      undoableAction({
+        message: "Completed",
+        act: () => api.complete(tid),
+        undo: () => api.reopen(tid),
+        onError,
+      });
     },
     [api, onError],
   );
