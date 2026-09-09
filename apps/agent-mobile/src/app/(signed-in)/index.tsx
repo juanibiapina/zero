@@ -181,36 +181,43 @@ function CaptureRow({
   }));
 
   return (
-    <View className="overflow-hidden bg-background">
-      {/* Revealed as the card slides right. Left-aligned so the label shows in
-          the gap the card opens. */}
-      <View
-        style={StyleSheet.absoluteFill}
-        className="flex-row items-center bg-swipe-postpone px-screen-x"
-      >
-        <Text className="font-medium text-on-accent">Tomorrow</Text>
+    <View className="bg-background">
+      {/* The reveal is clipped to the card only. Keeping overflow-hidden on the
+          divider strip too would expose the orange reveal through the divider's
+          uninset left edge (ml-[50px]) at rest, so the clip wraps just the
+          card. */}
+      <View className="overflow-hidden bg-background">
+        {/* Revealed as the card slides right. Left-aligned so the label shows in
+            the gap the card opens. */}
+        <View
+          style={StyleSheet.absoluteFill}
+          className="flex-row items-center bg-swipe-postpone px-screen-x"
+        >
+          <Text className="font-medium text-on-accent">Tomorrow</Text>
+        </View>
+        <GestureDetector gesture={pan}>
+          <Animated.View style={[cardStyle, rowStyle]}>
+            <CheckCircle
+              label={`Process "${item.text}"`}
+              onPress={() => onProcess(item)}
+            />
+            <Pressable
+              className="flex-1"
+              accessibilityRole="button"
+              accessibilityLabel={`Edit "${item.text}"`}
+              onPress={() => onOpen(item)}
+              // Long-press the text body to start a reorder drag (Todoist-style).
+              // JS Pressability, so it does not block the list's pan.
+              onLongPress={() => drag()}
+              delayLongPress={500}
+            >
+              <Text>{item.text}</Text>
+            </Pressable>
+          </Animated.View>
+        </GestureDetector>
       </View>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[cardStyle, rowStyle]}>
-          <CheckCircle
-            label={`Process "${item.text}"`}
-            onPress={() => onProcess(item)}
-          />
-          <Pressable
-            className="flex-1"
-            accessibilityRole="button"
-            accessibilityLabel={`Edit "${item.text}"`}
-            onPress={() => onOpen(item)}
-            // Long-press the text body to start a reorder drag (Todoist-style).
-            // JS Pressability, so it does not block the list's pan.
-            onLongPress={() => drag()}
-            delayLongPress={500}
-          >
-            <Text>{item.text}</Text>
-          </Pressable>
-        </Animated.View>
-      </GestureDetector>
-      {/* Divider sits below the row and does not move with the swipe. */}
+      {/* Divider sits below the row over the opaque background (not inside the
+          clip), so its uninset left edge shows the background, not the reveal. */}
       <View className="ml-[50px] h-px bg-divider" />
     </View>
   );

@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-09: Removed a thin orange line that showed beneath each inbox capture on Home. Swiping a capture right still reveals "Tomorrow" and postpones it.
 - 2026-09-09: Screen titles and headings now show at their proper size. A styling bug had shrunk the top titles (Home, Upcoming, Projects) and every heading down to a small default; text across the app now renders at its intended size.
 - 2026-09-09: Adding a task on a project's own screen now shows the same "Task" pill in the quick-add box as Home does, so it's clear you're adding a task there.
 - 2026-09-09: The quick-add box now closes as soon as you add something, on every screen, instead of staying open. It also shows a single, clearer prompt with no separate hint line — Projects and the New project box now say "Name an outcome".
