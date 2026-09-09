@@ -176,7 +176,7 @@ describe('ProjectsScreen (list)', () => {
     await waitFor(() => expect(getByText(/UnknownHostException/)).toBeTruthy());
   });
 
-  it('creates a project by name and keeps the input open and cleared', async () => {
+  it('creates a project by name and closes the quick-add after adding', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([]);
     mockAddProject.mockImplementation(async () => {
@@ -185,7 +185,8 @@ describe('ProjectsScreen (list)', () => {
       return added;
     });
 
-    const { getByText, getByLabelText, getByPlaceholderText } = await renderScreen();
+    const { getByText, getByLabelText, getByPlaceholderText, queryByPlaceholderText } =
+      await renderScreen();
 
     await waitFor(() =>
       expect(getByText('No projects yet. Name your first outcome.')).toBeTruthy(),
@@ -195,7 +196,7 @@ describe('ProjectsScreen (list)', () => {
       fireEvent.press(getByLabelText('New project'));
     });
 
-    const input = getByPlaceholderText('Run a 5K under 30 min');
+    const input = getByPlaceholderText('Name an outcome');
     await act(async () => {
       fireEvent.changeText(input, 'Have a baby');
     });
@@ -206,7 +207,9 @@ describe('ProjectsScreen (list)', () => {
     await waitFor(() => expect(getByText('Have a baby')).toBeTruthy());
     expect(mockAddProject).toHaveBeenCalledTimes(1);
     expect(mockAddProject.mock.calls[0][1].title).toBe('Have a baby');
-    expect(getByPlaceholderText('Run a 5K under 30 min').props.value).toBe('');
+    await waitFor(() =>
+      expect(queryByPlaceholderText('Name an outcome')).toBeNull(),
+    );
     // Creating a project pre-warms icon suggestions in the background off the
     // title alone (create is name-only).
     await waitFor(() =>

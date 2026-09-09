@@ -45,9 +45,6 @@ import {
 } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
-// Helper text (not the placeholder): teach outcome-based naming.
-const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done.";
-
 // A project row: emoji icon + title, a single tap target that opens the
 // project's own screen. Done and Delete both happen on the project's own screen
 // and commit immediately, so the row simply drops from the list — it has no
@@ -228,6 +225,11 @@ function Projects({
     return () => sub.remove();
   }, [adding]);
 
+  const closeAdd = useCallback(() => {
+    setText('');
+    setAdding(false);
+  }, []);
+
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -248,8 +250,9 @@ function Projects({
         description: null,
       });
     }
-    setText('');
-  }, [text, api, getToken]);
+    // Close the quick-add after adding.
+    closeAdd();
+  }, [text, api, getToken, closeAdd]);
 
   const onFinishRefine = useCallback(
     (captureId: string) => {
@@ -260,11 +263,6 @@ function Projects({
     },
     [capturesApi],
   );
-
-  const closeAdd = useCallback(() => {
-    setText('');
-    setAdding(false);
-  }, []);
 
   const onOpen = useCallback(
     (p: Project) => router.push(`/projects/${p.id}`),
@@ -331,8 +329,7 @@ function Projects({
         busy={false}
         inputRef={inputRef}
         fabLabel="New project"
-        placeholder="Run a 5K under 30 min"
-        helperText={NAME_HELPER}
+        placeholder="Name an outcome"
         bottomOffset={bottomOffset}
       />
     </>

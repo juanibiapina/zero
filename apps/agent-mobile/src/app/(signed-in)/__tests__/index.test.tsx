@@ -307,8 +307,12 @@ describe('HomeScreen', () => {
       createdAt: '2023-01-01T00:00:00.000Z',
     }));
 
-    const { getByLabelText, getByPlaceholderText, getByText } =
-      await renderScreen();
+    const {
+      getByLabelText,
+      getByPlaceholderText,
+      queryByPlaceholderText,
+      getByText,
+    } = await renderScreen();
     await waitFor(() =>
       expect(getByText('Create your first project')).toBeTruthy(),
     );
@@ -320,7 +324,7 @@ describe('HomeScreen', () => {
     await act(async () => {
       fireEvent.press(getByLabelText('Add a project'));
     });
-    const input = getByPlaceholderText('Name a project outcome');
+    const input = getByPlaceholderText('Name an outcome');
     await act(async () => {
       fireEvent.changeText(input, 'ship the app');
     });
@@ -332,8 +336,8 @@ describe('HomeScreen', () => {
     const minted = mockAddProject.mock.calls[0][1];
     expect(minted.title).toBe('ship the app');
 
-    // Stays on Home: the quick-add bar is still open and cleared, no navigation yet.
-    expect(getByPlaceholderText('Name a project outcome').props.value).toBe('');
+    // Stays on Home (no navigation yet); the quick-add bar closes after adding.
+    expect(queryByPlaceholderText('Name an outcome')).toBeNull();
     expect(mockNavigate).not.toHaveBeenCalled();
 
     // Settle the optimistic insert (its persist reconciles the server row) so
@@ -718,7 +722,7 @@ describe('HomeScreen', () => {
     expect(queryByPlaceholderText('Capture a thought')).toBeTruthy();
   });
 
-  it('captures typed text and keeps the input open and cleared for the next one', async () => {
+  it('captures typed text and closes the quick-add after adding', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchCaptures.mockResolvedValue([]);
     // The collection refetches after the write; the server (mock) then returns
@@ -729,7 +733,7 @@ describe('HomeScreen', () => {
       return added;
     });
 
-    const { getByText, getByLabelText, getByPlaceholderText } =
+    const { getByText, getByLabelText, getByPlaceholderText, queryByPlaceholderText } =
       await renderScreen();
 
     // Let the initial (empty) load settle before typing, else it can clobber
@@ -756,9 +760,10 @@ describe('HomeScreen', () => {
     expect(mockAddCapture).toHaveBeenCalledTimes(1);
     expect(mockAddCapture.mock.calls[0][1].text).toBe('call mom');
 
-    // The quick-add input stays open and cleared for rapid capture.
-    const reopened = getByPlaceholderText('Capture a thought');
-    expect(reopened.props.value).toBe('');
+    // The quick-add closes after adding.
+    await waitFor(() =>
+      expect(queryByPlaceholderText('Capture a thought')).toBeNull(),
+    );
   });
 
   it('confirms before discarding unsaved quick-add text', async () => {

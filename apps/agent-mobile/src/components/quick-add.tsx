@@ -30,8 +30,6 @@ export type QuickAddProps = {
   // both. The FAB label doubles as its accessibility label.
   fabLabel?: string;
   placeholder?: string;
-  // An optional persistent hint shown above the input while the bar is open.
-  helperText?: string;
   // Distance (dp) from the screen's content bottom to the window bottom — the
   // native bottom tab bar plus the system gesture inset. The keyboard-sticky
   // bar lifts by the full keyboard height (from the window bottom), so without
@@ -59,7 +57,6 @@ export function QuickAdd({
   inputRef,
   fabLabel = 'Capture',
   placeholder,
-  helperText,
   bottomOffset = 0,
 }: QuickAddProps) {
   // Collapsed FAB wrapper: pinned bottom-right; box-none lets taps through to
@@ -101,7 +98,6 @@ export function QuickAdd({
               inputRef={inputRef}
               fabLabel={fabLabel}
               placeholder={placeholder}
-              helperText={helperText}
             />
           </Animated.View>
         </KeyboardStickyView>
