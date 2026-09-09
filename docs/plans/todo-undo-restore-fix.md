@@ -64,6 +64,37 @@ break again. We want a fix that does not depend on the row lingering.
 
 ## The fix: a `revive` verb
 
+### Design rationale (deep-modules)
+
+The collection factory in `base.ts` is a deep module: a large implementation
+(optimistic writes, offline outbox, reconcile across the working-set boundary,
+two adapters behind the `EntityApi` seam) sits behind a small interface — a verb
+table plus `api.<name>(...)` actions. Screens never see the verb table. `revive`
+is added to the factory's **spec vocabulary** (`insert | update | delete |
+revive`), NOT to the screen-facing interface: screens still call
+`api.reopen(item)` / `api.unprocess(item)` and never learn the word "revive." The
+entity wrapper (`tasks/collection.ts`, `captures/collection.ts`) maps `reopen`
+onto the revive kind. Keep it that way — do not leak the kind upward.
+
+Why a new kind rather than an `update` flag: an `update` with an
+`absentOk`/`row` option overloads `update` with a boolean that silently changes
+its semantics (update-that-might-insert) — the shallow-interface smell. `revive`
+names a distinct concept, the inverse of the spec's `leavesCollection` predicate:
+a row **re-enters** the working set. It carries a full `row` (like insert) but
+targets an existing id and is a semantic transition (like update), so it is a
+genuine hybrid that earns its own name. Deletion test: remove the kind and the
+resurrect logic reappears in the two entity wrappers, each reaching into the
+builder's routing/executor internals — so the kind concentrates the complexity in
+one place and pays back across both entities (reopen, unprocess = two real
+instances, a real seam, not a hypothetical one).
+
+The per-op `{ verb: name }` metadata (F1) is an **internal seam** of the builder:
+the spec author only declares a `revive` verb; the action wrapper tags the op and
+the builder routes on it. It is not part of the interface and must not be exposed
+through it.
+
+### Mechanics
+
 Model `reopen`/`unprocess` as the inverse of `leavesCollection` — a row
 **re-enters** the working set:
 
@@ -113,6 +144,17 @@ routing must not depend on the op type alone:
   insert (row was evicted) or an update (Undo tapped before eviction). Keep
   `refetchAfter` semantics (revive should refetch: the open list now includes the
   row, so it is retained).
+
+**Alternative considered — unify routing on metadata (deferred).** The above
+keeps two routing mechanisms in-memory: verb-name metadata for the insert-case and
+the changed-field `matches`/`routeUpdate` heuristic for the update-case — two
+rules doing one job (a mild shallowness). The deeper simplification is to tag
+*every* op with its verb name and route `onInsert`/`onUpdate` purely by that,
+deleting `matches` entirely (one routing rule, one internal seam). It is out of
+scope here: `matches` is load-bearing across every update verb, so unifying now
+widens the blast radius of a fix that must land safely. Revive is the first verb
+to need op metadata; once it exists, unifying the rest on it is the natural
+follow-up (Rule of Three) — record it, do not do it in this change.
 
 Net: the only genuinely new code is (1) a `revive` verb kind (or an `update`
 flavour flagged `revives: true` carrying a `row(args)` builder), (2) the
