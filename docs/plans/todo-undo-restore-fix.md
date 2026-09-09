@@ -83,21 +83,36 @@ Model `reopen`/`unprocess` as the inverse of `leavesCollection` — a row
 
 ### Why the two-path routing resolves cleanly
 
-The subtlety is that the two builders route a write differently, but it works out:
+The two builders route a write differently, and revive can appear as either an
+insert (row already evicted) or an update (Undo tapped before eviction), so
+routing must not depend on the op type alone:
 
-- **In-memory** routes by *operation type* (`onInsert`/`onUpdate`). Here the row
-  is **always present** (in-memory never evicts), so revive always takes the
-  `update` branch and routes through `routeUpdate` — which must be widened to
-  match `revive` verbs as well as `update` verbs (match on the changed field set,
-  exactly like today: `"completedAt" in changes` / `"processedAt" in changes`).
-  The absent→insert branch never happens in-memory.
-- **Persisted** routes the outbox by *verb name* (`mutationFnName`), independent
-  of whether the optimistic op was an insert or an update. Add a `revive` branch
-  to the executor loop that calls `verb.persist(String(m.key), …)` and
-  `reconcileOne(updated)` — identical to the `update` branch, so it does the
-  right thing whether the optimistic op was an insert (row was evicted) or an
-  update (Undo tapped before eviction). Keep `refetchAfter` semantics (revive
-  should refetch: the open list now includes the row, so it is retained).
+- **In-memory** routes by *operation type* (`onInsert`/`onUpdate`, `base.ts`
+  ~320/332). The row is **not** guaranteed present: the in-memory builder is
+  `queryCollectionOptions` over the open-only `spec.fetch()`, and `refetch()`
+  (wired via `useForegroundRefetch`) reconciles the collection to that open-only
+  result, so a foreground refetch between complete and Undo evicts the row here
+  too — after which revive's optimistic `collection.insert` lands in `onInsert`,
+  which today routes to the single **add** verb (`insertVerbOf`) and would create
+  a new row instead of reopening. **So the revive op MUST carry per-operation
+  metadata `{ verb: name }`** (`collection.insert(row, { metadata })` /
+  `collection.update(id, { metadata }, draft)`, both supported in
+  `@tanstack/db@0.8.5`; the value surfaces as `PendingMutation.metadata`), and
+  `onInsert`/`onUpdate` must route by that metadata when present: a
+  metadata-named revive verb wins over the default add/`routeUpdate` path. Keep
+  the changed-field `routeUpdate` as the fallback for the plain update verbs, but
+  **widen it to consider `revive` verbs alongside `update` verbs in one
+  declaration-ordered pass** — the order is load-bearing (complete/process
+  `matches` a *set*, their inverse `matches` a *clear*; the inverse must stay
+  declared after so a clear routes to revive, not to complete/process).
+- **Persisted** routes the outbox by *verb name* (`mutationFnName`,
+  `base.ts:589`), independent of whether the optimistic op was an insert or an
+  update. Add a `revive` branch to the executor loop that calls
+  `verb.persist(String(m.key), …)` and `reconcileOne(updated)` — identical to the
+  `update` branch, so it does the right thing whether the optimistic op was an
+  insert (row was evicted) or an update (Undo tapped before eviction). Keep
+  `refetchAfter` semantics (revive should refetch: the open list now includes the
+  row, so it is retained).
 
 Net: the only genuinely new code is (1) a `revive` verb kind (or an `update`
 flavour flagged `revives: true` carrying a `row(args)` builder), (2) the
@@ -145,11 +160,19 @@ The bug lives on the **persisted** path, which the node/jest suites cannot run
   pass and must keep passing after the verb becomes `revive` (they exercise the
   update branch).
 - **Executor-branch unit test (agent-core, new):** drive the persisted executor's
-  `mutationFns[verb]` with a fake collection/controls (no real SQLite) to assert
-  the `revive` branch calls the reopen/unprocess persist and reconciles the row
-  back — a headless regression guard for the exact path that broke. Feasible
-  because the executor logic is a plain closure over injected `controls`; if it
-  is not currently reachable in isolation, extract it minimally so it is.
+  `mutationFns[verb]` with a fake executor (the injected `startOfflineExecutor`
+  can capture `config.mutationFns`) to assert the `revive` branch calls the
+  reopen/unprocess persist (and NOT the add persist) — a headless regression
+  guard for the exact routing that broke. Note the scope limit: `reconcileOne`
+  early-returns until the sync's `controls` are set on first subscribe
+  (`base.ts` ~450/509), so asserting the reconcile *insert* needs either starting
+  the sync in the harness or extracting the per-verb executor step into a pure
+  function taking `controls`. Scope the test to persist-routing unless that
+  extraction is done.
+- **In-memory metadata-routing test (agent-core, new):** simulate the eviction
+  (complete, then `refetch()` against an open-only fake REST so the row leaves),
+  then revive and assert it reopens (not adds) — this is the one place the F1
+  metadata routing is unit-observable, since the in-memory path runs in node.
 - **On-device (Pixel 7), required** per the new `AGENTS.md` rule: complete a task
   on Home, Upcoming, and the project screen; tap Undo within the window; confirm
   the row returns and the device log shows `reopenTask` with **no**
@@ -205,6 +228,11 @@ The bug lives on the **persisted** path, which the node/jest suites cannot run
 - **Main risk:** the persisted path is not covered by the standard suites, so a
   regression can only be caught on-device or by the new executor-branch test —
   write that test, and keep the AGENTS.md on-device rule.
+- **Routing correctness rests on per-op metadata**, not on the row being present.
+  Do not fall back to "the row is still there so `update` will find it" — a
+  foreground refetch can evict it on either builder (verified against
+  `queryCollectionOptions` open-only reconcile). Tag every revive op with
+  `{ verb: name }` and route by it.
 - Preserving the row's id on the absent→insert branch is essential (use the
   collection's upsert/write path, not `mintRow`); a minted id would create a
   duplicate.
