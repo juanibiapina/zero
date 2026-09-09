@@ -51,6 +51,12 @@ const fakeUserDO = (seed: Task[] = []) => {
       task.takenOnAt = takenOnAt;
       return task;
     },
+    reopenTask(id: string): Task | null {
+      const task = tasks.find((t) => t.id === id);
+      if (!task) return null;
+      task.completedAt = null;
+      return task;
+    },
     _tasks: tasks,
   };
 };
@@ -216,6 +222,47 @@ describe("POST /api/tasks/{id}/complete", () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
 
     const res = await app.request("/api/tasks/nope/complete", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/tasks/{id}/reopen", () => {
+  it("reopens a completed task and returns it with completedAt cleared", async () => {
+    const userDO = fakeUserDO([
+      task({ completedAt: "2023-11-14T22:13:20.000Z" }),
+    ]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1/reopen", {
+      method: "POST",
+    });
+
+    expect(res.status).toBe(200);
+    const body: { task: Task } = await res.json();
+    expect(body.task.id).toBe("id-1");
+    expect(body.task.completedAt).toBeNull();
+  });
+
+  it("returns the reopened task to a following list", async () => {
+    const userDO = fakeUserDO([
+      task({ completedAt: "2023-11-14T22:13:20.000Z" }),
+    ]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    await app.request("/api/tasks/id-1/reopen", { method: "POST" });
+    const res = await app.request("/api/tasks");
+
+    const body: { tasks: Task[] } = await res.json();
+    expect(body.tasks.map((t) => t.id)).toEqual(["id-1"]);
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+
+    const res = await app.request("/api/tasks/nope/reopen", {
       method: "POST",
     });
 

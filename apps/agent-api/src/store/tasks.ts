@@ -111,4 +111,13 @@ export class DbTaskStore {
     const row = this.db.get(tasks, { where: eq("id", id) });
     return row ? toTask(row) : null;
   }
+
+  // The inverse of complete: clear completedAt so the task returns to the open
+  // list. Backs the Home task-complete Undo. Idempotent on the id; returns the
+  // updated row, or null when no row has that id.
+  reopen(id: string): Task | null {
+    this.db.update(tasks, { completedAt: null }, { where: eq("id", id) });
+    const row = this.db.get(tasks, { where: eq("id", id) });
+    return row ? toTask(row) : null;
+  }
 }

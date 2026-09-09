@@ -204,6 +204,10 @@ export class UserDO extends DurableObject<Env> {
     return this.tasks.complete(id);
   }
 
+  reopenTask(id: string): Task | null {
+    return this.tasks.reopen(id);
+  }
+
   addProject(id: string, title: string, opts?: ProjectDefaults): Project {
     return this.projects.add(id, title, opts);
   }

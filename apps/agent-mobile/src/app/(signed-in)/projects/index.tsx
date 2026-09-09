@@ -4,7 +4,6 @@ import { useLiveQuery } from '@tanstack/react-db';
 import { useRouter } from 'expo-router';
 import {
   BACKLOG_COLLAPSE_THRESHOLD,
-  DONE_UNDO_MS,
   LOADING_TEXT_DELAY_MS,
   messageOf,
   projectDisplayStatus,
@@ -37,14 +36,12 @@ import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
 import { useCapturesApi } from '@/lib/captures-collection';
 import { refiningCaptureId, stopRefine } from '@/lib/refine-session';
-import { onProjectLeave } from '@/lib/project-leave';
 import { RefineBanner } from '@/components/refine-banner';
 import {
   useDelayed,
   useForegroundRefetch,
   useLoadError,
   usePullRefresh,
-  useUndoableLeave,
 } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
@@ -52,44 +49,21 @@ import { useColor } from '@/lib/theme';
 const NAME_HELPER = "Name the outcome you'll reach, so you know when it's done.";
 
 // A project row: emoji icon + title, a single tap target that opens the
-// project's own screen. While mid-Done/Delete it is struck-through with an Undo
-// instead of tappable.
+// project's own screen. Done and Delete both happen on the project's own screen
+// and commit immediately, so the row simply drops from the list — it has no
+// transient state of its own.
 function ProjectRow({
   item,
-  pending,
   onOpen,
-  onUndo,
 }: {
   item: Project;
-  pending: boolean;
   onOpen: (p: Project) => void;
-  onUndo: (id: string) => void;
 }) {
   const icon = (
     <View className="w-[22px] items-center">
       <Text className="text-[20px]">{item.icon}</Text>
     </View>
   );
-
-  if (pending) {
-    return (
-      <ListRow
-        leading={icon}
-        trailing={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Undo"
-            hitSlop={8}
-            onPress={() => onUndo(item.id)}
-          >
-            <Text className="font-semibold text-accent">Undo</Text>
-          </Pressable>
-        }
-      >
-        <Text className="text-foreground-muted line-through">{item.title}</Text>
-      </ListRow>
-    );
-  }
 
   return (
     <ListRow leading={icon} accessibilityLabel={item.title} onPress={() => onOpen(item)}>
@@ -193,9 +167,6 @@ function Projects({
   const [collapseOverride, setCollapseOverride] = useState<
     Partial<Record<ProjectStatus, boolean>>
   >({});
-  // Two deferred-undo channels: one for Done, one for Delete.
-  const done = useUndoableLeave(DONE_UNDO_MS);
-  const del = useUndoableLeave(DONE_UNDO_MS);
 
   useForegroundRefetch(api.refetch);
 
@@ -207,52 +178,6 @@ function Projects({
     [api, tasksApi, waitsApi],
   );
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
-
-  const commitStatus = useCallback(
-    (id: string, status: ProjectStatus) => {
-      setWriteError(null);
-      const tx = api.setStatus(id, status);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api],
-  );
-
-  const startDone = useCallback(
-    (id: string) => {
-      done.start(id, () => commitStatus(id, 'done'));
-    },
-    [done, commitStatus],
-  );
-  const startDelete = useCallback(
-    (id: string) => {
-      del.start(id, () => {
-        setWriteError(null);
-        const tx = api.remove(id);
-        tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-      });
-    },
-    [del, api],
-  );
-
-  const onUndo = useCallback(
-    (id: string) => {
-      if (del.pending.has(id)) del.undo(id);
-      else done.undo(id);
-    },
-    [del, done],
-  );
-
-  // The detail screen hands Done/Delete back here (it pops before the row leaves
-  // the working list, so the ~5s Undo lives on the list). This screen stays
-  // mounted beneath the pushed detail, so the handler runs synchronously.
-  useEffect(
-    () =>
-      onProjectLeave(({ id, kind }) => {
-        if (kind === 'delete') startDelete(id);
-        else startDone(id);
-      }),
-    [startDelete, startDone],
-  );
 
   const onToggle = useCallback((status: ProjectStatus, current: boolean) => {
     setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
@@ -391,12 +316,7 @@ function Projects({
             />
           )}
           renderItem={({ item }) => (
-            <ProjectRow
-              item={item}
-              pending={done.pending.has(item.id) || del.pending.has(item.id)}
-              onOpen={onOpen}
-              onUndo={onUndo}
-            />
+            <ProjectRow item={item} onOpen={onOpen} />
           )}
         />
       )}

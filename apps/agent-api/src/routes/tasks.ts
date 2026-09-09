@@ -194,5 +194,44 @@ export const createTasksRoutes = () => {
     return c.json({ task }, 200);
   });
 
+  const reopenRoute = createRoute({
+    method: "post",
+    path: "/api/tasks/{id}/reopen",
+    tags: ["Tasks"],
+    summary: "Reopen a completed task, returning it to the open list",
+    request: {
+      params: z.object({ id: z.string() }),
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": { schema: z.object({ task: TaskSchema }) },
+        },
+        description: "The task, now open (completedAt cleared)",
+      },
+      404: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "No task with that id",
+      },
+    },
+  });
+
+  // The inverse of complete: it backs the Undo on the Home task-complete
+  // snackbar, so a mis-tapped completion is one tap to reverse. Idempotent on
+  // the id (reopening an already-open task just re-clears a null completedAt).
+  router.openapi(reopenRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const userDO = getUserDO(c.env, userId);
+    const task = await userDO.reopenTask(id);
+    if (!task) {
+      return c.json({ error: "task not found" }, 404);
+    }
+    log("task_reopened", { clerk_user_id: userId });
+    return c.json({ task }, 200);
+  });
+
   return router;
 };

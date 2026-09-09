@@ -99,7 +99,6 @@ export {
   ALL_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
   DEFAULT_ICON,
-  DONE_UNDO_MS,
   STATUS_LABELS,
 } from "./projects/display";
 

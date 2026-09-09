@@ -105,6 +105,8 @@ jest.mock('rn-emoji-keyboard', () => ({
 const mockFetchProjects = jest.fn<() => Promise<Project[]>>();
 const mockSetProjectStatus =
   jest.fn<(getToken: unknown, id: string, status: ProjectStatus) => Promise<Project>>();
+const mockDeleteProject =
+  jest.fn<(getToken: unknown, id: string) => Promise<void>>();
 const mockEditProject =
   jest.fn<
     (getToken: unknown, id: string, fields: Record<string, unknown>) => Promise<Project>
@@ -136,7 +138,8 @@ jest.mock('@/lib/api', () => ({
     mockSetProjectStatus(getToken, id, status),
   editProject: (getToken: unknown, id: string, fields: Record<string, unknown>) =>
     mockEditProject(getToken, id, fields),
-  deleteProject: () => Promise.resolve(),
+  deleteProject: (getToken: unknown, id: string) =>
+    mockDeleteProject(getToken, id),
   fetchIconSuggestions: (
     getToken: unknown,
     input: { title: string; description?: string | null },
@@ -154,13 +157,8 @@ jest.mock('@/lib/api', () => ({
     task: { id: string; text: string; showUpDate: string; projectId: string | null },
   ) => mockAddTask(getToken, task),
   completeTask: () => Promise.reject(new Error('not used')),
+  reopenTask: () => Promise.reject(new Error('not used')),
   setTaskTakenOn: () => Promise.reject(new Error('not used')),
-}));
-
-// Capture the Done/Delete handback to the list.
-const mockRequestLeave = jest.fn<(id: string, kind: string) => void>();
-jest.mock('@/lib/project-leave', () => ({
-  requestProjectLeave: (id: string, kind: string) => mockRequestLeave(id, kind),
 }));
 
 const project = (
@@ -198,7 +196,8 @@ describe('ProjectDetailScreen', () => {
     resetTasksApiForTest();
     resetWaitsApiForTest();
     mockBack.mockReset();
-    mockRequestLeave.mockReset();
+    mockDeleteProject.mockReset();
+    mockDeleteProject.mockResolvedValue(undefined);
     mockSetProjectStatus.mockClear();
     mockEditProject.mockClear();
     mockAddTask.mockReset();
@@ -385,7 +384,8 @@ describe('ProjectDetailScreen', () => {
     expect(mockSetProjectStatus.mock.calls[0][2]).toBe('backlog');
   });
 
-  it('marks done by handing back to the list and popping', async () => {
+  it('marks done immediately and pops', async () => {
+    mockSetProjectStatus.mockResolvedValue(project('1', 'ship', '📁', 'done'));
     const { getByLabelText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project actions')).toBeTruthy());
 
@@ -396,11 +396,17 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Mark done'));
     });
 
-    expect(mockRequestLeave).toHaveBeenCalledWith('1', 'done');
+    await waitFor(() =>
+      expect(mockSetProjectStatus).toHaveBeenCalledWith(
+        expect.anything(),
+        '1',
+        'done',
+      ),
+    );
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('deletes by handing back to the list and popping', async () => {
+  it('deletes immediately and pops', async () => {
     const { getByLabelText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project actions')).toBeTruthy());
 
@@ -411,7 +417,9 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Delete project'));
     });
 
-    expect(mockRequestLeave).toHaveBeenCalledWith('1', 'delete');
+    await waitFor(() =>
+      expect(mockDeleteProject).toHaveBeenCalledWith(expect.anything(), '1'),
+    );
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 

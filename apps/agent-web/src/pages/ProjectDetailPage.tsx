@@ -99,16 +99,6 @@ function ProjectDetailReady({
   const conds = useMemo(() => conditions ?? [], [conditions]);
   const project = list.find((p) => p.id === id) ?? null;
 
-  // Return to the list, asking it to hold the row with an Undo. Done and delete
-  // both remove the project from the working list, so the transient Undo lives
-  // where the row is — on the list, not on this now-gone screen.
-  const leave = useCallback(
-    (kind: "done" | "delete") => {
-      void navigate("/projects", { state: { leaveId: id, leaveKind: kind } });
-    },
-    [navigate, id],
-  );
-
   const commitEdit = useCallback(
     (pid: string, fields: ProjectEditFields) => {
       setError(null);
@@ -125,6 +115,19 @@ function ProjectDetailReady({
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     },
     [api],
+  );
+
+  // Delete happens immediately (it is already behind the overflow menu — a
+  // deliberate act), then we return to the list. The write lives on the shared
+  // projects data layer, so it persists even as this screen unmounts.
+  const commitDelete = useCallback(
+    (pid: string) => {
+      setError(null);
+      const tx = api.remove(pid);
+      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      void navigate("/projects");
+    },
+    [api, navigate],
   );
 
   // The project isn't in the loaded set: a bad or deleted id. Once the
@@ -155,10 +158,14 @@ function ProjectDetailReady({
         displayStatus={displayStatus}
         onEdit={commitEdit}
         onStatus={(status) => {
-          if (status === "done") leave("done");
-          else commitStatus(project.id, status);
+          if (status === "done") {
+            commitStatus(project.id, "done");
+            void navigate("/projects");
+          } else {
+            commitStatus(project.id, status);
+          }
         }}
-        onDelete={() => leave("delete")}
+        onDelete={() => commitDelete(project.id)}
       />
 
       {/* The description is the project's statement of intent — why this outcome

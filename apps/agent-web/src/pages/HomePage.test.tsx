@@ -156,6 +156,12 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       row.completedAt = new Date().toISOString();
       return { ...row };
     },
+    reopenTask: async (id) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.completedAt = null;
+      return { ...row };
+    },
     setTaskTakenOn: async (id, takenOnAt) => {
       const row = server.find((item) => item.id === id);
       if (!row) throw new Error(`no task ${id}`);

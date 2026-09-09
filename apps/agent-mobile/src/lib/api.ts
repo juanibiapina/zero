@@ -255,6 +255,24 @@ export async function completeTask(
   return body.task;
 }
 
+export async function reopenTask(
+  getToken: TokenGetter,
+  id: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}/reopen`,
+    { method: 'POST' },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`POST /api/tasks/${id}/reopen failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
 export async function setTaskTakenOn(
   getToken: TokenGetter,
   id: string,
