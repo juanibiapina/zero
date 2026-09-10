@@ -15,6 +15,11 @@ import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
 import { resetCapturesApiForTest } from '@/lib/captures-collection';
 import { __resetIconSuggestions } from '@/lib/icon-suggestions';
+import {
+  refiningCaptureId,
+  startRefine,
+  stopRefine,
+} from '@/lib/refine-session';
 
 import ProjectsScreen from '../projects';
 
@@ -52,7 +57,10 @@ jest.mock('expo-router', () => ({
 const mockFetchProjects = jest.fn<() => Promise<Project[]>>();
 const mockAddProject =
   jest.fn<
-    (getToken: unknown, project: { id: string; title: string }) => Promise<Project>
+    (
+      getToken: unknown,
+      project: { id: string; title: string; sourceCaptureId: string | null },
+    ) => Promise<Project>
   >();
 const mockFetchIconSuggestions =
   jest.fn<
@@ -64,8 +72,10 @@ const mockFetchIconSuggestions =
 const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
 jest.mock('@/lib/api', () => ({
   fetchProjects: () => mockFetchProjects(),
-  addProject: (getToken: unknown, project: { id: string; title: string }) =>
-    mockAddProject(getToken, project),
+  addProject: (
+    getToken: unknown,
+    project: { id: string; title: string; sourceCaptureId: string | null },
+  ) => mockAddProject(getToken, project),
   fetchIconSuggestions: (
     getToken: unknown,
     input: { title: string; description?: string | null },
@@ -125,6 +135,7 @@ describe('ProjectsScreen (list)', () => {
     resetTasksApiForTest();
     resetWaitsApiForTest();
     resetCapturesApiForTest();
+    stopRefine();
     mockPush.mockReset();
     mockAddProject.mockClear();
     mockFetchProjects.mockReset();
@@ -223,6 +234,58 @@ describe('ProjectsScreen (list)', () => {
       title: 'Have a baby',
       description: null,
     });
+    // Creating a project opens its own screen right away. The id is the
+    // client-minted UUID on the optimistic row (not the mock's server id), so
+    // match the route shape rather than a fixed id.
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/projects\/.+/),
+      ),
+    );
+  });
+
+  it('opens the project screen and keeps the refine session going when adding during refine', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([]);
+    mockAddProject.mockImplementation(async () => {
+      const added = project('2', 'Have a baby');
+      mockFetchProjects.mockResolvedValue([added]);
+      return added;
+    });
+    // A refine session links what you create back to a capture. Opening the new
+    // project's screen continues that flow: the session is global, so tasks
+    // added on the project screen still link to the capture.
+    startRefine('cap-1', 'some capture');
+
+    const { getByText, getByLabelText, getByPlaceholderText } =
+      await renderScreen();
+
+    await waitFor(() =>
+      expect(getByText('No projects yet. Name your first outcome.')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('New project'));
+    });
+    const input = getByPlaceholderText('Name an outcome');
+    await act(async () => {
+      fireEvent.changeText(input, 'Have a baby');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(mockAddProject).toHaveBeenCalledTimes(1));
+    // The new project links back to the capture …
+    expect(mockAddProject.mock.calls[0][1].sourceCaptureId).toBe('cap-1');
+    // … its screen opens …
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/projects\/.+/),
+      ),
+    );
+    // … and the refine session is still active for the next thing created.
+    expect(refiningCaptureId()).toBe('cap-1');
   });
 
   it('shows a Project pill when the quick-add bar is open', async () => {

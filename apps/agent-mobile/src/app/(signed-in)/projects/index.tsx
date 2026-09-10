@@ -284,10 +284,16 @@ function Projects({
         title: trimmed,
         description: null,
       });
+      // Open the new project's own screen right away: the id is client-minted
+      // and the optimistic row is already in the collection, so its screen
+      // renders at once (before the server confirms). A refine session is a
+      // global singleton, so this continues that flow — tasks added on the
+      // project screen still link back to the capture.
+      router.push(`/projects/${key}`);
     }
     // Close the quick-add after adding.
     closeAdd();
-  }, [text, api, getToken, closeAdd]);
+  }, [text, api, getToken, router, closeAdd]);
 
   const onFinishRefine = useCallback(
     (captureId: string) => {
