@@ -34,9 +34,11 @@ jest.mock('@clerk/expo', () => ({
 }));
 
 // The screen navigates via the expo-router singleton; capture it.
-const mockNavigate = jest.fn<(href: string) => void>();
+const mockNavigate = jest.fn<(href: string, options?: unknown) => void>();
 jest.mock('expo-router', () => ({
-  router: { navigate: (href: string) => mockNavigate(href) },
+  router: {
+    navigate: (href: string, options?: unknown) => mockNavigate(href, options),
+  },
 }));
 
 
@@ -354,7 +356,9 @@ describe('HomeScreen', () => {
     expect(snap[0].description).toBe('ship the app');
     expect(snap[0].action?.label).toBe('View');
     snap[0].action?.onPress();
-    expect(mockNavigate).toHaveBeenCalledWith('/projects');
+    expect(mockNavigate).toHaveBeenCalledWith(`/projects/${minted.id}`, {
+      withAnchor: true,
+    });
   });
 
   it('completes a task immediately and offers Undo in a toast that reopens it', async () => {
@@ -385,12 +389,65 @@ describe('HomeScreen', () => {
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe('Completed');
     expect(snap[0].action?.label).toBe('Undo');
+    // A loose task (no project) gets no project line and no Open link.
+    expect(snap[0].description).toBeUndefined();
+    expect(snap[0].link).toBeUndefined();
     await act(async () => {
       snap[0].action?.onPress();
     });
     await waitFor(() =>
       expect(mockReopenTask).toHaveBeenCalledWith(expect.anything(), '1'),
     );
+  });
+
+  it('names the project and offers an Open deep-link when a project task is completed', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([]);
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p',
+        title: 'Diploma',
+        icon: '🎓',
+        description: null,
+        status: 'next',
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+    mockFetchTasks.mockResolvedValue([
+      {
+        ...taskRow('1', 'mail the letter'),
+        projectId: 'p',
+        takenOnAt: '2023-01-02T00:00:00.000Z',
+      },
+    ]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return {
+        ...taskRow('1', 'mail the letter'),
+        projectId: 'p',
+        completedAt: '2023-01-02T00:00:00.000Z',
+      };
+    });
+
+    const { getByLabelText, getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "mail the letter"'));
+    });
+    await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(queryByText('mail the letter')).toBeNull());
+
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].message).toBe('Completed');
+    expect(snap[0].description).toBe('🎓 Diploma');
+    expect(snap[0].link?.label).toBe('Open');
+    expect(snap[0].action?.label).toBe('Undo');
+    snap[0].link?.onPress();
+    expect(mockNavigate).toHaveBeenCalledWith('/projects/p', {
+      withAnchor: true,
+    });
   });
 
   it('shows only one Undo toast when a second task is completed', async () => {

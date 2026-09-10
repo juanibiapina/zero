@@ -109,6 +109,18 @@ function ToastRow({ toast }: { toast: Rendered }) {
           </p>
         ) : null}
       </div>
+      {toast.link ? (
+        <button
+          type="button"
+          className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold text-primary hover:bg-primary/10"
+          onClick={() => {
+            toast.link?.onPress();
+            defaultToastController.dismiss(toast.id);
+          }}
+        >
+          {toast.link.label}
+        </button>
+      ) : null}
       {toast.action ? (
         <button
           type="button"

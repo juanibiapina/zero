@@ -357,17 +357,34 @@ function TasksTop({
       : (projects.find((p) => p.id === item.projectId)?.icon ?? DEFAULT_ICON);
   // Completing commits immediately (the row leaves at once) and raises a single
   // bottom Undo snackbar. A fixed toast id means a second completion replaces the
-  // first toast, so only one Undo is ever offered. Undo reopens the task.
+  // first toast, so only one Undo is ever offered. Undo reopens the task. A task
+  // that belongs to a project also names it and offers an Open link that
+  // deep-links to the project's own screen (withAnchor keeps the list beneath it
+  // and the tabs visible); a loose task shows neither.
   const onComplete = useCallback(
     (item: Task) => {
+      const project =
+        item.projectId != null
+          ? projects.find((p) => p.id === item.projectId)
+          : undefined;
       undoableAction({
         message: 'Completed',
+        description: project
+          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
+          : undefined,
+        link: project
+          ? {
+              label: 'Open',
+              onPress: () =>
+                router.navigate(`/projects/${project.id}`, { withAnchor: true }),
+            }
+          : undefined,
         act: () => api.complete(item.id),
         undo: () => api.reopen(item),
         onError,
       });
     },
-    [api, onError],
+    [api, onError, projects],
   );
   const onPark = useCallback(
     (item: Task) => {
@@ -635,11 +652,14 @@ function Captures({
         description: trimmed,
         action: {
           label: 'View',
-          // Opens the Projects tab, where the new project sits at the top of its
-          // status group. A direct deep link to the project's own detail is
-          // blocked by a NativeTabs cross-tab bug (expo/expo#45786) that needs a
-          // native fix; revisit when it lands.
-          onPress: () => router.navigate('/projects'),
+          // Deep-links straight to the new project's own detail across the tab
+          // boundary; withAnchor + the projects stack's initialRouteName anchor
+          // keep the list beneath it and the tabs visible. This replaces the old
+          // /projects workaround: with the anchor, the cross-tab push lands (the
+          // symptom filed as expo/expo#45786 was the missing anchor, verified on
+          // device).
+          onPress: () =>
+            router.navigate(`/projects/${id}`, { withAnchor: true }),
         },
       });
       // Close the quick-add after adding.

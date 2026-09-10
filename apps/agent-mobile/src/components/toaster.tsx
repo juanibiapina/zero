@@ -78,6 +78,19 @@ function ToastRow({ toast }: { toast: Toast }) {
           </Text>
         ) : null}
       </View>
+      {toast.link ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={toast.link.label}
+          hitSlop={8}
+          onPress={() => {
+            toast.link?.onPress();
+            defaultToastController.dismiss(toast.id);
+          }}
+        >
+          <Text className="font-semibold text-accent">{toast.link.label}</Text>
+        </Pressable>
+      ) : null}
       {toast.action ? (
         <Pressable
           accessibilityRole="button"

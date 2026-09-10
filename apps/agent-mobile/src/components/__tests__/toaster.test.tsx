@@ -26,6 +26,23 @@ describe('Toaster', () => {
     expect(getByLabelText('View')).toBeTruthy();
   });
 
+  it('renders both a link and an action, and the link fires and dismisses', async () => {
+    const onLink = jest.fn();
+    defaultToastController.show({
+      message: 'Completed',
+      description: '📁 Ship the app',
+      link: { label: 'Open', onPress: onLink },
+      action: { label: 'Undo', onPress: () => {} },
+      durationMs: Infinity,
+    });
+    const { getByLabelText } = await render(<Toaster />);
+    expect(getByLabelText('Open')).toBeTruthy();
+    expect(getByLabelText('Undo')).toBeTruthy();
+    fireEvent.press(getByLabelText('Open'));
+    expect(onLink).toHaveBeenCalledTimes(1);
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+  });
+
   it('fires the action onPress and dismisses on press', async () => {
     const onPress = jest.fn();
     defaultToastController.show({

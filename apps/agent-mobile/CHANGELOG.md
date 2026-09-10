@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-10: Completing a task that belongs to a project now names the project in the "Completed" bar and adds a one-tap Open beside Undo that jumps straight to that project's screen. Completing a loose task is unchanged.
+- 2026-09-10: Opening a project from a link — the View after creating one on Home, and the new Open on a completed task — now lands on the project's own screen directly, with the tabs still showing and Back returning to the Projects list, instead of dropping you on the list.
 - 2026-09-10: Adding a project from the Projects list now opens its own screen right away, so you can add a description, pick an icon, and start listing tasks. When refining a capture, this keeps going — the new project links back to the capture, and tasks you add on its screen do too.
 - 2026-09-11: The Projects list + button now shows a "Project" pill above the input when opened, matching Home and the project screen.
 - 2026-09-10: Add what a project is waiting on from the project's + button — it now offers a "Waiting" pill beside "Task", so one + adds either a task or a waiting condition. The always-open "Waiting on…" field is gone.

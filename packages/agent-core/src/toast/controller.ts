@@ -16,21 +16,26 @@ export type ToastAction = { label: string; onPress: () => void };
 // What a caller passes to show a toast. `id` lets a caller key a toast so a
 // re-show replaces it in place (and restarts its timer) instead of stacking a
 // duplicate. `durationMs` of Infinity makes the toast sticky (no auto-dismiss).
+// `action` is the primary affordance (e.g. Undo); `link` is an optional
+// secondary, navigation-style tappable a renderer places beside it.
 export type ToastInput = {
   message: string;
   description?: string;
   action?: ToastAction;
+  link?: ToastAction;
   durationMs?: number;
   id?: string;
 };
 
 // A live toast in the snapshot. `id` is stable (caller-supplied or minted);
-// `createdAt` orders the queue.
+// `createdAt` orders the queue. `action` is the primary tappable; `link` is an
+// optional secondary navigation tappable.
 export type Toast = {
   id: string;
   message: string;
   description?: string;
   action?: ToastAction;
+  link?: ToastAction;
   createdAt: number;
 };
 
@@ -114,6 +119,7 @@ export function createToastController(
       message: normalized.message,
       description: normalized.description,
       action: normalized.action,
+      link: normalized.link,
       // Keep the original position on a replace so it doesn't jump.
       createdAt: existing?.createdAt ?? Date.now(),
     };
