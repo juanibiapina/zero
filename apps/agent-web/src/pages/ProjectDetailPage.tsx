@@ -605,10 +605,10 @@ function conditionLabel(
   return `until “${p?.title ?? "?"}” is ${c.targetStatus}`;
 }
 
-// The waiting conditions for a project: the open ones, plus "+ Waiting
-// condition", which reveals the kind/param fields only on tap (progressive
-// disclosure — the builder is off the main path until asked for). Structured
-// kinds (task-done, project-status) clear themselves in code; a free-text one is
+// The waiting conditions for a project: the open ones, plus a "+ Waiting
+// condition" control that opens the kind/param builder in a popover (off the
+// main flow, not an inline form that shifts the section). Structured kinds
+// (task-done, project-status) clear themselves in code; a free-text one is
 // resolved by hand (or later the AI).
 function ProjectWaits({
   project,
@@ -630,7 +630,7 @@ function ProjectWaits({
     (c: WaitingCondition) => c.projectId === project.id,
   );
 
-  const [adding, setAdding] = useState(false);
+  const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<WaitingConditionKind>("free-text");
   const [text, setText] = useState("");
   const [refId, setRefId] = useState("");
@@ -641,6 +641,16 @@ function ProjectWaits({
 
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }): void => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  };
+
+  // Reset the draft whenever the popover closes (a cancel via outside click, or
+  // a successful add), so it reopens clean.
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setText("");
+      setRefId("");
+    }
   };
 
   const onAdd = () => {
@@ -655,9 +665,7 @@ function ProjectWaits({
       if (!refId) return;
       write(waitsApi.add(project.id, "project-status", { refId, targetStatus }));
     }
-    setText("");
-    setRefId("");
-    setAdding(false);
+    onOpenChange(false);
   };
 
   return (
@@ -694,8 +702,13 @@ function ProjectWaits({
           ))}
         </ul>
       )}
-      {adding ? (
-        <div className="space-y-2 rounded-lg border p-2">
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <PopoverTrigger asChild>
+          <Button size="sm" variant="outline" className="w-full">
+            + Waiting condition
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 space-y-2">
           <select
             aria-label="Condition kind"
             value={kind}
@@ -762,33 +775,11 @@ function ProjectWaits({
               </select>
             </div>
           )}
-          <div className="flex gap-2">
-            <Button size="sm" className="flex-1" onClick={onAdd}>
-              Add condition
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setAdding(false);
-                setText("");
-                setRefId("");
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full"
-          onClick={() => setAdding(true)}
-        >
-          + Waiting condition
-        </Button>
-      )}
+          <Button size="sm" className="w-full" onClick={onAdd}>
+            Add condition
+          </Button>
+        </PopoverContent>
+      </Popover>
     </section>
   );
 }

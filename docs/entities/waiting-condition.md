@@ -78,9 +78,11 @@ condition drops it from the set, so the badge and order always match the derived
 
 - **UI** — the project screen gains a **Waiting-on** section: the open
   conditions (each with Resolve for free-text, or an "auto" tag for structured,
-  and a delete), plus an add control. Web offers all three kinds (free-text +
-  task/project pickers); mobile adds free-text (structured kinds are web-first
-  for now, still shown and auto-resolved on mobile).
+  and a delete). Adding is behind a **"+" affordance**, not an inline form:
+  mobile adds a **Waiting** mode to the project screen's plus FAB (beside Task),
+  free-text only; web opens the builder in a **popover** from a "+" control,
+  offering all three kinds (free-text + task/project pickers). Structured kinds
+  stay web-first for now (still shown and auto-resolved on mobile).
 - **Storage** — `DbWaitingConditionStore` (`add` / `listOpen` / `resolve` /
   `delete`), a per-entity store over do-orm. See `docs/storage.md`.
 - **API** — per-user isolated: `GET /api/waits`, `POST /api/waits`,

@@ -401,6 +401,18 @@ Shipped:
 - **Automatic appearance.** Mobile and web follow the system light or dark
   preference, including native/browser chrome. See `todo-dark-mode.md` for the
   implementation and device proof.
+- **Add a waiting condition with the "+" affordance, not an inline form**
+  (mobile + web; plan `docs/plans/todo-project-waiting-add-fab.md`). On the
+  project screen, the waiting-condition add moved off an always-present inline
+  composer. Mobile folds it into the project screen's single plus FAB as a
+  second **Waiting** mode (beside Task) — free-text only; web opens the same
+  three-kind builder in a popover from the "+ Waiting condition" control. Backed
+  by a new project-scoped `waiting` add mode in the shared quick-add registry,
+  kept out of the global set so Home and the Projects list never offer it. No
+  data/API/store/derivation change. Unit + web/mobile screen tests cover the new
+  affordance; device-verified on the Pixel 7 (the project + shows Task/Waiting
+  pills, Waiting adds a free-text condition to the Waiting-on list — pure-JS, no
+  EAS rebuild).
 - **Mobile task add on a project is a plus FAB** (not an inline field): the
   project screen's task composer moved to the shared plus button / keyboard-docked
   quick-add bar, task-only (no capture mode, so captures aren't selectable there).

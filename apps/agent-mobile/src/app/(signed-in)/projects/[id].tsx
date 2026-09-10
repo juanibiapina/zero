@@ -10,6 +10,7 @@ import {
   projectDisplayStatus,
   STATUS_LABELS,
   undoableAction,
+  type AddMode,
   type Project,
   type ProjectEditFields,
   type ProjectStatus,
@@ -96,12 +97,15 @@ function ProjectDetail({
   const back = useCallback(() => router.back(), [router]);
   const [error, setError] = useState<string | null>(null);
 
-  // Adding a task is a plus FAB that expands into the shared keyboard-docked
-  // quick-add bar (like Home and the Projects list), not an inline field. The
-  // bar is task-only — no capture mode — so what you add here lands in this
-  // project. See docs/plans/todo-project-task-add-fab.md.
+  // Adding is a plus FAB that expands into the shared keyboard-docked quick-add
+  // bar (like Home and the Projects list), not an inline field. The bar offers
+  // two project-scoped modes — Task and Waiting — so from one "+" you add either
+  // a task or a free-text waiting condition to this project. No capture/project
+  // mode here. See docs/plans/todo-project-task-add-fab.md and
+  // docs/plans/todo-project-waiting-add-fab.md.
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
+  const [mode, setMode] = useState<AddMode>('task');
   const inputRef = useRef<RNTextInput>(null);
 
   // Measure the gap from this screen's content bottom to the window bottom (the
@@ -163,6 +167,8 @@ function ProjectDetail({
   const closeAdd = useCallback(() => {
     setText('');
     setAdding(false);
+    // Next open starts on the common case.
+    setMode('task');
   }, []);
 
   const onAdd = useCallback(() => {
@@ -174,19 +180,23 @@ function ProjectDetail({
     }
     if (!project) return;
     setError(null);
-    // Parked by default (takenOnAt null) — grooming is collect-then-take-on;
-    // linked to the capture when refining.
-    const tx = tasksApi.add(
-      trimmed,
-      localToday(),
-      project.id,
-      null,
-      refiningCaptureId(),
-    );
+    // Waiting mode records a free-text waiting condition on this project; Task
+    // mode adds a parked task (takenOnAt null — grooming is collect-then-take-on;
+    // linked to the capture when refining).
+    const tx =
+      mode === 'waiting'
+        ? waitsApi.add(project.id, 'free-text', { text: trimmed })
+        : tasksApi.add(
+            trimmed,
+            localToday(),
+            project.id,
+            null,
+            refiningCaptureId(),
+          );
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     // Close the quick-add after adding.
     closeAdd();
-  }, [text, tasksApi, project, closeAdd]);
+  }, [text, mode, tasksApi, waitsApi, project, closeAdd]);
 
   // Android hardware Back closes the quick-add before it pops the screen.
   useEffect(() => {
@@ -289,20 +299,22 @@ function ProjectDetail({
         />
       </ScrollView>
 
-      {/* Task-only quick-add: it offers just the Task pill (the sole mode here),
-          which reads exactly like Home's, so it adds a task to this project. */}
+      {/* Project-scoped quick-add: two pills, Task and Waiting, so one "+" adds
+          either a task or a free-text waiting condition to this project. No
+          capture/project mode. */}
       <QuickAdd
         open={adding}
         text={text}
-        mode="task"
-        modes={['task']}
+        mode={mode}
+        modes={['task', 'waiting']}
+        onModeChange={setMode}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
         onSubmit={onAdd}
         onRequestClose={closeAdd}
         busy={false}
         inputRef={inputRef}
-        fabLabel="Add a task"
+        fabLabel="Add"
         bottomOffset={bottomOffset}
       />
     </View>
@@ -653,9 +665,10 @@ function conditionLabel(c: WaitingCondition, tasks: Task[], projects: Project[])
   return `until “${p?.title ?? '?'}” is ${c.targetStatus}`;
 }
 
-// The waiting conditions for a project: the open ones (resolve/delete) and a
-// free-text add. Structured kinds (task-done, project-status) are created on web
-// for now; here they still render with a label and auto-resolve in code.
+// The waiting conditions for a project: the open ones (resolve/delete). Adding a
+// condition moved to the screen's plus FAB (the Waiting mode), so this section is
+// list-only. Structured kinds (task-done, project-status) are created on web for
+// now; here they still render with a label and auto-resolve in code.
 function ProjectWaits({
   project,
   waitsApi,
@@ -673,16 +686,9 @@ function ProjectWaits({
   const list = (allConditions ?? []).filter(
     (c: WaitingCondition) => c.projectId === project.id,
   );
-  const [text, setText] = useState('');
 
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-  };
-  const onAdd = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    write(waitsApi.add(project.id, 'free-text', { text: trimmed }));
-    setText('');
   };
 
   return (
@@ -715,17 +721,6 @@ function ProjectWaits({
           </Pressable>
         </View>
       ))}
-      <View className="mt-1 rounded-xl bg-surface-muted px-4 py-3">
-        <Input
-          value={text}
-          onChangeText={setText}
-          onSubmitEditing={onAdd}
-          returnKeyType="done"
-          blurOnSubmit={false}
-          placeholder="Waiting on… (e.g. the letter comes back)"
-          accessibilityLabel="Waiting condition"
-        />
-      </View>
     </View>
   );
 }

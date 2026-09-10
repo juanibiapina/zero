@@ -9,10 +9,15 @@
 // so adding a mode meant editing all of them. It is now one table.
 
 // What the quick-add box can create. Ordered as the pill row shows them.
-export type AddMode = "capture" | "task" | "project";
+// `waiting` is project-scoped: it creates a free-text waiting condition on the
+// open project and so is NEVER in ALL_ADD_MODES (Home and the Projects list have
+// no project context); the project screen passes it explicitly.
+export type AddMode = "capture" | "task" | "project" | "waiting";
 
 // The full offered set, in display order. A widget defaults to this; a
-// single-purpose screen passes a narrowed list (e.g. ["task"] on a project).
+// single-purpose screen passes a narrowed list (e.g. ["task"] on a project, or
+// ["task", "waiting"] on a project's own screen). `waiting` is deliberately
+// absent here — it is project-scoped (see the type note above).
 export const ALL_ADD_MODES: AddMode[] = ["capture", "task", "project"];
 
 // The short word shown on a mode's pill (capitalized as rendered).
@@ -20,6 +25,7 @@ export const ADD_MODE_LABEL: Record<AddMode, string> = {
   capture: "Capture",
   task: "Task",
   project: "Project",
+  waiting: "Waiting",
 };
 
 // The input placeholder while a mode is selected. Project mode folds the
@@ -28,10 +34,17 @@ export const ADD_MODE_PLACEHOLDER: Record<AddMode, string> = {
   capture: "Capture a thought",
   task: "Add a task",
   project: "Name an outcome",
+  waiting: "Waiting on…",
 };
 
-// The accessibility label for a mode's pill, derived from its word so the two
-// never drift ("Add a capture" / "Add a task" / "Add a project").
+// The accessibility label for a mode's pill. Most derive "Add a {label}", but
+// "waiting" would read "Add a waiting", so it carries an explicit phrase.
+const ADD_MODE_A11Y_OVERRIDE: Partial<Record<AddMode, string>> = {
+  waiting: "Add a waiting condition",
+};
+
 export function addModeA11yLabel(mode: AddMode): string {
-  return `Add a ${ADD_MODE_LABEL[mode].toLowerCase()}`;
+  return (
+    ADD_MODE_A11Y_OVERRIDE[mode] ?? `Add a ${ADD_MODE_LABEL[mode].toLowerCase()}`
+  );
 }

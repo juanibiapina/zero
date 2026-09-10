@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-10: Add what a project is waiting on from the project's + button — it now offers a "Waiting" pill beside "Task", so one + adds either a task or a waiting condition. The always-open "Waiting on…" field is gone.
 - 2026-09-10: Each waiting project now shows how long it has been waiting (e.g. "3 days") on its row, and the Waiting section is ordered so the longest-waiting project is on top.
 - 2026-09-09: Removed a thin orange line that showed beneath each inbox capture on Home. Swiping a capture right still reveals "Tomorrow" and postpones it.
 - 2026-09-09: Screen titles and headings now show at their proper size. A styling bug had shrunk the top titles (Home, Upcoming, Projects) and every heading down to a small default; text across the app now renders at its intended size.

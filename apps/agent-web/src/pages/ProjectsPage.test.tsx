@@ -410,7 +410,8 @@ describe("ProjectsPage", () => {
     setApi([project("1", "Send tax letter", "next")]);
     renderApp();
     await openDetail("Send tax letter");
-    // The builder is revealed only after '+ Waiting condition'.
+    // The builder lives in a popover opened by the '+ Waiting condition'
+    // control (not an inline form that shifts the section).
     fireEvent.click(
       screen.getByRole("button", { name: "+ Waiting condition" }),
     );

@@ -259,11 +259,13 @@ describe('ProjectDetailScreen', () => {
 
     // Adding is a plus FAB that expands into the quick-add bar.
     await act(async () => {
-      fireEvent.press(getByLabelText('Add a task'));
+      fireEvent.press(getByLabelText('Add'));
     });
 
-    // The bar offers the single interactive Task pill (the sole mode here), like
-    // Home's — and no capture/project pills.
+    // The bar offers the two project-scoped pills (Task and Waiting) — and no
+    // capture/project pills. Task is the default mode, so its placeholder shows.
+    expect(getByLabelText('Add a task')).toBeTruthy();
+    expect(getByLabelText('Add a waiting condition')).toBeTruthy();
     expect(queryByLabelText('Add a capture')).toBeNull();
     expect(queryByLabelText('Add a project')).toBeNull();
 
@@ -330,7 +332,15 @@ describe('ProjectDetailScreen', () => {
     const { getByLabelText, getByPlaceholderText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
-    const input = getByPlaceholderText('Waiting on… (e.g. the letter comes back)');
+    // Adding a condition is the plus FAB's Waiting mode, not an inline field:
+    // open the bar, pick Waiting, type, submit.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a waiting condition'));
+    });
+    const input = getByPlaceholderText('Waiting on…');
     await act(async () => {
       fireEvent.changeText(input, 'the letter comes back');
     });
@@ -342,6 +352,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockAddWaitingCondition.mock.calls[0][0].text).toBe(
       'the letter comes back',
     );
+    expect(mockAddWaitingCondition.mock.calls[0][0].kind).toBe('free-text');
   });
 
   it('changes the icon from the emoji picker', async () => {

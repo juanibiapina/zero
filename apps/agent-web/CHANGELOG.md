@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-10: Add a waiting condition from the "+ Waiting condition" control, which now opens a small composer popover instead of an inline form that pushed the page. All three kinds (free text, until a task is done, until a project reaches a status) are still there.
 - 2026-09-10: Each waiting project now shows how long it has been waiting (e.g. "3 days") on its row, and the Waiting section is ordered so the longest-waiting project is on top.
 - 2026-09-09: The quick-add prompt is simpler and no longer shows a separate hint line — the Projects page and Home's Project mode now prompt "Name an outcome", and a project's task field prompts "Add a task".
 - 2026-09-09: Undo on the bottom bar now reliably brings a completed task or a processed capture back. Before, tapping Undo could quietly do nothing once the row had left the list.

@@ -358,6 +358,14 @@ appId: dev.juanibiapina.zeroagent
 `takeScreenshot` writes under the run folder
 (`~/.maestro/tests/<timestamp>/.../<name>.png`), not an arbitrary path.
 
+**Take a screenshot and send it whenever it is relevant.** On-device
+verification is visual: after a change lands on the Pixel, capture the screen
+(`maestro` `takeScreenshot`, or `adb exec-out screencap -p > shot.png`) and send
+the image back — show the new UI, the before/after of a fix, or the state that
+proves the bug is gone. A description of what you saw is not the same as showing
+it; a screenshot is the proof the reviewer can check. Default to sending one for
+any user-visible change; skip it only when the change has no visible surface.
+
 **Caveat:** the CI flows use `launchApp: { clearState: true }`, which **signs the
 device out**. Run those only on this test device, and re-sign-in afterward to
 test signed-in screens (Captures). To test without disturbing the session, use a
