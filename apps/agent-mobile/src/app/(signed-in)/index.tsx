@@ -144,6 +144,14 @@ function CaptureRow({
   // silent skip of this leaf row is harmless.
   const pan = Gesture.Pan()
     .activeOffsetX(12)
+    // Fail the moment the drag turns vertical (~6pt), so a downward pull is
+    // handed back to the list's scroll and Android's RefreshControl
+    // (SwipeRefreshLayout, which only arms at the start of the gesture at
+    // scrollY:0). Without this, a Pan with only activeOffsetX stays alive on a
+    // vertical drag, suppresses ancestor interception, and swallows
+    // pull-to-refresh anywhere a capture row sits (the lower half of Home). The
+    // ~2:1 horizontal:vertical ratio keeps the rightward swipe-to-postpone.
+    .failOffsetY([-6, 6])
     .onStart(() => {
       startX.set(x.get());
     })
