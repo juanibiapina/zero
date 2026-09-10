@@ -357,6 +357,11 @@ function Projects({
       <QuickAdd
         open={adding}
         text={text}
+        // The Projects list only creates projects, so it shows the single
+        // Project mode pill — reading like Home's pills and the project screen's
+        // sole Task pill. One mode, so tapping the pill is a no-op reselect.
+        mode="project"
+        modes={['project']}
         onChangeText={setText}
         onOpen={() => setAdding(true)}
         onSubmit={() => onAdd()}

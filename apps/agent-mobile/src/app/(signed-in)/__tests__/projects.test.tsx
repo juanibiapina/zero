@@ -225,6 +225,23 @@ describe('ProjectsScreen (list)', () => {
     });
   });
 
+  it('shows a Project pill when the quick-add bar is open', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([]);
+
+    const { getByLabelText, queryByLabelText } = await renderScreen();
+
+    // The pill is absent while the bar is collapsed.
+    expect(queryByLabelText('Add a project')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('New project'));
+    });
+
+    // Opening the bar reveals the single Project mode pill, reading like Home's.
+    await waitFor(() => expect(getByLabelText('Add a project')).toBeTruthy());
+  });
+
   it('groups projects under a status section header', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);

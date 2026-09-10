@@ -426,6 +426,11 @@ Shipped:
   (web + mobile) — is now one pure registry (`@zero/agent-core`
   `quick-add/modes.ts`) consumed by both surfaces; the quick-add bar renders
   whatever `modes` it is handed and derives the placeholder from the selected mode.
+  Follow-up: the **Projects list** + now also shows its single interactive
+  **Project** pill (`mode="project"`, `modes={['project']}`), so all three mobile
+  quick-add surfaces (Home, the project screen, the Projects list) render pills
+  from the one registry — the mobile pill affordance is fully unified. Web has no
+  pill concept (the web Projects page is a plain input), so it is unchanged.
 
 - **AI icon suggestions for a Project** (web + mobile shipped) — the
   **first AI integration of the todo app**. Creating a project fires a background
