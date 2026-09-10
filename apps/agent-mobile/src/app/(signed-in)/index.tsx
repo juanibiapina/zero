@@ -832,7 +832,12 @@ function Captures({
         // slides the remaining rows closed when one is processed or postponed.
         <ReorderableList
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 96 }}
+          // flexGrow makes the content fill the viewport when the inbox is
+          // short, so the empty area below the rows is still part of the
+          // scrollable surface and pull-to-refresh works anywhere on the screen.
+          // ReorderableList (unlike the SectionList screens) does not make that
+          // empty area refresh-responsive on its own.
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
