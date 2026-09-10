@@ -97,16 +97,17 @@ third entity, now being built (slice A1 shipped). Everything else below
   `docs/entities/task.md`. A Capture becoming a Task (the Capture->Task
   transition) and Task belonging to a Project are the next interactions to
   design.
-- **Project** — the first container, now being built as entity #3 (plan:
+- **Project** — the first container, entity #3 (plan:
   `docs/plans/todo-project-entity.md`; source of truth: `docs/entities/project.md`).
   Goal-oriented (baby, diploma, buy a house, watch a movie), sometimes
   maintenance-oriented (a "baby maintenance" project should maybe not exist). Has
   a nice icon (baby face, diploma) and a status (active / next / waiting / backlog
-  / done). Slices A1 + A2 shipped: name-only create, a status-grouped list, and a
-  detail sheet where the status is changed (Done + inline Undo) on both surfaces;
-  slice A3 shipped enrichment in that sheet (an emoji icon picker offering all
-  standard emoji with search, editable title and notes). Slice A (the
-  hand-managed entity) is complete. Vision beyond that:
+  / done). Slices A1 + A2 shipped: name-only create and a status-grouped list on
+  both surfaces; A3 added enrichment (an emoji icon picker over all standard emoji
+  with search, editable title and notes). Slice A (the hand-managed entity) is
+  complete. A project now opens **its own screen** (web `/projects/:id`, mobile a
+  pushed screen), not a bottom sheet — that is where status is changed, tasks are
+  groomed, and what it's waiting on is recorded. Vision beyond that:
   can contain Todos, agent sessions, documents. Can spin off other Projects and
   even People. Notify dependent Projects when they move; can unblock them. Idea:
   project "slots", start with one slot to teach the game.
@@ -433,22 +434,27 @@ Shipped:
   Proves the todo app's first server LLM path end to end for heavier features
   (Capture → Project). Plan: `docs/plans/todo-project-icon-suggestions.md`.
 
+Shipped (2026-09-05): **Project detail as a destination** (plan:
+`docs/plans/todo-project-detail-rework.md`). Tapping a project now opens its own
+screen — a `/projects/:id` route on web (`ProjectDetailPage`) and a pushed screen
+within the Projects tab on mobile (`projects/[id].tsx`) — instead of a bottom
+sheet. The screen leads with the work (tasks, then what it's waiting on) and keeps
+identity compact (icon, editable title, derived-status pill, a `⋯` menu for status
+moves/delete); the icon picker and status/delete actions stay as short `@expo/ui`
+sheets. This dissolved the broken mobile task/waiting renderer (raw RN rows inside
+an `@expo/ui` sheet host): a pushed Expo Router screen is an ordinary RN view tree,
+so the rows render correctly. UI/navigation only — no data model, API, store, or
+derivation change. Web has a `ProjectsPage` route test; the mobile project screen
+was later device-exercised in the Undo-restore fix (2026-09-09).
+
 In flight (details in `docs/plans/`):
 
-- `todo-tanstack-db.md` — share the Capture collection across web+mobile and add
-  the mobile offline outbox (phase 3). Code-complete on a branch, device-verified,
-  with the offline decision gate still open.
-- `todo-capture-animations.md` — quick-add morph + done fade-out.
+- `todo-capture-animations.md` — quick-add morph + done fade-out. **Done fade-out
+  shipped** (marking a todo done fades and collapses the row out); the **quick-add
+  morph** (FAB expanding into the quick-add bar) is the remaining half.
 
 Next:
 
-- **Project detail as a destination** (implemented on a branch, PR pending;
-  mobile on-device verification still pending) — a project opens its own screen
-  (web `/projects/:id` route; mobile a pushed screen within the Projects tab),
-  not a bottom sheet, leading with its tasks and what it's waiting on. Also fixes
-  the broken mobile task/waiting renderer (raw React Native rows inside an
-  `@expo/ui` sheet host; a pushed RN screen removes the host). Plan:
-  `docs/plans/todo-project-detail-rework.md`.
 - **Reschedule a Task** — swipe-to-tomorrow / pick a future date (v1 dates every
   Task today with no way to change it).
 - **AI Capture → Project** — swipe a Capture, propose a Project, confirm (the
