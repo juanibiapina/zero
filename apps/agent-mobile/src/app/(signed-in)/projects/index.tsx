@@ -10,6 +10,8 @@ import {
   projectsByStatus,
   listView,
   STATUS_LABELS,
+  waitingSince,
+  waitingLabel,
   type Project,
   type ProjectsApi,
   type ProjectStatus,
@@ -51,9 +53,11 @@ import { useColor } from '@/lib/theme';
 // transient state of its own.
 function ProjectRow({
   item,
+  waited,
   onOpen,
 }: {
   item: Project;
+  waited: string | null;
   onOpen: (p: Project) => void;
 }) {
   const icon = (
@@ -62,8 +66,25 @@ function ProjectRow({
     </View>
   );
 
+  // A muted trailing "how long waiting" label, shown only for waiting rows. The
+  // Waiting section header frames it, so the badge carries only the magnitude.
+  const trailing = waited ? (
+    <Text
+      variant="caption"
+      className="shrink-0"
+      accessibilityLabel={`Waiting ${waited}`}
+    >
+      {waited}
+    </Text>
+  ) : undefined;
+
   return (
-    <ListRow leading={icon} accessibilityLabel={item.title} onPress={() => onOpen(item)}>
+    <ListRow
+      leading={icon}
+      trailing={trailing}
+      accessibilityLabel={item.title}
+      onPress={() => onOpen(item)}
+    >
       <Text>{item.title}</Text>
     </ListRow>
   );
@@ -186,8 +207,22 @@ function Projects({
 
   const grouped = useMemo(
     () =>
-      projectsByStatus(list, (p) => projectDisplayStatus(p, tasks, conds, list)),
+      projectsByStatus(
+        list,
+        (p) => projectDisplayStatus(p, tasks, conds, list),
+        // Order the Waiting section by how long each project has waited (longest
+        // on top); other sections fall back to createdAt.
+        (p) => waitingSince(p, tasks, conds, list) ?? p.createdAt,
+      ),
     [list, tasks, conds],
+  );
+  // A project's "how long waiting" label, non-null only for waiting projects.
+  const labelOf = useCallback(
+    (p: Project) => {
+      const since = waitingSince(p, tasks, conds, list);
+      return since ? waitingLabel(since) : null;
+    },
+    [tasks, conds, list],
   );
 
   // Collapse is derived, not stored: a section uses the user's explicit override
@@ -314,7 +349,7 @@ function Projects({
             />
           )}
           renderItem={({ item }) => (
-            <ProjectRow item={item} onOpen={onOpen} />
+            <ProjectRow item={item} waited={labelOf(item)} onOpen={onOpen} />
           )}
         />
       )}

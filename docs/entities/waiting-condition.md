@@ -67,6 +67,13 @@ Completing that task drops the project back to waiting, not next, because the
 condition is still open. `homeTasks` gates on that derived status: a waiting
 project's tasks leave Today, and starring one brings it (and the task) back.
 
+The oldest unresolved condition also fixes **how long the project has been
+waiting**: `waitingSince` (same module) returns that condition's `createdAt`, and
+the Projects list turns it into a readable badge (`waitingLabel`, e.g. "3 days")
+and orders the Waiting section longest-first. Resolving or code-satisfying a
+condition drops it from the set, so the badge and order always match the derived
+`waiting` status.
+
 ## Interactions (per system)
 
 - **UI** — the project screen gains a **Waiting-on** section: the open

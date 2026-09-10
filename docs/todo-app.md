@@ -361,6 +361,18 @@ for captures). Verified on the Pixel 7 (reopen and unprocess both restore the ro
 design record: `docs/plans/todo-undo-restore-fix.md`, `docs/storage.md`. This is
 why every mobile change must be verified on the Pixel 7 (now a rule in `AGENTS.md`).
 
+Shipped (2026-09-10): **how long a project has been waiting**, on both surfaces
+(plan: `docs/plans/todo-project-waiting-time.md`). Each waiting project's row
+shows a muted trailing badge with the elapsed time since its oldest unresolved
+condition (a readable phrase like "3 days", via date-fns `formatDistanceStrict`),
+and the Waiting section is ordered longest-waiting first. Two pure helpers in
+`@zero/agent-core` — `waitingSince` (the blocked-since instant, reusing
+`unresolvedConditions` so it never disagrees with the derived `waiting` status)
+and `waitingLabel` (the phrase, with a sub-minute "just now" floor) — plus an
+optional `sortKeyOf` on `projectsByStatus` (the list passes `waitingSince ??
+createdAt`, so only the Waiting section reorders). No data-model change. Unit +
+web/mobile screen tests; device-verified on the Pixel 7.
+
 Shipped:
 
 - **The "what shows up" availability model** (plan:

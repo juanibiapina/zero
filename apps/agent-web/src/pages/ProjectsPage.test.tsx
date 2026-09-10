@@ -23,6 +23,7 @@ import {
   type Task,
   type TasksApi,
   type TasksRest,
+  type WaitingCondition,
   type WaitsApi,
   type WaitsRest,
 } from "@zero/agent-core";
@@ -94,8 +95,8 @@ vi.mock("frimousse", () => {
   };
 });
 
-function fakeWaitsRest(): WaitsRest {
-  const server: import("@zero/agent-core").WaitingCondition[] = [];
+function fakeWaitsRest(initial: WaitingCondition[] = []): WaitsRest {
+  const server: WaitingCondition[] = initial.map((c) => ({ ...c }));
   return {
     fetchWaits: async () => server.map((c) => ({ ...c })),
     addWaitingCondition: async (c) => {
@@ -213,7 +214,26 @@ function fakeTasksRest(initial: Task[]): TasksRest {
   };
 }
 
-function setApi(initial: Project[], tasks: Task[] = []) {
+const waitCondition = (
+  id: string,
+  projectId: string,
+  createdAt: string,
+): WaitingCondition => ({
+  id,
+  projectId,
+  kind: "free-text",
+  text: "blocked",
+  refId: null,
+  targetStatus: null,
+  resolvedAt: null,
+  createdAt,
+});
+
+function setApi(
+  initial: Project[],
+  tasks: Task[] = [],
+  waits: WaitingCondition[] = [],
+) {
   h.api = createInMemoryProjectsApi({
     queryClient: new QueryClient(),
     rest: fakeRest(initial),
@@ -224,7 +244,7 @@ function setApi(initial: Project[], tasks: Task[] = []) {
   });
   h.waitsApi = createInMemoryWaitsApi({
     queryClient: new QueryClient(),
-    rest: fakeWaitsRest(),
+    rest: fakeWaitsRest(waits),
   });
   h.capturesApi = createInMemoryApi({
     queryClient: new QueryClient(),
@@ -292,6 +312,37 @@ describe("ProjectsPage", () => {
     renderApp();
     expect(await screen.findByText("Run a 5K")).toBeInTheDocument();
     expect(screen.getByText("🏃")).toBeInTheDocument();
+  });
+
+  it("badges each waiting project with how long it has waited, longest-first", async () => {
+    // Both projects are 'next' with an open condition and no tasks, so both
+    // derive to waiting. "Older" has the earlier condition, so it has waited
+    // longer and must sort above "Newer".
+    setApi(
+      [
+        project("1", "Newer wait", "next"),
+        project("2", "Older wait", "next"),
+      ],
+      [],
+      [
+        waitCondition("cA", "1", "2024-06-01T00:00:00.000Z"),
+        waitCondition("cB", "2", "2023-01-01T00:00:00.000Z"),
+      ],
+    );
+    renderApp();
+
+    // Both rows carry a "Waiting …" badge.
+    await screen.findByText("Older wait");
+    const badges = screen.getAllByLabelText(/^Waiting /);
+    expect(badges).toHaveLength(2);
+
+    // Longest wait on top: "Older wait" precedes "Newer wait" in the document.
+    const older = screen.getByText("Older wait");
+    const newer = screen.getByText("Newer wait");
+    expect(
+      older.compareDocumentPosition(newer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("navigates from a list row to the project's own screen", async () => {

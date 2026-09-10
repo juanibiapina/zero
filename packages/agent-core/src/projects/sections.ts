@@ -24,9 +24,17 @@ export type ProjectSection = { status: ProjectStatus; projects: Project[] };
 // defaults to the stored `status`, but callers pass the derived display status
 // (projectDisplayStatus) so the list groups by active/next as taken-on tasks
 // change, not by the stored column.
+//
+// `sortKeyOf` is the ascending sort key within each section; it defaults to
+// createdAt (oldest-first, the historical behavior). The Projects list passes
+// `waitingSince(p) ?? p.createdAt`: since waitingSince is non-null only for
+// waiting projects and each section is homogeneous by status, this orders the
+// Waiting section by how long each project has waited (longest on top) while
+// every other section keeps its createdAt order.
 export function projectsByStatus(
   list: readonly Project[],
   statusOf: (p: Project) => ProjectStatus = (p) => p.status,
+  sortKeyOf: (p: Project) => string = (p) => p.createdAt,
 ): ProjectSection[] {
   const byStatus = new Map<ProjectStatus, Project[]>();
   for (const p of list) {
@@ -45,7 +53,7 @@ export function projectsByStatus(
   for (const status of PROJECT_SECTION_ORDER) {
     const projects = byStatus.get(status);
     if (!projects || projects.length === 0) continue;
-    projects.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    projects.sort((a, b) => sortKeyOf(a).localeCompare(sortKeyOf(b)));
     sections.push({ status, projects });
   }
   return sections;

@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react-native';
 
 import type { Project, ProjectStatus } from '@/lib/api';
+import type { WaitingCondition } from '@zero/agent-core';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
@@ -60,6 +61,7 @@ const mockFetchIconSuggestions =
       input: { title: string; description?: string | null },
     ) => Promise<string[]>
   >();
+const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
 jest.mock('@/lib/api', () => ({
   fetchProjects: () => mockFetchProjects(),
   addProject: (getToken: unknown, project: { id: string; title: string }) =>
@@ -73,7 +75,7 @@ jest.mock('@/lib/api', () => ({
   deleteProject: () => Promise.resolve(),
   // Projects loads tasks/waits/captures for derivation and the refine banner; []
   // is enough here.
-  fetchWaits: () => Promise.resolve([]),
+  fetchWaits: () => mockFetchWaits(),
   addWaitingCondition: () => Promise.reject(new Error('not used')),
   resolveWaitingCondition: () => Promise.reject(new Error('not used')),
   deleteWaitingCondition: () => Promise.resolve(),
@@ -130,6 +132,8 @@ describe('ProjectsScreen (list)', () => {
     __resetIconSuggestions();
     mockFetchIconSuggestions.mockReset();
     mockFetchIconSuggestions.mockResolvedValue(['🌟']);
+    mockFetchWaits.mockReset();
+    mockFetchWaits.mockResolvedValue([]);
   });
 
   it('shows the fetched projects with their icons', async () => {
@@ -228,6 +232,44 @@ describe('ProjectsScreen (list)', () => {
     const { getByLabelText } = await renderScreen();
 
     await waitFor(() => expect(getByLabelText('Next, 1')).toBeTruthy());
+  });
+
+  it('badges each waiting project with how long it has waited, longest-first', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    // Both are 'next' with an open condition and no tasks, so both derive to
+    // waiting. "Older wait" has the earlier condition (waited longer) and must
+    // sort above "Newer wait".
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Newer wait', '📁', 'next'),
+      project('2', 'Older wait', '📁', 'next'),
+    ]);
+    const wait = (
+      id: string,
+      projectId: string,
+      createdAt: string,
+    ): WaitingCondition => ({
+      id,
+      projectId,
+      kind: 'free-text',
+      text: 'blocked',
+      refId: null,
+      targetStatus: null,
+      resolvedAt: null,
+      createdAt,
+    });
+    mockFetchWaits.mockResolvedValue([
+      wait('cA', '1', '2024-06-01T00:00:00.000Z'),
+      wait('cB', '2', '2023-01-01T00:00:00.000Z'),
+    ]);
+
+    const { getByText, getAllByLabelText, getAllByText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('Older wait')).toBeTruthy());
+    // Both rows carry a "Waiting …" badge.
+    expect(getAllByLabelText(/^Waiting /)).toHaveLength(2);
+    // Longest wait on top: "Older wait" renders before "Newer wait".
+    const titles = getAllByText(/ wait$/).map((n) => n.props.children);
+    expect(titles).toEqual(['Older wait', 'Newer wait']);
   });
 
   it('re-pulls the projects when the list is pulled to refresh', async () => {

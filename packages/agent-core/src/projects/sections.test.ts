@@ -57,6 +57,31 @@ describe("projectsByStatus", () => {
     ]);
   });
 
+  it("orders a section by a supplied sortKey, leaving others on createdAt", () => {
+    // waitingSince-style key: waiting projects sort by a blocked-since instant,
+    // others fall back to createdAt.
+    const since: Record<string, string> = {
+      w1: "2023-05-01T00:00:00.000Z", // waited longest (oldest since)
+      w2: "2023-06-01T00:00:00.000Z",
+    };
+    const sections = projectsByStatus(
+      [
+        project("w2", "waiting", "2023-02-01T00:00:00.000Z"),
+        project("w1", "waiting", "2023-03-01T00:00:00.000Z"),
+        project("late", "active", "2023-03-01T00:00:00.000Z"),
+        project("early", "active", "2023-01-01T00:00:00.000Z"),
+      ],
+      (p) => p.status,
+      (p) => since[p.id] ?? p.createdAt,
+    );
+    const waiting = sections.find((s) => s.status === "waiting")!;
+    // Oldest since first: w1 then w2 (not their createdAt order).
+    expect(waiting.projects.map((p) => p.id)).toEqual(["w1", "w2"]);
+    const active = sections.find((s) => s.status === "active")!;
+    // No override for active rows, so they keep createdAt order.
+    expect(active.projects.map((p) => p.id)).toEqual(["early", "late"]);
+  });
+
   it("never emits a done section", () => {
     const sections = projectsByStatus([
       project("a", "active"),

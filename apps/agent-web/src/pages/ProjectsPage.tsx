@@ -13,6 +13,8 @@ import {
   projectsByStatus,
   listView,
   STATUS_LABELS,
+  waitingSince,
+  waitingLabel,
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
@@ -138,10 +140,22 @@ function ProjectsReady({
   const conds = useMemo(() => conditions ?? [], [conditions]);
   const sections = useMemo(
     () =>
-      projectsByStatus(list, (p) =>
-        projectDisplayStatus(p, tasks, conds, list),
+      projectsByStatus(
+        list,
+        (p) => projectDisplayStatus(p, tasks, conds, list),
+        // The Waiting section orders by how long each project has waited
+        // (longest on top); others fall back to createdAt.
+        (p) => waitingSince(p, tasks, conds, list) ?? p.createdAt,
       ),
     [list, tasks, conds],
+  );
+  // A project's "how long waiting" label, non-null only for waiting projects.
+  const labelOf = useCallback(
+    (p: Project) => {
+      const since = waitingSince(p, tasks, conds, list);
+      return since ? waitingLabel(since) : null;
+    },
+    [tasks, conds, list],
   );
   const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
@@ -198,6 +212,7 @@ function ProjectsReady({
               key={section.status}
               status={section.status}
               projects={section.projects}
+              labelOf={labelOf}
               onOpen={(p) => void navigate(`/projects/${p.id}`)}
             />
           ))}
@@ -213,10 +228,12 @@ function ProjectsReady({
 function ProjectSectionView({
   status,
   projects,
+  labelOf,
   onOpen,
 }: {
   status: ProjectStatus;
   projects: Project[];
+  labelOf: (p: Project) => string | null;
   onOpen: (p: Project) => void;
 }) {
   const [collapsed, setCollapsed] = useState(
@@ -247,22 +264,33 @@ function ProjectSectionView({
       </button>
       {!collapsed && (
         <ul className="space-y-3">
-          {projects.map((item) => (
-            <li key={item.id}>
-              <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4">
-                <span className="shrink-0 text-xl" aria-hidden>
-                  {item.icon}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onOpen(item)}
-                  className="flex-1 text-left text-base"
-                >
-                  {item.title}
-                </button>
-              </div>
-            </li>
-          ))}
+          {projects.map((item) => {
+            const waited = labelOf(item);
+            return (
+              <li key={item.id}>
+                <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4">
+                  <span className="shrink-0 text-xl" aria-hidden>
+                    {item.icon}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(item)}
+                    className="flex-1 truncate text-left text-base"
+                  >
+                    {item.title}
+                  </button>
+                  {waited && (
+                    <span
+                      className="shrink-0 text-sm text-muted-foreground"
+                      aria-label={`Waiting ${waited}`}
+                    >
+                      {waited}
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

@@ -4,6 +4,7 @@ import {
   conditionSatisfied,
   projectDisplayStatus,
   unresolvedConditions,
+  waitingSince,
 } from "./derive";
 import type { Project, ProjectStatus } from "./types";
 import type { Task } from "../tasks/types";
@@ -18,7 +19,7 @@ function condition(over: Partial<WaitingCondition>): WaitingCondition {
     refId: over.refId ?? null,
     targetStatus: over.targetStatus ?? null,
     resolvedAt: over.resolvedAt ?? null,
-    createdAt: "2026-01-01T00:00:00.000Z",
+    createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
   };
 }
 
@@ -145,6 +146,41 @@ describe("conditionSatisfied", () => {
     expect(conditionSatisfied(c, [], [other])).toBe(true);
     const notYet = { ...project("next"), id: "x" };
     expect(conditionSatisfied(c, [], [notYet])).toBe(false);
+  });
+});
+
+describe("waitingSince", () => {
+  it("is null when the project has no conditions", () => {
+    expect(waitingSince(project("next"), [], [])).toBeNull();
+  });
+
+  it("is null when every condition is resolved or satisfied", () => {
+    expect(
+      waitingSince(project("next"), [], [
+        condition({ resolvedAt: "2026-02-01T00:00:00.000Z" }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("returns the oldest unresolved condition's createdAt", () => {
+    const out = waitingSince(project("next"), [], [
+      condition({ id: "a", createdAt: "2026-03-01T00:00:00.000Z" }),
+      condition({ id: "b", createdAt: "2026-01-15T00:00:00.000Z" }),
+      condition({ id: "c", createdAt: "2026-02-10T00:00:00.000Z" }),
+    ]);
+    expect(out).toBe("2026-01-15T00:00:00.000Z");
+  });
+
+  it("ignores a resolved condition even if it is the oldest", () => {
+    const out = waitingSince(project("next"), [], [
+      condition({
+        id: "old",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        resolvedAt: "2026-01-05T00:00:00.000Z",
+      }),
+      condition({ id: "open", createdAt: "2026-02-01T00:00:00.000Z" }),
+    ]);
+    expect(out).toBe("2026-02-01T00:00:00.000Z");
   });
 });
 

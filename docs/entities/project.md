@@ -66,8 +66,14 @@ groom / take on more"). An open waiting condition shows the project as `waiting`
 but **a taken-on open task overrides waiting** — starring a task pulls a waiting
 project back to `active`; completing that task returns it to `waiting` (the
 condition is still open), not `next`. The list groups by this derived status (`projectsByStatus`
-takes a `statusOf` mapper). The project screen's actions menu offers three manual
-moves — **Put in play** (writes `next`), **Move to backlog**, **Mark done** — not
+takes a `statusOf` mapper). A waiting project also shows **how long it has been
+waiting** — the elapsed time since its oldest unresolved condition was created
+(`waitingSince` + `waitingLabel`, a readable phrase like "3 days") — as a muted
+trailing badge on its row, and the Waiting section is ordered **longest-waiting
+first** (`projectsByStatus` takes an optional `sortKeyOf`; the list passes
+`waitingSince(p) ?? p.createdAt`, so only the Waiting section reorders while the
+others keep their created-at order). The project screen's actions menu offers
+three manual moves — **Put in play** (writes `next`), **Move to backlog**, **Mark done** — not
 a five-way picker. No status migration: the column stays; the display is
 computed. See `docs/plans/todo-availability-model.md`.
 

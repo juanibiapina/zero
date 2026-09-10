@@ -78,6 +78,28 @@ export function unresolvedConditions(
   );
 }
 
+// The instant a project started waiting: the createdAt of its oldest unresolved
+// condition, or null when the project has none (so it is not waiting on
+// anything). Reuses unresolvedConditions, so it counts exactly the conditions
+// that make projectDisplayStatus return 'waiting' — the label and the status
+// never disagree. ISO timestamps compare correctly as strings, so the minimum is
+// the earliest. The Projects list uses this both to label how long a project has
+// waited and to order the Waiting section oldest-first.
+export function waitingSince(
+  project: Project,
+  tasks: Task[],
+  conditions: WaitingCondition[] = [],
+  projects: Project[] = [],
+): string | null {
+  const open = unresolvedConditions(project, conditions, tasks, projects);
+  if (open.length === 0) return null;
+  let oldest = open[0].createdAt;
+  for (const c of open) {
+    if (c.createdAt < oldest) oldest = c.createdAt;
+  }
+  return oldest;
+}
+
 export function projectDisplayStatus(
   project: Project,
   tasks: Task[],

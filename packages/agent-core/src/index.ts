@@ -76,7 +76,9 @@ export {
   projectDisplayStatus,
   conditionSatisfied,
   unresolvedConditions,
+  waitingSince,
 } from "./projects/derive";
+export { waitingLabel } from "./projects/waiting-label";
 export {
   homeCallToAction,
   homeCallToActionCopy,
