@@ -49,28 +49,79 @@ completed or re-postponed, and "which date" is ambiguous with several postponed
 tasks. Keep `waiting_conditions` only for reasons that are **not** a task date
 (the existing `free-text` / `task-done` / `project-status` kinds).
 
+## Concrete interface change: thread `today` into the derivation
+
+The derivation functions in `derive.ts` currently take **no `today`** — they are
+date-blind: `projectDisplayStatus(project, tasks, conditions, projects)`,
+`conditionSatisfied`, `unresolvedConditions`, `waitingSince`, and the private
+`projectBaseStatus`. Making `active` date-aware means the derivation must know the
+user's local day, so plan 3 adds a required `today: string` parameter to each of
+these (matching `homeTasks`, which already takes `today`).
+
+`today` stays an **explicit required argument**, never a `new Date()` computed
+inside agent-core. The module is deliberately timezone-free (the client owns the
+local day; the server stores YYYY-MM-DD verbatim), and a hidden clock would both
+reintroduce that timezone and make the pure tests non-deterministic. Every call
+site already has `localToday()` in hand.
+
+Call sites to update (all pass `localToday()` / the screen's `today`):
+
+- `packages/agent-core/src/tasks/home.ts` — `homeTasks` already has `today`; pass
+  it through to `projectDisplayStatus`.
+- `packages/agent-core/src/projects/call-to-action.ts` — `homeCallToAction` gains
+  a `today` param and passes it down (date-waiting projects now count as Waiting
+  in the CTA, which is correct).
+- `apps/agent-web`: `ProjectsPage.tsx`, `ProjectDetailPage.tsx`, `HomePage.tsx`
+  (CTA).
+- `apps/agent-mobile`: `projects/index.tsx`, `projects/[id].tsx`, `index.tsx`
+  (CTA).
+- Their `.test` files: pass a fixed `today` and add the date-aware cases.
+
 ## Surfaces to change (mostly one pure module)
 
-- **Shared (`packages/agent-core/src/projects/derive.ts`):** add the shown-up
-  clause to `projectBaseStatus`'s taken-on test. Add a derived `waitingUntil`
-  (soonest future-dated taken-on open task's `showUpDate`, or null) and make
-  `projectDisplayStatus` return `waiting` when `waitingUntil` is set and nothing
-  is active/otherwise-waiting. Keep the mutually-recursive `conditionSatisfied` /
-  base-status structure intact (a `project-status` condition still compares base,
-  ignoring waiting, to stay finite).
-- **`homeTasks`:** fold the shown-up clause into the project-task gate so it agrees
-  with the date-aware `active` (it already filters shown-up for plan 1's Home;
-  here it reads the date-aware `projectDisplayStatus`).
-- **`waitingSince` / Waiting-section ordering:** a project waiting *only* on a
-  derived date has no condition row, so `waitingSince` must also consider
-  `waitingUntil`'s basis (or a parallel "waiting since the postpone" instant) so
-  the Projects list can label and order it. Decide the label: the badge reads the
-  target day ("until Tue") for a date-derived wait, versus elapsed time ("3 days")
-  for a condition — they are different phrasings; pick per kind.
+- **Shared (`packages/agent-core/src/projects/derive.ts`):** thread `today`
+  through (above). Add the shown-up clause to `projectBaseStatus`'s taken-on test
+  (`takenOnAt != null && (showUpDate == null || showUpDate <= today)`). Add a
+  derived exported `waitingUntil(project, tasks, today)` — the soonest
+  `showUpDate` among the project's open, taken-on, future-dated (`> today`) tasks,
+  or null — and make `projectDisplayStatus` return `waiting` when `waitingUntil`
+  is set and nothing is active/otherwise-waiting. Order inside
+  `projectDisplayStatus`: `base !== 'next'` → base; else unresolved condition →
+  `waiting`; else `waitingUntil != null` → `waiting`; else `next`. Keep the
+  mutually-recursive `conditionSatisfied` / base-status structure intact (a
+  `project-status` condition still compares base, ignoring waiting, to stay
+  finite; base is now date-aware, which is consistent).
+- **`homeTasks`:** already filters shown-up and reads
+  `projectDisplayStatus === 'active'`; passing the now date-aware status keeps the
+  two in agreement — a future-dated taken-on task is dropped by the shown-up
+  filter *and* no longer makes its project active, so it cannot leak onto Home.
+- **One shared waiting-badge seam (resolves the open label/order question).**
+  Both the web and mobile Projects lists today duplicate the same three lines:
+  group by `projectDisplayStatus`, sort the Waiting section by `waitingSince(p) ??
+  createdAt`, and label it `waitingSince ? waitingLabel(since) : null`. A
+  date-only wait has **no condition row**, so `waitingSince` returns null and both
+  the label and the sort key would be wrong for it. Rather than re-branch this on
+  each surface (shallow duplication), add one pure seam in `@zero/agent-core`,
+  `waitingBadge(project, tasks, conditions, projects, today, now?)`, returning
+  `{ label: string; sortKey: string } | null` (null when the project is not
+  waiting). It owns both cases in one tested place:
+  - **condition wait:** `label = waitingLabel(since)` (elapsed, e.g. "3 days"),
+    `sortKey` orders longest-waited first.
+  - **date wait:** `label = "until " + dayLabel(until, today)` (target day, e.g.
+    "until Tue"), `sortKey` orders soonest-arriving first.
+  A project is exactly one kind at a time (a condition wait wins if any condition
+  is open; otherwise a date wait), so the two never collide on one row. `now` is
+  injected (default `new Date()`) to keep the elapsed label deterministic in
+  tests. Both surfaces then just render `badge.label` and sort by `badge.sortKey`,
+  and `projectsByStatus`'s `sortKeyOf` becomes `waitingBadge(...)?.sortKey ??
+  createdAt`. This retires the per-surface `labelOf`/`waitingSince(...) ??
+  createdAt` idiom. (`waitingSince` stays exported and unchanged as the
+  condition-instant primitive `waitingBadge` builds on.)
 - **Project screen Waiting-on section (web + mobile):** render the derived
-  "Waiting until <day>" reason alongside real condition rows, tagged as automatic
-  (no Resolve button; it clears when the day comes or the task moves). It is not a
-  row, so it has no id/delete.
+  "Waiting until <day>" reason (from `waitingUntil`) alongside real condition
+  rows, tagged as automatic (no Resolve button, no delete/✕). It is **not** a
+  stored row, so it has no id — render it as a synthetic leading item, shown only
+  when `waitingUntil` is non-null, above the real condition list.
 
 ## Interaction with plan 1's interim
 
@@ -113,4 +164,36 @@ derived waiting-until. No migration or data change — this is derivation only.
   the project screen.
 - No `date`-kind condition row is ever written.
 - Shared unit tests + web page tests pass; mobile Pixel 7 device-verified.
+
+## Series closeout (whatever is left after plan 3)
+
+Plan 3 is the last derivation slice; these are the remaining loose ends that
+close the `todo-single-list` series. They are separable from the derivation and
+can each be its own commit/PR.
+
+- **Deploy + device-verify plans 1 and 2.** Both shipped in code but their
+  tracking entries say **"Pixel 7 device verification is pending."** Plan 2's
+  merge commit (`559e88bbe`, move-a-task-to-a-project) is **committed on `main`
+  locally but not yet pushed** (`main` is ahead of origin by 1), so it is not
+  deployed either. Push, let the Cloudflare build finish, then run the on-device
+  pass for the merged single-list Home/Upcoming, postpone, drag-reorder, and
+  move-to-project. Plan 3's own device check should cover the merged behaviors in
+  the same session.
+- **Move-to-project from web Upcoming (plan 2's one deferred gap).** Plan 2
+  shipped move-to-project on mobile Home + Upcoming and web Home, but **web
+  Upcoming has no task detail sheet**, so a web user cannot file a future-dated
+  task under a project from Upcoming. Closing this means giving web Upcoming the
+  same task-detail affordance Home has (the Project row + picker). UI only — the
+  `projectId` field, store `setProject`, RPC, and `moveToProject` collection verb
+  already exist. Small, and optional to bundle with plan 3.
+
+## Out of scope
+
+- **Refine (Capture → tasks/projects).** Removed by the merge; returns later over
+  all tasks. The dormant `sourceCaptureId` column stays untouched. Not part of
+  closing this series.
+- **Reschedule-a-Task UX beyond postpone** (a full future-date picker from every
+  surface) and **AI Capture → Project** — both are separate "Next" items in
+  `docs/todo-app.md`, not series closeout.
+- Recurring tasks, subtasks, priorities, labels.
 </content>

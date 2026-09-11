@@ -336,6 +336,33 @@ describe("ProjectsPage", () => {
     ).toBeTruthy();
   });
 
+  it("badges a project waiting only on a future-dated taken-on task with its day, and shows it on the detail screen", async () => {
+    // A 'next' project whose sole task is taken on but dated in the far future
+    // derives to waiting-until — no stored condition. The list badge and the
+    // detail Waiting-on row both read the target day.
+    setApi(
+      [project("1", "Trip planning", "next")],
+      [
+        {
+          ...task("t1", "book flights", "1"),
+          takenOnAt: "2023-01-02T00:00:00.000Z",
+          showUpDate: "2099-12-31",
+        },
+      ],
+    );
+    renderApp();
+    await screen.findByText("Trip planning");
+    // The Projects list badges it "until <day>" (aria "Waiting until …").
+    expect(screen.getByLabelText(/^Waiting until /)).toBeInTheDocument();
+
+    // The detail screen renders the same derived reason as an automatic row.
+    await openDetail("Trip planning");
+    const untilRows = screen.getAllByText(/^until /);
+    expect(untilRows.length).toBeGreaterThan(0);
+    // It is automatic (no Resolve), so it carries the "auto" marker.
+    expect(screen.getAllByText("auto").length).toBeGreaterThan(0);
+  });
+
   it("navigates from a list row to the project's own screen", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp();

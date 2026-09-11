@@ -161,6 +161,30 @@ committed.
 
 ## Project tracking
 
+Implemented, device verification pending (2026-09-12): **Date-aware
+availability** — the last slice of the single-list series (plan part 3
+`docs/plans/todo-single-list-3-date-availability.md`). A project's derived status
+is now date-aware: a taken-on task postponed to a future day no longer keeps its
+project `active` — the project instead **waits until that day**, derived purely
+from the task's `showUpDate` with **no** stored `waiting_conditions` row, and the
+day it arrives (shown-up) makes the project `active` again with no write on either
+transition. A not-taken task whose date passed leaves the project `Next` and lives
+only on the project screen. Derivation only, no migration: `projectDisplayStatus`
+threads the user's local `today` and gates `active` on shown-up taken-on tasks; a
+new `waitingUntil` returns the soonest future-dated taken-on task's day; and one
+new shared seam `waitingBadge` folds both wait kinds (elapsed "3 days" for a
+condition, "until <day>" for a date) into a single label + sort key, replacing the
+per-surface `waitingSince ?? createdAt` idiom the web and mobile Projects lists
+duplicated. The project screen's Waiting-on section shows the derived "until
+<day>" as an automatic reason (no Resolve/delete). Shared unit tests
+(`derive`/`waitingUntil`/`waitingBadge`), web page tests, and mobile screen tests
+pass; **Pixel 7 device verification is pending** (postpone a taken-on project task
+→ it leaves Home, project shows "waiting until <day>", the day arrives → it
+returns to Home and the project is active). This closes the derivation work of the
+single-list series; the remaining loose ends are pushing/device-verifying parts 1
+and 2 and giving web Upcoming a move-to-project affordance (see the plan's "Series
+closeout").
+
 Shipped (2026-09-12): **Move a loose task to a project** (plan part 2
 `docs/plans/todo-single-list-2-move-to-project.md`). A task's detail now carries a
 Project row + picker: filing a loose task under a project (or moving it back to

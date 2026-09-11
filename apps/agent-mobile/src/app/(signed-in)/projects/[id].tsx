@@ -4,12 +4,14 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  dayLabel,
   isBasisStale,
   localToday,
   messageOf,
   projectDisplayStatus,
   STATUS_LABELS,
   undoableAction,
+  waitingUntil,
   type AddMode,
   type Project,
   type ProjectEditFields,
@@ -229,7 +231,8 @@ function ProjectDetail({
     );
   }
 
-  const displayStatus = projectDisplayStatus(project, tasks, conds, list);
+  const today = localToday();
+  const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
 
   return (
     <View
@@ -287,6 +290,7 @@ function ProjectDetail({
           project={project}
           waitsApi={waitsApi}
           tasks={tasks}
+          today={today}
           onError={setError}
         />
       </ScrollView>
@@ -670,11 +674,13 @@ function ProjectWaits({
   project,
   waitsApi,
   tasks,
+  today,
   onError,
 }: {
   project: Project;
   waitsApi: WaitsApi;
   tasks: Task[];
+  today: string;
   onError: (message: string) => void;
 }) {
   const { data: allConditions } = useLiveQuery((q) =>
@@ -683,20 +689,30 @@ function ProjectWaits({
   const list = (allConditions ?? []).filter(
     (c: WaitingCondition) => c.projectId === project.id,
   );
+  // A future-dated taken-on task makes the project wait until that day, derived
+  // with no stored row — shown as an automatic reason (no Resolve/delete).
+  const until = waitingUntil(project, tasks, today);
 
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
 
-  // No open conditions: render no section at all (not a bare heading). Adding is
-  // the screen's plus FAB (Waiting mode), so hiding this removes no add path.
-  if (list.length === 0) return null;
+  // Nothing to show: no open conditions and no derived date wait. Render no
+  // section at all (not a bare heading). Adding a condition is the screen's plus
+  // FAB (Waiting mode), so hiding this removes no add path.
+  if (list.length === 0 && until == null) return null;
 
   return (
     <View className="px-screen-x pb-4">
       <Text variant="section" className="pb-2">
         Waiting on
       </Text>
+      {until != null && (
+        <View className="flex-row items-center gap-2 py-2">
+          <Text className="flex-1 text-[14px]">until {dayLabel(until, today)}</Text>
+          <Text className="text-[12px] text-foreground-muted">auto</Text>
+        </View>
+      )}
       {list.map((c) => (
         <View key={c.id} className="flex-row items-center gap-2 py-2">
           <Text className="flex-1 text-[14px]">{conditionLabel(c, tasks, [project])}</Text>

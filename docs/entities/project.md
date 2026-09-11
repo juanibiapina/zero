@@ -61,18 +61,24 @@ editable title and notes).
 The stored `status` column is only the deliberate parking value: `backlog` and
 `done` are set by hand. The three in-play states are **derived on the client**
 from the project's tasks by `projectDisplayStatus` (in `@zero/agent-core`): a
-project shows as `active` while it has a taken-on, open task, else `next` ("come
-groom / take on more"). An open waiting condition shows the project as `waiting`,
-but **a taken-on open task overrides waiting** — starring a task pulls a waiting
-project back to `active`; completing that task returns it to `waiting` (the
-condition is still open), not `next`. The list groups by this derived status (`projectsByStatus`
-takes a `statusOf` mapper). A waiting project also shows **how long it has been
-waiting** — the elapsed time since its oldest unresolved condition was created
-(`waitingSince` + `waitingLabel`, a readable phrase like "3 days") — as a muted
-trailing badge on its row, and the Waiting section is ordered **longest-waiting
-first** (`projectsByStatus` takes an optional `sortKeyOf`; the list passes
-`waitingSince(p) ?? p.createdAt`, so only the Waiting section reorders while the
-others keep their created-at order). The project screen's actions menu offers
+project shows as `active` while it has a **shown-up** (`showUpDate == null ||
+<= today`) taken-on, open task, else `next` ("come groom / take on more"). The
+derivation is **date-aware**: a taken-on task postponed to a future day does not
+keep its project active — the project instead **waits until that day**
+(`waitingUntil`, the soonest such `showUpDate`), and the day it arrives makes the
+project active again with no write. An open waiting condition also shows the
+project as `waiting`, but **a shown-up taken-on open task overrides waiting** —
+starring a shown-up task pulls a waiting project back to `active`; completing that
+task returns it to `waiting` (the condition is still open), not `next`. The list
+groups by this derived status (`projectsByStatus` takes a `statusOf` mapper). A
+waiting project also shows **why/how long it is waiting** as a muted trailing
+badge — the elapsed time since its oldest unresolved condition ("3 days") for a
+condition wait, or the target day ("until Tue") for a date wait — via the shared
+`waitingBadge` seam, which also supplies the Waiting section's sort key
+(`projectsByStatus` takes an optional `sortKeyOf`; the list passes
+`waitingBadge(p, …)?.sortKey ?? p.createdAt`, ordering condition waits
+longest-first, then date waits soonest-first, while other sections keep their
+created-at order). The project screen's actions menu offers
 three manual moves — **Put in play** (writes `next`), **Move to backlog**, **Mark done** — not
 a five-way picker. No status migration: the column stays; the display is
 computed. See `docs/plans/todo-availability-model.md`.

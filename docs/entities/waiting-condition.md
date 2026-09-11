@@ -74,6 +74,25 @@ and orders the Waiting section longest-first. Resolving or code-satisfying a
 condition drops it from the set, so the badge and order always match the derived
 `waiting` status.
 
+### Derived date wait (no stored condition)
+
+A project can also display `waiting` with **no** `waiting_conditions` row: when it
+holds a future-dated **taken-on** open task, it waits until that task's day.
+`waitingUntil` (same module) returns the soonest such `showUpDate`, and
+`projectDisplayStatus` reads `waiting` when it is set and nothing is
+active/otherwise-waiting. The day the task's date arrives it becomes shown-up,
+which makes the project `active` again — no row is written or resolved on either
+transition. This is deliberately **not** a `date`-kind condition: the status is
+already computed from the tasks, so a stored row would duplicate state that
+desyncs when the task is completed or re-postponed, and "which date" is ambiguous
+with several postponed tasks. Conditions remain only for reasons that are *not* a
+task date (`free-text` / `task-done` / `project-status`). The Projects list badges
+a date wait "until <day>" (via `waitingBadge`, which folds both wait kinds into
+one label + sort key: elapsed time for a condition wait, the target day for a date
+wait), and the project screen shows the same "until <day>" as an automatic
+reason with no Resolve/delete. See
+`docs/plans/todo-single-list-3-date-availability.md`.
+
 ## Interactions (per system)
 
 - **UI** — the project screen gains a **Waiting-on** section: the open

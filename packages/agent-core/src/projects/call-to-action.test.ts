@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { homeCallToAction } from "./call-to-action";
+
+const TODAY = "2026-06-01";
 import type { Project, ProjectStatus } from "./types";
 import type { Task } from "../tasks/types";
 import type { WaitingCondition } from "../waits/types";
@@ -44,15 +46,15 @@ function freeTextCondition(projectId: string): WaitingCondition {
 
 describe("homeCallToAction", () => {
   it("returns null when the plate has tasks", () => {
-    expect(homeCallToAction(1, 0, [project("p", "next")], [])).toBeNull();
+    expect(homeCallToAction(1, 0, [project("p", "next")], [], TODAY)).toBeNull();
   });
 
   it("returns null when the plate is empty but the inbox has captures", () => {
-    expect(homeCallToAction(0, 3, [project("p", "next")], [])).toBeNull();
+    expect(homeCallToAction(0, 3, [project("p", "next")], [], TODAY)).toBeNull();
   });
 
   it("plans when the plate and inbox are empty and a project is next", () => {
-    expect(homeCallToAction(0, 0, [project("p", "next")], [])).toEqual({
+    expect(homeCallToAction(0, 0, [project("p", "next")], [], TODAY)).toEqual({
       kind: "plan",
       next: 1,
       waiting: 0,
@@ -71,6 +73,7 @@ describe("homeCallToAction", () => {
       0,
       projects,
       [],
+      TODAY,
       [freeTextCondition("w")],
     );
     expect(out).toEqual({ kind: "plan", next: 2, waiting: 1 });
@@ -81,19 +84,19 @@ describe("homeCallToAction", () => {
       project("b1", "backlog"),
       project("b2", "backlog"),
       project("d", "done"),
-    ], []);
+    ], [], TODAY);
     expect(out).toEqual({ kind: "activate-backlog", backlog: 2 });
   });
 
   it("asks to create when there are no projects", () => {
-    expect(homeCallToAction(0, 0, [], [])).toEqual({ kind: "create" });
+    expect(homeCallToAction(0, 0, [], [], TODAY)).toEqual({ kind: "create" });
   });
 
   it("asks to create when every project is done", () => {
     const out = homeCallToAction(0, 0, [
       project("d1", "done"),
       project("d2", "done"),
-    ], []);
+    ], [], TODAY);
     expect(out).toEqual({ kind: "create" });
   });
 
@@ -107,6 +110,7 @@ describe("homeCallToAction", () => {
       0,
       [project("p", "next")],
       [task({ id: "t", projectId: "p", takenOnAt: "2026-01-02T00:00:00.000Z" })],
+      TODAY,
     );
     expect(out).toEqual({ kind: "create" });
   });

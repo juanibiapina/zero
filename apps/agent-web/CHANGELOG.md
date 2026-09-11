@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-12: Pushing a project task you've taken on to a future day now moves the project to Waiting and shows the day it's waiting until (e.g. "until Tue"), on both the project's page and its row in the Projects list. The task leaves Home and returns on its own when the day arrives — the project turns active again with nothing to re-star. A task you dated but never took on stays on the project's page until you do.
 - 2026-09-12: A task's detail now has a Project row — click it to file the task under a project, or move it back to loose. Filing a task under a project takes it off Home until you take it on from the project.
 - 2026-09-12: Home is now one list. What you add is a task — there's no separate capture inbox or "Process" step anymore. The quick-add adds a task by default (and can still create a project). Reorder by dragging, postpone with the row's "Tomorrow" button, complete with the circle (with Undo), and click the text to rename or schedule it. Anything you postpone appears under Upcoming and returns on its day. "Refine" is gone for now.
 - 2026-09-11: Tapping a capture opens a cleaner detail: a complete circle, an editable title, a schedule row that opens a Today / Tomorrow / calendar picker (or clears the date), and a "Refine into tasks & projects" action. The old "Done" button is gone — the circle completes the capture, and your edits save when you close the sheet.

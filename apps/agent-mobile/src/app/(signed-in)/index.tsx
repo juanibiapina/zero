@@ -314,6 +314,7 @@ function Home({
     0,
     projects ?? [],
     tasks ?? [],
+    today,
     conditions ?? [],
   );
   // Do not flash the CTA while the local snapshot hydrates (every collection

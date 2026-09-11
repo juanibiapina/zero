@@ -67,8 +67,10 @@ export {
   conditionSatisfied,
   unresolvedConditions,
   waitingSince,
+  waitingUntil,
 } from "./projects/derive";
 export { waitingLabel } from "./projects/waiting-label";
+export { waitingBadge, type WaitingBadge } from "./projects/waiting-badge";
 export {
   homeCallToAction,
   homeCallToActionCopy,

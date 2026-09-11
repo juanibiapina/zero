@@ -12,12 +12,14 @@ import {
 import { ErrorText } from "@/components/ConnectionStatus";
 import { EmojiPicker } from "frimousse";
 import {
+  dayLabel,
   isBasisStale,
   localToday,
   messageOf,
   projectDisplayStatus,
   STATUS_LABELS,
   undoableAction,
+  waitingUntil,
   type ProjectEditFields,
   type ProjectStatus,
   type WaitingCondition,
@@ -138,7 +140,8 @@ function ProjectDetailReady({
     return <Navigate to="/projects" replace />;
   }
 
-  const displayStatus = projectDisplayStatus(project, tasks, conds, list);
+  const today = localToday();
+  const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
 
   return (
     <div className="space-y-6">
@@ -179,6 +182,7 @@ function ProjectDetailReady({
         waitsApi={waitsApi}
         tasks={tasks}
         projects={list}
+        today={today}
         onError={setError}
       />
     </div>
@@ -615,12 +619,14 @@ function ProjectWaits({
   waitsApi,
   tasks,
   projects,
+  today,
   onError,
 }: {
   project: Project;
   waitsApi: WaitsApi;
   tasks: Task[];
   projects: Project[];
+  today: string;
   onError: (message: string) => void;
 }) {
   const { data: allConditions } = useLiveQuery((q) =>
@@ -629,6 +635,10 @@ function ProjectWaits({
   const list = (allConditions ?? []).filter(
     (c: WaitingCondition) => c.projectId === project.id,
   );
+  // A future-dated taken-on task makes the project wait until that day, derived
+  // with no stored row. Shown as an automatic reason (no Resolve/delete); it
+  // clears when the day comes or the task moves.
+  const until = waitingUntil(project, tasks, today);
 
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<WaitingConditionKind>("free-text");
@@ -671,6 +681,14 @@ function ProjectWaits({
   return (
     <section className="space-y-2">
       <h2 className="text-sm font-semibold text-muted-foreground">Waiting on</h2>
+      {until != null && (
+        <ul className="space-y-1">
+          <li className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+            <span className="flex-1">until {dayLabel(until, today)}</span>
+            <span className="text-xs text-muted-foreground">auto</span>
+          </li>
+        </ul>
+      )}
       {list.length > 0 && (
         <ul className="space-y-1">
           {list.map((c) => (

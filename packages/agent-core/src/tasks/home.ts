@@ -42,7 +42,8 @@ export function homeTasks(
       const project = byId.get(t.projectId);
       if (!project || t.takenOnAt == null) return false;
       return (
-        projectDisplayStatus(project, tasks, conditions, projects) === "active"
+        projectDisplayStatus(project, tasks, today, conditions, projects) ===
+        "active"
       );
     })
     .sort(compareByOrder);

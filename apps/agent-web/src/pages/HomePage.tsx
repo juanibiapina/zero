@@ -337,6 +337,7 @@ function TaskList({
     0,
     projects ?? [],
     tasks ?? [],
+    today,
     conditions ?? [],
   );
   const hydrating = isLoading || projectsLoading;

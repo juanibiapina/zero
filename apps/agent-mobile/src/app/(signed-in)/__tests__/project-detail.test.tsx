@@ -252,6 +252,23 @@ describe('ProjectDetailScreen', () => {
     expect(queryByText('Waiting on')).toBeNull();
   });
 
+  it('shows a derived "until <day>" reason for a future-dated taken-on task', async () => {
+    // A taken-on task dated in the far future makes the project wait until that
+    // day, with no stored condition. The Waiting-on section surfaces it as an
+    // automatic reason (no Resolve/delete).
+    mockFetchTasks.mockResolvedValue([
+      {
+        ...taskRow('t1', 'book flights'),
+        takenOnAt: '2023-01-02T00:00:00.000Z',
+        showUpDate: '2099-12-31',
+      },
+    ]);
+    const { getByText, getAllByText } = await renderScreen();
+    await waitFor(() => expect(getByText('Waiting on')).toBeTruthy());
+    expect(getAllByText(/^until /).length).toBeGreaterThan(0);
+    expect(getByText('auto')).toBeTruthy();
+  });
+
   it('shows the Tasks heading once the project has an open task', async () => {
     mockFetchTasks.mockResolvedValue([taskRow('t1', 'buy running shoes')]);
     const { getByText } = await renderScreen();

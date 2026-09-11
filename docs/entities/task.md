@@ -98,6 +98,17 @@ serves the open-tasks query.
   availability, so postponing any task (even taken-on) parks it in Upcoming, and
   it returns to Home on its day with no re-take step. The rule lives in the pure
   `homeTasks` seam in `@zero/agent-core`.
+- **Take-on and the date are orthogonal, and both gate a project task's status.**
+  A project is `active` only for a **shown-up** taken-on open task; a taken-on task
+  postponed to a future day does **not** keep its project active — it derives
+  "waiting until <day>" instead, and the day it arrives (shown-up) makes the
+  project active again with no re-take and no write. Take-on is the commitment
+  gate; the date only decides *when* a taken-on task counts. A task you dated but
+  never took on never reaches Home; once its date passes it is shown-up-but-not-
+  taken, so it lives only on the project screen (the project derives `Next`). This
+  date-aware derivation lives in `projectDisplayStatus` / `waitingUntil` (see
+  `docs/entities/waiting-condition.md` and
+  `docs/plans/todo-single-list-3-date-availability.md`).
 - **Upcoming** = open ∧ future-dated (`showUpDate > today`), grouped by day, **no
   other gate** — every postponed task, loose or project, taken-on or not
   (`upcomingSections` in `@zero/agent-core`).
@@ -159,9 +170,6 @@ serves the open-tasks query.
 
 ## Next
 
-- **Date-aware project status** — postponing a taken-on project task drops its
-  project out of `active` and derives "waiting until <day>"
-  (`docs/plans/todo-single-list-3-date-availability.md`).
 - **Refine returns** over all tasks (the dormant `sourceCaptureId`).
 - **Agent `create_task` tool**, recurring tasks.
 - Likely never (not used in Todoist today): subtasks, priorities, labels.

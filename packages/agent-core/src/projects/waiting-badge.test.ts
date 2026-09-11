@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+
+import type { Project } from "./types";
+import type { Task } from "../tasks/types";
+import type { WaitingCondition } from "../waits/types";
+import { waitingBadge } from "./waiting-badge";
+
+const TODAY = "2026-06-01";
+// A stable "now" for the elapsed label: a month after a condition created on
+// 2026-01-15, so waitingLabel reads a fixed phrase.
+const NOW = new Date("2026-06-01T00:00:00.000Z");
+
+function project(over: Partial<Project> = {}): Project {
+  return {
+    id: over.id ?? "p",
+    title: over.title ?? "p",
+    icon: "📁",
+    description: null,
+    status: over.status ?? "next",
+    createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
+  };
+}
+
+function task(over: Partial<Task>): Task {
+  return {
+    id: over.id ?? "t",
+    text: "t",
+    showUpDate: over.showUpDate !== undefined ? over.showUpDate : "2026-01-01",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    completedAt: over.completedAt ?? null,
+    projectId: over.projectId ?? "p",
+    takenOnAt: over.takenOnAt ?? null,
+    sortKey: over.sortKey ?? null,
+  };
+}
+
+function condition(over: Partial<WaitingCondition>): WaitingCondition {
+  return {
+    id: over.id ?? "c",
+    projectId: over.projectId ?? "p",
+    kind: over.kind ?? "free-text",
+    text: over.text ?? null,
+    refId: over.refId ?? null,
+    targetStatus: over.targetStatus ?? null,
+    resolvedAt: over.resolvedAt ?? null,
+    createdAt: over.createdAt ?? "2026-01-15T00:00:00.000Z",
+  };
+}
+
+describe("waitingBadge", () => {
+  it("is null when the project is not waiting", () => {
+    expect(waitingBadge(project(), [], [], [], TODAY, NOW)).toBeNull();
+    const active = task({ takenOnAt: "2026-01-02T00:00:00.000Z" });
+    expect(waitingBadge(project(), [active], [], [], TODAY, NOW)).toBeNull();
+  });
+
+  it("labels a condition wait with the elapsed time and an 'a:' sort key", () => {
+    const badge = waitingBadge(
+      project(),
+      [],
+      [condition({ createdAt: "2026-01-15T00:00:00.000Z" })],
+      [],
+      TODAY,
+      NOW,
+    );
+    expect(badge?.label).toBe("5 months");
+    expect(badge?.sortKey).toBe("a:2026-01-15T00:00:00.000Z");
+  });
+
+  it("labels a date wait with the target day and a 'b:' sort key", () => {
+    const future = task({
+      takenOnAt: "2026-01-02T00:00:00.000Z",
+      showUpDate: "2026-07-15",
+    });
+    const badge = waitingBadge(project(), [future], [], [], TODAY, NOW);
+    expect(badge?.label).toBe("until Wednesday, Jul 15");
+    expect(badge?.sortKey).toBe("b:2026-07-15");
+  });
+
+  it("orders condition waits before date waits (a: < b:)", () => {
+    const condBadge = waitingBadge(
+      project(),
+      [],
+      [condition({})],
+      [],
+      TODAY,
+      NOW,
+    );
+    const dateBadge = waitingBadge(
+      project(),
+      [task({ takenOnAt: "2026-01-02T00:00:00.000Z", showUpDate: "2026-07-15" })],
+      [],
+      [],
+      TODAY,
+      NOW,
+    );
+    expect(condBadge!.sortKey < dateBadge!.sortKey).toBe(true);
+  });
+});

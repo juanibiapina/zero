@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-12: Pushing a project task you've taken on to a future day now moves the project to Waiting and shows the day it's waiting until (e.g. "until Tue"), on both the project's screen and its row in the Projects list. The task leaves Home and returns on its own when the day arrives — the project turns active again with nothing to re-star. A task you dated but never took on stays on the project's screen until you do.
 - 2026-09-12: A task's detail now has a Project row — tap it to file the task under a project, or move it back to loose. Filing a task under a project takes it off Home until you take it on from the project. Works from both Home and Upcoming.
 - 2026-09-12: Home is now one list. What you jot down is a task — there's no separate capture inbox or "Process" step anymore. The quick-add adds a task by default (and can still create a project). Swipe a task right to push it to tomorrow, long-press to reorder, tap the circle to complete (with Undo), and tap the text to rename or schedule it. Anything you postpone shows up under Upcoming and returns on its day. "Refine" is gone for now.
 - 2026-09-11: A project's screen no longer shows an empty "Tasks" or "Waiting on" heading — each section appears only once it has something in it. Add either from the + button.

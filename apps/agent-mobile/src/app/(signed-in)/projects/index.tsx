@@ -5,13 +5,13 @@ import { useRouter } from 'expo-router';
 import {
   BACKLOG_COLLAPSE_THRESHOLD,
   LOADING_TEXT_DELAY_MS,
+  localToday,
   messageOf,
   projectDisplayStatus,
   projectsByStatus,
   listView,
   STATUS_LABELS,
-  waitingSince,
-  waitingLabel,
+  waitingBadge,
   type Project,
   type ProjectsApi,
   type ProjectStatus,
@@ -201,24 +201,24 @@ function Projects({
   const error = writeError ?? (list.length === 0 ? loadError : null);
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
+  const today = localToday();
   const grouped = useMemo(
     () =>
       projectsByStatus(
         list,
-        (p) => projectDisplayStatus(p, tasks, conds, list),
-        // Order the Waiting section by how long each project has waited (longest
-        // on top); other sections fall back to createdAt.
-        (p) => waitingSince(p, tasks, conds, list) ?? p.createdAt,
+        (p) => projectDisplayStatus(p, tasks, today, conds, list),
+        // Order the Waiting section by the shared badge's sort key (condition
+        // waits longest-first, then date waits soonest-first); other sections
+        // fall back to createdAt.
+        (p) => waitingBadge(p, tasks, conds, list, today)?.sortKey ?? p.createdAt,
       ),
-    [list, tasks, conds],
+    [list, tasks, conds, today],
   );
-  // A project's "how long waiting" label, non-null only for waiting projects.
+  // A project's waiting badge text, non-null only for waiting projects: elapsed
+  // time for a condition wait, "until <day>" for a date wait.
   const labelOf = useCallback(
-    (p: Project) => {
-      const since = waitingSince(p, tasks, conds, list);
-      return since ? waitingLabel(since) : null;
-    },
-    [tasks, conds, list],
+    (p: Project) => waitingBadge(p, tasks, conds, list, today)?.label ?? null,
+    [tasks, conds, list, today],
   );
 
   // Collapse is derived, not stored: a section uses the user's explicit override

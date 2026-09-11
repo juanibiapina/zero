@@ -32,6 +32,7 @@ export function homeCallToAction(
   captureCount: number,
   projects: Project[],
   tasks: Task[],
+  today: string,
   conditions: WaitingCondition[] = [],
 ): HomeCallToAction | null {
   if (plateCount > 0) return null;
@@ -41,7 +42,7 @@ export function homeCallToAction(
   let waiting = 0;
   let backlog = 0;
   for (const project of projects) {
-    const status = projectDisplayStatus(project, tasks, conditions, projects);
+    const status = projectDisplayStatus(project, tasks, today, conditions, projects);
     if (status === "next") next++;
     else if (status === "waiting") waiting++;
     else if (status === "backlog") backlog++;

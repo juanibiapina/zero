@@ -8,13 +8,13 @@ import { ErrorText } from "@/components/ConnectionStatus";
 import {
   BACKLOG_COLLAPSE_THRESHOLD,
   LOADING_TEXT_DELAY_MS,
+  localToday,
   messageOf,
   projectDisplayStatus,
   projectsByStatus,
   listView,
   STATUS_LABELS,
-  waitingSince,
-  waitingLabel,
+  waitingBadge,
   type ProjectStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
@@ -116,24 +116,24 @@ function ProjectsReady({
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
+  const today = localToday();
   const sections = useMemo(
     () =>
       projectsByStatus(
         list,
-        (p) => projectDisplayStatus(p, tasks, conds, list),
-        // The Waiting section orders by how long each project has waited
-        // (longest on top); others fall back to createdAt.
-        (p) => waitingSince(p, tasks, conds, list) ?? p.createdAt,
+        (p) => projectDisplayStatus(p, tasks, today, conds, list),
+        // The Waiting section orders by the shared badge's sort key (condition
+        // waits longest-first, then date waits soonest-first); others fall back
+        // to createdAt.
+        (p) => waitingBadge(p, tasks, conds, list, today)?.sortKey ?? p.createdAt,
       ),
-    [list, tasks, conds],
+    [list, tasks, conds, today],
   );
-  // A project's "how long waiting" label, non-null only for waiting projects.
+  // A project's waiting badge text, non-null only for waiting projects: elapsed
+  // time for a condition wait, "until <day>" for a date wait.
   const labelOf = useCallback(
-    (p: Project) => {
-      const since = waitingSince(p, tasks, conds, list);
-      return since ? waitingLabel(since) : null;
-    },
-    [tasks, conds, list],
+    (p: Project) => waitingBadge(p, tasks, conds, list, today)?.label ?? null,
+    [tasks, conds, list, today],
   );
   const view = listView({ count: list.length, isLoading, loadError: null });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
