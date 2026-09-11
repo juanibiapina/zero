@@ -4,62 +4,43 @@ import {
   capturesLocalToday,
   dayLabel,
   messageOf,
-  undoableAction,
   upcomingSections,
   type Capture,
   type CapturesApi,
 } from '@zero/agent-core';
-import { useCallback, useMemo, useState } from 'react';
-import { RefreshControl, SectionList, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { BackHandler, RefreshControl, SectionList, View } from 'react-native';
 
+import { RefineBanner } from '@/components/refine-banner';
 import { ScreenHeader } from '@/components/screen-header';
+import { useCaptureDetail } from '@/components/capture-detail';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
-// One upcoming row: tap the circle to Process, tap the text to edit inline. No
-// drag-reorder or swipe — ordering across days has no meaning here.
+// One upcoming row: tap the circle to Process, tap the text to open the capture
+// detail — the same editor Home opens. No drag-reorder or swipe — ordering across
+// days has no meaning here.
 function UpcomingRow({
   item,
-  editing,
-  editText,
   onProcess,
-  onEditSubmit,
-  onChangeEditText,
-  onStartEdit,
+  onOpen,
 }: {
   item: Capture;
-  editing: boolean;
-  editText: string;
   onProcess: (item: Capture) => void;
-  onEditSubmit: (item: Capture) => void;
-  onChangeEditText: (text: string) => void;
-  onStartEdit: (item: Capture) => void;
+  onOpen: (item: Capture) => void;
 }) {
   return (
     <ListRow
       leading={
         <CheckCircle label={`Process "${item.text}"`} onPress={() => onProcess(item)} />
       }
-      onPress={editing ? undefined : () => onStartEdit(item)}
+      onPress={() => onOpen(item)}
       accessibilityLabel={`Edit "${item.text}"`}
     >
-      {editing ? (
-        <TextInput
-          autoFocus
-          accessibilityLabel={`Edit "${item.text}"`}
-          className="text-body text-foreground"
-          value={editText}
-          onChangeText={onChangeEditText}
-          onSubmitEditing={() => onEditSubmit(item)}
-          onBlur={() => onEditSubmit(item)}
-          returnKeyType="done"
-        />
-      ) : (
-        <Text>{item.text}</Text>
-      )}
+      <Text>{item.text}</Text>
     </ListRow>
   );
 }
@@ -92,63 +73,48 @@ function Upcoming({ api }: { api: CapturesApi }) {
       })),
     [captures, today],
   );
+  // The flat list of visible upcoming captures, so the detail editor resolves the
+  // tapped capture and drops it (closing the sheet) when rescheduled to today.
+  const list = useMemo(() => sections.flatMap((s) => s.data), [sections]);
 
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  const onProcess = useCallback(
-    (item: Capture) => {
+  // The capture detail editor — the same one Home opens — owns the sheet,
+  // scheduler, edit-on-dismiss, complete-with-Undo, and refine.
+  const detail = useCaptureDetail({ api, list, onError: setWriteError });
+
+  // Refining a capture started here finishes here too: process the capture.
+  const onFinishRefine = useCallback(
+    (captureId: string) => {
       setWriteError(null);
-      // Same single bottom Undo snackbar as elsewhere; Undo returns the capture.
-      undoableAction({
-        message: 'Completed',
-        act: () => api.process(item.id),
-        undo: () => api.unprocess(item),
-        onError: setWriteError,
-      });
+      const tx = api.process(captureId);
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     },
     [api],
   );
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
-
-  const onEditSubmit = useCallback(
-    (item: Capture) => {
-      const trimmed = editText.trim();
-      setEditingId(null);
-      if (!trimmed || trimmed === item.text) return;
-      setWriteError(null);
-      const tx = api.edit(item.id, trimmed);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api, editText],
-  );
-
-  const onStartEdit = useCallback((item: Capture) => {
-    setEditText(item.text);
-    setEditingId(item.id);
-  }, []);
+  // Android Back closes the scheduler, then the detail sheet. Upcoming has no
+  // quick-add, so the hook is the only Back consumer here.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () =>
+      detail.handleBack(),
+    );
+    return () => sub.remove();
+  }, [detail]);
 
   const accent = useColor('--color-accent');
   const { refreshing, onRefresh } = usePullRefresh(api.refetch);
 
   const renderItem = useCallback(
     ({ item }: { item: Capture }) => (
-      <UpcomingRow
-        item={item}
-        editing={editingId === item.id}
-        editText={editText}
-        onProcess={onProcess}
-        onEditSubmit={onEditSubmit}
-        onChangeEditText={setEditText}
-        onStartEdit={onStartEdit}
-      />
+      <UpcomingRow item={item} onProcess={detail.process} onOpen={detail.open} />
     ),
-    [onProcess, editingId, editText, onEditSubmit, onStartEdit],
+    [detail.process, detail.open],
   );
 
   return (
     <>
+      <RefineBanner onFinish={onFinishRefine} />
       {writeError ? (
         <Text variant="error" className="px-screen-x">
           {writeError}
@@ -182,6 +148,8 @@ function Upcoming({ api }: { api: CapturesApi }) {
           </Text>
         }
       />
+
+      {detail.sheets}
     </>
   );
 }

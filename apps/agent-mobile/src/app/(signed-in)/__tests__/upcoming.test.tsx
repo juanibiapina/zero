@@ -37,13 +37,21 @@ jest.mock('@clerk/expo/native', () => ({
 const mockFetchCaptures = jest.fn<(getToken: unknown) => Promise<Capture[]>>();
 const mockProcessCapture =
   jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
+const mockEditCapture =
+  jest.fn<(getToken: unknown, id: string, text: string) => Promise<Capture>>();
+const mockRescheduleCapture =
+  jest.fn<
+    (getToken: unknown, id: string, date: string | null) => Promise<Capture>
+  >();
 jest.mock('@/lib/api', () => ({
   fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
   addCapture: jest.fn(),
   processCapture: (getToken: unknown, id: string) =>
     mockProcessCapture(getToken, id),
-  editCapture: jest.fn(),
-  rescheduleCapture: jest.fn(),
+  editCapture: (getToken: unknown, id: string, text: string) =>
+    mockEditCapture(getToken, id, text),
+  rescheduleCapture: (getToken: unknown, id: string, date: string | null) =>
+    mockRescheduleCapture(getToken, id, date),
   reorderCapture: jest.fn(),
 }));
 
@@ -78,6 +86,8 @@ describe('UpcomingScreen', () => {
   beforeEach(() => {
     resetCapturesApiForTest();
     mockProcessCapture.mockReset();
+    mockEditCapture.mockReset();
+    mockRescheduleCapture.mockReset();
   });
 
   it('lists a future-dated capture and hides an undated one', async () => {
@@ -148,5 +158,97 @@ describe('UpcomingScreen', () => {
     await waitFor(() =>
       expect(mockFetchCaptures.mock.calls.length).toBeGreaterThan(before),
     );
+  });
+
+  it('opens the capture detail editor and edits the title', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([
+      capture('2', 'ship the release', '2099-01-01'),
+    ]);
+    mockEditCapture.mockImplementation(async (_g, id, text) => {
+      const edited = capture(id, text, '2099-01-01');
+      mockFetchCaptures.mockResolvedValue([edited]);
+      return edited;
+    });
+
+    const { getByText, getByLabelText, getByDisplayValue } = await renderScreen();
+
+    await waitFor(() => expect(getByText('ship the release')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "ship the release"'));
+    });
+
+    // Same sheet as Home: the editable title, not an inline row input.
+    const input = getByDisplayValue('ship the release');
+    await act(async () => {
+      fireEvent.changeText(input, 'ship the big release');
+    });
+    // The keyboard done key (onSubmitEditing) saves and closes; submit in its own
+    // act so the edited draft is committed, not the stale one.
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(getByText('ship the big release')).toBeTruthy());
+    expect(mockEditCapture).toHaveBeenCalledTimes(1);
+    expect(mockEditCapture.mock.calls[0][1]).toBe('2');
+    expect(mockEditCapture.mock.calls[0][2]).toBe('ship the big release');
+  });
+
+  it('reschedules an upcoming capture from the scheduler', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([
+      capture('2', 'ship the release', '2099-01-01'),
+    ]);
+    mockRescheduleCapture.mockResolvedValue(
+      capture('2', 'ship the release', '2099-01-02'),
+    );
+
+    const { getByText, getByLabelText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('ship the release')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "ship the release"'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Set schedule'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Tomorrow'));
+    });
+
+    await waitFor(() => expect(mockRescheduleCapture).toHaveBeenCalledTimes(1));
+    expect(mockRescheduleCapture.mock.calls[0][1]).toBe('2');
+    expect(mockRescheduleCapture.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('completes a capture from the detail round check', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([
+      capture('2', 'ship the release', '2099-01-01'),
+    ]);
+    mockProcessCapture.mockImplementation(async () => {
+      mockFetchCaptures.mockResolvedValue([]);
+      return {
+        ...capture('2', 'ship the release', '2099-01-01'),
+        processedAt: '2023-01-02T00:00:00.000Z',
+      };
+    });
+
+    const { getByText, getByLabelText, queryByText, queryByLabelText } =
+      await renderScreen();
+
+    await waitFor(() => expect(getByText('ship the release')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "ship the release"'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete capture'));
+    });
+
+    await waitFor(() => expect(queryByLabelText('sheet')).toBeNull());
+    await waitFor(() => expect(queryByText('ship the release')).toBeNull());
+    expect(mockProcessCapture).toHaveBeenCalledTimes(1);
+    expect(mockProcessCapture.mock.calls[0][1]).toBe('2');
   });
 });
