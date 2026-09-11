@@ -43,6 +43,7 @@ function task(over: Partial<Task>): Task {
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? "p",
     takenOnAt: over.takenOnAt ?? null,
+    sortKey: over.sortKey ?? null,
   };
 }
 

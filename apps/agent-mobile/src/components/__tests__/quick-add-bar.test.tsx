@@ -8,13 +8,13 @@ describe('QuickAddBar', () => {
     const { getByPlaceholderText, getByLabelText } = await render(
       <QuickAddBar value="" onChangeText={() => {}} onSubmit={() => {}} />,
     );
-    expect(getByPlaceholderText('Capture a thought')).toBeTruthy();
-    expect(getByLabelText('Capture')).toBeTruthy();
+    expect(getByPlaceholderText('Add a task')).toBeTruthy();
+    expect(getByLabelText('Task')).toBeTruthy();
   });
 
-  it('offers capture, task, and project pills when a mode is set', async () => {
+  it('offers task and project pills when a mode is set', async () => {
     const onModeChange = jest.fn();
-    const { getByLabelText } = await render(
+    const { getByLabelText, queryByLabelText } = await render(
       <QuickAddBar
         value=""
         mode="project"
@@ -24,7 +24,8 @@ describe('QuickAddBar', () => {
       />,
     );
 
-    expect(getByLabelText('Add a capture')).toBeTruthy();
+    // Capture was retired in the single-list merge: only task and project.
+    expect(queryByLabelText('Add a capture')).toBeNull();
     expect(getByLabelText('Add a task')).toBeTruthy();
     const project = getByLabelText('Add a project');
     expect(project).toBeTruthy();
@@ -75,8 +76,8 @@ describe('QuickAddBar', () => {
       <QuickAddBar value="buy milk" onChangeText={() => {}} onSubmit={onSubmit} />,
     );
 
-    fireEvent.press(getByLabelText('Capture'));
-    fireEvent(getByPlaceholderText('Capture a thought'), 'submitEditing');
+    fireEvent.press(getByLabelText('Task'));
+    fireEvent(getByPlaceholderText('Add a task'), 'submitEditing');
 
     expect(onSubmit).toHaveBeenCalledTimes(2);
   });

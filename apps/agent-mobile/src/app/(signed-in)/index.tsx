@@ -4,7 +4,6 @@ import { useLiveQuery } from '@tanstack/react-db';
 import {
   listView,
   LOADING_TEXT_DELAY_MS,
-  capturesLocalToday,
   homeCallToAction,
   homeCallToActionCopy,
   homeTasks,
@@ -15,12 +14,8 @@ import {
   toast,
   tomorrow,
   undoableAction,
-  visibleCaptures,
   type AddMode,
-  type Capture,
-  type CapturesApi,
   type HomeCallToAction,
-  type Project,
   type ProjectsApi,
   type Task,
   type TasksApi,
@@ -62,16 +57,13 @@ import { useResolveClassNames } from 'uniwind';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
-import { useCaptureDetail } from '@/components/capture-detail';
-import { CheckCircle, ListRow } from '@/components/ui/list-row';
+import { useTaskDetail } from '@/components/task-detail';
+import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
-import { useCapturesApi } from '@/lib/captures-collection';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
-import { refiningCaptureId, stopRefine } from '@/lib/refine-session';
-import { RefineBanner } from '@/components/refine-banner';
 import { useColor } from '@/lib/theme';
 import {
   useDelayed,
@@ -93,14 +85,16 @@ function project(velocity: number, decelerationRate = 0.998): number {
   return ((velocity / 1000) * decelerationRate) / (1 - decelerationRate);
 }
 
-// One Captures row: long-press the text to drag-reorder, swipe right to
-// postpone, tap the circle to process, tap the text to open its detail sheet.
-// The swipe is a swipe-to-commit (one decisive swipe = the action), so it is a
-// hand-built Gesture.Pan, not ReanimatedSwipeable. The row is flat (Todoist
-// style): the sliding card is opaque so it covers the "Tomorrow" reveal beneath
-// it, and a hairline divider sits under the row and does not move with the
-// swipe. Animated.View is not an RN core component, so Uniwind does not map
-// `className` onto it — its static styling comes from a resolved class list.
+// One task row in the single Home list: long-press the text to drag-reorder,
+// swipe right to postpone (to tomorrow), tap the circle to complete, tap the
+// text to open its detail sheet. A project task also shows its project's icon
+// badge and a park star. The swipe is a swipe-to-commit (one decisive swipe =
+// the action), so it is a hand-built Gesture.Pan, not ReanimatedSwipeable. The
+// row is flat (Todoist style): the sliding card is opaque so it covers the
+// "Tomorrow" reveal beneath it, and a hairline divider sits under the row and
+// does not move with the swipe. Animated.View is not an RN core component, so
+// Uniwind does not map `className` onto it — its static styling comes from a
+// resolved class list.
 //
 // Reorder is triggered by a plain RN `Pressable onLongPress={drag}` (JS
 // Pressability), NOT a gesture-handler Gesture.LongPress. This is deliberate and
@@ -108,45 +102,36 @@ function project(velocity: number, decelerationRate = 0.998): number {
 // gesture on the whole list, and a competing GH gesture in this row's own
 // GestureDetector would block that list pan from activating. A JS long-press
 // does not participate in GH arbitration, so the list pan is free to track. The
-// row's GestureDetector therefore carries ONLY the horizontal swipe.
-function CaptureRow({
+// row's GestureDetector therefore carries ONLY the horizontal swipe. Ported from
+// the former CaptureRow in the single-list merge.
+function TaskRow({
   item,
-  onProcess,
+  icon,
+  onComplete,
   onReschedule,
   onOpen,
+  onPark,
 }: {
-  item: Capture;
-  onProcess: (item: Capture) => void;
-  onReschedule: (item: Capture) => void;
-  onOpen: (item: Capture) => void;
+  item: Task;
+  // The task's project icon, or null for a loose task (shows no badge/star).
+  icon: string | null;
+  onComplete: (item: Task) => void;
+  onReschedule: (item: Task) => void;
+  onOpen: (item: Task) => void;
+  onPark: (item: Task) => void;
 }) {
   const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
   const drag = useReorderableDrag();
-  // The card's horizontal offset. 0 at rest (covering the reveal); grows
-  // rightward as the user swipes, revealing "Tomorrow" underneath.
   const x = useSharedValue(0);
-  // Where the card was when this drag started, so a grab mid-animation continues
-  // smoothly instead of jumping to 0.
   const startX = useSharedValue(0);
 
-  // Opaque flat card styling. Resolved from classes because Animated.View is not
-  // Uniwind-mapped; combined with the animated transform below.
   const cardStyle = useResolveClassNames(
     'flex-row items-center gap-3 bg-background px-screen-x py-row-y',
   );
 
-  // Built inline (no useMemo) so the React Compiler owns the memoization; a
-  // silent skip of this leaf row is harmless.
   const pan = Gesture.Pan()
     .activeOffsetX(12)
-    // Fail the moment the drag turns vertical (~6pt), so a downward pull is
-    // handed back to the list's scroll and Android's RefreshControl
-    // (SwipeRefreshLayout, which only arms at the start of the gesture at
-    // scrollY:0). Without this, a Pan with only activeOffsetX stays alive on a
-    // vertical drag, suppresses ancestor interception, and swallows
-    // pull-to-refresh anywhere a capture row sits (the lower half of Home). The
-    // ~2:1 horizontal:vertical ratio keeps the rightward swipe-to-postpone.
     .failOffsetY([-6, 6])
     .onStart(() => {
       startX.set(x.get());
@@ -157,8 +142,6 @@ function CaptureRow({
     .onEnd((e) => {
       const projected = x.get() + project(e.velocityX);
       if (projected > SWIPE_THRESHOLD) {
-        // Commit: slide the card fully off, then remove it. The optimistic hide
-        // drops the row and the list's itemLayoutAnimation closes the gap.
         x.set(
           withTiming(
             width,
@@ -186,13 +169,7 @@ function CaptureRow({
 
   return (
     <View className="bg-background">
-      {/* The reveal is clipped to the card only. Keeping overflow-hidden on the
-          divider strip too would expose the orange reveal through the divider's
-          uninset left edge (ml-[50px]) at rest, so the clip wraps just the
-          card. */}
       <View className="overflow-hidden bg-background">
-        {/* Revealed as the card slides right. Left-aligned so the label shows in
-            the gap the card opens. */}
         <View
           style={StyleSheet.absoluteFill}
           className="flex-row items-center bg-swipe-postpone px-screen-x"
@@ -202,180 +179,43 @@ function CaptureRow({
         <GestureDetector gesture={pan}>
           <Animated.View style={[cardStyle, rowStyle]}>
             <CheckCircle
-              label={`Process "${item.text}"`}
-              onPress={() => onProcess(item)}
+              label={`Complete "${item.text}"`}
+              onPress={() => onComplete(item)}
             />
+            {icon != null ? <Text className="text-[16px]">{icon}</Text> : null}
             <Pressable
               className="flex-1"
               accessibilityRole="button"
               accessibilityLabel={`Edit "${item.text}"`}
               onPress={() => onOpen(item)}
-              // Long-press the text body to start a reorder drag (Todoist-style).
-              // JS Pressability, so it does not block the list's pan.
               onLongPress={() => drag()}
               delayLongPress={500}
             >
               <Text>{item.text}</Text>
             </Pressable>
+            {/* A project task carries a park star (send it back to the project
+                screen); a loose task has none — it is an immediate to-do. */}
+            {item.projectId ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Park "${item.text}"`}
+                hitSlop={8}
+                onPress={() => onPark(item)}
+              >
+                <Text className="text-[18px] text-accent">★</Text>
+              </Pressable>
+            ) : null}
           </Animated.View>
         </GestureDetector>
       </View>
-      {/* Divider sits below the row over the opaque background (not inside the
-          clip), so its uninset left edge shows the background, not the reveal. */}
       <View className="ml-[50px] h-px bg-divider" />
     </View>
   );
 }
 
-// One task row in the Home top region: a complete circle and the text. The
-// availability rule (which tasks show) lives in the shared homeTasks seam.
-function TaskRow({
-  item,
-  icon,
-  onComplete,
-  onPark,
-}: {
-  item: Task;
-  // The task's project icon, or null for a loose task (shows no badge).
-  icon: string | null;
-  onComplete: (item: Task) => void;
-  onPark: (item: Task) => void;
-}) {
-  // A project task leads with its project's icon as a small context badge; a
-  // loose task shows none.
-  const body =
-    icon != null ? (
-      <View className="flex-row items-center gap-2">
-        <Text className="text-[16px]">{icon}</Text>
-        <Text className="flex-1">{item.text}</Text>
-      </View>
-    ) : (
-      <Text>{item.text}</Text>
-    );
-  // Completing commits at once and the row leaves; a bottom Undo snackbar (owned
-  // by TasksTop) is the way back.
-  return (
-    <ListRow
-      leading={
-        <CheckCircle
-          label={`Complete "${item.text}"`}
-          onPress={() => onComplete(item)}
-        />
-      }
-      // A project task carries a park star (send it back to the project screen);
-      // a loose task has none — it is an immediate to-do, not curated.
-      trailing={
-        item.projectId ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Park "${item.text}"`}
-            hitSlop={8}
-            onPress={() => onPark(item)}
-          >
-            <Text className="text-[18px] text-accent">★</Text>
-          </Pressable>
-        ) : undefined
-      }
-    >
-      {body}
-    </ListRow>
-  );
-}
-
-// The Home top region: the tasks you have taken on, rendered above the capture
-// inbox as the list header. Availability (which tasks show) lives in homeTasks;
-// this renders the plate and hides itself (and its "Tasks" caption) when empty —
-// the parent then shows the inbox alone or the all-clear call to action.
-function TasksTop({
-  plate,
-  projects,
-  hasCaptures,
-  api,
-  onError,
-}: {
-  plate: Task[];
-  projects: Project[];
-  // Whether the inbox has any visible capture. The "Inbox" caption only shows
-  // when it does — an empty inbox below a plate of tasks shows nothing.
-  hasCaptures: boolean;
-  api: TasksApi;
-  onError: (message: string) => void;
-}) {
-  useForegroundRefetch(api.refetch);
-  const list = plate;
-  // A project task's icon (defaulting to the neutral one); a loose task has none.
-  const iconOf = (item: Task): string | null =>
-    item.projectId == null
-      ? null
-      : (projects.find((p) => p.id === item.projectId)?.icon ?? DEFAULT_ICON);
-  // Completing commits immediately (the row leaves at once) and raises a single
-  // bottom Undo snackbar. A fixed toast id means a second completion replaces the
-  // first toast, so only one Undo is ever offered. Undo reopens the task. A task
-  // that belongs to a project also names it and offers an Open link that
-  // deep-links to the project's own screen (withAnchor keeps the list beneath it
-  // and the tabs visible); a loose task shows neither.
-  const onComplete = useCallback(
-    (item: Task) => {
-      const project =
-        item.projectId != null
-          ? projects.find((p) => p.id === item.projectId)
-          : undefined;
-      undoableAction({
-        message: 'Completed',
-        description: project
-          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
-          : undefined,
-        link: project
-          ? {
-              label: 'Open',
-              onPress: () =>
-                router.navigate(`/projects/${project.id}`, { withAnchor: true }),
-            }
-          : undefined,
-        act: () => api.complete(item.id),
-        undo: () => api.reopen(item),
-        onError,
-      });
-    },
-    [api, onError, projects],
-  );
-  const onPark = useCallback(
-    (item: Task) => {
-      const tx = api.park(item.id);
-      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-    },
-    [api, onError],
-  );
-  return (
-    <View>
-      {list.length > 0 ? (
-        <>
-          <Text variant="caption" className="px-screen-x pb-1 pt-2">
-            Tasks
-          </Text>
-          {list.map((item) => (
-            <TaskRow
-              key={item.id}
-              item={item}
-              icon={iconOf(item)}
-              onComplete={onComplete}
-              onPark={onPark}
-            />
-          ))}
-        </>
-      ) : null}
-      {hasCaptures ? (
-        <Text variant="caption" className="px-screen-x pb-1 pt-3">
-          Inbox
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-// The all-clear state on Home: shown only when the plate and inbox are both
-// empty. The shared homeCallToAction seam picks the framing from the projects'
-// derived states; every case routes to the Projects tab.
+// The all-clear state on Home: shown only when the list is empty. The shared
+// homeCallToAction seam picks the framing from the projects' derived states;
+// every case routes to the Projects tab.
 function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
   const { title, body, button } = homeCallToActionCopy(action);
   return (
@@ -402,18 +242,15 @@ function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
   );
 }
 
-// Home is two regions: the tasks you have taken on (TasksTop) above the capture
-// inbox. The quick-add defaults to a capture and can switch to a task.
+// Home is one reorderable list of tasks: the loose ones you dropped in and the
+// project tasks you have taken on (availability-gated by homeTasks). No separate
+// capture inbox after the single-list merge. The quick-add defaults to a task
+// and can switch to a project.
 export default function HomeScreen() {
-  const capturesApi = useCapturesApi();
   const tasksApi = useTasksApi();
   const projectsApi = useProjectsApi();
   const waitsApi = useWaitsApi();
 
-  // Measure the gap from this screen's content bottom to the window bottom (the
-  // native bottom tab bar plus the system gesture inset), fed to the
-  // keyboard-sticky quick-add so it docks to the keyboard. See
-  // QuickAdd.bottomOffset.
   const { height: windowHeight } = useWindowDimensions();
   const rootRef = useRef<View>(null);
   const [bottomOffset, setBottomOffset] = useState(0);
@@ -426,10 +263,9 @@ export default function HomeScreen() {
   return (
     <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
       <ScreenHeader title="Home" />
-      {capturesApi && tasksApi && projectsApi && waitsApi ? (
-        <Captures
-          api={capturesApi}
-          tasksApi={tasksApi}
+      {tasksApi && projectsApi && waitsApi ? (
+        <Home
+          api={tasksApi}
           projectsApi={projectsApi}
           waitsApi={waitsApi}
           bottomOffset={bottomOffset}
@@ -441,40 +277,21 @@ export default function HomeScreen() {
   );
 }
 
-function Captures({
+function Home({
   api,
-  tasksApi,
   projectsApi,
   waitsApi,
   bottomOffset,
 }: {
-  api: CapturesApi;
-  tasksApi: TasksApi;
+  api: TasksApi;
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
   bottomOffset: number;
 }) {
-  const [mode, setMode] = useState<AddMode>('capture');
+  const [mode, setMode] = useState<AddMode>('task');
   const { getToken } = useAuth();
-  const { data: captures, isLoading } = useLiveQuery((q) =>
-    q
-      .from({ c: api.collection })
-      .where(({ c }) => isNull(c.processedAt))
-      .orderBy(({ c }) => c.createdAt, 'asc'),
-  );
-  // The server returns every open capture (Captures and Upcoming share the same
-  // set); this pass keeps only the ones that have shown up, so a just-postponed
-  // row leaves the list at once and future-dated rows stay in Upcoming.
-  const list = useMemo(
-    () => visibleCaptures(captures ?? [], capturesLocalToday()),
-    [captures],
-  );
-
-  // The plate (tasks taken on) and the projects/conditions that derive it. Read
-  // here so Home can gate the whole empty region through the shared seam: a
-  // non-null call to action means the plate and inbox are both empty.
-  const { data: tasks, isLoading: tasksLoading } = useLiveQuery((q) =>
-    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  const { data: tasks, isLoading } = useLiveQuery((q) =>
+    q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
   const { data: projects, isLoading: projectsLoading } = useLiveQuery((q) =>
     q.from({ p: projectsApi.collection }),
@@ -482,47 +299,39 @@ function Captures({
   const { data: conditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
-  const plate = useMemo(
-    () => homeTasks(tasks ?? [], projects ?? [], conditions ?? []),
-    [tasks, projects, conditions],
+
+  const today = localToday();
+  // The single Home list: open ∧ shown-up ∧ available, ordered by the manual
+  // sort key. The server returns all open tasks; this pass drops future-dated
+  // ones (they belong to Upcoming) and unavailable project tasks.
+  const list = useMemo(
+    () => homeTasks(tasks ?? [], projects ?? [], today, conditions ?? []),
+    [tasks, projects, conditions, today],
   );
+
   const cta = homeCallToAction(
-    plate.length,
     list.length,
+    0,
     projects ?? [],
     tasks ?? [],
     conditions ?? [],
   );
   // Do not flash the CTA while the local snapshot hydrates (every collection
   // reads empty then, which would look like "create").
-  const hydrating = isLoading || tasksLoading || projectsLoading;
+  const hydrating = isLoading || projectsLoading;
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  // Refresh when the app returns to the foreground.
   useForegroundRefetch(api.refetch);
 
   const accent = useColor('--color-accent');
-  // A pull re-pulls every list Home shows: the captures inbox plus the tasks
-  // header's tasks, and the projects/waits that derive which tasks are available.
   const refetchAll = useCallback(
     () =>
-      Promise.all([
-        api.refetch(),
-        tasksApi.refetch(),
-        projectsApi.refetch(),
-        waitsApi.refetch(),
-      ]),
-    [api, tasksApi, projectsApi, waitsApi],
+      Promise.all([api.refetch(), projectsApi.refetch(), waitsApi.refetch()]),
+    [api, projectsApi, waitsApi],
   );
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
-  // On Android the SwipeRefreshLayout behind RefreshControl fires while a row is
-  // dragged vertically, so a reorder would spuriously trip the refresh spinner.
-  // Disable the control for the duration of a drag (keeping it on if a refresh
-  // is already running so the spinner does not vanish). iOS has no such conflict.
-  // Home starts drags via a JS long-press, not the list pan's own long-press, so
-  // the library's activateAfterLongPress mitigation does not apply here.
   const [refreshEnabled, setRefreshEnabled] = useState(true);
   const onDragStart = useCallback(() => {
     'worklet';
@@ -536,10 +345,7 @@ function Captures({
       scheduleOnRN(setRefreshEnabled, true);
     }
   }, []);
-  // Gate the list on the row count, not isLoading: a hydrated snapshot must
-  // paint even while the network sync is still pending.
   const view = listView({ count: list.length, isLoading, loadError });
-  // Show a load error only when there's nothing on screen.
   const error = writeError ?? (list.length === 0 ? loadError : null);
 
   const [text, setText] = useState('');
@@ -547,10 +353,20 @@ function Captures({
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const inputRef = useRef<RNTextInput>(null);
 
-  // The capture detail editor (sheet + schedule selector + their writes). It
-  // resolves the selected capture from Home's visible `list`, so rescheduling a
-  // capture to a future day drops it from the list and closes the sheet.
-  const detail = useCaptureDetail({ api, list, onError: setWriteError });
+  // The task detail editor (sheet + schedule selector + their writes). It
+  // resolves the selected task from Home's visible `list`, so rescheduling a
+  // task to a future day drops it from the list and closes the sheet.
+  const detail = useTaskDetail({ api, list, onError: setWriteError });
+
+  // A project task's icon (defaulting to the neutral one); a loose task has none.
+  const iconOf = useCallback(
+    (item: Task): string | null =>
+      item.projectId == null
+        ? null
+        : ((projects ?? []).find((p) => p.id === item.projectId)?.icon ??
+          DEFAULT_ICON),
+    [projects],
+  );
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -561,7 +377,6 @@ function Captures({
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
-      // Submitting an empty input closes the quick-add bar.
       setAdding(false);
       return;
     }
@@ -570,12 +385,9 @@ function Captures({
       // Create the project but stay on Home; a toast is the escape hatch to jump
       // to it. The id comes off the optimistic insert transaction so the toast
       // can deep-link before the server round-trip finishes.
-      const tx = projectsApi.add(trimmed, refiningCaptureId());
+      const tx = projectsApi.add(trimmed);
       tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
       const id = String(tx.mutations[0]?.key);
-      // Pre-warm emoji icon suggestions so the picker shows them instantly when
-      // the project is opened. Create is name-only, so the basis is the title
-      // alone. Fire-and-forget; a failure only costs the shortcut.
       void requestIconSuggestions(getToken, id, {
         title: trimmed,
         description: null,
@@ -584,42 +396,19 @@ function Captures({
         description: trimmed,
         action: {
           label: 'View',
-          // Deep-links straight to the new project's own detail across the tab
-          // boundary; withAnchor + the projects stack's initialRouteName anchor
-          // keep the list beneath it and the tabs visible. This replaces the old
-          // /projects workaround: with the anchor, the cross-tab push lands (the
-          // symptom filed as expo/expo#45786 was the missing anchor, verified on
-          // device).
           onPress: () =>
             router.navigate(`/projects/${id}`, { withAnchor: true }),
         },
       });
-      // Close the quick-add after adding.
       closeAdd();
       return;
     }
-    // Optimistic: the row appears at once; surface a failure if the write loses.
-    // The mode decides where it lands: a task dated today, or a capture.
-    const tx =
-      mode === 'task'
-        ? tasksApi.add(trimmed, localToday(), null, null, refiningCaptureId())
-        : api.add(trimmed);
+    // A quick-add with no project creates a loose open task on Home (no day).
+    const tx = api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    // Close the quick-add after adding.
     closeAdd();
-  }, [text, api, tasksApi, projectsApi, mode, getToken, closeAdd]);
+  }, [text, api, projectsApi, mode, getToken, closeAdd]);
 
-  const onFinishRefine = useCallback(
-    (captureId: string) => {
-      const tx = api.process(captureId);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-      stopRefine();
-    },
-    [api],
-  );
-
-  // Dismissing the quick-add: with unsaved text, confirm before discarding;
-  // with an empty input, close silently.
   const requestClose = useCallback(() => {
     if (text.trim()) {
       setConfirmingDiscard(true);
@@ -628,11 +417,6 @@ function Captures({
     }
   }, [text, closeAdd]);
 
-  // First Android Back press with the keyboard up is swallowed by the OS to hide
-  // the keyboard and never reaches BackHandler. So treat "keyboard hidden while
-  // the quick-add is open" as a dismiss request (the Todoist single-back
-  // behavior). Guard on `adding` (not confirming) so the hide that fires while
-  // closing doesn't re-trigger.
   useEffect(() => {
     const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
       if (!adding || confirmingDiscard) return;
@@ -645,12 +429,8 @@ function Captures({
     return () => sub.remove();
   }, [adding, confirmingDiscard, text, closeAdd]);
 
-  // Android hardware / navigation back button, for the cases where the keyboard
-  // is already down. Returning true consumes the event.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      // The detail sheet / scheduler take Back first (it closes them); quick-add
-      // and discard-confirm follow.
       if (detail.handleBack()) {
         return true;
       }
@@ -671,18 +451,56 @@ function Captures({
     return () => sub.remove();
   }, [detail, adding, confirmingDiscard, text, closeAdd]);
 
+  // Postpone to tomorrow (the swipe-right action). The optimistic reschedule
+  // drops the row from Home at once and lands it in Upcoming.
   const onReschedule = useCallback(
-    (item: Capture) => {
+    (item: Task) => {
       setWriteError(null);
-      const tx = api.reschedule(item.id, tomorrow(capturesLocalToday()));
+      const tx = api.reschedule(item.id, tomorrow(today));
+      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    },
+    [api, today],
+  );
+
+  // Park a project task (send it back to the project screen).
+  const onPark = useCallback(
+    (item: Task) => {
+      setWriteError(null);
+      const tx = api.park(item.id);
       tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     },
     [api],
   );
 
-  // Drop: mint a key strictly between the moved row's new neighbors and persist
-  // it. reorderItems gives the post-drop order; the neighbors' keys (or null at
-  // an end) bound the new key.
+  // Complete: commit immediately (the row leaves at once) + a single bottom Undo
+  // snackbar (shared 'undo' id). A project task also names its project and offers
+  // an Open deep-link; a loose task shows neither. Undo reopens the task.
+  const onComplete = useCallback(
+    (item: Task) => {
+      const project =
+        item.projectId != null
+          ? (projects ?? []).find((p) => p.id === item.projectId)
+          : undefined;
+      undoableAction({
+        message: 'Completed',
+        description: project
+          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
+          : undefined,
+        link: project
+          ? {
+              label: 'Open',
+              onPress: () =>
+                router.navigate(`/projects/${project.id}`, { withAnchor: true }),
+            }
+          : undefined,
+        act: () => api.complete(item.id),
+        undo: () => api.reopen(item),
+        onError: setWriteError,
+      });
+    },
+    [api, projects],
+  );
+
   const onReorder = useCallback(
     ({ from, to }: ReorderableListReorderEvent) => {
       if (from === to) return;
@@ -699,23 +517,23 @@ function Captures({
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: Capture }) => (
-      <CaptureRow
+    ({ item }: { item: Task }) => (
+      <TaskRow
         item={item}
-        onProcess={detail.process}
+        icon={iconOf(item)}
+        onComplete={onComplete}
         onReschedule={onReschedule}
         onOpen={detail.open}
+        onPark={onPark}
       />
     ),
-    [detail.process, onReschedule, detail.open],
+    [iconOf, onComplete, onReschedule, detail.open, onPark],
   );
 
-  // Only surface the loading text once the snapshot has had time to hydrate.
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
   return (
     <>
-      <RefineBanner onFinish={onFinishRefine} />
       {error ? (
         <Text variant="error" className="px-screen-x">
           {error}
@@ -725,28 +543,20 @@ function Captures({
       {view === 'loading' ? (
         showLoadingText ? (
           <Text variant="subtitle" className="px-screen-x">
-            Loading your captures…
+            Loading your tasks…
           </Text>
         ) : (
           <View className="flex-1" />
         )
-      ) : cta && !loadError ? (
+      ) : view === 'empty' && cta && !loadError ? (
         hydrating ? (
           <View className="flex-1" />
         ) : (
           <HomeCallToActionView action={cta} />
         )
       ) : (
-        // ReorderableList extends FlatList (so it still virtualizes the unbounded
-        // Captures list) and adds long-press drag-to-reorder. itemLayoutAnimation
-        // slides the remaining rows closed when one is processed or postponed.
         <ReorderableList
           style={{ flex: 1 }}
-          // flexGrow makes the content fill the viewport when the inbox is
-          // short, so the empty area below the rows is still part of the
-          // scrollable surface and pull-to-refresh works anywhere on the screen.
-          // ReorderableList (unlike the SectionList screens) does not make that
-          // empty area refresh-responsive on its own.
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
           refreshControl={
             <RefreshControl
@@ -764,22 +574,11 @@ function Captures({
           onReorder={onReorder}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
-          ListHeaderComponent={
-            <TasksTop
-              plate={plate}
-              projects={projects ?? []}
-              hasCaptures={list.length > 0}
-              api={tasksApi}
-              onError={setWriteError}
-            />
-          }
         />
       )}
 
       {detail.sheets}
 
-      {/* Transition layer: cross-fades the plus FAB and the quick-add bar and
-          lifts the bar with the keyboard. */}
       <QuickAdd
         open={adding}
         text={text}
@@ -803,7 +602,6 @@ function Captures({
           destructive
           onCancel={() => {
             setConfirmingDiscard(false);
-            // The Back that opened this dialog also hid the keyboard; refocus.
             inputRef.current?.focus();
           }}
           onConfirm={closeAdd}

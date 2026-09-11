@@ -2,21 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import {
-  capturesLocalToday,
   dayLabel,
+  localToday,
   messageOf,
   undoableAction,
   upcomingSections,
 } from "@zero/agent-core";
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
-import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
+import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { useForegroundRefetch } from "@/lib/screen-hooks";
-import { type Capture } from "@/lib/captures";
+import { type Task } from "@/lib/tasks";
 
-// Upcoming lists captures scheduled for a future day, grouped into day sections.
-// The complement of Captures: what has shown up stays there, what is still ahead
-// shows here. The Capture data layer is the same shared singleton.
+// Upcoming lists tasks scheduled for a future day, grouped into day sections.
+// The complement of Home: what has shown up stays there, what is still ahead
+// shows here — every future-dated open task, loose or project, no other gate.
+// The Task data layer is the same shared singleton.
 export function UpcomingPage() {
   return (
     <div className="min-h-screen bg-background">
@@ -31,10 +32,10 @@ export function UpcomingPage() {
 }
 
 function UpcomingPanel() {
-  const [api, setApi] = useState<CapturesApi | null>(null);
+  const [api, setApi] = useState<TasksApi | null>(null);
   useEffect(() => {
     let live = true;
-    void getCapturesApi().then((a) => {
+    void getTasksApi().then((a) => {
       if (live) setApi(a);
     });
     return () => {
@@ -44,29 +45,29 @@ function UpcomingPanel() {
   return api ? <UpcomingReady api={api} /> : <div className="min-h-24" />;
 }
 
-function UpcomingReady({ api }: { api: CapturesApi }) {
-  const { data: captures } = useLiveQuery((q) =>
-    q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+function UpcomingReady({ api }: { api: TasksApi }) {
+  const { data: tasks } = useLiveQuery((q) =>
+    q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
 
-  const today = capturesLocalToday();
+  const today = localToday();
   const sections = useMemo(
-    () => upcomingSections(captures ?? [], today),
-    [captures, today],
+    () => upcomingSections(tasks ?? [], today),
+    [tasks, today],
   );
 
   const [error, setError] = useState<string | null>(null);
 
   useForegroundRefetch(api.refetch);
 
-  const onProcess = useCallback(
-    (item: Capture) => {
+  const onComplete = useCallback(
+    (item: Task) => {
       setError(null);
-      // Same single bottom Undo snackbar as elsewhere; Undo returns the capture.
+      // Same single bottom Undo snackbar as elsewhere; Undo reopens the task.
       undoableAction({
         message: "Completed",
-        act: () => api.process(item.id),
-        undo: () => api.unprocess(item),
+        act: () => api.complete(item.id),
+        undo: () => api.reopen(item),
         onError: setError,
       });
     },
@@ -74,7 +75,7 @@ function UpcomingReady({ api }: { api: CapturesApi }) {
   );
 
   const onEdit = useCallback(
-    (item: Capture, text: string) => {
+    (item: Task, text: string) => {
       setError(null);
       const tx = api.edit(item.id, text);
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
@@ -96,11 +97,11 @@ function UpcomingReady({ api }: { api: CapturesApi }) {
                 {dayLabel(section.date, today)}
               </h2>
               <ul className="space-y-3">
-                {section.captures.map((item) => (
+                {section.tasks.map((item) => (
                   <Row
                     key={item.id}
                     text={item.text}
-                    onProcess={() => onProcess(item)}
+                    onComplete={() => onComplete(item)}
                     onEdit={(text) => onEdit(item, text)}
                   />
                 ))}
@@ -115,11 +116,11 @@ function UpcomingReady({ api }: { api: CapturesApi }) {
 
 function Row({
   text,
-  onProcess,
+  onComplete,
   onEdit,
 }: {
   text: string;
-  onProcess: () => void;
+  onComplete: () => void;
   onEdit: (text: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -141,9 +142,9 @@ function Row({
     <li className="flex items-center gap-3 rounded-xl border bg-card px-4 py-4">
       <button
         type="button"
-        aria-label={`Process "${text}"`}
+        aria-label={`Complete "${text}"`}
         className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
-        onClick={onProcess}
+        onClick={onComplete}
       />
       {editing ? (
         <Input

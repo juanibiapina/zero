@@ -30,7 +30,6 @@ import {
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
-import { refiningCaptureId } from "@/lib/refine-session";
 import { useForegroundRefetch } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
@@ -505,8 +504,9 @@ function ProjectTasks({
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    // Parked (takenOnAt null); linked to the capture when refining.
-    const tx = api.add(trimmed, localToday(), projectId, null, refiningCaptureId());
+    // A project-screen task is parked (takenOnAt null) and shown up today; it is
+    // groomed on this screen and taken onto Home from here.
+    const tx = api.add(trimmed, localToday(), projectId);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     setText("");
   }, [api, text, projectId, onError]);

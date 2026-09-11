@@ -5,7 +5,6 @@ import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
-import { DbCaptureStore, type Capture } from "../store/captures";
 import { DbTaskStore, type Task } from "../store/tasks";
 import {
   DbProjectStore,
@@ -106,7 +105,6 @@ export class UserDO extends DurableObject<Env> {
   private store: Store;
   // File bytes in R2. Metadata rows live in this user's SQLite store.
   private fileBlobs: FileBlobStore;
-  private captures: DbCaptureStore;
   private tasks: DbTaskStore;
   private projects: DbProjectStore;
   private waitingConditions: DbWaitingConditionStore;
@@ -117,7 +115,6 @@ export class UserDO extends DurableObject<Env> {
     const dbStore = new DbStore(this.db);
     this.store = new SystemTopicStore(dbStore);
     this.fileBlobs = createR2FileBlobs(env.FILES);
-    this.captures = new DbCaptureStore(this.db);
     this.tasks = new DbTaskStore(this.db);
     this.projects = new DbProjectStore(this.db);
     this.waitingConditions = new DbWaitingConditionStore(this.db);
@@ -135,53 +132,22 @@ export class UserDO extends DurableObject<Env> {
       // their text must still invalidate persisted reads of them. This bumps
       // the knowledge version once per content change, never per boot.
       dbStore.syncSystemTopicsFingerprint(systemTopicsFingerprint());
-      // Ordering convergence for the sortKey column (migration 0045). A null
-      // sortKey sorts LAST, and `add` mints a real trailing key for every new
-      // capture — so without this the first capture added after 0045 would sort
-      // ABOVE all the still-null legacy rows, flipping every older capture to the
+      // Ordering convergence for the tasks sortKey column (migration 0051). A
+      // null sortKey sorts LAST, and `add` mints a real trailing key for every
+      // new task — so without this the first task added after 0051 would sort
+      // ABOVE all the still-null preserved rows, flipping every older task to the
       // bottom of the list. Backfilling once (in createdAt order) gives the
-      // legacy rows keys so their order holds and new adds append below them.
+      // preserved rows keys so their order holds and new adds append below them.
       // Idempotent: a no-op once every row has a key. Runs in code because valid
       // fractional keys cannot be minted in SQL.
-      this.captures.backfillSortKeys();
+      this.tasks.backfillSortKeys();
     });
-  }
-
-  addCapture(id: string, text: string): Capture {
-    return this.captures.add(id, text);
-  }
-
-  listCaptures(): Capture[] {
-    // Return every open capture; the client splits them into Captures (shown up)
-    // and Upcoming (future-dated) against its own local day, so the server holds
-    // no visibility filter here.
-    return this.captures.list();
-  }
-
-  processCapture(id: string): Capture | null {
-    return this.captures.process(id);
-  }
-
-  unprocessCapture(id: string): Capture | null {
-    return this.captures.unprocess(id);
-  }
-
-  editCapture(id: string, text: string): Capture | null {
-    return this.captures.editText(id, text);
-  }
-
-  rescheduleCapture(id: string, showUpDate: string | null): Capture | null {
-    return this.captures.reschedule(id, showUpDate);
-  }
-
-  reorderCapture(id: string, sortKey: string): Capture | null {
-    return this.captures.reorder(id, sortKey);
   }
 
   addTask(
     id: string,
     text: string,
-    showUpDate: string,
+    showUpDate: string | null = null,
     projectId: string | null = null,
     takenOnAt: string | null = null,
     sourceCaptureId: string | null = null,
@@ -201,6 +167,9 @@ export class UserDO extends DurableObject<Env> {
   }
 
   listTasks(): Task[] {
+    // Return every open task; the client splits them into Home (shown up) and
+    // Upcoming (future-dated) against its own local day, so the server holds no
+    // visibility filter here.
     return this.tasks.list();
   }
 
@@ -210,6 +179,18 @@ export class UserDO extends DurableObject<Env> {
 
   reopenTask(id: string): Task | null {
     return this.tasks.reopen(id);
+  }
+
+  editTask(id: string, text: string): Task | null {
+    return this.tasks.editText(id, text);
+  }
+
+  rescheduleTask(id: string, showUpDate: string | null): Task | null {
+    return this.tasks.reschedule(id, showUpDate);
+  }
+
+  reorderTask(id: string, sortKey: string): Task | null {
+    return this.tasks.reorder(id, sortKey);
   }
 
   addProject(id: string, title: string, opts?: ProjectDefaults): Project {

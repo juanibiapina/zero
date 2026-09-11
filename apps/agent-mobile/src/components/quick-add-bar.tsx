@@ -51,10 +51,10 @@ export function QuickAddBar({
   placeholder,
   autoFocus = true,
   inputRef,
-  fabLabel = 'Capture',
+  fabLabel = 'Task',
 }: QuickAddBarProps) {
   const resolvedPlaceholder =
-    placeholder ?? (mode ? ADD_MODE_PLACEHOLDER[mode] : 'Capture a thought');
+    placeholder ?? (mode ? ADD_MODE_PLACEHOLDER[mode] : 'Add a task');
   return (
     <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
       {mode ? (

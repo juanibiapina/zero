@@ -1,41 +1,39 @@
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
-  capturesLocalToday,
   dayLabel,
-  messageOf,
+  localToday,
   upcomingSections,
-  type Capture,
-  type CapturesApi,
+  type Task,
+  type TasksApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, RefreshControl, SectionList, View } from 'react-native';
 
-import { RefineBanner } from '@/components/refine-banner';
 import { ScreenHeader } from '@/components/screen-header';
-import { useCaptureDetail } from '@/components/capture-detail';
+import { useTaskDetail } from '@/components/task-detail';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
-import { useCapturesApi } from '@/lib/captures-collection';
+import { useTasksApi } from '@/lib/tasks-collection';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
-// One upcoming row: tap the circle to Process, tap the text to open the capture
+// One upcoming row: tap the circle to complete, tap the text to open the task
 // detail — the same editor Home opens. No drag-reorder or swipe — ordering across
 // days has no meaning here.
 function UpcomingRow({
   item,
-  onProcess,
+  onComplete,
   onOpen,
 }: {
-  item: Capture;
-  onProcess: (item: Capture) => void;
-  onOpen: (item: Capture) => void;
+  item: Task;
+  onComplete: (item: Task) => void;
+  onOpen: (item: Task) => void;
 }) {
   return (
     <ListRow
       leading={
-        <CheckCircle label={`Process "${item.text}"`} onPress={() => onProcess(item)} />
+        <CheckCircle label={`Complete "${item.text}"`} onPress={() => onComplete(item)} />
       }
       onPress={() => onOpen(item)}
       accessibilityLabel={`Edit "${item.text}"`}
@@ -45,53 +43,43 @@ function UpcomingRow({
   );
 }
 
-// Upcoming lists captures scheduled for a future day, grouped into day sections.
-// The complement of Captures: what has shown up stays in Captures, what is still
-// ahead shows here.
+// Upcoming lists tasks scheduled for a future day, grouped into day sections.
+// The complement of Home: what has shown up stays on Home, what is still ahead
+// shows here — every future-dated open task, loose or project, no other gate.
 export default function UpcomingScreen() {
-  const capturesApi = useCapturesApi();
+  const tasksApi = useTasksApi();
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Upcoming" />
-      {capturesApi ? <Upcoming api={capturesApi} /> : <View className="flex-1" />}
+      {tasksApi ? <Upcoming api={tasksApi} /> : <View className="flex-1" />}
     </View>
   );
 }
 
-function Upcoming({ api }: { api: CapturesApi }) {
-  const { data: captures } = useLiveQuery((q) =>
-    q.from({ c: api.collection }).where(({ c }) => isNull(c.processedAt)),
+function Upcoming({ api }: { api: TasksApi }) {
+  const { data: tasks } = useLiveQuery((q) =>
+    q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
 
-  const today = capturesLocalToday();
+  const today = localToday();
   const sections = useMemo(
     () =>
-      upcomingSections(captures ?? [], today).map((s) => ({
+      upcomingSections(tasks ?? [], today).map((s) => ({
         date: s.date,
-        data: s.captures,
+        data: s.tasks,
       })),
-    [captures, today],
+    [tasks, today],
   );
-  // The flat list of visible upcoming captures, so the detail editor resolves the
-  // tapped capture and drops it (closing the sheet) when rescheduled to today.
+  // The flat list of visible upcoming tasks, so the detail editor resolves the
+  // tapped task and drops it (closing the sheet) when rescheduled to today.
   const list = useMemo(() => sections.flatMap((s) => s.data), [sections]);
 
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  // The capture detail editor — the same one Home opens — owns the sheet,
-  // scheduler, edit-on-dismiss, complete-with-Undo, and refine.
-  const detail = useCaptureDetail({ api, list, onError: setWriteError });
-
-  // Refining a capture started here finishes here too: process the capture.
-  const onFinishRefine = useCallback(
-    (captureId: string) => {
-      setWriteError(null);
-      const tx = api.process(captureId);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api],
-  );
+  // The task detail editor — the same one Home opens — owns the sheet,
+  // scheduler, edit-on-dismiss, and complete-with-Undo.
+  const detail = useTaskDetail({ api, list, onError: setWriteError });
 
   // Android Back closes the scheduler, then the detail sheet. Upcoming has no
   // quick-add, so the hook is the only Back consumer here.
@@ -106,15 +94,14 @@ function Upcoming({ api }: { api: CapturesApi }) {
   const { refreshing, onRefresh } = usePullRefresh(api.refetch);
 
   const renderItem = useCallback(
-    ({ item }: { item: Capture }) => (
-      <UpcomingRow item={item} onProcess={detail.process} onOpen={detail.open} />
+    ({ item }: { item: Task }) => (
+      <UpcomingRow item={item} onComplete={detail.complete} onOpen={detail.open} />
     ),
-    [detail.process, detail.open],
+    [detail.complete, detail.open],
   );
 
   return (
     <>
-      <RefineBanner onFinish={onFinishRefine} />
       {writeError ? (
         <Text variant="error" className="px-screen-x">
           {writeError}

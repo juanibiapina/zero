@@ -5,10 +5,12 @@
 export type Task = {
   id: string;
   text: string;
-  // Local date (YYYY-MM-DD) the task should show up on. Minted by the client in
-  // the user's timezone. The "due today" filter (showUpDate <= today) runs
-  // client-side, so the server never needs a timezone.
-  showUpDate: string;
+  // Local day (YYYY-MM-DD) the task should show up on, or null for a loose,
+  // always-relevant task (a quick capture with no day). Minted by the client in
+  // the user's timezone. The shown-up split (showUpDate == null || <= today)
+  // runs client-side, so the server never needs a timezone. A future day parks
+  // the task in Upcoming.
+  showUpDate: string | null;
   createdAt: string;
   completedAt: string | null;
   // The Project this task belongs to, or null when the task is loose.
@@ -16,7 +18,13 @@ export type Task = {
   // When the user took this task on (curated it onto Home), or null when parked.
   // Only gates project tasks; loose tasks always show on Home.
   takenOnAt: string | null;
-  // The capture this task was refined from, or null. Optional so existing rows
-  // and optimistic drafts need not carry it.
+  // The capture this task was refined from, or null. Dormant after the merge.
+  // Optional so optimistic drafts need not carry it.
   sourceCaptureId?: string | null;
+  // Fractional-index sort key for the manual list order, or null (unkeyed, sorts
+  // last — newest-at-bottom). Keyed in practice (server mints the trailing key on
+  // add, reorder sets it, an init backfill keys legacy rows); null is a transient
+  // state — the optimistic just-added row before the server assigns its key on
+  // reconcile. Ordering tolerates null on both sides.
+  sortKey: string | null;
 };

@@ -4,9 +4,9 @@
 
 // The user's local calendar day as YYYY-MM-DD, for the given IANA timezone. Uses
 // the same Intl/en-CA approach as agents/interface.ts formatTimestamp: en-CA
-// formats a date as YYYY-MM-DD, and timeZone shifts it to the user's day. This is
-// the authoritative "today" for the Captures visibility filter, so a device with
-// a wrong clock cannot desync the list.
+// formats a date as YYYY-MM-DD, and timeZone shifts it to the user's day. The
+// authoritative server-side "today" for a timezone, independent of any device
+// clock.
 export function localDayInZone(now: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,

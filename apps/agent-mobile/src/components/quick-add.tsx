@@ -58,7 +58,7 @@ export function QuickAdd({
   onRequestClose,
   busy,
   inputRef,
-  fabLabel = 'Capture',
+  fabLabel = 'Task',
   placeholder,
   bottomOffset = 0,
 }: QuickAddProps) {

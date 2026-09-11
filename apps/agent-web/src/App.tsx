@@ -55,13 +55,13 @@ function AuthGate() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<HomeRoute />} />
-        {/* Unlinked: reachable only by typing /captures. Keeps the GTD Captures
-            list isolated from the current web app while it is dogfooded. */}
+        {/* Home: the single task list. The path stays /captures (unchanged
+            through the single-list merge) so bookmarks and the nav keep working;
+            the screen is the one task list now. */}
         <Route path="captures" element={<HomePage />} />
-        {/* Unlinked from the marketing app like Captures; the second GTD
-            section. Shows captures scheduled for a future day. */}
+        {/* The second section: tasks scheduled for a future day. */}
         <Route path="upcoming" element={<UpcomingPage />} />
-        {/* Unlinked like Captures; the Projects list (entity #3). */}
+        {/* The Projects list (entity #3). */}
         <Route path="projects" element={<ProjectsPage />} />
         {/* A project opens its own screen (a destination, not a sheet). */}
         <Route path="projects/:id" element={<ProjectDetailPage />} />

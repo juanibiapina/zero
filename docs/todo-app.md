@@ -64,43 +64,33 @@ verbs and their optimistic drafts, the REST contracts, and the server stores
 (do-orm is already the generic layer; the leftover overlap is two 3-line idioms).
 See `docs/storage.md`.
 
-**Collapse to one list (decided 2026-08-31):** the Capture/Task split proved
-premature. The user works in a single list the way they do in Todoist and never
-adopted the separate Today tab. The **Today tab was removed from the UI** on web
-and mobile; the app is one Captures list again. All Task code stays parked in the
-tree (table, migration, `DbTaskStore`, `/api/tasks`, the `@zero/agent-core` Task
-data layer, both `tasks-collection.ts`) — unreferenced by any UI, deleted
-nowhere — so Task can return roughly as a one-screen change once Projects and the
-agent give it a reason to exist. The scheduling moves a single list actually
-wants (**postpone to a day**, **drag-to-reorder**) are being folded into Capture
-instead, which reverses the old "do not add a date to Capture" rule. This is
-slice 0 of the Captures postpone/reorder/detail-sheet plan; see that plan for the
-full sequence. **Postpone (slice 1), drag-to-reorder (slice 2), and the edit-only
-detail sheet (slice 3) have shipped** on web and mobile — a capture carries a `showUpDate`
-and a fractional-index `sortKey`, the list orders by that manual key, and tapping
-its text opens the editor. **On mobile the detail was then redesigned** into a
-structured card (round complete check + editable title + a quiet Refine) with a
-schedule row that opens a Today / Tomorrow / calendar picker — this shipped the
-date scheduler (slice 4) on mobile (no free-text, recurrence, or time); see
-`docs/plans/todo-capture-detail-rework.md`. Web's scheduler is still pending.
+**Collapse to one list (decided 2026-08-31; merged 2026-09-12):** the
+Capture/Task split proved premature — the user works in one list the way they do
+in Todoist. This went through two stages. First the separate **Today tab was
+removed** and the app was one **Captures** list, with Capture growing the moves a
+single list wants (postpone to a day, drag-to-reorder, the detail sheet + date
+scheduler) while Task sat parked. Then the **single-list merge** (2026-09-12,
+`docs/plans/todo-single-list-1-merge.md`) finished the job the other way round:
+**Capture was collapsed into Task**, so Task is the single entity and the one
+list, and Capture is deleted. The scheduling/reorder/visibility behavior that had
+been built on Capture moved onto Task. See the shipped entry below and
+`docs/entities/task.md`.
 
 ## Entity wiki (draft — grow one at a time)
 
-Grounding: the foundational block is the **Capture** (the entry point);
-**Task** is the first typed entity built on top of it, and **Project** is the
-third entity, now being built (slice A1 shipped). Everything else below
-(Person, Note…) is a vision draft, not committed.
+Grounding: **Task** is the foundational block and the entry point (Capture was
+collapsed into it by the single-list merge, 2026-09-12), and **Project** is the
+container. Everything else below (Person, Note…) is a vision draft, not
+committed.
 
-- **Capture** — the foundational block and the entry point. A single raw line of
-  text (a thought, task, idea, anything), untyped and uncommitted, added to
-  Captures and later Processed out of it. Fully documented in
+- **Task** — the **single entity and the entry point** (named `Task`, not "Todo",
+  which collides with the app name). One line of work: a loose quick-capture with
+  no project, or a committed next-action under a project. It owns the nullable
+  `showUpDate`, the manual drag-reorder, and the Home/Upcoming visibility split.
+  Fully documented in `docs/entities/task.md`.
+- **Capture** — **retired.** Collapsed into Task by the single-list merge
+  (2026-09-12); a quick-add with no project is a loose task now. Tombstone at
   `docs/entities/capture.md`.
-- **Task** — the first typed entity (named `Task`, not "Todo", which collides
-  with the app name). A clarified next-action with a `showUpDate`, completed out
-  of the Today view. Built as a sibling of Capture. Fully documented in
-  `docs/entities/task.md`. A Capture becoming a Task (the Capture->Task
-  transition) and Task belonging to a Project are the next interactions to
-  design.
 - **Project** — the first container, entity #3 (plan:
   `docs/plans/todo-project-entity.md`; source of truth: `docs/entities/project.md`).
   Goal-oriented (baby, diploma, buy a house, watch a movie), sometimes
@@ -170,6 +160,24 @@ third entity, now being built (slice A1 shipped). Everything else below
 ---
 
 ## Project tracking
+
+Shipped (2026-09-12): **One list — Capture collapsed into Task** (plan series
+`docs/plans/todo-single-list-overview.md`, part 1 `todo-single-list-1-merge.md`).
+Task is now the single entity and the app's entry point; the Capture entity is
+deleted (no `captures` table/route/store/collection/type, no Process, no Refine).
+A quick-add with no project creates a **loose task**; Task absorbed the nullable
+show-up date, the manual drag-reorder, and the Home/Upcoming visibility split.
+Home is one reorderable `sortKey`-ordered list (swipe-right to postpone,
+long-press/grip to reorder, complete with the single bottom Undo, tap to
+rename/schedule); Upcoming lists every future-dated open task grouped by day.
+Migration 0051 drops `captures` and preserves every `tasks` row with a nullable
+`showUpDate` + backfilled `sortKey`; the dormant `sourceCaptureId` stays for a
+future Refine. Shared helpers moved onto the task module (`homeTasks` gained the
+shown-up gate + sortKey ordering; `upcomingSections`, `orderKeyBetween` /
+`compareByOrder`, and the date helpers were ported from the deleted `captures/`).
+Server + agent-core + web suites pass; mobile unit tests pass and **Pixel 7
+device verification is pending**. Parts 2 (move a loose task to a project) and 3
+(date-aware project status / derived "waiting until a day") are the next slices.
 
 Shipped (on main, device-verified): the Capture list (Captures) on mobile
 (`apps/agent-mobile`) and web (unlinked `/captures`) — add a Capture, Process it

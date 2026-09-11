@@ -25,6 +25,7 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? null,
     takenOnAt: over.takenOnAt ?? null,
+    sortKey: over.sortKey ?? null,
   };
 }
 

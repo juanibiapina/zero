@@ -4,8 +4,11 @@ import { defineWebEntityApi } from "./entity-api";
 import {
   addTask,
   completeTask,
+  editTask,
   fetchTasks,
   reopenTask,
+  reorderTask,
+  rescheduleTask,
   setTaskTakenOn,
 } from "./tasks";
 
@@ -15,6 +18,15 @@ export type { TasksApi };
 export const getTasksApi = defineWebEntityApi((deps) =>
   createTasksApi({
     ...deps,
-    rest: { fetchTasks, addTask, completeTask, reopenTask, setTaskTakenOn },
+    rest: {
+      fetchTasks,
+      addTask,
+      completeTask,
+      reopenTask,
+      setTaskTakenOn,
+      editTask,
+      rescheduleTask,
+      reorderTask,
+    },
   }),
 );

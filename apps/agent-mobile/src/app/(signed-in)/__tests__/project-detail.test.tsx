@@ -188,6 +188,7 @@ const taskRow = (id: string, text: string): Task => ({
   completedAt: null,
   projectId: '1',
   takenOnAt: null,
+  sortKey: null,
 });
 
 const renderScreen = () => {
@@ -267,6 +268,7 @@ describe('ProjectDetailScreen', () => {
         completedAt: null,
         projectId: task.projectId,
         takenOnAt: null,
+        sortKey: null,
       };
       mockFetchTasks.mockResolvedValue([added]);
       return added;

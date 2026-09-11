@@ -1,13 +1,13 @@
 import {
-  capturesLocalToday,
+  localToday,
   messageOf,
   monthMatrix,
   scheduleLabel,
   tomorrow,
   undoableAction,
   weekdayShort,
-  type Capture,
-  type CapturesApi,
+  type Task,
+  type TasksApi,
 } from '@zero/agent-core';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, View } from 'react-native';
@@ -17,23 +17,21 @@ import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { Input } from '@/components/ui/input';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
-import { startRefine } from '@/lib/refine-session';
 import { useColor } from '@/lib/theme';
 
-// The capture detail: a plain React Native bottom sheet (an RN Modal + scrim +
-// a keyboard-docked bottom panel), NOT an @expo/ui tree. Built with the app's
-// own components so it matches every other screen: the real hollow `CheckCircle`
+// The task detail: a plain React Native bottom sheet (an RN Modal + scrim + a
+// keyboard-docked bottom panel), NOT an @expo/ui tree. Built with the app's own
+// components so it matches every other screen: the real hollow `CheckCircle`
 // radio, the `Input` field, and hairline `bg-divider` rows on the `bg-surface`
-// sheet — no muddy filled cards, no @expo/ui layout quirks. There is no "Done"
-// button: the circle completes, and Enter / dismissal saves. It does not
-// autofocus, so it opens showing a clean sheet; tap the title to edit.
-function CaptureDetailSheet({
+// sheet. There is no "Done" button: the circle completes, and Enter / dismissal
+// saves. It does not autofocus, so it opens showing a clean sheet; tap the title
+// to edit. Repurposed from the former capture detail in the single-list merge.
+function TaskDetailSheet({
   open,
   draft,
   onChangeDraft,
   onSubmit,
   onComplete,
-  onRefine,
   onOpenSchedule,
   scheduleText,
   scheduled,
@@ -44,7 +42,6 @@ function CaptureDetailSheet({
   onChangeDraft: (text: string) => void;
   onSubmit: () => void;
   onComplete: () => void;
-  onRefine: () => void;
   onOpenSchedule: () => void;
   scheduleText: string;
   scheduled: boolean;
@@ -55,7 +52,7 @@ function CaptureDetailSheet({
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Close capture"
+        accessibilityLabel="Close task"
         className="flex-1 bg-scrim"
         onPress={onClose}
       />
@@ -73,7 +70,7 @@ function CaptureDetailSheet({
               centered. The multiline field's default vertical padding is zeroed
               so its text line centers against the 22dp radio. */}
           <View className="flex-row items-center gap-3 px-screen-x py-3">
-            <CheckCircle label="Complete capture" onPress={onComplete} />
+            <CheckCircle label="Complete task" onPress={onComplete} />
             <Input
               value={draft}
               onChangeText={onChangeDraft}
@@ -81,11 +78,11 @@ function CaptureDetailSheet({
               returnKeyType="done"
               blurOnSubmit
               multiline
-              placeholder="Capture"
-              accessibilityLabel="Capture text"
+              placeholder="Task"
+              accessibilityLabel="Task text"
               style={{ paddingTop: 0, paddingBottom: 0 }}
               className="flex-1 text-[18px] font-semibold leading-6"
-              testID="capture-edit-input"
+              testID="task-edit-input"
             />
           </View>
 
@@ -96,7 +93,7 @@ function CaptureDetailSheet({
             accessibilityRole="button"
             accessibilityLabel="Set schedule"
             onPress={onOpenSchedule}
-            testID="capture-schedule"
+            testID="task-schedule"
             className="flex-row items-center gap-3 px-screen-x py-3.5"
           >
             <Text className="w-6 text-center text-[18px]">🗓</Text>
@@ -108,21 +105,6 @@ function CaptureDetailSheet({
               }
             >
               {scheduleText}
-            </Text>
-          </Pressable>
-
-          <View className="h-px bg-divider" />
-
-          {/* Refine: the next step. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Refine into tasks & projects"
-            onPress={onRefine}
-            className="flex-row items-center gap-3 px-screen-x py-3.5"
-          >
-            <Text className="w-6 text-center text-[16px] text-accent">✦</Text>
-            <Text className="flex-1 text-[16px] text-accent">
-              Refine into tasks &amp; projects
             </Text>
           </Pressable>
         </View>
@@ -163,11 +145,10 @@ function QuickRow({
   );
 }
 
-// The schedule selector: a plain React Native modal (the IconPickerSheet
-// pattern), NOT an @expo/ui tree, so it can reproduce Todoist's scheduler — quick
-// options with the resolved weekday on the right, an inline month calendar, and a
-// "No date" row. It sets a capture's showUpDate (a plain date; no time, no
-// recurrence). Rendered at the screen root (above the @expo/ui detail sheet).
+// The schedule selector: a plain React Native modal, NOT an @expo/ui tree, so it
+// reproduces Todoist's scheduler — quick options with the resolved weekday on the
+// right, an inline month calendar, and a "No date" row. It sets a task's
+// showUpDate (a plain date; no time, no recurrence).
 function ScheduleSheet({
   open,
   showUpDate,
@@ -182,16 +163,13 @@ function ScheduleSheet({
   const insets = useSafeAreaInsets();
   const accent = useColor('--color-accent');
   const onAccent = useColor('--color-on-accent');
-  const today = capturesLocalToday();
+  const today = localToday();
   const tmr = tomorrow(today);
   const selected = showUpDate ?? null;
 
   // The month the grid shows: the selected date's month, else the current month.
   const initial = selected ?? today;
   const [y, m] = initial.split('-').map(Number);
-  // Seeded once from the selected date (or today). The call site keys this
-  // component by capture id, so it remounts — and reseeds — per capture; the
-  // prev/next arrows then drive the visible month from here.
   const [view, setView] = useState<{ y: number; m0: number }>({ y, m0: m - 1 });
 
   const grid = useMemo(() => monthMatrix(view.y, view.m0), [view]);
@@ -327,23 +305,23 @@ function ScheduleSheet({
   );
 }
 
-// The capture detail editor as one deep module: it owns the detail sheet, the
+// The task detail editor as one deep module: it owns the detail sheet, the
 // schedule selector, and all of their state and writes, behind a small
 // interface. Home and Upcoming both open the same editor through this hook
 // instead of duplicating ~200 lines of sheet markup.
 //
-// `list` is the screen's own visible list; the selected capture is resolved as
-// `list.find(id)`, so a reschedule that moves a capture out of that list closes
-// the sheet (Home drops a future-dated capture; Upcoming drops one pulled to
-// today). `handleBack` is returned, not self-registered, so each screen keeps
-// its own Back priority (Home must still order quick-add and discard-confirm).
-export type CaptureDetail = {
-  // Open the editor for a capture (seeds the editable draft from its text).
-  open: (item: Capture) => void;
-  // Complete a capture with the shared single bottom Undo snackbar. Used by the
-  // sheet's check and by each screen's row checks, so the Undo behavior lives in
-  // one place.
-  process: (item: Capture) => void;
+// `list` is the screen's own visible list; the selected task is resolved as
+// `list.find(id)`, so a reschedule that moves a task out of that list closes the
+// sheet (Home drops a future-dated task; Upcoming drops one pulled to today).
+// `handleBack` is returned, not self-registered, so each screen keeps its own
+// Back priority (Home must still order quick-add and discard-confirm).
+export type TaskDetail = {
+  // Open the editor for a task (seeds the editable draft from its text).
+  open: (item: Task) => void;
+  // Complete a task with the shared single bottom Undo snackbar (shared 'undo'
+  // id). Used by the sheet's check and by each screen's row checks, so the Undo
+  // behavior lives in one place.
+  complete: (item: Task) => void;
   // The detail sheet + schedule selector, ready to render at the screen root.
   sheets: ReactNode;
   // Consume an Android Back press when a sheet or the scheduler is open. Returns
@@ -353,16 +331,16 @@ export type CaptureDetail = {
   active: boolean;
 };
 
-export function useCaptureDetail({
+export function useTaskDetail({
   api,
   list,
   onError,
 }: {
-  api: CapturesApi;
-  list: Capture[];
+  api: TasksApi;
+  list: Task[];
   // Each screen passes its own write-error setter (clears on null).
   onError: (message: string | null) => void;
-}): CaptureDetail {
+}): TaskDetail {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [scheduling, setScheduling] = useState(false);
@@ -371,7 +349,7 @@ export function useCaptureDetail({
     ? (list.find((item) => item.id === selectedId) ?? null)
     : null;
 
-  const open = useCallback((item: Capture) => {
+  const open = useCallback((item: Task) => {
     closingDetailRef.current = false;
     setDraft(item.text);
     setSelectedId(item.id);
@@ -390,15 +368,15 @@ export function useCaptureDetail({
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   }, [api, draft, selected, onError]);
 
-  const process = useCallback(
-    (item: Capture) => {
+  const complete = useCallback(
+    (item: Task) => {
       onError(null);
-      // Same single bottom Undo snackbar as task-complete (shared 'undo' id, so
-      // only one shows at a time). Undo un-processes the capture back to the inbox.
+      // Single bottom Undo snackbar (shared 'undo' id, so only one shows at a
+      // time). Undo reopens the task.
       undoableAction({
         message: 'Completed',
-        act: () => api.process(item.id),
-        undo: () => api.unprocess(item),
+        act: () => api.complete(item.id),
+        undo: () => api.reopen(item),
         onError,
       });
     },
@@ -409,14 +387,8 @@ export function useCaptureDetail({
     if (!selected) return;
     const item = selected;
     setSelectedId(null);
-    process(item);
-  }, [selected, process]);
-
-  const refine = useCallback(() => {
-    if (!selected) return;
-    startRefine(selected.id, selected.text);
-    setSelectedId(null);
-  }, [selected]);
+    complete(item);
+  }, [selected, complete]);
 
   const onPickSchedule = useCallback(
     (date: string | null) => {
@@ -444,17 +416,16 @@ export function useCaptureDetail({
 
   const sheets = (
     <>
-      <CaptureDetailSheet
+      <TaskDetailSheet
         open={selected != null}
         draft={draft}
         onChangeDraft={setDraft}
         onSubmit={commitAndClose}
         onClose={commitAndClose}
         onComplete={completeFromSheet}
-        onRefine={refine}
         onOpenSchedule={() => setScheduling(true)}
         scheduleText={
-          selected ? scheduleLabel(selected.showUpDate, capturesLocalToday()) : ''
+          selected ? scheduleLabel(selected.showUpDate, localToday()) : ''
         }
         scheduled={selected?.showUpDate != null}
       />
@@ -471,7 +442,7 @@ export function useCaptureDetail({
 
   return {
     open,
-    process,
+    complete,
     sheets,
     handleBack,
     active: selected != null || scheduling,

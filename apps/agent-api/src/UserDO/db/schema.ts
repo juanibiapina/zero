@@ -192,41 +192,22 @@ export const processedUpdates = table("processed_updates", {
   createdAt: column.text().notNull(),
 });
 
-// The GTD Captures list (the Todoist replacement). Standalone from the agent's
-// tables; owned by DbCaptureStore. Captures are the rows where processedAt IS
-// NULL; createdAt is the Captures order.
-export const captures = table("captures", {
-  // The client mints the id (a UUID) and re-sends it verbatim on every
-  // retry/replay, so the primary key itself dedupes a lost-ACK double-insert.
-  id: column.text().notNull().primaryKey(),
-  text: column.text().notNull(),
-  createdAt: column.text().notNull(),
-  processedAt: column.text(),
-  // Local day (YYYY-MM-DD) the capture should reappear on. NULL = always
-  // visible. Postpone sets it; the visibility filter runs server-side.
-  showUpDate: column.text(),
-  // Fractional-index sort key (base-62 string) for the manual list order.
-  // Nullable: NULL means "unkeyed", which sorts LAST. In practice every stored
-  // row is keyed — `add` mints a trailing key, `reorder` sets one, and an init
-  // backfill (DbCaptureStore.backfillSortKeys) keys legacy rows so they keep
-  // their place instead of sinking below newly-keyed adds — so NULL is only a
-  // transient legacy state (pre-backfill) or the client's optimistic just-added
-  // row. Not NOT NULL because ADD COLUMN (migration 0045) can't carry it on a
-  // populated table and a valid key can't be minted in SQL.
-  sortKey: column.text(),
-});
-
-// The Today list (the Todoist replacement). A Task is a typed, clarified
-// next-action with a day, distinct from a Capture. Owned by DbTaskStore. Open
-// tasks are the rows where completedAt IS NULL; showUpDate is the local day the
-// task is due (client-side "due today" filter). See docs/entities/task.md.
+// The single todo-app list (the Todoist replacement). A Task is one line of
+// work; it is the app's entry point and only entity. A loose task (NULL
+// projectId) is a quick capture; a project task belongs to a Project. Owned by
+// DbTaskStore. Open tasks are the rows where completedAt IS NULL. The Capture
+// entity was collapsed into Task here (migration 0051); see
+// docs/plans/todo-single-list-1-merge.md.
 export const tasks = table("tasks", {
   // The client mints the id (a UUID) and re-sends it verbatim on every
   // retry/replay, so the primary key itself dedupes a lost-ACK double-insert.
   id: column.text().notNull().primaryKey(),
   text: column.text().notNull(),
-  // Local date (YYYY-MM-DD) the task should show up on.
-  showUpDate: column.text().notNull(),
+  // Local day (YYYY-MM-DD) the task should show up on, or NULL for a loose,
+  // always-relevant task (a quick capture with no day). A future day parks the
+  // task in Upcoming; a past/today day is "shown up". Postpone sets it; the
+  // visibility split runs client-side against the user's local today.
+  showUpDate: column.text(),
   createdAt: column.text().notNull(),
   completedAt: column.text(),
   // The Project this task belongs to, or NULL when the task is loose. See
@@ -235,8 +216,16 @@ export const tasks = table("tasks", {
   // When the user took this task on (curated it onto Home), or NULL when parked.
   // Only gates project tasks; loose tasks always show. See migration 0048.
   takenOnAt: column.text(),
-  // The capture this task was refined from, or NULL. See migration 0050.
+  // The capture this task was refined from, or NULL. Dormant after the merge
+  // (Refine returns later over all tasks). See migration 0050.
   sourceCaptureId: column.text(),
+  // Fractional-index sort key (base-62 string) for the manual list order.
+  // Nullable: NULL means "unkeyed", which sorts LAST. In practice every stored
+  // row is keyed — `add` mints a trailing key, `reorder` sets one, and a DO-init
+  // backfill (DbTaskStore.backfillSortKeys) keys legacy rows so they keep their
+  // place. Not NOT NULL because a valid key can't be minted in SQL. See
+  // migration 0051.
+  sortKey: column.text(),
 });
 
 // Projects: the third entity of the todo app (the Todoist replacement). A named,

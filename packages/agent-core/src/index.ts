@@ -14,30 +14,7 @@ export { listView, LOADING_TEXT_DELAY_MS, type ListView } from "./collection/vie
 // The error-to-message helper shared by every list screen.
 export { messageOf } from "./errors";
 
-// The Capture data layer (TanStack DB collection) shared by web + mobile.
-export type { Capture } from "./captures/types";
-export {
-  CAPTURES_QUERY_KEY,
-  createCapturesApi,
-  createInMemoryApi,
-  createPersistedApi,
-  type CapturesApi,
-  type CapturesRest,
-} from "./captures/collection";
-export {
-  dayLabel,
-  localToday as capturesLocalToday,
-  monthMatrix,
-  parseLocalDay,
-  scheduleLabel,
-  tomorrow,
-  visibleCaptures,
-  weekdayShort,
-} from "./captures/dates";
-export { upcomingSections, type UpcomingSection } from "./captures/upcoming";
-export { compareByOrder, orderKeyBetween } from "./captures/order";
-
-// The Task data layer (Today list).
+// The Task data layer (the single list) shared by web + mobile.
 export type { Task } from "./tasks/types";
 export {
   TASKS_QUERY_KEY,
@@ -47,8 +24,18 @@ export {
   type TasksApi,
   type TasksRest,
 } from "./tasks/collection";
-export { dueToday, localToday } from "./tasks/today";
+export { localToday } from "./tasks/today";
 export { homeTasks } from "./tasks/home";
+export {
+  dayLabel,
+  monthMatrix,
+  parseLocalDay,
+  scheduleLabel,
+  tomorrow,
+  weekdayShort,
+} from "./tasks/dates";
+export { upcomingSections, type UpcomingSection } from "./tasks/upcoming";
+export { compareByOrder, orderKeyBetween } from "./tasks/order";
 
 // The AI icon-suggestion hint (shared shape + pure staleness check; the cache
 // and fetch live per surface).

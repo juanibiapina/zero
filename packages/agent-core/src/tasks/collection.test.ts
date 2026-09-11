@@ -31,6 +31,7 @@ function fakeRest(initial: Task[]): TasksRest {
         completedAt: null,
         projectId,
         takenOnAt,
+        sortKey: `a${server.length}`,
       };
       server.push(task);
       return { ...task };
@@ -54,6 +55,27 @@ function fakeRest(initial: Task[]): TasksRest {
       const task = server.find((t) => t.id === id);
       if (!task) throw new Error(`no task ${id}`);
       task.completedAt = null;
+      return { ...task };
+    },
+    editTask: async (id, text) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      task.text = text;
+      return { ...task };
+    },
+    rescheduleTask: async (id, showUpDate) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      task.showUpDate = showUpDate;
+      return { ...task };
+    },
+    reorderTask: async (id, sortKey) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      task.sortKey = sortKey;
       return { ...task };
     },
   };
@@ -82,6 +104,7 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   completedAt: null,
   projectId: null,
   takenOnAt: null,
+  sortKey: null,
   ...over,
 });
 
@@ -222,6 +245,68 @@ describe("tasks collection", () => {
   });
 });
 
+describe("tasks update verbs route by the changed field set", () => {
+  // A rest that records which verb the collection dispatched to, so we prove the
+  // ordered `matches` disambiguation (sortKey → reorder, showUpDate → reschedule,
+  // else text → edit) picks the right one.
+  function spyRest(initial: Task[]) {
+    const base = fakeRest(initial);
+    const calls: string[] = [];
+    const rest: TasksRest = {
+      ...base,
+      editTask: (id, text) => {
+        calls.push("edit");
+        return base.editTask(id, text);
+      },
+      rescheduleTask: (id, showUpDate) => {
+        calls.push("reschedule");
+        return base.rescheduleTask(id, showUpDate);
+      },
+      reorderTask: (id, sortKey) => {
+        calls.push("reorder");
+        return base.reorderTask(id, sortKey);
+      },
+    };
+    return { rest, calls };
+  }
+
+  it("routes a showUpDate change to reschedule (not edit)", async () => {
+    const { rest, calls } = spyRest([task("s1", { text: "alpha" })]);
+    const api = createInMemoryTasksApi({ queryClient: new QueryClient(), rest });
+    await api.collection.stateWhenReady();
+    await api.refetch();
+
+    await api.reschedule("s1", "2099-01-01").isPersisted.promise;
+
+    expect(calls).toEqual(["reschedule"]);
+    expect(api.collection.get("s1")?.showUpDate).toBe("2099-01-01");
+  });
+
+  it("routes a sortKey change to reorder (not edit)", async () => {
+    const { rest, calls } = spyRest([task("s1", { text: "alpha" })]);
+    const api = createInMemoryTasksApi({ queryClient: new QueryClient(), rest });
+    await api.collection.stateWhenReady();
+    await api.refetch();
+
+    await api.reorder("s1", "a5").isPersisted.promise;
+
+    expect(calls).toEqual(["reorder"]);
+    expect(api.collection.get("s1")?.sortKey).toBe("a5");
+  });
+
+  it("routes a text change to edit (the catch-all)", async () => {
+    const { rest, calls } = spyRest([task("s1", { text: "alpha" })]);
+    const api = createInMemoryTasksApi({ queryClient: new QueryClient(), rest });
+    await api.collection.stateWhenReady();
+    await api.refetch();
+
+    await api.edit("s1", "renamed").isPersisted.promise;
+
+    expect(calls).toEqual(["edit"]);
+    expect(api.collection.get("s1")?.text).toBe("renamed");
+  });
+});
+
 // The outbox persists queued offline writes by these names and the local cache
 // table by the entity name. Renaming any strands offline writes.
 describe("tasks durable names", () => {
@@ -231,7 +316,10 @@ describe("tasks durable names", () => {
     expect(Object.keys(spec.verbs).sort()).toEqual([
       "addTask",
       "completeTask",
+      "editTask",
       "reopenTask",
+      "reorderTask",
+      "rescheduleTask",
       "setTakenOn",
     ]);
   });

@@ -9,8 +9,8 @@ import {
 } from '@testing-library/react-native';
 import { View } from 'react-native';
 
-import type { Capture } from '@/lib/api';
-import { resetCapturesApiForTest } from '@/lib/captures-collection';
+import type { Task } from '@/lib/api';
+import { resetTasksApiForTest } from '@/lib/tasks-collection';
 
 import UpcomingScreen from '../upcoming';
 
@@ -34,37 +34,42 @@ jest.mock('@clerk/expo/native', () => ({
   UserButton: () => mockUserButton(),
 }));
 
-const mockFetchCaptures = jest.fn<(getToken: unknown) => Promise<Capture[]>>();
-const mockProcessCapture =
-  jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
-const mockEditCapture =
-  jest.fn<(getToken: unknown, id: string, text: string) => Promise<Capture>>();
-const mockRescheduleCapture =
+const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
+const mockCompleteTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockReopenTask =
+  jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockEditTask =
+  jest.fn<(getToken: unknown, id: string, text: string) => Promise<Task>>();
+const mockRescheduleTask =
   jest.fn<
-    (getToken: unknown, id: string, date: string | null) => Promise<Capture>
+    (getToken: unknown, id: string, date: string | null) => Promise<Task>
   >();
 jest.mock('@/lib/api', () => ({
-  fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
-  addCapture: jest.fn(),
-  processCapture: (getToken: unknown, id: string) =>
-    mockProcessCapture(getToken, id),
-  editCapture: (getToken: unknown, id: string, text: string) =>
-    mockEditCapture(getToken, id, text),
-  rescheduleCapture: (getToken: unknown, id: string, date: string | null) =>
-    mockRescheduleCapture(getToken, id, date),
-  reorderCapture: jest.fn(),
+  fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
+  addTask: jest.fn(),
+  completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
+  reopenTask: (getToken: unknown, id: string) => mockReopenTask(getToken, id),
+  editTask: (getToken: unknown, id: string, text: string) =>
+    mockEditTask(getToken, id, text),
+  rescheduleTask: (getToken: unknown, id: string, date: string | null) =>
+    mockRescheduleTask(getToken, id, date),
+  reorderTask: jest.fn(),
+  setTaskTakenOn: jest.fn(),
 }));
 
-const capture = (
+const task = (
   id: string,
   text: string,
   showUpDate: string | null = null,
-): Capture => ({
+): Task => ({
   id,
   text,
   createdAt: '2023-01-01T00:00:00.000Z',
-  processedAt: null,
+  completedAt: null,
   showUpDate,
+  projectId: null,
+  takenOnAt: null,
   sortKey: null,
 });
 
@@ -84,29 +89,30 @@ const renderScreen = () => {
 
 describe('UpcomingScreen', () => {
   beforeEach(() => {
-    resetCapturesApiForTest();
-    mockProcessCapture.mockReset();
-    mockEditCapture.mockReset();
-    mockRescheduleCapture.mockReset();
+    resetTasksApiForTest();
+    mockCompleteTask.mockReset();
+    mockReopenTask.mockReset();
+    mockEditTask.mockReset();
+    mockRescheduleTask.mockReset();
   });
 
-  it('lists a future-dated capture and hides an undated one', async () => {
+  it('lists a future-dated task and hides an undated one', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([
-      capture('1', 'undated thought'),
-      capture('2', 'ship the release', '2099-01-01'),
+    mockFetchTasks.mockResolvedValue([
+      task('1', 'undated thought'),
+      task('2', 'ship the release', '2099-01-01'),
     ]);
 
     const { getByText, queryByText } = await renderScreen();
 
     await waitFor(() => expect(getByText('ship the release')).toBeTruthy());
-    // Undated captures live in the Captures tab, never Upcoming.
+    // Undated / shown-up tasks live on Home, never Upcoming.
     expect(queryByText('undated thought')).toBeNull();
   });
 
   it('shows the empty message when nothing is scheduled ahead', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'undated thought')]);
+    mockFetchTasks.mockResolvedValue([task('1', 'undated thought')]);
 
     const { getByText } = await renderScreen();
 
@@ -115,16 +121,14 @@ describe('UpcomingScreen', () => {
     );
   });
 
-  it('processes an upcoming capture, removing it', async () => {
+  it('completes an upcoming task, removing it', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([
-      capture('2', 'ship the release', '2099-01-01'),
-    ]);
-    mockProcessCapture.mockImplementation(async () => {
-      mockFetchCaptures.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([task('2', 'ship the release', '2099-01-01')]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
       return {
-        ...capture('2', 'ship the release', '2099-01-01'),
-        processedAt: '2023-01-02T00:00:00.000Z',
+        ...task('2', 'ship the release', '2099-01-01'),
+        completedAt: '2023-01-02T00:00:00.000Z',
       };
     });
 
@@ -133,41 +137,37 @@ describe('UpcomingScreen', () => {
     await waitFor(() => expect(getByText('ship the release')).toBeTruthy());
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Process "ship the release"'));
+      fireEvent.press(getByLabelText('Complete "ship the release"'));
     });
 
     await waitFor(() => expect(queryByText('ship the release')).toBeNull());
-    expect(mockProcessCapture).toHaveBeenCalledTimes(1);
-    expect(mockProcessCapture.mock.calls[0][1]).toBe('2');
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1);
+    expect(mockCompleteTask.mock.calls[0][1]).toBe('2');
   });
 
-  it('re-pulls the captures when the list is pulled to refresh', async () => {
+  it('re-pulls the tasks when the list is pulled to refresh', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([
-      capture('2', 'ship the release', '2099-01-01'),
-    ]);
+    mockFetchTasks.mockResolvedValue([task('2', 'ship the release', '2099-01-01')]);
 
     const screen = await renderScreen();
     await waitFor(() => expect(screen.getByText('ship the release')).toBeTruthy());
 
-    const before = mockFetchCaptures.mock.calls.length;
+    const before = mockFetchTasks.mock.calls.length;
     await act(async () => {
       pullToRefresh(screen);
     });
 
     await waitFor(() =>
-      expect(mockFetchCaptures.mock.calls.length).toBeGreaterThan(before),
+      expect(mockFetchTasks.mock.calls.length).toBeGreaterThan(before),
     );
   });
 
-  it('opens the capture detail editor and edits the title', async () => {
+  it('opens the task detail editor and edits the title', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([
-      capture('2', 'ship the release', '2099-01-01'),
-    ]);
-    mockEditCapture.mockImplementation(async (_g, id, text) => {
-      const edited = capture(id, text, '2099-01-01');
-      mockFetchCaptures.mockResolvedValue([edited]);
+    mockFetchTasks.mockResolvedValue([task('2', 'ship the release', '2099-01-01')]);
+    mockEditTask.mockImplementation(async (_g, id, text) => {
+      const edited = task(id, text, '2099-01-01');
+      mockFetchTasks.mockResolvedValue([edited]);
       return edited;
     });
 
@@ -178,30 +178,25 @@ describe('UpcomingScreen', () => {
       fireEvent.press(getByLabelText('Edit "ship the release"'));
     });
 
-    // Same sheet as Home: the editable title, not an inline row input.
     const input = getByDisplayValue('ship the release');
     await act(async () => {
       fireEvent.changeText(input, 'ship the big release');
     });
-    // The keyboard done key (onSubmitEditing) saves and closes; submit in its own
-    // act so the edited draft is committed, not the stale one.
     await act(async () => {
       fireEvent(input, 'submitEditing');
     });
 
     await waitFor(() => expect(getByText('ship the big release')).toBeTruthy());
-    expect(mockEditCapture).toHaveBeenCalledTimes(1);
-    expect(mockEditCapture.mock.calls[0][1]).toBe('2');
-    expect(mockEditCapture.mock.calls[0][2]).toBe('ship the big release');
+    expect(mockEditTask).toHaveBeenCalledTimes(1);
+    expect(mockEditTask.mock.calls[0][1]).toBe('2');
+    expect(mockEditTask.mock.calls[0][2]).toBe('ship the big release');
   });
 
-  it('reschedules an upcoming capture from the scheduler', async () => {
+  it('reschedules an upcoming task from the scheduler', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([
-      capture('2', 'ship the release', '2099-01-01'),
-    ]);
-    mockRescheduleCapture.mockResolvedValue(
-      capture('2', 'ship the release', '2099-01-02'),
+    mockFetchTasks.mockResolvedValue([task('2', 'ship the release', '2099-01-01')]);
+    mockRescheduleTask.mockResolvedValue(
+      task('2', 'ship the release', '2099-01-02'),
     );
 
     const { getByText, getByLabelText } = await renderScreen();
@@ -217,21 +212,19 @@ describe('UpcomingScreen', () => {
       fireEvent.press(getByLabelText('Tomorrow'));
     });
 
-    await waitFor(() => expect(mockRescheduleCapture).toHaveBeenCalledTimes(1));
-    expect(mockRescheduleCapture.mock.calls[0][1]).toBe('2');
-    expect(mockRescheduleCapture.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await waitFor(() => expect(mockRescheduleTask).toHaveBeenCalledTimes(1));
+    expect(mockRescheduleTask.mock.calls[0][1]).toBe('2');
+    expect(mockRescheduleTask.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('completes a capture from the detail round check', async () => {
+  it('completes a task from the detail round check', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([
-      capture('2', 'ship the release', '2099-01-01'),
-    ]);
-    mockProcessCapture.mockImplementation(async () => {
-      mockFetchCaptures.mockResolvedValue([]);
+    mockFetchTasks.mockResolvedValue([task('2', 'ship the release', '2099-01-01')]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
       return {
-        ...capture('2', 'ship the release', '2099-01-01'),
-        processedAt: '2023-01-02T00:00:00.000Z',
+        ...task('2', 'ship the release', '2099-01-01'),
+        completedAt: '2023-01-02T00:00:00.000Z',
       };
     });
 
@@ -243,12 +236,12 @@ describe('UpcomingScreen', () => {
       fireEvent.press(getByLabelText('Edit "ship the release"'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('Complete capture'));
+      fireEvent.press(getByLabelText('Complete task'));
     });
 
     await waitFor(() => expect(queryByLabelText('sheet')).toBeNull());
     await waitFor(() => expect(queryByText('ship the release')).toBeNull());
-    expect(mockProcessCapture).toHaveBeenCalledTimes(1);
-    expect(mockProcessCapture.mock.calls[0][1]).toBe('2');
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1);
+    expect(mockCompleteTask.mock.calls[0][1]).toBe('2');
   });
 });

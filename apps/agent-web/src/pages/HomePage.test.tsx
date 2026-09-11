@@ -3,13 +3,9 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, useLocation } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import {
-  createInMemoryApi,
   createInMemoryProjectsApi,
   createInMemoryTasksApi,
   createInMemoryWaitsApi,
-  type Capture,
-  type CapturesApi,
-  type CapturesRest,
   type Project,
   type ProjectsApi,
   type ProjectsRest,
@@ -26,13 +22,9 @@ import { HomePage } from "./HomePage";
 // Give the real page fresh in-memory collections per test. The array-backed
 // REST boundary keeps each interaction deterministic without OPFS or network.
 const h = vi.hoisted(() => ({
-  api: null as CapturesApi | null,
   tasksApi: null as TasksApi | null,
   projectsApi: null as ProjectsApi | null,
   waitsApi: null as WaitsApi | null,
-}));
-vi.mock("@/lib/captures-collection", () => ({
-  getCapturesApi: () => Promise.resolve(h.api),
 }));
 vi.mock("@/lib/tasks-collection", () => ({
   getTasksApi: () => Promise.resolve(h.tasksApi),
@@ -43,8 +35,6 @@ vi.mock("@/lib/projects-collection", () => ({
 vi.mock("@/lib/waits-collection", () => ({
   getWaitsApi: () => Promise.resolve(h.waitsApi),
 }));
-
-
 
 const emptyWaitsRest: WaitsRest = {
   fetchWaits: async () => [],
@@ -78,75 +68,26 @@ const emptyProjectsRest: ProjectsRest = {
   deleteProject: async () => {},
 };
 
-const capture = (id: string, text: string): Capture => ({
+// A loose task with no show-up date (always shown up on Home).
+const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   id,
   text,
-  createdAt: `2023-01-0${id}T00:00:00.000Z`,
-  processedAt: null,
-  showUpDate: null,
-  sortKey: null,
+  showUpDate: over.showUpDate === undefined ? null : over.showUpDate,
+  createdAt: over.createdAt ?? `2023-01-0${id}T00:00:00.000Z`,
+  completedAt: over.completedAt ?? null,
+  projectId: over.projectId ?? null,
+  takenOnAt: over.takenOnAt ?? null,
+  sortKey: over.sortKey ?? null,
 });
 
 // Records reschedule calls so tests can assert the scheduler wiring.
 const rescheduled: { id: string; showUpDate: string | null }[] = [];
 
-function fakeRest(initial: Capture[]): CapturesRest {
-  const server = initial.map((item) => ({ ...item }));
-  return {
-    fetchCaptures: async () => server.map((item) => ({ ...item })),
-    addCapture: async ({ id, text }) => {
-      const row = capture(id, text);
-      server.push(row);
-      return { ...row };
-    },
-    processCapture: async (id) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no capture ${id}`);
-      row.processedAt = new Date().toISOString();
-      return { ...row };
-    },
-    unprocessCapture: async (id) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no capture ${id}`);
-      row.processedAt = null;
-      return { ...row };
-    },
-    editCapture: async (id, text) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no capture ${id}`);
-      row.text = text;
-      return { ...row };
-    },
-    rescheduleCapture: async (id, showUpDate) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no capture ${id}`);
-      row.showUpDate = showUpDate;
-      rescheduled.push({ id, showUpDate });
-      return { ...row };
-    },
-    reorderCapture: async (id, sortKey) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no capture ${id}`);
-      row.sortKey = sortKey;
-      return { ...row };
-    },
-  };
-}
-
-const taskRow = (id: string, text: string): Task => ({
-  id,
-  text,
-  showUpDate: "2023-01-01",
-  createdAt: `2023-01-0${id}T00:00:00.000Z`,
-  completedAt: null,
-  projectId: null,
-  takenOnAt: null,
-});
-
 function fakeTasksRest(initial: Task[]): TasksRest {
   const server = initial.map((item) => ({ ...item }));
   return {
-    fetchTasks: async () => server.map((item) => ({ ...item })),
+    fetchTasks: async () =>
+      server.filter((t) => t.completedAt == null).map((item) => ({ ...item })),
     addTask: async ({ id, text, showUpDate, projectId, takenOnAt }) => {
       const row: Task = {
         id,
@@ -156,6 +97,7 @@ function fakeTasksRest(initial: Task[]): TasksRest {
         completedAt: null,
         projectId,
         takenOnAt,
+        sortKey: `a${server.length}`,
       };
       server.push(row);
       return { ...row };
@@ -178,6 +120,25 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       row.takenOnAt = takenOnAt;
       return { ...row };
     },
+    editTask: async (id, text) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.text = text;
+      return { ...row };
+    },
+    rescheduleTask: async (id, showUpDate) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.showUpDate = showUpDate;
+      rescheduled.push({ id, showUpDate });
+      return { ...row };
+    },
+    reorderTask: async (id, sortKey) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.sortKey = sortKey;
+      return { ...row };
+    },
   };
 }
 
@@ -198,12 +159,8 @@ const projectRow = (id: string, over: Partial<Project> = {}): Project => ({
   createdAt: over.createdAt ?? "2023-01-01T00:00:00.000Z",
 });
 
-function setApi(initial: Capture[], tasks: Task[] = [], projects: Project[] = []) {
+function setApi(tasks: Task[] = [], projects: Project[] = []) {
   rescheduled.length = 0;
-  h.api = createInMemoryApi({
-    queryClient: new QueryClient(),
-    rest: fakeRest(initial),
-  });
   h.tasksApi = createInMemoryTasksApi({
     queryClient: new QueryClient(),
     rest: fakeTasksRest(tasks),
@@ -220,7 +177,6 @@ function setApi(initial: Capture[], tasks: Task[] = [], projects: Project[] = []
 
 describe("HomePage", () => {
   afterEach(() => {
-    h.api = null;
     h.tasksApi = null;
     h.projectsApi = null;
     h.waitsApi = null;
@@ -228,15 +184,15 @@ describe("HomePage", () => {
   });
 
   it("titles the screen Home", async () => {
-    setApi([]);
+    setApi();
     render(<HomePage />, { wrapper: MemoryRouter });
     expect(
       await screen.findByRole("heading", { name: "Home", level: 1 }),
     ).toBeInTheDocument();
   });
 
-  it("shows the plan CTA when plate and inbox are empty and a project is next", async () => {
-    setApi([], [], [projectRow("p", { status: "next" })]);
+  it("shows the plan CTA when the list is empty and a project is next", async () => {
+    setApi([], [projectRow("p", { status: "next" })]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     const cta = await screen.findByRole("link", { name: "Plan your day" });
@@ -244,8 +200,8 @@ describe("HomePage", () => {
     expect(screen.getByText("1 Next")).toBeInTheDocument();
   });
 
-  it("shows the create CTA when there are no projects", async () => {
-    setApi([]);
+  it("shows the create CTA when there are no projects and no tasks", async () => {
+    setApi();
     render(<HomePage />, { wrapper: MemoryRouter });
 
     expect(
@@ -253,38 +209,23 @@ describe("HomePage", () => {
     ).toHaveAttribute("href", "/projects");
   });
 
-  it("shows the inbox and no CTA when the plate is empty but captures exist", async () => {
-    setApi([capture("1", "buy milk")], [], [projectRow("p", { status: "next" })]);
+  it("renders a loose task and no CTA", async () => {
+    setApi([taskRow("1", "buy milk")], [projectRow("p", { status: "next" })]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     expect(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Plan your day" }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Plan your day" })).toBeNull();
   });
 
-  it("hides the inbox section when there are tasks but no captures", async () => {
-    setApi([], [taskRow("1", "mail the letter")]);
-    render(<HomePage />, { wrapper: MemoryRouter });
-
-    await screen.findByRole("button", { name: 'Complete "mail the letter"' });
-    expect(screen.queryByText("Inbox")).toBeNull();
-    expect(
-      screen.queryByText("No captures yet. Capture something."),
-    ).toBeNull();
-  });
-
-  it("badges a project task on the plate with its project icon", async () => {
+  it("badges a project task with its project icon", async () => {
     setApi(
-      [],
       [
-        {
-          ...taskRow("1", "mail the letter"),
+        taskRow("1", "mail the letter", {
           projectId: "p",
           takenOnAt: "2023-01-02T00:00:00.000Z",
-        },
+        }),
       ],
       [projectRow("p", { status: "next", icon: "🎓" })],
     );
@@ -294,27 +235,27 @@ describe("HomePage", () => {
     expect(screen.getByText("🎓")).toBeInTheDocument();
   });
 
-  it("adds a task from the Task quick-add mode", async () => {
-    setApi([]);
+  it("adds a loose task from the default Task quick-add", async () => {
+    setApi();
     render(<HomePage />, { wrapper: MemoryRouter });
 
-    fireEvent.click(await screen.findByRole("radio", { name: "Task" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Add a task" }), {
-      target: { value: "call the dentist" },
-    });
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: "Add a task" }),
+      { target: { value: "call the dentist" } },
+    );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
     });
 
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: 'Complete "call the dentist"' }),
+        screen.getByRole("button", { name: 'Edit "call the dentist"' }),
       ).toBeInTheDocument(),
     );
   });
 
   it("creates a project from the Project mode, stays on Home, and toasts a link to it", async () => {
-    setApi([]);
+    setApi();
     let path = "";
     function Probe() {
       path = useLocation().pathname;
@@ -339,7 +280,6 @@ describe("HomePage", () => {
     await waitFor(() =>
       expect(defaultToastController.getSnapshot()).toHaveLength(1),
     );
-    // Stays on Home; the toast is the only way to jump to the project.
     expect(path).toBe("/");
     const [t] = defaultToastController.getSnapshot();
     expect(t.message).toBe("Project created");
@@ -352,8 +292,8 @@ describe("HomePage", () => {
     await waitFor(() => expect(path).toMatch(/^\/projects\/.+/));
   });
 
-  it("completes a task from the top region", async () => {
-    setApi([], [taskRow("1", "mail the letter")]);
+  it("completes a task, leaves it at once, and offers Undo that reopens it", async () => {
+    setApi([taskRow("1", "mail the letter")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     const complete = await screen.findByRole("button", {
@@ -368,27 +308,7 @@ describe("HomePage", () => {
         screen.queryByRole("button", { name: 'Complete "mail the letter"' }),
       ).toBeNull(),
     );
-  });
 
-  it("completes a capture, leaves it at once, and offers Undo that returns it", async () => {
-    setApi([capture("1", "buy milk")]);
-    render(<HomePage />, { wrapper: MemoryRouter });
-
-    const process = await screen.findByRole("button", {
-      name: 'Process "buy milk"',
-    });
-    await act(async () => {
-      fireEvent.click(process);
-    });
-
-    // The capture leaves the inbox immediately.
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: 'Process "buy milk"' }),
-      ).toBeNull(),
-    );
-
-    // A single Undo toast is offered; tapping it returns the capture.
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe("Completed");
@@ -398,22 +318,21 @@ describe("HomePage", () => {
     });
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: 'Process "buy milk"' }),
+        screen.getByRole("button", { name: 'Complete "mail the letter"' }),
       ).toBeInTheDocument(),
     );
   });
 
-  it("edits a capture from its detail sheet", async () => {
-    setApi([capture("1", "buy milk")]);
+  it("edits a task from its detail sheet", async () => {
+    setApi([taskRow("1", "buy milk")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
     );
-    const input = screen.getByRole("textbox", { name: "Capture text" });
+    const input = screen.getByRole("textbox", { name: "Task text" });
     expect(input).toHaveFocus();
     fireEvent.change(input, { target: { value: "buy oat milk" } });
-    // No "Done" button: pressing Enter (form submit) saves and closes.
     await act(async () => {
       fireEvent.submit(input.closest("form")!);
     });
@@ -427,13 +346,13 @@ describe("HomePage", () => {
   });
 
   it("preserves the stored text when the sheet draft is empty", async () => {
-    setApi([capture("1", "buy milk")]);
+    setApi([taskRow("1", "buy milk")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
     );
-    const input = screen.getByRole("textbox", { name: "Capture text" });
+    const input = screen.getByRole("textbox", { name: "Task text" });
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.submit(input.closest("form")!);
 
@@ -443,34 +362,32 @@ describe("HomePage", () => {
     ).toBeInTheDocument();
   });
 
-  it("completes a capture from its detail sheet via the circle", async () => {
-    setApi([capture("1", "buy milk")]);
+  it("completes a task from its detail sheet via the circle", async () => {
+    setApi([taskRow("1", "buy milk")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
     );
-    // The sheet's complete circle processes the capture and closes the sheet.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Complete capture" }));
+      fireEvent.click(screen.getByRole("button", { name: "Complete task" }));
     });
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: 'Process "buy milk"' }),
+        screen.queryByRole("button", { name: 'Edit "buy milk"' }),
       ).toBeNull(),
     );
   });
 
-  it("schedules a capture to tomorrow from the detail sheet", async () => {
-    setApi([capture("1", "buy milk")]);
+  it("schedules a task to tomorrow from the detail sheet", async () => {
+    setApi([taskRow("1", "buy milk")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
     );
-    // Open the scheduler from the schedule row (its label is "Schedule" when unset).
     fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
     await act(async () => {
       fireEvent.click(await screen.findByRole("button", { name: /Tomorrow/ }));
@@ -481,41 +398,18 @@ describe("HomePage", () => {
     expect(rescheduled[0].showUpDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it("commits a changed draft when Escape dismisses the sheet", async () => {
-    setApi([capture("1", "buy milk")]);
+  it("postpones a task to tomorrow from the row button", async () => {
+    setApi([taskRow("1", "buy milk")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: 'Edit "buy milk"' }),
-    );
-    fireEvent.change(screen.getByRole("textbox", { name: "Capture text" }), {
-      target: { value: "buy oat milk" },
+    const btn = await screen.findByRole("button", {
+      name: 'Postpone "buy milk" to tomorrow',
     });
-    fireEvent.keyDown(screen.getByRole("dialog"), {
-      key: "Escape",
-      code: "Escape",
+    await act(async () => {
+      fireEvent.click(btn);
     });
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: 'Edit "buy oat milk"' }),
-      ).toBeInTheDocument(),
-    );
-  });
-
-  it("closes an unchanged capture with the sheet Close button", async () => {
-    setApi([capture("1", "buy milk")]);
-    render(<HomePage />, { wrapper: MemoryRouter });
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: 'Edit "buy milk"' }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(
-      screen.getByRole("button", { name: 'Edit "buy milk"' }),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(rescheduled.length).toBe(1));
+    expect(rescheduled[0].id).toBe("1");
   });
 });

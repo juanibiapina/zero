@@ -17,7 +17,7 @@ export async function fetchTasks(): Promise<Task[]> {
 export async function addTask(task: {
   id: string;
   text: string;
-  showUpDate: string;
+  showUpDate: string | null;
   projectId: string | null;
   takenOnAt: string | null;
   sourceCaptureId: string | null;
@@ -63,6 +63,48 @@ export async function reopenTask(id: string): Promise<Task> {
   const res = await fetch(`/api/tasks/${id}/reopen`, { method: "POST" });
   if (!res.ok) {
     throw new Error(`POST /api/tasks/${id}/reopen failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
+export async function editTask(id: string, text: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
+export async function rescheduleTask(
+  id: string,
+  showUpDate: string | null,
+): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ showUpDate }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
+export async function reorderTask(id: string, sortKey: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sortKey }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
   }
   const body = (await res.json()) as { task: Task };
   return body.task;

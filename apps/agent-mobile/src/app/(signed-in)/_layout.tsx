@@ -47,9 +47,8 @@ export default function SignedInLayout() {
     return <Redirect href="/sign-in" />;
   }
 
-  // Three sections: Home (tasks on top, the capture inbox below), Upcoming
-  // (future-dated captures, grouped by day), and Projects (outcome-oriented
-  // containers). Each
+  // Three sections: Home (the single task list), Upcoming (future-dated tasks,
+  // grouped by day), and Projects (outcome-oriented containers). Each
   // tab is a screen file whose name matches its Trigger `name`, so a new tab is a
   // new file plus one more Trigger. NativeTabs
   // is a native navigator, so its first use needs a fresh EAS dev build to

@@ -7,11 +7,10 @@ import {
   waitFor,
   type RenderResult,
 } from '@testing-library/react-native';
-import { BackHandler, View } from 'react-native';
+import { View } from 'react-native';
 import { defaultToastController } from '@zero/agent-core';
 
-import type { Capture, Task } from '@/lib/api';
-import { resetCapturesApiForTest } from '@/lib/captures-collection';
+import type { Task } from '@/lib/api';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
@@ -41,53 +40,35 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-
-
 // The native Clerk button renders a platform view via requireNativeView, which
-// is unavailable under jest. Stub it with a queryable element. The component is
-// defined at module scope (mock-prefixed) so the hoisted jest.mock factory needs
-// no in-factory JSX (which would reference React out of scope).
+// is unavailable under jest. Stub it with a queryable element.
 const mockUserButton = () => <View accessibilityLabel="Account" />;
 jest.mock('@clerk/expo/native', () => ({
   UserButton: () => mockUserButton(),
 }));
 
-const mockFetchCaptures = jest.fn<(getToken: unknown) => Promise<Capture[]>>();
-const mockAddCapture =
-  jest.fn<
-    (
-      getToken: unknown,
-      capture: { id: string; text: string },
-    ) => Promise<Capture>
-  >();
-const mockProcessCapture =
-  jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
-const mockUnprocessCapture =
-  jest.fn<(getToken: unknown, id: string) => Promise<Capture>>();
-const mockEditCapture =
-  jest.fn<(getToken: unknown, id: string, text: string) => Promise<Capture>>();
-const mockRescheduleCapture =
-  jest.fn<
-    (getToken: unknown, id: string, showUpDate: string | null) => Promise<Capture>
-  >();
-const mockReorderCapture =
-  jest.fn<
-    (getToken: unknown, id: string, sortKey: string) => Promise<Capture>
-  >();
-const mockFetchProjects =
-  jest.fn<(getToken: unknown) => Promise<unknown[]>>();
 const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
 const mockAddTask =
   jest.fn<
     (
       getToken: unknown,
-      task: { id: string; text: string; showUpDate: string },
+      task: { id: string; text: string; showUpDate: string | null },
     ) => Promise<Task>
   >();
 const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 const mockReopenTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockEditTask =
+  jest.fn<(getToken: unknown, id: string, text: string) => Promise<Task>>();
+const mockRescheduleTask =
+  jest.fn<
+    (getToken: unknown, id: string, showUpDate: string | null) => Promise<Task>
+  >();
+const mockReorderTask =
+  jest.fn<(getToken: unknown, id: string, sortKey: string) => Promise<Task>>();
+const mockFetchProjects =
+  jest.fn<(getToken: unknown) => Promise<unknown[]>>();
 const mockAddProject =
   jest.fn<
     (
@@ -96,34 +77,26 @@ const mockAddProject =
     ) => Promise<unknown>
   >();
 jest.mock('@/lib/api', () => ({
-  fetchCaptures: (getToken: unknown) => mockFetchCaptures(getToken),
-  addCapture: (getToken: unknown, capture: { id: string; text: string }) =>
-    mockAddCapture(getToken, capture),
-  processCapture: (getToken: unknown, id: string) =>
-    mockProcessCapture(getToken, id),
-  unprocessCapture: (getToken: unknown, id: string) =>
-    mockUnprocessCapture(getToken, id),
-  editCapture: (getToken: unknown, id: string, text: string) =>
-    mockEditCapture(getToken, id, text),
-  rescheduleCapture: (getToken: unknown, id: string, showUpDate: string | null) =>
-    mockRescheduleCapture(getToken, id, showUpDate),
-  reorderCapture: (getToken: unknown, id: string, sortKey: string) =>
-    mockReorderCapture(getToken, id, sortKey),
   fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
   addTask: (
     getToken: unknown,
-    task: { id: string; text: string; showUpDate: string },
+    task: { id: string; text: string; showUpDate: string | null },
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
   reopenTask: (getToken: unknown, id: string) => mockReopenTask(getToken, id),
-  // The Home top region reads projects (for the project-active gate and the
-  // all-clear call to action).
+  editTask: (getToken: unknown, id: string, text: string) =>
+    mockEditTask(getToken, id, text),
+  rescheduleTask: (getToken: unknown, id: string, showUpDate: string | null) =>
+    mockRescheduleTask(getToken, id, showUpDate),
+  reorderTask: (getToken: unknown, id: string, sortKey: string) =>
+    mockReorderTask(getToken, id, sortKey),
+  setTaskTakenOn: () => Promise.reject(new Error('not used')),
+  // Home reads projects (for the project-active gate and the all-clear CTA).
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: (
     getToken: unknown,
     project: { id: string; title: string; sourceCaptureId: string | null },
   ) => mockAddProject(getToken, project),
-  // Creating a project from Home pre-warms icon suggestions in the background.
   fetchIconSuggestions: () => Promise.resolve([]),
   setProjectStatus: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
@@ -135,37 +108,21 @@ jest.mock('@/lib/api', () => ({
   deleteWaitingCondition: () => Promise.resolve(),
 }));
 
-const taskRow = (id: string, text: string): Task => ({
+// A loose task (null showUpDate = always shown up on Home).
+const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   id,
   text,
-  showUpDate: '2023-01-01',
+  showUpDate: over.showUpDate === undefined ? null : over.showUpDate,
   createdAt: '2023-01-01T00:00:00.000Z',
-  completedAt: null,
-  projectId: null,
-  takenOnAt: null,
+  completedAt: over.completedAt ?? null,
+  projectId: over.projectId ?? null,
+  takenOnAt: over.takenOnAt ?? null,
+  sortKey: over.sortKey ?? null,
 });
 
-const capture = (
-  id: string,
-  text: string,
-  showUpDate: string | null = null,
-  sortKey: string | null = null,
-): Capture => ({
-  id,
-  text,
-  createdAt: '2023-01-01T00:00:00.000Z',
-  processedAt: null,
-  showUpDate,
-  sortKey,
-});
-
-// Render the screen inside a fresh QueryClient with retries off, so a rejected
-// query fails fast and deterministically instead of retrying with backoff.
 const renderScreen = () => {
   const client = new QueryClient({
     defaultOptions: {
-      // retry off = deterministic failures; gcTime 0 = no lingering gc timer
-      // that would keep jest from exiting.
       queries: { retry: false, gcTime: 0 },
       mutations: { retry: false },
     },
@@ -179,17 +136,15 @@ const renderScreen = () => {
 
 describe('HomeScreen', () => {
   beforeEach(() => {
-    resetCapturesApiForTest();
     resetTasksApiForTest();
     resetProjectsApiForTest();
     resetWaitsApiForTest();
-    mockEditCapture.mockReset();
-    mockProcessCapture.mockReset();
-    mockUnprocessCapture.mockReset();
-    mockRescheduleCapture.mockReset();
-    mockAddTask.mockReset();
+    mockEditTask.mockReset();
     mockCompleteTask.mockReset();
     mockReopenTask.mockReset();
+    mockRescheduleTask.mockReset();
+    mockReorderTask.mockReset();
+    mockAddTask.mockReset();
     mockFetchTasks.mockReset();
     mockFetchTasks.mockResolvedValue([]);
     mockFetchProjects.mockReset();
@@ -201,41 +156,28 @@ describe('HomeScreen', () => {
 
   it('titles the screen Home', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
     const { getByText } = await renderScreen();
     await waitFor(() => expect(getByText('Home')).toBeTruthy());
   });
 
-  it('shows the create call to action when plate and inbox are empty', async () => {
+  it('shows the create call to action when the list is empty', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
     const { getByText } = await renderScreen();
     await waitFor(() =>
       expect(getByText('Create your first project')).toBeTruthy(),
     );
   });
 
-  it('shows the inbox and no call to action when a capture is present', async () => {
+  it('renders a loose task and no call to action', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
     const { getByText, queryByText } = await renderScreen();
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
     expect(queryByText('Create your first project')).toBeNull();
   });
 
-  it('hides the inbox caption when there are tasks but no captures', async () => {
+  it('badges a project task with its project icon', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-    mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
-    const { getByText, queryByText } = await renderScreen();
-    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
-    expect(queryByText('Inbox')).toBeNull();
-    expect(queryByText('No captures yet. Capture something.')).toBeNull();
-  });
-
-  it('badges a project task on the plate with its project icon', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
     mockFetchProjects.mockResolvedValue([
       {
         id: 'p',
@@ -247,30 +189,20 @@ describe('HomeScreen', () => {
       },
     ]);
     mockFetchTasks.mockResolvedValue([
-      {
-        ...taskRow('1', 'mail the letter'),
+      taskRow('1', 'mail the letter', {
         projectId: 'p',
         takenOnAt: '2023-01-02T00:00:00.000Z',
-      },
+      }),
     ]);
     const { getByText } = await renderScreen();
     await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
     expect(getByText('🎓')).toBeTruthy();
   });
 
-  it('adds a task from the Task quick-add mode', async () => {
+  it('adds a loose task from the default quick-add', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
     mockAddTask.mockImplementation(async (_g, task) => {
-      const added: Task = {
-        id: task.id,
-        text: task.text,
-        showUpDate: task.showUpDate,
-        createdAt: '2023-01-01T00:00:00.000Z',
-        completedAt: null,
-        projectId: null,
-        takenOnAt: null,
-      };
+      const added = taskRow(task.id, task.text);
       mockFetchTasks.mockResolvedValue([added]);
       return added;
     });
@@ -282,10 +214,7 @@ describe('HomeScreen', () => {
     );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
-    });
-    await act(async () => {
-      fireEvent.press(getByLabelText('Add a task'));
+      fireEvent.press(getByLabelText('Task'));
     });
     const input = getByPlaceholderText('Add a task');
     await act(async () => {
@@ -300,9 +229,8 @@ describe('HomeScreen', () => {
     expect(mockAddTask.mock.calls[0][1].text).toBe('call the dentist');
   });
 
-  it('creates a project from the Project quick-add mode, stays on Home, and toasts a link to it', async () => {
+  it('creates a project from the Project quick-add mode, stays on Home, and toasts a link', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
     mockAddProject.mockImplementation(async (_g, project) => ({
       id: project.id,
       title: project.title,
@@ -322,9 +250,8 @@ describe('HomeScreen', () => {
       expect(getByText('Create your first project')).toBeTruthy(),
     );
 
-    // Open the quick-add and switch to Project mode.
     await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
+      fireEvent.press(getByLabelText('Task'));
     });
     await act(async () => {
       fireEvent.press(getByLabelText('Add a project'));
@@ -340,19 +267,13 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(mockAddProject).toHaveBeenCalledTimes(1));
     const minted = mockAddProject.mock.calls[0][1];
     expect(minted.title).toBe('ship the app');
-
-    // Stays on Home (no navigation yet); the quick-add bar closes after adding.
     expect(queryByPlaceholderText('Name an outcome')).toBeNull();
     expect(mockNavigate).not.toHaveBeenCalled();
 
-    // Settle the optimistic insert (its persist reconciles the server row) so
-    // the transaction does not stay pending in @tanstack/db's global state and
-    // stall the next test's live queries.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    // The toast carries the title and a View action that deep-links the project.
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe('Project created');
@@ -366,71 +287,14 @@ describe('HomeScreen', () => {
 
   it('completes a task immediately and offers Undo in a toast that reopens it', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
     mockFetchTasks.mockResolvedValue([taskRow('1', 'mail the letter')]);
     mockCompleteTask.mockImplementation(async () => {
       mockFetchTasks.mockResolvedValue([]);
-      return {
-        ...taskRow('1', 'mail the letter'),
+      return taskRow('1', 'mail the letter', {
         completedAt: '2023-01-02T00:00:00.000Z',
-      };
+      });
     });
     mockReopenTask.mockResolvedValue(taskRow('1', 'mail the letter'));
-
-    const { getByLabelText, getByText, queryByText } = await renderScreen();
-    expect(getByText('mail the letter')).toBeTruthy();
-
-    // Completing commits the write at once and drops the row (no deferred window).
-    await act(async () => {
-      fireEvent.press(getByLabelText('Complete "mail the letter"'));
-    });
-    await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(queryByText('mail the letter')).toBeNull());
-
-    // A single Undo toast is offered; tapping it reopens the task on the server.
-    const snap = defaultToastController.getSnapshot();
-    expect(snap).toHaveLength(1);
-    expect(snap[0].message).toBe('Completed');
-    expect(snap[0].action?.label).toBe('Undo');
-    // A loose task (no project) gets no project line and no Open link.
-    expect(snap[0].description).toBeUndefined();
-    expect(snap[0].link).toBeUndefined();
-    await act(async () => {
-      snap[0].action?.onPress();
-    });
-    await waitFor(() =>
-      expect(mockReopenTask).toHaveBeenCalledWith(expect.anything(), '1'),
-    );
-  });
-
-  it('names the project and offers an Open deep-link when a project task is completed', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-    mockFetchProjects.mockResolvedValue([
-      {
-        id: 'p',
-        title: 'Diploma',
-        icon: '🎓',
-        description: null,
-        status: 'next',
-        createdAt: '2023-01-01T00:00:00.000Z',
-      },
-    ]);
-    mockFetchTasks.mockResolvedValue([
-      {
-        ...taskRow('1', 'mail the letter'),
-        projectId: 'p',
-        takenOnAt: '2023-01-02T00:00:00.000Z',
-      },
-    ]);
-    mockCompleteTask.mockImplementation(async () => {
-      mockFetchTasks.mockResolvedValue([]);
-      return {
-        ...taskRow('1', 'mail the letter'),
-        projectId: 'p',
-        completedAt: '2023-01-02T00:00:00.000Z',
-      };
-    });
 
     const { getByLabelText, getByText, queryByText } = await renderScreen();
     await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
@@ -444,9 +308,56 @@ describe('HomeScreen', () => {
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe('Completed');
+    expect(snap[0].action?.label).toBe('Undo');
+    expect(snap[0].description).toBeUndefined();
+    expect(snap[0].link).toBeUndefined();
+    await act(async () => {
+      snap[0].action?.onPress();
+    });
+    await waitFor(() =>
+      expect(mockReopenTask).toHaveBeenCalledWith(expect.anything(), '1'),
+    );
+  });
+
+  it('names the project and offers an Open deep-link when a project task is completed', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p',
+        title: 'Diploma',
+        icon: '🎓',
+        description: null,
+        status: 'next',
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+    mockFetchTasks.mockResolvedValue([
+      taskRow('1', 'mail the letter', {
+        projectId: 'p',
+        takenOnAt: '2023-01-02T00:00:00.000Z',
+      }),
+    ]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return taskRow('1', 'mail the letter', {
+        projectId: 'p',
+        completedAt: '2023-01-02T00:00:00.000Z',
+      });
+    });
+
+    const { getByLabelText, getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete "mail the letter"'));
+    });
+    await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(queryByText('mail the letter')).toBeNull());
+
+    const snap = defaultToastController.getSnapshot();
+    expect(snap).toHaveLength(1);
     expect(snap[0].description).toBe('🎓 Diploma');
     expect(snap[0].link?.label).toBe('Open');
-    expect(snap[0].action?.label).toBe('Undo');
     snap[0].link?.onPress();
     expect(mockNavigate).toHaveBeenCalledWith('/projects/p', {
       withAnchor: true,
@@ -455,15 +366,13 @@ describe('HomeScreen', () => {
 
   it('shows only one Undo toast when a second task is completed', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
     mockFetchTasks.mockResolvedValue([
       taskRow('1', 'mail the letter'),
       taskRow('2', 'call the bank'),
     ]);
-    mockCompleteTask.mockImplementation(async (_t: unknown, id: string) => ({
-      ...taskRow(id, id),
-      completedAt: '2023-01-02T00:00:00.000Z',
-    }));
+    mockCompleteTask.mockImplementation(async (_t: unknown, id: string) =>
+      taskRow(id, id, { completedAt: '2023-01-02T00:00:00.000Z' }),
+    );
 
     const { getByLabelText } = await renderScreen();
     await act(async () => {
@@ -473,108 +382,154 @@ describe('HomeScreen', () => {
       fireEvent.press(getByLabelText('Complete "call the bank"'));
     });
 
-    // The fixed toast id means the second completion replaces the first toast.
     expect(defaultToastController.getSnapshot()).toHaveLength(1);
-  });
-
-  it('holds the loading text back briefly, then shows it while the first fetch is pending', async () => {
-    // Fake timers so the loading-text delay is driven by the test clock, not
-    // wall time. Under real timers a loaded CI box can let the 1s delay elapse
-    // during the first `await`, flashing the text before the "held back"
-    // assertion and failing the test intermittently.
-    jest.useFakeTimers();
-    try {
-      mockGetToken.mockResolvedValue('tok');
-      let resolveFetch!: (captures: Capture[]) => void;
-      mockFetchCaptures.mockReturnValue(
-        new Promise<Capture[]>((resolve) => {
-          resolveFetch = resolve;
-        }),
-      );
-
-      const { getByText, queryByText } = await renderScreen();
-      // Flush mount effects and microtasks without advancing the delay timer.
-      await act(async () => {});
-
-      // The cached snapshot hydrates fast, so the loading text is held back at
-      // first: no spinner flash, and the empty message is not shown either.
-      expect(queryByText('Loading your captures…')).toBeNull();
-      expect(queryByText('Create your first project')).toBeNull();
-
-      // Only a genuinely slow, still-pending fetch surfaces the loading text,
-      // once the delay elapses.
-      await act(async () => {
-        jest.advanceTimersByTime(1000);
-      });
-      expect(getByText('Loading your captures…')).toBeTruthy();
-
-      await act(async () => {
-        resolveFetch([]);
-      });
-      await act(async () => {});
-
-      expect(
-        getByText('Create your first project'),
-      ).toBeTruthy();
-      expect(queryByText('Loading your captures…')).toBeNull();
-    } finally {
-      jest.useRealTimers();
-    }
   });
 
   it('shows the account button instead of a sign-out button', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-
     const { getByLabelText, queryByText } = await renderScreen();
-
     expect(getByLabelText('Account')).toBeTruthy();
     expect(queryByText('Sign out')).toBeNull();
   });
 
   it('surfaces a load error when there is nothing to show', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockRejectedValue(
+    mockFetchTasks.mockRejectedValue(
       new Error('java.net.UnknownHostException'),
     );
-
     const { getByText } = await renderScreen();
-
     await waitFor(() => expect(getByText(/UnknownHostException/)).toBeTruthy());
   });
 
-  it('shows the fetched captures', async () => {
+  it('hides a future-dated task (it belongs to Upcoming)', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-
-    const { getByText } = await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+    mockFetchTasks.mockResolvedValue([
+      taskRow('1', 'visible now'),
+      taskRow('2', 'later', { showUpDate: '2099-01-01' }),
+    ]);
+    const { getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByText('visible now')).toBeTruthy());
+    expect(queryByText('later')).toBeNull();
   });
 
-  it('reorders: onReorder mints an in-between key and calls reorderCapture for the moved row', async () => {
-    // The native long-press-drag can't run under jest; the mock captures the
-    // list's onReorder so we can drive it directly and assert the wiring
-    // (onReorder -> reorderItems -> orderKeyBetween -> api.reorder). Three keyed
-    // rows in order a0 < a1 < a2.
+  it('edits a task from its detail sheet and shows the new text', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([
-      capture('a', 'Apple', null, 'a0'),
-      capture('b', 'Banana', null, 'a1'),
-      capture('c', 'Cherry', null, 'a2'),
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
+    mockEditTask.mockImplementation(async (_g, id, text) => {
+      const edited = taskRow(id, text);
+      mockFetchTasks.mockResolvedValue([edited]);
+      return edited;
+    });
+
+    const { getByText, getByLabelText, getByDisplayValue } =
+      await renderScreen();
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    const input = getByDisplayValue('buy milk');
+    await act(async () => {
+      fireEvent.changeText(input, 'buy oat milk');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(getByText('buy oat milk')).toBeTruthy());
+    expect(mockEditTask).toHaveBeenCalledTimes(1);
+    expect(mockEditTask.mock.calls[0][1]).toBe('1');
+    expect(mockEditTask.mock.calls[0][2]).toBe('buy oat milk');
+  });
+
+  it('does not call edit when the sheet text is unchanged', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
+
+    const { getByText, getByLabelText, getByDisplayValue } =
+      await renderScreen();
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    const input = getByDisplayValue('buy milk');
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    expect(mockEditTask).not.toHaveBeenCalled();
+  });
+
+  it('completes a task from its detail sheet via the round check', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return taskRow('1', 'buy milk', {
+        completedAt: '2023-01-02T00:00:00.000Z',
+      });
+    });
+
+    const { getByText, getByLabelText, queryByText, queryByLabelText } =
+      await renderScreen();
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete task'));
+    });
+
+    await waitFor(() => expect(queryByLabelText('sheet')).toBeNull());
+    await waitFor(() => expect(queryByText('buy milk')).toBeNull());
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1);
+    expect(mockCompleteTask.mock.calls[0][1]).toBe('1');
+  });
+
+  it('schedules a task to tomorrow from the scheduler', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
+    mockRescheduleTask.mockResolvedValue(taskRow('1', 'buy milk'));
+
+    const { getByText, getByLabelText } = await renderScreen();
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Set schedule'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Tomorrow'));
+    });
+
+    await waitFor(() => expect(mockRescheduleTask).toHaveBeenCalledTimes(1));
+    expect(mockRescheduleTask.mock.calls[0][1]).toBe('1');
+    expect(mockRescheduleTask.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('reorders: onReorder mints an in-between key and calls reorderTask for the moved row', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTasks.mockResolvedValue([
+      taskRow('a', 'Apple', { sortKey: 'a0' }),
+      taskRow('b', 'Banana', { sortKey: 'a1' }),
+      taskRow('c', 'Cherry', { sortKey: 'a2' }),
     ]);
-    mockReorderCapture.mockImplementation(async (_t, id, sortKey) => ({
-      ...capture(id, id === 'c' ? 'Cherry' : id, null, sortKey),
-    }));
+    mockReorderTask.mockImplementation(async (_t, id, sortKey) =>
+      taskRow(id, id, { sortKey }),
+    );
 
     await renderScreen();
     await waitFor(() =>
-      expect(typeof (global as { __reorderableOnReorder?: unknown }).__reorderableOnReorder).toBe(
-        'function',
-      ),
+      expect(
+        typeof (global as { __reorderableOnReorder?: unknown })
+          .__reorderableOnReorder,
+      ).toBe('function'),
     );
 
-    // Drag the last row (Cherry, index 2) to the top (index 0).
     await act(async () => {
       (
         global as unknown as {
@@ -583,388 +538,74 @@ describe('HomeScreen', () => {
       ).__reorderableOnReorder({ from: 2, to: 0 });
     });
 
-    await waitFor(() => expect(mockReorderCapture).toHaveBeenCalledTimes(1));
-    // Moved row is Cherry; the new key sorts before the old head (a0).
-    expect(mockReorderCapture.mock.calls[0][1]).toBe('c');
-    const newKey = mockReorderCapture.mock.calls[0][2];
+    await waitFor(() => expect(mockReorderTask).toHaveBeenCalledTimes(1));
+    expect(mockReorderTask.mock.calls[0][1]).toBe('c');
+    const newKey = mockReorderTask.mock.calls[0][2];
     expect(typeof newKey).toBe('string');
     expect(newKey < 'a0').toBe(true);
   });
 
-  it('hides a future-dated capture (optimistic visibility)', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    // The server would filter this out; the mock returns it as-is, so this
-    // exercises the client-side visibleCaptures hide.
-    mockFetchCaptures.mockResolvedValue([
-      capture('1', 'visible now'),
-      capture('2', 'later', '2099-01-01'),
-    ]);
-
-    const { getByText, queryByText } = await renderScreen();
-
-    await waitFor(() => expect(getByText('visible now')).toBeTruthy());
-    expect(queryByText('later')).toBeNull();
-  });
-
-  it('processes a capture, removing it from Captures', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-    // The collection refetches after the write; once processed the open Captures list is
-    // empty, so the server (mock) then returns [].
-    mockProcessCapture.mockImplementation(async () => {
-      mockFetchCaptures.mockResolvedValue([]);
-      return { ...capture('1', 'buy milk'), processedAt: '2023-01-02T00:00:00.000Z' };
-    });
-
-    const { getByText, getByLabelText, queryByText } = await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Process "buy milk"'));
-    });
-
-    await waitFor(() => expect(queryByText('buy milk')).toBeNull());
-    expect(mockProcessCapture).toHaveBeenCalledTimes(1);
-    expect(mockProcessCapture.mock.calls[0][1]).toBe('1');
-
-    // A single Undo toast is offered; tapping it un-processes the capture.
-    mockUnprocessCapture.mockResolvedValue(capture('1', 'buy milk'));
-    const snap = defaultToastController.getSnapshot();
-    expect(snap).toHaveLength(1);
-    expect(snap[0].message).toBe('Completed');
-    expect(snap[0].action?.label).toBe('Undo');
-    await act(async () => {
-      snap[0].action?.onPress();
-    });
-    await waitFor(() =>
-      expect(mockUnprocessCapture).toHaveBeenCalledWith(expect.anything(), '1'),
-    );
-  });
-
-  it('edits a capture from its detail sheet and shows the new text', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-    mockEditCapture.mockImplementation(async (_g, id, text) => {
-      const edited = { ...capture(id, text) };
-      mockFetchCaptures.mockResolvedValue([edited]);
-      return edited;
-    });
-
-    const { getByText, getByLabelText, getByDisplayValue } =
-      await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Edit "buy milk"'));
-    });
-
-    const input = getByDisplayValue('buy milk');
-    await act(async () => {
-      fireEvent.changeText(input, 'buy oat milk');
-    });
-    // No "Done" button: the keyboard done key (onSubmitEditing) saves and closes.
-    await act(async () => {
-      fireEvent(input, 'submitEditing');
-    });
-
-    await waitFor(() => expect(getByText('buy oat milk')).toBeTruthy());
-    expect(mockEditCapture).toHaveBeenCalledTimes(1);
-    expect(mockEditCapture.mock.calls[0][1]).toBe('1');
-    expect(mockEditCapture.mock.calls[0][2]).toBe('buy oat milk');
-  });
-
-  it('does not call edit when the sheet text is unchanged', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-
-    const { getByText, getByLabelText, getByDisplayValue } =
-      await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Edit "buy milk"'));
-    });
-    const input = getByDisplayValue('buy milk');
-    await act(async () => {
-      fireEvent(input, 'submitEditing');
-    });
-
-    expect(mockEditCapture).not.toHaveBeenCalled();
-  });
-
-  it('preserves the stored text when the sheet draft is empty', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-
-    const { getByText, getByLabelText, getByDisplayValue, queryByLabelText } =
-      await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-    await act(async () => {
-      fireEvent.press(getByLabelText('Edit "buy milk"'));
-    });
-    await act(async () => {
-      const input = getByDisplayValue('buy milk');
-      fireEvent.changeText(input, '   ');
-      fireEvent(input, 'submitEditing');
-    });
-
-    expect(queryByLabelText('sheet')).toBeNull();
-    expect(getByText('buy milk')).toBeTruthy();
-    expect(mockEditCapture).not.toHaveBeenCalled();
-  });
-
-  it('completes a capture from its detail sheet via the round check', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-    mockProcessCapture.mockImplementation(async () => {
-      mockFetchCaptures.mockResolvedValue([]);
-      return { ...capture('1', 'buy milk'), processedAt: '2023-01-02T00:00:00.000Z' };
-    });
-
-    const { getByText, getByLabelText, queryByText, queryByLabelText } =
-      await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-    await act(async () => {
-      fireEvent.press(getByLabelText('Edit "buy milk"'));
-    });
-    // The sheet's round check completes (processes) the capture and closes.
-    await act(async () => {
-      fireEvent.press(getByLabelText('Complete capture'));
-    });
-
-    await waitFor(() => expect(queryByLabelText('sheet')).toBeNull());
-    await waitFor(() => expect(queryByText('buy milk')).toBeNull());
-    expect(mockProcessCapture).toHaveBeenCalledTimes(1);
-    expect(mockProcessCapture.mock.calls[0][1]).toBe('1');
-  });
-
-  it('schedules a capture to tomorrow from the scheduler', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-    mockRescheduleCapture.mockResolvedValue(capture('1', 'buy milk'));
-
-    const { getByText, getByLabelText } = await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-    await act(async () => {
-      fireEvent.press(getByLabelText('Edit "buy milk"'));
-    });
-    // The schedule row opens the scheduler; "Tomorrow" reschedules.
-    await act(async () => {
-      fireEvent.press(getByLabelText('Set schedule'));
-    });
-    await act(async () => {
-      fireEvent.press(getByLabelText('Tomorrow'));
-    });
-
-    await waitFor(() => expect(mockRescheduleCapture).toHaveBeenCalledTimes(1));
-    expect(mockRescheduleCapture.mock.calls[0][1]).toBe('1');
-    // A YYYY-MM-DD date, not null.
-    expect(mockRescheduleCapture.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  });
-
-  it('clears a capture date with No date in the scheduler', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    // A dated (but past, so still visible) capture, so "No date" is a real change.
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk', '2023-01-01')]);
-    mockRescheduleCapture.mockResolvedValue(capture('1', 'buy milk'));
-
-    const { getByText, getByLabelText } = await renderScreen();
-
-    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-    await act(async () => {
-      fireEvent.press(getByLabelText('Edit "buy milk"'));
-    });
-    await act(async () => {
-      fireEvent.press(getByLabelText('Set schedule'));
-    });
-    await act(async () => {
-      fireEvent.press(getByLabelText('No date'));
-    });
-
-    await waitFor(() => expect(mockRescheduleCapture).toHaveBeenCalledTimes(1));
-    expect(mockRescheduleCapture.mock.calls[0][1]).toBe('1');
-    expect(mockRescheduleCapture.mock.calls[0][2]).toBeNull();
-  });
-
-  it('closes the capture sheet before handling quick-add on Android Back', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
-    mockEditCapture.mockImplementation(async (_g, id, text) => {
-      const edited = { ...capture(id, text) };
-      mockFetchCaptures.mockResolvedValue([edited]);
-      return edited;
-    });
-    let onBack: Parameters<typeof BackHandler.addEventListener>[1] | null = null;
-    const addListener = jest
-      .spyOn(BackHandler, 'addEventListener')
-      .mockImplementation((_event, handler) => {
-        onBack = handler;
-        return { remove: jest.fn() };
-      });
-
-    try {
-      const {
-        getByText,
-        getByLabelText,
-        getByDisplayValue,
-        getByPlaceholderText,
-        queryByLabelText,
-      } = await renderScreen();
-
-      await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByLabelText('Capture'));
-        fireEvent.press(getByLabelText('Edit "buy milk"'));
-      });
-      expect(getByPlaceholderText('Capture a thought')).toBeTruthy();
-      expect(getByLabelText('sheet')).toBeTruthy();
-      await act(async () => {
-        fireEvent.changeText(getByDisplayValue('buy milk'), 'buy oat milk');
-      });
-
-      await act(async () => {
-        expect(onBack?.({} as never)).toBe(true);
-      });
-
-      expect(queryByLabelText('sheet')).toBeNull();
-      expect(getByPlaceholderText('Capture a thought')).toBeTruthy();
-      await waitFor(() => expect(getByText('buy oat milk')).toBeTruthy());
-      expect(mockEditCapture).toHaveBeenCalledTimes(1);
-    } finally {
-      addListener.mockRestore();
-    }
-  });
-
   it('opens the quick-add input only after tapping the add button', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-
     const { getByLabelText, queryByPlaceholderText } = await renderScreen();
 
     await waitFor(() =>
-      expect(queryByPlaceholderText('Capture a thought')).toBeNull(),
+      expect(queryByPlaceholderText('Add a task')).toBeNull(),
     );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
+      fireEvent.press(getByLabelText('Task'));
     });
 
-    expect(queryByPlaceholderText('Capture a thought')).toBeTruthy();
-  });
-
-  it('captures typed text and closes the quick-add after adding', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-    // The collection refetches after the write; the server (mock) then returns
-    // the newly added capture so it survives reconciliation.
-    mockAddCapture.mockImplementation(async () => {
-      const added = capture('2', 'call mom');
-      mockFetchCaptures.mockResolvedValue([added]);
-      return added;
-    });
-
-    const { getByText, getByLabelText, getByPlaceholderText, queryByPlaceholderText } =
-      await renderScreen();
-
-    // Let the initial (empty) load settle before typing, else it can clobber
-    // the just-added item.
-    await waitFor(() =>
-      expect(
-        getByText('Create your first project'),
-      ).toBeTruthy(),
-    );
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
-    });
-
-    const input = getByPlaceholderText('Capture a thought');
-    await act(async () => {
-      fireEvent.changeText(input, 'call mom');
-    });
-    await act(async () => {
-      fireEvent(input, 'submitEditing');
-    });
-
-    await waitFor(() => expect(getByText('call mom')).toBeTruthy());
-    expect(mockAddCapture).toHaveBeenCalledTimes(1);
-    expect(mockAddCapture.mock.calls[0][1].text).toBe('call mom');
-
-    // The quick-add closes after adding.
-    await waitFor(() =>
-      expect(queryByPlaceholderText('Capture a thought')).toBeNull(),
-    );
+    expect(queryByPlaceholderText('Add a task')).toBeTruthy();
   });
 
   it('confirms before discarding unsaved quick-add text', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-
     const { getByLabelText, getByText, getByPlaceholderText, queryByText } =
       await renderScreen();
-
     await waitFor(() =>
-      expect(
-        getByText('Create your first project'),
-      ).toBeTruthy(),
+      expect(getByText('Create your first project')).toBeTruthy(),
     );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
+      fireEvent.press(getByLabelText('Task'));
     });
-    const input = getByPlaceholderText('Capture a thought');
+    const input = getByPlaceholderText('Add a task');
     await act(async () => {
       fireEvent.changeText(input, 'buy milk');
     });
 
-    // Tapping the backdrop with unsaved text opens the confirm dialog and does
-    // NOT clear/close the bar.
     await act(async () => {
       fireEvent.press(getByLabelText('Dismiss quick add'));
     });
     expect(getByText('Discard changes?')).toBeTruthy();
-    expect(getByPlaceholderText('Capture a thought').props.value).toBe(
-      'buy milk',
-    );
+    expect(getByPlaceholderText('Add a task').props.value).toBe('buy milk');
 
-    // Cancel keeps editing: dialog gone, text preserved.
     await act(async () => {
       fireEvent.press(getByLabelText('Cancel'));
     });
     expect(queryByText('Discard changes?')).toBeNull();
-    expect(getByPlaceholderText('Capture a thought').props.value).toBe(
-      'buy milk',
-    );
+    expect(getByPlaceholderText('Add a task').props.value).toBe('buy milk');
   });
 
   it('discards the quick-add text when confirming', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-
     const {
       getByLabelText,
       getByText,
       getByPlaceholderText,
       queryByPlaceholderText,
     } = await renderScreen();
-
     await waitFor(() =>
-      expect(
-        getByText('Create your first project'),
-      ).toBeTruthy(),
+      expect(getByText('Create your first project')).toBeTruthy(),
     );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
+      fireEvent.press(getByLabelText('Task'));
     });
     await act(async () => {
-      fireEvent.changeText(getByPlaceholderText('Capture a thought'), 'buy milk');
+      fireEvent.changeText(getByPlaceholderText('Add a task'), 'buy milk');
     });
     await act(async () => {
       fireEvent.press(getByLabelText('Dismiss quick add'));
@@ -973,60 +614,21 @@ describe('HomeScreen', () => {
       fireEvent.press(getByLabelText('Discard'));
     });
 
-    expect(queryByPlaceholderText('Capture a thought')).toBeNull();
+    expect(queryByPlaceholderText('Add a task')).toBeNull();
   });
 
   it('closes the empty quick-add when the keyboard hides (Android back)', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-
-    const {
-      getByLabelText,
-      getByText,
-      getByPlaceholderText,
-      queryByPlaceholderText,
-    } = await renderScreen();
-
-    await waitFor(() =>
-      expect(
-        getByText('Create your first project'),
-      ).toBeTruthy(),
-    );
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
-    });
-    expect(getByPlaceholderText('Capture a thought')).toBeTruthy();
-
-    // Android's first Back only hides the keyboard; the empty bar must close.
-    await act(async () => {
-      (
-        globalThis as { __emitKeyboardEvent?: (name: string) => void }
-      ).__emitKeyboardEvent?.('keyboardDidHide');
-    });
-
-    expect(queryByPlaceholderText('Capture a thought')).toBeNull();
-  });
-
-  it('confirms instead of closing when the keyboard hides with unsaved text', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-
-    const { getByLabelText, getByText, getByPlaceholderText } =
+    const { getByLabelText, getByText, getByPlaceholderText, queryByPlaceholderText } =
       await renderScreen();
-
     await waitFor(() =>
-      expect(
-        getByText('Create your first project'),
-      ).toBeTruthy(),
+      expect(getByText('Create your first project')).toBeTruthy(),
     );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
+      fireEvent.press(getByLabelText('Task'));
     });
-    await act(async () => {
-      fireEvent.changeText(getByPlaceholderText('Capture a thought'), 'buy milk');
-    });
+    expect(getByPlaceholderText('Add a task')).toBeTruthy();
 
     await act(async () => {
       (
@@ -1034,51 +636,23 @@ describe('HomeScreen', () => {
       ).__emitKeyboardEvent?.('keyboardDidHide');
     });
 
-    // Unsaved text: the dialog appears, the bar stays open.
-    expect(getByText('Discard changes?')).toBeTruthy();
-    expect(getByPlaceholderText('Capture a thought').props.value).toBe(
-      'buy milk',
-    );
+    expect(queryByPlaceholderText('Add a task')).toBeNull();
   });
 
-  it('closes the quick-add silently when it is empty', async () => {
+  it('re-pulls the tasks when the list is pulled to refresh', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([]);
-
-    const { getByLabelText, getByText, queryByText, queryByPlaceholderText } =
-      await renderScreen();
-
-    await waitFor(() =>
-      expect(
-        getByText('Create your first project'),
-      ).toBeTruthy(),
-    );
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Capture'));
-    });
-    await act(async () => {
-      fireEvent.press(getByLabelText('Dismiss quick add'));
-    });
-
-    expect(queryByText('Discard changes?')).toBeNull();
-    expect(queryByPlaceholderText('Capture a thought')).toBeNull();
-  });
-
-  it('re-pulls the captures when the list is pulled to refresh', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
 
     const screen = await renderScreen();
     await waitFor(() => expect(screen.getByText('buy milk')).toBeTruthy());
 
-    const before = mockFetchCaptures.mock.calls.length;
+    const before = mockFetchTasks.mock.calls.length;
     await act(async () => {
       pullToRefresh(screen);
     });
 
     await waitFor(() =>
-      expect(mockFetchCaptures.mock.calls.length).toBeGreaterThan(before),
+      expect(mockFetchTasks.mock.calls.length).toBeGreaterThan(before),
     );
   });
 });

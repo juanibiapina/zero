@@ -10,12 +10,10 @@ import {
 import { MemoryRouter, Route, Routes } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import {
-  createInMemoryApi,
   createInMemoryProjectsApi,
   createInMemoryTasksApi,
   createInMemoryWaitsApi,
   defaultToastController,
-  type CapturesApi,
   type Project,
   type ProjectsApi,
   type ProjectsRest,
@@ -41,7 +39,6 @@ const h = vi.hoisted(() => ({
   api: null as ProjectsApi | null,
   tasksApi: null as TasksApi | null,
   waitsApi: null as WaitsApi | null,
-  capturesApi: null as CapturesApi | null,
 }));
 vi.mock("@/lib/projects-collection", () => ({
   getProjectsApi: () => Promise.resolve(h.api),
@@ -51,9 +48,6 @@ vi.mock("@/lib/tasks-collection", () => ({
 }));
 vi.mock("@/lib/waits-collection", () => ({
   getWaitsApi: () => Promise.resolve(h.waitsApi),
-}));
-vi.mock("@/lib/captures-collection", () => ({
-  getCapturesApi: () => Promise.resolve(h.capturesApi),
 }));
 
 // frimousse fetches its emoji data from a CDN at runtime, which never resolves
@@ -143,6 +137,7 @@ const task = (id: string, text: string, projectId: string): Task => ({
   completedAt: null,
   projectId,
   takenOnAt: null,
+  sortKey: null,
 });
 
 function fakeRest(initial: Project[]): ProjectsRest {
@@ -189,8 +184,27 @@ function fakeTasksRest(initial: Task[]): TasksRest {
         completedAt: null,
         projectId,
         takenOnAt,
+        sortKey: `a${server.length}`,
       };
       server.push(row);
+      return { ...row };
+    },
+    editTask: async (id, text) => {
+      const row = server.find((t) => t.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.text = text;
+      return { ...row };
+    },
+    rescheduleTask: async (id, showUpDate) => {
+      const row = server.find((t) => t.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.showUpDate = showUpDate;
+      return { ...row };
+    },
+    reorderTask: async (id, sortKey) => {
+      const row = server.find((t) => t.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.sortKey = sortKey;
       return { ...row };
     },
     completeTask: async (id) => {
@@ -246,35 +260,6 @@ function setApi(
     queryClient: new QueryClient(),
     rest: fakeWaitsRest(waits),
   });
-  h.capturesApi = createInMemoryApi({
-    queryClient: new QueryClient(),
-    rest: {
-      fetchCaptures: async () => [],
-      addCapture: async ({ id, text }) => ({
-        id,
-        text,
-        createdAt: new Date().toISOString(),
-        processedAt: null,
-        showUpDate: null,
-        sortKey: null,
-      }),
-      processCapture: async (id) => {
-        throw new Error(`no capture ${id}`);
-      },
-      unprocessCapture: async (id) => {
-        throw new Error(`no capture ${id}`);
-      },
-      editCapture: async (id) => {
-        throw new Error(`no capture ${id}`);
-      },
-      rescheduleCapture: async (id) => {
-        throw new Error(`no capture ${id}`);
-      },
-      reorderCapture: async (id) => {
-        throw new Error(`no capture ${id}`);
-      },
-    },
-  });
 }
 
 // Render the projects list + detail routes together so a row tap really
@@ -302,7 +287,6 @@ describe("ProjectsPage", () => {
     h.api = null;
     h.tasksApi = null;
     h.waitsApi = null;
-    h.capturesApi = null;
     defaultToastController.dismiss();
     vi.useRealTimers();
   });
@@ -469,6 +453,7 @@ describe("ProjectsPage", () => {
           completedAt: null,
           projectId: "1",
           takenOnAt: "2023-01-02T00:00:00.000Z",
+          sortKey: null,
         },
       ],
     );
@@ -543,7 +528,6 @@ describe("project icon suggestions", () => {
     h.api = null;
     h.tasksApi = null;
     h.waitsApi = null;
-    h.capturesApi = null;
     __resetIconSuggestions();
     fetchMock.mockReset();
     vi.useRealTimers();

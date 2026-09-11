@@ -33,7 +33,7 @@ export type TasksRest = {
   addTask: (task: {
     id: string;
     text: string;
-    showUpDate: string;
+    showUpDate: string | null;
     projectId: string | null;
     takenOnAt: string | null;
     sourceCaptureId: string | null;
@@ -44,6 +44,12 @@ export type TasksRest = {
   reopenTask: (id: string) => Promise<Task>;
   // Take a task on (a timestamp) or park it (null). Idempotent on the id.
   setTaskTakenOn: (id: string, takenOnAt: string | null) => Promise<Task>;
+  // Replace a task's text (title edit). Idempotent on the id.
+  editTask: (id: string, text: string) => Promise<Task>;
+  // Set (or clear, with null) a task's show-up date. Idempotent on the id.
+  rescheduleTask: (id: string, showUpDate: string | null) => Promise<Task>;
+  // Set a task's manual sort key (drag-reorder). Idempotent on the id.
+  reorderTask: (id: string, sortKey: string) => Promise<Task>;
 };
 
 // One handle over the Today data layer. Both Today screens read `collection`
@@ -58,7 +64,7 @@ export type TasksApi = {
   // to, or null/omitted for a loose task (the Home quick-add).
   add: (
     text: string,
-    showUpDate: string,
+    showUpDate?: string | null,
     projectId?: string | null,
     takenOnAt?: string | null,
     sourceCaptureId?: string | null,
@@ -73,6 +79,15 @@ export type TasksApi = {
   // timestamp now; `park` clears it.
   takeOn: (id: string) => Transaction;
   park: (id: string) => Transaction;
+  // Replace a task's text optimistically (title edit).
+  edit: (id: string, text: string) => Transaction;
+  // Set (or clear, with null) a task's show-up date optimistically. Postpone is
+  // reschedule(id, tomorrow); the optimistic move drops the row from Home at
+  // once (the shown-up gate) and lands it in Upcoming.
+  reschedule: (id: string, showUpDate: string | null) => Transaction;
+  // Set a task's manual sort key optimistically (drag-reorder). The caller mints
+  // the key between the drop position's neighbors with orderKeyBetween.
+  reorder: (id: string, sortKey: string) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
   getLoadError: () => string | null;
@@ -85,12 +100,17 @@ export const TASKS_QUERY_KEY = entityQueryKey("tasks");
 
 // The verb table. Each key is the outbox mutationFn name (durable: a queued
 // offline write replays by it), so the keys never change.
+// One collection.update backs reorder, reschedule, complete, take-on and the
+// text edit; the in-memory path tells them apart by the changed field set, in
+// this order: sortKey changed → reorder; showUpDate changed → reschedule;
+// completedAt set → complete; takenOnAt changed → take-on; else → edit (the
+// catch-all). reopen is a revive (routed by metadata, not by matches).
 export function tasksSpec(rest: TasksRest) {
   const v = verbsFor<Task>();
   const verbs = {
     addTask: v.insert<{
       text: string;
-      showUpDate: string;
+      showUpDate: string | null;
       projectId: string | null;
       takenOnAt: string | null;
       sourceCaptureId: string | null;
@@ -102,6 +122,11 @@ export function tasksSpec(rest: TasksRest) {
         takenOnAt,
         sourceCaptureId,
         completedAt: null,
+        // Null sorts last, so a new task lands at the bottom of the manual order
+        // (newest-at-bottom). The server mints the real trailing key on
+        // reconcile, still at the bottom — no jump. So the client never mints a
+        // key on add.
+        sortKey: null,
       }),
       persist: (row) =>
         rest.addTask({
@@ -112,6 +137,27 @@ export function tasksSpec(rest: TasksRest) {
           takenOnAt: row.takenOnAt,
           sourceCaptureId: row.sourceCaptureId ?? null,
         }),
+    }),
+    reorderTask: v.update<{ id: string; sortKey: string }>({
+      id: ({ id }) => id,
+      draft:
+        ({ sortKey }) =>
+        (draft) => {
+          draft.sortKey = sortKey;
+        },
+      matches: ({ changes }) => "sortKey" in changes,
+      persist: (id, { modified }) => rest.reorderTask(id, modified.sortKey!),
+    }),
+    rescheduleTask: v.update<{ id: string; showUpDate: string | null }>({
+      id: ({ id }) => id,
+      draft:
+        ({ showUpDate }) =>
+        (draft) => {
+          draft.showUpDate = showUpDate;
+        },
+      matches: ({ changes }) => "showUpDate" in changes,
+      persist: (id, { modified }) =>
+        rest.rescheduleTask(id, modified.showUpDate),
     }),
     completeTask: v.update<{ id: string }>({
       id: ({ id }) => id,
@@ -140,8 +186,19 @@ export function tasksSpec(rest: TasksRest) {
         (draft) => {
           draft.takenOnAt = takenOnAt;
         },
-      matches: () => true,
+      matches: ({ changes }) => "takenOnAt" in changes,
       persist: (id, { modified }) => rest.setTaskTakenOn(id, modified.takenOnAt),
+    }),
+    // Catch-all: an update that changed none of the above is a text edit.
+    editTask: v.update<{ id: string; text: string }>({
+      id: ({ id }) => id,
+      draft:
+        ({ text }) =>
+        (draft) => {
+          draft.text = text;
+        },
+      matches: () => true,
+      persist: (id, { modified }) => rest.editTask(id, modified.text),
     }),
   };
   const spec: EntitySpec<Task, typeof verbs> = {
@@ -157,13 +214,17 @@ function toTasksApi(
 ): TasksApi {
   return {
     collection: api.collection,
-    add: (text, showUpDate, projectId = null, takenOnAt = null, sourceCaptureId = null) =>
+    add: (text, showUpDate = null, projectId = null, takenOnAt = null, sourceCaptureId = null) =>
       api.actions.addTask({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }),
     complete: (id) => api.actions.completeTask({ id }),
     reopen: (task) => api.actions.reopenTask(task),
     takeOn: (id) =>
       api.actions.setTakenOn({ id, takenOnAt: new Date().toISOString() }),
     park: (id) => api.actions.setTakenOn({ id, takenOnAt: null }),
+    edit: (id, text) => api.actions.editTask({ id, text }),
+    reschedule: (id, showUpDate) =>
+      api.actions.rescheduleTask({ id, showUpDate }),
+    reorder: (id, sortKey) => api.actions.reorderTask({ id, sortKey }),
     offline: api.offline,
     refetch: api.refetch,
     getLoadError: api.getLoadError,

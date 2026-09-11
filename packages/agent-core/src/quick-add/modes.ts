@@ -12,17 +12,21 @@
 // `waiting` is project-scoped: it creates a free-text waiting condition on the
 // open project and so is NEVER in ALL_ADD_MODES (Home and the Projects list have
 // no project context); the project screen passes it explicitly.
-export type AddMode = "capture" | "task" | "project" | "waiting";
+//
+// The `capture` mode was retired in the single-list merge: Task is the single
+// entity now, so a quick-add with no project simply creates a loose task. See
+// docs/plans/todo-single-list-1-merge.md.
+export type AddMode = "task" | "project" | "waiting";
 
 // The full offered set, in display order. A widget defaults to this; a
 // single-purpose screen passes a narrowed list (e.g. ["task"] on a project, or
 // ["task", "waiting"] on a project's own screen). `waiting` is deliberately
-// absent here — it is project-scoped (see the type note above).
-export const ALL_ADD_MODES: AddMode[] = ["capture", "task", "project"];
+// absent here — it is project-scoped (see the type note above). `task` is the
+// default entry (Home's quick-add).
+export const ALL_ADD_MODES: AddMode[] = ["task", "project"];
 
 // The short word shown on a mode's pill (capitalized as rendered).
 export const ADD_MODE_LABEL: Record<AddMode, string> = {
-  capture: "Capture",
   task: "Task",
   project: "Project",
   waiting: "Waiting",
@@ -31,7 +35,6 @@ export const ADD_MODE_LABEL: Record<AddMode, string> = {
 // The input placeholder while a mode is selected. Project mode folds the
 // outcome-based-naming guidance into the placeholder itself.
 export const ADD_MODE_PLACEHOLDER: Record<AddMode, string> = {
-  capture: "Capture a thought",
   task: "Add a task",
   project: "Name an outcome",
   waiting: "Waiting on…",

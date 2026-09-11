@@ -9,8 +9,8 @@ import {
 } from "./modes";
 
 describe("add-mode registry", () => {
-  it("offers the three global modes in display order", () => {
-    expect(ALL_ADD_MODES).toEqual(["capture", "task", "project"]);
+  it("offers the global modes in display order (task default, then project)", () => {
+    expect(ALL_ADD_MODES).toEqual(["task", "project"]);
   });
 
   it("keeps the project-scoped 'waiting' mode out of the global set", () => {
@@ -23,7 +23,7 @@ describe("add-mode registry", () => {
   });
 
   it("has a label and placeholder for every mode", () => {
-    for (const mode of ["capture", "task", "project", "waiting"] as AddMode[]) {
+    for (const mode of ["task", "project", "waiting"] as AddMode[]) {
       expect(ADD_MODE_LABEL[mode]).toBeTruthy();
       expect(ADD_MODE_PLACEHOLDER[mode]).toBeTruthy();
     }
@@ -31,7 +31,6 @@ describe("add-mode registry", () => {
 
   it("labels each mode's pill for accessibility ('waiting' is spelled out)", () => {
     const cases: Record<AddMode, string> = {
-      capture: "Add a capture",
       task: "Add a task",
       project: "Add a project",
       waiting: "Add a waiting condition",

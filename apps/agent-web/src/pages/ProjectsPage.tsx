@@ -20,10 +20,7 @@ import {
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
-import { getCapturesApi, type CapturesApi } from "@/lib/captures-collection";
-import { refiningCaptureId, stopRefine } from "@/lib/refine-session";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
-import { RefineBanner } from "@/components/RefineBanner";
 import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 import { type Project } from "@/lib/projects";
@@ -51,24 +48,17 @@ function ProjectsPanel() {
   const [api, setApi] = useState<ProjectsApi | null>(null);
   const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
   const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
-  const [capturesApi, setCapturesApi] = useState<CapturesApi | null>(null);
   useEffect(() => {
     let live = true;
     void getProjectsApi().then((a) => live && setApi(a));
     void getTasksApi().then((a) => live && setTasksApi(a));
     void getWaitsApi().then((a) => live && setWaitsApi(a));
-    void getCapturesApi().then((a) => live && setCapturesApi(a));
     return () => {
       live = false;
     };
   }, []);
-  return api && tasksApi && waitsApi && capturesApi ? (
-    <ProjectsReady
-      api={api}
-      tasksApi={tasksApi}
-      waitsApi={waitsApi}
-      capturesApi={capturesApi}
-    />
+  return api && tasksApi && waitsApi ? (
+    <ProjectsReady api={api} tasksApi={tasksApi} waitsApi={waitsApi} />
   ) : (
     <div className="min-h-24" />
   );
@@ -78,12 +68,10 @@ function ProjectsReady({
   api,
   tasksApi,
   waitsApi,
-  capturesApi,
 }: {
   api: ProjectsApi;
   tasksApi: TasksApi;
   waitsApi: WaitsApi;
-  capturesApi: CapturesApi;
 }) {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useLiveQuery((q) =>
@@ -108,8 +96,7 @@ function ProjectsReady({
     const trimmed = title.trim();
     if (!trimmed) return;
     setError(null);
-    // When refining a capture, the new project links back to it.
-    const tx = api.add(trimmed, refiningCaptureId());
+    const tx = api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     // Pre-warm emoji icon suggestions in the background off the optimistic
     // insert's id, so the picker shows them instantly when opened (create is
@@ -125,15 +112,6 @@ function ProjectsReady({
     setTitle("");
     inputRef.current?.focus();
   }, [api, title]);
-
-  const onFinishRefine = useCallback(
-    (captureId: string) => {
-      const tx = capturesApi.process(captureId);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-      stopRefine();
-    },
-    [capturesApi],
-  );
 
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
@@ -162,7 +140,6 @@ function ProjectsReady({
 
   return (
     <div className="space-y-6">
-      <RefineBanner onFinish={onFinishRefine} />
       <form
         className="space-y-1"
         onSubmit={(e) => {

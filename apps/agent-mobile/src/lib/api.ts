@@ -1,5 +1,4 @@
 import type {
-  Capture,
   Project,
   ProjectEditFields,
   ProjectStatus,
@@ -12,7 +11,6 @@ import { API_BASE_URL } from './env';
 
 // The shared entity types (web + mobile).
 export type {
-  Capture,
   Project,
   ProjectEditFields,
   ProjectStatus,
@@ -72,148 +70,8 @@ export async function patchTimezone(
   }
 }
 
-export async function fetchCaptures(
-  getToken: TokenGetter,
-  baseUrl: string = API_BASE_URL,
-): Promise<Capture[]> {
-  const res = await apiFetch(getToken, '/api/captures', {}, baseUrl);
-  if (!res.ok) {
-    throw new Error(`GET /api/captures failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { captures: Capture[] };
-  return body.captures;
-}
-
-export async function addCapture(
-  getToken: TokenGetter,
-  capture: { id: string; text: string },
-  baseUrl: string = API_BASE_URL,
-): Promise<Capture> {
-  const res = await apiFetch(
-    getToken,
-    '/api/captures',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(capture),
-    },
-    baseUrl,
-  );
-  if (!res.ok) {
-    throw new Error(`POST /api/captures failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { capture: Capture };
-  return body.capture;
-}
-
-export async function processCapture(
-  getToken: TokenGetter,
-  id: string,
-  baseUrl: string = API_BASE_URL,
-): Promise<Capture> {
-  const res = await apiFetch(
-    getToken,
-    `/api/captures/${id}/process`,
-    { method: 'POST' },
-    baseUrl,
-  );
-  if (!res.ok) {
-    throw new Error(`POST /api/captures/${id}/process failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { capture: Capture };
-  return body.capture;
-}
-
-export async function unprocessCapture(
-  getToken: TokenGetter,
-  id: string,
-  baseUrl: string = API_BASE_URL,
-): Promise<Capture> {
-  const res = await apiFetch(
-    getToken,
-    `/api/captures/${id}/unprocess`,
-    { method: 'POST' },
-    baseUrl,
-  );
-  if (!res.ok) {
-    throw new Error(`POST /api/captures/${id}/unprocess failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { capture: Capture };
-  return body.capture;
-}
-
-export async function editCapture(
-  getToken: TokenGetter,
-  id: string,
-  text: string,
-  baseUrl: string = API_BASE_URL,
-): Promise<Capture> {
-  const res = await apiFetch(
-    getToken,
-    `/api/captures/${id}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    },
-    baseUrl,
-  );
-  if (!res.ok) {
-    throw new Error(`PATCH /api/captures/${id} failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { capture: Capture };
-  return body.capture;
-}
-
-export async function rescheduleCapture(
-  getToken: TokenGetter,
-  id: string,
-  showUpDate: string | null,
-  baseUrl: string = API_BASE_URL,
-): Promise<Capture> {
-  const res = await apiFetch(
-    getToken,
-    `/api/captures/${id}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ showUpDate }),
-    },
-    baseUrl,
-  );
-  if (!res.ok) {
-    throw new Error(`PATCH /api/captures/${id} failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { capture: Capture };
-  return body.capture;
-}
-
-export async function reorderCapture(
-  getToken: TokenGetter,
-  id: string,
-  sortKey: string,
-  baseUrl: string = API_BASE_URL,
-): Promise<Capture> {
-  const res = await apiFetch(
-    getToken,
-    `/api/captures/${id}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sortKey }),
-    },
-    baseUrl,
-  );
-  if (!res.ok) {
-    throw new Error(`PATCH /api/captures/${id} failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { capture: Capture };
-  return body.capture;
-}
-
-// Task REST helpers: siblings of the Capture ones above, hitting /api/tasks.
-// The server returns all open tasks (completedAt IS NULL); the client applies
-// the local-today date filter.
+// Task REST helpers hitting /api/tasks. The server returns all open tasks
+// (completedAt IS NULL); the client applies the local-today shown-up split.
 export async function fetchTasks(
   getToken: TokenGetter,
   baseUrl: string = API_BASE_URL,
@@ -231,7 +89,7 @@ export async function addTask(
   task: {
     id: string;
     text: string;
-    showUpDate: string;
+    showUpDate: string | null;
     projectId: string | null;
     takenOnAt: string | null;
     sourceCaptureId: string | null;
@@ -304,6 +162,75 @@ export async function setTaskTakenOn(
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ takenOnAt }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
+export async function editTask(
+  getToken: TokenGetter,
+  id: string,
+  text: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
+export async function rescheduleTask(
+  getToken: TokenGetter,
+  id: string,
+  showUpDate: string | null,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showUpDate }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
+export async function reorderTask(
+  getToken: TokenGetter,
+  id: string,
+  sortKey: string,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sortKey }),
     },
     baseUrl,
   );

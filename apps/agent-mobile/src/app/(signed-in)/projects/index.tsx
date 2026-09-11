@@ -36,9 +36,6 @@ import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
-import { useCapturesApi } from '@/lib/captures-collection';
-import { refiningCaptureId, stopRefine } from '@/lib/refine-session';
-import { RefineBanner } from '@/components/refine-banner';
 import {
   useDelayed,
   useForegroundRefetch,
@@ -177,7 +174,6 @@ function Projects({
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
-  const capturesApi = useCapturesApi();
 
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
@@ -272,8 +268,7 @@ function Projects({
       return;
     }
     setWriteError(null);
-    // When refining a capture, the new project links back to it.
-    const tx = api.add(trimmed, refiningCaptureId());
+    const tx = api.add(trimmed);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
     // Pre-warm emoji icon suggestions off the optimistic insert's id, so the
     // picker shows them instantly when opened (create is name-only, so the basis
@@ -286,24 +281,12 @@ function Projects({
       });
       // Open the new project's own screen right away: the id is client-minted
       // and the optimistic row is already in the collection, so its screen
-      // renders at once (before the server confirms). A refine session is a
-      // global singleton, so this continues that flow — tasks added on the
-      // project screen still link back to the capture.
+      // renders at once (before the server confirms).
       router.push(`/projects/${key}`);
     }
     // Close the quick-add after adding.
     closeAdd();
   }, [text, api, getToken, router, closeAdd]);
-
-  const onFinishRefine = useCallback(
-    (captureId: string) => {
-      if (!capturesApi) return;
-      const tx = capturesApi.process(captureId);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-      stopRefine();
-    },
-    [capturesApi],
-  );
 
   const onOpen = useCallback(
     (p: Project) => router.push(`/projects/${p.id}`),
@@ -312,7 +295,6 @@ function Projects({
 
   return (
     <>
-      <RefineBanner onFinish={onFinishRefine} />
       {error ? (
         <Text variant="error" className="px-screen-x">
           {error}

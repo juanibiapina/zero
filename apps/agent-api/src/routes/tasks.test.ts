@@ -16,7 +16,7 @@ const fakeUserDO = (seed: Task[] = []) => {
     addTask(
       id: string,
       text: string,
-      showUpDate: string,
+      showUpDate: string | null = null,
       projectId: string | null = null,
       takenOnAt: string | null = null,
       sourceCaptureId: string | null = null,
@@ -32,6 +32,7 @@ const fakeUserDO = (seed: Task[] = []) => {
         projectId,
         takenOnAt,
         sourceCaptureId,
+        sortKey: "a0",
       };
       tasks.push(task);
       return task;
@@ -55,6 +56,24 @@ const fakeUserDO = (seed: Task[] = []) => {
       const task = tasks.find((t) => t.id === id);
       if (!task) return null;
       task.completedAt = null;
+      return task;
+    },
+    editTask(id: string, text: string): Task | null {
+      const task = tasks.find((t) => t.id === id);
+      if (!task) return null;
+      task.text = text;
+      return task;
+    },
+    rescheduleTask(id: string, showUpDate: string | null): Task | null {
+      const task = tasks.find((t) => t.id === id);
+      if (!task) return null;
+      task.showUpDate = showUpDate;
+      return task;
+    },
+    reorderTask(id: string, sortKey: string): Task | null {
+      const task = tasks.find((t) => t.id === id);
+      if (!task) return null;
+      task.sortKey = sortKey;
       return task;
     },
     _tasks: tasks,
@@ -94,6 +113,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   projectId: null,
   takenOnAt: null,
   sourceCaptureId: null,
+  sortKey: "a0",
   ...over,
 });
 
@@ -164,6 +184,22 @@ describe("POST /api/tasks", () => {
     expect(userDO._tasks).toHaveLength(1);
   });
 
+  it("adds a loose task with no showUpDate (a quick capture)", async () => {
+    const userDO = fakeUserDO();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: UUID_1, text: "a loose thought" }),
+    });
+
+    expect(res.status).toBe(201);
+    const body: { task: Task } = await res.json();
+    expect(body.task.text).toBe("a loose thought");
+    expect(body.task.showUpDate).toBeNull();
+  });
+
   it("rejects an empty text with 400", async () => {
     const userDO = fakeUserDO();
     const app = buildApp(fakeEnv(userDO), "user_abc");
@@ -190,6 +226,78 @@ describe("POST /api/tasks", () => {
 
     expect(res.status).toBe(400);
     expect(userDO._tasks).toEqual([]);
+  });
+});
+
+describe("PATCH /api/tasks/{id}", () => {
+  it("reschedules a task to a future day", async () => {
+    const userDO = fakeUserDO([task()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showUpDate: "2999-01-01" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { task: Task } = await res.json();
+    expect(body.task.showUpDate).toBe("2999-01-01");
+  });
+
+  it("clears the show-up date with null (task becomes loose)", async () => {
+    const userDO = fakeUserDO([task({ showUpDate: "2999-01-01" })]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showUpDate: null }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { task: Task } = await res.json();
+    expect(body.task.showUpDate).toBeNull();
+  });
+
+  it("reorders a task (sets its sort key)", async () => {
+    const userDO = fakeUserDO([task()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sortKey: "a5" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { task: Task } = await res.json();
+    expect(body.task.sortKey).toBe("a5");
+  });
+
+  it("rejects an empty body with 400", async () => {
+    const userDO = fakeUserDO([task()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+
+    const res = await app.request("/api/tasks/nope", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showUpDate: "2999-01-01" }),
+    });
+
+    expect(res.status).toBe(404);
   });
 });
 

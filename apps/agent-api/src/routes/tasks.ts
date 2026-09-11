@@ -12,12 +12,16 @@ type Variables = {
 const TaskSchema = z.object({
   id: z.string(),
   text: z.string(),
-  showUpDate: z.string(),
+  showUpDate: z.string().nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
   projectId: z.string().nullable(),
   takenOnAt: z.string().nullable(),
   sourceCaptureId: z.string().nullable(),
+  // In practice every stored row is keyed; a null (unkeyed) row sorts last and
+  // is tolerated rather than rejected so a stray/legacy null degrades
+  // gracefully instead of 500ing the whole list response.
+  sortKey: z.string().nullable(),
 });
 
 // A local calendar day, YYYY-MM-DD. The client mints it in the user's timezone.
@@ -63,7 +67,9 @@ export const createTasksRoutes = () => {
             schema: z.object({
               id: z.string().uuid(),
               text: z.string().min(1),
-              showUpDate: ShowUpDate,
+              // Optional: a loose quick-capture has no day (null/absent = always
+              // relevant). A project-screen add or a dated quick-add sends one.
+              showUpDate: ShowUpDate.nullable().optional(),
               // Optional: the Project this task belongs to. Omitted/absent for a
               // loose task.
               projectId: z.string().uuid().nullable().optional(),
@@ -105,7 +111,7 @@ export const createTasksRoutes = () => {
     const task = await userDO.addTask(
       id,
       text,
-      showUpDate,
+      showUpDate ?? null,
       projectId ?? null,
       takenOnAt ?? null,
       sourceCaptureId ?? null,
@@ -114,19 +120,28 @@ export const createTasksRoutes = () => {
     return c.json({ task }, 201);
   });
 
-  const takenOnRoute = createRoute({
+  const patchRoute = createRoute({
     method: "patch",
     path: "/api/tasks/{id}",
     tags: ["Tasks"],
-    summary: "Take a task on (curate onto Home) or park it",
+    summary: "Update a task's text, show-up date, sort key, or taken-on state",
     request: {
       params: z.object({ id: z.string() }),
       body: {
         content: {
           "application/json": {
-            // takenOnAt: a timestamp to take on, or null to park. Idempotent on
+            // A partial update: any field may be present. showUpDate may be null
+            // to clear the date (make the task loose/always-relevant again).
+            // takenOnAt: a timestamp to take on, or null to park. sortKey is a
+            // client-minted fractional index (trusted, not charset validated).
+            // In practice each PATCH carries exactly one intent. Idempotent on
             // the id, so a replayed offline write is safe.
-            schema: z.object({ takenOnAt: z.string().nullable() }),
+            schema: z.object({
+              text: z.string().min(1).optional(),
+              showUpDate: ShowUpDate.nullable().optional(),
+              sortKey: z.string().min(1).optional(),
+              takenOnAt: z.string().nullable().optional(),
+            }),
           },
         },
       },
@@ -138,6 +153,12 @@ export const createTasksRoutes = () => {
         },
         description: "The updated task",
       },
+      400: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "Empty text, malformed date, or no fields to update",
+      },
       404: {
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
@@ -147,14 +168,41 @@ export const createTasksRoutes = () => {
     },
   });
 
-  router.openapi(takenOnRoute, async (c) => {
+  // PATCH (not a POST …/edit action) because updating a task's fields is a
+  // genuine idempotent field update on its stable id. One endpoint carries
+  // edit (text), reschedule (showUpDate), reorder (sortKey), and curation
+  // (takenOnAt); each field maps to its own store verb.
+  router.openapi(patchRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const { takenOnAt } = c.req.valid("json");
+    const body = c.req.valid("json");
+    const hasText = body.text !== undefined;
+    const hasShowUpDate = "showUpDate" in body;
+    const hasSortKey = body.sortKey !== undefined;
+    const hasTakenOn = "takenOnAt" in body;
+    if (!hasText && !hasShowUpDate && !hasSortKey && !hasTakenOn) {
+      return c.json({ error: "no fields to update" }, 400);
+    }
+
     const userDO = getUserDO(c.env, userId);
-    const task = await userDO.setTaskTakenOn(id, takenOnAt);
+    let task: Awaited<ReturnType<typeof userDO.setTaskTakenOn>> = null;
+    if (hasSortKey && body.sortKey !== undefined) {
+      task = await userDO.reorderTask(id, body.sortKey);
+      if (task) log("task_reordered", { clerk_user_id: userId });
+    }
+    if (hasShowUpDate) {
+      task = await userDO.rescheduleTask(id, body.showUpDate ?? null);
+      if (task) log("task_rescheduled", { clerk_user_id: userId });
+    }
+    if (hasText && body.text !== undefined) {
+      task = await userDO.editTask(id, body.text);
+      if (task) log("task_edited", { clerk_user_id: userId });
+    }
+    if (hasTakenOn) {
+      task = await userDO.setTaskTakenOn(id, body.takenOnAt ?? null);
+      if (task) log("task_taken_on", { clerk_user_id: userId });
+    }
     if (!task) return c.json({ error: "task not found" }, 404);
-    log("task_taken_on", { clerk_user_id: userId });
     return c.json({ task }, 200);
   });
 

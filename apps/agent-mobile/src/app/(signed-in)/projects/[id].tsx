@@ -45,7 +45,6 @@ import {
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
-import { refiningCaptureId } from '@/lib/refine-session';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
@@ -181,18 +180,11 @@ function ProjectDetail({
     if (!project) return;
     setError(null);
     // Waiting mode records a free-text waiting condition on this project; Task
-    // mode adds a parked task (takenOnAt null — grooming is collect-then-take-on;
-    // linked to the capture when refining).
+    // mode adds a parked task (takenOnAt null — grooming is collect-then-take-on).
     const tx =
       mode === 'waiting'
         ? waitsApi.add(project.id, 'free-text', { text: trimmed })
-        : tasksApi.add(
-            trimmed,
-            localToday(),
-            project.id,
-            null,
-            refiningCaptureId(),
-          );
+        : tasksApi.add(trimmed, localToday(), project.id);
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     // Close the quick-add after adding.
     closeAdd();

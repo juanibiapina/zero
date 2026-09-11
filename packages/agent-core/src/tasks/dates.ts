@@ -1,20 +1,8 @@
-// Pure date helpers for the Captures list. The server is the authority on
-// visibility (it filters by the user's timezone); these back only the client's
-// optimistic hide, so a just-postponed row leaves the list at once and offline,
-// before the server's filtered GET reconciles it.
-
-import { compareByOrder } from "./order";
-import type { Capture } from "./types";
-
-// The device's local calendar day as YYYY-MM-DD. Duplicated from tasks/today.ts
-// (not imported) so Captures does not depend on the parked Task module and Task
-// can later be deleted cleanly. Pass a fixed `now` in tests.
-export function localToday(now: Date = new Date()): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+// Pure date helpers for the task list. The client mints a task's showUpDate in
+// the user's local day and does the shown-up / upcoming split against it (the
+// server stores the string verbatim and has no timezone). Ported from the
+// former captures/dates.ts in the single-list merge; `localToday` and the
+// Today-list `dueToday` still live in ./today.ts.
 
 // The next calendar day after a YYYY-MM-DD string. Parsed at UTC noon so adding
 // 24h never lands on the same date across a DST boundary, then reformatted in
@@ -45,12 +33,12 @@ function formatLocalDay(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
-// The label the capture detail's schedule row shows for a `showUpDate`:
+// The label the task detail's schedule row shows for a `showUpDate`:
 //   null/undefined -> "Schedule" (the empty call to action, never "No date"),
 //   today          -> "Today",
 //   today + 1      -> "Tomorrow",
 //   else           -> weekday + day + month in the device locale (e.g. "Fri, 12 Sep").
-// Loose `== null` so a pre-column row (undefined) reads as unscheduled.
+// Loose `== null` so an unscheduled (loose) task reads as unscheduled.
 export function scheduleLabel(
   showUpDate: string | null | undefined,
   today: string,
@@ -105,25 +93,4 @@ export function dayLabel(date: string, today: string): string {
     day: "numeric",
     month: "short",
   }).format(parseLocalDay(date));
-}
-
-// The optimistic client-side hide, mirroring the server filter: keep open
-// captures with no show-up date or a date that has arrived, so a plain capture
-// always shows and an overdue one rolls in silently (no red — Things-3 gentle
-// overdue). Ordered by the manual sort key (nulls last), createdAt as the
-// tiebreak — the same comparator the server uses, so client and server order
-// identically. Pure, so it is unit-tested without the collection.
-export function visibleCaptures(
-  list: readonly Capture[],
-  today: string,
-): Capture[] {
-  return list
-    .filter(
-      (c) =>
-        c.processedAt == null &&
-        // Loose `== null` so a missing/undefined date (e.g. a row from a server
-        // that predates showUpDate) is treated as "always visible", not hidden.
-        (c.showUpDate == null || c.showUpDate <= today),
-    )
-    .sort(compareByOrder);
 }

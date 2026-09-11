@@ -49,5 +49,6 @@ import m0047 from "./migrations/0047_tasks_project_id.sql";
 import m0048 from "./migrations/0048_tasks_taken_on.sql";
 import m0049 from "./migrations/0049_waiting_conditions.sql";
 import m0050 from "./migrations/0050_source_capture_id.sql";
+import m0051 from "./migrations/0051_single_list_merge.sql";
 
-export const migrations = { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014, m0015, m0016, m0017, m0018, m0019, m0020, m0021, m0022, m0023, m0024, m0025, m0026, m0027, m0028, m0029, m0030, m0031, m0032, m0033, m0034, m0035, m0036, m0037, m0038, m0039, m0040, m0041, m0042, m0043, m0044, m0045, m0046, m0047, m0048, m0049, m0050 };
+export const migrations = { m0000, m0001, m0002, m0003, m0004, m0005, m0006, m0007, m0008, m0009, m0010, m0011, m0012, m0013, m0014, m0015, m0016, m0017, m0018, m0019, m0020, m0021, m0022, m0023, m0024, m0025, m0026, m0027, m0028, m0029, m0030, m0031, m0032, m0033, m0034, m0035, m0036, m0037, m0038, m0039, m0040, m0041, m0042, m0043, m0044, m0045, m0046, m0047, m0048, m0049, m0050, m0051 };
