@@ -418,15 +418,18 @@ eas build -p android --profile preview
 `node`/`pnpm` per profile to avoid EAS corepack/pnpm-detection issues. The
 `preview` profile produces a sideloadable **APK** (not an AAB); `production`
 produces an AAB for the Play Store (defined but unused for now). The `preview`
-build (local or the manual CI job) is a **distributable artifact** — it is not
-sideloaded onto the mini Pixel, which stays on the dev client (see the callout
-under Physical device testing).
+build (a **distributable artifact**) is not sideloaded onto the mini Pixel, which
+stays on the dev client (see the callout under Physical device testing) — for the
+full preview-APK release flow see **[Mobile releases](../../docs/mobile-releases.md)**.
+
+Builds run **locally on `mini`** by default (next section); the cloud (EAS) path
+is used only when explicitly asked (EAS free tier caps Android cloud builds per
+month).
 
 ### Local builds on the `mini` NixOS box (no EAS quota)
 
-The EAS free tier caps Android cloud builds per month. When it runs out, build
-the **dev client** APK **locally on `mini`** and install it on the Pixel (this
-device is dev-client-only — see the callout above). Use a Nix dev shell that
+Build the **dev client** APK **locally on `mini`** and install it on the Pixel
+(this device is dev-client-only — see the callout above). Use a Nix dev shell that
 ships the exact Android toolchain Expo SDK 57 / React Native 0.86 pin (SDK platform 36,
 build-tools 36.0.0, NDK 27.1.12297006, cmake 3.22.1, JDK 17). The shell lives in
 `juanibiapina/dotfiles` (`nix/shells/android.nix`, exposed as the flake output
@@ -458,48 +461,12 @@ adb install -r -d /tmp/local-devclient.apk
 
 Do **not** build `--profile preview`/`production` and `adb install` it here — a
 standalone build breaks hot-reload on this device (see the callout above). A
-standalone **preview** APK is a distributable artifact; build it locally and put
-it on Google Drive (next section) — never sideload it onto the mini Pixel.
+standalone **preview** APK is a distributable artifact; build it locally and
+publish it to Google Drive — never sideload it onto the mini Pixel. The full
+preview-APK release flow (local build, Drive publish, install) lives in
+**[Mobile releases](../../docs/mobile-releases.md)**.
 
-### Preview APK artifact → Google Drive (no EAS quota)
-
-The `preview` profile is a self-contained, sideloadable APK (production Clerk +
-`https://zero.juanibiapina.dev` API baked in) meant for handing to a real device,
-not for the dev-client Pixel. Build it the same way as the dev client, just with
-`--profile preview`, then publish it to Drive and drop the previous one. The build
-takes ~50 min on `mini` (gradle compiles native for all four ABIs). It runs with
-`appVersionSource: remote` + `autoIncrement`, so EAS bumps the remote
-`versionCode` (e.g. 54 → 55) and prints it; the app `version` is in
-`app.json` (`expo.version`, e.g. `1.0.0`).
-
-```bash
-# 1) Build (from the zero repo root, on mini). ~50 min.
-export NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1
-nix develop ~/workspace/juanibiapina/dotfiles#android --command bash -c '
-  cd apps/agent-mobile
-  pnpm dlx eas-cli@latest build --platform android --profile preview --local \
-    --non-interactive --output /tmp/zero-agent-preview.apk
-'
-# The log ends with "Incremented versionCode from N to N+1" and
-# "You can find the build artifacts in /tmp/zero-agent-preview.apk".
-
-# 2) Name it <version>-vc<versionCode>, matching the convention on Drive.
-mv /tmp/zero-agent-preview.apk /tmp/zero-agent-v1.0.0-vc55-preview.apk
-
-# 3) Publish to Drive (My Drive root) and make it link-shareable.
-gdcli juanibiapina@gmail.com upload /tmp/zero-agent-v1.0.0-vc55-preview.apk
-gdcli juanibiapina@gmail.com share <newFileId> --anyone
-
-# 4) Remove the previous APK so only the latest remains.
-gdcli juanibiapina@gmail.com ls --query "name contains '.apk' and trashed = false"
-gdcli juanibiapina@gmail.com delete <oldFileId>
-```
-
-Keep exactly **one** preview APK on Drive (the latest). `gdcli delete` moves the
-old one to Trash (recoverable). The shared `--anyone` link is what you open on a
-phone to install (allow "install from unknown sources").
-
-Notes:
+Notes on local builds:
 - `eas build --local` still fetches the signing keystore from EAS ("Using remote
   Android credentials"), so the local APK installs over the existing app with no
   uninstall. It runs the same prebuild + gradle steps as the cloud, just on this
@@ -512,28 +479,13 @@ Notes:
 - Plain `pnpm`/`node` from the outer environment stay on `PATH` inside the shell,
   so the repo's package manager is used as usual.
 
-## Install on a physical Android device
+## Releases (preview APK → Google Drive)
 
-1. Run `eas build -p android --profile preview` (or trigger the manual CI job
-   below). EAS prints a build URL with a QR code when done.
-2. On the phone, open the URL / scan the QR from the EAS build page.
-3. Allow **install from unknown sources** if prompted, then install.
-4. Launch **Zero Agent** — it opens to the sign-in screen; sign in with Google to
-   reach the home screen.
-
-Find past builds and their install URLs:
-
-```bash
-eas build:list
-```
-
-## CI build (manual)
-
-A `mobile-build` job in `.github/workflows/ci.yml` runs an EAS `preview` build.
-It is gated on **`workflow_dispatch`** (manual) — not on every push — to conserve
-the free EAS quota (30 builds/month). Trigger it from the GitHub Actions tab
-("Run workflow"). It requires an `EXPO_TOKEN` repository secret (create a token
-in the Expo dashboard → Account settings → Access tokens).
+The preview-APK release process — local-by-default build, publish into the
+dedicated `Zero Agent releases` Drive folder (replacing the previous APK), and
+install on a device — lives in **[Mobile releases](../../docs/mobile-releases.md)**.
+The manual `mobile-build` CI job (EAS `preview`, `workflow_dispatch`, needs an
+`EXPO_TOKEN` secret) is documented there too.
 
 The `lint` / `typecheck` / `test` jobs still run on every push and PR and include
 this app via Turbo.

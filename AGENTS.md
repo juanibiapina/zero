@@ -186,6 +186,15 @@ npm binds that trust to the workflow **filename**
 `.github/workflows/publish-cli.yml`. Renaming or moving the file breaks
 publishing until the trusted publisher entry on npmjs.com is edited to match.
 
+### Mobile releases
+
+The mobile todo app (`apps/agent-mobile`) ships as a sideloadable preview APK,
+separate from the Workers deploy. A release builds **locally by default** on the
+`mini` box (Nix dev shell), and in the cloud (EAS) only when explicitly asked.
+The APK is published to the dedicated `Zero Agent releases` Google Drive folder,
+always replacing the previous one so exactly one release APK is live. See
+`docs/mobile-releases.md`.
+
 ## Architecture
 
 Zero receives Telegram bot webhooks and routes each update to the right user via a KV cache backed by an authoritative `TelegramAccountDO` per Telegram account, consulted whenever KV misses (see `docs/telegram-login.md`). Messages are handled by a two-phase meta-agent that runs inside the per-user `UserDO` Durable Object: an **interface agent** reads the conversation and a topic-based knowledge model (stored in DO SQLite) and replies to the user, then a **writer agent** consolidates what was learned back into the accessed topics. The interface agent, the learner and onboarding are the same runner (`agents/run.ts`) with different prompts and tools; the interface agent investigates the web in its own loop with `web_search` (`WebSearch` port, Brave adapter) and `read_page` (`PageFetcher` port, Tavily adapter). The webhook enqueues each turn and returns 200 immediately; the turn (including any searching) runs inline on a DO alarm. LLM calls go through the Cloudflare AI Gateway (BYOK) with per-user `cf-aig-metadata` attribution; the model is `MODEL_ID` (`gpt-5.6-luna` on the OpenAI Responses API), and the provider is derived from the model id. The web app is a single screen where a signed-in user links their Telegram account via Telegram's Login Widget (see `docs/telegram-login.md`). A user can also ask Zero to act later, once or on a routine; the schedule record lives in `UserDO` and its deadline in `ScheduleDO`, which queues the schedule's prompt as an ordinary turn when it comes due (see `docs/schedules.md`). Zero also watches Gmail threads it sent for you, and any the user points at, and starts a turn when a reply arrives (see `docs/mail-watch.md`). See `docs/topics.md` for the topic model and writer policy, and `docs/research.md` for web research.
@@ -194,7 +203,7 @@ Packages:
 
 - **Worker:** `apps/agent-api` (`@zero/agent-api`)
 - **Frontend:** `apps/agent-web` (`@zero/agent-web`)
-- **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Built and distributed via EAS; the `mini` box can also build a standalone APK locally with a Nix dev shell (no system change) when the EAS quota runs out — see the "Local builds on the `mini` NixOS box" section of `apps/agent-mobile/README.md`. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/agent-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
+- **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). A release is a preview APK built **locally by default** on the `mini` box with a Nix dev shell (no system change), and only in the cloud (EAS) when explicitly asked; it is published to a dedicated Google Drive folder, replacing the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/agent-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
 - **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and OpenAI servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 - **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
