@@ -136,11 +136,16 @@ no speculative columns before their behavior is designed.
   fields; the description may be cleared to null). One `edit` verb, separate from
   `setStatus` (status has terminal semantics). Idempotent on the id, so an
   offline edit replays safely.
-- **Delete** — permanently remove a Project. Distinct from `done`: `done` keeps
-  the row (out of the working list) while delete hard-removes it. Idempotent on
-  the id (a replayed delete of an already-gone Project is a no-op), so an offline
-  delete replays safely. Destructive with no server-side undo, so the UI holds a
-  brief client-side Undo window before it commits.
+- **Delete** — permanently remove a Project **and everything that belongs to
+  it**: the delete cascades to the project's Tasks and its waiting conditions, so
+  no orphaned rows survive (an orphaned task is a ghost — hidden from Home because
+  its project is gone, yet still an open row the server returns). Distinct from
+  `done`: `done` keeps the row (out of the working list) while delete hard-removes
+  it. Idempotent on the id (a replayed delete of an already-gone Project is a
+  no-op, and re-cascades over nothing), so an offline delete replays safely.
+  Destructive with no server-side undo. The cascade lives in the `UserDO`
+  composition root (which holds all three stores), not in `DbProjectStore`, so
+  the per-entity store still owns only the `projects` table.
 
 ## Interactions (per system)
 
@@ -176,7 +181,10 @@ no speculative columns before their behavior is designed.
 - **Storage** — the server domain store is `DbProjectStore` (domain methods
   `add` / `list` / `setStatus` / `edit` / `delete`), a per-entity store like
   `DbCaptureStore` / `DbTaskStore` (do-orm is the shared layer; a store holds
-  only domain verbs). See `docs/storage.md`.
+  only domain verbs). The delete cascade is not a `DbProjectStore` method: it is
+  orchestrated in `UserDO.deleteProject`, which calls `DbProjectStore.delete`,
+  then `DbTaskStore.deleteByProject` and `DbWaitingConditionStore.deleteByProject`
+  — each store still owns only its own table. See `docs/storage.md`.
 - **API** — per-user isolated:
   - `GET /api/projects` → `{ projects }`, the non-`done` working set, oldest-first.
   - `POST /api/projects { id, title, icon?, description?, status? }` →
@@ -187,9 +195,11 @@ no speculative columns before their behavior is designed.
     `200 { project }`; `400` (no fields / empty title or icon / unknown status) /
     `404`. Carries both the status transition (`done` drops the row from the
     list) and the edit fields; an edit sends only the changed field.
-  - `DELETE /api/projects/{id}` → `204` (empty body). Idempotent: returns `204`
-    whether or not the row existed, so a replayed offline delete never makes the
-    outbox throw and retry forever (deliberately no `404`, unlike `PATCH`).
+  - `DELETE /api/projects/{id}` → `204` (empty body). Cascades to the project's
+    tasks and waiting conditions (see Behavior → Delete). Idempotent: returns
+    `204` whether or not the row existed, so a replayed offline delete never makes
+    the outbox throw and retry forever (deliberately no `404`, unlike `PATCH`).
+    The `project_deleted` log carries the cascade counts (`tasks`, `conditions`).
   - `POST /api/projects/icon-suggestions { title, description? }` →
     `200 { icons }`, single-emoji suggestions; `400` on empty title. **Stateless**
     on purpose: it reads/writes no project row (it is the first todo-app server
@@ -226,7 +236,10 @@ no speculative columns before their behavior is designed.
   parked (grooming is collect-then-take-on). **Waiting conditions** attach to a project
   (see `docs/entities/waiting-condition.md`). **Refine provenance**:
   `sourceCaptureId` (migration 0050) records the capture a project was refined
-  from. The AI Capture → Project conversion is a later slice.
+  from. The AI Capture → Project conversion is a later slice. **Deleting a project
+  cascades** to both dependent entities: every task with this `projectId` and
+  every waiting condition on this project is hard-removed (in
+  `UserDO.deleteProject`), so a project delete leaves no orphans.
 
 ## Shared view rule
 

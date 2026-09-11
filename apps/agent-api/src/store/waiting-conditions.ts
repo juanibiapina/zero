@@ -117,4 +117,19 @@ export class DbWaitingConditionStore {
     this.db.delete(waitingConditions, { where: eq("id", id) });
     return true;
   }
+
+  // Delete every waiting condition belonging to a project, resolved or open.
+  // Called when the project itself is deleted (the cascade lives in
+  // UserDO.deleteProject), so a project delete never leaves conditions pointing
+  // at a missing project. Idempotent — a project with none deletes 0. Returns
+  // the number of rows removed.
+  deleteByProject(projectId: string): number {
+    const rows = this.db.all(waitingConditions, {
+      where: eq("projectId", projectId),
+    });
+    if (rows.length > 0) {
+      this.db.delete(waitingConditions, { where: eq("projectId", projectId) });
+    }
+    return rows.length;
+  }
 }

@@ -197,4 +197,41 @@ describe("DbTaskStore", () => {
     store.backfillSortKeys();
     expect(store.list().map((t) => t.sortKey)).toEqual(before);
   });
+
+  describe("deleteByProject", () => {
+    it("deletes only tasks of the given project, leaving loose and other-project tasks", () => {
+      const store = makeStore();
+      store.add("t-loose", "loose", null, null);
+      store.add("t-p1a", "p1 a", null, "p1");
+      store.add("t-p1b", "p1 b", null, "p1");
+      store.add("t-p2", "p2", null, "p2");
+
+      const removed = store.deleteByProject("p1");
+
+      expect(removed).toBe(2);
+      expect(store.list().map((t) => t.id).sort()).toEqual(["t-loose", "t-p2"]);
+    });
+
+    it("deletes a completed task of the project too", () => {
+      const store = makeStore();
+      store.add("t-open", "open", null, "p1");
+      store.add("t-done", "done", null, "p1");
+      store.complete("t-done");
+
+      const removed = store.deleteByProject("p1");
+
+      // Both the open and the completed row are removed (2), even though only the
+      // open one is in list().
+      expect(removed).toBe(2);
+      expect(store.list()).toEqual([]);
+    });
+
+    it("is a no-op for a project with no tasks", () => {
+      const store = makeStore();
+      store.add("t-loose", "loose", null, null);
+
+      expect(store.deleteByProject("p1")).toBe(0);
+      expect(store.list()).toHaveLength(1);
+    });
+  });
 });

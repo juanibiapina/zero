@@ -204,6 +204,20 @@ export class DbTaskStore {
     return row ? toTask(row) : null;
   }
 
+  // Delete every task belonging to a project, open or completed. Called when the
+  // project itself is deleted (the cascade lives in UserDO.deleteProject, the
+  // composition root that holds every store), so a project delete never leaves
+  // orphaned tasks pointing at a missing project. A completed task is deleted
+  // too: it is just as orphaned. Idempotent — a project with no tasks deletes 0.
+  // Returns the number of rows removed.
+  deleteByProject(projectId: string): number {
+    const rows = this.db.all(tasks, { where: eq("projectId", projectId) });
+    if (rows.length > 0) {
+      this.db.delete(tasks, { where: eq("projectId", projectId) });
+    }
+    return rows.length;
+  }
+
   // One-shot backfill of sort keys for rows that predate the column (sortKey IS
   // NULL). Assigns sequential fractional keys in createdAt order, so the list's
   // manual order starts out matching the old oldest-first order. Idempotent:

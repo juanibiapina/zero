@@ -528,6 +528,30 @@ describe('ProjectDetailScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
+  it('re-pulls tasks and waits after a delete so cascaded orphans disappear', async () => {
+    const { getByLabelText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project actions')).toBeTruthy());
+
+    const tasksBefore = mockFetchTasks.mock.calls.length;
+    const waitsBefore = mockFetchWaits.mock.calls.length;
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Project actions'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Delete project'));
+    });
+
+    // The delete persists, then its .then re-pulls both dependent collections
+    // (the server has cascaded their rows away).
+    await waitFor(() =>
+      expect(mockFetchTasks.mock.calls.length).toBeGreaterThan(tasksBefore),
+    );
+    await waitFor(() =>
+      expect(mockFetchWaits.mock.calls.length).toBeGreaterThan(waitsBefore),
+    );
+  });
+
   it('re-pulls the project when the screen is pulled to refresh', async () => {
     const screen = await renderScreen();
     await waitFor(() =>

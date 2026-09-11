@@ -161,9 +161,15 @@ function ProjectDetail({
     setError(null);
     // The write lives on the shared projects data layer, not this screen, so it
     // persists even though we pop away immediately — no toast, no deferred window.
+    // The server cascades the delete to the project's tasks and waiting
+    // conditions, so once it persists we re-pull those two collections to drop
+    // any lingering orphan (a future-dated task of this project would otherwise
+    // sit in Upcoming until the next refetch — Upcoming applies no project gate).
     const tx = api.remove(project.id);
-    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-  }, [api, project]);
+    tx.isPersisted.promise
+      .then(() => Promise.all([tasksApi.refetch(), waitsApi.refetch()]))
+      .catch((e) => setError(messageOf(e)));
+  }, [api, tasksApi, waitsApi, project]);
 
   const closeAdd = useCallback(() => {
     setText('');

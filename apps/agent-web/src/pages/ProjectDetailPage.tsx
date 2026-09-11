@@ -121,15 +121,21 @@ function ProjectDetailReady({
 
   // Delete happens immediately (it is already behind the overflow menu — a
   // deliberate act), then we return to the list. The write lives on the shared
-  // projects data layer, so it persists even as this screen unmounts.
+  // projects data layer, so it persists even as this screen unmounts. The server
+  // cascades the delete to the project's tasks and waiting conditions, so once
+  // the delete persists we re-pull those two collections to drop any lingering
+  // orphan (a future-dated task of this project would otherwise sit in Upcoming
+  // until the next refetch — Upcoming applies no project gate).
   const commitDelete = useCallback(
     (pid: string) => {
       setError(null);
       const tx = api.remove(pid);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      tx.isPersisted.promise
+        .then(() => Promise.all([tasksApi.refetch(), waitsApi.refetch()]))
+        .catch((e) => setError(messageOf(e)));
       void navigate("/projects");
     },
-    [api, navigate],
+    [api, tasksApi, waitsApi, navigate],
   );
 
   // The project isn't in the loaded set: a bad or deleted id. Once the

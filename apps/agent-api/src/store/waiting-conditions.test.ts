@@ -53,4 +53,36 @@ describe("DbWaitingConditionStore", () => {
     expect(store.delete("c1")).toBe(false);
     expect(store.listOpen()).toEqual([]);
   });
+
+  describe("deleteByProject", () => {
+    it("deletes only conditions of the given project", () => {
+      const store = makeStore();
+      store.add("c1", "p1", "free-text", { text: "a" });
+      store.add("c2", "p1", "free-text", { text: "b" });
+      store.add("c3", "p2", "free-text", { text: "c" });
+
+      const removed = store.deleteByProject("p1");
+
+      expect(removed).toBe(2);
+      expect(store.listOpen().map((c) => c.id)).toEqual(["c3"]);
+    });
+
+    it("deletes a resolved condition of the project too", () => {
+      const store = makeStore();
+      store.add("c1", "p1", "free-text", { text: "a" });
+      store.resolve("c1");
+
+      // The resolved row is off the open list but still stored; the cascade
+      // removes it (1).
+      expect(store.deleteByProject("p1")).toBe(1);
+    });
+
+    it("is a no-op for a project with no conditions", () => {
+      const store = makeStore();
+      store.add("c1", "p1", "free-text", { text: "a" });
+
+      expect(store.deleteByProject("p2")).toBe(0);
+      expect(store.listOpen()).toHaveLength(1);
+    });
+  });
 });

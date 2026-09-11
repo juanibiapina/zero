@@ -53,11 +53,18 @@ const fakeUserDO = (seed: Project[] = []) => {
         project.description = fields.description;
       return project;
     },
-    deleteProject(id: string): boolean {
+    // Mirrors UserDO.deleteProject's cascade shape. This fake holds only
+    // projects (no tasks/conditions), so the cascade counts are always 0; the
+    // cross-store cascade is proven in store/project-delete-cascade.test.ts.
+    deleteProject(id: string): {
+      existed: boolean;
+      tasks: number;
+      conditions: number;
+    } {
       const i = projects.findIndex((p) => p.id === id);
-      if (i < 0) return false;
-      projects.splice(i, 1);
-      return true;
+      const existed = i >= 0;
+      if (existed) projects.splice(i, 1);
+      return { existed, tasks: 0, conditions: 0 };
     },
     _projects: projects,
   };

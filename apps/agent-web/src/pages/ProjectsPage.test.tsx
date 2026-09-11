@@ -526,6 +526,23 @@ describe("ProjectsPage", () => {
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
+  it("re-pulls tasks and waits after a delete so cascaded orphans disappear", async () => {
+    setApi([project("1", "Run a 5K", "next")]);
+    // The server cascades the delete to the project's tasks/conditions; the
+    // screen re-pulls both dependent collections once the delete persists so
+    // any lingering orphan (e.g. a future-dated task in Upcoming) drops.
+    const tasksRefetch = vi.spyOn(h.tasksApi!, "refetch");
+    const waitsRefetch = vi.spyOn(h.waitsApi!, "refetch");
+    renderApp();
+    await openDetail("Run a 5K");
+    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
+    });
+    await waitFor(() => expect(tasksRefetch).toHaveBeenCalled());
+    await waitFor(() => expect(waitsRefetch).toHaveBeenCalled());
+  });
+
   it("redirects to the list when the project id is unknown", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp(["/projects/nope"]);

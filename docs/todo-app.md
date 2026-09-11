@@ -161,6 +161,26 @@ committed.
 
 ## Project tracking
 
+Implemented, device verification pending (2026-09-12): **Delete a project
+cascades to its tasks and waiting conditions** (plan:
+`docs/plans/todo-project-delete-cascade.md`). Deleting a project no longer leaves
+orphans: `DELETE /api/projects/{id}` now also hard-removes every task with that
+`projectId` (open or completed) and every waiting condition on the project. Before
+this, an orphaned task was a ghost — hidden from Home (its project is gone, so
+`homeTasks` gates it out) yet still an open row, and a future-dated orphan even
+lingered in Upcoming (which applies no project gate). The cascade lives in the
+`UserDO` composition root (`deleteProject` calls the project delete, then
+`DbTaskStore.deleteByProject` and `DbWaitingConditionStore.deleteByProject`), so
+each per-entity store still owns only its own table; the route stays 204 and
+idempotent and now logs the cascade counts. On both surfaces the project-detail
+screen re-pulls the tasks and waits collections once the delete persists, so any
+lingering orphan drops at once (offline, the client cascade waits for reconnect;
+Home already hides the orphan meanwhile). No schema/migration change. Store, route
+(via a cross-store composition test), and both screen tests pass; **Pixel 7 device
+verification is pending** (delete a throwaway project with a task and a waiting
+condition → the task is on neither Home nor Upcoming, no orphan remains). Deleting
+a project stays permanent (no undo).
+
 Implemented, device verification pending (2026-09-12): **Date-aware
 availability** — the last slice of the single-list series (plan part 3
 `docs/plans/todo-single-list-3-date-availability.md`). A project's derived status

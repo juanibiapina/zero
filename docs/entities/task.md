@@ -51,6 +51,12 @@ Minimal on purpose; no priority or subtasks.
   `task_reordered`. `sortKey` is a fractional index (see Ordering).
 - **Take on / park** — curate a project task onto Home. Column `takenOnAt`, verbs
   `takeOn` / `park` over `PATCH /api/tasks/{id} { takenOnAt }`.
+- **Deleted with its project** — a task is not orphaned when its project is
+  deleted: `DELETE /api/projects/{id}` cascades to every task with that
+  `projectId` (open or completed), removing them in the same call
+  (`DbTaskStore.deleteByProject`, orchestrated by `UserDO.deleteProject`). A loose
+  task (`projectId == null`) is never touched by a project delete. See
+  `docs/entities/project.md`.
 - **Move to project** — set (or clear) `projectId` to file a loose task under a
   project (or send it back to loose). Store verb `setProject`, RPC
   `setTaskProject`, over `PATCH /api/tasks/{id} { projectId }` (uuid or `null`),
@@ -138,8 +144,8 @@ serves the open-tasks query.
 - **Storage** — the server domain store is `DbTaskStore` (`add` mints the trailing
   `sortKey`; `list` = every open task in manual order, no visibility filter — the
   client splits Home/Upcoming; `complete` / `reopen` / `setTakenOn` / `editText` /
-  `reschedule` / `reorder` / `setProject` / `backfillSortKeys`). See
-  `docs/storage.md`.
+  `reschedule` / `reorder` / `setProject` / `deleteByProject` (the project-delete
+  cascade) / `backfillSortKeys`). See `docs/storage.md`.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, every open task in manual order (future-dated
     included); the client splits Home and Upcoming.

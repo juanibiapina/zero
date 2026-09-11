@@ -286,16 +286,17 @@ export const createProjectsRoutes = (
   });
 
   // DELETE hard-removes the project (distinct from PATCH status 'done', which
-  // keeps the row out of the working list). Idempotent on the id: a missing row
-  // still returns 204, so a replayed offline delete (a retry after a lost ACK)
-  // never makes the client's outbox throw and retry forever. Unlike the PATCH
-  // route there is no 404.
+  // keeps the row out of the working list) and cascades to its tasks and waiting
+  // conditions (UserDO.deleteProject). Idempotent on the id: a missing row still
+  // returns 204, so a replayed offline delete (a retry after a lost ACK) never
+  // makes the client's outbox throw and retry forever. Unlike the PATCH route
+  // there is no 404. The cascade counts ride the log so a delete is observable.
   router.openapi(deleteRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
     const userDO = getUserDO(c.env, userId);
-    await userDO.deleteProject(id);
-    log("project_deleted", { clerk_user_id: userId });
+    const { tasks, conditions } = await userDO.deleteProject(id);
+    log("project_deleted", { clerk_user_id: userId, tasks, conditions });
     return c.body(null, 204);
   });
 

@@ -213,8 +213,23 @@ export class UserDO extends DurableObject<Env> {
     return this.projects.edit(id, fields);
   }
 
-  deleteProject(id: string): boolean {
-    return this.projects.delete(id);
+  // Delete a project and cascade to every row that references it: its tasks and
+  // its waiting conditions. The cascade lives here, in the composition root that
+  // holds all three stores, not in DbProjectStore (which owns only the projects
+  // table) — deleting a project must pass over every entity that references it
+  // (docs/todo-app.md), or those rows orphan (an orphaned task is a ghost: hidden
+  // from Home because its project is gone, yet still an open row). Idempotent on
+  // the id: a replayed offline delete finds nothing and no-ops on all three.
+  // Returns the cascade counts for the route's log line.
+  deleteProject(id: string): {
+    existed: boolean;
+    tasks: number;
+    conditions: number;
+  } {
+    const existed = this.projects.delete(id);
+    const tasks = this.tasks.deleteByProject(id);
+    const conditions = this.waitingConditions.deleteByProject(id);
+    return { existed, tasks, conditions };
   }
 
   // --- Waiting conditions ---
