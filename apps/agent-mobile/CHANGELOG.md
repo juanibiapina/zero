@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-11: A project's screen no longer shows an empty "Tasks" or "Waiting on" heading — each section appears only once it has something in it. Add either from the + button.
 - 2026-09-11: Tapping a capture in Upcoming now opens the same detail editor as Home — complete it with the round check, edit the title, reschedule it, or refine it into tasks & projects — instead of a plain inline text edit.
 - 2026-09-10: Tapping a capture opens a cleaner detail: a round check to complete it, an editable title, a quiet "Refine into tasks & projects", and a schedule row that opens a Today / Tomorrow / calendar picker (or clears the date). The old "Done" button is gone — the check completes the capture, and your edits save when you close the sheet.
 - 2026-09-10: Pull-to-refresh now works anywhere on Home — over the inbox rows and the empty space below them. Before, it only worked from the top: the rows' swipe-to-postpone gesture swallowed the pull, and the empty area below a short inbox wasn't refresh-responsive at all.

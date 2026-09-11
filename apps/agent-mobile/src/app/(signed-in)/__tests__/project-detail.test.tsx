@@ -238,6 +238,25 @@ describe('ProjectDetailScreen', () => {
     );
   });
 
+  it('hides the Tasks heading when the project has no open tasks', async () => {
+    // Default fixture resolves empty tasks + empty waits.
+    const { getByLabelText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
+    expect(queryByText('Tasks')).toBeNull();
+  });
+
+  it('hides the Waiting on heading when the project has no conditions', async () => {
+    const { getByLabelText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
+    expect(queryByText('Waiting on')).toBeNull();
+  });
+
+  it('shows the Tasks heading once the project has an open task', async () => {
+    mockFetchTasks.mockResolvedValue([taskRow('t1', 'buy running shoes')]);
+    const { getByText } = await renderScreen();
+    await waitFor(() => expect(getByText('Tasks')).toBeTruthy());
+  });
+
   it('adds a task to the project from its screen', async () => {
     mockAddTask.mockImplementation(async (_t, task) => {
       const added: Task = {

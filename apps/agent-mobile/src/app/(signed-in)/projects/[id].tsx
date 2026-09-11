@@ -623,6 +623,11 @@ function ProjectTasks({
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
 
+  // Nothing to groom yet: render no section at all (not a bare heading). Adding
+  // is the screen's plus FAB, so hiding this removes no add path. The live query
+  // above still runs, so the section appears the instant the first task lands.
+  if (list.length === 0) return null;
+
   return (
     <View className="px-screen-x pb-4">
       <Text variant="section" className="pb-2">
@@ -690,6 +695,10 @@ function ProjectWaits({
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
+
+  // No open conditions: render no section at all (not a bare heading). Adding is
+  // the screen's plus FAB (Waiting mode), so hiding this removes no add path.
+  if (list.length === 0) return null;
 
   return (
     <View className="px-screen-x pb-4">
