@@ -76,6 +76,13 @@ const fakeUserDO = (seed: Task[] = []) => {
       task.sortKey = sortKey;
       return task;
     },
+    setTaskProject(id: string, projectId: string | null): Task | null {
+      const task = tasks.find((t) => t.id === id);
+      if (!task) return null;
+      task.projectId = projectId;
+      if (projectId != null) task.takenOnAt = null;
+      return task;
+    },
     _tasks: tasks,
   };
 };
@@ -273,6 +280,52 @@ describe("PATCH /api/tasks/{id}", () => {
     expect(res.status).toBe(200);
     const body: { task: Task } = await res.json();
     expect(body.task.sortKey).toBe("a5");
+  });
+
+  it("moves a task into a project and clears takenOnAt", async () => {
+    const userDO = fakeUserDO([
+      task({ takenOnAt: "2023-11-14T00:00:00.000Z" }),
+    ]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: UUID_1 }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { task: Task } = await res.json();
+    expect(body.task.projectId).toBe(UUID_1);
+    expect(body.task.takenOnAt).toBeNull();
+  });
+
+  it("clears the project with null (task becomes loose)", async () => {
+    const userDO = fakeUserDO([task({ projectId: UUID_1 })]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: null }),
+    });
+
+    expect(res.status).toBe(200);
+    const body: { task: Task } = await res.json();
+    expect(body.task.projectId).toBeNull();
+  });
+
+  it("rejects a malformed projectId with 400", async () => {
+    const userDO = fakeUserDO([task()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+
+    const res = await app.request("/api/tasks/id-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: "not-a-uuid" }),
+    });
+
+    expect(res.status).toBe(400);
   });
 
   it("rejects an empty body with 400", async () => {

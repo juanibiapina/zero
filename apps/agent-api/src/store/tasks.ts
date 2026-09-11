@@ -177,6 +177,23 @@ export class DbTaskStore {
     return row ? toTask(row) : null;
   }
 
+  // Move a task into a project (projectId = a uuid) or back to loose (null).
+  // Moving INTO a project also clears takenOnAt in the same update: a loose task
+  // is always on Home, but once it belongs to a project it must obey the
+  // project's curation gate (taken-on + active) rather than silently staying on
+  // Home, so filing it parks it. Moving OUT to loose leaves takenOnAt untouched
+  // (a loose task ignores it). Same-key idempotent update on the stable id;
+  // returns the updated row, or null when no row has that id.
+  setProject(id: string, projectId: string | null): Task | null {
+    this.db.update(
+      tasks,
+      projectId != null ? { projectId, takenOnAt: null } : { projectId },
+      { where: eq("id", id) },
+    );
+    const row = this.db.get(tasks, { where: eq("id", id) });
+    return row ? toTask(row) : null;
+  }
+
   // Set a task's manual sort key. Same-key idempotent update on the stable id.
   // The client mints the key strictly between the drop position's two neighbors,
   // so this only writes the moved row. Returns the updated row, or null when no

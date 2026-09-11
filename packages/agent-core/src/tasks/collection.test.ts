@@ -78,6 +78,14 @@ function fakeRest(initial: Task[]): TasksRest {
       task.sortKey = sortKey;
       return { ...task };
     },
+    setTaskProject: async (id, projectId) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      task.projectId = projectId;
+      if (projectId != null) task.takenOnAt = null;
+      return { ...task };
+    },
   };
 }
 
@@ -266,6 +274,14 @@ describe("tasks update verbs route by the changed field set", () => {
         calls.push("reorder");
         return base.reorderTask(id, sortKey);
       },
+      setTaskTakenOn: (id, takenOnAt) => {
+        calls.push("takeOn");
+        return base.setTaskTakenOn(id, takenOnAt);
+      },
+      setTaskProject: (id, projectId) => {
+        calls.push("move");
+        return base.setTaskProject(id, projectId);
+      },
     };
     return { rest, calls };
   }
@@ -294,6 +310,48 @@ describe("tasks update verbs route by the changed field set", () => {
     expect(api.collection.get("s1")?.sortKey).toBe("a5");
   });
 
+  it("routes a move-into-project to move (not take-on), clearing takenOnAt", async () => {
+    // A loose task the Home quick-add took on.
+    const { rest, calls } = spyRest([
+      task("s1", {
+        text: "alpha",
+        takenOnAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ]);
+    const api = createInMemoryTasksApi({ queryClient: new QueryClient(), rest });
+    await api.collection.stateWhenReady();
+    await api.refetch();
+
+    await api.moveToProject("s1", "proj-1").isPersisted.promise;
+
+    // The move changes both projectId and takenOnAt; it must route to move, not
+    // take-on (which would misfire if placed after take-on in the verb table).
+    expect(calls).toEqual(["move"]);
+    expect(api.collection.get("s1")?.projectId).toBe("proj-1");
+    expect(api.collection.get("s1")?.takenOnAt).toBeNull();
+  });
+
+  it("routes a move-to-loose to move and leaves takenOnAt", async () => {
+    const { rest, calls } = spyRest([
+      task("s1", {
+        text: "alpha",
+        projectId: "proj-1",
+        takenOnAt: "2020-01-01T00:00:00.000Z",
+      }),
+    ]);
+    const api = createInMemoryTasksApi({ queryClient: new QueryClient(), rest });
+    await api.collection.stateWhenReady();
+    await api.refetch();
+
+    await api.moveToProject("s1", null).isPersisted.promise;
+
+    expect(calls).toEqual(["move"]);
+    expect(api.collection.get("s1")?.projectId).toBeNull();
+    expect(api.collection.get("s1")?.takenOnAt).toBe(
+      "2020-01-01T00:00:00.000Z",
+    );
+  });
+
   it("routes a text change to edit (the catch-all)", async () => {
     const { rest, calls } = spyRest([task("s1", { text: "alpha" })]);
     const api = createInMemoryTasksApi({ queryClient: new QueryClient(), rest });
@@ -317,6 +375,7 @@ describe("tasks durable names", () => {
       "addTask",
       "completeTask",
       "editTask",
+      "moveToProject",
       "reopenTask",
       "reorderTask",
       "rescheduleTask",

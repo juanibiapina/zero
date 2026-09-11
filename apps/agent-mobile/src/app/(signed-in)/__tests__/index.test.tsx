@@ -91,6 +91,7 @@ jest.mock('@/lib/api', () => ({
   reorderTask: (getToken: unknown, id: string, sortKey: string) =>
     mockReorderTask(getToken, id, sortKey),
   setTaskTakenOn: () => Promise.reject(new Error('not used')),
+  setTaskProject: () => Promise.reject(new Error('not used')),
   // Home reads projects (for the project-active gate and the all-clear CTA).
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: (

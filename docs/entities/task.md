@@ -51,6 +51,15 @@ Minimal on purpose; no priority or subtasks.
   `task_reordered`. `sortKey` is a fractional index (see Ordering).
 - **Take on / park** — curate a project task onto Home. Column `takenOnAt`, verbs
   `takeOn` / `park` over `PATCH /api/tasks/{id} { takenOnAt }`.
+- **Move to project** — set (or clear) `projectId` to file a loose task under a
+  project (or send it back to loose). Store verb `setProject`, RPC
+  `setTaskProject`, over `PATCH /api/tasks/{id} { projectId }` (uuid or `null`),
+  log `task_moved`; collection verb `moveToProject`. This is the replacement for
+  the clarify/process step the single-list merge removed. **Moving into a project
+  clears `takenOnAt`** (a loose task is always on Home, but a project task must
+  obey the project's curation gate, so filing it parks it); **moving back to loose
+  leaves `takenOnAt` untouched** (a loose task ignores it). Reachable from the
+  task detail's Project row on mobile (Home and Upcoming) and web (Home).
 
 ## Data shape
 
@@ -118,7 +127,8 @@ serves the open-tasks query.
 - **Storage** — the server domain store is `DbTaskStore` (`add` mints the trailing
   `sortKey`; `list` = every open task in manual order, no visibility filter — the
   client splits Home/Upcoming; `complete` / `reopen` / `setTakenOn` / `editText` /
-  `reschedule` / `reorder` / `backfillSortKeys`). See `docs/storage.md`.
+  `reschedule` / `reorder` / `setProject` / `backfillSortKeys`). See
+  `docs/storage.md`.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, every open task in manual order (future-dated
     included); the client splits Home and Upcoming.
@@ -126,15 +136,18 @@ serves the open-tasks query.
     → `201 { task }`; `showUpDate` optional (a loose task omits it). The server
     dedupes on the client `id`. `400` on empty text or a non-UUID id.
   - `POST /api/tasks/{id}/complete` and `/reopen` → `200 { task }`, `404` unknown.
-  - `PATCH /api/tasks/{id} { text?, showUpDate?, sortKey?, takenOnAt? }` →
-    `200 { task }`, `404` unknown, `400` on empty text / malformed date / no
-    field. One partial update carries edit, reschedule, reorder, and take-on; in
-    practice each PATCH carries one intent.
+  - `PATCH /api/tasks/{id} { text?, showUpDate?, sortKey?, takenOnAt?, projectId? }`
+    → `200 { task }`, `404` unknown, `400` on empty text / malformed date /
+    non-UUID projectId / no field. One partial update carries edit, reschedule,
+    reorder, take-on, and move-to-project; in practice each PATCH carries one
+    intent. `projectId` accepts a uuid or `null` (clear to loose); moving into a
+    project clears `takenOnAt` server-side.
   - Logs `task_added` / `task_completed` / `task_reopened` / `task_edited` /
-    `task_rescheduled` / `task_reordered` / `task_taken_on`.
+    `task_rescheduled` / `task_reordered` / `task_taken_on` / `task_moved`.
 - **Data layer** — a TanStack DB collection (`createTasksApi` in
   `@zero/agent-core`); the update verbs are told apart by their changed field set
-  (sortKey → reorder, showUpDate → reschedule, completedAt → complete, takenOnAt →
+  (sortKey → reorder, showUpDate → reschedule, completedAt → complete, projectId →
+  move-to-project [before take-on, since a move also clears takenOnAt], takenOnAt →
   take-on, else → edit), and reopen is a `revive` verb (re-inserts an evicted
   row). See `docs/storage.md`.
 - **Timezone lives on the client.** The server returns every open task; the
@@ -146,8 +159,6 @@ serves the open-tasks query.
 
 ## Next
 
-- **Move a loose task to a project** — the replacement for the removed clarify
-  step (`docs/plans/todo-single-list-2-move-to-project.md`).
 - **Date-aware project status** — postponing a taken-on project task drops its
   project out of `active` and derives "waiting until <day>"
   (`docs/plans/todo-single-list-3-date-availability.md`).

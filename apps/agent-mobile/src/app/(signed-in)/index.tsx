@@ -356,7 +356,12 @@ function Home({
   // The task detail editor (sheet + schedule selector + their writes). It
   // resolves the selected task from Home's visible `list`, so rescheduling a
   // task to a future day drops it from the list and closes the sheet.
-  const detail = useTaskDetail({ api, list, onError: setWriteError });
+  const detail = useTaskDetail({
+    api,
+    list,
+    projects: projects ?? [],
+    onError: setWriteError,
+  });
 
   // A project task's icon (defaulting to the neutral one); a loose task has none.
   const iconOf = useCallback(

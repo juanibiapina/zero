@@ -9,6 +9,7 @@ import {
   reopenTask,
   reorderTask,
   rescheduleTask,
+  setTaskProject,
   setTaskTakenOn,
 } from "./tasks";
 
@@ -27,6 +28,7 @@ export const getTasksApi = defineWebEntityApi((deps) =>
       editTask,
       rescheduleTask,
       reorderTask,
+      setTaskProject,
     },
   }),
 );

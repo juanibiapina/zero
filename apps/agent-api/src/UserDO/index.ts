@@ -193,6 +193,10 @@ export class UserDO extends DurableObject<Env> {
     return this.tasks.reorder(id, sortKey);
   }
 
+  setTaskProject(id: string, projectId: string | null): Task | null {
+    return this.tasks.setProject(id, projectId);
+  }
+
   addProject(id: string, title: string, opts?: ProjectDefaults): Project {
     return this.projects.add(id, title, opts);
   }

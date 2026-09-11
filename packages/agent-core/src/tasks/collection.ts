@@ -50,6 +50,9 @@ export type TasksRest = {
   rescheduleTask: (id: string, showUpDate: string | null) => Promise<Task>;
   // Set a task's manual sort key (drag-reorder). Idempotent on the id.
   reorderTask: (id: string, sortKey: string) => Promise<Task>;
+  // Move a task into a project (a uuid) or back to loose (null). The server
+  // clears takenOnAt when moving into a project. Idempotent on the id.
+  setTaskProject: (id: string, projectId: string | null) => Promise<Task>;
 };
 
 // One handle over the Today data layer. Both Today screens read `collection`
@@ -88,6 +91,10 @@ export type TasksApi = {
   // Set a task's manual sort key optimistically (drag-reorder). The caller mints
   // the key between the drop position's neighbors with orderKeyBetween.
   reorder: (id: string, sortKey: string) => Transaction;
+  // Move a task into a project (a uuid) or back to loose (null), optimistically.
+  // Moving into a project also clears takenOnAt so the task drops off Home at
+  // once (it must obey the project's curation gate); moving to loose leaves it.
+  moveToProject: (id: string, projectId: string | null) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
   getLoadError: () => string | null;
@@ -100,11 +107,13 @@ export const TASKS_QUERY_KEY = entityQueryKey("tasks");
 
 // The verb table. Each key is the outbox mutationFn name (durable: a queued
 // offline write replays by it), so the keys never change.
-// One collection.update backs reorder, reschedule, complete, take-on and the
-// text edit; the in-memory path tells them apart by the changed field set, in
-// this order: sortKey changed → reorder; showUpDate changed → reschedule;
-// completedAt set → complete; takenOnAt changed → take-on; else → edit (the
-// catch-all). reopen is a revive (routed by metadata, not by matches).
+// One collection.update backs reorder, reschedule, complete, move-to-project,
+// take-on and the text edit; the in-memory path tells them apart by the changed
+// field set, in this order: sortKey changed → reorder; showUpDate changed →
+// reschedule; completedAt set → complete; projectId changed → move-to-project
+// (before take-on, because a move also clears takenOnAt); takenOnAt changed →
+// take-on; else → edit (the catch-all). reopen is a revive (routed by metadata,
+// not by matches).
 export function tasksSpec(rest: TasksRest) {
   const v = verbsFor<Task>();
   const verbs = {
@@ -179,6 +188,25 @@ export function tasksSpec(rest: TasksRest) {
       },
       persist: (id) => rest.reopenTask(id),
     }),
+    // Move into a project (or back to loose). Placed BEFORE setTakenOn: a move
+    // into a project changes both `projectId` and `takenOnAt`, and the in-memory
+    // router picks the first verb whose `matches` fires in declaration order, so
+    // this must be tried before the takenOnAt rule or it would misroute to
+    // take-on. It matches on `"projectId" in changes`.
+    moveToProject: v.update<{ id: string; projectId: string | null }>({
+      id: ({ id }) => id,
+      draft:
+        ({ projectId }) =>
+        (draft) => {
+          draft.projectId = projectId;
+          // Clear takenOnAt when filing into a project (parks it under the
+          // project's curation); leave it when moving back to loose.
+          if (projectId != null) draft.takenOnAt = null;
+        },
+      matches: ({ changes }) => "projectId" in changes,
+      persist: (id, { modified }) =>
+        rest.setTaskProject(id, modified.projectId),
+    }),
     setTakenOn: v.update<{ id: string; takenOnAt: string | null }>({
       id: ({ id }) => id,
       draft:
@@ -225,6 +253,8 @@ function toTasksApi(
     reschedule: (id, showUpDate) =>
       api.actions.rescheduleTask({ id, showUpDate }),
     reorder: (id, sortKey) => api.actions.reorderTask({ id, sortKey }),
+    moveToProject: (id, projectId) =>
+      api.actions.moveToProject({ id, projectId }),
     offline: api.offline,
     refetch: api.refetch,
     getLoadError: api.getLoadError,

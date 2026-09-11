@@ -124,7 +124,8 @@ export const createTasksRoutes = () => {
     method: "patch",
     path: "/api/tasks/{id}",
     tags: ["Tasks"],
-    summary: "Update a task's text, show-up date, sort key, or taken-on state",
+    summary:
+      "Update a task's text, show-up date, sort key, taken-on state, or project",
     request: {
       params: z.object({ id: z.string() }),
       body: {
@@ -141,6 +142,9 @@ export const createTasksRoutes = () => {
               showUpDate: ShowUpDate.nullable().optional(),
               sortKey: z.string().min(1).optional(),
               takenOnAt: z.string().nullable().optional(),
+              // The Project to move the task into (uuid), or null to move it back
+              // to loose. Present-not-value: null is a valid clear-to-loose.
+              projectId: z.string().uuid().nullable().optional(),
             }),
           },
         },
@@ -180,7 +184,14 @@ export const createTasksRoutes = () => {
     const hasShowUpDate = "showUpDate" in body;
     const hasSortKey = body.sortKey !== undefined;
     const hasTakenOn = "takenOnAt" in body;
-    if (!hasText && !hasShowUpDate && !hasSortKey && !hasTakenOn) {
+    const hasProjectId = "projectId" in body;
+    if (
+      !hasText &&
+      !hasShowUpDate &&
+      !hasSortKey &&
+      !hasTakenOn &&
+      !hasProjectId
+    ) {
       return c.json({ error: "no fields to update" }, 400);
     }
 
@@ -201,6 +212,10 @@ export const createTasksRoutes = () => {
     if (hasTakenOn) {
       task = await userDO.setTaskTakenOn(id, body.takenOnAt ?? null);
       if (task) log("task_taken_on", { clerk_user_id: userId });
+    }
+    if (hasProjectId) {
+      task = await userDO.setTaskProject(id, body.projectId ?? null);
+      if (task) log("task_moved", { clerk_user_id: userId });
     }
     if (!task) return c.json({ error: "task not found" }, 404);
     return c.json({ task }, 200);

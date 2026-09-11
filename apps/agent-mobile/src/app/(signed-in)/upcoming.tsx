@@ -4,6 +4,7 @@ import {
   dayLabel,
   localToday,
   upcomingSections,
+  type ProjectsApi,
   type Task,
   type TasksApi,
 } from '@zero/agent-core';
@@ -14,6 +15,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { useTaskDetail } from '@/components/task-detail';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
+import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
@@ -48,18 +50,32 @@ function UpcomingRow({
 // shows here — every future-dated open task, loose or project, no other gate.
 export default function UpcomingScreen() {
   const tasksApi = useTasksApi();
+  const projectsApi = useProjectsApi();
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Upcoming" />
-      {tasksApi ? <Upcoming api={tasksApi} /> : <View className="flex-1" />}
+      {tasksApi && projectsApi ? (
+        <Upcoming api={tasksApi} projectsApi={projectsApi} />
+      ) : (
+        <View className="flex-1" />
+      )}
     </View>
   );
 }
 
-function Upcoming({ api }: { api: TasksApi }) {
+function Upcoming({
+  api,
+  projectsApi,
+}: {
+  api: TasksApi;
+  projectsApi: ProjectsApi;
+}) {
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
+  const { data: projects } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
   );
 
   const today = localToday();
@@ -79,7 +95,12 @@ function Upcoming({ api }: { api: TasksApi }) {
 
   // The task detail editor — the same one Home opens — owns the sheet,
   // scheduler, edit-on-dismiss, and complete-with-Undo.
-  const detail = useTaskDetail({ api, list, onError: setWriteError });
+  const detail = useTaskDetail({
+    api,
+    list,
+    projects: projects ?? [],
+    onError: setWriteError,
+  });
 
   // Android Back closes the scheduler, then the detail sheet. Upcoming has no
   // quick-add, so the hook is the only Back consumer here.

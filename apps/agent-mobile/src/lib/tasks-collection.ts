@@ -8,6 +8,7 @@ import {
   reopenTask,
   reorderTask,
   rescheduleTask,
+  setTaskProject,
   setTaskTakenOn,
   type TokenGetter,
 } from './api';
@@ -27,6 +28,7 @@ function makeRest(getToken: TokenGetter): TasksRest {
     editTask: (id, text) => editTask(getToken, id, text),
     rescheduleTask: (id, showUpDate) => rescheduleTask(getToken, id, showUpDate),
     reorderTask: (id, sortKey) => reorderTask(getToken, id, sortKey),
+    setTaskProject: (id, projectId) => setTaskProject(getToken, id, projectId),
   };
 }
 

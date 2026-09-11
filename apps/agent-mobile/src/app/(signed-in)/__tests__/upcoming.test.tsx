@@ -56,6 +56,7 @@ jest.mock('@/lib/api', () => ({
     mockRescheduleTask(getToken, id, date),
   reorderTask: jest.fn(),
   setTaskTakenOn: jest.fn(),
+  setTaskProject: jest.fn(),
 }));
 
 const task = (

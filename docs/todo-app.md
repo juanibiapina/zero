@@ -161,6 +161,18 @@ committed.
 
 ## Project tracking
 
+Shipped (2026-09-12): **Move a loose task to a project** (plan part 2
+`docs/plans/todo-single-list-2-move-to-project.md`). A task's detail now carries a
+Project row + picker: filing a loose task under a project (or moving it back to
+loose) rides one new `projectId` field on `PATCH /api/tasks/{id}` (store
+`setProject`, RPC `setTaskProject`, collection `moveToProject`, log `task_moved`).
+Moving into a project clears `takenOnAt` server-side so the task obeys the
+project's curation gate; moving back to loose leaves it. On mobile it works from
+both Home and Upcoming (shared task detail); on web from Home only (web Upcoming
+has no detail sheet yet — deferred). Server + agent-core + web suites pass; mobile
+unit tests pass and **Pixel 7 device verification is pending**. Part 3 (date-aware
+project status / derived "waiting until a day") is the next slice.
+
 Shipped (2026-09-12): **One list — Capture collapsed into Task** (plan series
 `docs/plans/todo-single-list-overview.md`, part 1 `todo-single-list-1-merge.md`).
 Task is now the single entity and the app's entry point; the Capture entity is
@@ -176,8 +188,8 @@ future Refine. Shared helpers moved onto the task module (`homeTasks` gained the
 shown-up gate + sortKey ordering; `upcomingSections`, `orderKeyBetween` /
 `compareByOrder`, and the date helpers were ported from the deleted `captures/`).
 Server + agent-core + web suites pass; mobile unit tests pass and **Pixel 7
-device verification is pending**. Parts 2 (move a loose task to a project) and 3
-(date-aware project status / derived "waiting until a day") are the next slices.
+device verification is pending**. Part 3 (date-aware project status / derived
+"waiting until a day") is the next slice.
 
 Shipped (on main, device-verified): the Capture list (Captures) on mobile
 (`apps/agent-mobile`) and web (unlinked `/captures`) — add a Capture, Process it

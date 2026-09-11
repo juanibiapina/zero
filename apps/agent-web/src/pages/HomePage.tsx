@@ -288,6 +288,17 @@ function TaskList({
     [api, selected, onError],
   );
 
+  // Move the selected task into a project (or back to loose with null). Moving
+  // into a project clears takenOnAt, so the row drops off Home's loose list.
+  const onPickProject = useCallback(
+    (projectId: string | null) => {
+      if (!selected) return;
+      const tx = api.moveToProject(selected.id, projectId);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, selected, onError],
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -404,6 +415,14 @@ function TaskList({
             <ScheduleField
               showUpDate={selected.showUpDate}
               onPick={onPickSchedule}
+            />
+
+            <div className="border-t" />
+
+            <ProjectField
+              projects={projects ?? []}
+              selectedProjectId={selected.projectId}
+              onPick={onPickProject}
             />
           </form>
         ) : null}
@@ -703,6 +722,76 @@ function ScheduleField({
             setOpen(false);
           }}
         />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// The project row in the detail sheet: shows the current project (icon + title,
+// or "Project" when loose) and opens a picker listing every project plus a
+// "No project" row (move back to loose). Mirrors ScheduleField.
+function ProjectField({
+  projects,
+  selectedProjectId,
+  onPick,
+}: {
+  projects: { id: string; title: string; icon: string }[];
+  selectedProjectId: string | null;
+  onPick: (projectId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = projects.find((p) => p.id === selectedProjectId) ?? null;
+  const pick = (projectId: string | null) => {
+    onPick(projectId);
+    setOpen(false);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg py-3 text-left hover:bg-muted/40"
+        >
+          <span aria-hidden className="w-5 shrink-0 text-center text-base leading-none">
+            {current ? current.icon : "📁"}
+          </span>
+          <span
+            className={cn(
+              "text-base",
+              current ? "font-medium text-primary" : "text-muted-foreground",
+            )}
+          >
+            {current ? current.title : "Project"}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-1">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/60"
+          onClick={() => pick(null)}
+        >
+          <span aria-hidden className="w-5 text-center">
+            ⊘
+          </span>
+          No project
+        </button>
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={cn(
+              "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/60",
+              p.id === selectedProjectId && "font-medium text-primary",
+            )}
+            onClick={() => pick(p.id)}
+          >
+            <span aria-hidden className="w-5 text-center text-base leading-none">
+              {p.icon}
+            </span>
+            {p.title}
+          </button>
+        ))}
       </PopoverContent>
     </Popover>
   );

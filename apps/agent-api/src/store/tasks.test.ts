@@ -131,6 +131,33 @@ describe("DbTaskStore", () => {
     expect(edited?.text).toBe("buy oat milk");
   });
 
+  it("moves a loose task into a project and clears takenOnAt", () => {
+    const store = makeStore();
+    // A loose task the Home quick-add took on (a timestamp).
+    store.add("id-1", "buy milk", null, null, "2023-11-14T00:00:00.000Z");
+
+    const moved = store.setProject("id-1", "proj-1");
+    expect(moved?.projectId).toBe("proj-1");
+    // Filing into a project parks it: it must obey the project's curation gate,
+    // not silently stay on Home.
+    expect(moved?.takenOnAt).toBeNull();
+  });
+
+  it("moves a task back to loose and leaves takenOnAt untouched", () => {
+    const store = makeStore();
+    store.add("id-1", "buy milk", null, "proj-1", "2023-11-14T00:00:00.000Z");
+
+    const loosened = store.setProject("id-1", null);
+    expect(loosened?.projectId).toBeNull();
+    // Clearing to loose does not touch takenOnAt (a loose task ignores it).
+    expect(loosened?.takenOnAt).toBe("2023-11-14T00:00:00.000Z");
+  });
+
+  it("returns null moving an unknown id", () => {
+    const store = makeStore();
+    expect(store.setProject("nope", "proj-1")).toBeNull();
+  });
+
   it("backfills null sort keys in createdAt order, idempotently", () => {
     const { store, db } = makeStoreWithDb();
     // Seed two pre-0051 rows (null sortKey) directly, out of createdAt order in

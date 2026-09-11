@@ -6,6 +6,7 @@ import {
   tomorrow,
   undoableAction,
   weekdayShort,
+  type Project,
   type Task,
   type TasksApi,
 } from '@zero/agent-core';
@@ -35,6 +36,9 @@ function TaskDetailSheet({
   onOpenSchedule,
   scheduleText,
   scheduled,
+  onOpenProjectPicker,
+  projectText,
+  hasProject,
   onClose,
 }: {
   open: boolean;
@@ -45,6 +49,9 @@ function TaskDetailSheet({
   onOpenSchedule: () => void;
   scheduleText: string;
   scheduled: boolean;
+  onOpenProjectPicker: () => void;
+  projectText: string;
+  hasProject: boolean;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -107,8 +114,98 @@ function TaskDetailSheet({
               {scheduleText}
             </Text>
           </Pressable>
+
+          <View className="h-px bg-divider" />
+
+          {/* Project: one row, opens the project picker. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Set project"
+            onPress={onOpenProjectPicker}
+            testID="task-project"
+            className="flex-row items-center gap-3 px-screen-x py-3.5"
+          >
+            <Text className="w-6 text-center text-[18px]">📁</Text>
+            <Text
+              className={
+                hasProject
+                  ? 'flex-1 text-[16px] font-medium text-accent'
+                  : 'flex-1 text-[16px] text-foreground-secondary'
+              }
+            >
+              {projectText}
+            </Text>
+          </Pressable>
         </View>
       </KeyboardStickyView>
+    </Modal>
+  );
+}
+
+// The project picker: a plain React Native modal listing the user's projects
+// plus a "No project" row (move back to loose). Mirrors ScheduleSheet's shape.
+function ProjectPickerSheet({
+  open,
+  projects,
+  selectedProjectId,
+  onPick,
+  onClose,
+}: {
+  open: boolean;
+  projects: Project[];
+  selectedProjectId: string | null;
+  onPick: (projectId: string | null) => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close project picker"
+        className="flex-1 bg-scrim"
+        onPress={onClose}
+      />
+      <View
+        style={{ paddingBottom: insets.bottom + 8 }}
+        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface pt-2 shadow-raised"
+      >
+        <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
+        <Text className="px-screen-x pb-1 pt-2 text-[15px] font-semibold">
+          Move to project
+        </Text>
+
+        <QuickRow
+          icon="⊘"
+          label="No project"
+          onPress={() => onPick(null)}
+          testID="project-none"
+        />
+
+        <View className="border-t border-divider">
+          {projects.map((p) => (
+            <Pressable
+              key={p.id}
+              accessibilityRole="button"
+              accessibilityLabel={p.title}
+              testID={`project-${p.id}`}
+              onPress={() => onPick(p.id)}
+              className="flex-row items-center gap-3 px-screen-x py-3"
+            >
+              <Text className="w-6 text-center text-[18px]">{p.icon}</Text>
+              <Text
+                className={
+                  p.id === selectedProjectId
+                    ? 'flex-1 text-[16px] font-medium text-accent'
+                    : 'flex-1 text-[16px]'
+                }
+              >
+                {p.title}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -334,19 +431,26 @@ export type TaskDetail = {
 export function useTaskDetail({
   api,
   list,
+  projects,
   onError,
 }: {
   api: TasksApi;
   list: Task[];
+  // The user's projects, for the move-to-project picker and the row's label.
+  projects: Project[];
   // Each screen passes its own write-error setter (clears on null).
   onError: (message: string | null) => void;
 }): TaskDetail {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [scheduling, setScheduling] = useState(false);
+  const [picking, setPicking] = useState(false);
   const closingDetailRef = useRef(false);
   const selected = selectedId
     ? (list.find((item) => item.id === selectedId) ?? null)
+    : null;
+  const selectedProject = selected?.projectId
+    ? (projects.find((p) => p.id === selected.projectId) ?? null)
     : null;
 
   const open = useCallback((item: Task) => {
@@ -402,7 +506,23 @@ export function useTaskDetail({
     [api, selected, onError],
   );
 
+  const onPickProject = useCallback(
+    (projectId: string | null) => {
+      if (selected) {
+        onError(null);
+        const tx = api.moveToProject(selected.id, projectId);
+        tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+      }
+      setPicking(false);
+    },
+    [api, selected, onError],
+  );
+
   const handleBack = useCallback(() => {
+    if (picking) {
+      setPicking(false);
+      return true;
+    }
     if (scheduling) {
       setScheduling(false);
       return true;
@@ -412,7 +532,7 @@ export function useTaskDetail({
       return true;
     }
     return false;
-  }, [scheduling, selected, commitAndClose]);
+  }, [picking, scheduling, selected, commitAndClose]);
 
   const sheets = (
     <>
@@ -428,6 +548,13 @@ export function useTaskDetail({
           selected ? scheduleLabel(selected.showUpDate, localToday()) : ''
         }
         scheduled={selected?.showUpDate != null}
+        onOpenProjectPicker={() => setPicking(true)}
+        projectText={
+          selectedProject
+            ? `${selectedProject.icon} ${selectedProject.title}`
+            : 'Project'
+        }
+        hasProject={selectedProject != null}
       />
 
       <ScheduleSheet
@@ -437,6 +564,14 @@ export function useTaskDetail({
         onPick={onPickSchedule}
         onClose={() => setScheduling(false)}
       />
+
+      <ProjectPickerSheet
+        open={picking && selected != null}
+        projects={projects}
+        selectedProjectId={selected?.projectId ?? null}
+        onPick={onPickProject}
+        onClose={() => setPicking(false)}
+      />
     </>
   );
 
@@ -445,6 +580,6 @@ export function useTaskDetail({
     complete,
     sheets,
     handleBack,
-    active: selected != null || scheduling,
+    active: selected != null || scheduling || picking,
   };
 }

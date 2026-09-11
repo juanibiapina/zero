@@ -83,6 +83,9 @@ const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
 // Records reschedule calls so tests can assert the scheduler wiring.
 const rescheduled: { id: string; showUpDate: string | null }[] = [];
 
+// Records move-to-project calls so tests can assert the project-picker wiring.
+const moved: { id: string; projectId: string | null }[] = [];
+
 function fakeTasksRest(initial: Task[]): TasksRest {
   const server = initial.map((item) => ({ ...item }));
   return {
@@ -139,6 +142,14 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       row.sortKey = sortKey;
       return { ...row };
     },
+    setTaskProject: async (id, projectId) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.projectId = projectId;
+      if (projectId != null) row.takenOnAt = null;
+      moved.push({ id, projectId });
+      return { ...row };
+    },
   };
 }
 
@@ -161,6 +172,7 @@ const projectRow = (id: string, over: Partial<Project> = {}): Project => ({
 
 function setApi(tasks: Task[] = [], projects: Project[] = []) {
   rescheduled.length = 0;
+  moved.length = 0;
   h.tasksApi = createInMemoryTasksApi({
     queryClient: new QueryClient(),
     rest: fakeTasksRest(tasks),
@@ -411,5 +423,25 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(rescheduled.length).toBe(1));
     expect(rescheduled[0].id).toBe("1");
+  });
+
+  it("moves a loose task into a project from the detail sheet", async () => {
+    setApi(
+      [taskRow("1", "buy milk")],
+      [projectRow("p", { title: "Groceries", status: "next" })],
+    );
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: 'Edit "buy milk"' }),
+    );
+    // The project row reads "Project" when the task is loose; open the picker.
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Groceries" }));
+    });
+
+    await waitFor(() => expect(moved.length).toBe(1));
+    expect(moved[0]).toEqual({ id: "1", projectId: "p" });
   });
 });

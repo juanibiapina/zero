@@ -109,3 +109,19 @@ export async function reorderTask(id: string, sortKey: string): Promise<Task> {
   const body = (await res.json()) as { task: Task };
   return body.task;
 }
+
+export async function setTaskProject(
+  id: string,
+  projectId: string | null,
+): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}

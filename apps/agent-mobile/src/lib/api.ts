@@ -241,6 +241,29 @@ export async function reorderTask(
   return body.task;
 }
 
+export async function setTaskProject(
+  getToken: TokenGetter,
+  id: string,
+  projectId: string | null,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) {
+    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { task: Task };
+  return body.task;
+}
+
 // Project REST helpers: siblings of the Task ones above, hitting /api/projects.
 // The client sends only id + title; the server fills the defaults (icon 📁,
 // description null, status next).

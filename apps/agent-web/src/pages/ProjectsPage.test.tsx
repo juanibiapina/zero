@@ -207,6 +207,13 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       row.sortKey = sortKey;
       return { ...row };
     },
+    setTaskProject: async (id, projectId) => {
+      const row = server.find((t) => t.id === id);
+      if (!row) throw new Error(`no task ${id}`);
+      row.projectId = projectId;
+      if (projectId != null) row.takenOnAt = null;
+      return { ...row };
+    },
     completeTask: async (id) => {
       const row = server.find((t) => t.id === id);
       if (!row) throw new Error(`no task ${id}`);
