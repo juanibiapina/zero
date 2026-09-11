@@ -11,6 +11,7 @@ import {
   localToday,
   messageOf,
   orderKeyBetween,
+  taskIcon,
   toast,
   tomorrow,
   undoableAction,
@@ -365,12 +366,9 @@ function Home({
   });
 
   // A project task's icon (defaulting to the neutral one); a loose task has none.
+  // The rule lives in the shared taskIcon resolver, so Home and Upcoming agree.
   const iconOf = useCallback(
-    (item: Task): string | null =>
-      item.projectId == null
-        ? null
-        : ((projects ?? []).find((p) => p.id === item.projectId)?.icon ??
-          DEFAULT_ICON),
+    (item: Task): string | null => taskIcon(item, projects ?? []),
     [projects],
   );
 

@@ -94,6 +94,7 @@ export {
   BACKLOG_COLLAPSE_THRESHOLD,
   DEFAULT_ICON,
   STATUS_LABELS,
+  taskIcon,
 } from "./projects/display";
 
 // The add-mode registry: what the quick-add box can create, shared web + mobile.

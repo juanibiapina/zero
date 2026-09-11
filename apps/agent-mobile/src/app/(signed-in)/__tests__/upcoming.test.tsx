@@ -9,8 +9,9 @@ import {
 } from '@testing-library/react-native';
 import { View } from 'react-native';
 
-import type { Task } from '@/lib/api';
+import type { Project, Task } from '@/lib/api';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
+import { resetProjectsApiForTest } from '@/lib/projects-collection';
 
 import UpcomingScreen from '../upcoming';
 
@@ -35,6 +36,7 @@ jest.mock('@clerk/expo/native', () => ({
 }));
 
 const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
+const mockFetchProjects = jest.fn<(getToken: unknown) => Promise<Project[]>>();
 const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 const mockReopenTask =
@@ -57,21 +59,38 @@ jest.mock('@/lib/api', () => ({
   reorderTask: jest.fn(),
   setTaskTakenOn: jest.fn(),
   setTaskProject: jest.fn(),
+  // Upcoming reads projects to show each project task's icon.
+  fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
+  addProject: jest.fn(),
+  fetchIconSuggestions: () => Promise.resolve([]),
+  setProjectStatus: jest.fn(),
+  editProject: jest.fn(),
+  deleteProject: () => Promise.resolve(),
 }));
 
 const task = (
   id: string,
   text: string,
   showUpDate: string | null = null,
+  projectId: string | null = null,
 ): Task => ({
   id,
   text,
   createdAt: '2023-01-01T00:00:00.000Z',
   completedAt: null,
   showUpDate,
-  projectId: null,
+  projectId,
   takenOnAt: null,
   sortKey: null,
+});
+
+const project = (id: string, icon: string): Project => ({
+  id,
+  title: 'Diploma',
+  icon,
+  description: null,
+  status: 'next',
+  createdAt: '2023-01-01T00:00:00.000Z',
 });
 
 const renderScreen = () => {
@@ -91,6 +110,9 @@ const renderScreen = () => {
 describe('UpcomingScreen', () => {
   beforeEach(() => {
     resetTasksApiForTest();
+    resetProjectsApiForTest();
+    mockFetchProjects.mockReset();
+    mockFetchProjects.mockResolvedValue([]);
     mockCompleteTask.mockReset();
     mockReopenTask.mockReset();
     mockEditTask.mockReset();
@@ -109,6 +131,22 @@ describe('UpcomingScreen', () => {
     await waitFor(() => expect(getByText('ship the release')).toBeTruthy());
     // Undated / shown-up tasks live on Home, never Upcoming.
     expect(queryByText('undated thought')).toBeNull();
+  });
+
+  it("shows a project task's icon and none for a loose task", async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([project('p', '🎓')]);
+    mockFetchTasks.mockResolvedValue([
+      task('1', 'mail the letter', '2099-01-01', 'p'),
+      task('2', 'ship the release', '2099-01-02'),
+    ]);
+
+    const { getByText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
+    expect(getByText('🎓')).toBeTruthy();
+    // The loose task carries no project, so no glyph is drawn for it.
+    expect(getByText('ship the release')).toBeTruthy();
   });
 
   it('shows the empty message when nothing is scheduled ahead', async () => {

@@ -3,6 +3,7 @@ import { useLiveQuery } from '@tanstack/react-db';
 import {
   dayLabel,
   localToday,
+  taskIcon,
   upcomingSections,
   type ProjectsApi,
   type Task,
@@ -22,13 +23,17 @@ import { useColor } from '@/lib/theme';
 
 // One upcoming row: tap the circle to complete, tap the text to open the task
 // detail — the same editor Home opens. No drag-reorder or swipe — ordering across
-// days has no meaning here.
+// days has no meaning here. A project task shows its project's icon glyph before
+// the title (same as Home); a loose task shows none.
 function UpcomingRow({
   item,
+  icon,
   onComplete,
   onOpen,
 }: {
   item: Task;
+  // The task's project icon, or null for a loose task (shows no glyph).
+  icon: string | null;
   onComplete: (item: Task) => void;
   onOpen: (item: Task) => void;
 }) {
@@ -40,7 +45,10 @@ function UpcomingRow({
       onPress={() => onOpen(item)}
       accessibilityLabel={`Edit "${item.text}"`}
     >
-      <Text>{item.text}</Text>
+      <View className="flex-row items-center gap-3">
+        {icon != null ? <Text className="text-[16px]">{icon}</Text> : null}
+        <Text className="flex-1">{item.text}</Text>
+      </View>
     </ListRow>
   );
 }
@@ -116,9 +124,14 @@ function Upcoming({
 
   const renderItem = useCallback(
     ({ item }: { item: Task }) => (
-      <UpcomingRow item={item} onComplete={detail.complete} onOpen={detail.open} />
+      <UpcomingRow
+        item={item}
+        icon={taskIcon(item, projects ?? [])}
+        onComplete={detail.complete}
+        onOpen={detail.open}
+      />
     ),
-    [detail.complete, detail.open],
+    [detail.complete, detail.open, projects],
   );
 
   return (
