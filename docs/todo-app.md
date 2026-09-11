@@ -161,9 +161,9 @@ committed.
 
 ## Project tracking
 
-Implemented, device verification pending (2026-09-12): **Delete a project
-cascades to its tasks and waiting conditions** (plan:
-`docs/plans/todo-project-delete-cascade.md`). Deleting a project no longer leaves
+Shipped (2026-09-12): **Delete a project cascades to its tasks and waiting
+conditions** (plan: `docs/plans/todo-project-delete-cascade.md`). Deleting a
+project no longer leaves
 orphans: `DELETE /api/projects/{id}` now also hard-removes every task with that
 `projectId` (open or completed) and every waiting condition on the project. Before
 this, an orphaned task was a ghost — hidden from Home (its project is gone, so
@@ -176,10 +176,13 @@ idempotent and now logs the cascade counts. On both surfaces the project-detail
 screen re-pulls the tasks and waits collections once the delete persists, so any
 lingering orphan drops at once (offline, the client cascade waits for reconnect;
 Home already hides the orphan meanwhile). No schema/migration change. Store, route
-(via a cross-store composition test), and both screen tests pass; **Pixel 7 device
-verification is pending** (delete a throwaway project with a task and a waiting
-condition → the task is on neither Home nor Upcoming, no orphan remains). Deleting
-a project stays permanent (no undo).
+(via a cross-store composition test), and both screen tests pass. **Device-verified
+on the Pixel 7:** a throwaway project's taken-on task was dated to tomorrow (so it
+sat in Upcoming, the surface with no project gate where an orphan would otherwise
+linger), the project was deleted, and the task vanished from Upcoming at once — and
+production Workers Logs recorded the `project_deleted` cascade (`tasks: 1`),
+confirming the server delete, not just a client hide. Deleting a project stays
+permanent (no undo).
 
 Implemented, device verification pending (2026-09-12): **Date-aware
 availability** — the last slice of the single-list series (plan part 3
