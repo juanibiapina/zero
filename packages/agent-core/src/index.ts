@@ -27,9 +27,12 @@ export {
 export {
   dayLabel,
   localToday as capturesLocalToday,
+  monthMatrix,
   parseLocalDay,
+  scheduleLabel,
   tomorrow,
   visibleCaptures,
+  weekdayShort,
 } from "./captures/dates";
 export { upcomingSections, type UpcomingSection } from "./captures/upcoming";
 export { compareByOrder, orderKeyBetween } from "./captures/order";

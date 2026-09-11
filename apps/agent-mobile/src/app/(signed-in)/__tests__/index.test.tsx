@@ -184,6 +184,9 @@ describe('HomeScreen', () => {
     resetProjectsApiForTest();
     resetWaitsApiForTest();
     mockEditCapture.mockReset();
+    mockProcessCapture.mockReset();
+    mockUnprocessCapture.mockReset();
+    mockRescheduleCapture.mockReset();
     mockAddTask.mockReset();
     mockCompleteTask.mockReset();
     mockReopenTask.mockReset();
@@ -658,12 +661,12 @@ describe('HomeScreen', () => {
     });
 
     const input = getByDisplayValue('buy milk');
-    expect(input.props.autoFocus).toBe(true);
     await act(async () => {
       fireEvent.changeText(input, 'buy oat milk');
     });
+    // No "Done" button: the keyboard done key (onSubmitEditing) saves and closes.
     await act(async () => {
-      fireEvent.press(getByLabelText('Done'));
+      fireEvent(input, 'submitEditing');
     });
 
     await waitFor(() => expect(getByText('buy oat milk')).toBeTruthy());
@@ -704,13 +707,89 @@ describe('HomeScreen', () => {
       fireEvent.press(getByLabelText('Edit "buy milk"'));
     });
     await act(async () => {
-      fireEvent.changeText(getByDisplayValue('buy milk'), '   ');
-      fireEvent.press(getByLabelText('Done'));
+      const input = getByDisplayValue('buy milk');
+      fireEvent.changeText(input, '   ');
+      fireEvent(input, 'submitEditing');
     });
 
     expect(queryByLabelText('sheet')).toBeNull();
     expect(getByText('buy milk')).toBeTruthy();
     expect(mockEditCapture).not.toHaveBeenCalled();
+  });
+
+  it('completes a capture from its detail sheet via the round check', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    mockProcessCapture.mockImplementation(async () => {
+      mockFetchCaptures.mockResolvedValue([]);
+      return { ...capture('1', 'buy milk'), processedAt: '2023-01-02T00:00:00.000Z' };
+    });
+
+    const { getByText, getByLabelText, queryByText, queryByLabelText } =
+      await renderScreen();
+
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    // The sheet's round check completes (processes) the capture and closes.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Complete capture'));
+    });
+
+    await waitFor(() => expect(queryByLabelText('sheet')).toBeNull());
+    await waitFor(() => expect(queryByText('buy milk')).toBeNull());
+    expect(mockProcessCapture).toHaveBeenCalledTimes(1);
+    expect(mockProcessCapture.mock.calls[0][1]).toBe('1');
+  });
+
+  it('schedules a capture to tomorrow from the scheduler', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk')]);
+    mockRescheduleCapture.mockResolvedValue(capture('1', 'buy milk'));
+
+    const { getByText, getByLabelText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    // The schedule row opens the scheduler; "Tomorrow" reschedules.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Set schedule'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Tomorrow'));
+    });
+
+    await waitFor(() => expect(mockRescheduleCapture).toHaveBeenCalledTimes(1));
+    expect(mockRescheduleCapture.mock.calls[0][1]).toBe('1');
+    // A YYYY-MM-DD date, not null.
+    expect(mockRescheduleCapture.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('clears a capture date with No date in the scheduler', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    // A dated (but past, so still visible) capture, so "No date" is a real change.
+    mockFetchCaptures.mockResolvedValue([capture('1', 'buy milk', '2023-01-01')]);
+    mockRescheduleCapture.mockResolvedValue(capture('1', 'buy milk'));
+
+    const { getByText, getByLabelText } = await renderScreen();
+
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy milk"'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Set schedule'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('No date'));
+    });
+
+    await waitFor(() => expect(mockRescheduleCapture).toHaveBeenCalledTimes(1));
+    expect(mockRescheduleCapture.mock.calls[0][1]).toBe('1');
+    expect(mockRescheduleCapture.mock.calls[0][2]).toBeNull();
   });
 
   it('closes the capture sheet before handling quick-add on Android Back', async () => {

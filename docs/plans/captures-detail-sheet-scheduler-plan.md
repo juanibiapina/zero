@@ -7,7 +7,13 @@ status and what is left:
 
 - **Slice 3 — Edit-only detail bottom sheet** (inline editing moved into the
   existing shared sheet) — SHIPPED
-- **Slice 4 — Full scheduler** (chips + calendar added to the sheet) — NEXT
+- **Slice 4 — Full scheduler** (quick options + calendar) — SHIPPED on **mobile
+  and web**. Mobile via the detail rework (`docs/plans/todo-capture-detail-rework.md`,
+  a plain RN modal); web via `docs/plans/todo-capture-detail-web.md` (a Radix
+  popover on the detail sheet). Both: the schedule row opens a Today / Tomorrow
+  (with resolved weekday) / inline month calendar / No date selector — no native
+  picker, no `react-day-picker` (a shared `monthMatrix` helper), no free-text,
+  recurrence, or time.
 - **Later fast-follow — Natural-language date input** ("next thursday")
 
 Dependencies: 4 needs the sheet from 3; 4 reuses the `reschedule(id, showUpDate|null)`

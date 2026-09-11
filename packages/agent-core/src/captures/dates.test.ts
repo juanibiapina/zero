@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { dayLabel, localToday, tomorrow, visibleCaptures } from "./dates";
+import {
+  dayLabel,
+  localToday,
+  monthMatrix,
+  scheduleLabel,
+  tomorrow,
+  visibleCaptures,
+  weekdayShort,
+} from "./dates";
 import type { Capture } from "./types";
 
 const cap = (
@@ -67,6 +75,70 @@ describe("dayLabel", () => {
     // new Date("2024-03-10") would read as UTC midnight and could render as the
     // 9th in a negative-offset zone; local parsing keeps it the 10th.
     expect(dayLabel("2024-03-11", "2024-03-09")).toMatch(/11/);
+  });
+});
+
+describe("scheduleLabel", () => {
+  const today = "2024-03-09";
+
+  it("reads 'Schedule' when unscheduled (null or undefined)", () => {
+    expect(scheduleLabel(null, today)).toBe("Schedule");
+    expect(scheduleLabel(undefined, today)).toBe("Schedule");
+  });
+
+  it("reads 'Today' for today or an overdue date", () => {
+    expect(scheduleLabel(today, today)).toBe("Today");
+    expect(scheduleLabel("2024-03-01", today)).toBe("Today");
+  });
+
+  it("reads 'Tomorrow' for the next day", () => {
+    expect(scheduleLabel("2024-03-10", today)).toBe("Tomorrow");
+  });
+
+  it("reads a formatted weekday+date for a further day", () => {
+    // 2024-03-15 is a Friday.
+    const label = scheduleLabel("2024-03-15", today);
+    expect(label).not.toBe("Tomorrow");
+    expect(label).toMatch(/Fri/);
+    expect(label).toMatch(/15/);
+  });
+});
+
+describe("weekdayShort", () => {
+  it("gives the short local weekday, parsed from local parts", () => {
+    // 2024-03-15 is a Friday.
+    expect(weekdayShort("2024-03-15")).toMatch(/Fri/);
+  });
+});
+
+describe("monthMatrix", () => {
+  it("returns six Monday-first weeks of seven days", () => {
+    const grid = monthMatrix(2024, 2); // March 2024
+    expect(grid).toHaveLength(6);
+    for (const week of grid) expect(week).toHaveLength(7);
+  });
+
+  it("starts the grid on the Monday on or before the 1st", () => {
+    // 2024-03-01 is a Friday, so the grid's first cell is Mon 2024-02-26.
+    const grid = monthMatrix(2024, 2);
+    expect(grid[0][0]).toBe("2024-02-26");
+    expect(grid[0][4]).toBe("2024-03-01");
+  });
+
+  it("spills trailing days into the next month and stays contiguous", () => {
+    const grid = monthMatrix(2024, 2);
+    const flat = grid.flat();
+    // 42 contiguous days: each is the day after the previous.
+    for (let i = 1; i < flat.length; i++) {
+      expect(flat[i]).toBe(tomorrow(flat[i - 1]));
+    }
+    expect(flat[flat.length - 1]).toBe("2024-04-07");
+  });
+
+  it("handles a month that begins on a Monday with no lead spill", () => {
+    // 2024-04-01 is a Monday.
+    const grid = monthMatrix(2024, 3);
+    expect(grid[0][0]).toBe("2024-04-01");
   });
 });
 

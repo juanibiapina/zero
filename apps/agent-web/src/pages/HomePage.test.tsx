@@ -87,6 +87,9 @@ const capture = (id: string, text: string): Capture => ({
   sortKey: null,
 });
 
+// Records reschedule calls so tests can assert the scheduler wiring.
+const rescheduled: { id: string; showUpDate: string | null }[] = [];
+
 function fakeRest(initial: Capture[]): CapturesRest {
   const server = initial.map((item) => ({ ...item }));
   return {
@@ -118,6 +121,7 @@ function fakeRest(initial: Capture[]): CapturesRest {
       const row = server.find((item) => item.id === id);
       if (!row) throw new Error(`no capture ${id}`);
       row.showUpDate = showUpDate;
+      rescheduled.push({ id, showUpDate });
       return { ...row };
     },
     reorderCapture: async (id, sortKey) => {
@@ -195,6 +199,7 @@ const projectRow = (id: string, over: Partial<Project> = {}): Project => ({
 });
 
 function setApi(initial: Capture[], tasks: Task[] = [], projects: Project[] = []) {
+  rescheduled.length = 0;
   h.api = createInMemoryApi({
     queryClient: new QueryClient(),
     rest: fakeRest(initial),
@@ -408,8 +413,9 @@ describe("HomePage", () => {
     const input = screen.getByRole("textbox", { name: "Capture text" });
     expect(input).toHaveFocus();
     fireEvent.change(input, { target: { value: "buy oat milk" } });
+    // No "Done" button: pressing Enter (form submit) saves and closes.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      fireEvent.submit(input.closest("form")!);
     });
 
     await waitFor(() =>
@@ -427,15 +433,52 @@ describe("HomePage", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: 'Edit "buy milk"' }),
     );
-    fireEvent.change(screen.getByRole("textbox", { name: "Capture text" }), {
-      target: { value: "   " },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    const input = screen.getByRole("textbox", { name: "Capture text" });
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.submit(input.closest("form")!);
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(
       screen.getByRole("button", { name: 'Edit "buy milk"' }),
     ).toBeInTheDocument();
+  });
+
+  it("completes a capture from its detail sheet via the circle", async () => {
+    setApi([capture("1", "buy milk")]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: 'Edit "buy milk"' }),
+    );
+    // The sheet's complete circle processes the capture and closes the sheet.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Complete capture" }));
+    });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: 'Process "buy milk"' }),
+      ).toBeNull(),
+    );
+  });
+
+  it("schedules a capture to tomorrow from the detail sheet", async () => {
+    setApi([capture("1", "buy milk")]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: 'Edit "buy milk"' }),
+    );
+    // Open the scheduler from the schedule row (its label is "Schedule" when unset).
+    fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /Tomorrow/ }));
+    });
+
+    await waitFor(() => expect(rescheduled.length).toBe(1));
+    expect(rescheduled[0].id).toBe("1");
+    expect(rescheduled[0].showUpDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("commits a changed draft when Escape dismisses the sheet", async () => {

@@ -80,12 +80,17 @@ tools; it never names this view.
 - **Process** a Capture: it leaves Captures (still stored). Today Process just
   removes it; later it could turn the Capture into a typed entity.
 - **Edit** a Capture's text in place, on web and mobile: tap the row's text to
-  open its edit-only detail sheet. Done, Enter, or dismissing the sheet saves a
-  changed non-empty draft; an empty or unchanged edit is a no-op. Optimistic and
-  offline-durable like add/process.
-- **Postpone** a Capture to the next day: swipe the row right on mobile, or click
-  the "Tomorrow" button on web. It leaves the list at once and comes back on its
-  day. Optimistic and offline-durable.
+  open its detail sheet. Both surfaces show the same structure — a round complete
+  control + an editable title, a schedule row, and a quiet "Refine into tasks &
+  projects" — with no "Done" button: the circle completes the Capture, and Enter
+  or dismissing the sheet saves a changed non-empty draft; an empty or unchanged
+  edit is a no-op. Optimistic and offline-durable like add/process.
+- **Postpone / schedule** a Capture: swipe the row right on mobile (or the web
+  "Tomorrow" button) to postpone one day. On both surfaces the detail sheet's
+  schedule row opens a picker — Today, Tomorrow, any calendar day, or "No date"
+  to clear — which sets `showUpDate` (a plain date; no time or recurrence). The
+  row's label reads the current date, or "Schedule" when unset. It leaves the
+  list at once and comes back on its day. Optimistic and offline-durable.
 - **Visibility (client-side).** `GET /api/captures` returns **every** open
   Capture (`processedAt IS NULL`), future-dated rows included. The client owns
   the split against its own local day: **Captures** shows the rows that have

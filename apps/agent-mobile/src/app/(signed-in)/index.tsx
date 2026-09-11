@@ -1,4 +1,4 @@
-import { Button, Column, Host, TextInput } from '@expo/ui';
+import { Button, Host } from '@expo/ui';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -11,11 +11,14 @@ import {
   DEFAULT_ICON,
   localToday,
   messageOf,
+  monthMatrix,
   orderKeyBetween,
+  scheduleLabel,
   toast,
   tomorrow,
   undoableAction,
   visibleCaptures,
+  weekdayShort,
   type AddMode,
   type Capture,
   type CapturesApi,
@@ -31,6 +34,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BackHandler,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -39,7 +43,11 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { KeyboardEvents } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  KeyboardEvents,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReorderableList, {
   reorderItems,
@@ -62,8 +70,8 @@ import { useResolveClassNames } from 'uniwind';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
+import { Input } from '@/components/ui/input';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
-import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import { useCapturesApi } from '@/lib/captures-collection';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
@@ -231,54 +239,310 @@ function CaptureRow({
   );
 }
 
-// Native edit-only sheet body. Keyed by capture id at the call site so the
-// uncontrolled native field reseeds when another capture opens. Colors come from
-// tokens via useColor (@expo/ui takes string colors, not classes).
-function CaptureDetail({
+// The capture detail: a plain React Native bottom sheet (an RN Modal + scrim +
+// a keyboard-docked bottom panel), NOT an @expo/ui tree. Built with the app's
+// own components so it matches every other screen: the real hollow `CheckCircle`
+// radio, the `Input` field, and hairline `bg-divider` rows on the `bg-surface`
+// sheet — no muddy filled cards, no @expo/ui layout quirks. There is no "Done"
+// button: the circle completes, and Enter / dismissal saves. It does not
+// autofocus, so it opens showing a clean sheet; tap the title to edit.
+function CaptureDetailSheet({
+  open,
   draft,
   onChangeDraft,
-  onDone,
+  onSubmit,
+  onComplete,
   onRefine,
+  onOpenSchedule,
+  scheduleText,
+  scheduled,
+  onClose,
 }: {
+  open: boolean;
   draft: string;
   onChangeDraft: (text: string) => void;
-  onDone: () => void;
+  onSubmit: () => void;
+  onComplete: () => void;
   onRefine: () => void;
+  onOpenSchedule: () => void;
+  scheduleText: string;
+  scheduled: boolean;
+  onClose: () => void;
 }) {
-  const surfaceMuted = useColor('--color-surface-muted');
-  const foreground = useColor('--color-foreground');
+  const insets = useSafeAreaInsets();
   return (
-    <Column spacing={20}>
-      <TextInput
-        autoFocus
-        defaultValue={draft}
-        onChangeText={onChangeDraft}
-        onSubmitEditing={onDone}
-        returnKeyType="done"
-        placeholder="Capture"
-        style={{
-          height: 72,
-          paddingHorizontal: 18,
-          paddingVertical: 14,
-          borderRadius: 12,
-          backgroundColor: surfaceMuted,
-        }}
-        textStyle={{ fontSize: 18, fontWeight: '500', lineHeight: 24, color: foreground }}
-        testID="capture-edit-input"
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close capture"
+        className="flex-1 bg-scrim"
+        onPress={onClose}
       />
-      <Button
-        label="Done"
-        variant="filled"
-        style={{ height: 48, borderRadius: 14 }}
-        onPress={onDone}
+      <KeyboardStickyView
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+      >
+        <View
+          accessibilityLabel="sheet"
+          style={{ paddingBottom: insets.bottom + 8 }}
+          className="rounded-t-2xl bg-surface pt-2 shadow-raised"
+        >
+          <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
+
+          {/* Identity: the real hollow radio + the editable title, vertically
+              centered. The multiline field's default vertical padding is zeroed
+              so its text line centers against the 22dp radio. */}
+          <View className="flex-row items-center gap-3 px-screen-x py-3">
+            <CheckCircle label="Complete capture" onPress={onComplete} />
+            <Input
+              value={draft}
+              onChangeText={onChangeDraft}
+              onSubmitEditing={onSubmit}
+              returnKeyType="done"
+              blurOnSubmit
+              multiline
+              placeholder="Capture"
+              accessibilityLabel="Capture text"
+              style={{ paddingTop: 0, paddingBottom: 0 }}
+              className="flex-1 text-[18px] font-semibold leading-6"
+              testID="capture-edit-input"
+            />
+          </View>
+
+          <View className="h-px bg-divider" />
+
+          {/* Schedule: one row, opens the selector. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Set schedule"
+            onPress={onOpenSchedule}
+            testID="capture-schedule"
+            className="flex-row items-center gap-3 px-screen-x py-3.5"
+          >
+            <Text className="w-6 text-center text-[18px]">🗓</Text>
+            <Text
+              className={
+                scheduled
+                  ? 'flex-1 text-[16px] font-medium text-accent'
+                  : 'flex-1 text-[16px] text-foreground-secondary'
+              }
+            >
+              {scheduleText}
+            </Text>
+          </Pressable>
+
+          <View className="h-px bg-divider" />
+
+          {/* Refine: the next step. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Refine into tasks & projects"
+            onPress={onRefine}
+            className="flex-row items-center gap-3 px-screen-x py-3.5"
+          >
+            <Text className="w-6 text-center text-[16px] text-accent">✦</Text>
+            <Text className="flex-1 text-[16px] text-accent">
+              Refine into tasks &amp; projects
+            </Text>
+          </Pressable>
+        </View>
+      </KeyboardStickyView>
+    </Modal>
+  );
+}
+
+// One tappable quick-option row in the scheduler: an icon, a label, and the
+// resolved weekday on the right (e.g. "Tomorrow · Fri"), mirroring Todoist.
+function QuickRow({
+  icon,
+  label,
+  hint,
+  onPress,
+  testID,
+}: {
+  icon: string;
+  label: string;
+  hint?: string;
+  onPress: () => void;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      onPress={onPress}
+      className="flex-row items-center gap-3 px-screen-x py-3"
+    >
+      <Text className="w-6 text-center text-[18px]">{icon}</Text>
+      <Text className="flex-1 text-[16px]">{label}</Text>
+      {hint ? (
+        <Text className="text-[14px] text-foreground-secondary">{hint}</Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+// The schedule selector: a plain React Native modal (the IconPickerSheet
+// pattern), NOT an @expo/ui tree, so it can reproduce Todoist's scheduler — quick
+// options with the resolved weekday on the right, an inline month calendar, and a
+// "No date" row. It sets a capture's showUpDate (a plain date; no time, no
+// recurrence). Rendered at the screen root (above the @expo/ui detail sheet).
+function ScheduleSheet({
+  open,
+  showUpDate,
+  onPick,
+  onClose,
+}: {
+  open: boolean;
+  showUpDate: string | null | undefined;
+  onPick: (date: string | null) => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const accent = useColor('--color-accent');
+  const onAccent = useColor('--color-on-accent');
+  const today = capturesLocalToday();
+  const tmr = tomorrow(today);
+  const selected = showUpDate ?? null;
+
+  // The month the grid shows: the selected date's month, else the current month.
+  const initial = selected ?? today;
+  const [y, m] = initial.split('-').map(Number);
+  // Seeded once from the selected date (or today). The call site keys this
+  // component by capture id, so it remounts — and reseeds — per capture; the
+  // prev/next arrows then drive the visible month from here.
+  const [view, setView] = useState<{ y: number; m0: number }>({ y, m0: m - 1 });
+
+  const grid = useMemo(() => monthMatrix(view.y, view.m0), [view]);
+  const monthTitle = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        month: 'long',
+        year: 'numeric',
+      }).format(new Date(view.y, view.m0, 1)),
+    [view],
+  );
+  const step = (delta: number) => {
+    const d = new Date(view.y, view.m0 + delta, 1);
+    setView({ y: d.getFullYear(), m0: d.getMonth() });
+  };
+
+  return (
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close scheduler"
+        className="flex-1 bg-scrim"
+        onPress={onClose}
       />
-      <Button
-        label="Refine into tasks & projects"
-        variant="outlined"
-        style={{ height: 48, borderRadius: 14 }}
-        onPress={onRefine}
-      />
-    </Column>
+      <View
+        style={{ paddingBottom: insets.bottom + 8 }}
+        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface pt-2 shadow-raised"
+      >
+        <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
+        <Text className="px-screen-x pb-1 pt-2 text-[15px] font-semibold">
+          Schedule
+        </Text>
+
+        <QuickRow
+          icon="🌤"
+          label="Today"
+          hint={weekdayShort(today)}
+          onPress={() => onPick(today)}
+          testID="schedule-today"
+        />
+        <QuickRow
+          icon="⏭"
+          label="Tomorrow"
+          hint={weekdayShort(tmr)}
+          onPress={() => onPick(tmr)}
+          testID="schedule-tomorrow"
+        />
+
+        {/* Inline month calendar */}
+        <View className="mt-2 border-t border-divider px-screen-x pt-3">
+          <View className="flex-row items-center justify-between pb-2">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Previous month"
+              hitSlop={8}
+              onPress={() => step(-1)}
+            >
+              <Text className="text-[20px] text-foreground-secondary">‹</Text>
+            </Pressable>
+            <Text className="text-[14px] font-medium">{monthTitle}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Next month"
+              hitSlop={8}
+              onPress={() => step(1)}
+            >
+              <Text className="text-[20px] text-foreground-secondary">›</Text>
+            </Pressable>
+          </View>
+          <View className="flex-row pb-1">
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+              <Text
+                key={i}
+                className="flex-1 text-center text-[12px] text-foreground-muted"
+              >
+                {d}
+              </Text>
+            ))}
+          </View>
+          {grid.map((week, wi) => (
+            <View key={wi} className="flex-row">
+              {week.map((date) => {
+                const day = Number(date.split('-')[2]);
+                const inMonth = Number(date.split('-')[1]) === view.m0 + 1;
+                const isToday = date === today;
+                const isSelected = date === selected;
+                return (
+                  <Pressable
+                    key={date}
+                    accessibilityRole="button"
+                    accessibilityLabel={date}
+                    onPress={() => onPick(date)}
+                    className="flex-1 items-center py-1"
+                  >
+                    <View
+                      style={
+                        isSelected
+                          ? { backgroundColor: accent }
+                          : isToday
+                            ? { borderWidth: 1, borderColor: accent }
+                            : undefined
+                      }
+                      className="h-9 w-9 items-center justify-center rounded-full"
+                    >
+                      <Text
+                        style={isSelected ? { color: onAccent } : undefined}
+                        className={
+                          inMonth
+                            ? 'text-[15px] text-foreground'
+                            : 'text-[15px] text-foreground-muted'
+                        }
+                      >
+                        {day}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+
+        <View className="mt-2 border-t border-divider">
+          <QuickRow
+            icon="⊘"
+            label="No date"
+            onPress={() => onPick(null)}
+            testID="schedule-none"
+          />
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -604,6 +868,7 @@ function Captures({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [scheduling, setScheduling] = useState(false);
   const closingDetailRef = useRef(false);
   const selected = selectedId
     ? (list.find((item) => item.id === selectedId) ?? null)
@@ -725,6 +990,10 @@ function Captures({
   // is already down. Returning true consumes the event.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (scheduling) {
+        setScheduling(false);
+        return true;
+      }
       if (selected) {
         commitAndClose();
         return true;
@@ -744,7 +1013,7 @@ function Captures({
       return false;
     });
     return () => sub.remove();
-  }, [selected, commitAndClose, adding, confirmingDiscard, text, closeAdd]);
+  }, [scheduling, selected, commitAndClose, adding, confirmingDiscard, text, closeAdd]);
 
   const onProcess = useCallback(
     (item: Capture) => {
@@ -866,20 +1135,44 @@ function Captures({
         />
       )}
 
-      <Sheet open={selected != null} onClose={commitAndClose}>
-        {selected ? (
-          <CaptureDetail
-            key={selected.id}
-            draft={draft}
-            onChangeDraft={setDraft}
-            onDone={commitAndClose}
-            onRefine={() => {
-              startRefine(selected.id, selected.text);
-              setSelectedId(null);
-            }}
-          />
-        ) : null}
-      </Sheet>
+      <CaptureDetailSheet
+        open={selected != null}
+        draft={draft}
+        onChangeDraft={setDraft}
+        onSubmit={commitAndClose}
+        onClose={commitAndClose}
+        onComplete={() => {
+          if (!selected) return;
+          const item = selected;
+          setSelectedId(null);
+          onProcess(item);
+        }}
+        onRefine={() => {
+          if (!selected) return;
+          startRefine(selected.id, selected.text);
+          setSelectedId(null);
+        }}
+        onOpenSchedule={() => setScheduling(true)}
+        scheduleText={
+          selected ? scheduleLabel(selected.showUpDate, capturesLocalToday()) : ''
+        }
+        scheduled={selected?.showUpDate != null}
+      />
+
+      <ScheduleSheet
+        key={selected?.id ?? 'none'}
+        open={scheduling && selected != null}
+        showUpDate={selected?.showUpDate}
+        onPick={(date) => {
+          if (selected) {
+            setWriteError(null);
+            const tx = api.reschedule(selected.id, date);
+            tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+          }
+          setScheduling(false);
+        }}
+        onClose={() => setScheduling(false)}
+      />
 
       {/* Transition layer: cross-fades the plus FAB and the quick-add bar and
           lifts the bar with the keyboard. */}

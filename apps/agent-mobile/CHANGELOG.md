@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-10: Tapping a capture opens a cleaner detail: a round check to complete it, an editable title, a quiet "Refine into tasks & projects", and a schedule row that opens a Today / Tomorrow / calendar picker (or clears the date). The old "Done" button is gone — the check completes the capture, and your edits save when you close the sheet.
 - 2026-09-10: Pull-to-refresh now works anywhere on Home — over the inbox rows and the empty space below them. Before, it only worked from the top: the rows' swipe-to-postpone gesture swallowed the pull, and the empty area below a short inbox wasn't refresh-responsive at all.
 - 2026-09-10: Completing a task that belongs to a project now names the project in the "Completed" bar and adds a one-tap Open beside Undo that jumps straight to that project's screen. Completing a loose task is unchanged.
 - 2026-09-10: Opening a project from a link — the View after creating one on Home, and the new Open on a completed task — now lands on the project's own screen directly, with the tabs still showing and Back returning to the Projects list, instead of dropping you on the list.

@@ -78,7 +78,11 @@ slice 0 of the Captures postpone/reorder/detail-sheet plan; see that plan for th
 full sequence. **Postpone (slice 1), drag-to-reorder (slice 2), and the edit-only
 detail sheet (slice 3) have shipped** on web and mobile — a capture carries a `showUpDate`
 and a fractional-index `sortKey`, the list orders by that manual key, and tapping
-its text opens the editor. Next is the full scheduler (slice 4).
+its text opens the editor. **On mobile the detail was then redesigned** into a
+structured card (round complete check + editable title + a quiet Refine) with a
+schedule row that opens a Today / Tomorrow / calendar picker — this shipped the
+date scheduler (slice 4) on mobile (no free-text, recurrence, or time); see
+`docs/plans/todo-capture-detail-rework.md`. Web's scheduler is still pending.
 
 ## Entity wiki (draft — grow one at a time)
 

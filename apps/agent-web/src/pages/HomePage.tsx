@@ -20,7 +20,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Sheet } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { Link, useNavigate } from "react-router";
 import {
@@ -36,11 +42,14 @@ import {
   DEFAULT_ICON,
   localToday,
   messageOf,
+  monthMatrix,
   orderKeyBetween,
+  scheduleLabel,
   toast,
   tomorrow,
   undoableAction,
   visibleCaptures,
+  weekdayShort,
   type AddMode,
   type HomeCallToAction,
 } from "@zero/agent-core";
@@ -412,6 +421,25 @@ function CapturesSection({
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   }, [api, draft, selected, onError]);
 
+  // Complete from the detail sheet: close it, then run the same process + Undo
+  // path the row uses.
+  const onCompleteFromDetail = useCallback(() => {
+    if (!selected) return;
+    const item = selected;
+    setSelectedId(null);
+    onProcess(item);
+  }, [selected, onProcess]);
+
+  // Reschedule from the detail sheet's scheduler; the sheet stays open.
+  const onPickSchedule = useCallback(
+    (date: string | null) => {
+      if (!selected) return;
+      const tx = api.reschedule(selected.id, date);
+      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    },
+    [api, selected, onError],
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -486,26 +514,49 @@ function CapturesSection({
       >
         {selected ? (
           <form
-            className="space-y-6"
+            className="space-y-1"
             onSubmit={(event) => {
               event.preventDefault();
               commitAndClose();
             }}
           >
-            <div className="rounded-2xl bg-muted/60 px-5 py-4 transition-colors focus-within:bg-muted">
+            {/* Identity: the shared complete circle + the editable title. No
+                "Done" button — the circle completes, dismissal saves. */}
+            <div className="flex items-center gap-3 py-1">
+              <CaptureCircle
+                label="Complete capture"
+                onClick={onCompleteFromDetail}
+              />
               <Input
                 autoFocus
                 value={draft}
                 aria-label="Capture text"
-                className="h-14 rounded-none border-0 bg-transparent px-0 py-0 text-xl font-medium leading-7 shadow-none focus-visible:ring-0"
+                className="h-11 flex-1 rounded-none border-0 bg-transparent px-0 py-0 text-lg font-medium shadow-none focus-visible:ring-0"
                 onChange={(event) => setDraft(event.target.value)}
               />
             </div>
-            <div className="flex justify-end">
-              <Button type="submit" size="lg" className="min-w-24 rounded-xl">
-                Done
-              </Button>
-            </div>
+
+            <div className="border-t" />
+
+            {/* Schedule: one row, opens the Today/Tomorrow/calendar/No-date menu. */}
+            <ScheduleField
+              showUpDate={selected.showUpDate}
+              onPick={onPickSchedule}
+            />
+
+            <div className="border-t" />
+
+            {/* Refine: the next step. */}
+            <button
+              type="button"
+              onClick={() => {
+                startRefine(selected.id, selected.text);
+                setSelectedId(null);
+              }}
+              className="flex w-full items-center gap-2 py-3 text-left text-base font-medium text-primary hover:opacity-80"
+            >
+              <span aria-hidden>✦</span> Refine into tasks &amp; projects
+            </button>
           </form>
         ) : null}
       </Sheet>
@@ -602,6 +653,213 @@ function GripIcon() {
   );
 }
 
+// The capture completion circle, shared by the inbox row and the detail sheet so
+// the two never diverge: a hollow ring that fills on hover.
+function CaptureCircle({
+  label,
+  onClick,
+  className,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className={cn(
+        "size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10",
+        className,
+      )}
+      onClick={onClick}
+    />
+  );
+}
+
+function CalendarGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
+}
+
+// The scheduler menu inside the popover: Today / Tomorrow (with the resolved
+// weekday), an inline month calendar (built from the shared monthMatrix helper —
+// no date library), and No date. Mirrors the mobile scheduler.
+function ScheduleMenu({
+  today,
+  selected,
+  onPick,
+}: {
+  today: string;
+  selected: string | null;
+  onPick: (date: string | null) => void;
+}) {
+  const tmr = tomorrow(today);
+  const initial = selected ?? today;
+  const [iy, im] = initial.split("-").map(Number);
+  const [view, setView] = useState<{ y: number; m0: number }>({
+    y: iy,
+    m0: im - 1,
+  });
+  const grid = monthMatrix(view.y, view.m0);
+  const monthTitle = new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(view.y, view.m0, 1));
+  const step = (delta: number) => {
+    const d = new Date(view.y, view.m0 + delta, 1);
+    setView({ y: d.getFullYear(), m0: d.getMonth() });
+  };
+  return (
+    <div className="p-2">
+      <button
+        type="button"
+        onClick={() => onPick(today)}
+        className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-accent"
+      >
+        <span>Today</span>
+        <span className="text-muted-foreground">{weekdayShort(today)}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => onPick(tmr)}
+        className="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-accent"
+      >
+        <span>Tomorrow</span>
+        <span className="text-muted-foreground">{weekdayShort(tmr)}</span>
+      </button>
+      <div className="my-2 border-t" />
+      <div className="px-1">
+        <div className="mb-1 flex items-center justify-between">
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => step(-1)}
+            className="rounded px-2 py-1 text-muted-foreground hover:bg-accent"
+          >
+            ‹
+          </button>
+          <span className="text-sm font-medium">{monthTitle}</span>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => step(1)}
+            className="rounded px-2 py-1 text-muted-foreground hover:bg-accent"
+          >
+            ›
+          </button>
+        </div>
+        <div className="grid grid-cols-7 text-center text-xs text-muted-foreground">
+          {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+            <div key={i} className="py-1">
+              {d}
+            </div>
+          ))}
+        </div>
+        {grid.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-7">
+            {week.map((date) => {
+              const day = Number(date.split("-")[2]);
+              const inMonth = Number(date.split("-")[1]) === view.m0 + 1;
+              const isToday = date === today;
+              const isSelected = date === selected;
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  aria-label={date}
+                  onClick={() => onPick(date)}
+                  className={cn(
+                    "mx-auto my-0.5 flex size-8 items-center justify-center rounded-full text-sm",
+                    isSelected
+                      ? "bg-primary text-primary-foreground"
+                      : isToday
+                        ? "border border-primary"
+                        : "hover:bg-accent",
+                    !inMonth && !isSelected ? "text-muted-foreground/50" : "",
+                  )}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="my-2 border-t" />
+      <button
+        type="button"
+        onClick={() => onPick(null)}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent"
+      >
+        No date
+      </button>
+    </div>
+  );
+}
+
+// The schedule row in the detail sheet: shows the current date (or "Schedule"
+// when unset) and opens the ScheduleMenu popover.
+function ScheduleField({
+  showUpDate,
+  onPick,
+}: {
+  showUpDate: string | null | undefined;
+  onPick: (date: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const today = capturesLocalToday();
+  const scheduled = showUpDate != null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg py-3 text-left hover:bg-muted/40"
+        >
+          <CalendarGlyph
+            className={cn(
+              "size-5 shrink-0",
+              scheduled ? "text-primary" : "text-muted-foreground",
+            )}
+          />
+          <span
+            className={cn(
+              "text-base",
+              scheduled ? "font-medium text-primary" : "text-muted-foreground",
+            )}
+          >
+            {scheduleLabel(showUpDate, today)}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <ScheduleMenu
+          today={today}
+          selected={showUpDate ?? null}
+          onPick={(d) => {
+            onPick(d);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function Row({
   id,
   text,
@@ -655,12 +913,7 @@ function Row({
       >
         <GripIcon />
       </button>
-      <button
-        type="button"
-        aria-label={actionLabel}
-        className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
-        onClick={onAction}
-      />
+      <CaptureCircle label={actionLabel} onClick={onAction} />
       <button
         type="button"
         className="flex-1 text-left text-base"
