@@ -52,7 +52,12 @@ const mockAddTask =
   jest.fn<
     (
       getToken: unknown,
-      task: { id: string; text: string; showUpDate: string | null },
+      task: {
+        id: string;
+        text: string;
+        showUpDate: string | null;
+        projectId: string | null;
+      },
     ) => Promise<Task>
   >();
 const mockCompleteTask =
@@ -80,7 +85,12 @@ jest.mock('@/lib/api', () => ({
   fetchTasks: (getToken: unknown) => mockFetchTasks(getToken),
   addTask: (
     getToken: unknown,
-    task: { id: string; text: string; showUpDate: string | null },
+    task: {
+        id: string;
+        text: string;
+        showUpDate: string | null;
+        projectId: string | null;
+      },
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
   reopenTask: (getToken: unknown, id: string) => mockReopenTask(getToken, id),

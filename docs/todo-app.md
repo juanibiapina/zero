@@ -161,7 +161,7 @@ committed.
 
 ## Project tracking
 
-Implemented, device verification pending (2026-09-12): **Retire take-on — the
+Shipped, device-verified on the Pixel 7 (2026-09-12): **Retire take-on — the
 show-up date is the sole commitment gate** (plan:
 `docs/plans/todo-retire-take-on.md`). The take-on/park star (`takenOnAt`) is gone
 end to end: a project task reaches Home only when it has a date that has arrived
@@ -180,8 +180,18 @@ shown-up dated task overrides an open waiting condition. Migration 0052 drops th
 `date(takenOnAt)` so it stays on Home (zero rows in practice). The `takenOnAt`
 field/verb/log left the store, routes, `UserDO`, the `Task` type, the collection,
 and both surfaces' REST + UI. Web reused a shared `ScheduleMenu` component; mobile
-reused the detail sheet's `ScheduleSheet`. Server + agent-core + web suites pass;
-mobile unit tests pass; **Pixel 7 device verification pending**. Supersedes
+reused the detail sheet's `ScheduleSheet`. The **Home quick-add also became a
+mini-composer**: in task mode it shows a date chip and a project chip (web +
+mobile), so a quick-add can be dated and filed to a project at create time;
+filing a dateless task to a project lands it groomed (off Home) behind a "Filed to
+<project>" toast. A device-only bug was caught and fixed on the Pixel 7: opening a
+composer picker dismisses the keyboard, and the mobile Home's keyboard-hide
+handler closed the whole quick-add before the picker showed — guarded now with the
+picker-open flags plus a short suppression window for the close race.
+**Device-verified on the Pixel 7** (throwaway project): project-screen date chip
+commits a groomed task (No date → Today → project Active, task on Home); the Home
+composer files a dateless task to a project (groomed, off Home) and dates a loose
+task onto Home; both pickers open without closing the composer. Supersedes
 Decision A of `docs/plans/todo-project-task-row-parity.md` (the star is replaced,
 not kept).
 

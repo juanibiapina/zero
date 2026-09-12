@@ -359,6 +359,12 @@ function Home({
   const [addProjectId, setAddProjectId] = useState<string | null>(null);
   const [schedulingAdd, setSchedulingAdd] = useState(false);
   const [pickingProject, setPickingProject] = useState(false);
+  // Opening/closing a composer picker dismisses the keyboard, which would fire
+  // keyboardDidHide and close the whole quick-add. The flags guard the open; a
+  // brief suppression window absorbs the CLOSE race, where keyboardDidHide fires
+  // after the flag is already cleared. Epoch ms until which keyboard-hide close
+  // is suppressed.
+  const suppressKbCloseUntil = useRef(0);
   const inputRef = useRef<RNTextInput>(null);
 
   // The task detail editor (sheet + schedule selector + their writes). It
@@ -455,6 +461,13 @@ function Home({
   useEffect(() => {
     const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
       if (!adding || confirmingDiscard) return;
+      // Opening the composer's date/project picker dismisses the keyboard; that
+      // must NOT close the whole quick-add (the picker is a deliberate step, and
+      // the bar reopens the keyboard when it closes). The flags guard while a
+      // picker is open; the suppression window absorbs the close race, where this
+      // event fires just after the flag is cleared.
+      if (schedulingAdd || pickingProject) return;
+      if (Date.now() < suppressKbCloseUntil.current) return;
       if (text.trim()) {
         setConfirmingDiscard(true);
       } else {
@@ -462,7 +475,7 @@ function Home({
       }
     });
     return () => sub.remove();
-  }, [adding, confirmingDiscard, text, closeAdd]);
+  }, [adding, confirmingDiscard, text, closeAdd, schedulingAdd, pickingProject]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -643,20 +656,28 @@ function Home({
         open={schedulingAdd}
         showUpDate={addDate}
         onPick={(d) => {
+          suppressKbCloseUntil.current = Date.now() + 1000;
           setAddDate(d);
           setSchedulingAdd(false);
         }}
-        onClose={() => setSchedulingAdd(false)}
+        onClose={() => {
+          suppressKbCloseUntil.current = Date.now() + 1000;
+          setSchedulingAdd(false);
+        }}
       />
       <ProjectPickerSheet
         open={pickingProject}
         projects={projects ?? []}
         selectedProjectId={addProjectId}
         onPick={(id) => {
+          suppressKbCloseUntil.current = Date.now() + 1000;
           setAddProjectId(id);
           setPickingProject(false);
         }}
-        onClose={() => setPickingProject(false)}
+        onClose={() => {
+          suppressKbCloseUntil.current = Date.now() + 1000;
+          setPickingProject(false);
+        }}
       />
 
       {confirmingDiscard ? (
