@@ -338,8 +338,8 @@ function Home({
     [projects],
   );
 
-  // The quick-add composer (bar + date/project chips + sheets + discard confirm
-  // + writes). Home offers task and project modes and the project chip; the
+  // The quick-add composer (drawer + date/project rows + picker sheets + discard
+  // confirm + writes). Home offers task and project modes and the project row; the
   // shared hook owns everything else. See quick-add-composer.tsx.
   const add = useQuickAdd({
     tasksApi: api,

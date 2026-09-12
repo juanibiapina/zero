@@ -105,6 +105,7 @@ export function QuickAddBar({
       <View className="flex-row items-center gap-2">
         <Input
           ref={inputRef}
+          variant="editor"
           className="flex-1"
           placeholder={resolvedPlaceholder}
           value={value}

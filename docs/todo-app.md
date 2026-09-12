@@ -196,13 +196,17 @@ Decision A of `docs/plans/todo-project-task-row-parity.md` (the star is replaced
 not kept).
 
 Implemented (2026-09-12, mobile; Pixel 7 verified): **task creation and editing
-share a bottom drawer** (`TaskEditorSheet`). Date and project use chips in both;
-the project supplies its own icon. Creation opens the keyboard and confirms
-before discarding text; editing opens without the keyboard and saves on dismissal.
-`useQuickAdd` and `useTaskDetail` retain their separate write lifecycles. The
-Modal owns keyboard docking, replacing Home/project-screen bottom-gap measurement
-and the create keyboard-hide close listener. The Projects list keeps its existing
-project-only bar. See `docs/plans/todo-unify-task-editor-drawer.md`.
+share an editor-first bottom drawer** (`TaskEditorSheet`). A grip, strong title
+row, and full-width date/project rows replace the temporary round pills; create
+modes are direct text tabs. The selected project supplies its own icon once.
+Creation opens the keyboard and confirms before discarding text; editing opens
+without the keyboard and saves on dismissal. `useQuickAdd` and `useTaskDetail`
+retain their separate write lifecycles. The Modal owns keyboard docking,
+replacing Home/project-screen bottom-gap measurement and the create
+keyboard-hide close listener. The Projects list keeps its existing project-only
+bar, but its input now uses the same editor typography as task creation. See
+`docs/plans/todo-unify-task-editor-drawer.md` and
+`docs/plans/todo-task-drawer-editor-first-restyle.md`.
 
 Shipped (2026-09-12, mobile — device pending): **the project screen reuses the
 shared task editor and quick-add composer** (plan:

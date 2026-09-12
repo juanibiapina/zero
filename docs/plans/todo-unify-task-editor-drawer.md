@@ -1,26 +1,34 @@
 # Unified task create and edit drawer
 
+## Presentation follow-up, 2026-09-12
+
+The shared module and create/edit behavior below remain current. The chip-based
+presentation is superseded by
+`docs/plans/todo-task-drawer-editor-first-restyle.md`: the final drawer uses a
+grip, text-tab create modes, and full-width date/project rows.
+
 ## Goal and agreed behavior
 
 The mobile todo app uses one bottom-drawer presentation for task creation and
-editing. Both show date and project chips. A selected project supplies its own
-icon; there is no additional folder glyph or calendar glyph. Unset chips read
-“No date” and “No project”. Chips remain visible even when unset.
+editing. Both show full-width date and project rows. A selected project supplies
+its own icon; there is no additional folder glyph or calendar glyph. Unset rows
+read “No date” and “No project” and remain visible.
 
 Creation autofocuses, submits explicitly, and confirms before discarding text.
 Editing opens without the keyboard, saves text on dismissal, and applies date
 and project changes immediately. The completion circle remains edit-only.
 
 Home retains Task/Project create modes. A project's screen retains Task/Waiting
-modes and presets the project chip to its own project, still changeable. Other
+modes and presets the project row to its own project, still changeable. Other
 create modes hide task metadata. Both drawers use the existing scrim token.
 Hiding the keyboard does not dismiss a creation draft.
 
 ## Implementation decisions
 
 - `apps/agent-mobile/src/components/task-editor-sheet.tsx` owns the shared RN
-  Modal, keyboard docking, text field, chips and create-mode pills. Existing RN
-  fields stay in an RN tree; no native package or build dependency changes.
+  Modal, keyboard docking, text field, metadata rows and create-mode tabs.
+  Existing RN fields stay in an RN tree; no native package or build dependency
+  changes.
 - `useQuickAdd` and `useTaskDetail` retain distinct persistence lifecycles.
   Presentation is shared without forcing creation's three write paths into the
   existing-task controller.
@@ -28,9 +36,9 @@ Hiding the keyboard does not dismiss a creation draft.
   cancels that dialog before attempting to dismiss the drawer.
 - Creation focuses again in Modal `onShow`: on the Pixel, initial input autofocus
   alone focused the field before its window could open the keyboard.
-- Chips have 48dp targets, wrap on narrow widths, and truncate long project names.
-  Long titles have a bounded scrolling input. There is no decorative drag handle
-  suggesting an unimplemented swipe gesture.
+- Metadata rows have 48dp targets and truncate long project names. Long titles
+  have a bounded scrolling input. A visual grip restores the drawer identity;
+  dismissal remains Back or scrim tap rather than an unimplemented drag gesture.
 - Home/project-screen bottom-gap measurement and the keyboard-hide race timer
   are removed. The Projects list still uses its project-only `QuickAdd` bar;
   that surface and its tests are retained.
@@ -51,7 +59,8 @@ from the caller's visible list.
 ## Checks and acceptance
 
 - Mobile Jest suite, lint and typecheck must pass.
-- Create and edit use the same drawer and chips; the project icon appears once.
+- Create and edit use the same drawer and metadata rows; the project icon appears
+  once.
 - Date/project picker round trips preserve the creation draft.
 - All existing create modes, project presets, toasts and completion Undo work.
 - Keyboard-up creation and keyboard-down editing work on the Pixel 7.

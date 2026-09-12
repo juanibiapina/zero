@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
 
-type EditorChip = {
+type EditorAction = {
   label: string;
   active: boolean;
   onPress: () => void;
@@ -17,7 +17,14 @@ type EditorChip = {
   testID?: string;
 };
 
-function Chip({ label, active, onPress, accessibilityLabel, icon, testID }: EditorChip) {
+function EditorActionRow({
+  label,
+  active,
+  onPress,
+  accessibilityLabel,
+  icon,
+  testID,
+}: EditorAction) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -25,53 +32,76 @@ function Chip({ label, active, onPress, accessibilityLabel, icon, testID }: Edit
       accessibilityValue={accessibilityLabel ? { text: label } : undefined}
       testID={testID}
       onPress={onPress}
-      className={cn(
-        'min-h-12 max-w-full justify-center rounded-full border px-3 py-2',
-        active ? 'border-accent bg-accent/10' : 'border-divider',
-      )}
+      className="min-h-14 max-w-full flex-row items-center px-screen-x py-3.5"
     >
-      <Text variant="caption" numberOfLines={1} className={cn(active && 'text-accent')}>
+      <Text
+        numberOfLines={1}
+        className={cn(
+          'flex-1 text-[16px]',
+          active
+            ? 'font-medium text-accent'
+            : 'text-foreground-secondary',
+        )}
+      >
         {icon != null ? `${icon} ${label}` : label}
       </Text>
     </Pressable>
   );
 }
 
-export function ModePills({ mode, modes, onModeChange }: {
+export function AddModeSelector({
+  mode,
+  modes,
+  onModeChange,
+}: {
   mode: AddMode;
   modes: AddMode[];
   onModeChange: (mode: AddMode) => void;
 }) {
   return (
-    <View className="mb-1 flex-row flex-wrap gap-2">
-      {modes.map((m) => (
-        <Pressable
-          key={m}
-          accessibilityRole="button"
-          accessibilityLabel={addModeA11yLabel(m)}
-          accessibilityState={{ selected: mode === m }}
-          onPress={() => onModeChange(m)}
-          className={cn(
-            'min-h-12 justify-center rounded-full px-3 py-2',
-            mode === m ? 'bg-accent' : 'bg-surface-muted',
-          )}
-        >
-          <Text variant="caption" className={cn(mode === m && 'text-on-accent')}>
-            {ADD_MODE_LABEL[m]}
-          </Text>
-        </Pressable>
-      ))}
+    <View className="flex-row gap-6 border-b border-divider px-screen-x">
+      {modes.map((candidate) => {
+        const selected = mode === candidate;
+        return (
+          <Pressable
+            key={candidate}
+            accessibilityRole="button"
+            accessibilityLabel={addModeA11yLabel(candidate)}
+            accessibilityState={{ selected }}
+            onPress={() => onModeChange(candidate)}
+            className="min-h-12 justify-end pt-2"
+          >
+            <Text
+              variant="subtitle"
+              className={cn(
+                'pb-2 font-medium',
+                selected ? 'text-accent' : 'text-foreground-secondary',
+              )}
+            >
+              {ADD_MODE_LABEL[candidate]}
+            </Text>
+            <View
+              className={cn(
+                'h-0.5',
+                selected ? 'bg-accent' : 'bg-transparent',
+              )}
+            />
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
-// Create and edit share the Modal, keyboard docking, title and metadata chips.
-// Their controllers own persistence. Overlays live inside the Modal because an
-// in-tree discard dialog rendered outside it would be hidden behind its window.
+// Create and edit share the Modal, keyboard docking, title and metadata rows.
+// The visual hierarchy follows the former edit drawer: grip, identity, then
+// full-width actions. Their controllers own persistence. Overlays live inside
+// the Modal because an in-tree discard dialog rendered outside it would be
+// hidden behind its window.
 export function TaskEditorSheet({
   open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inputRef,
-  leading, pills, trailing, dateChip, projectChip, overlay,
+  leading, modeSelector, trailing, scheduleAction, projectAction, overlay,
 }: {
   open: boolean;
   onClose: () => void;
@@ -83,10 +113,10 @@ export function TaskEditorSheet({
   autoFocus?: boolean;
   inputRef?: Ref<{ focus: () => void }>;
   leading?: ReactNode;
-  pills?: ReactNode;
+  modeSelector?: ReactNode;
   trailing?: ReactNode;
-  dateChip?: EditorChip;
-  projectChip?: EditorChip;
+  scheduleAction?: EditorAction;
+  projectAction?: EditorAction;
   overlay?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -112,10 +142,15 @@ export function TaskEditorSheet({
         <View
           accessibilityLabel="sheet"
           style={{ paddingBottom: insets.bottom + 8 }}
-          className="rounded-t-2xl bg-surface px-screen-x pt-3 shadow-raised"
+          className="rounded-t-2xl bg-surface pt-2 shadow-raised"
         >
-          {pills}
-          <View className="flex-row items-center gap-3 py-3">
+          <View
+            testID="task-editor-grip"
+            importantForAccessibility="no"
+            className="mb-1 h-1 w-9 self-center rounded-full bg-divider"
+          />
+          {modeSelector}
+          <View className="min-h-16 flex-row items-center gap-3 px-screen-x py-4">
             {leading}
             <Input
               ref={field}
@@ -129,15 +164,21 @@ export function TaskEditorSheet({
               accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
               autoFocus={autoFocus}
               style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
-              className="flex-1 text-[18px] font-semibold leading-6"
+              variant="editor"
+              className="flex-1"
               testID="task-edit-input"
             />
             {trailing}
           </View>
-          {dateChip || projectChip ? (
-            <View className="flex-row flex-wrap gap-2 pb-1">
-              {dateChip ? <Chip {...dateChip} /> : null}
-              {projectChip ? <Chip {...projectChip} /> : null}
+          {scheduleAction || projectAction ? (
+            <View className="border-t border-divider">
+              {scheduleAction ? (
+                <EditorActionRow {...scheduleAction} />
+              ) : null}
+              {scheduleAction && projectAction ? (
+                <View className="h-px bg-divider" />
+              ) : null}
+              {projectAction ? <EditorActionRow {...projectAction} /> : null}
             </View>
           ) : null}
         </View>

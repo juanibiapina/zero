@@ -2,7 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
-- 2026-09-12: Creating and editing tasks now use the same bottom drawer with date and project chips. Project chips show the project's own icon without an extra folder icon. Hiding the keyboard keeps your draft open.
+- 2026-09-13: Task and project names now use the same title type while you add them.
+- 2026-09-12: Creating and editing tasks now use the same bottom drawer, with clear date and project rows instead of round pills. A selected project shows its own icon once, and hiding the keyboard keeps your draft open.
 
 - 2026-09-12: On a project's screen you can now tap a task to open the full editor — rename it, schedule it, move it to another project, or complete it — the same editor Home and Upcoming use. Adding a task there now uses the same quick-add as Home, with an optional date and a project chip preset to the current project (change it to file the new task elsewhere, or keep it here). The old per-task date chip on the project screen is gone; set a date from inside the editor instead.
 - 2026-09-12: The take-on star is gone — giving a project task a date is now how you commit it. On a project's screen each task shows a date chip; tap it and pick Today to bring the task to Home (the project turns active), or leave it with no date to keep grooming it there. New tasks you add on a project start with no date. Everything else works the same: a future date shows the project as waiting until that day, and a dated task returns to Home on its day.

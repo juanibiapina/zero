@@ -315,8 +315,8 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add'));
     });
 
-    // The bar offers the two project-scoped pills (Task and Waiting) — and no
-    // capture/project pills. Task is the default mode, so its placeholder shows.
+    // The drawer offers the two project-scoped tabs (Task and Waiting) — and no
+    // capture/project modes. Task is the default, so its placeholder shows.
     expect(getByLabelText('Add a task')).toBeTruthy();
     expect(getByLabelText('Add a waiting condition')).toBeTruthy();
     expect(queryByLabelText('Add a capture')).toBeNull();
@@ -368,7 +368,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockEditTask.mock.calls[0][2]).toBe('buy trail shoes');
   });
 
-  it('adds a task with the composer date chip and the project chip preset to this project, on a chosen date', async () => {
+  it('adds a task with the date row and project row preset to this project, on a chosen date', async () => {
     mockAddTask.mockImplementation(async (_t, task) => {
       const added: Task = {
         id: task.id,
@@ -390,12 +390,12 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add'));
     });
 
-    // The same composer Home uses: a create-time date chip, and a project chip
-    // preset to this screen's project (label = the project title, 'Run a 5K').
+    // The same composer Home uses: create-time date and project rows, with the
+    // project preset to this screen (label = the project title, 'Run a 5K').
     expect(getByLabelText('No date')).toBeTruthy();
     expect(getByLabelText('Run a 5K')).toBeTruthy();
 
-    // Pick Today from the scheduler the date chip opens.
+    // Pick Today from the scheduler the date row opens.
     await act(async () => {
       fireEvent.press(getByLabelText('No date'));
     });
@@ -419,7 +419,7 @@ describe('ProjectDetailScreen', () => {
     );
   });
 
-  it('lets the composer project chip be changed to move a new task off this project', async () => {
+  it('lets the composer project row move a new task off this project', async () => {
     mockFetchProjects.mockResolvedValue([
       project('1', 'Run a 5K', '🏃', 'next'),
       project('2', 'Learn piano', '🎹', 'next'),
@@ -443,7 +443,7 @@ describe('ProjectDetailScreen', () => {
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
     });
-    // The chip is preset to this project; open the picker and switch to another.
+    // The row is preset to this project; open the picker and switch to another.
     await act(async () => {
       fireEvent.press(getByLabelText('Run a 5K'));
     });

@@ -166,8 +166,8 @@ function ProjectDetail({
   });
 
   // The quick-add composer, project-scoped: Task and Waiting modes, the project
-  // fixed to this one (no project chip), and — like Home — a create-time date
-  // chip on a task. See quick-add-composer.tsx.
+  // preset to this one in the project row, and — like Home — a create-time date
+  // row on a task. See quick-add-composer.tsx.
   const add = useQuickAdd({
     tasksApi,
     projectsApi: api,
@@ -285,8 +285,8 @@ function ProjectDetail({
 
       {detail.sheets}
 
-      {/* Project-scoped quick-add: Task and Waiting pills, the project fixed to
-          this one, plus a create-time date chip on a task — the same composer
+      {/* Project-scoped quick-add: Task and Waiting tabs, plus create-time date
+          and project rows on a task — the same composer
           Home uses. */}
       {add.bar}
     </View>

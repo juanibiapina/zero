@@ -11,6 +11,15 @@ describe('Input', () => {
     expect(getByDisplayValue('hello')).toBeTruthy();
   });
 
+  it('uses the shared editor typography when requested', async () => {
+    const { getByDisplayValue } = await render(
+      <Input variant="editor" value="Name an outcome" onChangeText={() => {}} />,
+    );
+    const input = getByDisplayValue('Name an outcome');
+    expect(input.props.className).toContain('text-editor');
+    expect(input.props.variant).toBeUndefined();
+  });
+
   it('calls onChangeText when edited', async () => {
     const onChangeText = jest.fn();
     const { getByPlaceholderText } = await render(

@@ -16,20 +16,20 @@ import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { ProjectPickerSheet, ScheduleSheet } from '@/components/task-detail';
-import { ModePills, TaskEditorSheet } from '@/components/task-editor-sheet';
+import { AddModeSelector, TaskEditorSheet } from '@/components/task-editor-sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { type TokenGetter } from '@/lib/api';
 
 // The quick-add composer as one deep module: it owns the whole add surface — the
-// collapsed FAB, the create bottom drawer with its mode pills, the create-time
-// date and project chips, the schedule/project picker sheets, the discard-confirm
+// collapsed FAB, the create bottom drawer with its mode selector, the create-time
+// date and project rows, the schedule/project picker sheets, the discard-confirm
 // dialog, and the per-mode write logic — behind a small interface. Home and a
 // project's own screen render the same composer through this hook instead of each
 // reimplementing it. It renders the SHARED `TaskEditorSheet` (the same
 // bottom-drawer edit opens), so create and edit look identical; the differences
-// (mode pills, a submit button, no complete circle) are passed as slots. Sibling
+// (mode selector, a submit button, no complete circle) are passed as slots. Sibling
 // in spirit to useTaskDetail. See docs/plans/todo-unify-task-editor-drawer.md.
 //
 // Because the drawer is an RN Modal (not an in-screen keyboard bar), the keyboard
@@ -38,12 +38,12 @@ import { type TokenGetter } from '@/lib/api';
 // text.
 //
 // A `projectId` (a project's own screen) is the composer's home project: it
-// presets the project chip to that project (still changeable — you can move the
+// presets the project row to that project (still changeable — you can move the
 // new task to another project or make it loose), a `waiting` add records a
 // free-text condition on it, and filing a dateless task to it fires no "Filed to
 // project" toast (it appears right there in the project's Tasks). With no
-// `projectId` (Home) the chip starts on "No project". Either way the chip is
-// shown in task mode.
+// `projectId` (Home) the row starts on "No project". Either way the row is shown
+// in task mode.
 export type QuickAddController = {
   // The FAB + create drawer + all composer sheets + the discard dialog, rendered
   // at the screen root.
@@ -69,14 +69,14 @@ export function useQuickAdd({
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
-  // The user's projects, for the project chip label and the "Filed" toast copy.
+  // The user's projects, for the project row label and the "Filed" toast copy.
   projects: Project[];
-  // Which mode pills to offer, in order. Home: ['task','project']; a project's
+  // Which mode tabs to offer, in order. Home: ['task','project']; a project's
   // own screen: ['task','waiting'].
   modes: AddMode[];
   // This screen's home project (a project's own screen): presets the project
-  // chip to it (still changeable) and scopes a waiting add to it. Omit/null on
-  // Home (chip starts on "No project").
+  // row to it (still changeable) and scopes a waiting add to it. Omit/null on
+  // Home (the row starts on "No project").
   projectId?: string | null;
   // For warming a freshly created project's icon suggestions (project mode).
   getToken: TokenGetter;
@@ -92,7 +92,7 @@ export function useQuickAdd({
   // Create-time date + project for a task quick-add. Both default to "unset":
   // null date + no project = a loose Home task. Reset when the drawer closes.
   const [addDate, setAddDate] = useState<string | null>(null);
-  // The chip is preset to the screen's home project (`projectId`), so a
+  // The project row is preset to the screen's home project (`projectId`), so a
   // project-screen task defaults to that project; Home starts on "No project".
   const [addProjectId, setAddProjectId] = useState<string | null>(
     projectId ?? null,
@@ -153,7 +153,7 @@ export function useQuickAdd({
     if (mode === 'waiting') {
       // Waiting mode records a free-text waiting condition on this screen's own
       // project (a condition belongs to the project, so it is not the changeable
-      // chip's target).
+      // project row's target).
       if (projectId == null) return;
       const tx = waitsApi.add(projectId, 'free-text', { text: trimmed });
       tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
@@ -161,8 +161,9 @@ export function useQuickAdd({
       return;
     }
 
-    // Task mode. The task attaches to the chip's project (preset to this screen's
-    // project, changeable). No project + null date = a loose Home task; a date
+    // Task mode. The task attaches to the project chosen in the row (preset to
+    // this screen's project, changeable). No project + null date = a loose Home
+    // task; a date
     // makes it a Home/Upcoming task; a project with no date files it groomed (off
     // Home). A dateless task filed to a project OTHER than this screen's own —
     // i.e. it will not appear right here — is explained by a "Filed to project"
@@ -229,10 +230,10 @@ export function useQuickAdd({
     return false;
   }, [confirmingDiscard, adding, text, closeAdd]);
 
-  // Date and project chips belong to task mode only; project/waiting create no
-  // task, so they show pills + text + submit with no chips. The project chip is
-  // always shown in task mode (preset to this screen's project, changeable).
-  const chipsInMode = mode === 'task';
+  // Date and project rows belong to task mode only; project/waiting create no
+  // task, so they show the mode selector, text, and submit action without task
+  // metadata. The project row stays changeable when preset by a project screen.
+  const taskActionsVisible = mode === 'task';
   const selectedProject = projects.find((p) => p.id === addProjectId) ?? null;
 
   const bar = (
@@ -259,8 +260,8 @@ export function useQuickAdd({
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus
         inputRef={inputRef}
-        pills={
-          <ModePills mode={mode} modes={modes} onModeChange={setMode} />
+        modeSelector={
+          <AddModeSelector mode={mode} modes={modes} onModeChange={setMode} />
         }
         trailing={
           <Fab
@@ -270,8 +271,8 @@ export function useQuickAdd({
             onPress={onAdd}
           />
         }
-        dateChip={
-          chipsInMode
+        scheduleAction={
+          taskActionsVisible
             ? {
                 label: addDate ? scheduleLabel(addDate, today) : 'No date',
                 active: addDate != null,
@@ -279,8 +280,8 @@ export function useQuickAdd({
               }
             : undefined
         }
-        projectChip={
-          chipsInMode
+        projectAction={
+          taskActionsVisible
             ? {
                 label: selectedProject ? selectedProject.title : 'No project',
                 icon: selectedProject?.icon ?? null,

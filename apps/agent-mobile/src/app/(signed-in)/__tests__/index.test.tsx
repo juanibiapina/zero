@@ -265,7 +265,7 @@ describe('HomeScreen', () => {
     await act(async () => {
       fireEvent.press(getByLabelText('Task'));
     });
-    // Pick the project in the composer's project chip.
+    // Pick the project from the composer's project row.
     await act(async () => {
       fireEvent.press(getByLabelText('No project'));
     });

@@ -5,20 +5,24 @@ import { cn } from '@/lib/cn';
 
 export type InputProps = TextInputProps & {
   className?: string;
+  variant?: 'body' | 'editor';
 };
 
-// Single-line text input. Borderless by default (its container — e.g. the
-// quick-add surface — owns the framing), body type, token placeholder color.
-// Forwards its ref so callers can focus it (e.g. to restore the keyboard after
-// a dialog).
+// Borderless text input whose container owns the framing. Body is the default;
+// editor gives task and project creation one typography token. Forwards its ref
+// so callers can restore focus after a dialog.
 export const Input = forwardRef<TextInput, InputProps>(function Input(
-  { className, ...props },
+  { className, variant = 'body', ...props },
   ref,
 ) {
   return (
     <TextInput
       ref={ref}
-      className={cn('text-body text-foreground', className)}
+      className={cn(
+        variant === 'editor' ? 'text-editor' : 'text-body',
+        'text-foreground',
+        className,
+      )}
       placeholderTextColorClassName="text-placeholder"
       {...props}
     />

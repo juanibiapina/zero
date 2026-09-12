@@ -19,7 +19,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ['title', 'section', 'body', 'subtitle', 'caption'],
+      text: ['title', 'section', 'body', 'editor', 'subtitle', 'caption'],
     },
   },
 });

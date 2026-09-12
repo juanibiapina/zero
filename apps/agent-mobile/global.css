@@ -24,6 +24,10 @@
   --text-body: 16px;
   --text-body--line-height: 22px;
 
+  --text-editor: 18px;
+  --text-editor--line-height: 24px;
+  --text-editor--font-weight: 600;
+
   --text-subtitle: 14px;
   --text-subtitle--line-height: 20px;
 
