@@ -1,4 +1,5 @@
 import {
+  ADD_MODE_PLACEHOLDER,
   DEFAULT_ICON,
   localToday,
   messageOf,
@@ -11,30 +12,30 @@ import {
   type WaitsApi,
 } from '@zero/agent-core';
 import { router } from 'expo-router';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { type TextInput as RNTextInput } from 'react-native';
-import { KeyboardEvents } from 'react-native-keyboard-controller';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { View } from 'react-native';
 
-import { QuickAdd } from '@/components/quick-add';
 import { ProjectPickerSheet, ScheduleSheet } from '@/components/task-detail';
+import { ModePills, TaskEditorSheet } from '@/components/task-editor-sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Fab } from '@/components/ui/fab';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { type TokenGetter } from '@/lib/api';
 
 // The quick-add composer as one deep module: it owns the whole add surface — the
-// collapsed FAB, the expanded bar with its mode pills, the create-time date and
-// project chips, the schedule/project picker sheets, the discard-confirm dialog,
-// the keyboard-hide close race, and the per-mode write logic — behind a small
-// interface. Home and a project's own screen render the same composer through
-// this hook instead of each reimplementing it (they had already drifted: only
-// Home carried the date/project chips and discard-confirm). Sibling in spirit to
-// useTaskDetail. See docs/plans/todo-project-task-edit-and-shared-add.md.
+// collapsed FAB, the create bottom drawer with its mode pills, the create-time
+// date and project chips, the schedule/project picker sheets, the discard-confirm
+// dialog, and the per-mode write logic — behind a small interface. Home and a
+// project's own screen render the same composer through this hook instead of each
+// reimplementing it. It renders the SHARED `TaskEditorSheet` (the same
+// bottom-drawer edit opens), so create and edit look identical; the differences
+// (mode pills, a submit button, no complete circle) are passed as slots. Sibling
+// in spirit to useTaskDetail. See docs/plans/todo-unify-task-editor-drawer.md.
+//
+// Because the drawer is an RN Modal (not an in-screen keyboard bar), the keyboard
+// hiding no longer closes it, so the old keyboard-hide close-race guard is gone;
+// dismissal is a scrim tap or Back, which raises the discard-confirm over unsaved
+// text.
 //
 // A `projectId` (a project's own screen) is the composer's home project: it
 // presets the project chip to that project (still changeable — you can move the
@@ -44,13 +45,13 @@ import { type TokenGetter } from '@/lib/api';
 // `projectId` (Home) the chip starts on "No project". Either way the chip is
 // shown in task mode.
 export type QuickAddController = {
-  // The FAB + bar + all composer sheets + the discard dialog, rendered at the
-  // screen root.
+  // The FAB + create drawer + all composer sheets + the discard dialog, rendered
+  // at the screen root.
   bar: ReactNode;
   // Consume one Android Back press: close the discard dialog, raise it over
-  // unsaved text, or close the bar. Returns true when it handled the press.
+  // unsaved text, or close the drawer. Returns true when it handled the press.
   handleBack: () => boolean;
-  // Whether the bar or any of its sheets/dialogs is open.
+  // Whether the drawer or any of its sheets/dialogs is open.
   active: boolean;
 };
 
@@ -61,7 +62,6 @@ export function useQuickAdd({
   projects,
   modes,
   projectId,
-  bottomOffset,
   getToken,
   onError,
   fabLabel,
@@ -78,9 +78,6 @@ export function useQuickAdd({
   // chip to it (still changeable) and scopes a waiting add to it. Omit/null on
   // Home (chip starts on "No project").
   projectId?: string | null;
-  // Distance (dp) from the screen's content bottom to the window bottom, so the
-  // keyboard-sticky bar docks flush to the keyboard.
-  bottomOffset: number;
   // For warming a freshly created project's icon suggestions (project mode).
   getToken: TokenGetter;
   // Each screen passes its own write-error setter (clears on null).
@@ -93,7 +90,7 @@ export function useQuickAdd({
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   // Create-time date + project for a task quick-add. Both default to "unset":
-  // null date + no project = a loose Home task. Reset when the bar closes.
+  // null date + no project = a loose Home task. Reset when the drawer closes.
   const [addDate, setAddDate] = useState<string | null>(null);
   // The chip is preset to the screen's home project (`projectId`), so a
   // project-screen task defaults to that project; Home starts on "No project".
@@ -102,13 +99,7 @@ export function useQuickAdd({
   );
   const [schedulingAdd, setSchedulingAdd] = useState(false);
   const [pickingProject, setPickingProject] = useState(false);
-  // Opening/closing a composer picker dismisses the keyboard, which would fire
-  // keyboardDidHide and close the whole bar. The flags guard the open; this
-  // suppression window absorbs the CLOSE race, where keyboardDidHide fires just
-  // after the flag is cleared. Epoch ms until which keyboard-hide close is
-  // suppressed.
-  const suppressKbCloseUntil = useRef(0);
-  const inputRef = useRef<RNTextInput>(null);
+  const inputRef = useRef<{ focus: () => void }>(null);
 
   // The screen's home project, normalized (Home passes none).
   const contextProjectId = projectId ?? null;
@@ -130,8 +121,8 @@ export function useQuickAdd({
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) {
-      // Submitting an empty input closes the bar.
-      setAdding(false);
+      // Reset metadata as well, so the next draft starts clean.
+      closeAdd();
       return;
     }
     onError(null);
@@ -209,30 +200,18 @@ export function useQuickAdd({
     closeAdd,
   ]);
 
+  // Scrim tap or Back over unsaved text raises the discard confirm; empty, it
+  // just closes. The drawer is a Modal, so the keyboard hiding never closes it —
+  // there is no keyboard-hide race to guard against anymore.
   const requestClose = useCallback(() => {
-    if (text.trim()) {
+    if (confirmingDiscard) {
+      setConfirmingDiscard(false);
+    } else if (text.trim()) {
       setConfirmingDiscard(true);
     } else {
       closeAdd();
     }
-  }, [text, closeAdd]);
-
-  // The keyboard hiding closes an empty bar and raises the discard confirm over
-  // unsaved text — but not when a composer picker is open (that dismissal is
-  // deliberate and the bar reopens the keyboard when the picker closes).
-  useEffect(() => {
-    const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
-      if (!adding || confirmingDiscard) return;
-      if (schedulingAdd || pickingProject) return;
-      if (Date.now() < suppressKbCloseUntil.current) return;
-      if (text.trim()) {
-        setConfirmingDiscard(true);
-      } else {
-        closeAdd();
-      }
-    });
-    return () => sub.remove();
-  }, [adding, confirmingDiscard, text, closeAdd, schedulingAdd, pickingProject]);
+  }, [confirmingDiscard, text, closeAdd]);
 
   const handleBack = useCallback(() => {
     if (confirmingDiscard) {
@@ -250,60 +229,92 @@ export function useQuickAdd({
     return false;
   }, [confirmingDiscard, adding, text, closeAdd]);
 
-  // Date and project chips belong to task mode only. The project chip is always
-  // shown there (preset to this screen's project, changeable).
-  const showDateChip = mode === 'task';
-  const showProjectChip = mode === 'task';
+  // Date and project chips belong to task mode only; project/waiting create no
+  // task, so they show pills + text + submit with no chips. The project chip is
+  // always shown in task mode (preset to this screen's project, changeable).
+  const chipsInMode = mode === 'task';
+  const selectedProject = projects.find((p) => p.id === addProjectId) ?? null;
 
   const bar = (
     <>
-      <QuickAdd
+      {/* Collapsed entry: the FAB, pinned bottom-right; box-none lets taps
+          through to the list everywhere except the FAB. Tapping it opens the
+          drawer. */}
+      {!adding ? (
+        <View
+          pointerEvents="box-none"
+          className="absolute inset-x-0 bottom-0 items-end px-screen-x pb-6"
+        >
+          <Fab label={fabLabel} onPress={() => setAdding(true)} />
+        </View>
+      ) : null}
+
+      <TaskEditorSheet
         open={adding}
-        text={text}
-        mode={mode}
-        modes={modes}
-        onModeChange={setMode}
-        onChangeText={setText}
-        onOpen={() => setAdding(true)}
+        onClose={requestClose}
+        dismissLabel="Dismiss quick add"
+        draft={text}
+        onChangeDraft={setText}
         onSubmit={onAdd}
-        onRequestClose={requestClose}
-        busy={false}
+        placeholder={ADD_MODE_PLACEHOLDER[mode]}
+        autoFocus
         inputRef={inputRef}
-        fabLabel={fabLabel}
-        dateChipLabel={
-          showDateChip
-            ? addDate
-              ? scheduleLabel(addDate, today)
-              : 'No date'
+        pills={
+          <ModePills mode={mode} modes={modes} onModeChange={setMode} />
+        }
+        trailing={
+          <Fab
+            label={fabLabel}
+            size="sm"
+            disabled={text.trim().length === 0}
+            onPress={onAdd}
+          />
+        }
+        dateChip={
+          chipsInMode
+            ? {
+                label: addDate ? scheduleLabel(addDate, today) : 'No date',
+                active: addDate != null,
+                onPress: () => setSchedulingAdd(true),
+              }
             : undefined
         }
-        dateChipActive={addDate != null}
-        onDateChipPress={showDateChip ? () => setSchedulingAdd(true) : undefined}
-        projectChipLabel={
-          showProjectChip
-            ? (projects.find((p) => p.id === addProjectId)?.title ??
-              'No project')
+        projectChip={
+          chipsInMode
+            ? {
+                label: selectedProject ? selectedProject.title : 'No project',
+                icon: selectedProject?.icon ?? null,
+                active: addProjectId != null,
+                onPress: () => setPickingProject(true),
+              }
             : undefined
         }
-        projectChipActive={addProjectId != null}
-        onProjectChipPress={
-          showProjectChip ? () => setPickingProject(true) : undefined
+        overlay={
+          confirmingDiscard ? (
+            <ConfirmDialog
+              title="Discard changes?"
+              message="The changes you've made will not be saved."
+              cancelLabel="Cancel"
+              confirmLabel="Discard"
+              destructive
+              onCancel={() => {
+                setConfirmingDiscard(false);
+                inputRef.current?.focus();
+              }}
+              onConfirm={closeAdd}
+            />
+          ) : null
         }
-        bottomOffset={bottomOffset}
       />
 
       <ScheduleSheet
         open={schedulingAdd}
         showUpDate={addDate}
         onPick={(d) => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
           setAddDate(d);
           setSchedulingAdd(false);
         }}
-        onClose={() => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
-          setSchedulingAdd(false);
-        }}
+        onClose={() => setSchedulingAdd(false)}
       />
 
       <ProjectPickerSheet
@@ -311,30 +322,11 @@ export function useQuickAdd({
         projects={projects}
         selectedProjectId={addProjectId}
         onPick={(id) => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
           setAddProjectId(id);
           setPickingProject(false);
         }}
-        onClose={() => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
-          setPickingProject(false);
-        }}
+        onClose={() => setPickingProject(false)}
       />
-
-      {confirmingDiscard ? (
-        <ConfirmDialog
-          title="Discard changes?"
-          message="The changes you've made will not be saved."
-          cancelLabel="Cancel"
-          confirmLabel="Discard"
-          destructive
-          onCancel={() => {
-            setConfirmingDiscard(false);
-            inputRef.current?.focus();
-          }}
-          onConfirm={closeAdd}
-        />
-      ) : null}
     </>
   );
 

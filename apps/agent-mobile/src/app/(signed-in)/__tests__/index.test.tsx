@@ -675,7 +675,7 @@ describe('HomeScreen', () => {
     expect(queryByPlaceholderText('Add a task')).toBeNull();
   });
 
-  it('closes the empty quick-add when the keyboard hides (Android back)', async () => {
+  it('keeps the create drawer open when the keyboard hides, then closes on dismissal', async () => {
     mockGetToken.mockResolvedValue('tok');
     const { getByLabelText, getByText, getByPlaceholderText, queryByPlaceholderText } =
       await renderScreen();
@@ -694,6 +694,10 @@ describe('HomeScreen', () => {
       ).__emitKeyboardEvent?.('keyboardDidHide');
     });
 
+    expect(getByPlaceholderText('Add a task')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(getByLabelText('Dismiss quick add'));
+    });
     expect(queryByPlaceholderText('Add a task')).toBeNull();
   });
 

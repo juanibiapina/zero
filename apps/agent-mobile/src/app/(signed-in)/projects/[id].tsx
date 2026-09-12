@@ -20,7 +20,7 @@ import {
   type WaitingCondition,
   type WaitsApi,
 } from '@zero/agent-core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
   Modal,
@@ -96,18 +96,6 @@ function ProjectDetail({
   const { getToken } = useAuth();
   const back = useCallback(() => router.back(), [router]);
   const [error, setError] = useState<string | null>(null);
-
-  // Measure the gap from this screen's content bottom to the window bottom (the
-  // native bottom tab bar plus the system gesture inset), fed to the
-  // keyboard-sticky quick-add so it docks flush to the keyboard.
-  const { height: windowHeight } = useWindowDimensions();
-  const rootRef = useRef<View>(null);
-  const [bottomOffset, setBottomOffset] = useState(0);
-  const measureBottomGap = useCallback(() => {
-    rootRef.current?.measureInWindow((_x, y, _w, h) => {
-      setBottomOffset(Math.max(0, windowHeight - (y + h)));
-    });
-  }, [windowHeight]);
 
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
@@ -187,7 +175,6 @@ function ProjectDetail({
     projects: list,
     modes: ['task', 'waiting'],
     projectId: id,
-    bottomOffset,
     getToken,
     onError: setError,
     fabLabel: 'Add',
@@ -235,11 +222,7 @@ function ProjectDetail({
   const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
 
   return (
-    <View
-      ref={rootRef}
-      onLayout={measureBottomGap}
-      className="flex-1 bg-background"
-    >
+    <View className="flex-1 bg-background">
       <BackRow onBack={back} />
       <ScrollView
         style={{ flex: 1 }}

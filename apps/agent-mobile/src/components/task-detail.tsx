@@ -13,134 +13,11 @@ import {
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
-import { Input } from '@/components/ui/input';
+import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useColor } from '@/lib/theme';
-
-// The task detail: a plain React Native bottom sheet (an RN Modal + scrim + a
-// keyboard-docked bottom panel), NOT an @expo/ui tree. Built with the app's own
-// components so it matches every other screen: the real hollow `CheckCircle`
-// radio, the `Input` field, and hairline `bg-divider` rows on the `bg-surface`
-// sheet. There is no "Done" button: the circle completes, and Enter / dismissal
-// saves. It does not autofocus, so it opens showing a clean sheet; tap the title
-// to edit. Repurposed from the former capture detail in the single-list merge.
-function TaskDetailSheet({
-  open,
-  draft,
-  onChangeDraft,
-  onSubmit,
-  onComplete,
-  onOpenSchedule,
-  scheduleText,
-  scheduled,
-  onOpenProjectPicker,
-  projectText,
-  hasProject,
-  onClose,
-}: {
-  open: boolean;
-  draft: string;
-  onChangeDraft: (text: string) => void;
-  onSubmit: () => void;
-  onComplete: () => void;
-  onOpenSchedule: () => void;
-  scheduleText: string;
-  scheduled: boolean;
-  onOpenProjectPicker: () => void;
-  projectText: string;
-  hasProject: boolean;
-  onClose: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  return (
-    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close task"
-        className="flex-1 bg-scrim"
-        onPress={onClose}
-      />
-      <KeyboardStickyView
-        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
-      >
-        <View
-          accessibilityLabel="sheet"
-          style={{ paddingBottom: insets.bottom + 8 }}
-          className="rounded-t-2xl bg-surface pt-2 shadow-raised"
-        >
-          <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
-
-          {/* Identity: the real hollow radio + the editable title, vertically
-              centered. The multiline field's default vertical padding is zeroed
-              so its text line centers against the 22dp radio. */}
-          <View className="flex-row items-center gap-3 px-screen-x py-3">
-            <CheckCircle label="Complete task" onPress={onComplete} />
-            <Input
-              value={draft}
-              onChangeText={onChangeDraft}
-              onSubmitEditing={onSubmit}
-              returnKeyType="done"
-              blurOnSubmit
-              multiline
-              placeholder="Task"
-              accessibilityLabel="Task text"
-              style={{ paddingTop: 0, paddingBottom: 0 }}
-              className="flex-1 text-[18px] font-semibold leading-6"
-              testID="task-edit-input"
-            />
-          </View>
-
-          <View className="h-px bg-divider" />
-
-          {/* Schedule: one row, opens the selector. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Set schedule"
-            onPress={onOpenSchedule}
-            testID="task-schedule"
-            className="flex-row items-center gap-3 px-screen-x py-3.5"
-          >
-            <Text className="w-6 text-center text-[18px]">🗓</Text>
-            <Text
-              className={
-                scheduled
-                  ? 'flex-1 text-[16px] font-medium text-accent'
-                  : 'flex-1 text-[16px] text-foreground-secondary'
-              }
-            >
-              {scheduleText}
-            </Text>
-          </Pressable>
-
-          <View className="h-px bg-divider" />
-
-          {/* Project: one row, opens the project picker. */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Set project"
-            onPress={onOpenProjectPicker}
-            testID="task-project"
-            className="flex-row items-center gap-3 px-screen-x py-3.5"
-          >
-            <Text className="w-6 text-center text-[18px]">📁</Text>
-            <Text
-              className={
-                hasProject
-                  ? 'flex-1 text-[16px] font-medium text-accent'
-                  : 'flex-1 text-[16px] text-foreground-secondary'
-              }
-            >
-              {projectText}
-            </Text>
-          </Pressable>
-        </View>
-      </KeyboardStickyView>
-    </Modal>
-  );
-}
 
 // The project picker: a plain React Native modal listing the user's projects
 // plus a "No project" row (move back to loose). Mirrors ScheduleSheet's shape.
@@ -538,25 +415,40 @@ export function useTaskDetail({
 
   const sheets = (
     <>
-      <TaskDetailSheet
+      <TaskEditorSheet
         open={selected != null}
+        onClose={commitAndClose}
+        dismissLabel="Close task"
         draft={draft}
         onChangeDraft={setDraft}
         onSubmit={commitAndClose}
-        onClose={commitAndClose}
-        onComplete={completeFromSheet}
-        onOpenSchedule={() => setScheduling(true)}
-        scheduleText={
-          selected ? scheduleLabel(selected.showUpDate, localToday()) : ''
+        autoFocus={false}
+        leading={
+          <CheckCircle label="Complete task" onPress={completeFromSheet} />
         }
-        scheduled={selected?.showUpDate != null}
-        onOpenProjectPicker={() => setPicking(true)}
-        projectText={
-          selectedProject
-            ? `${selectedProject.icon} ${selectedProject.title}`
-            : 'Project'
+        dateChip={
+          selected
+            ? {
+                label: scheduleLabel(selected.showUpDate, localToday()),
+                accessibilityLabel: 'Set schedule',
+                active: selected.showUpDate != null,
+                onPress: () => setScheduling(true),
+                testID: 'task-schedule',
+              }
+            : undefined
         }
-        hasProject={selectedProject != null}
+        projectChip={
+          selected
+            ? {
+                label: selectedProject ? selectedProject.title : 'No project',
+                icon: selectedProject?.icon ?? null,
+                accessibilityLabel: 'Set project',
+                active: selectedProject != null,
+                onPress: () => setPicking(true),
+                testID: 'task-project',
+              }
+            : undefined
+        }
       />
 
       <ScheduleSheet

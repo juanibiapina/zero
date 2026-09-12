@@ -22,7 +22,7 @@ import {
 } from '@zero/agent-core';
 import { useAuth } from '@clerk/expo';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
   Platform,
@@ -232,25 +232,11 @@ export default function HomeScreen() {
   const projectsApi = useProjectsApi();
   const waitsApi = useWaitsApi();
 
-  const { height: windowHeight } = useWindowDimensions();
-  const rootRef = useRef<View>(null);
-  const [bottomOffset, setBottomOffset] = useState(0);
-  const measureBottomGap = useCallback(() => {
-    rootRef.current?.measureInWindow((_x, y, _w, h) => {
-      setBottomOffset(Math.max(0, windowHeight - (y + h)));
-    });
-  }, [windowHeight]);
-
   return (
-    <View ref={rootRef} onLayout={measureBottomGap} className="flex-1 bg-background">
+    <View className="flex-1 bg-background">
       <ScreenHeader title="Home" />
       {tasksApi && projectsApi && waitsApi ? (
-        <Home
-          api={tasksApi}
-          projectsApi={projectsApi}
-          waitsApi={waitsApi}
-          bottomOffset={bottomOffset}
-        />
+        <Home api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} />
       ) : (
         <View className="flex-1" />
       )}
@@ -262,12 +248,10 @@ function Home({
   api,
   projectsApi,
   waitsApi,
-  bottomOffset,
 }: {
   api: TasksApi;
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
-  bottomOffset: number;
 }) {
   // The reorderable list's reorder pan must wait for a long-press before it
   // activates, or on Android it fights the RefreshControl's SwipeRefreshLayout
@@ -363,7 +347,6 @@ function Home({
     waitsApi,
     projects: projects ?? [],
     modes: ['task', 'project'],
-    bottomOffset,
     getToken,
     onError: setWriteError,
     fabLabel: 'Task',
