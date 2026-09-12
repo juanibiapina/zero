@@ -257,6 +257,33 @@ describe("HomePage", () => {
     );
   });
 
+  it("files a dateless task to a project from the composer: off Home, with a toast", async () => {
+    setApi([], [projectRow("p", { title: "Diploma", icon: "🎓" })]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    // Pick the project in the quick-add composer's project chip.
+    fireEvent.click(await screen.findByRole("button", { name: "Add to a project" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Diploma" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a task" }), {
+      target: { value: "write thesis" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+
+    // A dateless project task is groomed: it does NOT appear on Home.
+    await waitFor(() =>
+      expect(defaultToastController.getSnapshot()).toHaveLength(1),
+    );
+    expect(defaultToastController.getSnapshot()[0].message).toBe(
+      "Filed to project",
+    );
+    expect(
+      screen.queryByRole("button", { name: 'Edit "write thesis"' }),
+    ).toBeNull();
+  });
+
   it("creates a project from the Project mode, stays on Home, and toasts a link to it", async () => {
     setApi();
     let path = "";

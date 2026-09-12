@@ -32,6 +32,14 @@ export type QuickAddProps = {
   // both. The FAB label doubles as its accessibility label.
   fabLabel?: string;
   placeholder?: string;
+  // The create-time date + project composer chips (Home quick-add), forwarded to
+  // the bar. Rendered only when both press handlers are supplied.
+  dateChipLabel?: string;
+  dateChipActive?: boolean;
+  onDateChipPress?: () => void;
+  projectChipLabel?: string;
+  projectChipActive?: boolean;
+  onProjectChipPress?: () => void;
   // Distance (dp) from the screen's content bottom to the window bottom — the
   // native bottom tab bar plus the system gesture inset. The keyboard-sticky
   // bar lifts by the full keyboard height (from the window bottom), so without
@@ -60,6 +68,12 @@ export function QuickAdd({
   inputRef,
   fabLabel = 'Task',
   placeholder,
+  dateChipLabel,
+  dateChipActive,
+  onDateChipPress,
+  projectChipLabel,
+  projectChipActive,
+  onProjectChipPress,
   bottomOffset = 0,
 }: QuickAddProps) {
   // Collapsed FAB wrapper: pinned bottom-right; box-none lets taps through to
@@ -102,6 +116,12 @@ export function QuickAdd({
               inputRef={inputRef}
               fabLabel={fabLabel}
               placeholder={placeholder}
+              dateChipLabel={dateChipLabel}
+              dateChipActive={dateChipActive}
+              onDateChipPress={onDateChipPress}
+              projectChipLabel={projectChipLabel}
+              projectChipActive={projectChipActive}
+              onProjectChipPress={onProjectChipPress}
             />
           </Animated.View>
         </KeyboardStickyView>

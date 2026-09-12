@@ -33,6 +33,16 @@ export type QuickAddBarProps = {
   inputRef?: Ref<TextInput>;
   // Accessibility label of the submit button. Defaults to the Capture wording.
   fabLabel?: string;
+  // The create-time date + project composer chips (Home quick-add). Rendered as
+  // a row below the input when both handlers are supplied. The date is the sole
+  // commitment gate, so this is how a quick-add task lands on Home / Upcoming or
+  // is filed to a project. See docs/plans/todo-retire-take-on.md.
+  dateChipLabel?: string;
+  dateChipActive?: boolean;
+  onDateChipPress?: () => void;
+  projectChipLabel?: string;
+  projectChipActive?: boolean;
+  onProjectChipPress?: () => void;
 };
 
 // Presentational quick-add surface: a full-width panel with rounded top corners
@@ -52,9 +62,16 @@ export function QuickAddBar({
   autoFocus = true,
   inputRef,
   fabLabel = 'Task',
+  dateChipLabel,
+  dateChipActive,
+  onDateChipPress,
+  projectChipLabel,
+  projectChipActive,
+  onProjectChipPress,
 }: QuickAddBarProps) {
   const resolvedPlaceholder =
     placeholder ?? (mode ? ADD_MODE_PLACEHOLDER[mode] : 'Add a task');
+  const showChips = onDateChipPress != null && onProjectChipPress != null;
   return (
     <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
       {mode ? (
@@ -104,6 +121,42 @@ export function QuickAddBar({
           onPress={onSubmit}
         />
       </View>
+      {showChips ? (
+        <View className="mt-2 flex-row gap-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={dateChipLabel}
+            onPress={onDateChipPress}
+            className={cn(
+              'rounded-full border px-3 py-1',
+              dateChipActive ? 'border-accent bg-accent/10' : 'border-divider',
+            )}
+          >
+            <Text
+              variant="caption"
+              className={cn(dateChipActive && 'text-accent')}
+            >
+              {dateChipLabel}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={projectChipLabel}
+            onPress={onProjectChipPress}
+            className={cn(
+              'rounded-full border px-3 py-1',
+              projectChipActive ? 'border-accent bg-accent/10' : 'border-divider',
+            )}
+          >
+            <Text
+              variant="caption"
+              className={cn(projectChipActive && 'text-accent')}
+            >
+              {projectChipLabel}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }

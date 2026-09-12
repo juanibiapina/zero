@@ -11,6 +11,7 @@ import {
   localToday,
   messageOf,
   orderKeyBetween,
+  scheduleLabel,
   taskIcon,
   toast,
   tomorrow,
@@ -58,7 +59,11 @@ import { useResolveClassNames } from 'uniwind';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { QuickAdd } from '@/components/quick-add';
 import { ScreenHeader } from '@/components/screen-header';
-import { useTaskDetail } from '@/components/task-detail';
+import {
+  ProjectPickerSheet,
+  ScheduleSheet,
+  useTaskDetail,
+} from '@/components/task-detail';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
@@ -347,6 +352,13 @@ function Home({
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  // Create-time date + project for a task quick-add (the mini-composer). Both
+  // default to "unset": null date + no project = a loose Home task. `schedulingAdd`
+  // / `pickingProject` open the shared pickers. Reset when the bar closes.
+  const [addDate, setAddDate] = useState<string | null>(null);
+  const [addProjectId, setAddProjectId] = useState<string | null>(null);
+  const [schedulingAdd, setSchedulingAdd] = useState(false);
+  const [pickingProject, setPickingProject] = useState(false);
   const inputRef = useRef<RNTextInput>(null);
 
   // The task detail editor (sheet + schedule selector + their writes). It
@@ -370,6 +382,10 @@ function Home({
     setText('');
     setConfirmingDiscard(false);
     setAdding(false);
+    setAddDate(null);
+    setAddProjectId(null);
+    setSchedulingAdd(false);
+    setPickingProject(false);
   }, []);
 
   const onAdd = useCallback(() => {
@@ -401,11 +417,32 @@ function Home({
       closeAdd();
       return;
     }
-    // A quick-add with no project creates a loose open task on Home (no day).
-    const tx = api.add(trimmed);
+    // A task quick-add carries the composer's date + project. No project + null
+    // date = a loose Home task; a date makes it a Home/Upcoming task; a project
+    // with no date files it groomed (off Home), explained by a toast so nothing
+    // vanishes silently.
+    const tx = api.add(trimmed, addDate, addProjectId);
     tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
+    if (addProjectId != null && addDate == null) {
+      const project = (projects ?? []).find((p) => p.id === addProjectId);
+      toast('Filed to project', {
+        description: project
+          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
+          : undefined,
+      });
+    }
     closeAdd();
-  }, [text, api, projectsApi, mode, getToken, closeAdd]);
+  }, [
+    text,
+    api,
+    projectsApi,
+    mode,
+    getToken,
+    closeAdd,
+    addDate,
+    addProjectId,
+    projects,
+  ]);
 
   const requestClose = useCallback(() => {
     if (text.trim()) {
@@ -578,7 +615,48 @@ function Home({
         onRequestClose={requestClose}
         busy={false}
         inputRef={inputRef}
+        dateChipLabel={
+          mode === 'task'
+            ? addDate
+              ? scheduleLabel(addDate, today)
+              : 'No date'
+            : undefined
+        }
+        dateChipActive={addDate != null}
+        onDateChipPress={
+          mode === 'task' ? () => setSchedulingAdd(true) : undefined
+        }
+        projectChipLabel={
+          mode === 'task'
+            ? ((projects ?? []).find((p) => p.id === addProjectId)?.title ??
+              'No project')
+            : undefined
+        }
+        projectChipActive={addProjectId != null}
+        onProjectChipPress={
+          mode === 'task' ? () => setPickingProject(true) : undefined
+        }
         bottomOffset={bottomOffset}
+      />
+
+      <ScheduleSheet
+        open={schedulingAdd}
+        showUpDate={addDate}
+        onPick={(d) => {
+          setAddDate(d);
+          setSchedulingAdd(false);
+        }}
+        onClose={() => setSchedulingAdd(false)}
+      />
+      <ProjectPickerSheet
+        open={pickingProject}
+        projects={projects ?? []}
+        selectedProjectId={addProjectId}
+        onPick={(id) => {
+          setAddProjectId(id);
+          setPickingProject(false);
+        }}
+        onClose={() => setPickingProject(false)}
       />
 
       {confirmingDiscard ? (

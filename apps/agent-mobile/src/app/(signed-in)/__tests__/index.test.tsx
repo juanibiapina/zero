@@ -228,6 +228,55 @@ describe('HomeScreen', () => {
     expect(mockAddTask.mock.calls[0][1].text).toBe('call the dentist');
   });
 
+  it('files a dateless task to a project from the composer: off Home', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p',
+        title: 'Diploma',
+        icon: '🎓',
+        description: null,
+        status: 'next',
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+    mockAddTask.mockImplementation(async (_g, task) => {
+      const added = taskRow(task.id, task.text, {
+        projectId: task.projectId,
+        showUpDate: task.showUpDate,
+      });
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const { getByLabelText, getByPlaceholderText, queryByText } =
+      await renderScreen();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Task'));
+    });
+    // Pick the project in the composer's project chip.
+    await act(async () => {
+      fireEvent.press(getByLabelText('No project'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Diploma'));
+    });
+    const input = getByPlaceholderText('Add a task');
+    await act(async () => {
+      fireEvent.changeText(input, 'write thesis');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    // Filed with a project and no date, so it is groomed — not on Home.
+    expect(mockAddTask.mock.calls[0][1].projectId).toBe('p');
+    expect(mockAddTask.mock.calls[0][1].showUpDate).toBeNull();
+    expect(queryByText('write thesis')).toBeNull();
+  });
+
   it('creates a project from the Project quick-add mode, stays on Home, and toasts a link', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockAddProject.mockImplementation(async (_g, project) => ({

@@ -106,9 +106,17 @@ function Home({
 }) {
   const [mode, setMode] = useState<AddMode>("task");
   const [text, setText] = useState("");
+  // Create-time date and project for a task quick-add (the mini-composer). Both
+  // default to "unset": null date + no project = a loose Home task. Reset after
+  // each add. See docs/plans/todo-retire-take-on.md.
+  const [date, setDate] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { data: projects } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
+  );
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
@@ -138,12 +146,25 @@ function Home({
       inputRef.current?.focus();
       return;
     }
-    // A quick-add with no project creates a loose open task on Home (no day).
-    const tx = tasksApi.add(trimmed);
+    // A task quick-add carries the composer's date + project. No project + null
+    // date = a loose Home task; a date makes it a Home/Upcoming task; a project
+    // with no date files it groomed (off Home), explained by a toast so nothing
+    // vanishes silently.
+    const tx = tasksApi.add(trimmed, date, projectId);
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+    if (projectId != null && date == null) {
+      const project = (projects ?? []).find((p) => p.id === projectId);
+      toast("Filed to project", {
+        description: project
+          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
+          : undefined,
+      });
+    }
     setText("");
+    setDate(null);
+    setProjectId(null);
     inputRef.current?.focus();
-  }, [tasksApi, projectsApi, mode, text, navigate]);
+  }, [tasksApi, projectsApi, mode, text, date, projectId, projects, navigate]);
 
   return (
     <div className="space-y-6">
@@ -154,6 +175,11 @@ function Home({
         onChange={setText}
         onSubmit={onAdd}
         inputRef={inputRef}
+        date={date}
+        onDateChange={setDate}
+        projectId={projectId}
+        onProjectChange={setProjectId}
+        projects={projects ?? []}
       />
       {error && <ErrorText>{error}</ErrorText>}
       <TaskList
@@ -277,8 +303,9 @@ function TaskList({
     [api, selected, onError],
   );
 
-  // Move the selected task into a project (or back to loose with null). Moving
-  // into a project clears takenOnAt, so the row drops off Home's loose list.
+  // Move the selected task into a project (or back to loose with null). An
+  // undated task filed into a project drops off Home's loose list (it becomes
+  // groomed); a dated one keeps its date.
   const onPickProject = useCallback(
     (projectId: string | null) => {
       if (!selected) return;
@@ -426,6 +453,11 @@ function QuickAdd({
   onChange,
   onSubmit,
   inputRef,
+  date,
+  onDateChange,
+  projectId,
+  onProjectChange,
+  projects,
 }: {
   mode: AddMode;
   value: string;
@@ -433,6 +465,13 @@ function QuickAdd({
   onChange: (v: string) => void;
   onSubmit: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  // Create-time date + project for a task quick-add (the mini-composer). Shown
+  // only in task mode.
+  date: string | null;
+  onDateChange: (date: string | null) => void;
+  projectId: string | null;
+  onProjectChange: (projectId: string | null) => void;
+  projects: { id: string; title: string; icon: string }[];
 }) {
   return (
     <div className="space-y-2">
@@ -484,7 +523,131 @@ function QuickAdd({
           Add
         </Button>
       </form>
+      {mode === "task" && (
+        <div className="flex items-center gap-2">
+          <QuickAddDateChip date={date} onPick={onDateChange} />
+          <QuickAddProjectChip
+            projects={projects}
+            projectId={projectId}
+            onPick={onProjectChange}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+// The compact date chip in the Home quick-add composer: "No date" by default,
+// or the picked date; opens the shared scheduler. The date is the sole
+// commitment gate, so this is how a quick-add task lands on Home (or Upcoming).
+function QuickAddDateChip({
+  date,
+  onPick,
+}: {
+  date: string | null;
+  onPick: (date: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const today = localToday();
+  const scheduled = date != null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={scheduled ? `Date: ${date}` : "Add a date"}
+          className={cn(
+            "flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
+            scheduled
+              ? "border-primary/40 font-medium text-primary"
+              : "text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          <CalendarGlyph className="size-3.5" />
+          <span>{scheduled ? scheduleLabel(date, today) : "No date"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <ScheduleMenu
+          today={today}
+          selected={date}
+          onPick={(d) => {
+            onPick(d);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// The compact project chip in the Home quick-add composer: "No project" by
+// default (a loose task), or the picked project's icon + title. Filing a task to
+// a project with no date lands it groomed on the project screen (the composer's
+// caller raises a "Filed to <project>" toast).
+function QuickAddProjectChip({
+  projects,
+  projectId,
+  onPick,
+}: {
+  projects: { id: string; title: string; icon: string }[];
+  projectId: string | null;
+  onPick: (projectId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = projects.find((p) => p.id === projectId) ?? null;
+  const pick = (id: string | null) => {
+    onPick(id);
+    setOpen(false);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={current ? `Project: ${current.title}` : "Add to a project"}
+          className={cn(
+            "flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
+            current
+              ? "border-primary/40 font-medium text-primary"
+              : "text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          <span aria-hidden className="text-sm leading-none">
+            {current ? current.icon : "📁"}
+          </span>
+          <span>{current ? current.title : "No project"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-1">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/60"
+          onClick={() => pick(null)}
+        >
+          <span aria-hidden className="w-5 text-center">
+            ⊘
+          </span>
+          No project
+        </button>
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={cn(
+              "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/60",
+              p.id === projectId && "font-medium text-primary",
+            )}
+            onClick={() => pick(p.id)}
+          >
+            <span aria-hidden className="w-5 text-center text-base leading-none">
+              {p.icon}
+            </span>
+            {p.title}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -144,7 +144,8 @@ function TaskDetailSheet({
 
 // The project picker: a plain React Native modal listing the user's projects
 // plus a "No project" row (move back to loose). Mirrors ScheduleSheet's shape.
-function ProjectPickerSheet({
+// Exported so the Home quick-add composer can pick a project at create time.
+export function ProjectPickerSheet({
   open,
   projects,
   selectedProjectId,
