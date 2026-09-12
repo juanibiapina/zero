@@ -76,7 +76,6 @@ const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   createdAt: over.createdAt ?? `2023-01-0${id}T00:00:00.000Z`,
   completedAt: over.completedAt ?? null,
   projectId: over.projectId ?? null,
-  takenOnAt: over.takenOnAt ?? null,
   sortKey: over.sortKey ?? null,
 });
 
@@ -91,7 +90,7 @@ function fakeTasksRest(initial: Task[]): TasksRest {
   return {
     fetchTasks: async () =>
       server.filter((t) => t.completedAt == null).map((item) => ({ ...item })),
-    addTask: async ({ id, text, showUpDate, projectId, takenOnAt }) => {
+    addTask: async ({ id, text, showUpDate, projectId }) => {
       const row: Task = {
         id,
         text,
@@ -99,7 +98,6 @@ function fakeTasksRest(initial: Task[]): TasksRest {
         createdAt: new Date().toISOString(),
         completedAt: null,
         projectId,
-        takenOnAt,
         sortKey: `a${server.length}`,
       };
       server.push(row);
@@ -115,12 +113,6 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       const row = server.find((item) => item.id === id);
       if (!row) throw new Error(`no task ${id}`);
       row.completedAt = null;
-      return { ...row };
-    },
-    setTaskTakenOn: async (id, takenOnAt) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.takenOnAt = takenOnAt;
       return { ...row };
     },
     editTask: async (id, text) => {
@@ -146,7 +138,6 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       const row = server.find((item) => item.id === id);
       if (!row) throw new Error(`no task ${id}`);
       row.projectId = projectId;
-      if (projectId != null) row.takenOnAt = null;
       moved.push({ id, projectId });
       return { ...row };
     },
@@ -236,7 +227,7 @@ describe("HomePage", () => {
       [
         taskRow("1", "mail the letter", {
           projectId: "p",
-          takenOnAt: "2023-01-02T00:00:00.000Z",
+          showUpDate: "2023-01-01",
         }),
       ],
       [projectRow("p", { status: "next", icon: "🎓" })],

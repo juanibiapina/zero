@@ -18,7 +18,6 @@ const fakeUserDO = (seed: Task[] = []) => {
       text: string,
       showUpDate: string | null = null,
       projectId: string | null = null,
-      takenOnAt: string | null = null,
       sourceCaptureId: string | null = null,
     ): Task {
       const existingById = tasks.find((t) => t.id === id);
@@ -30,7 +29,6 @@ const fakeUserDO = (seed: Task[] = []) => {
         createdAt: new Date(1700000000000 + ++n).toISOString(),
         completedAt: null,
         projectId,
-        takenOnAt,
         sourceCaptureId,
         sortKey: "a0",
       };
@@ -44,12 +42,6 @@ const fakeUserDO = (seed: Task[] = []) => {
       const task = tasks.find((t) => t.id === id);
       if (!task) return null;
       task.completedAt = new Date(1700000000000).toISOString();
-      return task;
-    },
-    setTaskTakenOn(id: string, takenOnAt: string | null): Task | null {
-      const task = tasks.find((t) => t.id === id);
-      if (!task) return null;
-      task.takenOnAt = takenOnAt;
       return task;
     },
     reopenTask(id: string): Task | null {
@@ -80,7 +72,6 @@ const fakeUserDO = (seed: Task[] = []) => {
       const task = tasks.find((t) => t.id === id);
       if (!task) return null;
       task.projectId = projectId;
-      if (projectId != null) task.takenOnAt = null;
       return task;
     },
     _tasks: tasks,
@@ -118,7 +109,6 @@ const task = (over: Partial<Task> = {}): Task => ({
   createdAt: "2023-11-14T22:13:20.001Z",
   completedAt: null,
   projectId: null,
-  takenOnAt: null,
   sourceCaptureId: null,
   sortKey: "a0",
   ...over,
@@ -282,10 +272,8 @@ describe("PATCH /api/tasks/{id}", () => {
     expect(body.task.sortKey).toBe("a5");
   });
 
-  it("moves a task into a project and clears takenOnAt", async () => {
-    const userDO = fakeUserDO([
-      task({ takenOnAt: "2023-11-14T00:00:00.000Z" }),
-    ]);
+  it("moves a task into a project", async () => {
+    const userDO = fakeUserDO([task({ showUpDate: "2023-11-14" })]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
     const res = await app.request("/api/tasks/id-1", {
@@ -297,7 +285,8 @@ describe("PATCH /api/tasks/{id}", () => {
     expect(res.status).toBe(200);
     const body: { task: Task } = await res.json();
     expect(body.task.projectId).toBe(UUID_1);
-    expect(body.task.takenOnAt).toBeNull();
+    // The date is the sole commitment gate; filing does not change it.
+    expect(body.task.showUpDate).toBe("2023-11-14");
   });
 
   it("clears the project with null (task becomes loose)", async () => {

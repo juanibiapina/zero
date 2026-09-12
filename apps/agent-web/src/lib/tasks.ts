@@ -19,7 +19,6 @@ export async function addTask(task: {
   text: string;
   showUpDate: string | null;
   projectId: string | null;
-  takenOnAt: string | null;
   sourceCaptureId: string | null;
 }): Promise<Task> {
   const res = await fetch("/api/tasks", {
@@ -29,22 +28,6 @@ export async function addTask(task: {
   });
   if (!res.ok) {
     throw new Error(`POST /api/tasks failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { task: Task };
-  return body.task;
-}
-
-export async function setTaskTakenOn(
-  id: string,
-  takenOnAt: string | null,
-): Promise<Task> {
-  const res = await fetch(`/api/tasks/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ takenOnAt }),
-  });
-  if (!res.ok) {
-    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
   }
   const body = (await res.json()) as { task: Task };
   return body.task;

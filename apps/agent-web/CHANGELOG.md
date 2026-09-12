@@ -2,6 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-12: The take-on star is gone — giving a project task a date is now how you commit it. On a project's page each task shows a date chip; click it and pick Today to bring the task to Home (the project turns active), or leave it with no date to keep grooming it there. New tasks you add on a project start with no date. Everything else works the same: a future date shows the project as waiting until that day, and a dated task returns to Home on its day.
 - 2026-09-12: A project waiting on a condition now shows how long it's been waiting as "for 5 days", matching the "until <day>" label on a project waiting for a date.
 - 2026-09-12: Deleting a project now also deletes all of its tasks and everything it was waiting on, so nothing is left behind with no project to belong to. Deleting a project is still permanent — there's no undo.
 - 2026-09-12: Pushing a project task you've taken on to a future day now moves the project to Waiting and shows the day it's waiting until (e.g. "until Tue"), on both the project's page and its row in the Projects list. The task leaves Home and returns on its own when the day arrives — the project turns active again with nothing to re-star. A task you dated but never took on stays on the project's page until you do.

@@ -163,7 +163,6 @@ jest.mock('@/lib/api', () => ({
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
   reopenTask: (getToken: unknown, id: string) => mockReopenTask(getToken, id),
-  setTaskTakenOn: () => Promise.reject(new Error('not used')),
 }));
 
 const project = (
@@ -187,7 +186,6 @@ const taskRow = (id: string, text: string): Task => ({
   createdAt: '2023-01-01T00:00:00.000Z',
   completedAt: null,
   projectId: '1',
-  takenOnAt: null,
   sortKey: null,
 });
 
@@ -252,14 +250,13 @@ describe('ProjectDetailScreen', () => {
     expect(queryByText('Waiting on')).toBeNull();
   });
 
-  it('shows a derived "until <day>" reason for a future-dated taken-on task', async () => {
-    // A taken-on task dated in the far future makes the project wait until that
-    // day, with no stored condition. The Waiting-on section surfaces it as an
-    // automatic reason (no Resolve/delete).
+  it('shows a derived "until <day>" reason for a future-dated task', async () => {
+    // A task dated in the far future makes the project wait until that day, with
+    // no stored condition. The Waiting-on section surfaces it as an automatic
+    // reason (no Resolve/delete).
     mockFetchTasks.mockResolvedValue([
       {
         ...taskRow('t1', 'book flights'),
-        takenOnAt: '2023-01-02T00:00:00.000Z',
         showUpDate: '2099-12-31',
       },
     ]);
@@ -284,7 +281,6 @@ describe('ProjectDetailScreen', () => {
         createdAt: '2023-01-01T00:00:00.000Z',
         completedAt: null,
         projectId: task.projectId,
-        takenOnAt: null,
         sortKey: null,
       };
       mockFetchTasks.mockResolvedValue([added]);

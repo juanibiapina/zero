@@ -91,7 +91,6 @@ export async function addTask(
     text: string;
     showUpDate: string | null;
     projectId: string | null;
-    takenOnAt: string | null;
     sourceCaptureId: string | null;
   },
   baseUrl: string = API_BASE_URL,
@@ -149,28 +148,7 @@ export async function reopenTask(
   return body.task;
 }
 
-export async function setTaskTakenOn(
-  getToken: TokenGetter,
-  id: string,
-  takenOnAt: string | null,
-  baseUrl: string = API_BASE_URL,
-): Promise<Task> {
-  const res = await apiFetch(
-    getToken,
-    `/api/tasks/${id}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ takenOnAt }),
-    },
-    baseUrl,
-  );
-  if (!res.ok) {
-    throw new Error(`PATCH /api/tasks/${id} failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { task: Task };
-  return body.task;
-}
+
 
 export async function editTask(
   getToken: TokenGetter,

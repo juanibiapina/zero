@@ -10,7 +10,6 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   createdAt: "2024-01-01T00:00:00.000Z",
   completedAt: null,
   projectId: null,
-  takenOnAt: null,
   sortKey: null,
   ...over,
 });
@@ -50,21 +49,20 @@ describe("upcomingSections", () => {
     expect(sections[0].tasks.map((t) => t.id)).toEqual(["open"]);
   });
 
-  it("has no other gate: parks any future task regardless of takenOnAt/project", () => {
+  it("has no other gate: parks any future task regardless of project", () => {
     const sections = upcomingSections(
       [
         task("loose-future", { showUpDate: "2024-01-12" }),
-        task("proj-parked", {
+        task("proj-future", {
           showUpDate: "2024-01-12",
           projectId: "p",
-          takenOnAt: null,
         }),
       ],
       today,
     );
     expect(sections[0].tasks.map((t) => t.id).sort()).toEqual([
       "loose-future",
-      "proj-parked",
+      "proj-future",
     ]);
   });
 

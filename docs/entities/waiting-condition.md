@@ -60,12 +60,13 @@ one module (`packages/agent-core/src/projects/derive.ts`) because a
 mutually recursive; the condition check compares against a project's *base*
 status (active/next/backlog/done, ignoring waiting) to keep that finite. A
 project with an unresolved condition displays `waiting` **only when nothing is
-taken on**: a taken-on open task makes the project display `active` even with an
-open condition (taking a task on overrides waiting). So the order is active
-(taken-on open task) → waiting (open condition, nothing taken on) → next.
-Completing that task drops the project back to waiting, not next, because the
-condition is still open. `homeTasks` gates on that derived status: a waiting
-project's tasks leave Today, and starring one brings it (and the task) back.
+dated-and-arrived**: a shown-up dated open task makes the project display `active`
+even with an open condition (dating a task overrides waiting — the date is the
+sole commitment gate, see `docs/plans/todo-retire-take-on.md`). So the order is
+active (shown-up dated open task) → waiting (open condition, nothing dated) →
+next. Completing that task drops the project back to waiting, not next, because
+the condition is still open. `homeTasks` gates on that derived status: a waiting
+project's tasks leave Home, and dating one brings it (and the task) back.
 
 The oldest unresolved condition also fixes **how long the project has been
 waiting**: `waitingSince` (same module) returns that condition's `createdAt`, and
@@ -77,7 +78,7 @@ condition drops it from the set, so the badge and order always match the derived
 ### Derived date wait (no stored condition)
 
 A project can also display `waiting` with **no** `waiting_conditions` row: when it
-holds a future-dated **taken-on** open task, it waits until that task's day.
+holds a future-dated open task, it waits until that task's day.
 `waitingUntil` (same module) returns the soonest such `showUpDate`, and
 `projectDisplayStatus` reads `waiting` when it is set and nothing is
 active/otherwise-waiting. The day the task's date arrives it becomes shown-up,

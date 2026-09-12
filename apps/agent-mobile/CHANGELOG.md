@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-12: The take-on star is gone — giving a project task a date is now how you commit it. On a project's screen each task shows a date chip; tap it and pick Today to bring the task to Home (the project turns active), or leave it with no date to keep grooming it there. New tasks you add on a project start with no date. Everything else works the same: a future date shows the project as waiting until that day, and a dated task returns to Home on its day.
 - 2026-09-12: Home scrolls again when it's full, and pull-to-refresh works even when you start the pull on a task instead of from empty space. Swipe-to-postpone, drag-to-reorder, and tap-to-open are unchanged.
 - 2026-09-12: A project waiting on a condition now shows how long it's been waiting as "for 5 days", matching the "until <day>" label on a project waiting for a date.
 - 2026-09-12: Upcoming tasks now show their project's icon before the title, just like Home. Loose tasks show none.

@@ -98,17 +98,6 @@ describe("DbTaskStore", () => {
     expect(cleared?.showUpDate).toBeNull();
   });
 
-  it("takes a task on and parks it", () => {
-    const store = makeStore();
-    store.add("id-1", "buy milk", null, "proj-1");
-
-    const takenOn = store.setTakenOn("id-1", "2023-11-14T00:00:00.000Z");
-    expect(takenOn?.takenOnAt).toBe("2023-11-14T00:00:00.000Z");
-
-    const parked = store.setTakenOn("id-1", null);
-    expect(parked?.takenOnAt).toBeNull();
-  });
-
   it("reorders a task between two others via a client-minted sort key", () => {
     const store = makeStore();
     const a = store.add("id-1", "a"); // sortKey "a0"
@@ -131,26 +120,31 @@ describe("DbTaskStore", () => {
     expect(edited?.text).toBe("buy oat milk");
   });
 
-  it("moves a loose task into a project and clears takenOnAt", () => {
+  it("moves a loose task into a project", () => {
     const store = makeStore();
-    // A loose task the Home quick-add took on (a timestamp).
-    store.add("id-1", "buy milk", null, null, "2023-11-14T00:00:00.000Z");
+    store.add("id-1", "buy milk");
 
     const moved = store.setProject("id-1", "proj-1");
     expect(moved?.projectId).toBe("proj-1");
-    // Filing into a project parks it: it must obey the project's curation gate,
-    // not silently stay on Home.
-    expect(moved?.takenOnAt).toBeNull();
   });
 
-  it("moves a task back to loose and leaves takenOnAt untouched", () => {
+  it("moves a task back to loose", () => {
     const store = makeStore();
-    store.add("id-1", "buy milk", null, "proj-1", "2023-11-14T00:00:00.000Z");
+    store.add("id-1", "buy milk", null, "proj-1");
 
     const loosened = store.setProject("id-1", null);
     expect(loosened?.projectId).toBeNull();
-    // Clearing to loose does not touch takenOnAt (a loose task ignores it).
-    expect(loosened?.takenOnAt).toBe("2023-11-14T00:00:00.000Z");
+  });
+
+  it("keeps a task's show-up date when it moves into a project", () => {
+    const store = makeStore();
+    // A dated task filed into a project keeps its date (the date is the sole
+    // commitment gate; filing does not change it).
+    store.add("id-1", "buy milk", "2023-11-14", null);
+
+    const moved = store.setProject("id-1", "proj-1");
+    expect(moved?.projectId).toBe("proj-1");
+    expect(moved?.showUpDate).toBe("2023-11-14");
   });
 
   it("returns null moving an unknown id", () => {
@@ -169,7 +163,6 @@ describe("DbTaskStore", () => {
       createdAt: "2023-11-14T00:00:02.000Z",
       completedAt: null,
       projectId: null,
-      takenOnAt: null,
       sourceCaptureId: null,
       sortKey: null,
     });
@@ -180,7 +173,6 @@ describe("DbTaskStore", () => {
       createdAt: "2023-11-14T00:00:01.000Z",
       completedAt: null,
       projectId: null,
-      takenOnAt: null,
       sourceCaptureId: null,
       sortKey: null,
     });

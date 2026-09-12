@@ -9,7 +9,6 @@ import {
   reorderTask,
   rescheduleTask,
   setTaskProject,
-  setTaskTakenOn,
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
@@ -24,7 +23,6 @@ function makeRest(getToken: TokenGetter): TasksRest {
     addTask: (task) => addTask(getToken, task),
     completeTask: (id) => completeTask(getToken, id),
     reopenTask: (id) => reopenTask(getToken, id),
-    setTaskTakenOn: (id, takenOnAt) => setTaskTakenOn(getToken, id, takenOnAt),
     editTask: (id, text) => editTask(getToken, id, text),
     rescheduleTask: (id, showUpDate) => rescheduleTask(getToken, id, showUpDate),
     reorderTask: (id, sortKey) => reorderTask(getToken, id, sortKey),

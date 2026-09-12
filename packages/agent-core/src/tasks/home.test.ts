@@ -29,7 +29,6 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? null,
-    takenOnAt: over.takenOnAt ?? null,
     sortKey: over.sortKey ?? null,
   };
 }
@@ -114,57 +113,54 @@ describe("homeTasks", () => {
     expect(out.map((t) => t.id)).toEqual(["overdue"]);
   });
 
-  it("parks a taken-on task in Upcoming when it is future-dated", () => {
-    // Date-visibility is checked before availability: a future date parks even a
-    // taken-on active-project task.
+  it("hides a future-dated project task (it belongs to Upcoming)", () => {
+    // A project task needs an arrived date; a future date parks it in Upcoming.
     const out = homeTasks(
-      [
-        task({
-          id: "t",
-          projectId: "p",
-          takenOnAt: "2026-01-01T00:00:00.000Z",
-          showUpDate: "2099-01-01",
-        }),
-      ],
+      [task({ id: "t", projectId: "p", showUpDate: "2099-01-01" })],
       [project("p", "active")],
       TODAY,
     );
     expect(out).toEqual([]);
   });
 
-  it("shows a taken-on task whose project is active", () => {
+  it("shows a project task whose arrived date makes its project active", () => {
     const out = homeTasks(
-      [task({ id: "t", projectId: "p", takenOnAt: "2026-01-01T00:00:00.000Z" })],
-      [project("p", "active")],
+      [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
+      [project("p", "next")],
       TODAY,
     );
     expect(out.map((t) => t.id)).toEqual(["t"]);
   });
 
-  it("hides a parked task even when its project is active", () => {
+  it("hides an undated (groomed) project task even alongside a dated one", () => {
+    // The dated task makes the project active; the undated task is groomed and
+    // stays on the project screen only (the loose/project null-date asymmetry).
     const out = homeTasks(
-      [task({ id: "t", projectId: "p", takenOnAt: null })],
-      [project("p", "active")],
+      [
+        task({ id: "dated", projectId: "p", showUpDate: "2026-01-01" }),
+        task({ id: "groomed", projectId: "p", showUpDate: null }),
+      ],
+      [project("p", "next")],
       TODAY,
     );
-    expect(out).toEqual([]);
+    expect(out.map((t) => t.id)).toEqual(["dated"]);
   });
 
-  it("shows a taken-on task even when its project has an unresolved condition", () => {
-    // Taking a task on overrides waiting: the project displays active again, so
-    // the task shows.
+  it("shows a dated project task even when its project has an unresolved condition", () => {
+    // Dating a task overrides waiting: the project displays active again, so the
+    // task shows.
     const out = homeTasks(
-      [task({ id: "t", projectId: "p", takenOnAt: "2026-01-02T00:00:00.000Z" })],
-      [project("p", "active")],
+      [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
+      [project("p", "next")],
       TODAY,
       [freeTextCondition("p")],
     );
     expect(out.map((t) => t.id)).toEqual(["t"]);
   });
 
-  it("hides a parked task on a project with an unresolved condition (waiting)", () => {
+  it("hides an undated project task on a project with an unresolved condition (waiting)", () => {
     const out = homeTasks(
-      [task({ id: "t", projectId: "p", takenOnAt: null })],
+      [task({ id: "t", projectId: "p", showUpDate: null })],
       [project("p", "next")],
       TODAY,
       [freeTextCondition("p")],
@@ -172,17 +168,15 @@ describe("homeTasks", () => {
     expect(out).toEqual([]);
   });
 
-  it("hides a task whose project is not active", () => {
+  it("hides a dated project task under a backlog or done project", () => {
     const projects = [
-      project("next", "next"),
-      project("waiting", "waiting"),
       project("backlog", "backlog"),
+      project("done", "done"),
     ];
     const out = homeTasks(
       [
-        task({ id: "n", projectId: "next" }),
-        task({ id: "w", projectId: "waiting" }),
-        task({ id: "b", projectId: "backlog" }),
+        task({ id: "b", projectId: "backlog", showUpDate: "2026-01-01" }),
+        task({ id: "d", projectId: "done", showUpDate: "2026-01-01" }),
         task({ id: "loose", projectId: null }),
       ],
       projects,

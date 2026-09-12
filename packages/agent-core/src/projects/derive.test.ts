@@ -47,7 +47,6 @@ function task(over: Partial<Task>): Task {
     createdAt: "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? "p",
-    takenOnAt: over.takenOnAt ?? null,
     sortKey: over.sortKey ?? null,
   };
 }
@@ -58,30 +57,34 @@ describe("projectDisplayStatus", () => {
     expect(projectDisplayStatus(project("done"), [], TODAY)).toBe("done");
   });
 
-  it("is next when in play with no taken-on task", () => {
+  it("is next when in play with no dated task", () => {
     expect(projectDisplayStatus(project("next"), [], TODAY)).toBe("next");
-    expect(
-      projectDisplayStatus(project("next"), [task({ takenOnAt: null })], TODAY),
-    ).toBe("next");
-  });
-
-  it("is active when in play with a shown-up taken-on open task", () => {
     expect(
       projectDisplayStatus(
         project("next"),
-        [task({ takenOnAt: "2026-01-02T00:00:00.000Z" })],
+        [task({ showUpDate: null })],
+        TODAY,
+      ),
+    ).toBe("next");
+  });
+
+  it("is active when in play with a shown-up dated open task", () => {
+    expect(
+      projectDisplayStatus(
+        project("next"),
+        [task({ showUpDate: "2026-01-01" })],
         TODAY,
       ),
     ).toBe("active");
   });
 
-  it("ignores a completed taken-on task (drops back to next)", () => {
+  it("ignores a completed dated task (drops back to next)", () => {
     expect(
       projectDisplayStatus(
         project("active"),
         [
           task({
-            takenOnAt: "2026-01-02T00:00:00.000Z",
+            showUpDate: "2026-01-01",
             completedAt: "2026-01-03T00:00:00.000Z",
           }),
         ],
@@ -94,28 +97,28 @@ describe("projectDisplayStatus", () => {
     expect(
       projectDisplayStatus(
         project("next"),
-        [task({ projectId: "other", takenOnAt: "2026-01-02T00:00:00.000Z" })],
+        [task({ projectId: "other", showUpDate: "2026-01-01" })],
         TODAY,
       ),
     ).toBe("next");
   });
 
-  it("is waiting when an unresolved condition exists and nothing is taken on", () => {
+  it("is waiting when an unresolved condition exists and nothing is dated", () => {
     expect(
       projectDisplayStatus(project("next"), [], TODAY, [condition({})]),
     ).toBe("waiting");
   });
 
-  it("a shown-up taken-on open task overrides an unresolved condition (active, not waiting)", () => {
-    const taken = task({ takenOnAt: "2026-01-02T00:00:00.000Z" });
+  it("a shown-up dated open task overrides an unresolved condition (active, not waiting)", () => {
+    const dated = task({ showUpDate: "2026-01-01" });
     expect(
-      projectDisplayStatus(project("next"), [taken], TODAY, [condition({})]),
+      projectDisplayStatus(project("next"), [dated], TODAY, [condition({})]),
     ).toBe("active");
   });
 
-  it("drops back to waiting (not next) when the taken-on task is completed", () => {
+  it("drops back to waiting (not next) when the dated task is completed", () => {
     const done = task({
-      takenOnAt: "2026-01-02T00:00:00.000Z",
+      showUpDate: "2026-01-01",
       completedAt: "2026-01-03T00:00:00.000Z",
     });
     expect(
@@ -131,76 +134,60 @@ describe("projectDisplayStatus", () => {
     ).toBe("next");
   });
 
-  // --- date-aware cases (plan 3) ---
+  // --- date-aware cases ---
 
-  it("a future-dated taken-on task does not keep the project active", () => {
-    const future = task({
-      takenOnAt: "2026-01-02T00:00:00.000Z",
-      showUpDate: "2026-07-01",
-    });
+  it("a future-dated task does not keep the project active (waits until its day)", () => {
+    const future = task({ showUpDate: "2026-07-01" });
     expect(projectDisplayStatus(project("next"), [future], TODAY)).toBe(
       "waiting",
     );
   });
 
-  it("derives waiting from a future-dated taken-on task with no condition", () => {
-    const future = task({
-      takenOnAt: "2026-01-02T00:00:00.000Z",
-      showUpDate: "2026-07-01",
-    });
-    expect(projectDisplayStatus(project("next"), [future], TODAY)).toBe(
-      "waiting",
-    );
-  });
-
-  it("returns to active when a taken-on task's date arrives (shown up)", () => {
-    const arrived = task({
-      takenOnAt: "2026-01-02T00:00:00.000Z",
-      showUpDate: TODAY,
-    });
+  it("returns to active when a dated task's date arrives (shown up)", () => {
+    const arrived = task({ showUpDate: TODAY });
     expect(projectDisplayStatus(project("next"), [arrived], TODAY)).toBe(
       "active",
     );
   });
 
-  it("is next (not waiting) for a not-taken task whose date passed", () => {
-    const shownUpNotTaken = task({ takenOnAt: null, showUpDate: "2026-05-01" });
-    expect(
-      projectDisplayStatus(project("next"), [shownUpNotTaken], TODAY),
-    ).toBe("next");
+  it("is next (not waiting) for an undated (groomed) task", () => {
+    const groomed = task({ showUpDate: null });
+    expect(projectDisplayStatus(project("next"), [groomed], TODAY)).toBe(
+      "next",
+    );
   });
 });
 
 describe("waitingUntil", () => {
-  it("is null when the project has no future-dated taken-on task", () => {
+  it("is null when the project has no future-dated task", () => {
     expect(waitingUntil(project("next"), [], TODAY)).toBeNull();
     expect(
       waitingUntil(
         project("next"),
-        [task({ takenOnAt: "2026-01-02T00:00:00.000Z", showUpDate: TODAY })],
+        [task({ showUpDate: TODAY })],
         TODAY,
       ),
     ).toBeNull();
   });
 
-  it("picks the soonest of several future taken-on tasks", () => {
+  it("picks the soonest of several future-dated tasks", () => {
     const out = waitingUntil(
       project("next"),
       [
-        task({ id: "a", takenOnAt: "2026-01-02T00:00:00.000Z", showUpDate: "2026-09-01" }),
-        task({ id: "b", takenOnAt: "2026-01-02T00:00:00.000Z", showUpDate: "2026-07-15" }),
-        task({ id: "c", takenOnAt: "2026-01-02T00:00:00.000Z", showUpDate: "2026-08-01" }),
+        task({ id: "a", showUpDate: "2026-09-01" }),
+        task({ id: "b", showUpDate: "2026-07-15" }),
+        task({ id: "c", showUpDate: "2026-08-01" }),
       ],
       TODAY,
     );
     expect(out).toBe("2026-07-15");
   });
 
-  it("ignores a future-dated task that is not taken on", () => {
+  it("ignores a completed future-dated task", () => {
     expect(
       waitingUntil(
         project("next"),
-        [task({ takenOnAt: null, showUpDate: "2026-07-01" })],
+        [task({ showUpDate: "2026-07-01", completedAt: "2026-06-02" })],
         TODAY,
       ),
     ).toBeNull();

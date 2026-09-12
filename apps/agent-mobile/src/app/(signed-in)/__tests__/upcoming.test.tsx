@@ -57,7 +57,6 @@ jest.mock('@/lib/api', () => ({
   rescheduleTask: (getToken: unknown, id: string, date: string | null) =>
     mockRescheduleTask(getToken, id, date),
   reorderTask: jest.fn(),
-  setTaskTakenOn: jest.fn(),
   setTaskProject: jest.fn(),
   // Upcoming reads projects to show each project task's icon.
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
@@ -80,7 +79,6 @@ const task = (
   completedAt: null,
   showUpDate,
   projectId,
-  takenOnAt: null,
   sortKey: null,
 });
 

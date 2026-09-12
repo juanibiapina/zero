@@ -54,7 +54,6 @@ const task = (id: string, text: string): Task => ({
   showUpDate: '2023-01-01',
   completedAt: null,
   projectId: null,
-  takenOnAt: null,
   sortKey: null,
 });
 
@@ -99,7 +98,6 @@ describe('addTask', () => {
         text: 'call plumber',
         showUpDate: '2023-01-01',
         projectId: null,
-        takenOnAt: null,
         sourceCaptureId: null,
       },
       'https://example.test',
@@ -114,7 +112,6 @@ describe('addTask', () => {
       text: 'call plumber',
       showUpDate: '2023-01-01',
       projectId: null,
-      takenOnAt: null,
       sourceCaptureId: null,
     });
   });

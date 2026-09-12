@@ -24,9 +24,11 @@ Capture data was disposable and dropped; task data was preserved (migration
 ## What it is
 
 A single line of work: `text`, an optional `showUpDate`, a `completedAt` that
-flips when done, an optional `projectId` (loose when null), a `takenOnAt`
-curation stamp, a manual-order `sortKey`, and a dormant `sourceCaptureId`.
-Minimal on purpose; no priority or subtasks.
+flips when done, an optional `projectId` (loose when null), a manual-order
+`sortKey`, and a dormant `sourceCaptureId`. Minimal on purpose; no priority or
+subtasks. The show-up date is the **sole commitment gate** for a project task
+(the former take-on/park star was retired — see
+`docs/plans/todo-retire-take-on.md`).
 
 ## Vocabulary
 
@@ -49,8 +51,11 @@ Minimal on purpose; no priority or subtasks.
 - **Reorder** — set `sortKey` to move a task in the manual order. Long-press-drag
   on mobile, grip-drag on web. Store verb `reorder`, RPC `reorderTask`, log
   `task_reordered`. `sortKey` is a fractional index (see Ordering).
-- **Take on / park** — curate a project task onto Home. Column `takenOnAt`, verbs
-  `takeOn` / `park` over `PATCH /api/tasks/{id} { takenOnAt }`.
+- **Commit / groom** — a project task reaches Home by having a **date that has
+  arrived**; giving it a date (Today) is the commitment, clearing the date keeps
+  it groomed on the project screen. There is no separate take-on/park verb — this
+  is `reschedule` (set/clear `showUpDate`). This replaced the retired
+  take-on/park star (`takenOnAt`, dropped in migration 0052).
 - **Deleted with its project** — a task is not orphaned when its project is
   deleted: `DELETE /api/projects/{id}` cascades to every task with that
   `projectId` (open or completed), removing them in the same call
@@ -61,11 +66,11 @@ Minimal on purpose; no priority or subtasks.
   project (or send it back to loose). Store verb `setProject`, RPC
   `setTaskProject`, over `PATCH /api/tasks/{id} { projectId }` (uuid or `null`),
   log `task_moved`; collection verb `moveToProject`. This is the replacement for
-  the clarify/process step the single-list merge removed. **Moving into a project
-  clears `takenOnAt`** (a loose task is always on Home, but a project task must
-  obey the project's curation gate, so filing it parks it); **moving back to loose
-  leaves `takenOnAt` untouched** (a loose task ignores it). Reachable from the
-  task detail's Project row on mobile (Home and Upcoming) and web (Home).
+  the clarify/process step the single-list merge removed. Filing a task into a
+  project changes only `projectId` — the show-up date is the commitment gate, so
+  a dated task stays dated (and on Home if arrived) and an undated one is groomed
+  on the project screen. Reachable from the task detail's Project row on mobile
+  (Home and Upcoming) and web (Home).
 
 ## Data shape
 
@@ -79,8 +84,6 @@ Minimal on purpose; no priority or subtasks.
 - `completedAt` — nullable ISO timestamp; `null` = open.
 - `projectId` — nullable; the project this task belongs to, else loose
   (migration 0047).
-- `takenOnAt` — nullable ISO timestamp; when the user took a project task onto
-  Home (migration 0048). Only gates project tasks; a loose task always shows.
 - `sourceCaptureId` — nullable; **dormant** provenance kept for a future Refine
   (migration 0050).
 - `sortKey` — nullable fractional-index string (base-62) for the manual order;
@@ -98,23 +101,25 @@ serves the open-tasks query.
 - **Complete** a task: it leaves the list at once and a single bottom **Undo**
   snackbar (shared `'undo'` toast id — only one on screen) reopens it. A project
   task's snackbar also names the project and offers an Open deep-link.
-- **Home = open ∧ shown-up ∧ available.** Shown-up is `showUpDate == null ||
-  showUpDate <= today`; available is loose (always) or a project task that is
-  taken-on and whose project displays `active`. Date-visibility is checked before
-  availability, so postponing any task (even taken-on) parks it in Upcoming, and
-  it returns to Home on its day with no re-take step. The rule lives in the pure
-  `homeTasks` seam in `@zero/agent-core`.
-- **Take-on and the date are orthogonal, and both gate a project task's status.**
-  A project is `active` only for a **shown-up** taken-on open task; a taken-on task
-  postponed to a future day does **not** keep its project active — it derives
-  "waiting until <day>" instead, and the day it arrives (shown-up) makes the
-  project active again with no re-take and no write. Take-on is the commitment
-  gate; the date only decides *when* a taken-on task counts. A task you dated but
-  never took on never reaches Home; once its date passes it is shown-up-but-not-
-  taken, so it lives only on the project screen (the project derives `Next`). This
-  date-aware derivation lives in `projectDisplayStatus` / `waitingUntil` (see
-  `docs/entities/waiting-condition.md` and
-  `docs/plans/todo-single-list-3-date-availability.md`).
+- **Home = open ∧ available**, where availability splits loose vs project on the
+  date (the date is the sole commitment gate):
+  - a **loose** task (projectId null) is available when shown-up: `showUpDate ==
+    null` (always relevant) or `showUpDate <= today`. A null date keeps a loose
+    task on Home.
+  - a **project** task is available only when it has a date that has **arrived**
+    (`showUpDate != null && showUpDate <= today`) and its project displays
+    `active`. A null date means the task is **groomed** — project screen only,
+    never Home (the loose/project asymmetry on null). Postponing any task parks it
+    in Upcoming and it returns to Home on its day. The rule lives in the pure
+    `homeTasks` seam in `@zero/agent-core`.
+- **The date is the commitment.** A project is `active` only for a **shown-up
+  dated** open task; a task postponed to a future day does **not** keep its
+  project active — it derives "waiting until <day>" instead, and the day it
+  arrives (shown-up) makes the project active again with no write. An **undated**
+  project task is groomed: it never reaches Home and leaves the project `next`
+  (come groom / schedule one). This date-aware derivation lives in
+  `projectDisplayStatus` / `waitingUntil` (see
+  `docs/entities/waiting-condition.md` and `docs/plans/todo-retire-take-on.md`).
 - **Upcoming** = open ∧ future-dated (`showUpDate > today`), grouped by day, **no
   other gate** — every postponed task, loose or project, taken-on or not
   (`upcomingSections` in `@zero/agent-core`).
@@ -143,30 +148,28 @@ serves the open-tasks query.
   sheet. Quick-add adds a task by default and can switch to a project.
 - **Storage** — the server domain store is `DbTaskStore` (`add` mints the trailing
   `sortKey`; `list` = every open task in manual order, no visibility filter — the
-  client splits Home/Upcoming; `complete` / `reopen` / `setTakenOn` / `editText` /
+  client splits Home/Upcoming; `complete` / `reopen` / `editText` /
   `reschedule` / `reorder` / `setProject` / `deleteByProject` (the project-delete
   cascade) / `backfillSortKeys`). See `docs/storage.md`.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, every open task in manual order (future-dated
     included); the client splits Home and Upcoming.
-  - `POST /api/tasks { id, text, showUpDate?, projectId?, takenOnAt?, sourceCaptureId? }`
+  - `POST /api/tasks { id, text, showUpDate?, projectId?, sourceCaptureId? }`
     → `201 { task }`; `showUpDate` optional (a loose task omits it). The server
     dedupes on the client `id`. `400` on empty text or a non-UUID id.
   - `POST /api/tasks/{id}/complete` and `/reopen` → `200 { task }`, `404` unknown.
-  - `PATCH /api/tasks/{id} { text?, showUpDate?, sortKey?, takenOnAt?, projectId? }`
+  - `PATCH /api/tasks/{id} { text?, showUpDate?, sortKey?, projectId? }`
     → `200 { task }`, `404` unknown, `400` on empty text / malformed date /
     non-UUID projectId / no field. One partial update carries edit, reschedule,
-    reorder, take-on, and move-to-project; in practice each PATCH carries one
-    intent. `projectId` accepts a uuid or `null` (clear to loose); moving into a
-    project clears `takenOnAt` server-side.
+    reorder, and move-to-project; in practice each PATCH carries one intent.
+    `projectId` accepts a uuid or `null` (clear to loose).
   - Logs `task_added` / `task_completed` / `task_reopened` / `task_edited` /
-    `task_rescheduled` / `task_reordered` / `task_taken_on` / `task_moved`.
+    `task_rescheduled` / `task_reordered` / `task_moved`.
 - **Data layer** — a TanStack DB collection (`createTasksApi` in
   `@zero/agent-core`); the update verbs are told apart by their changed field set
   (sortKey → reorder, showUpDate → reschedule, completedAt → complete, projectId →
-  move-to-project [before take-on, since a move also clears takenOnAt], takenOnAt →
-  take-on, else → edit), and reopen is a `revive` verb (re-inserts an evicted
-  row). See `docs/storage.md`.
+  move-to-project, else → edit), and reopen is a `revive` verb (re-inserts an
+  evicted row). See `docs/storage.md`.
 - **Timezone lives on the client.** The server returns every open task; the
   client splits Home/Upcoming against its own local today (`localToday` in
   `@zero/agent-core`), so the DO needs no timezone.

@@ -245,8 +245,9 @@ function QuickRow({
 // The schedule selector: a plain React Native modal, NOT an @expo/ui tree, so it
 // reproduces Todoist's scheduler — quick options with the resolved weekday on the
 // right, an inline month calendar, and a "No date" row. It sets a task's
-// showUpDate (a plain date; no time, no recurrence).
-function ScheduleSheet({
+// showUpDate (a plain date; no time, no recurrence). Exported so the project
+// screen's per-task date chip opens the same scheduler as the detail sheet.
+export function ScheduleSheet({
   open,
   showUpDate,
   onPick,

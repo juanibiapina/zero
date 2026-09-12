@@ -213,9 +213,6 @@ export const tasks = table("tasks", {
   // The Project this task belongs to, or NULL when the task is loose. See
   // migration 0047.
   projectId: column.text(),
-  // When the user took this task on (curated it onto Home), or NULL when parked.
-  // Only gates project tasks; loose tasks always show. See migration 0048.
-  takenOnAt: column.text(),
   // The capture this task was refined from, or NULL. Dormant after the merge
   // (Refine returns later over all tasks). See migration 0050.
   sourceCaptureId: column.text(),

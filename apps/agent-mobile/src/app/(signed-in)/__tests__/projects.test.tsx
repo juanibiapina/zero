@@ -86,7 +86,6 @@ jest.mock('@/lib/api', () => ({
   fetchTasks: () => Promise.resolve([]),
   addTask: () => Promise.reject(new Error('not used')),
   completeTask: () => Promise.reject(new Error('not used')),
-  setTaskTakenOn: () => Promise.reject(new Error('not used')),
 }));
 
 const project = (

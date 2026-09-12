@@ -9,6 +9,7 @@ import {
   localToday,
   messageOf,
   projectDisplayStatus,
+  scheduleLabel,
   STATUS_LABELS,
   undoableAction,
   waitingUntil,
@@ -38,6 +39,7 @@ import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
 import { QuickAdd } from '@/components/quick-add';
+import { ScheduleSheet } from '@/components/task-detail';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import {
@@ -188,11 +190,12 @@ function ProjectDetail({
     if (!project) return;
     setError(null);
     // Waiting mode records a free-text waiting condition on this project; Task
-    // mode adds a parked task (takenOnAt null — grooming is collect-then-take-on).
+    // mode adds an undated (groomed) task — the date is the sole commitment gate,
+    // so a project-screen task is not on Home until it is given a date here.
     const tx =
       mode === 'waiting'
         ? waitsApi.add(project.id, 'free-text', { text: trimmed })
-        : tasksApi.add(trimmed, localToday(), project.id);
+        : tasksApi.add(trimmed, null, project.id);
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     // Close the quick-add after adding.
     closeAdd();
@@ -589,9 +592,12 @@ function ProjectHeader({
   );
 }
 
-// The project's tasks, groomed in place: complete one with its circle, take it
-// on / park it with the star, add a new one (parked by default — grooming is
-// collect-then-take-on). Plain RN rows, like the list screens.
+// The project's tasks, groomed in place: complete one with its circle, commit it
+// to Home by giving it a date with the date chip (or clear the date to keep
+// grooming it here), add a new one (undated by default — grooming is
+// collect-then-schedule). Plain RN rows, like the list screens. The date is the
+// sole commitment gate (the take-on star is retired); tapping the chip opens the
+// same scheduler as the detail sheet. See docs/plans/todo-retire-take-on.md.
 function ProjectTasks({
   api,
   projectId,
@@ -608,6 +614,10 @@ function ProjectTasks({
       .orderBy(({ t }) => t.createdAt, 'asc'),
   );
   const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
+  const today = localToday();
+  // Which task's scheduler is open (by id), or null.
+  const [scheduling, setScheduling] = useState<string | null>(null);
+  const schedulingTask = list.find((t) => t.id === scheduling) ?? null;
 
   // Completing commits immediately (the row leaves at once) and raises the same
   // single bottom Undo snackbar used on Home; Undo reopens the task.
@@ -620,8 +630,9 @@ function ProjectTasks({
     });
   };
 
-  const onToggleTakenOn = (t: Task) => {
-    const tx = t.takenOnAt ? api.park(t.id) : api.takeOn(t.id);
+  const onPick = (id: string, showUpDate: string | null) => {
+    setScheduling(null);
+    const tx = api.reschedule(id, showUpDate);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
 
@@ -641,22 +652,32 @@ function ProjectTasks({
           <Text className="flex-1">{t.text}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t.takenOnAt ? `Park "${t.text}"` : `Take on "${t.text}"`}
+            accessibilityLabel={
+              t.showUpDate ? `Reschedule "${t.text}"` : `Add a date to "${t.text}"`
+            }
             hitSlop={8}
-            onPress={() => onToggleTakenOn(t)}
+            onPress={() => setScheduling(t.id)}
           >
             <Text
               className={
-                t.takenOnAt
-                  ? 'text-[18px] text-accent'
-                  : 'text-[18px] text-foreground-muted'
+                t.showUpDate
+                  ? 'text-[13px] font-medium text-accent'
+                  : 'text-[13px] text-foreground-muted'
               }
             >
-              {t.takenOnAt ? '★' : '☆'}
+              {t.showUpDate ? scheduleLabel(t.showUpDate, today) : 'No date'}
             </Text>
           </Pressable>
         </View>
       ))}
+      <ScheduleSheet
+        open={schedulingTask != null}
+        showUpDate={schedulingTask?.showUpDate}
+        onPick={(d) => {
+          if (schedulingTask) onPick(schedulingTask.id, d);
+        }}
+        onClose={() => setScheduling(null)}
+      />
     </View>
   );
 }

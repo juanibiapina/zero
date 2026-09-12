@@ -10,7 +10,6 @@ import {
   reorderTask,
   rescheduleTask,
   setTaskProject,
-  setTaskTakenOn,
 } from "./tasks";
 
 export type { TasksApi };
@@ -24,7 +23,6 @@ export const getTasksApi = defineWebEntityApi((deps) =>
       addTask,
       completeTask,
       reopenTask,
-      setTaskTakenOn,
       editTask,
       rescheduleTask,
       reorderTask,

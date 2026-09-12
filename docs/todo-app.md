@@ -161,6 +161,30 @@ committed.
 
 ## Project tracking
 
+Implemented, device verification pending (2026-09-12): **Retire take-on — the
+show-up date is the sole commitment gate** (plan:
+`docs/plans/todo-retire-take-on.md`). The take-on/park star (`takenOnAt`) is gone
+end to end: a project task reaches Home only when it has a date that has arrived
+(`showUpDate <= today`) and its project is `active`; an undated project task is
+groomed on the project screen only (the loose/project null-date asymmetry — a
+loose task with no date still always shows on Home). Committing a groomed task is
+now "give it a date" (Today), reusing `reschedule`; there is no separate verb. The
+project screen's per-task star became a **date chip** (web + mobile) opening the
+existing scheduler; picking Today commits the task and flips the project active,
+"No date" keeps it groomed. New tasks added on a project start **undated**. The
+derivation swapped its predicate from "taken-on" to "has a shown-up date"
+(`projectBaseStatus`, `waitingUntil`, `homeTasks`), so a future-dated task is now
+itself the commitment that drives "waiting until <day>" and Upcoming, and a
+shown-up dated task overrides an open waiting condition. Migration 0052 drops the
+`takenOnAt` column (rebuild), backfilling any undated taken-on row to
+`date(takenOnAt)` so it stays on Home (zero rows in practice). The `takenOnAt`
+field/verb/log left the store, routes, `UserDO`, the `Task` type, the collection,
+and both surfaces' REST + UI. Web reused a shared `ScheduleMenu` component; mobile
+reused the detail sheet's `ScheduleSheet`. Server + agent-core + web suites pass;
+mobile unit tests pass; **Pixel 7 device verification pending**. Supersedes
+Decision A of `docs/plans/todo-project-task-row-parity.md` (the star is replaced,
+not kept).
+
 Shipped (2026-09-12): **Delete a project cascades to its tasks and waiting
 conditions** (plan: `docs/plans/todo-project-delete-cascade.md`). Deleting a
 project no longer leaves

@@ -89,7 +89,7 @@ function project(velocity: number, decelerationRate = 0.998): number {
 // One task row in the single Home list: long-press the text to drag-reorder,
 // swipe right to postpone (to tomorrow), tap the circle to complete, tap the
 // text to open its detail sheet. A project task also shows its project's icon
-// badge and a park star. The swipe is a swipe-to-commit (one decisive swipe =
+// badge. The swipe is a swipe-to-commit (one decisive swipe =
 // the action), so it is a hand-built Gesture.Pan, not ReanimatedSwipeable. The
 // row is flat (Todoist style): the sliding card is opaque so it covers the
 // "Tomorrow" reveal beneath it, and a hairline divider sits under the row and
@@ -111,15 +111,13 @@ function TaskRow({
   onComplete,
   onReschedule,
   onOpen,
-  onPark,
 }: {
   item: Task;
-  // The task's project icon, or null for a loose task (shows no badge/star).
+  // The task's project icon, or null for a loose task (shows no badge).
   icon: string | null;
   onComplete: (item: Task) => void;
   onReschedule: (item: Task) => void;
   onOpen: (item: Task) => void;
-  onPark: (item: Task) => void;
 }) {
   const { width } = useWindowDimensions();
   const reduced = useReducedMotion();
@@ -194,18 +192,6 @@ function TaskRow({
             >
               <Text>{item.text}</Text>
             </Pressable>
-            {/* A project task carries a park star (send it back to the project
-                screen); a loose task has none — it is an immediate to-do. */}
-            {item.projectId ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Park "${item.text}"`}
-                hitSlop={8}
-                onPress={() => onPark(item)}
-              >
-                <Text className="text-[18px] text-accent">★</Text>
-              </Pressable>
-            ) : null}
           </Animated.View>
         </GestureDetector>
       </View>
@@ -474,16 +460,6 @@ function Home({
     [api, today],
   );
 
-  // Park a project task (send it back to the project screen).
-  const onPark = useCallback(
-    (item: Task) => {
-      setWriteError(null);
-      const tx = api.park(item.id);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    },
-    [api],
-  );
-
   // Complete: commit immediately (the row leaves at once) + a single bottom Undo
   // snackbar (shared 'undo' id). A project task also names its project and offers
   // an Open deep-link; a loose task shows neither. Undo reopens the task.
@@ -536,10 +512,9 @@ function Home({
         onComplete={onComplete}
         onReschedule={onReschedule}
         onOpen={detail.open}
-        onPark={onPark}
       />
     ),
-    [iconOf, onComplete, onReschedule, detail.open, onPark],
+    [iconOf, onComplete, onReschedule, detail.open],
   );
 
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);

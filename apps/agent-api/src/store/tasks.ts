@@ -26,8 +26,6 @@ export interface Task {
   completedAt: string | null;
   // The Project this task belongs to, or null when the task is loose.
   projectId: string | null;
-  // When the user took this task on (curated it onto Home), or null when parked.
-  takenOnAt: string | null;
   // The capture this task was refined from, or null. Dormant after the merge.
   sourceCaptureId: string | null;
   // Fractional-index sort key for the manual list order, or null (unkeyed,
@@ -45,7 +43,6 @@ function toTask(row: {
   createdAt: string;
   completedAt: string | null;
   projectId: string | null;
-  takenOnAt: string | null;
   sourceCaptureId: string | null;
   sortKey: string | null;
 }): Task {
@@ -56,7 +53,6 @@ function toTask(row: {
     createdAt: row.createdAt,
     completedAt: row.completedAt,
     projectId: row.projectId,
-    takenOnAt: row.takenOnAt,
     sourceCaptureId: row.sourceCaptureId,
     sortKey: row.sortKey,
   };
@@ -94,7 +90,6 @@ export class DbTaskStore {
     text: string,
     showUpDate: string | null = null,
     projectId: string | null = null,
-    takenOnAt: string | null = null,
     sourceCaptureId: string | null = null,
   ): Task {
     const existingById = this.db.get(tasks, { where: eq("id", id) });
@@ -107,7 +102,6 @@ export class DbTaskStore {
       createdAt: new Date().toISOString(),
       completedAt: null,
       projectId,
-      takenOnAt,
       sourceCaptureId,
       sortKey: generateKeyBetween(max?.sortKey ?? null, null),
     };
@@ -127,15 +121,6 @@ export class DbTaskStore {
       })
       .map(toTask)
       .sort(byOrder);
-  }
-
-  // Take a task on (takenOnAt = a timestamp) or park it (takenOnAt = null). One
-  // verb carries both; idempotent on the id, so a replayed offline write is
-  // safe. Returns the updated row, or null when no row has that id.
-  setTakenOn(id: string, takenOnAt: string | null): Task | null {
-    this.db.update(tasks, { takenOnAt }, { where: eq("id", id) });
-    const row = this.db.get(tasks, { where: eq("id", id) });
-    return row ? toTask(row) : null;
   }
 
   // Returns the updated row, or null when no row has that id.
@@ -178,18 +163,12 @@ export class DbTaskStore {
   }
 
   // Move a task into a project (projectId = a uuid) or back to loose (null).
-  // Moving INTO a project also clears takenOnAt in the same update: a loose task
-  // is always on Home, but once it belongs to a project it must obey the
-  // project's curation gate (taken-on + active) rather than silently staying on
-  // Home, so filing it parks it. Moving OUT to loose leaves takenOnAt untouched
-  // (a loose task ignores it). Same-key idempotent update on the stable id;
-  // returns the updated row, or null when no row has that id.
+  // Same-key idempotent update on the stable id; returns the updated row, or
+  // null when no row has that id. The show-up date is the sole commitment gate,
+  // so filing a task into a project no longer changes any other field: an
+  // undated task is groomed on the project screen, a dated one shows on Home.
   setProject(id: string, projectId: string | null): Task | null {
-    this.db.update(
-      tasks,
-      projectId != null ? { projectId, takenOnAt: null } : { projectId },
-      { where: eq("id", id) },
-    );
+    this.db.update(tasks, { projectId }, { where: eq("id", id) });
     const row = this.db.get(tasks, { where: eq("id", id) });
     return row ? toTask(row) : null;
   }

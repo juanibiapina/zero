@@ -61,15 +61,18 @@ editable title and notes).
 The stored `status` column is only the deliberate parking value: `backlog` and
 `done` are set by hand. The three in-play states are **derived on the client**
 from the project's tasks by `projectDisplayStatus` (in `@zero/agent-core`): a
-project shows as `active` while it has a **shown-up** (`showUpDate == null ||
-<= today`) taken-on, open task, else `next` ("come groom / take on more"). The
-derivation is **date-aware**: a taken-on task postponed to a future day does not
-keep its project active — the project instead **waits until that day**
-(`waitingUntil`, the soonest such `showUpDate`), and the day it arrives makes the
-project active again with no write. An open waiting condition also shows the
-project as `waiting`, but **a shown-up taken-on open task overrides waiting** —
-starring a shown-up task pulls a waiting project back to `active`; completing that
-task returns it to `waiting` (the condition is still open), not `next`. The list
+project shows as `active` while it has an open task with a date that has
+**arrived** (`showUpDate != null && showUpDate <= today`), else `next` ("come
+groom / schedule one"). The date is the sole commitment gate (the take-on/park
+star was retired — see `docs/plans/todo-retire-take-on.md`). The derivation is
+**date-aware**: an undated task is groomed (never makes a project active); a task
+dated in the future does not keep its project active — the project instead
+**waits until that day** (`waitingUntil`, the soonest such `showUpDate`), and the
+day it arrives makes the project active again with no write. An open waiting
+condition also shows the project as `waiting`, but **a shown-up dated open task
+overrides waiting** — dating a shown-up task pulls a waiting project back to
+`active`; completing that task returns it to `waiting` (the condition is still
+open), not `next`. The list
 groups by this derived status (`projectsByStatus` takes a `statusOf` mapper). A
 waiting project also shows **why/how long it is waiting** as a muted trailing
 badge — the elapsed time since its oldest unresolved condition ("3 days") for a
@@ -167,10 +170,12 @@ no speculative columns before their behavior is designed.
   **title** as an editable heading, a read-only **derived-status pill**, and a
   "⋯" **actions menu** with the status moves and **Delete project**), then the
   project's **description** — its statement of intent, an always-visible editable
-  field directly under the title — then the project's **tasks** (complete,
-  take-on/park; a task is added from a plus button (a FAB) that opens a
-  **task-only** quick-add bar docked to the keyboard — no capture mode, so
-  captures are not selectable here), then its **waiting conditions** (add
+  field directly under the title — then the project's **tasks** (complete each
+  with its circle; each row carries a **date chip** — pick a date to commit the
+  task to Home, or leave it "No date" to keep grooming; a task is added from a
+  plus button (a FAB) that opens a **task-only** quick-add bar docked to the
+  keyboard — no capture mode, so captures are not selectable here, and a new task
+  starts undated), then its **waiting conditions** (add
   revealed on "+"). Field edits commit on blur/submit (the icon on tap). Choosing **Mark
   done** or **Delete project** returns to the list and leaves the row briefly
   struck-through with an inline **Undo** (~5s) before it leaves (delete then
@@ -232,8 +237,8 @@ no speculative columns before their behavior is designed.
   and fetch are per surface. See `docs/plans/todo-project-icon-suggestions.md`.
 - **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
   migration 0047): the project screen lists the project's open tasks and adds one
-  from a plus-button quick-add bar (grooming). A task added from a project is
-  parked (grooming is collect-then-take-on). **Waiting conditions** attach to a project
+  from a plus-button quick-add bar (grooming). A task added from a project starts
+  **undated** (groomed); giving it a date commits it to Home. **Waiting conditions** attach to a project
   (see `docs/entities/waiting-condition.md`). **Refine provenance**:
   `sourceCaptureId` (migration 0050) records the capture a project was refined
   from. The AI Capture → Project conversion is a later slice. **Deleting a project

@@ -10,22 +10,24 @@ import type { Project, ProjectStatus } from "./types";
 // docs/plans/todo-single-list-3-date-availability.md for the date-aware rule):
 //
 //   - backlog / done: the stored value (manual parking).
-//   - active: in play, with a taken-on open task that has *shown up*
-//     (showUpDate null or <= today). This wins even over an unresolved waiting
-//     condition: taking a task on pulls the project back into active work.
-//     Completing that task drops it back to next, at which point an open
-//     condition surfaces as waiting.
-//   - waiting: in play, nothing shown-up-and-taken-on, and either an unresolved
-//     condition OR a future-dated taken-on task (a derived "waiting until <day>",
-//     see waitingUntil).
-//   - next: in play, nothing taken on, no open condition, no future-dated
-//     taken-on task ("come groom / take on more").
+//   - active: in play, with an open task that has a date that has *arrived*
+//     (showUpDate != null AND <= today). The date is the commitment gate (the
+//     take-on star is retired; see docs/plans/todo-retire-take-on.md). This wins
+//     even over an unresolved waiting condition: dating a task pulls the project
+//     back into active work. Completing that task drops it back to next, at which
+//     point an open condition surfaces as waiting.
+//   - waiting: in play, nothing shown-up-and-dated, and either an unresolved
+//     condition OR a future-dated task (a derived "waiting until <day>", see
+//     waitingUntil).
+//   - next: in play, nothing dated (only groomed/undated tasks), no open
+//     condition, no future-dated task ("come groom / schedule one").
 //
-// The derivation is date-aware: a taken-on task postponed to a future day no
-// longer keeps its project active, and its `showUpDate` is what the project
-// waits until. `today` is the user's local day (YYYY-MM-DD); it is always passed
-// in, never computed here, so this module stays timezone-free and its tests stay
-// deterministic (the client owns the day; the server stores the string verbatim).
+// The derivation is date-aware: an undated task is groomed and never makes a
+// project active; a future-dated task is a commitment and its `showUpDate` is
+// what the project waits until. `today` is the user's local day (YYYY-MM-DD); it
+// is always passed in, never computed here, so this module stays timezone-free
+// and its tests stay deterministic (the client owns the day; the server stores
+// the string verbatim).
 //
 // conditionSatisfied / unresolvedConditions and projectDisplayStatus live in one
 // module on purpose: a `project-status` condition asks for another project's
@@ -33,22 +35,22 @@ import type { Project, ProjectStatus } from "./types";
 // check compares against the project's *base* status (active/next/backlog/done,
 // ignoring waiting), so evaluating one project's waiting never re-enters
 // another's. The base status doubling as the active check is also what lets a
-// taken-on task override waiting below. All pure and in-process; tested directly
+// dated task override waiting below. All pure and in-process; tested directly
 // through this interface.
 
-// Whether an open, taken-on task has shown up: no date (loose) or a date at or
-// before today. A future date parks the task, so it does not count for `active`.
-function isShownUpTakenOnOpen(t: Task, today: string): boolean {
+// Whether an open project task has a date that has ARRIVED: a non-null date at
+// or before today. A null date is groomed (not a commitment) and a future date
+// parks the task, so neither counts for `active`. The date is the sole
+// commitment gate (take-on is retired).
+function isShownUpDatedOpen(t: Task, today: string): boolean {
   return (
-    t.completedAt == null &&
-    t.takenOnAt != null &&
-    (t.showUpDate == null || t.showUpDate <= today)
+    t.completedAt == null && t.showUpDate != null && t.showUpDate <= today
   );
 }
 
 // active/next/backlog/done ignoring waiting conditions. The base used both by
 // conditionSatisfied (to avoid recursion) and by projectDisplayStatus. Date-aware:
-// only a shown-up taken-on open task makes a project active.
+// only a shown-up dated open task makes a project active.
 function projectBaseStatus(
   project: Project,
   tasks: Task[],
@@ -57,20 +59,20 @@ function projectBaseStatus(
   if (project.status === "backlog" || project.status === "done") {
     return project.status;
   }
-  const hasShownUpTakenOnOpenTask = tasks.some(
-    (t) => t.projectId === project.id && isShownUpTakenOnOpen(t, today),
+  const hasShownUpDatedOpenTask = tasks.some(
+    (t) => t.projectId === project.id && isShownUpDatedOpen(t, today),
   );
-  return hasShownUpTakenOnOpenTask ? "active" : "next";
+  return hasShownUpDatedOpenTask ? "active" : "next";
 }
 
 // The soonest future day a project is waiting on, derived purely from its tasks:
-// the earliest `showUpDate` among its open, taken-on, future-dated (> today)
-// tasks, or null when it has none. No stored `waiting_conditions` row — the
-// project status already computes from tasks, so a postponed taken-on task's day
-// falls out of the tasks themselves. Completing or re-postponing that task
-// changes the result for free; the day arriving makes the task shown-up, which
-// makes the project active again, with no write on either transition. See
-// docs/plans/todo-single-list-3-date-availability.md.
+// the earliest `showUpDate` among its open, future-dated (> today) tasks, or
+// null when it has none. No stored `waiting_conditions` row — the project status
+// already computes from tasks, so a scheduled task's day falls out of the tasks
+// themselves. A future-dated task is a commitment (the date is the gate), so any
+// such task counts. Completing or re-scheduling that task changes the result for
+// free; the day arriving makes the task shown-up, which makes the project active
+// again, with no write on either transition. See docs/plans/todo-retire-take-on.md.
 export function waitingUntil(
   project: Project,
   tasks: Task[],
@@ -81,7 +83,6 @@ export function waitingUntil(
     if (
       t.projectId === project.id &&
       t.completedAt == null &&
-      t.takenOnAt != null &&
       t.showUpDate != null &&
       t.showUpDate > today
     ) {
@@ -163,13 +164,13 @@ export function projectDisplayStatus(
   projects: Project[] = [],
 ): ProjectStatus {
   const base = projectBaseStatus(project, tasks, today);
-  // backlog/done are terminal; an active project (a shown-up taken-on open task)
-  // stays active even with an open condition — taking a task on overrides waiting.
+  // backlog/done are terminal; an active project (a shown-up dated open task)
+  // stays active even with an open condition — dating a task overrides waiting.
   if (base !== "next") {
     return base;
   }
-  // In play with nothing shown-up-and-taken-on: an open condition or a
-  // future-dated taken-on task (waiting until its day) both read as waiting.
+  // In play with nothing shown-up-and-dated: an open condition or a future-dated
+  // task (waiting until its day) both read as waiting.
   if (
     unresolvedConditions(project, conditions, tasks, projects, today).length > 0
   ) {

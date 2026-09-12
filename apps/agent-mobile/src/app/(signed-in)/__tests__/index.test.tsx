@@ -90,7 +90,6 @@ jest.mock('@/lib/api', () => ({
     mockRescheduleTask(getToken, id, showUpDate),
   reorderTask: (getToken: unknown, id: string, sortKey: string) =>
     mockReorderTask(getToken, id, sortKey),
-  setTaskTakenOn: () => Promise.reject(new Error('not used')),
   setTaskProject: () => Promise.reject(new Error('not used')),
   // Home reads projects (for the project-active gate and the all-clear CTA).
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
@@ -117,7 +116,6 @@ const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   createdAt: '2023-01-01T00:00:00.000Z',
   completedAt: over.completedAt ?? null,
   projectId: over.projectId ?? null,
-  takenOnAt: over.takenOnAt ?? null,
   sortKey: over.sortKey ?? null,
 });
 
@@ -192,7 +190,7 @@ describe('HomeScreen', () => {
     mockFetchTasks.mockResolvedValue([
       taskRow('1', 'mail the letter', {
         projectId: 'p',
-        takenOnAt: '2023-01-02T00:00:00.000Z',
+        showUpDate: '2023-01-02',
       }),
     ]);
     const { getByText } = await renderScreen();
@@ -335,7 +333,7 @@ describe('HomeScreen', () => {
     mockFetchTasks.mockResolvedValue([
       taskRow('1', 'mail the letter', {
         projectId: 'p',
-        takenOnAt: '2023-01-02T00:00:00.000Z',
+        showUpDate: '2023-01-02',
       }),
     ]);
     mockCompleteTask.mockImplementation(async () => {

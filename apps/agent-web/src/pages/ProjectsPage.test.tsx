@@ -136,7 +136,6 @@ const task = (id: string, text: string, projectId: string): Task => ({
   createdAt: "2023-01-01T00:00:00.000Z",
   completedAt: null,
   projectId,
-  takenOnAt: null,
   sortKey: null,
 });
 
@@ -175,7 +174,7 @@ function fakeTasksRest(initial: Task[]): TasksRest {
   const server = initial.map((t) => ({ ...t }));
   return {
     fetchTasks: async () => server.map((t) => ({ ...t })),
-    addTask: async ({ id, text, showUpDate, projectId, takenOnAt }) => {
+    addTask: async ({ id, text, showUpDate, projectId }) => {
       const row: Task = {
         id,
         text,
@@ -183,7 +182,6 @@ function fakeTasksRest(initial: Task[]): TasksRest {
         createdAt: new Date().toISOString(),
         completedAt: null,
         projectId,
-        takenOnAt,
         sortKey: `a${server.length}`,
       };
       server.push(row);
@@ -211,7 +209,6 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       const row = server.find((t) => t.id === id);
       if (!row) throw new Error(`no task ${id}`);
       row.projectId = projectId;
-      if (projectId != null) row.takenOnAt = null;
       return { ...row };
     },
     completeTask: async (id) => {
@@ -224,12 +221,6 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       const row = server.find((t) => t.id === id);
       if (!row) throw new Error(`no task ${id}`);
       row.completedAt = null;
-      return { ...row };
-    },
-    setTaskTakenOn: async (id, takenOnAt) => {
-      const row = server.find((t) => t.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.takenOnAt = takenOnAt;
       return { ...row };
     },
   };
@@ -336,16 +327,15 @@ describe("ProjectsPage", () => {
     ).toBeTruthy();
   });
 
-  it("badges a project waiting only on a future-dated taken-on task with its day, and shows it on the detail screen", async () => {
-    // A 'next' project whose sole task is taken on but dated in the far future
-    // derives to waiting-until — no stored condition. The list badge and the
-    // detail Waiting-on row both read the target day.
+  it("badges a project waiting only on a future-dated task with its day, and shows it on the detail screen", async () => {
+    // A 'next' project whose sole task is dated in the far future derives to
+    // waiting-until — no stored condition. The list badge and the detail
+    // Waiting-on row both read the target day.
     setApi(
       [project("1", "Trip planning", "next")],
       [
         {
           ...task("t1", "book flights", "1"),
-          takenOnAt: "2023-01-02T00:00:00.000Z",
           showUpDate: "2099-12-31",
         },
       ],
@@ -474,8 +464,8 @@ describe("ProjectsPage", () => {
     await waitFor(() => expect(screen.getByText("Backlog")).toBeInTheDocument());
   });
 
-  it("shows a project as Active once one of its tasks is taken on", async () => {
-    // A 'next' project with a taken-on open task derives to Active.
+  it("shows a project as Active once one of its tasks has an arrived date", async () => {
+    // A 'next' project with a shown-up dated open task derives to Active.
     setApi(
       [project("1", "Run a 5K", "next")],
       [
@@ -486,7 +476,6 @@ describe("ProjectsPage", () => {
           createdAt: "2023-01-01T00:00:00.000Z",
           completedAt: null,
           projectId: "1",
-          takenOnAt: "2023-01-02T00:00:00.000Z",
           sortKey: null,
         },
       ],

@@ -35,23 +35,20 @@ export type TasksRest = {
     text: string;
     showUpDate: string | null;
     projectId: string | null;
-    takenOnAt: string | null;
     sourceCaptureId: string | null;
   }) => Promise<Task>;
   completeTask: (id: string) => Promise<Task>;
   // The inverse of complete: clear completedAt so the task returns to the open
   // list. Backs the Home task-complete Undo. Idempotent on the id.
   reopenTask: (id: string) => Promise<Task>;
-  // Take a task on (a timestamp) or park it (null). Idempotent on the id.
-  setTaskTakenOn: (id: string, takenOnAt: string | null) => Promise<Task>;
   // Replace a task's text (title edit). Idempotent on the id.
   editTask: (id: string, text: string) => Promise<Task>;
   // Set (or clear, with null) a task's show-up date. Idempotent on the id.
   rescheduleTask: (id: string, showUpDate: string | null) => Promise<Task>;
   // Set a task's manual sort key (drag-reorder). Idempotent on the id.
   reorderTask: (id: string, sortKey: string) => Promise<Task>;
-  // Move a task into a project (a uuid) or back to loose (null). The server
-  // clears takenOnAt when moving into a project. Idempotent on the id.
+  // Move a task into a project (a uuid) or back to loose (null). Idempotent on
+  // the id.
   setTaskProject: (id: string, projectId: string | null) => Promise<Task>;
 };
 
@@ -69,7 +66,6 @@ export type TasksApi = {
     text: string,
     showUpDate?: string | null,
     projectId?: string | null,
-    takenOnAt?: string | null,
     sourceCaptureId?: string | null,
   ) => Transaction;
   complete: (id: string) => Transaction;
@@ -78,10 +74,6 @@ export type TasksApi = {
   // reconciles the row out of the collection (the server list is open-only), so
   // Undo must be able to re-insert it — see the `revive` verb.
   reopen: (task: Task) => Transaction;
-  // Curation: take a task on (surface it on Home) or park it. `takeOn` stamps a
-  // timestamp now; `park` clears it.
-  takeOn: (id: string) => Transaction;
-  park: (id: string) => Transaction;
   // Replace a task's text optimistically (title edit).
   edit: (id: string, text: string) => Transaction;
   // Set (or clear, with null) a task's show-up date optimistically. Postpone is
@@ -92,8 +84,6 @@ export type TasksApi = {
   // the key between the drop position's neighbors with orderKeyBetween.
   reorder: (id: string, sortKey: string) => Transaction;
   // Move a task into a project (a uuid) or back to loose (null), optimistically.
-  // Moving into a project also clears takenOnAt so the task drops off Home at
-  // once (it must obey the project's curation gate); moving to loose leaves it.
   moveToProject: (id: string, projectId: string | null) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
@@ -107,12 +97,11 @@ export const TASKS_QUERY_KEY = entityQueryKey("tasks");
 
 // The verb table. Each key is the outbox mutationFn name (durable: a queued
 // offline write replays by it), so the keys never change.
-// One collection.update backs reorder, reschedule, complete, move-to-project,
-// take-on and the text edit; the in-memory path tells them apart by the changed
-// field set, in this order: sortKey changed → reorder; showUpDate changed →
-// reschedule; completedAt set → complete; projectId changed → move-to-project
-// (before take-on, because a move also clears takenOnAt); takenOnAt changed →
-// take-on; else → edit (the catch-all). reopen is a revive (routed by metadata,
+// One collection.update backs reorder, reschedule, complete, move-to-project
+// and the text edit; the in-memory path tells them apart by the changed field
+// set, in this order: sortKey changed → reorder; showUpDate changed →
+// reschedule; completedAt set → complete; projectId changed → move-to-project;
+// else → edit (the catch-all). reopen is a revive (routed by metadata,
 // not by matches).
 export function tasksSpec(rest: TasksRest) {
   const v = verbsFor<Task>();
@@ -121,14 +110,12 @@ export function tasksSpec(rest: TasksRest) {
       text: string;
       showUpDate: string | null;
       projectId: string | null;
-      takenOnAt: string | null;
       sourceCaptureId: string | null;
     }>({
-      row: ({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }) => ({
+      row: ({ text, showUpDate, projectId, sourceCaptureId }) => ({
         text,
         showUpDate,
         projectId,
-        takenOnAt,
         sourceCaptureId,
         completedAt: null,
         // Null sorts last, so a new task lands at the bottom of the manual order
@@ -143,7 +130,6 @@ export function tasksSpec(rest: TasksRest) {
           text: row.text,
           showUpDate: row.showUpDate,
           projectId: row.projectId,
-          takenOnAt: row.takenOnAt,
           sourceCaptureId: row.sourceCaptureId ?? null,
         }),
     }),
@@ -188,34 +174,17 @@ export function tasksSpec(rest: TasksRest) {
       },
       persist: (id) => rest.reopenTask(id),
     }),
-    // Move into a project (or back to loose). Placed BEFORE setTakenOn: a move
-    // into a project changes both `projectId` and `takenOnAt`, and the in-memory
-    // router picks the first verb whose `matches` fires in declaration order, so
-    // this must be tried before the takenOnAt rule or it would misroute to
-    // take-on. It matches on `"projectId" in changes`.
+    // Move into a project (or back to loose). Matches on `"projectId" in changes`.
     moveToProject: v.update<{ id: string; projectId: string | null }>({
       id: ({ id }) => id,
       draft:
         ({ projectId }) =>
         (draft) => {
           draft.projectId = projectId;
-          // Clear takenOnAt when filing into a project (parks it under the
-          // project's curation); leave it when moving back to loose.
-          if (projectId != null) draft.takenOnAt = null;
         },
       matches: ({ changes }) => "projectId" in changes,
       persist: (id, { modified }) =>
         rest.setTaskProject(id, modified.projectId),
-    }),
-    setTakenOn: v.update<{ id: string; takenOnAt: string | null }>({
-      id: ({ id }) => id,
-      draft:
-        ({ takenOnAt }) =>
-        (draft) => {
-          draft.takenOnAt = takenOnAt;
-        },
-      matches: ({ changes }) => "takenOnAt" in changes,
-      persist: (id, { modified }) => rest.setTaskTakenOn(id, modified.takenOnAt),
     }),
     // Catch-all: an update that changed none of the above is a text edit.
     editTask: v.update<{ id: string; text: string }>({
@@ -242,13 +211,10 @@ function toTasksApi(
 ): TasksApi {
   return {
     collection: api.collection,
-    add: (text, showUpDate = null, projectId = null, takenOnAt = null, sourceCaptureId = null) =>
-      api.actions.addTask({ text, showUpDate, projectId, takenOnAt, sourceCaptureId }),
+    add: (text, showUpDate = null, projectId = null, sourceCaptureId = null) =>
+      api.actions.addTask({ text, showUpDate, projectId, sourceCaptureId }),
     complete: (id) => api.actions.completeTask({ id }),
     reopen: (task) => api.actions.reopenTask(task),
-    takeOn: (id) =>
-      api.actions.setTakenOn({ id, takenOnAt: new Date().toISOString() }),
-    park: (id) => api.actions.setTakenOn({ id, takenOnAt: null }),
     edit: (id, text) => api.actions.editTask({ id, text }),
     reschedule: (id, showUpDate) =>
       api.actions.rescheduleTask({ id, showUpDate }),

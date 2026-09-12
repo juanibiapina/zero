@@ -10,6 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ErrorText } from "@/components/ConnectionStatus";
+import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
 import { EmojiPicker } from "frimousse";
 import {
   dayLabel,
@@ -17,6 +18,7 @@ import {
   localToday,
   messageOf,
   projectDisplayStatus,
+  scheduleLabel,
   STATUS_LABELS,
   undoableAction,
   waitingUntil,
@@ -489,10 +491,60 @@ function MenuItem({
   );
 }
 
-// The project's tasks, groomed in place: complete one with its circle, take it
-// on / park it with the star, add a new one (parked by default — grooming is
-// collect-then-take-on, so a project-screen task is not surfaced on Home until
-// it is taken on). Reads the shared tasks collection filtered to this project.
+// The per-task date chip on a project row: shows the task's show-up date (or
+// "No date" when groomed) and opens the shared scheduler. Picking a date commits
+// the task to Home (an arrived date makes the project active); "No date" keeps it
+// grooming here. This is the replacement for the retired take-on/park star — the
+// date is the sole commitment gate. See docs/plans/todo-retire-take-on.md.
+function TaskDateChip({
+  showUpDate,
+  onPick,
+}: {
+  showUpDate: string | null;
+  onPick: (date: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const today = localToday();
+  const scheduled = showUpDate != null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={
+            scheduled ? `Reschedule (${showUpDate})` : "Add a date"
+          }
+          className={cn(
+            "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+            scheduled
+              ? "font-medium text-primary hover:bg-primary/10"
+              : "text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground",
+          )}
+        >
+          <CalendarGlyph className="size-3.5" />
+          <span>{scheduled ? scheduleLabel(showUpDate, today) : "No date"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <ScheduleMenu
+          today={today}
+          selected={showUpDate}
+          onPick={(d) => {
+            onPick(d);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// The project's tasks, groomed in place: complete one with its circle, commit it
+// to Home by giving it a date with the date chip (or clear the date to keep
+// grooming it here), add a new one (undated by default — grooming is
+// collect-then-schedule, so a project-screen task is not surfaced on Home until
+// it has an arrived date). Reads the shared tasks collection filtered to this
+// project.
 function ProjectTasks({
   api,
   projectId,
@@ -514,9 +566,9 @@ function ProjectTasks({
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    // A project-screen task is parked (takenOnAt null) and shown up today; it is
-    // groomed on this screen and taken onto Home from here.
-    const tx = api.add(trimmed, localToday(), projectId);
+    // A project-screen task is undated (groomed) by default: it lives here until
+    // it is given a date, which commits it to Home. The date is the gate.
+    const tx = api.add(trimmed, null, projectId);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     setText("");
   }, [api, text, projectId, onError]);
@@ -535,9 +587,9 @@ function ProjectTasks({
     [api, onError],
   );
 
-  const onToggleTakenOn = useCallback(
-    (t: Task) => {
-      const tx = t.takenOnAt ? api.park(t.id) : api.takeOn(t.id);
+  const onSchedule = useCallback(
+    (t: Task, showUpDate: string | null) => {
+      const tx = api.reschedule(t.id, showUpDate);
       tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     },
     [api, onError],
@@ -560,20 +612,10 @@ function ProjectTasks({
                 onClick={() => onComplete(t)}
               />
               <span className="flex-1 text-sm">{t.text}</span>
-              <button
-                type="button"
-                aria-label={t.takenOnAt ? `Park "${t.text}"` : `Take on "${t.text}"`}
-                aria-pressed={t.takenOnAt != null}
-                className={cn(
-                  "shrink-0 text-lg leading-none transition-colors",
-                  t.takenOnAt
-                    ? "text-amber-500"
-                    : "text-muted-foreground/40 hover:text-muted-foreground",
-                )}
-                onClick={() => onToggleTakenOn(t)}
-              >
-                {t.takenOnAt ? "★" : "☆"}
-              </button>
+              <TaskDateChip
+                showUpDate={t.showUpDate}
+                onPick={(d) => onSchedule(t, d)}
+              />
             </li>
           ))}
         </ul>

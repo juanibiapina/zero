@@ -29,7 +29,6 @@ function task(over: Partial<Task>): Task {
     createdAt: "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? "p",
-    takenOnAt: over.takenOnAt ?? null,
     sortKey: over.sortKey ?? null,
   };
 }
@@ -50,7 +49,7 @@ function condition(over: Partial<WaitingCondition>): WaitingCondition {
 describe("waitingBadge", () => {
   it("is null when the project is not waiting", () => {
     expect(waitingBadge(project(), [], [], [], TODAY, NOW)).toBeNull();
-    const active = task({ takenOnAt: "2026-01-02T00:00:00.000Z" });
+    const active = task({ showUpDate: "2026-01-01" });
     expect(waitingBadge(project(), [active], [], [], TODAY, NOW)).toBeNull();
   });
 
@@ -80,10 +79,7 @@ describe("waitingBadge", () => {
   });
 
   it("labels a date wait with the target day and a 'b:' sort key", () => {
-    const future = task({
-      takenOnAt: "2026-01-02T00:00:00.000Z",
-      showUpDate: "2026-07-15",
-    });
+    const future = task({ showUpDate: "2026-07-15" });
     const badge = waitingBadge(project(), [future], [], [], TODAY, NOW);
     expect(badge?.label).toBe("until Wednesday, Jul 15");
     expect(badge?.sortKey).toBe("b:2026-07-15");
@@ -100,7 +96,7 @@ describe("waitingBadge", () => {
     );
     const dateBadge = waitingBadge(
       project(),
-      [task({ takenOnAt: "2026-01-02T00:00:00.000Z", showUpDate: "2026-07-15" })],
+      [task({ showUpDate: "2026-07-15" })],
       [],
       [],
       TODAY,

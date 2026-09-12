@@ -26,7 +26,6 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? null,
-    takenOnAt: over.takenOnAt ?? null,
     sortKey: over.sortKey ?? null,
   };
 }
@@ -100,16 +99,16 @@ describe("homeCallToAction", () => {
     expect(out).toEqual({ kind: "create" });
   });
 
-  it("uses the derived status: a project with a taken-on open task is active, not counted", () => {
-    // `p` has a taken-on open task, so its display status is `active` and it is
-    // excluded from the working next/waiting/backlog counts. (The plate would not
-    // really be empty here, but the helper is gated on plateCount, which the
+  it("uses the derived status: a project with a shown-up dated open task is active, not counted", () => {
+    // `p` has a shown-up dated open task, so its display status is `active` and it
+    // is excluded from the working next/waiting/backlog counts. (The plate would
+    // not really be empty here, but the helper is gated on plateCount, which the
     // caller supplies — this asserts the derivation, given plateCount 0.)
     const out = homeCallToAction(
       0,
       0,
       [project("p", "next")],
-      [task({ id: "t", projectId: "p", takenOnAt: "2026-01-02T00:00:00.000Z" })],
+      [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
       TODAY,
     );
     expect(out).toEqual({ kind: "create" });
