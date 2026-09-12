@@ -368,7 +368,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockEditTask.mock.calls[0][2]).toBe('buy trail shoes');
   });
 
-  it('adds a task with the composer date chip and no project chip, filing to this project on a chosen date', async () => {
+  it('adds a task with the composer date chip and the project chip preset to this project, on a chosen date', async () => {
     mockAddTask.mockImplementation(async (_t, task) => {
       const added: Task = {
         id: task.id,
@@ -383,18 +383,17 @@ describe('ProjectDetailScreen', () => {
       return added;
     });
 
-    const { getByLabelText, getByPlaceholderText, queryByLabelText } =
-      await renderScreen();
+    const { getByLabelText, getByPlaceholderText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
     });
 
-    // The same composer Home uses: a create-time date chip is offered, but no
-    // project chip (the project is fixed to this screen).
+    // The same composer Home uses: a create-time date chip, and a project chip
+    // preset to this screen's project (label = the project title, 'Run a 5K').
     expect(getByLabelText('No date')).toBeTruthy();
-    expect(queryByLabelText('No project')).toBeNull();
+    expect(getByLabelText('Run a 5K')).toBeTruthy();
 
     // Pick Today from the scheduler the date chip opens.
     await act(async () => {
@@ -413,10 +412,56 @@ describe('ProjectDetailScreen', () => {
     });
 
     await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    // Kept the preset project, dated to the chosen day.
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('1');
     expect(mockAddTask.mock.calls[0][1].showUpDate).toMatch(
       /^\d{4}-\d{2}-\d{2}$/,
     );
+  });
+
+  it('lets the composer project chip be changed to move a new task off this project', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Run a 5K', '🏃', 'next'),
+      project('2', 'Learn piano', '🎹', 'next'),
+    ]);
+    mockAddTask.mockImplementation(async (_t, task) => {
+      const added: Task = {
+        id: task.id,
+        text: task.text,
+        showUpDate: task.showUpDate,
+        createdAt: '2023-01-01T00:00:00.000Z',
+        completedAt: null,
+        projectId: task.projectId,
+        sortKey: null,
+      };
+      return added;
+    });
+
+    const { getByLabelText, getByPlaceholderText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add'));
+    });
+    // The chip is preset to this project; open the picker and switch to another.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Run a 5K'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Learn piano'));
+    });
+
+    const input = getByPlaceholderText('Add a task');
+    await act(async () => {
+      fireEvent.changeText(input, 'buy a metronome');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    // Filed to the picked project, not this screen's own.
+    expect(mockAddTask.mock.calls[0][1].projectId).toBe('2');
   });
 
   it('completes a task and offers Undo in a toast that reopens it', async () => {

@@ -127,11 +127,11 @@ function useQuickAdd(config: {
   waitsApi: WaitsApi;
   projects: Project[];             // for the project chip + "filed" toast copy
   modes: AddMode[];                // Home: ['task','project']; project: ['task','waiting']
-  projectId?: string | null;       // fixed project context (project screen). When set:
-                                   //   - the project chip is hidden
-                                   //   - a 'task' add attaches to this project
+  projectId?: string | null;       // this screen's home project (project screen). When set:
+                                   //   - PRESETS the project chip to it (still changeable)
                                    //   - a 'waiting' add records a condition on it
-                                   //   - no "Filed to project" toast (you are on it)
+                                   //   - filing a dateless task to THIS project fires no toast
+                                   //     (it lands in the project's Tasks); filing to another does
   bottomOffset: number;
   getToken: TokenGetter;           // for project-create icon suggestions (Home)
   onError: (message: string | null) => void;
@@ -152,11 +152,13 @@ flow, and Back handling. Callers learn three fields.
 - **Home:** `useQuickAdd({ modes: ['task','project'], projectId: undefined,
   fabLabel: 'Task', ... })` → shows the project chip, offers project mode.
 - **Project screen:** `useQuickAdd({ modes: ['task','waiting'], projectId:
-  project.id, fabLabel: 'Add', ... })` → hides the project chip (project fixed),
-  offers waiting mode, and the new **date chip is now available on the project
-  screen** — the concrete "same add screen" the request asks for. It defaults to
-  "No date", preserving today's undated-by-default grooming behavior while
-  letting the user optionally date at create time.
+  project.id, fabLabel: 'Add', ... })` → offers waiting mode, and the new **date
+  and project chips are now available on the project screen** — the concrete
+  "same add screen" the request asks for. The project chip is **preset** to this
+  project but changeable (revised from the original "hide it" plan, per the
+  request: show it, preset, changeable). The date chip defaults to "No date",
+  preserving today's undated-by-default grooming while letting the user optionally
+  date at create time.
 
 Both then render `{add.bar}` and delegate Back to `add.handleBack()`.
 

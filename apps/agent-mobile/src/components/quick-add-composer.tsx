@@ -36,11 +36,13 @@ import { type TokenGetter } from '@/lib/api';
 // Home carried the date/project chips and discard-confirm). Sibling in spirit to
 // useTaskDetail. See docs/plans/todo-project-task-edit-and-shared-add.md.
 //
-// A fixed `projectId` (a project's own screen) makes the composer project-scoped:
-// the project chip is hidden (there is nothing to pick), a new task attaches to
-// that project, a `waiting` add records a free-text condition on it, and no
-// "Filed to project" toast fires (you are already on it). With no `projectId`
-// (Home) the project chip is shown and any project can be picked.
+// A `projectId` (a project's own screen) is the composer's home project: it
+// presets the project chip to that project (still changeable — you can move the
+// new task to another project or make it loose), a `waiting` add records a
+// free-text condition on it, and filing a dateless task to it fires no "Filed to
+// project" toast (it appears right there in the project's Tasks). With no
+// `projectId` (Home) the chip starts on "No project". Either way the chip is
+// shown in task mode.
 export type QuickAddController = {
   // The FAB + bar + all composer sheets + the discard dialog, rendered at the
   // screen root.
@@ -72,7 +74,9 @@ export function useQuickAdd({
   // Which mode pills to offer, in order. Home: ['task','project']; a project's
   // own screen: ['task','waiting'].
   modes: AddMode[];
-  // A fixed project context (a project's own screen); omit/null on Home.
+  // This screen's home project (a project's own screen): presets the project
+  // chip to it (still changeable) and scopes a waiting add to it. Omit/null on
+  // Home (chip starts on "No project").
   projectId?: string | null;
   // Distance (dp) from the screen's content bottom to the window bottom, so the
   // keyboard-sticky bar docks flush to the keyboard.
@@ -91,7 +95,11 @@ export function useQuickAdd({
   // Create-time date + project for a task quick-add. Both default to "unset":
   // null date + no project = a loose Home task. Reset when the bar closes.
   const [addDate, setAddDate] = useState<string | null>(null);
-  const [addProjectId, setAddProjectId] = useState<string | null>(null);
+  // The chip is preset to the screen's home project (`projectId`), so a
+  // project-screen task defaults to that project; Home starts on "No project".
+  const [addProjectId, setAddProjectId] = useState<string | null>(
+    projectId ?? null,
+  );
   const [schedulingAdd, setSchedulingAdd] = useState(false);
   const [pickingProject, setPickingProject] = useState(false);
   // Opening/closing a composer picker dismisses the keyboard, which would fire
@@ -102,8 +110,8 @@ export function useQuickAdd({
   const suppressKbCloseUntil = useRef(0);
   const inputRef = useRef<RNTextInput>(null);
 
-  // A fixed project context hides the project chip (nothing to pick).
-  const fixedProject = projectId != null;
+  // The screen's home project, normalized (Home passes none).
+  const contextProjectId = projectId ?? null;
   const today = localToday();
 
   const closeAdd = useCallback(() => {
@@ -111,12 +119,13 @@ export function useQuickAdd({
     setConfirmingDiscard(false);
     setAdding(false);
     setAddDate(null);
-    setAddProjectId(null);
+    // Next open starts preset to the screen's project again.
+    setAddProjectId(contextProjectId);
     setSchedulingAdd(false);
     setPickingProject(false);
     // Next open starts on the common case.
     setMode(modes[0] ?? 'task');
-  }, [modes]);
+  }, [modes, contextProjectId]);
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
@@ -151,7 +160,9 @@ export function useQuickAdd({
     }
 
     if (mode === 'waiting') {
-      // Waiting mode records a free-text waiting condition on the fixed project.
+      // Waiting mode records a free-text waiting condition on this screen's own
+      // project (a condition belongs to the project, so it is not the changeable
+      // chip's target).
       if (projectId == null) return;
       const tx = waitsApi.add(projectId, 'free-text', { text: trimmed });
       tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
@@ -159,16 +170,22 @@ export function useQuickAdd({
       return;
     }
 
-    // Task mode. A fixed project wins; otherwise the composer's picked project.
-    // No project + null date = a loose Home task; a date makes it a Home/Upcoming
-    // task; a project with no date files it groomed (off Home). On Home a filed
-    // dateless task is explained by a toast so nothing vanishes silently; on a
-    // project's own screen no toast fires (you are already on it).
-    const effectiveProjectId = projectId ?? addProjectId;
+    // Task mode. The task attaches to the chip's project (preset to this screen's
+    // project, changeable). No project + null date = a loose Home task; a date
+    // makes it a Home/Upcoming task; a project with no date files it groomed (off
+    // Home). A dateless task filed to a project OTHER than this screen's own —
+    // i.e. it will not appear right here — is explained by a "Filed to project"
+    // toast so nothing vanishes silently; filing to this screen's own project
+    // stays quiet (it lands in the Tasks section below).
+    const effectiveProjectId = addProjectId;
     const tx = tasksApi.add(trimmed, addDate, effectiveProjectId);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-    if (!fixedProject && addProjectId != null && addDate == null) {
-      const project = projects.find((p) => p.id === addProjectId);
+    if (
+      addDate == null &&
+      effectiveProjectId != null &&
+      effectiveProjectId !== contextProjectId
+    ) {
+      const project = projects.find((p) => p.id === effectiveProjectId);
       toast('Filed to project', {
         description: project
           ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
@@ -182,7 +199,7 @@ export function useQuickAdd({
     projectId,
     addDate,
     addProjectId,
-    fixedProject,
+    contextProjectId,
     projects,
     tasksApi,
     projectsApi,
@@ -233,10 +250,10 @@ export function useQuickAdd({
     return false;
   }, [confirmingDiscard, adding, text, closeAdd]);
 
-  // Date/project chips belong to task mode only. The project chip is further
-  // gated to the free (non-fixed) context.
+  // Date and project chips belong to task mode only. The project chip is always
+  // shown there (preset to this screen's project, changeable).
   const showDateChip = mode === 'task';
-  const showProjectChip = mode === 'task' && !fixedProject;
+  const showProjectChip = mode === 'task';
 
   const bar = (
     <>
@@ -289,22 +306,20 @@ export function useQuickAdd({
         }}
       />
 
-      {!fixedProject ? (
-        <ProjectPickerSheet
-          open={pickingProject}
-          projects={projects}
-          selectedProjectId={addProjectId}
-          onPick={(id) => {
-            suppressKbCloseUntil.current = Date.now() + 1000;
-            setAddProjectId(id);
-            setPickingProject(false);
-          }}
-          onClose={() => {
-            suppressKbCloseUntil.current = Date.now() + 1000;
-            setPickingProject(false);
-          }}
-        />
-      ) : null}
+      <ProjectPickerSheet
+        open={pickingProject}
+        projects={projects}
+        selectedProjectId={addProjectId}
+        onPick={(id) => {
+          suppressKbCloseUntil.current = Date.now() + 1000;
+          setAddProjectId(id);
+          setPickingProject(false);
+        }}
+        onClose={() => {
+          suppressKbCloseUntil.current = Date.now() + 1000;
+          setPickingProject(false);
+        }}
+      />
 
       {confirmingDiscard ? (
         <ConfirmDialog
