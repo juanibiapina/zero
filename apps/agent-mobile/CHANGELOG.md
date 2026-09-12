@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-12: A project waiting on a condition now shows how long it's been waiting as "for 5 days", matching the "until <day>" label on a project waiting for a date.
 - 2026-09-12: Upcoming tasks now show their project's icon before the title, just like Home. Loose tasks show none.
 - 2026-09-12: Deleting a project now also deletes all of its tasks and everything it was waiting on, so nothing is left behind with no project to belong to. Deleting a project is still permanent — there's no undo.
 - 2026-09-12: Pushing a project task you've taken on to a future day now moves the project to Waiting and shows the day it's waiting until (e.g. "until Tue"), on both the project's screen and its row in the Projects list. The task leaves Home and returns on its own when the day arrives — the project turns active again with nothing to re-star. A task you dated but never took on stays on the project's screen until you do.

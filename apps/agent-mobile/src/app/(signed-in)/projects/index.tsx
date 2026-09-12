@@ -214,8 +214,8 @@ function Projects({
       ),
     [list, tasks, conds, today],
   );
-  // A project's waiting badge text, non-null only for waiting projects: elapsed
-  // time for a condition wait, "until <day>" for a date wait.
+  // A project's waiting badge text, non-null only for waiting projects:
+  // "for <elapsed>" for a condition wait, "until <day>" for a date wait.
   const labelOf = useCallback(
     (p: Project) => waitingBadge(p, tasks, conds, list, today)?.label ?? null,
     [tasks, conds, list, today],

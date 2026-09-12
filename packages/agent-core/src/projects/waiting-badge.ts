@@ -43,7 +43,12 @@ export function waitingBadge(
   // ascending by localeCompare.
   const since = waitingSince(project, tasks, today, conditions, projects);
   if (since != null) {
-    return { label: waitingLabel(since, now), sortKey: `a:${since}` };
+    // "for 5 days" mirrors the date wait's "until <day>": both are a preposition
+    // + a time phrase, one looking back, one looking forward. The sub-minute
+    // floor "just now" stays unprefixed — "for just now" reads wrong.
+    const elapsed = waitingLabel(since, now);
+    const label = elapsed === "just now" ? elapsed : `for ${elapsed}`;
+    return { label, sortKey: `a:${since}` };
   }
   const until = waitingUntil(project, tasks, today);
   if (until != null) {

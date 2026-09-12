@@ -63,8 +63,20 @@ describe("waitingBadge", () => {
       TODAY,
       NOW,
     );
-    expect(badge?.label).toBe("5 months");
+    expect(badge?.label).toBe("for 5 months");
     expect(badge?.sortKey).toBe("a:2026-01-15T00:00:00.000Z");
+  });
+
+  it("leaves a sub-minute condition wait as an unprefixed 'just now'", () => {
+    const badge = waitingBadge(
+      project(),
+      [],
+      [condition({ createdAt: "2026-05-31T23:59:30.000Z" })],
+      [],
+      TODAY,
+      NOW,
+    );
+    expect(badge?.label).toBe("just now");
   });
 
   it("labels a date wait with the target day and a 'b:' sort key", () => {
