@@ -290,6 +290,14 @@ function Home({
   bottomOffset: number;
 }) {
   const [mode, setMode] = useState<AddMode>('task');
+  // The reorderable list's reorder pan must wait for a long-press before it
+  // activates, or on Android it fights the RefreshControl's SwipeRefreshLayout
+  // and blocks list scrolling and pull-to-refresh (per the library's
+  // RefreshControl example). 520ms is just above the row's 500ms long-press.
+  const reorderPanGesture = useMemo(
+    () => Gesture.Pan().activateAfterLongPress(520),
+    [],
+  );
   const { getToken } = useAuth();
   const { data: tasks, isLoading } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
@@ -573,6 +581,7 @@ function Home({
           }
           data={list}
           keyExtractor={(item) => item.id}
+          panGesture={reorderPanGesture}
           renderItem={renderItem}
           itemLayoutAnimation={LinearTransition.duration(200)}
           onReorder={onReorder}
