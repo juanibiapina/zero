@@ -195,6 +195,22 @@ task onto Home; both pickers open without closing the composer. Supersedes
 Decision A of `docs/plans/todo-project-task-row-parity.md` (the star is replaced,
 not kept).
 
+Shipped (2026-09-12, mobile — device pending): **the project screen reuses the
+shared task editor and quick-add composer** (plan:
+`docs/plans/todo-project-task-edit-and-shared-add.md`). Tapping a task on a
+project's screen now opens the same `useTaskDetail` editor Home and Upcoming open
+(rename, schedule, move, complete-with-Undo), instead of a dead row. The
+project-screen add path became the same composer Home uses: the quick-add state,
+per-mode writes, date chip, discard-confirm, and keyboard-race guard were
+extracted from Home into one shared deep module, `useQuickAdd`
+(`apps/agent-mobile/src/components/quick-add-composer.tsx`), a sibling of
+`useTaskDetail`. Two adapters make the seam real — Home (task/project modes, free
+project context, project chip) and the project screen (task/waiting modes, fixed
+`projectId`, no project chip). Consequence: the project screen gained a
+create-time **date chip** (a task can be dated at creation there too) and lost the
+per-task inline date chip from the take-on retire (scheduling now lives in the
+editor), so its task rows read like every other list row.
+
 Shipped (2026-09-12): **Delete a project cascades to its tasks and waiting
 conditions** (plan: `docs/plans/todo-project-delete-cascade.md`). Deleting a
 project no longer leaves

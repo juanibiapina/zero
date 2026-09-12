@@ -11,12 +11,9 @@ import {
   localToday,
   messageOf,
   orderKeyBetween,
-  scheduleLabel,
   taskIcon,
-  toast,
   tomorrow,
   undoableAction,
-  type AddMode,
   type HomeCallToAction,
   type ProjectsApi,
   type Task,
@@ -32,11 +29,9 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
-  type TextInput as RNTextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { KeyboardEvents } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import ReorderableList, {
   reorderItems,
@@ -56,17 +51,11 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 import { useResolveClassNames } from 'uniwind';
 
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { QuickAdd } from '@/components/quick-add';
+import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
-import {
-  ProjectPickerSheet,
-  ScheduleSheet,
-  useTaskDetail,
-} from '@/components/task-detail';
+import { useTaskDetail } from '@/components/task-detail';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
-import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -280,7 +269,6 @@ function Home({
   waitsApi: WaitsApi;
   bottomOffset: number;
 }) {
-  const [mode, setMode] = useState<AddMode>('task');
   // The reorderable list's reorder pan must wait for a long-press before it
   // activates, or on Android it fights the RefreshControl's SwipeRefreshLayout
   // and blocks list scrolling and pull-to-refresh (per the library's
@@ -349,24 +337,6 @@ function Home({
   const view = listView({ count: list.length, isLoading, loadError });
   const error = writeError ?? (list.length === 0 ? loadError : null);
 
-  const [text, setText] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  // Create-time date + project for a task quick-add (the mini-composer). Both
-  // default to "unset": null date + no project = a loose Home task. `schedulingAdd`
-  // / `pickingProject` open the shared pickers. Reset when the bar closes.
-  const [addDate, setAddDate] = useState<string | null>(null);
-  const [addProjectId, setAddProjectId] = useState<string | null>(null);
-  const [schedulingAdd, setSchedulingAdd] = useState(false);
-  const [pickingProject, setPickingProject] = useState(false);
-  // Opening/closing a composer picker dismisses the keyboard, which would fire
-  // keyboardDidHide and close the whole quick-add. The flags guard the open; a
-  // brief suppression window absorbs the CLOSE race, where keyboardDidHide fires
-  // after the flag is already cleared. Epoch ms until which keyboard-hide close
-  // is suppressed.
-  const suppressKbCloseUntil = useRef(0);
-  const inputRef = useRef<RNTextInput>(null);
-
   // The task detail editor (sheet + schedule selector + their writes). It
   // resolves the selected task from Home's visible `list`, so rescheduling a
   // task to a future day drops it from the list and closes the sheet.
@@ -384,120 +354,33 @@ function Home({
     [projects],
   );
 
-  const closeAdd = useCallback(() => {
-    setText('');
-    setConfirmingDiscard(false);
-    setAdding(false);
-    setAddDate(null);
-    setAddProjectId(null);
-    setSchedulingAdd(false);
-    setPickingProject(false);
-  }, []);
-
-  const onAdd = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      setAdding(false);
-      return;
-    }
-    setWriteError(null);
-    if (mode === 'project') {
-      // Create the project but stay on Home; a toast is the escape hatch to jump
-      // to it. The id comes off the optimistic insert transaction so the toast
-      // can deep-link before the server round-trip finishes.
-      const tx = projectsApi.add(trimmed);
-      tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-      const id = String(tx.mutations[0]?.key);
-      void requestIconSuggestions(getToken, id, {
-        title: trimmed,
-        description: null,
-      });
-      toast('Project created', {
-        description: trimmed,
-        action: {
-          label: 'View',
-          onPress: () =>
-            router.navigate(`/projects/${id}`, { withAnchor: true }),
-        },
-      });
-      closeAdd();
-      return;
-    }
-    // A task quick-add carries the composer's date + project. No project + null
-    // date = a loose Home task; a date makes it a Home/Upcoming task; a project
-    // with no date files it groomed (off Home), explained by a toast so nothing
-    // vanishes silently.
-    const tx = api.add(trimmed, addDate, addProjectId);
-    tx.isPersisted.promise.catch((e) => setWriteError(messageOf(e)));
-    if (addProjectId != null && addDate == null) {
-      const project = (projects ?? []).find((p) => p.id === addProjectId);
-      toast('Filed to project', {
-        description: project
-          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
-          : undefined,
-      });
-    }
-    closeAdd();
-  }, [
-    text,
-    api,
+  // The quick-add composer (bar + date/project chips + sheets + discard confirm
+  // + writes). Home offers task and project modes and the project chip; the
+  // shared hook owns everything else. See quick-add-composer.tsx.
+  const add = useQuickAdd({
+    tasksApi: api,
     projectsApi,
-    mode,
+    waitsApi,
+    projects: projects ?? [],
+    modes: ['task', 'project'],
+    bottomOffset,
     getToken,
-    closeAdd,
-    addDate,
-    addProjectId,
-    projects,
-  ]);
-
-  const requestClose = useCallback(() => {
-    if (text.trim()) {
-      setConfirmingDiscard(true);
-    } else {
-      closeAdd();
-    }
-  }, [text, closeAdd]);
-
-  useEffect(() => {
-    const sub = KeyboardEvents.addListener('keyboardDidHide', () => {
-      if (!adding || confirmingDiscard) return;
-      // Opening the composer's date/project picker dismisses the keyboard; that
-      // must NOT close the whole quick-add (the picker is a deliberate step, and
-      // the bar reopens the keyboard when it closes). The flags guard while a
-      // picker is open; the suppression window absorbs the close race, where this
-      // event fires just after the flag is cleared.
-      if (schedulingAdd || pickingProject) return;
-      if (Date.now() < suppressKbCloseUntil.current) return;
-      if (text.trim()) {
-        setConfirmingDiscard(true);
-      } else {
-        closeAdd();
-      }
-    });
-    return () => sub.remove();
-  }, [adding, confirmingDiscard, text, closeAdd, schedulingAdd, pickingProject]);
+    onError: setWriteError,
+    fabLabel: 'Task',
+  });
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (detail.handleBack()) {
         return true;
       }
-      if (confirmingDiscard) {
-        setConfirmingDiscard(false);
-        return true;
-      }
-      if (adding && text.trim()) {
-        setConfirmingDiscard(true);
-        return true;
-      }
-      if (adding) {
-        closeAdd();
+      if (add.handleBack()) {
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [detail, adding, confirmingDiscard, text, closeAdd]);
+  }, [detail, add]);
 
   // Postpone to tomorrow (the swipe-right action). The optimistic reschedule
   // drops the row from Home at once and lands it in Upcoming.
@@ -617,83 +500,7 @@ function Home({
 
       {detail.sheets}
 
-      <QuickAdd
-        open={adding}
-        text={text}
-        mode={mode}
-        onModeChange={setMode}
-        onChangeText={setText}
-        onOpen={() => setAdding(true)}
-        onSubmit={() => onAdd()}
-        onRequestClose={requestClose}
-        busy={false}
-        inputRef={inputRef}
-        dateChipLabel={
-          mode === 'task'
-            ? addDate
-              ? scheduleLabel(addDate, today)
-              : 'No date'
-            : undefined
-        }
-        dateChipActive={addDate != null}
-        onDateChipPress={
-          mode === 'task' ? () => setSchedulingAdd(true) : undefined
-        }
-        projectChipLabel={
-          mode === 'task'
-            ? ((projects ?? []).find((p) => p.id === addProjectId)?.title ??
-              'No project')
-            : undefined
-        }
-        projectChipActive={addProjectId != null}
-        onProjectChipPress={
-          mode === 'task' ? () => setPickingProject(true) : undefined
-        }
-        bottomOffset={bottomOffset}
-      />
-
-      <ScheduleSheet
-        open={schedulingAdd}
-        showUpDate={addDate}
-        onPick={(d) => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
-          setAddDate(d);
-          setSchedulingAdd(false);
-        }}
-        onClose={() => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
-          setSchedulingAdd(false);
-        }}
-      />
-      <ProjectPickerSheet
-        open={pickingProject}
-        projects={projects ?? []}
-        selectedProjectId={addProjectId}
-        onPick={(id) => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
-          setAddProjectId(id);
-          setPickingProject(false);
-        }}
-        onClose={() => {
-          suppressKbCloseUntil.current = Date.now() + 1000;
-          setPickingProject(false);
-        }}
-      />
-
-      {confirmingDiscard ? (
-        <ConfirmDialog
-          title="Discard changes?"
-          message="The changes you've made will not be saved."
-          cancelLabel="Cancel"
-          confirmLabel="Discard"
-          destructive
-          onCancel={() => {
-            setConfirmingDiscard(false);
-            inputRef.current?.focus();
-          }}
-          onConfirm={closeAdd}
-        />
-      ) : null}
+      {add.bar}
     </>
   );
 }

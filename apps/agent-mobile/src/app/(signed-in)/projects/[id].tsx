@@ -9,11 +9,8 @@ import {
   localToday,
   messageOf,
   projectDisplayStatus,
-  scheduleLabel,
   STATUS_LABELS,
-  undoableAction,
   waitingUntil,
-  type AddMode,
   type Project,
   type ProjectEditFields,
   type ProjectStatus,
@@ -30,7 +27,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  type TextInput as RNTextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -38,8 +34,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
-import { QuickAdd } from '@/components/quick-add';
-import { ScheduleSheet } from '@/components/task-detail';
+import { useQuickAdd } from '@/components/quick-add-composer';
+import { useTaskDetail } from '@/components/task-detail';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import {
@@ -97,19 +93,9 @@ function ProjectDetail({
 }) {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { getToken } = useAuth();
   const back = useCallback(() => router.back(), [router]);
   const [error, setError] = useState<string | null>(null);
-
-  // Adding is a plus FAB that expands into the shared keyboard-docked quick-add
-  // bar (like Home and the Projects list), not an inline field. The bar offers
-  // two project-scoped modes — Task and Waiting — so from one "+" you add either
-  // a task or a free-text waiting condition to this project. No capture/project
-  // mode here. See docs/plans/todo-project-task-add-fab.md and
-  // docs/plans/todo-project-waiting-add-fab.md.
-  const [text, setText] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [mode, setMode] = useState<AddMode>('task');
-  const inputRef = useRef<RNTextInput>(null);
 
   // Measure the gap from this screen's content bottom to the window bottom (the
   // native bottom tab bar plus the system gesture inset), fed to the
@@ -173,45 +159,50 @@ function ProjectDetail({
       .catch((e) => setError(messageOf(e)));
   }, [api, tasksApi, waitsApi, project]);
 
-  const closeAdd = useCallback(() => {
-    setText('');
-    setAdding(false);
-    // Next open starts on the common case.
-    setMode('task');
-  }, []);
+  // This project's open tasks, the list the shared task editor resolves against:
+  // moving a task to another project drops it here (closes the sheet), while a
+  // reschedule keeps it (this screen shows the project's tasks regardless of
+  // date). Same membership as the ProjectTasks section below.
+  const projectTasks = useMemo(
+    () => (openTasks ?? []).filter((t) => t.projectId === id),
+    [openTasks, id],
+  );
 
-  const onAdd = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      // Submitting an empty input closes the quick-add bar.
-      setAdding(false);
-      return;
-    }
-    if (!project) return;
-    setError(null);
-    // Waiting mode records a free-text waiting condition on this project; Task
-    // mode adds an undated (groomed) task — the date is the sole commitment gate,
-    // so a project-screen task is not on Home until it is given a date here.
-    const tx =
-      mode === 'waiting'
-        ? waitsApi.add(project.id, 'free-text', { text: trimmed })
-        : tasksApi.add(trimmed, null, project.id);
-    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    // Close the quick-add after adding.
-    closeAdd();
-  }, [text, mode, tasksApi, waitsApi, project, closeAdd]);
+  // The task detail editor — the same one Home and Upcoming open. Tapping a task
+  // row opens it; its circle completes with the shared Undo.
+  const detail = useTaskDetail({
+    api: tasksApi,
+    list: projectTasks,
+    projects: list,
+    onError: setError,
+  });
 
-  // Android hardware Back closes the quick-add before it pops the screen.
+  // The quick-add composer, project-scoped: Task and Waiting modes, the project
+  // fixed to this one (no project chip), and — like Home — a create-time date
+  // chip on a task. See quick-add-composer.tsx.
+  const add = useQuickAdd({
+    tasksApi,
+    projectsApi: api,
+    waitsApi,
+    projects: list,
+    modes: ['task', 'waiting'],
+    projectId: id,
+    bottomOffset,
+    getToken,
+    onError: setError,
+    fabLabel: 'Add',
+  });
+
+  // Android hardware Back: close an open editor sheet, then the quick-add, before
+  // it pops the screen.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (adding) {
-        closeAdd();
-        return true;
-      }
+      if (detail.handleBack()) return true;
+      if (add.handleBack()) return true;
       return false;
     });
     return () => sub.remove();
-  }, [adding, closeAdd]);
+  }, [detail, add]);
 
   const accent = useColor('--color-accent');
   // The header's derived status reads tasks and waits, so a pull re-pulls all
@@ -293,7 +284,12 @@ function ProjectDetail({
             outcome matters. It sits under the title, above the work. */}
         <ProjectDescription project={project} onEdit={commitEdit} />
 
-        <ProjectTasks api={tasksApi} projectId={project.id} onError={setError} />
+        <ProjectTasks
+          api={tasksApi}
+          projectId={project.id}
+          onOpen={detail.open}
+          onComplete={detail.complete}
+        />
 
         <ProjectWaits
           project={project}
@@ -304,24 +300,12 @@ function ProjectDetail({
         />
       </ScrollView>
 
-      {/* Project-scoped quick-add: two pills, Task and Waiting, so one "+" adds
-          either a task or a free-text waiting condition to this project. No
-          capture/project mode. */}
-      <QuickAdd
-        open={adding}
-        text={text}
-        mode={mode}
-        modes={['task', 'waiting']}
-        onModeChange={setMode}
-        onChangeText={setText}
-        onOpen={() => setAdding(true)}
-        onSubmit={onAdd}
-        onRequestClose={closeAdd}
-        busy={false}
-        inputRef={inputRef}
-        fabLabel="Add"
-        bottomOffset={bottomOffset}
-      />
+      {detail.sheets}
+
+      {/* Project-scoped quick-add: Task and Waiting pills, the project fixed to
+          this one, plus a create-time date chip on a task — the same composer
+          Home uses. */}
+      {add.bar}
     </View>
   );
 }
@@ -592,20 +576,23 @@ function ProjectHeader({
   );
 }
 
-// The project's tasks, groomed in place: complete one with its circle, commit it
-// to Home by giving it a date with the date chip (or clear the date to keep
-// grooming it here), add a new one (undated by default — grooming is
-// collect-then-schedule). Plain RN rows, like the list screens. The date is the
-// sole commitment gate (the take-on star is retired); tapping the chip opens the
-// same scheduler as the detail sheet. See docs/plans/todo-retire-take-on.md.
+// The project's tasks: complete one with its circle, or tap its text to open the
+// full task editor — the same one Home and Upcoming open — where you rename,
+// schedule (dating a task commits it to Home), move it, or complete it. Plain RN
+// rows, like the list screens. Scheduling lives in the editor now (there is no
+// inline per-row date chip), so the row reads exactly like every other list row.
 function ProjectTasks({
   api,
   projectId,
-  onError,
+  onOpen,
+  onComplete,
 }: {
   api: TasksApi;
   projectId: string;
-  onError: (message: string) => void;
+  // Open the shared task editor for a task (owned by the screen's useTaskDetail).
+  onOpen: (task: Task) => void;
+  // Complete a task with the shared single Undo snackbar (owned by the same hook).
+  onComplete: (task: Task) => void;
 }) {
   const { data: tasks } = useLiveQuery((q) =>
     q
@@ -614,30 +601,9 @@ function ProjectTasks({
       .orderBy(({ t }) => t.createdAt, 'asc'),
   );
   const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
-  const today = localToday();
-  // Which task's scheduler is open (by id), or null.
-  const [scheduling, setScheduling] = useState<string | null>(null);
-  const schedulingTask = list.find((t) => t.id === scheduling) ?? null;
 
-  // Completing commits immediately (the row leaves at once) and raises the same
-  // single bottom Undo snackbar used on Home; Undo reopens the task.
-  const onComplete = (task: Task) => {
-    undoableAction({
-      message: 'Completed',
-      act: () => api.complete(task.id),
-      undo: () => api.reopen(task),
-      onError,
-    });
-  };
-
-  const onPick = (id: string, showUpDate: string | null) => {
-    setScheduling(null);
-    const tx = api.reschedule(id, showUpDate);
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-  };
-
-  // Nothing to groom yet: render no section at all (not a bare heading). Adding
-  // is the screen's plus FAB, so hiding this removes no add path. The live query
+  // Nothing here yet: render no section at all (not a bare heading). Adding is
+  // the screen's plus FAB, so hiding this removes no add path. The live query
   // above still runs, so the section appears the instant the first task lands.
   if (list.length === 0) return null;
 
@@ -648,36 +614,20 @@ function ProjectTasks({
       </Text>
       {list.map((t) => (
         <View key={t.id} className="flex-row items-center gap-3 py-2">
-          <CheckCircle label={`Complete "${t.text}"`} onPress={() => onComplete(t)} />
-          <Text className="flex-1">{t.text}</Text>
+          <CheckCircle
+            label={`Complete "${t.text}"`}
+            onPress={() => onComplete(t)}
+          />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={
-              t.showUpDate ? `Reschedule "${t.text}"` : `Add a date to "${t.text}"`
-            }
-            hitSlop={8}
-            onPress={() => setScheduling(t.id)}
+            accessibilityLabel={`Edit "${t.text}"`}
+            className="flex-1"
+            onPress={() => onOpen(t)}
           >
-            <Text
-              className={
-                t.showUpDate
-                  ? 'text-[13px] font-medium text-accent'
-                  : 'text-[13px] text-foreground-muted'
-              }
-            >
-              {t.showUpDate ? scheduleLabel(t.showUpDate, today) : 'No date'}
-            </Text>
+            <Text>{t.text}</Text>
           </Pressable>
         </View>
       ))}
-      <ScheduleSheet
-        open={schedulingTask != null}
-        showUpDate={schedulingTask?.showUpDate}
-        onPick={(d) => {
-          if (schedulingTask) onPick(schedulingTask.id, d);
-        }}
-        onClose={() => setScheduling(null)}
-      />
     </View>
   );
 }

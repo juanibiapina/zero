@@ -131,6 +131,16 @@ const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 const mockReopenTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
+const mockEditTask =
+  jest.fn<(getToken: unknown, id: string, text: string) => Promise<Task>>();
+const mockRescheduleTask =
+  jest.fn<
+    (getToken: unknown, id: string, showUpDate: string | null) => Promise<Task>
+  >();
+const mockSetTaskProject =
+  jest.fn<
+    (getToken: unknown, id: string, projectId: string | null) => Promise<Task>
+  >();
 const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
 const mockAddWaitingCondition =
   jest.fn<
@@ -163,6 +173,12 @@ jest.mock('@/lib/api', () => ({
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
   reopenTask: (getToken: unknown, id: string) => mockReopenTask(getToken, id),
+  editTask: (getToken: unknown, id: string, text: string) =>
+    mockEditTask(getToken, id, text),
+  rescheduleTask: (getToken: unknown, id: string, showUpDate: string | null) =>
+    mockRescheduleTask(getToken, id, showUpDate),
+  setTaskProject: (getToken: unknown, id: string, projectId: string | null) =>
+    mockSetTaskProject(getToken, id, projectId),
 }));
 
 const project = (
@@ -217,6 +233,9 @@ describe('ProjectDetailScreen', () => {
     mockAddTask.mockReset();
     mockCompleteTask.mockReset();
     mockReopenTask.mockReset();
+    mockEditTask.mockReset();
+    mockRescheduleTask.mockReset();
+    mockSetTaskProject.mockReset();
     defaultToastController.dismiss();
     mockFetchTasks.mockReset();
     mockFetchTasks.mockResolvedValue([]);
@@ -315,6 +334,89 @@ describe('ProjectDetailScreen', () => {
       expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
     );
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('1');
+  });
+
+  it('opens the shared task editor when a task row is tapped and edits on dismiss', async () => {
+    mockFetchTasks.mockResolvedValue([taskRow('t1', 'buy running shoes')]);
+    mockEditTask.mockImplementation(async (_g, id, text) => {
+      const edited = { ...taskRow(id, text) };
+      mockFetchTasks.mockResolvedValue([edited]);
+      return edited;
+    });
+
+    const { getByLabelText, getByDisplayValue, getByText } = await renderScreen();
+    await waitFor(() =>
+      expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
+    );
+
+    // Tapping the task text opens the same editor Home/Upcoming open.
+    await act(async () => {
+      fireEvent.press(getByLabelText('Edit "buy running shoes"'));
+    });
+    const input = getByDisplayValue('buy running shoes');
+    await act(async () => {
+      fireEvent.changeText(input, 'buy trail shoes');
+    });
+    // Dismissal (submit) commits the edit.
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(getByText('buy trail shoes')).toBeTruthy());
+    expect(mockEditTask).toHaveBeenCalledTimes(1);
+    expect(mockEditTask.mock.calls[0][1]).toBe('t1');
+    expect(mockEditTask.mock.calls[0][2]).toBe('buy trail shoes');
+  });
+
+  it('adds a task with the composer date chip and no project chip, filing to this project on a chosen date', async () => {
+    mockAddTask.mockImplementation(async (_t, task) => {
+      const added: Task = {
+        id: task.id,
+        text: task.text,
+        showUpDate: task.showUpDate,
+        createdAt: '2023-01-01T00:00:00.000Z',
+        completedAt: null,
+        projectId: task.projectId,
+        sortKey: null,
+      };
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const { getByLabelText, getByPlaceholderText, queryByLabelText } =
+      await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add'));
+    });
+
+    // The same composer Home uses: a create-time date chip is offered, but no
+    // project chip (the project is fixed to this screen).
+    expect(getByLabelText('No date')).toBeTruthy();
+    expect(queryByLabelText('No project')).toBeNull();
+
+    // Pick Today from the scheduler the date chip opens.
+    await act(async () => {
+      fireEvent.press(getByLabelText('No date'));
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Today'));
+    });
+
+    const input = getByPlaceholderText('Add a task');
+    await act(async () => {
+      fireEvent.changeText(input, 'buy running shoes');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    expect(mockAddTask.mock.calls[0][1].projectId).toBe('1');
+    expect(mockAddTask.mock.calls[0][1].showUpDate).toMatch(
+      /^\d{4}-\d{2}-\d{2}$/,
+    );
   });
 
   it('completes a task and offers Undo in a toast that reopens it', async () => {

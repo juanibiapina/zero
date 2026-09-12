@@ -71,7 +71,11 @@ export function QuickAddBar({
 }: QuickAddBarProps) {
   const resolvedPlaceholder =
     placeholder ?? (mode ? ADD_MODE_PLACEHOLDER[mode] : 'Add a task');
-  const showChips = onDateChipPress != null && onProjectChipPress != null;
+  // Each composer chip renders on its own. Home offers both (a task can be dated
+  // and filed to any project); a project's own screen offers only the date chip
+  // (the project is fixed, so there is nothing to pick). The chip row shows when
+  // at least one handler is supplied.
+  const showChips = onDateChipPress != null || onProjectChipPress != null;
   return (
     <View className="rounded-t-2xl bg-surface px-screen-x pb-4 pt-3 shadow-raised">
       {mode ? (
@@ -123,38 +127,44 @@ export function QuickAddBar({
       </View>
       {showChips ? (
         <View className="mt-2 flex-row gap-2">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={dateChipLabel}
-            onPress={onDateChipPress}
-            className={cn(
-              'rounded-full border px-3 py-1',
-              dateChipActive ? 'border-accent bg-accent/10' : 'border-divider',
-            )}
-          >
-            <Text
-              variant="caption"
-              className={cn(dateChipActive && 'text-accent')}
+          {onDateChipPress != null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={dateChipLabel}
+              onPress={onDateChipPress}
+              className={cn(
+                'rounded-full border px-3 py-1',
+                dateChipActive ? 'border-accent bg-accent/10' : 'border-divider',
+              )}
             >
-              {dateChipLabel}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={projectChipLabel}
-            onPress={onProjectChipPress}
-            className={cn(
-              'rounded-full border px-3 py-1',
-              projectChipActive ? 'border-accent bg-accent/10' : 'border-divider',
-            )}
-          >
-            <Text
-              variant="caption"
-              className={cn(projectChipActive && 'text-accent')}
+              <Text
+                variant="caption"
+                className={cn(dateChipActive && 'text-accent')}
+              >
+                {dateChipLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+          {onProjectChipPress != null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={projectChipLabel}
+              onPress={onProjectChipPress}
+              className={cn(
+                'rounded-full border px-3 py-1',
+                projectChipActive
+                  ? 'border-accent bg-accent/10'
+                  : 'border-divider',
+              )}
             >
-              {projectChipLabel}
-            </Text>
-          </Pressable>
+              <Text
+                variant="caption"
+                className={cn(projectChipActive && 'text-accent')}
+              >
+                {projectChipLabel}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </View>
