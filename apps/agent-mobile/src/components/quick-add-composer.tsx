@@ -65,6 +65,7 @@ export function useQuickAdd({
   getToken,
   onError,
   fabLabel,
+  onProjectCreated,
 }: {
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
@@ -84,6 +85,7 @@ export function useQuickAdd({
   onError: (message: string | null) => void;
   // Wording of the collapsed FAB and its accessibility label.
   fabLabel: string;
+  onProjectCreated?: (id: string) => void;
 }): QuickAddController {
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
@@ -138,6 +140,11 @@ export function useQuickAdd({
         title: trimmed,
         description: null,
       });
+      if (onProjectCreated) {
+        closeAdd();
+        onProjectCreated(id);
+        return;
+      }
       toast('Project created', {
         description: trimmed,
         action: {
@@ -199,6 +206,7 @@ export function useQuickAdd({
     getToken,
     onError,
     closeAdd,
+    onProjectCreated,
   ]);
 
   // Scrim tap or Back over unsaved text raises the discard confirm; empty, it

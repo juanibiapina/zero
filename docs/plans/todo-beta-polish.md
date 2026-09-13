@@ -158,6 +158,11 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 5: mobile suite, lint/typecheck pass. Pixel Back dismissed the keyboard,
+  then requested discard; Cancel retained the draft; submit opened the new project.
+  Deleted `ZZ Beta drawer` afterward. A Maestro scrim tap missed its target;
+  hardware Back provided reliable proof (`/tmp/beta-5-continue.yaml`).
+
 - Slice 4: 115 mobile tests, lint, typecheck pass. Pixel scrolled to the selected
   last project while No project remained visible (`beta-4-scroll.png`). The restored
   slice-3 task survived app restart. Closing the picker also closed the editor on

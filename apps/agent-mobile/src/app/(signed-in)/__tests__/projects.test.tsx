@@ -229,6 +229,22 @@ describe('ProjectsScreen (list)', () => {
     );
   });
 
+  it('protects a project draft until discard is confirmed', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('New project')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('New project'));
+    await fireEvent.changeText(screen.getByLabelText('New item text'), 'Keep this draft');
+    await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
+    expect(screen.getByText('Discard changes?')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Cancel'));
+    expect(screen.getByLabelText('New item text').props.value).toBe('Keep this draft');
+    await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
+    await fireEvent.press(screen.getByLabelText('Discard'));
+    expect(screen.queryByLabelText('New item text')).toBeNull();
+    expect(mockAddProject).not.toHaveBeenCalled();
+  });
+
   it('shows a Project pill when the quick-add bar is open', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([]);
