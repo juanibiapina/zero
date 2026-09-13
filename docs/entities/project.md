@@ -81,10 +81,10 @@ condition wait, or the target day ("until Tue") for a date wait — via the shar
 (`projectsByStatus` takes an optional `sortKeyOf`; the list passes
 `waitingBadge(p, …)?.sortKey ?? p.createdAt`, ordering condition waits
 longest-first, then date waits soonest-first, while other sections keep their
-created-at order). The project screen's actions menu offers
-three manual moves — **Put in play** (writes `next`), **Move to backlog**, **Mark done** — not
-a five-way picker. No status migration: the column stays; the display is
-computed. See `docs/plans/todo-availability-model.md`.
+created-at order). The project screen offers three manual moves — **Put in play** (writes `next`),
+**Move to backlog**, **Mark done** — not a five-way picker. Web keeps them in
+its actions menu; mobile opens them by tapping the visible status pill. No status
+migration: the column stays; the display is computed. See `docs/plans/todo-availability-model.md`.
 
 ## Vocabulary
 
@@ -167,11 +167,13 @@ no speculative columns before their behavior is designed.
   tree (the bug that broke the old mobile detail sheet's task/waiting rows). See
   `docs/plans/todo-project-detail-rework.md`. The screen leads with the **work**:
   a compact header (a de-emphasized emoji icon that opens its picker on tap, the
-  **title** as an editable heading, a read-only **derived-status pill**, and a
-  "⋯" **actions menu** with the status moves and **Delete project**), then the
-  project's **description**, tasks, and waiting conditions. On mobile, a waiting
-  status includes its winning timing (`Waiting · until Tomorrow` or `Waiting ·
-  for 5 days`). On mobile, project tasks use the same manually ordered
+  **title** as an editable heading, a **derived-status pill**, and a trailing
+  `⋯`), then the project's **description**, tasks, and waiting conditions. On
+  mobile the status pill is the status-change control: it opens a short sheet
+  with the valid manual moves, while `⋯` opens a compact native Project settings
+  menu with **Delete project**. Web keeps its read-only status pill and combined actions
+  menu. A mobile waiting status includes its winning timing (`Waiting · until
+  Tomorrow` or `Waiting · for 5 days`). On mobile, project tasks use the same manually ordered
   swipe-and-drag list as Home: long-press to reorder within the project, or swipe
   right to set the task to Tomorrow. An undated task gains that date; the task
   stays on the project screen and shows a muted `Scheduled · Tomorrow` caption.
@@ -188,8 +190,9 @@ no speculative columns before their behavior is designed.
   (web retains that synthetic row for now). Field edits commit on blur/submit
   (the icon on tap). Choosing **Mark done** or **Delete project** commits
   immediately and returns to the list; task completion keeps its Undo snackbar.
-  Sheets/menus still serve the short sub-interactions here (the icon picker and
-  status/delete actions on mobile are each a pure `@expo/ui` sheet).
+  Sheets/menus still serve the short sub-interactions here. On mobile, status
+  uses a pure `@expo/ui` sheet, settings uses a native anchored menu, and the
+  emoji picker remains a plain RN modal because its searchable grid is RN.
 - **Storage** — the server domain store is `DbProjectStore` (domain methods
   `add` / `list` / `setStatus` / `edit` / `delete`), a per-entity store like
   `DbCaptureStore` / `DbTaskStore` (do-orm is the shared layer; a store holds

@@ -161,6 +161,22 @@ committed.
 
 ## Project tracking
 
+Implemented and device-verified on the Pixel 7 (2026-09-13): **Direct
+project status and focused settings on mobile** (plan:
+`docs/plans/todo-project-status-and-settings.md`). The derived-status pill is now
+the status-change control and opens the existing valid manual moves: Put in
+play, Move to backlog, or Mark done. The `⋯` menu is now a compact native
+Project settings menu containing only Delete project. Project descriptions and
+their empty prompt now use the stronger secondary foreground color. Status
+derivation, inline project editing, persistence, and the web interface are
+unchanged. Mobile screen tests cover both backlog transitions, Done navigation, the settings
+split, delete, and cascade refetch. **Pixel 7:** a throwaway project moved Next
+→ Backlog → Next through the status pill, the settings menu showed only Delete
+project, and deletion returned to Projects and removed the throwaway row.
+Screenshots and UI hierarchies captured both presentations, and the stronger
+empty-description prompt was inspected read-only on an existing project; no
+existing project was changed.
+
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Create a project
 from inside another project on mobile** (plan:
 `docs/plans/todo-project-create-from-project-screen.md`). The project-detail add

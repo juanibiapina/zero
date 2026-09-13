@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-13: Project descriptions and their empty prompt are easier to read with stronger contrast.
+- 2026-09-13: Tap a project's status to move it into play, send it to Backlog, or mark it done. Project settings now keeps Delete project in a compact menu.
 - 2026-09-13: Create a project without leaving the project you're working in: open +, tap Project, and name the new outcome. Task still opens by default.
 - 2026-09-13: On a project's screen, press and hold tasks to reorder them or swipe right to schedule them for Tomorrow. Scrolling and pull-to-refresh still work directly from task rows.
 - 2026-09-13: A project waiting for a scheduled task now shows the date in its status and directly beneath that task, instead of listing an unexplained automatic condition. Project task rows also have more room and clear dividers.

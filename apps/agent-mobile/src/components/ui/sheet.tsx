@@ -1,4 +1,7 @@
-import { BottomSheet } from '@expo/ui';
+import {
+  BottomSheet,
+  type BottomSheetContentPadding,
+} from '@expo/ui';
 
 // A generic, entity-agnostic bottom sheet: a thin wrapper over the universal
 // @expo/ui BottomSheet (a real SwiftUI sheet on iOS, a Jetpack Compose
@@ -15,11 +18,21 @@ export type SheetProps = {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  contentPadding?: BottomSheetContentPadding;
 };
 
-export function Sheet({ open, onClose, children }: SheetProps) {
+export function Sheet({
+  open,
+  onClose,
+  children,
+  contentPadding,
+}: SheetProps) {
   return (
-    <BottomSheet isPresented={open} onDismiss={onClose}>
+    <BottomSheet
+      isPresented={open}
+      onDismiss={onClose}
+      contentPadding={contentPadding}
+    >
       {children}
     </BottomSheet>
   );

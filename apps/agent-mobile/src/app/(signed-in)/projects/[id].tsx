@@ -1,4 +1,5 @@
-import { Button, Column } from '@expo/ui';
+import { Column, ListItem, Text as UIText } from '@expo/ui';
+import { MenuView } from '@expo/ui/community/menu';
 import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
@@ -51,9 +52,9 @@ import { useColor } from '@/lib/theme';
 // Native view tree — NOT an @expo/ui native tree — so its task and waiting rows
 // render like every other list screen. (The old bottom-sheet detail dropped raw
 // RN rows inside an @expo/ui Column, which the native host cannot lay out; that
-// is the bug this screen removes.) The two short sub-interactions — the icon
-// picker and the status/delete actions — are the only @expo/ui here, each a pure
-// @expo/ui sheet. See docs/plans/todo-project-detail-rework.md.
+// is the bug this screen removes.) Status uses a short @expo/ui sheet, settings
+// uses a native menu, and the emoji picker is a plain RN modal for its RN grid.
+// See docs/plans/todo-project-detail-rework.md.
 export default function ProjectDetailScreen() {
   const projectsApi = useProjectsApi();
   const tasksApi = useTasksApi();
@@ -455,8 +456,8 @@ function IconPickerSheet({
 }
 
 // The identity header: a de-emphasized icon (tap to open the picker sheet), the
-// title as an editable heading (commit on blur / submit), a derived-status pill
-// that names the winning wait context, and a "⋯" that opens the actions sheet.
+// title as an editable heading (commit on blur / submit), a tappable derived-
+// status pill, and a "⋯" reserved for project settings.
 function ProjectHeader({
   project,
   statusLabel,
@@ -472,7 +473,11 @@ function ProjectHeader({
 }) {
   const [title, setTitle] = useState(project.title);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const foreground = useColor('--color-foreground');
+  const secondary = useColor('--color-foreground-secondary');
+  const danger = useColor('--color-danger');
+  const ripple = useColor('--color-ripple');
 
   const commitTitle = () => {
     const trimmed = title.trim();
@@ -488,6 +493,11 @@ function ProjectHeader({
   const applyIcon = (emoji: string) => {
     if (emoji !== project.icon) onEdit({ icon: emoji });
     setPickerOpen(false);
+  };
+
+  const chooseStatus = (status: ProjectStatus) => {
+    setStatusOpen(false);
+    onStatus(status);
   };
 
   return (
@@ -511,24 +521,47 @@ function ProjectHeader({
           accessibilityLabel="Project title"
           className="flex-1 text-[22px] font-bold"
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Project actions"
-          hitSlop={8}
-          onPress={() => setActionsOpen(true)}
+        <MenuView
+          title="Project settings"
+          actions={[
+            {
+              id: 'delete',
+              title: 'Delete project',
+              titleColor: danger,
+              attributes: { destructive: true },
+            },
+          ]}
+          onPressAction={({ nativeEvent }) => {
+            if (nativeEvent.event === 'delete') onDelete();
+          }}
         >
-          <Text className="text-[22px] text-foreground-muted">⋯</Text>
-        </Pressable>
+          <View
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Project settings"
+            className="p-2"
+          >
+            <Text className="text-[22px] text-foreground-muted">⋯</Text>
+          </View>
+        </MenuView>
       </View>
       <View className="mt-2 flex-row">
-        <View className="rounded-full bg-surface-muted px-2.5 py-0.5">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Project status: ${statusLabel}`}
+          accessibilityHint="Change project status"
+          hitSlop={8}
+          android_ripple={{ color: ripple }}
+          onPress={() => setStatusOpen(true)}
+          className="max-w-full overflow-hidden rounded-full bg-surface-muted px-3 py-1.5"
+        >
           <Text
-            accessibilityLabel={`Project status: ${statusLabel}`}
-            className="text-[12px] text-foreground-muted"
+            numberOfLines={1}
+            className="text-[13px] font-medium text-foreground-secondary"
           >
             {statusLabel}
           </Text>
-        </View>
+        </Pressable>
       </View>
 
       {/* One combined surface: AI suggestions on top, the full searchable emoji
@@ -540,43 +573,43 @@ function ProjectHeader({
         onPick={applyIcon}
       />
 
-      <Sheet open={actionsOpen} onClose={() => setActionsOpen(false)}>
-        <Column spacing={8}>
+      <Sheet
+        open={statusOpen}
+        onClose={() => setStatusOpen(false)}
+        contentPadding={{ top: 8, bottom: 16, left: 0, right: 0 }}
+      >
+        <Column>
+          <Column
+            spacing={2}
+            style={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: 8 }}
+          >
+            <UIText
+              textStyle={{ color: foreground, fontSize: 20, fontWeight: '600' }}
+            >
+              Project status
+            </UIText>
+            <UIText textStyle={{ color: secondary, fontSize: 14 }}>
+              {statusLabel}
+            </UIText>
+          </Column>
           {project.status === 'backlog' ? (
-            <Button
-              variant="outlined"
-              label="Put in play"
-              onPress={() => {
-                setActionsOpen(false);
-                onStatus('next');
-              }}
-            />
+            <ListItem onPress={() => chooseStatus('next')}>
+              <UIText textStyle={{ color: foreground, fontSize: 16 }}>
+                Put in play
+              </UIText>
+            </ListItem>
           ) : (
-            <Button
-              variant="outlined"
-              label="Move to backlog"
-              onPress={() => {
-                setActionsOpen(false);
-                onStatus('backlog');
-              }}
-            />
+            <ListItem onPress={() => chooseStatus('backlog')}>
+              <UIText textStyle={{ color: foreground, fontSize: 16 }}>
+                Move to backlog
+              </UIText>
+            </ListItem>
           )}
-          <Button
-            variant="outlined"
-            label="Mark done"
-            onPress={() => {
-              setActionsOpen(false);
-              onStatus('done');
-            }}
-          />
-          <Button
-            variant="text"
-            label="Delete project"
-            onPress={() => {
-              setActionsOpen(false);
-              onDelete();
-            }}
-          />
+          <ListItem onPress={() => chooseStatus('done')}>
+            <UIText textStyle={{ color: foreground, fontSize: 16 }}>
+              Mark done
+            </UIText>
+          </ListItem>
         </Column>
       </Sheet>
     </View>
@@ -685,7 +718,8 @@ function ProjectDescription({
         multiline
         placeholder="What outcome are you after, and why does it matter?"
         accessibilityLabel="Project description"
-        className="text-[15px] text-foreground-muted"
+        placeholderTextColorClassName="text-foreground-secondary"
+        className="text-[15px] text-foreground-secondary"
       />
     </View>
   );

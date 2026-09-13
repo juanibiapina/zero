@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
@@ -52,11 +52,10 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockBack, push: mockPush }),
 }));
 
-// The two short sub-interaction sheets (icon picker, status/delete actions) are
-// the only @expo/ui on the screen; the body is plain RN. Substitute RN
-// passthroughs so the wiring is unit-testable (the real native controls are
-// verified on-device). The mock BottomSheet renders children only when
-// presented, like the real sheet; Button exposes its label as the a11y name.
+// Status uses @expo/ui rows in a native sheet and settings uses a native menu;
+// the screen body is plain RN. Substitute RN adapters so their wiring is
+// unit-testable (the real native controls are verified on-device). The mock
+// BottomSheet renders children only when presented, like the real sheet.
 function MockView({ children }: { children?: ReactNode }) {
   return <View>{children}</View>;
 }
@@ -67,6 +66,19 @@ function MockButton({ label, onPress }: { label: string; onPress?: () => void })
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
       <RNText>{label}</RNText>
+    </Pressable>
+  );
+}
+function MockListItem({
+  children,
+  onPress,
+}: {
+  children?: ReactNode;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress}>
+      {children}
     </Pressable>
   );
 }
@@ -85,7 +97,45 @@ jest.mock('@expo/ui', () => ({
   Row: MockView,
   Text: MockText,
   Button: MockButton,
+  ListItem: MockListItem,
   BottomSheet: MockBottomSheet,
+}));
+
+function MockMenuView({
+  actions,
+  onPressAction,
+  children,
+}: {
+  actions: { id?: string; title: string }[];
+  onPressAction?: (event: { nativeEvent: { event: string } }) => void;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View>
+      <Pressable onPress={() => setOpen(true)}>{children}</Pressable>
+      {open
+        ? actions.map((action) => (
+            <Pressable
+              key={action.id ?? action.title}
+              accessibilityRole="button"
+              onPress={() => {
+                setOpen(false);
+                onPressAction?.({
+                  nativeEvent: { event: action.id ?? action.title },
+                });
+              }}
+            >
+              <RNText>{action.title}</RNText>
+            </Pressable>
+          ))
+        : null}
+    </View>
+  );
+}
+jest.mock('@expo/ui/community/menu', () => ({
+  __esModule: true,
+  MenuView: MockMenuView,
 }));
 
 // The inline emoji keyboard (rn-emoji-keyboard's non-modal build) sits inside our
@@ -852,33 +902,62 @@ describe('ProjectDetailScreen', () => {
     expect(getByLabelText('Pick emoji 🎓')).toBeTruthy();
   });
 
-  it('moves the project to backlog from the actions sheet', async () => {
+  it('moves the project to backlog from its status', async () => {
     mockSetProjectStatus.mockResolvedValue(project('1', 'Run a 5K', '🏃', 'backlog'));
 
-    const { getByLabelText } = await renderScreen();
-    await waitFor(() => expect(getByLabelText('Project actions')).toBeTruthy());
+    const { getByLabelText, getByText } = await renderScreen();
+    await waitFor(() =>
+      expect(getByLabelText('Project status: Next')).toBeTruthy(),
+    );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Project actions'));
+      fireEvent.press(getByLabelText('Project status: Next'));
     });
+    expect(getByText('Project status')).toBeTruthy();
     await act(async () => {
-      fireEvent.press(getByLabelText('Move to backlog'));
+      fireEvent.press(getByText('Move to backlog'));
     });
 
     expect(mockSetProjectStatus).toHaveBeenCalledTimes(1);
     expect(mockSetProjectStatus.mock.calls[0][2]).toBe('backlog');
   });
 
-  it('marks done immediately and pops', async () => {
-    mockSetProjectStatus.mockResolvedValue(project('1', 'ship', '📁', 'done'));
-    const { getByLabelText } = await renderScreen();
-    await waitFor(() => expect(getByLabelText('Project actions')).toBeTruthy());
+  it('puts a backlog project back in play from its status', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Run a 5K', '🏃', 'backlog'),
+    ]);
+    mockSetProjectStatus.mockResolvedValue(
+      project('1', 'Run a 5K', '🏃', 'next'),
+    );
+
+    const { getByLabelText, getByText } = await renderScreen();
+    await waitFor(() =>
+      expect(getByLabelText('Project status: Backlog')).toBeTruthy(),
+    );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Project actions'));
+      fireEvent.press(getByLabelText('Project status: Backlog'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('Mark done'));
+      fireEvent.press(getByText('Put in play'));
+    });
+
+    expect(mockSetProjectStatus).toHaveBeenCalledTimes(1);
+    expect(mockSetProjectStatus.mock.calls[0][2]).toBe('next');
+  });
+
+  it('marks done immediately from the status and pops', async () => {
+    mockSetProjectStatus.mockResolvedValue(project('1', 'ship', '📁', 'done'));
+    const { getByLabelText, getByText } = await renderScreen();
+    await waitFor(() =>
+      expect(getByLabelText('Project status: Next')).toBeTruthy(),
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Project status: Next'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Mark done'));
     });
 
     await waitFor(() =>
@@ -891,15 +970,19 @@ describe('ProjectDetailScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('deletes immediately and pops', async () => {
-    const { getByLabelText } = await renderScreen();
-    await waitFor(() => expect(getByLabelText('Project actions')).toBeTruthy());
+  it('keeps deletion in project settings without status controls', async () => {
+    const { getByLabelText, getByText, queryByText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project settings')).toBeTruthy());
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Project actions'));
+      fireEvent.press(getByLabelText('Project settings'));
     });
+    expect(getByText('Delete project')).toBeTruthy();
+    expect(queryByText('Move to backlog')).toBeNull();
+    expect(queryByText('Put in play')).toBeNull();
+    expect(queryByText('Mark done')).toBeNull();
     await act(async () => {
-      fireEvent.press(getByLabelText('Delete project'));
+      fireEvent.press(getByText('Delete project'));
     });
 
     await waitFor(() =>
@@ -909,17 +992,17 @@ describe('ProjectDetailScreen', () => {
   });
 
   it('re-pulls tasks and waits after a delete so cascaded orphans disappear', async () => {
-    const { getByLabelText } = await renderScreen();
-    await waitFor(() => expect(getByLabelText('Project actions')).toBeTruthy());
+    const { getByLabelText, getByText } = await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project settings')).toBeTruthy());
 
     const tasksBefore = mockFetchTasks.mock.calls.length;
     const waitsBefore = mockFetchWaits.mock.calls.length;
 
     await act(async () => {
-      fireEvent.press(getByLabelText('Project actions'));
+      fireEvent.press(getByLabelText('Project settings'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('Delete project'));
+      fireEvent.press(getByText('Delete project'));
     });
 
     // The delete persists, then its .then re-pulls both dependent collections
