@@ -71,7 +71,7 @@
     "lint": "eslint .",
     "uniwind:types": "uniwind generate-artifacts --css ./global.css --dts ./src/uniwind-types.d.ts",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests --forceExit"
+    "test": "jest --passWithNoTests --forceExit --runInBand"
   },
   "jest": {
     "preset": "jest-expo",
