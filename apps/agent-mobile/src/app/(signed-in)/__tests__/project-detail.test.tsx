@@ -42,9 +42,14 @@ jest.mock('@clerk/expo', () => ({
 // override the id before rendering.
 let mockCurrentId = '1';
 const mockBack = jest.fn();
+const mockNavigate = jest.fn<(href: string, options?: unknown) => void>();
+const mockPush = jest.fn<(href: string) => void>();
 jest.mock('expo-router', () => ({
+  router: {
+    navigate: (href: string, options?: unknown) => mockNavigate(href, options),
+  },
   useLocalSearchParams: () => ({ id: mockCurrentId }),
-  useRouter: () => ({ back: mockBack, push: jest.fn() }),
+  useRouter: () => ({ back: mockBack, push: mockPush }),
 }));
 
 // The two short sub-interaction sheets (icon picker, status/delete actions) are
@@ -108,6 +113,13 @@ jest.mock('rn-emoji-keyboard', () => ({
 }));
 
 const mockFetchProjects = jest.fn<() => Promise<Project[]>>();
+const mockAddProject =
+  jest.fn<
+    (
+      getToken: unknown,
+      project: { id: string; title: string; sourceCaptureId: string | null },
+    ) => Promise<Project>
+  >();
 const mockSetProjectStatus =
   jest.fn<(getToken: unknown, id: string, status: ProjectStatus) => Promise<Project>>();
 const mockDeleteProject =
@@ -154,7 +166,10 @@ const mockAddWaitingCondition =
   >();
 jest.mock('@/lib/api', () => ({
   fetchProjects: () => mockFetchProjects(),
-  addProject: () => Promise.reject(new Error('not used')),
+  addProject: (
+    getToken: unknown,
+    project: { id: string; title: string; sourceCaptureId: string | null },
+  ) => mockAddProject(getToken, project),
   setProjectStatus: (getToken: unknown, id: string, status: ProjectStatus) =>
     mockSetProjectStatus(getToken, id, status),
   editProject: (getToken: unknown, id: string, fields: Record<string, unknown>) =>
@@ -237,6 +252,9 @@ describe('ProjectDetailScreen', () => {
     resetTasksApiForTest();
     resetWaitsApiForTest();
     mockBack.mockReset();
+    mockNavigate.mockReset();
+    mockPush.mockReset();
+    mockAddProject.mockReset();
     mockDeleteProject.mockReset();
     mockDeleteProject.mockResolvedValue(undefined);
     mockSetProjectStatus.mockClear();
@@ -451,8 +469,12 @@ describe('ProjectDetailScreen', () => {
       return added;
     });
 
-    const { getByLabelText, getByPlaceholderText, queryByLabelText } =
-      await renderScreen();
+    const {
+      getAllByLabelText,
+      getByLabelText,
+      getByPlaceholderText,
+      queryByLabelText,
+    } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
     // Adding is a plus FAB that expands into the quick-add bar.
@@ -460,12 +482,17 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add'));
     });
 
-    // The drawer offers the two project-scoped tabs (Task and Waiting) — and no
-    // capture/project modes. Task is the default, so its placeholder shows.
-    expect(getByLabelText('Add a task')).toBeTruthy();
-    expect(getByLabelText('Add a waiting condition')).toBeTruthy();
+    // The drawer offers Task, project-scoped Waiting, and Project. Task remains
+    // the default, so its placeholder and metadata rows show first.
+    expect(
+      getByLabelText('Add a task').props.accessibilityState.selected,
+    ).toBe(true);
+    expect(
+      getAllByLabelText(/^Add a (task|project|waiting condition)$/).map(
+        (tab) => tab.props.accessibilityLabel,
+      ),
+    ).toEqual(['Add a task', 'Add a waiting condition', 'Add a project']);
     expect(queryByLabelText('Add a capture')).toBeNull();
-    expect(queryByLabelText('Add a project')).toBeNull();
 
     const input = getByPlaceholderText('Add a task');
     await act(async () => {
@@ -479,6 +506,69 @@ describe('ProjectDetailScreen', () => {
       expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
     );
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('1');
+  });
+
+  it('creates another project from the add drawer and defaults back to Task', async () => {
+    mockAddProject.mockImplementation(async (_token, input) =>
+      project(input.id, input.title),
+    );
+
+    const { getByLabelText, getByPlaceholderText, queryByPlaceholderText } =
+      await renderScreen();
+    await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add'));
+    });
+
+    expect(
+      getByLabelText('Add a task').props.accessibilityState.selected,
+    ).toBe(true);
+    expect(getByPlaceholderText('Add a task')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a project'));
+    });
+    const input = getByPlaceholderText('Name an outcome');
+    await act(async () => {
+      fireEvent.changeText(input, 'Run a half marathon');
+    });
+    await act(async () => {
+      fireEvent(input, 'submitEditing');
+    });
+
+    await waitFor(() => expect(mockAddProject).toHaveBeenCalledTimes(1));
+    const created = mockAddProject.mock.calls[0][1];
+    expect(created.title).toBe('Run a half marathon');
+    expect(created.sourceCaptureId).toBeNull();
+    expect(mockAddTask).not.toHaveBeenCalled();
+    expect(mockAddWaitingCondition).not.toHaveBeenCalled();
+    expect(queryByPlaceholderText('Name an outcome')).toBeNull();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast).toBeDefined();
+    if (!toast) throw new Error('Project-created toast is missing');
+    expect(toast.message).toBe('Project created');
+    expect(toast.description).toBe('Run a half marathon');
+    expect(toast.action?.label).toBe('View');
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add'));
+    });
+    expect(
+      getByLabelText('Add a task').props.accessibilityState.selected,
+    ).toBe(true);
+    expect(getByPlaceholderText('Add a task')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(getByLabelText('Dismiss quick add'));
+    });
+
+    toast.action?.onPress();
+    expect(mockNavigate).toHaveBeenCalledWith(`/projects/${created.id}`, {
+      withAnchor: true,
+    });
   });
 
   it('opens the shared task editor when a task row is tapped and edits on dismiss', async () => {

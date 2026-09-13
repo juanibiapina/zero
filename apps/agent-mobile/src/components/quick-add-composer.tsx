@@ -72,7 +72,7 @@ export function useQuickAdd({
   // The user's projects, for the project row label and the "Filed" toast copy.
   projects: Project[];
   // Which mode tabs to offer, in order. Home: ['task','project']; a project's
-  // own screen: ['task','waiting'].
+  // own screen: ['task','waiting','project'].
   modes: AddMode[];
   // This screen's home project (a project's own screen): presets the project
   // row to it (still changeable) and scopes a waiting add to it. Omit/null on

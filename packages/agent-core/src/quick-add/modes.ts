@@ -19,10 +19,10 @@
 export type AddMode = "task" | "project" | "waiting";
 
 // The full offered set, in display order. A widget defaults to this; a
-// single-purpose screen passes a narrowed list (e.g. ["task"] on a project, or
-// ["task", "waiting"] on a project's own screen). `waiting` is deliberately
-// absent here — it is project-scoped (see the type note above). `task` is the
-// default entry (Home's quick-add).
+// single-purpose screen passes a narrowed list (e.g. ["project"] on the Projects
+// list, or ["task", "waiting", "project"] on a project's own screen). `waiting`
+// is deliberately absent here — it is project-scoped (see the type note above).
+// `task` is the default entry (Home's quick-add).
 export const ALL_ADD_MODES: AddMode[] = ["task", "project"];
 
 // The short word shown on a mode's pill (capitalized as rendered).

@@ -161,6 +161,20 @@ committed.
 
 ## Project tracking
 
+Implemented and device-verified on the Pixel 7 (2026-09-13): **Create a project
+from inside another project on mobile** (plan:
+`docs/plans/todo-project-create-from-project-screen.md`). The project-detail add
+drawer now offers Task / Waiting / Project through the existing deep
+`useQuickAdd` module; Task remains first and resets as the default, while Project
+uses the same optimistic, offline-durable create path and View toast as Home.
+Projects created there are independent, not children of the open project. The
+screen test covers creation, staying on the current project, toast navigation,
+and the default after reopening. **Pixel 7:** from a throwaway parent project,
+the three tabs fit above the keyboard with Task selected; Project created a
+throwaway child while the parent stayed open and raised the expected toast; the
+child persisted in the Projects list; reopening defaulted to Task. Both
+throwaway projects were deleted and no existing entity was changed.
+
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Project task
 reorder and swipe-to-Tomorrow on mobile** (plan:
 `docs/plans/todo-project-task-reorder-postpone.md`). Project detail now uses the

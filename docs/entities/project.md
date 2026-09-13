@@ -178,11 +178,12 @@ no speculative columns before their behavior is designed.
   Tapping the full row still opens the shared editor. Every dated task continues
   to show its `Scheduled · <day>` context in the list without a second inline
   control. The list remains the screen's single scroll and pull-to-refresh
-  surface. The project FAB opens the shared Task/Waiting composer; a new task
-  starts undated and preset to this project,
-  but both date and project can be changed before creation. On web, project task
-  rows retain their inline date chip. Real waiting conditions remain under
-  **Waiting on** on both surfaces; mobile does not render a future task date as
+  surface. The project FAB opens the shared Task/Waiting/Project composer, with
+  Task selected by default. Project mode creates an independent project rather
+  than a child of the open one. A new task starts undated and preset to this
+  project, but both date and project can be changed before creation. On web,
+  project task rows retain their inline date chip. Real waiting conditions remain
+  under **Waiting on** on both surfaces; mobile does not render a future task date as
   an automatic condition because the header and source task already explain it
   (web retains that synthetic row for now). Field edits commit on blur/submit
   (the icon on tap). Choosing **Mark done** or **Delete project** commits

@@ -167,15 +167,15 @@ function ProjectDetail({
     onError: setError,
   });
 
-  // The quick-add composer, project-scoped: Task and Waiting modes, the project
-  // preset to this one in the project row, and — like Home — a create-time date
-  // row on a task. See quick-add-composer.tsx.
+  // The quick-add composer offers Task, Waiting, and Project. Task stays first
+  // so every open defaults to adding work under this project; Waiting remains
+  // scoped here, and Project reuses the ordinary independent-project path.
   const add = useQuickAdd({
     tasksApi,
     projectsApi: api,
     waitsApi,
     projects: list,
-    modes: ['task', 'waiting'],
+    modes: ['task', 'waiting', 'project'],
     projectId: id,
     getToken,
     onError: setError,
@@ -307,9 +307,8 @@ function ProjectDetail({
 
       {detail.sheets}
 
-      {/* Project-scoped quick-add: Task and Waiting tabs, plus create-time date
-          and project rows on a task — the same composer
-          Home uses. */}
+      {/* Project quick-add: Task, Waiting, and Project tabs, with task metadata
+          preset to this project and Waiting scoped to it. */}
       {add.bar}
     </View>
   );
