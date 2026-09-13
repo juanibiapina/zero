@@ -24,6 +24,7 @@ import {
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   BackHandler,
   Modal,
   Pressable,
@@ -532,7 +533,17 @@ function ProjectHeader({
             },
           ]}
           onPressAction={({ nativeEvent }) => {
-            if (nativeEvent.event === 'delete') onDelete();
+            if (nativeEvent.event === 'delete') {
+              Alert.alert(
+                `Delete “${project.title}”?`,
+                'This permanently deletes the project, all its tasks (including completed tasks), and its waiting conditions. This cannot be undone.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: onDelete },
+                ],
+                { cancelable: true },
+              );
+            }
           }}
         >
           <View

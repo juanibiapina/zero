@@ -158,6 +158,10 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 2: mobile suite, lint, typecheck pass. Pixel `/tmp/beta-2.yaml` confirmed
+  Cancel keeps the project and Delete removes its scheduled task from Upcoming.
+  The slice-1 fixture project and task are now deleted.
+
 - Slice 1: 112 mobile tests, lint, and typecheck pass. Pixel flow `/tmp/beta-1.yaml`
   renamed a throwaway task, scheduled Tomorrow, and confirmed the new name after
   refresh in Upcoming (2026-09-13_210006 Maestro run). The shared fixture project

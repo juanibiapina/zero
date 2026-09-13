@@ -8,7 +8,10 @@ import {
   waitFor,
   type RenderResult,
 } from '@testing-library/react-native';
-import { Pressable, Text as RNText, View } from 'react-native';
+import { Alert, Pressable, Text as RNText, View } from 'react-native';
+
+const mockAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+const confirmDelete = () => mockAlert.mock.calls.at(-1)?.[2]?.find((b) => b.text === 'Delete')?.onPress?.();
 import {
   defaultToastController,
   localToday,
@@ -985,6 +988,13 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByText('Delete project'));
     });
 
+    expect(mockDeleteProject).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockAlert).toHaveBeenLastCalledWith(
+      'Delete “Run a 5K”?', expect.stringContaining('including completed tasks'),
+      expect.any(Array), { cancelable: true },
+    );
+    await act(async () => confirmDelete());
     await waitFor(() =>
       expect(mockDeleteProject).toHaveBeenCalledWith(expect.anything(), '1'),
     );
@@ -1004,6 +1014,8 @@ describe('ProjectDetailScreen', () => {
     await act(async () => {
       fireEvent.press(getByText('Delete project'));
     });
+
+    await act(async () => confirmDelete());
 
     // The delete persists, then its .then re-pulls both dependent collections
     // (the server has cascaded their rows away).
