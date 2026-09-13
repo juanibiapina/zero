@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-14: The app now uses the white-and-graphite task icon on the launcher and launch screen, with a matching Android themed icon.
+
 - 2026-09-13: After signing in online, you can reopen the app without a connection and access your locally saved tasks instead of getting stuck during startup.
 
 - 2026-09-13: Screen readers announce snackbar results, selected dates, and expanded project sections. Calendar and snackbar controls are easier to tap, waiting actions name their condition, and drawers stay usable with larger text.

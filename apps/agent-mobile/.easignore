@@ -3,6 +3,8 @@
 # Session state dirs at the repo root hold Unix sockets (nvim, pi agent) that
 # break the upload copy ("Cannot copy a socket file"); never needed by the build.
 /.local
+/apps/agent-mobile/android
+/apps/agent-mobile/ios
 /docs
 /.github
 /PLAN.md

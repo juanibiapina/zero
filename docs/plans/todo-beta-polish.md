@@ -173,6 +173,12 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Final move/cleanup (2026-09-14): `/tmp/beta-final-move-resume.yaml` passed on the
+  rebuilt Pixel dev client. A renamed task moved out to Home and back to its
+  project with both View links; the named waiting-condition action resolved its
+  condition. Deleted `ZZ Beta move`, including the interrupted test's old task.
+  No beta fixtures remain; timeout/font/radio settings are restored.
+
 - Final local CI: `gob run env TURBO_CONCURRENCY=1 bin/ci` passed repository lint,
   typecheck, build, and nine test tasks (including mobile, web, core, and agent
   API). It then failed in untouched dashboard tests because NixOS cannot launch

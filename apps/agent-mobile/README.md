@@ -107,13 +107,34 @@ back only where the native component does not fit.
   --output-dir /tmp/x` compiles through Metro + Babel + Uniwind and surfaces
   styling/bundle wiring errors that typecheck alone misses.
 
+## Brand assets
+
+`assets/brand/todo-icon.svg` is the approved white/graphite icon source. Run
+`bin/generate-todo-icons` from the repository root (Python 3 and ImageMagick 7)
+to regenerate mobile PNGs and `apps/agent-web/public` favicons. The command
+validates dimensions, transparency, neutral pixels, and Android's safe zone.
+Do not edit generated PNGs or the web SVG copy independently.
+
+Android uses a transparent foreground over white and a matching monochrome
+silhouette; iOS uses the opaque 1024px icon. Launcher and splash changes require
+a new native build. Application UI colors are independent of these assets.
+The EAS archive rules exclude generated `android/` and `ios/` directories so
+prebuild always applies `app.json`. A stale git-ignored native project otherwise
+silently overrides icon configuration. For the attached Pixel, use the
+`development-pixel` profile: it inherits the development client and builds only
+ARM64. The regular development and preview profiles retain all architectures.
+
 ## Authentication and environment
 
 The app signs in with **Clerk**, against the **same Clerk instance as the web
 app**, so a user has one account across web and mobile. Sign-in is now the entry
 screen: signed-out users see "Continue with Google" (Google OAuth via Clerk's
 `useSSO`); after signing in they reach the home screen. The Clerk session is
-persisted in `expo-secure-store`, so it survives app restarts.
+persisted in `expo-secure-store`, so it survives app restarts. The root provider
+also enables Clerk's `resourceCache` (`__experimental_resourceCache`), backed by
+SecureStore, so a previously signed-in user can cold-start offline. Token caching
+alone is not enough: Clerk also needs its cached client and environment resources.
+First sign-in still requires a connection.
 
 The Clerk SDK is **`@clerk/expo` v4 (Core 3)**. The old `@clerk/clerk-expo`
 (Core 2) is deprecated. Google sign-in goes through `useSSO` (a Custom Tab +

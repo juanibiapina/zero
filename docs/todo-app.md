@@ -161,6 +161,14 @@ committed.
 
 ## Project tracking
 
+Implemented and launcher-verified on the Pixel 7 (2026-09-14): **Selected
+white/graphite icon** on mobile and web. The approved SVG generates platform
+assets and web favicons through `bin/generate-todo-icons`; see
+`docs/plans/todo-selected-icon-integration.md`. Native archive rules now exclude
+stale generated projects so Expo config applies on every build. The
+`development-pixel` profile verifies native changes on ARM64 without reducing
+preview compatibility. Application UI colors are unchanged.
+
 Implemented and Pixel-verified (2026-09-13): **Beta flow polish**, plan and proof
 at `docs/plans/todo-beta-polish.md`. Task drafts survive scheduling/moving/completion;
 project deletion confirms its cascade; Undo respects longer native timeouts;

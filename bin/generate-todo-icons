@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Render the approved todo SVG with Python 3 and ImageMagick 7."""
+import copy
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parent.parent
+SOURCE = ROOT / 'apps/agent-mobile/assets/brand/todo-icon.svg'
+MOBILE = ROOT / 'apps/agent-mobile/assets/images'
+WEB = ROOT / 'apps/agent-web/public'
+NS = 'http://www.w3.org/2000/svg'
+ET.register_namespace('', NS)
+ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
+ENV = {**os.environ, 'MAGICK_THREAD_LIMIT': '1'}
+
+
+def magick(*args):
+    return subprocess.check_output(['magick', *map(str, args)], env=ENV, text=True).strip()
+
+
+def render(source, output, size, opaque=False):
+    args = ['-background', 'none', source, '-resize', f'{size}x{size}']
+    if opaque:
+        args += ['-background', 'white', '-alpha', 'remove', '-alpha', 'off']
+    args += ['-strip', '-define', 'png:exclude-chunk=date,time',
+             ('PNG24:' if opaque else 'PNG32:') + str(output)]
+    magick(*args)
+    dimensions = magick('identify', '-format', '%wx%h', output)
+    if dimensions != f'{size}x{size}':
+        raise RuntimeError(f'{output}: unexpected dimensions {dimensions}')
+    is_opaque = magick('identify', '-format', '%[opaque]', output).lower() == 'true'
+    if is_opaque != opaque:
+        raise RuntimeError(f'{output}: unexpected opacity {is_opaque}')
+    # The approved design uses only neutral RGB values.
+    difference = float(magick(output, '-fx', 'abs(r-g)+abs(g-b)', '-format', '%[fx:maxima]', 'info:'))
+    if difference > 1 / 255:
+        raise RuntimeError(f'{output}: unexpected colored pixels')
+
+
+def main():
+    if shutil.which('magick') is None:
+        raise SystemExit('ImageMagick 7 (magick) is required.')
+    MOBILE.mkdir(parents=True, exist_ok=True)
+    WEB.mkdir(parents=True, exist_ok=True)
+    tree = ET.parse(SOURCE)
+    root = tree.getroot()
+    if root.get('viewBox') != '0 0 1024 1024':
+        raise RuntimeError('The approved SVG viewBox changed; review adaptive safe-zone sizing.')
+    groups = root.findall(f'{{{NS}}}g')
+    if len(groups) != 2 or groups[0].find(f'{{{NS}}}circle') is None:
+        raise RuntimeError('The approved background/artwork structure changed.')
+
+    with tempfile.TemporaryDirectory(prefix='todo-icons-') as folder:
+        temp = Path(folder)
+        # Android supplies its own opaque white background and launcher mask.
+        # Scale only the foreground into the central 66/108 safe-zone circle.
+        root.remove(groups[0])
+        root.remove(groups[1])
+        safe = ET.SubElement(root, f'{{{NS}}}g', {
+            'transform': 'translate(512 512) scale(0.75) translate(-512 -500)',
+        })
+        safe.append(groups[1])
+        foreground = temp / 'foreground.svg'
+        tree.write(foreground, encoding='utf-8', xml_declaration=True)
+
+        mono = copy.deepcopy(tree)
+        for element in mono.getroot().iter():
+            element.attrib.pop('filter', None)
+            for attr in ('fill', 'stroke'):
+                if attr in element.attrib and element.get(attr) != 'none':
+                    element.set(attr, '#000000')
+        monochrome = temp / 'monochrome.svg'
+        mono.write(monochrome, encoding='utf-8', xml_declaration=True)
+
+        render(SOURCE, MOBILE / 'icon.png', 1024, opaque=True)
+        render(foreground, MOBILE / 'android-icon-foreground.png', 1024)
+        render(monochrome, MOBILE / 'android-icon-monochrome.png', 1024)
+        render(SOURCE, MOBILE / 'splash-icon.png', 512)
+        render(SOURCE, MOBILE / 'favicon.png', 48, opaque=True)
+        render(SOURCE, WEB / 'apple-touch-icon.png', 180, opaque=True)
+        shutil.copyfile(SOURCE, WEB / 'todo-icon.svg')
+        shutil.copyfile(MOBILE / 'favicon.png', WEB / 'favicon.png')
+
+        # Every foreground pixel must fit in the Android guaranteed safe circle.
+        mask = temp / 'outside-safe.png'
+        magick('-size', '1024x1024', 'xc:white', '-fill', 'black', '-draw',
+               'circle 512,512 824,512', mask)
+        for name in ('android-icon-foreground.png', 'android-icon-monochrome.png'):
+            escaped = float(magick(MOBILE / name, '-alpha', 'extract', mask,
+                                   '-compose', 'Multiply', '-composite',
+                                   '-format', '%[fx:maxima]', 'info:'))
+            if escaped > 1 / 255:
+                raise RuntimeError(f'{name}: artwork escapes the adaptive safe zone')
+    print('Generated and validated mobile icons and web favicons from', SOURCE.relative_to(ROOT))
+
+
+if __name__ == '__main__':
+    main()

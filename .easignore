@@ -7,6 +7,9 @@
 # the upload copy ("Cannot copy a socket file"). .easignore overrides .gitignore,
 # so this must be listed here even though .local is gitignored.
 .local/
+# Native projects are generated from app.json, never source-of-truth inputs.
+/apps/agent-mobile/android/
+/apps/agent-mobile/ios/
 **/android/app/build/
 **/android/build/
 **/ios/build/
