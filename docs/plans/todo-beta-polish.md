@@ -158,6 +158,12 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 13: mobile checks pass, including spoken result and selected-date tests.
+  Pixel at font_scale 1.5 rendered the editor above the keyboard and reached the
+  calendar's No date action; discarded the draft, restored font_scale 1.0.
+  Screenshots in Maestro's 2026-09-13_220559 run. TalkBack audio was not audited;
+  native labels/state and the announcement call are covered by hierarchy/tests.
+
 - Slice 10: mobile checks pass. Pixel selected October 15, reopened at October,
   browsed November, canceled, and reopened at October again (`/tmp/beta-10-continue.yaml`).
   The initial project lookup failed because Projects retained its scroll offset;

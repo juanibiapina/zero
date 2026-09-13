@@ -721,7 +721,8 @@ function ProjectWaits({
           {c.kind === 'free-text' ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Resolve condition"
+              accessibilityLabel={`Resolve condition: ${conditionLabel(c, tasks, [project])}`}
+              className="min-h-12 min-w-12 items-center justify-center"
               hitSlop={8}
               onPress={() => write(waitsApi.resolve(c.id))}
             >
@@ -732,7 +733,8 @@ function ProjectWaits({
           )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Delete condition"
+            accessibilityLabel={`Delete condition: ${conditionLabel(c, tasks, [project])}`}
+            className="min-h-12 min-w-12 items-center justify-center"
             hitSlop={8}
             onPress={() => write(waitsApi.remove(c.id))}
           >

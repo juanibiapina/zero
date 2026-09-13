@@ -16,6 +16,9 @@ describe('task pickers', () => {
     await screen.rerender(<ScheduleSheet {...props} open={false} />);
     await screen.rerender(<ScheduleSheet {...props} open />);
     expect(screen.getByText('September 2026')).toBeTruthy();
+    const date = screen.getByTestId('schedule-date-2026-09-13');
+    expect(date.props.accessibilityState).toEqual({ selected: true });
+    expect(date.props.accessibilityLabel).toContain('September');
     await screen.rerender(<ScheduleSheet {...props} open={false} />);
     await screen.rerender(<ScheduleSheet {...props} showUpDate="2027-01-04" open />);
     expect(screen.getByText('January 2027')).toBeTruthy();

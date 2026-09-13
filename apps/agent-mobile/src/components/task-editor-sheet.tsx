@@ -3,10 +3,11 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
   type ReactNode,
   type Ref,
 } from 'react';
-import { Modal, Pressable, type TextInput, View } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
@@ -42,7 +43,6 @@ function EditorActionRow({
       className="min-h-14 max-w-full flex-row items-center px-screen-x py-3.5"
     >
       <Text
-        numberOfLines={1}
         className={cn(
           'flex-1 text-[16px]',
           active
@@ -127,6 +127,13 @@ export function TaskEditorSheet({
   overlay?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (event) => setKeyboardHeight(event.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   const field = useRef<TextInput>(null);
   const cancelRefocus = useRef<() => void>(() => {});
   useImperativeHandle(inputRef, () => ({ focus: () => field.current?.focus() }), []);
@@ -155,6 +162,7 @@ export function TaskEditorSheet({
           style={{ paddingBottom: insets.bottom + 8 }}
           className="rounded-t-2xl bg-surface pt-2 shadow-raised"
         >
+          <ScrollView style={{ maxHeight: Math.max(180, height - keyboardHeight - insets.top - insets.bottom - 32), flexGrow: 0 }} keyboardShouldPersistTaps="handled">
           <View
             testID="task-editor-grip"
             importantForAccessibility="no"
@@ -192,6 +200,7 @@ export function TaskEditorSheet({
               {projectAction ? <EditorActionRow {...projectAction} /> : null}
             </View>
           ) : null}
+          </ScrollView>
         </View>
       </KeyboardStickyView>
       {overlay}

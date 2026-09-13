@@ -59,6 +59,9 @@ export function Toaster() {
 
 function ToastRow({ toast }: { toast: Toast }) {
   useEffect(() => {
+    AccessibilityInfo.announceForAccessibility([toast.message, toast.description].filter(Boolean).join('. '));
+  }, [toast]);
+  useEffect(() => {
     const base = toast.action || toast.link ? Math.max(8000, toast.durationMs) : toast.durationMs;
     if (!Number.isFinite(base)) return;
     let remaining = base;
@@ -105,7 +108,7 @@ function ToastRow({ toast }: { toast: Toast }) {
       style={cardStyle}
     >
       <View className="flex-1">
-        <Text className="font-medium" numberOfLines={1}>
+        <Text className="font-medium">
           {toast.message}
         </Text>
         {toast.description ? (
@@ -118,6 +121,7 @@ function ToastRow({ toast }: { toast: Toast }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={toast.link.label}
+          className="min-h-12 min-w-12 items-center justify-center"
           hitSlop={8}
           onPress={() => {
             toast.link?.onPress();
@@ -131,6 +135,7 @@ function ToastRow({ toast }: { toast: Toast }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={toast.action.label}
+          className="min-h-12 min-w-12 items-center justify-center"
           hitSlop={8}
           onPress={() => {
             toast.action?.onPress();

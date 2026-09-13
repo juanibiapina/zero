@@ -11,7 +11,7 @@ import {
   type TasksApi,
 } from '@zero/agent-core';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { FlatList, Modal, Pressable, useWindowDimensions, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
@@ -154,6 +154,7 @@ export function ScheduleSheet(props: ScheduleSheetProps) {
 
 function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetProps) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const accent = useColor('--color-accent');
   const onAccent = useColor('--color-on-accent');
   const today = localToday();
@@ -188,9 +189,10 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
         onPress={onClose}
       />
       <View
-        style={{ paddingBottom: insets.bottom + 8 }}
+        style={{ paddingBottom: insets.bottom + 8, maxHeight: height - insets.top - 48 }}
         className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface pt-2 shadow-raised"
       >
+        <ScrollView style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled">
         <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
         <Text className="px-screen-x pb-1 pt-2 text-[15px] font-semibold">
           Schedule
@@ -202,6 +204,7 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
           hint={weekdayShort(today)}
           onPress={() => onPick(today)}
           testID="schedule-today"
+          selected={selected === today}
         />
         <QuickRow
           icon="⏭"
@@ -209,6 +212,7 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
           hint={weekdayShort(tmr)}
           onPress={() => onPick(tmr)}
           testID="schedule-tomorrow"
+          selected={selected === tmr}
         />
 
         {/* Inline month calendar */}
@@ -217,6 +221,7 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Previous month"
+              className="min-h-12 min-w-12 items-center justify-center"
               hitSlop={8}
               onPress={() => step(-1)}
             >
@@ -226,6 +231,7 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Next month"
+              className="min-h-12 min-w-12 items-center justify-center"
               hitSlop={8}
               onPress={() => step(1)}
             >
@@ -253,9 +259,12 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
                   <Pressable
                     key={date}
                     accessibilityRole="button"
-                    accessibilityLabel={date}
+                    accessibilityLabel={new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(new Date(`${date}T12:00:00`))}
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityHint={isToday ? 'Today' : undefined}
+                    testID={`schedule-date-${date}`}
                     onPress={() => onPick(date)}
-                    className="flex-1 items-center py-1"
+                    className="min-h-12 flex-1 items-center justify-center py-1"
                   >
                     <View
                       style={
@@ -291,8 +300,10 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
             label="No date"
             onPress={() => onPick(null)}
             testID="schedule-none"
+            selected={selected == null}
           />
         </View>
+        </ScrollView>
       </View>
     </Modal>
   );

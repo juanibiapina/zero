@@ -39,6 +39,7 @@ function SectionHeader({ status, count, collapsed, onToggle }: {
 }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${STATUS_LABELS[status]}, ${count}`}
+      accessibilityState={{ expanded: !collapsed }}
       onPress={() => onToggle(status, collapsed)}
       className="flex-row items-center gap-2 border-b border-divider bg-background px-screen-x pb-2 pt-6">
       <Text variant="section">{collapsed ? '▸' : '▾'} {STATUS_LABELS[status]}</Text>

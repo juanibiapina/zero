@@ -49,7 +49,9 @@ describe('Toaster', () => {
       action: { label: 'View', onPress: () => {} },
       durationMs: Infinity,
     });
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     const { getByText, getByLabelText } = await render(<Toaster />);
+    expect(announce).toHaveBeenCalledWith('Project created. ship the app');
     expect(getByText('Project created')).toBeTruthy();
     expect(getByText('ship the app')).toBeTruthy();
     expect(getByLabelText('View')).toBeTruthy();
