@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-13: Empty projects explain how to start and offer Add task directly, with separate guidance for projects in Backlog.
+
 - 2026-09-13: Scheduling, moving, and adding tasks outside your current list now explains where they went and offers View to open the destination.
 
 - 2026-09-13: If deleting or completing a project fails, the explanation stays visible after you leave the screen, with instructions to refresh and try again.

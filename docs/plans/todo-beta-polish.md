@@ -158,6 +158,10 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 8: mobile checks pass. Pixel created `ZZ Beta empty`, opened Add task from
+  its guidance, and confirmed the guidance disappeared after creating its task
+  (`/tmp/beta-8.yaml`). Retained this throwaway for status and calendar checks.
+
 - Slice 7: mobile checks pass. Pixel scheduled `ZZ Beta destination` for Tomorrow,
   showed feedback, and View opened Upcoming with that task (`/tmp/beta-7-finish.yaml`).
   The earlier Undo fixture was absent on reopening its project; final verification

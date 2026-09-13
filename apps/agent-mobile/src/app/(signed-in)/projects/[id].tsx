@@ -317,7 +317,20 @@ function ProjectDetail({
               <Text variant="section" className="px-screen-x pb-2">
                 Tasks
               </Text>
-            ) : null}
+            ) : (
+              <View className="px-screen-x pb-4">
+                <Text variant="section">No tasks yet</Text>
+                <Text variant="subtitle" className="mt-2">
+                  {project.status === 'backlog'
+                    ? 'Add tasks here to plan ahead. Move this project out of Backlog when you are ready to work on it.'
+                    : 'Add a task. Schedule it for Today to show it on Home.'}
+                </Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Add first task"
+                  onPress={add.open} className="min-h-12 justify-center self-start py-3">
+                  <Text className="font-semibold text-accent">Add task</Text>
+                </Pressable>
+              </View>
+            )}
           </>
         }
         footer={

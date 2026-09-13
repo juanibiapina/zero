@@ -45,6 +45,7 @@ import { showTaskDestination } from '@/lib/task-feedback';
 // `projectId` (Home) the row starts on "No project". Either way the row is shown
 // in task mode.
 export type QuickAddController = {
+  open: () => void;
   // The FAB + create drawer + all composer sheets + the discard dialog, rendered
   // at the screen root.
   bar: ReactNode;
@@ -334,6 +335,7 @@ export function useQuickAdd({
   );
 
   return {
+    open: () => setAdding(true),
     bar,
     handleBack,
     active: adding || schedulingAdd || pickingProject || confirmingDiscard,

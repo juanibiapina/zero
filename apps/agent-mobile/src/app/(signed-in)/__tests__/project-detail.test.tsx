@@ -973,6 +973,16 @@ describe('ProjectDetailScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
+  it('guides an empty project into its first task', async () => {
+    mockFetchTasks.mockResolvedValue([]);
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('No tasks yet')).toBeTruthy());
+    expect(screen.getByText('Add a task. Schedule it for Today to show it on Home.')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Add first task'));
+    expect(screen.getByLabelText('New item text')).toBeTruthy();
+    expect(screen.getByLabelText('Add a task').props.accessibilityState).toEqual({ selected: true });
+  });
+
   it('keeps deletion in project settings without status controls', async () => {
     const { getByLabelText, getByText, queryByText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project settings')).toBeTruthy());
