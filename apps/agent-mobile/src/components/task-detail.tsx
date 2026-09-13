@@ -11,7 +11,7 @@ import {
   type TasksApi,
 } from '@zero/agent-core';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import { FlatList, Modal, Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
@@ -36,6 +36,7 @@ export function ProjectPickerSheet({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable
@@ -45,7 +46,7 @@ export function ProjectPickerSheet({
         onPress={onClose}
       />
       <View
-        style={{ paddingBottom: insets.bottom + 8 }}
+        style={{ paddingBottom: insets.bottom + 8, maxHeight: height - insets.top - 48 }}
         className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface pt-2 shadow-raised"
       >
         <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
@@ -58,14 +59,21 @@ export function ProjectPickerSheet({
           label="No project"
           onPress={() => onPick(null)}
           testID="project-none"
+          selected={selectedProjectId == null}
         />
 
-        <View className="border-t border-divider">
-          {projects.map((p) => (
+        <FlatList
+          style={{ flexShrink: 1 }}
+          className="border-t border-divider"
+          data={projects}
+          keyExtractor={(p) => p.id}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item: p }) => (
             <Pressable
               key={p.id}
               accessibilityRole="button"
               accessibilityLabel={p.title}
+              accessibilityState={{ selected: p.id === selectedProjectId }}
               testID={`project-${p.id}`}
               onPress={() => onPick(p.id)}
               className="flex-row items-center gap-3 px-screen-x py-3"
@@ -80,9 +88,10 @@ export function ProjectPickerSheet({
               >
                 {p.title}
               </Text>
+              {p.id === selectedProjectId ? <Text importantForAccessibility="no">✓</Text> : null}
             </Pressable>
-          ))}
-        </View>
+          )}
+        />
       </View>
     </Modal>
   );
@@ -96,23 +105,27 @@ function QuickRow({
   hint,
   onPress,
   testID,
+  selected,
 }: {
   icon: string;
   label: string;
   hint?: string;
   onPress: () => void;
   testID?: string;
+  selected?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={selected === undefined ? undefined : { selected }}
       testID={testID}
       onPress={onPress}
       className="flex-row items-center gap-3 px-screen-x py-3"
     >
       <Text className="w-6 text-center text-[18px]">{icon}</Text>
       <Text className="flex-1 text-[16px]">{label}</Text>
+      {selected ? <Text importantForAccessibility="no">✓</Text> : null}
       {hint ? (
         <Text className="text-[14px] text-foreground-secondary">{hint}</Text>
       ) : null}

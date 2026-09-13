@@ -158,6 +158,11 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 4: 115 mobile tests, lint, typecheck pass. Pixel scrolled to the selected
+  last project while No project remained visible (`beta-4-scroll.png`). The restored
+  slice-3 task survived app restart. Closing the picker also closed the editor on
+  this run; no data changed. Native modal dismissal remains a closeout check.
+
 - Slice 3: 113 mobile tests plus core tests, both packages' lint/typecheck pass.
   Pixel `/tmp/beta-3-retry.yaml` restored a task after a five-second wait and
   retained it after refresh, with Android's recommended timeout set to 15 seconds

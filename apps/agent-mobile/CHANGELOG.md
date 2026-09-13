@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-13: The project picker scrolls within the screen and marks the selected project with a check, so longer lists stay usable.
+
 - 2026-09-13: Undo and other snackbar actions stay available for at least eight seconds, respect Android's accessibility timeout, and pause while the app is in the background.
 
 - 2026-09-13: Deleting a project now asks for confirmation and explains that its tasks and waiting conditions are permanently deleted too.
