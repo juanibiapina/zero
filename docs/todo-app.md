@@ -161,6 +161,18 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-13): **Beta flow polish**, plan and proof
+at `docs/plans/todo-beta-polish.md`. Task drafts survive scheduling/moving/completion;
+project deletion confirms its cascade; Undo respects longer native timeouts;
+project pickers scroll and show selection; project creation shares draft protection;
+departure failures stay visible; destination feedback links to the resulting list;
+empty projects and status controls explain the next action; calendars reopen at
+the selected month; non-color accessibility includes larger targets, spoken
+feedback, and large-text drawers. Release verification also found and fixed
+offline cold-start authentication by enabling Clerk's resource cache. Colors and
+contrast were deliberately excluded. Each slice has its own commit and mobile
+changelog entry.
+
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Direct
 project status and focused settings on mobile** (plan:
 `docs/plans/todo-project-status-and-settings.md`). The derived-status pill is now

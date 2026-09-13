@@ -173,6 +173,17 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Final local CI: `gob run env TURBO_CONCURRENCY=1 bin/ci` passed repository lint,
+  typecheck, build, and nine test tasks (including mobile, web, core, and agent
+  API). It then failed in untouched dashboard tests because NixOS cannot launch
+  workerd (`EPIPE`); deploy dry-run was not reached. GitHub CI is required.
+- `/tmp/beta-cleanup.yaml` removed all three retained beta projects and their tasks.
+  The subsequent move-specific check was interrupted by the user's release pause
+  and icon request. Only `ZZ Beta move` and its task remain for final cleanup.
+- No push or preview build occurred before the user's 22:34 pause. The approved
+  icon is now being integrated under `todo-selected-icon-integration.md` before
+  release resumes.
+
 - Release-gate repair: mobile tests/lint/typecheck pass with the root cache wiring
   test. Pixel positive control loaded the offline-created task online, then the
   same cold-start command with Wi-Fi/data disabled reached Home with the cached

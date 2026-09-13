@@ -9,9 +9,6 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 import { Alert, Pressable, Text as RNText, View } from 'react-native';
-
-const mockAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-const confirmDelete = () => mockAlert.mock.calls.at(-1)?.[2]?.find((b) => b.text === 'Delete')?.onPress?.();
 import {
   defaultToastController,
   localToday,
@@ -25,6 +22,9 @@ import { resetWaitsApiForTest } from '@/lib/waits-collection';
 import { __resetIconSuggestions } from '@/lib/icon-suggestions';
 
 import ProjectDetailScreen from '../projects/[id]';
+
+const mockAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+const confirmDelete = () => mockAlert.mock.calls.at(-1)?.[2]?.find((b) => b.text === 'Delete')?.onPress?.();
 
 // Trigger pull-to-refresh: the scroll host carries the RefreshControl element on
 // its `refreshControl` prop, so invoke that control's onRefresh the way a real
