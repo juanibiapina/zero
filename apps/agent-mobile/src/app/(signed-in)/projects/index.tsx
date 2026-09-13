@@ -33,6 +33,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
+import { refocusAfterPresentation } from '@/lib/keyboard';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -244,6 +245,10 @@ function Projects({
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
   const inputRef = useRef<RNTextInput>(null);
+  useEffect(() => {
+    if (!adding) return;
+    return refocusAfterPresentation(inputRef.current);
+  }, [adding]);
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (adding) {

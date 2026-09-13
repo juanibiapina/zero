@@ -230,9 +230,14 @@ Follow-up, 2026-09-13: the retained Projects-list `QuickAddBar` used the base
 request the shared `Input` editor variant, backed by the `text-editor` typography
 token in `global.css`.
 
+A second follow-up fixes Android add forms that could focus the input before the
+new Modal or animated panel finished presenting, leaving the keyboard closed.
+Both add paths now wait for native autofocus to settle, then blur and refocus on
+separate timers through `refocusAfterPresentation`.
+
 Verification completed:
 
-- Mobile Jest: 15 suites and 101 tests passed.
+- Mobile Jest: 16 suites and 103 tests passed.
 - Mobile lint, typecheck, and Android Expo export passed.
 - Impeccable detector returned no findings for the changed UI files.
 - Pixel 7: verified matching task/project creation typography, Home Task/Project

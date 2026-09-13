@@ -2,6 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-13: Opening any add form now brings up the keyboard automatically.
 - 2026-09-13: Task and project names now use the same title type while you add them.
 - 2026-09-12: Creating and editing tasks now use the same bottom drawer, with clear date and project rows instead of round pills. A selected project shows its own icon once, and hiding the keyboard keeps your draft open.
 

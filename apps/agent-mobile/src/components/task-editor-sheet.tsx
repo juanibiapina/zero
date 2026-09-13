@@ -1,5 +1,11 @@
 import { ADD_MODE_LABEL, addModeA11yLabel, type AddMode } from '@zero/agent-core';
-import { useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { Modal, Pressable, type TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
@@ -7,6 +13,7 @@ import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
+import { refocusAfterPresentation } from '@/lib/keyboard';
 
 type EditorAction = {
   label: string;
@@ -121,14 +128,18 @@ export function TaskEditorSheet({
 }) {
   const insets = useSafeAreaInsets();
   const field = useRef<TextInput>(null);
+  const cancelRefocus = useRef<() => void>(() => {});
   useImperativeHandle(inputRef, () => ({ focus: () => field.current?.focus() }), []);
+  useEffect(() => {
+    if (!open) cancelRefocus.current();
+  }, [open]);
+  useEffect(() => () => cancelRefocus.current(), []);
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}
       onShow={() => {
-        // Android may focus before the Modal owns a window, without opening IME.
+        cancelRefocus.current();
         if (autoFocus) {
-          field.current?.blur();
-          field.current?.focus();
+          cancelRefocus.current = refocusAfterPresentation(field.current);
         }
       }}
     >
