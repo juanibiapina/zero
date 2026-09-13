@@ -3,6 +3,7 @@ import '@/lib/crypto-polyfill';
 
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
+import { resourceCache } from '@clerk/expo/resource-cache';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -42,6 +43,7 @@ export default function RootLayout() {
         <ClerkProvider
           publishableKey={publishableKey}
           tokenCache={tokenCache}
+          __experimental_resourceCache={resourceCache}
         >
           <QueryClientProvider client={queryClient}>
             <KeyboardProvider>

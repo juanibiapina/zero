@@ -145,6 +145,21 @@ build and replacement publication.
   scale, restoring the original device setting afterward. No color changes.
 - Changelog: clearer screen-reader feedback and easier-to-tap controls.
 
+## Additional release-gate repair: offline authentication startup
+
+Pixel reproduction: disable Wi-Fi/data, create and edit a throwaway task, kill
+and reopen the app. JavaScript bundles over USB but Home never mounts; reconnect
+and cold-start online and the queued task returns. ClerkProvider currently only
+caches the client token. Clerk 4.6's singleton initializes environment/client
+snapshots and recovery retries only when `__experimental_resourceCache` is supplied.
+
+Enable the shipped `resourceCache` from `@clerk/expo/resource-cache` on the root
+provider, keeping SecureStore and normal auth gating. Do not invent offline auth
+or bypass verification. Warm the cache online, repeat offline cold start on Pixel,
+then reconnect/refresh and verify queued edits. Run existing auth and mobile
+checks, add a changelog entry, and commit independently. The SDK labels this
+cache experimental; pinning and device verification remain necessary.
+
 ## Release
 
 After all slices pass: run mobile/core checks and Android export, verify the
@@ -157,6 +172,18 @@ after verifying the new upload. Report commit, CI, versionCode, download link,
 and any remaining verification limits.
 
 ## Execution evidence
+
+- Release-gate repair: mobile tests/lint/typecheck pass with the root cache wiring
+  test. Pixel positive control loaded the offline-created task online, then the
+  same cold-start command with Wi-Fi/data disabled reached Home with the cached
+  task after enabling Clerk resource caching. Both radios restored to enabled.
+- Combined flow: `/tmp/beta-final-create.yaml` renamed → scheduled Tomorrow →
+  completed → waited five seconds → Undo → refreshed. `/tmp/beta-final-restart.yaml`
+  killed/reopened the process and refreshed again; the task retained its renamed
+  title. This supersedes the ambiguous earlier Undo-fixture observation.
+- Offline edit: create → rename → Today worked with both radios off and survived
+  process death; reconnect and online restart recovered the queued work. After
+  the auth cache fix, offline cold startup also passed (`/tmp/beta-cache-offline.log`).
 
 - Slice 13: mobile checks pass, including spoken result and selected-date tests.
   Pixel at font_scale 1.5 rendered the editor above the keyboard and reached the
