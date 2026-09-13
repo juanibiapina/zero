@@ -4,6 +4,7 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  compareByOrder,
   isBasisStale,
   localToday,
   messageOf,
@@ -25,16 +26,14 @@ import {
   BackHandler,
   Modal,
   Pressable,
-  RefreshControl,
-  ScrollView,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
-import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
 import { useQuickAdd } from '@/components/quick-add-composer';
+import { ReorderableTaskList } from '@/components/reorderable-task-list';
 import { useTaskDetail } from '@/components/task-detail';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
@@ -150,9 +149,12 @@ function ProjectDetail({
   // This project's open tasks, the list the shared task editor resolves against:
   // moving a task to another project drops it here (closes the sheet), while a
   // reschedule keeps it (this screen shows the project's tasks regardless of
-  // date). Same membership as the ProjectTasks section below.
+  // date). The shared reorderable list and task editor consume this same array.
   const projectTasks = useMemo(
-    () => (openTasks ?? []).filter((t) => t.projectId === id),
+    () =>
+      (openTasks ?? [])
+        .filter((task) => task.projectId === id)
+        .sort(compareByOrder),
     [openTasks, id],
   );
 
@@ -191,7 +193,6 @@ function ProjectDetail({
     return () => sub.remove();
   }, [detail, add]);
 
-  const accent = useColor('--color-accent');
   // The header's derived status reads tasks and waits, so a pull re-pulls all
   // three lists this screen shows.
   const refetchAll = useCallback(
@@ -199,6 +200,22 @@ function ProjectDetail({
     [api, tasksApi, waitsApi],
   );
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
+  const today = localToday();
+  const presentationOf = useCallback(
+    (task: Task) => {
+      const scheduled =
+        task.showUpDate == null
+          ? null
+          : scheduleLabel(task.showUpDate, today);
+      return {
+        caption: scheduled ? `Scheduled · ${scheduled}` : null,
+        accessibilityLabel: `Edit "${task.text}"${
+          scheduled ? `, scheduled ${scheduled}` : ''
+        }`,
+      };
+    },
+    [today],
+  );
 
   // Still hydrating the collection: hold a blank screen rather than flash a
   // not-found.
@@ -218,7 +235,6 @@ function ProjectDetail({
     );
   }
 
-  const today = localToday();
   const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
   const waitContext = waitingBadge(project, tasks, conds, list, today)?.label;
   const statusLabel = `${STATUS_LABELS[displayStatus]}${
@@ -228,64 +244,66 @@ function ProjectDetail({
   return (
     <View className="flex-1 bg-background">
       <BackRow onBack={back} />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: 96 }}
+      <ReorderableTaskList
+        api={tasksApi}
+        tasks={projectTasks}
+        today={today}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        onComplete={detail.complete}
+        onOpen={detail.open}
+        onError={setError}
+        presentationOf={presentationOf}
+        postponeMode="return"
         keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={accent}
-            colors={[accent]}
+        header={
+          <>
+            {error ? (
+              <Text variant="error" className="px-screen-x pb-2">
+                {error}
+              </Text>
+            ) : null}
+
+            <ProjectHeader
+              project={project}
+              statusLabel={statusLabel}
+              onEdit={commitEdit}
+              onStatus={(status) => {
+                if (status === 'done') {
+                  // Marking done removes the project from the working list;
+                  // commit immediately and pop back to it.
+                  commitStatus(status);
+                  back();
+                } else {
+                  commitStatus(status);
+                }
+              }}
+              onDelete={() => {
+                commitDelete();
+                back();
+              }}
+            />
+
+            {/* The description is the project's statement of intent — why this
+                outcome matters. It sits under the title, above the work. */}
+            <ProjectDescription project={project} onEdit={commitEdit} />
+
+            {projectTasks.length > 0 ? (
+              <Text variant="section" className="px-screen-x pb-2">
+                Tasks
+              </Text>
+            ) : null}
+          </>
+        }
+        footer={
+          <ProjectWaits
+            project={project}
+            waitsApi={waitsApi}
+            tasks={tasks}
+            onError={setError}
           />
         }
-      >
-        {error ? (
-          <Text variant="error" className="px-screen-x pb-2">
-            {error}
-          </Text>
-        ) : null}
-
-        <ProjectHeader
-          project={project}
-          statusLabel={statusLabel}
-          onEdit={commitEdit}
-          onStatus={(status) => {
-            if (status === 'done') {
-              // Marking done removes the project from the working list; commit
-              // immediately and pop back to it.
-              commitStatus(status);
-              back();
-            } else {
-              commitStatus(status);
-            }
-          }}
-          onDelete={() => {
-            commitDelete();
-            back();
-          }}
-        />
-
-        {/* The description is the project's statement of intent — why this
-            outcome matters. It sits under the title, above the work. */}
-        <ProjectDescription project={project} onEdit={commitEdit} />
-
-        <ProjectTasks
-          api={tasksApi}
-          projectId={project.id}
-          today={today}
-          onOpen={detail.open}
-          onComplete={detail.complete}
-        />
-
-        <ProjectWaits
-          project={project}
-          waitsApi={waitsApi}
-          tasks={tasks}
-          onError={setError}
-        />
-      </ScrollView>
+      />
 
       {detail.sheets}
 
@@ -562,75 +580,6 @@ function ProjectHeader({
           />
         </Column>
       </Sheet>
-    </View>
-  );
-}
-
-// The project's tasks use the same roomy ListRow rhythm as the list screens.
-// A dated task names its schedule beneath the title, which connects a derived
-// project wait to the task that causes it. The caption is informational;
-// scheduling stays in the shared editor opened by tapping the row.
-function ProjectTasks({
-  api,
-  projectId,
-  today,
-  onOpen,
-  onComplete,
-}: {
-  api: TasksApi;
-  projectId: string;
-  today: string;
-  // Open the shared task editor for a task (owned by the screen's useTaskDetail).
-  onOpen: (task: Task) => void;
-  // Complete a task with the shared single Undo snackbar (owned by the same hook).
-  onComplete: (task: Task) => void;
-}) {
-  const { data: tasks } = useLiveQuery((q) =>
-    q
-      .from({ t: api.collection })
-      .where(({ t }) => isNull(t.completedAt))
-      .orderBy(({ t }) => t.createdAt, 'asc'),
-  );
-  const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
-
-  // Nothing here yet: render no section at all (not a bare heading). Adding is
-  // the screen's plus FAB, so hiding this removes no add path. The live query
-  // above still runs, so the section appears the instant the first task lands.
-  if (list.length === 0) return null;
-
-  return (
-    <View className="pb-4">
-      <Text variant="section" className="px-screen-x pb-2">
-        Tasks
-      </Text>
-      {list.map((t) => {
-        const scheduled =
-          t.showUpDate == null ? null : scheduleLabel(t.showUpDate, today);
-        const accessibilityLabel = `Edit "${t.text}"${
-          scheduled ? `, scheduled ${scheduled}` : ''
-        }`;
-
-        return (
-          <ListRow
-            key={t.id}
-            leading={
-              <CheckCircle
-                label={`Complete "${t.text}"`}
-                onPress={() => onComplete(t)}
-              />
-            }
-            accessibilityLabel={accessibilityLabel}
-            onPress={() => onOpen(t)}
-          >
-            <View className="gap-0.5">
-              <Text>{t.text}</Text>
-              {scheduled ? (
-                <Text variant="caption">Scheduled · {scheduled}</Text>
-              ) : null}
-            </View>
-          </ListRow>
-        );
-      })}
     </View>
   );
 }

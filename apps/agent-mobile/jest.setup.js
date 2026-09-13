@@ -108,7 +108,9 @@ jest.mock('react-native-worklets', () => ({
 // uses (the row's Gesture.Pan + GestureDetector, and the root view) so the tree
 // renders without native bindings. GestureDetector/RootView return children
 // directly (no JSX) since a hoisted jest.mock factory can't safely hold JSX.
-// The swipe gesture itself is verified on-device (Maestro), not in jest.
+// The latest Pan exposes its registered lifecycle callbacks so a screen test can
+// assert the swipe's write outcome; native recognition and arbitration remain
+// Pixel-only verification.
 jest.mock('react-native-gesture-handler', () => {
   const makeGesture = () => {
     const g = {};
@@ -129,16 +131,26 @@ jest.mock('react-native-gesture-handler', () => {
       'onChange',
       'onFinalize',
     ]) {
-      g[m] = () => g;
+      g[m] = (argument) => {
+        if (m.startsWith('on') && typeof argument === 'function') {
+          g[`__${m}`] = argument;
+        }
+        return g;
+      };
     }
     return g;
+  };
+  const makePanGesture = () => {
+    const gesture = makeGesture();
+    global.__lastPanGesture = gesture;
+    return gesture;
   };
   const Passthrough = ({ children }) => children ?? null;
   return {
     __esModule: true,
     // Compose helpers return a gesture-like object; GestureDetector ignores it.
     Gesture: {
-      Pan: makeGesture,
+      Pan: makePanGesture,
       Tap: makeGesture,
       LongPress: makeGesture,
       Simultaneous: () => makeGesture(),

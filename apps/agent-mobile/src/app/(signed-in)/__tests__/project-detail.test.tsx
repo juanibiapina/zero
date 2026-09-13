@@ -141,6 +141,8 @@ const mockRescheduleTask =
   jest.fn<
     (getToken: unknown, id: string, showUpDate: string | null) => Promise<Task>
   >();
+const mockReorderTask =
+  jest.fn<(getToken: unknown, id: string, sortKey: string) => Promise<Task>>();
 const mockSetTaskProject =
   jest.fn<
     (getToken: unknown, id: string, projectId: string | null) => Promise<Task>
@@ -181,6 +183,8 @@ jest.mock('@/lib/api', () => ({
     mockEditTask(getToken, id, text),
   rescheduleTask: (getToken: unknown, id: string, showUpDate: string | null) =>
     mockRescheduleTask(getToken, id, showUpDate),
+  reorderTask: (getToken: unknown, id: string, sortKey: string) =>
+    mockReorderTask(getToken, id, sortKey),
   setTaskProject: (getToken: unknown, id: string, projectId: string | null) =>
     mockSetTaskProject(getToken, id, projectId),
 }));
@@ -199,14 +203,14 @@ const project = (
   createdAt: '2023-01-01T00:00:00.000Z',
 });
 
-const taskRow = (id: string, text: string): Task => ({
+const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   id,
   text,
-  showUpDate: '2023-01-01',
-  createdAt: '2023-01-01T00:00:00.000Z',
-  completedAt: null,
-  projectId: '1',
-  sortKey: null,
+  showUpDate: over.showUpDate === undefined ? '2023-01-01' : over.showUpDate,
+  createdAt: over.createdAt ?? '2023-01-01T00:00:00.000Z',
+  completedAt: over.completedAt ?? null,
+  projectId: over.projectId === undefined ? '1' : over.projectId,
+  sortKey: over.sortKey === undefined ? null : over.sortKey,
 });
 
 const renderScreen = () => {
@@ -226,6 +230,9 @@ const renderScreen = () => {
 describe('ProjectDetailScreen', () => {
   beforeEach(() => {
     mockCurrentId = '1';
+    (global as { __reorderableOnReorder?: unknown }).__reorderableOnReorder =
+      undefined;
+    (global as { __lastPanGesture?: unknown }).__lastPanGesture = undefined;
     resetProjectsApiForTest();
     resetTasksApiForTest();
     resetWaitsApiForTest();
@@ -239,6 +246,7 @@ describe('ProjectDetailScreen', () => {
     mockReopenTask.mockReset();
     mockEditTask.mockReset();
     mockRescheduleTask.mockReset();
+    mockReorderTask.mockReset();
     mockSetTaskProject.mockReset();
     defaultToastController.dismiss();
     mockFetchTasks.mockReset();
@@ -327,6 +335,105 @@ describe('ProjectDetailScreen', () => {
     mockFetchTasks.mockResolvedValue([taskRow('t1', 'buy running shoes')]);
     const { getByText } = await renderScreen();
     await waitFor(() => expect(getByText('Tasks')).toBeTruthy());
+  });
+
+  it('shows project tasks in their manual order', async () => {
+    mockFetchTasks.mockResolvedValue([
+      taskRow('b', 'Banana', {
+        sortKey: 'a1',
+        createdAt: '2023-01-01T00:00:00.000Z',
+      }),
+      taskRow('a', 'Apple', {
+        sortKey: 'a0',
+        createdAt: '2023-01-02T00:00:00.000Z',
+      }),
+    ]);
+
+    const { getAllByLabelText } = await renderScreen();
+    await waitFor(() =>
+      expect(getAllByLabelText(/^Edit "/)).toHaveLength(2),
+    );
+
+    expect(
+      getAllByLabelText(/^Edit "/).map((row) => row.props.accessibilityLabel),
+    ).toEqual([
+      'Edit "Apple", scheduled Today',
+      'Edit "Banana", scheduled Today',
+    ]);
+  });
+
+  it('reorders a project task with a new key at its drop position', async () => {
+    mockFetchTasks.mockResolvedValue([
+      taskRow('a', 'Apple', { sortKey: 'a0' }),
+      taskRow('other', 'Other project task', {
+        projectId: '2',
+        sortKey: 'a1',
+      }),
+      taskRow('b', 'Banana', { sortKey: 'a2' }),
+      taskRow('c', 'Cherry', { sortKey: 'a3' }),
+    ]);
+    mockReorderTask.mockImplementation(async (_token, id, sortKey) =>
+      taskRow(id, id, { sortKey }),
+    );
+
+    const { queryByText } = await renderScreen();
+    await waitFor(() =>
+      expect(
+        typeof (global as { __reorderableOnReorder?: unknown })
+          .__reorderableOnReorder,
+      ).toBe('function'),
+    );
+    expect(queryByText('Other project task')).toBeNull();
+
+    await act(async () => {
+      (
+        global as unknown as {
+          __reorderableOnReorder: (event: { from: number; to: number }) => void;
+        }
+      ).__reorderableOnReorder({ from: 2, to: 0 });
+    });
+
+    await waitFor(() => expect(mockReorderTask).toHaveBeenCalledTimes(1));
+    expect(mockReorderTask.mock.calls[0][1]).toBe('c');
+    expect(mockReorderTask.mock.calls[0][2] < 'a0').toBe(true);
+  });
+
+  it('postpones an undated project task to tomorrow only after the swipe commits', async () => {
+    mockFetchTasks.mockResolvedValue([
+      taskRow('t1', 'Book flights', { showUpDate: null, sortKey: 'a0' }),
+    ]);
+    mockRescheduleTask.mockImplementation(async (_token, id, showUpDate) =>
+      taskRow(id, 'Book flights', { showUpDate, sortKey: 'a0' }),
+    );
+
+    const { getByText } = await renderScreen();
+    await waitFor(() => expect(getByText('Book flights')).toBeTruthy());
+
+    const pan = (global as unknown as {
+      __lastPanGesture: {
+        __onStart: () => void;
+        __onUpdate: (event: { translationX: number }) => void;
+        __onEnd: (event: { velocityX: number }) => void;
+      };
+    }).__lastPanGesture;
+
+    await act(async () => {
+      pan.__onStart();
+      pan.__onUpdate({ translationX: 80 });
+      pan.__onEnd({ velocityX: 0 });
+    });
+    expect(mockRescheduleTask).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pan.__onStart();
+      pan.__onUpdate({ translationX: 160 });
+      pan.__onEnd({ velocityX: 0 });
+    });
+
+    await waitFor(() => expect(mockRescheduleTask).toHaveBeenCalledTimes(1));
+    expect(mockRescheduleTask.mock.calls[0][1]).toBe('t1');
+    expect(mockRescheduleTask.mock.calls[0][2]).toBe(tomorrow(localToday()));
+    await waitFor(() => expect(getByText('Scheduled · Tomorrow')).toBeTruthy());
   });
 
   it('adds a task to the project from its screen', async () => {
@@ -735,20 +842,24 @@ describe('ProjectDetailScreen', () => {
     );
   });
 
-  it('re-pulls the project when the screen is pulled to refresh', async () => {
+  it('re-pulls the project, tasks, and waits when the screen is pulled to refresh', async () => {
     const screen = await renderScreen();
     await waitFor(() =>
       expect(screen.getByLabelText('Project title').props.value).toBe('Run a 5K'),
     );
 
-    const before = mockFetchProjects.mock.calls.length;
+    const projectsBefore = mockFetchProjects.mock.calls.length;
+    const tasksBefore = mockFetchTasks.mock.calls.length;
+    const waitsBefore = mockFetchWaits.mock.calls.length;
     await act(async () => {
       pullToRefresh(screen);
     });
 
     await waitFor(() =>
-      expect(mockFetchProjects.mock.calls.length).toBeGreaterThan(before),
+      expect(mockFetchProjects.mock.calls.length).toBeGreaterThan(projectsBefore),
     );
+    expect(mockFetchTasks.mock.calls.length).toBeGreaterThan(tasksBefore);
+    expect(mockFetchWaits.mock.calls.length).toBeGreaterThan(waitsBefore);
   });
 
   it('offers a way back when the project id is unknown', async () => {

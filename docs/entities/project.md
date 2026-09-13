@@ -171,11 +171,15 @@ no speculative columns before their behavior is designed.
   "⋯" **actions menu** with the status moves and **Delete project**), then the
   project's **description**, tasks, and waiting conditions. On mobile, a waiting
   status includes its winning timing (`Waiting · until Tomorrow` or `Waiting ·
-  for 5 days`). Project tasks use the shared flat-list row rhythm; tapping the
-  full row opens the shared editor, and every dated task shows a muted
-  `Scheduled · <day>` caption beneath its title. Scheduling remains in the
-  editor, not in a second inline control. The project FAB opens the shared
-  Task/Waiting composer; a new task starts undated and preset to this project,
+  for 5 days`). On mobile, project tasks use the same manually ordered
+  swipe-and-drag list as Home: long-press to reorder within the project, or swipe
+  right to set the task to Tomorrow. An undated task gains that date; the task
+  stays on the project screen and shows a muted `Scheduled · Tomorrow` caption.
+  Tapping the full row still opens the shared editor. Every dated task continues
+  to show its `Scheduled · <day>` context in the list without a second inline
+  control. The list remains the screen's single scroll and pull-to-refresh
+  surface. The project FAB opens the shared Task/Waiting composer; a new task
+  starts undated and preset to this project,
   but both date and project can be changed before creation. On web, project task
   rows retain their inline date chip. Real waiting conditions remain under
   **Waiting on** on both surfaces; mobile does not render a future task date as

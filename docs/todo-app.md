@@ -162,6 +162,26 @@ committed.
 ## Project tracking
 
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Project task
+reorder and swipe-to-Tomorrow on mobile** (plan:
+`docs/plans/todo-project-task-reorder-postpone.md`). Project detail now uses the
+same deep `ReorderableTaskList` module as Home: long-press drag writes the moved
+task's existing fractional `sortKey`, while a committed right swipe sets local
+Tomorrow through the existing offline-durable reschedule verb and springs the
+retained project row back with its new schedule caption. The project page is one
+virtualized scroll host with its identity/description in the header and waiting
+conditions in the footer. The module owns the proven gesture arbitration: the
+row pan fails on vertical intent, the reorder pan waits 520 ms, and Android
+refresh disables only during an active drag. Screen tests cover persisted manual
+order, project-scoped drop neighbors, undated swipe threshold/commit, retained
+Tomorrow presentation, and three-collection refresh. **Pixel 7:** a 15-task
+throwaway project scrolled from a row, showed pull-to-refresh from a row, moved
+`ZZ drag 05` above `ZZ drag 02` and kept that order after reopening plus a server
+refresh, rejected a below-threshold swipe, and kept an undated swiped task in the
+project as `Scheduled · Tomorrow` while also showing it in Upcoming. The editor
+and completion targets remained distinct. Screenshot and hierarchy evidence were
+captured, then deleting the project removed every throwaway task from Upcoming.
+
+Implemented and device-verified on the Pixel 7 (2026-09-13): **Project task
 schedule clarity on mobile** (plan:
 `docs/plans/todo-project-task-list-clarity.md`). A future task no longer appears
 as an unexplained automatic row under Waiting on: the project status now reads
@@ -626,8 +646,6 @@ In flight (details in `docs/plans/`):
 
 Next:
 
-- **Reschedule a Task** — swipe-to-tomorrow / pick a future date (v1 dates every
-  Task today with no way to change it).
 - **AI Capture → Project** — swipe a Capture, propose a Project, confirm (the
   content-driven half of Refine; `docs/plans/todo-capture-to-project-ai.md`).
 - **AI-resolve a waiting condition** — from email/calendar/content.
