@@ -158,6 +158,13 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 3: 113 mobile tests plus core tests, both packages' lint/typecheck pass.
+  Pixel `/tmp/beta-3-retry.yaml` restored a task after a five-second wait and
+  retained it after refresh, with Android's recommended timeout set to 15 seconds
+  for reliable automation. Restored the original unset timeout afterward. The
+  eight-second run timed out at Maestro's tap, so it is not counted as Undo proof;
+  unit tests cover the eight-second floor and background pause.
+
 - Slice 2: mobile suite, lint, typecheck pass. Pixel `/tmp/beta-2.yaml` confirmed
   Cancel keeps the project and Delete removes its scheduled task from Upcoming.
   The slice-1 fixture project and task are now deleted.

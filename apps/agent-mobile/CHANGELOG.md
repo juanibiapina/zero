@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-13: Undo and other snackbar actions stay available for at least eight seconds, respect Android's accessibility timeout, and pause while the app is in the background.
+
 - 2026-09-13: Deleting a project now asks for confirmation and explains that its tasks and waiting conditions are permanently deleted too.
 
 - 2026-09-13: Task names you edit are saved before scheduling, moving, or completing the task, and Undo keeps the edited name.

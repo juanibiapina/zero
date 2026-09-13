@@ -34,6 +34,24 @@ describe("toast controller", () => {
     expect(c.getSnapshot()).toHaveLength(0);
   });
 
+  it("pauses expiration and ignores lifetime updates from a replaced toast", () => {
+    const c = createToastController();
+    c.show({ id: "undo", message: "First" });
+    const first = c.getSnapshot()[0];
+    c.deferDismiss(first, Infinity);
+    vi.advanceTimersByTime(10000);
+    expect(c.getSnapshot()).toHaveLength(1);
+    c.show({ id: "undo", message: "Second" });
+    c.deferDismiss(first, 1);
+    vi.advanceTimersByTime(10);
+    expect(c.getSnapshot()[0].message).toBe("Second");
+    c.deferDismiss(c.getSnapshot()[0], 8000);
+    vi.advanceTimersByTime(7999);
+    expect(c.getSnapshot()).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(c.getSnapshot()).toHaveLength(0);
+  });
+
   it("honors a per-toast duration", () => {
     const c = createToastController({ defaultDurationMs: 4000 });
     c.show({ message: "quick", durationMs: 1000 });

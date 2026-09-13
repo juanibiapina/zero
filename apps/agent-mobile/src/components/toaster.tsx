@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from 'react';
-import { Pressable, View } from 'react-native';
+import { useEffect, useSyncExternalStore } from 'react';
+import { AccessibilityInfo, AppState, Platform, Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResolveClassNames } from 'uniwind';
@@ -58,6 +58,42 @@ export function Toaster() {
 }
 
 function ToastRow({ toast }: { toast: Toast }) {
+  useEffect(() => {
+    const base = toast.action || toast.link ? Math.max(8000, toast.durationMs) : toast.durationMs;
+    if (!Number.isFinite(base)) return;
+    let remaining = base;
+    let started = Date.now();
+    let active = AppState.currentState !== 'background' && AppState.currentState !== 'inactive';
+    let disposed = false;
+    const schedule = () => {
+      started = Date.now();
+      defaultToastController.deferDismiss(toast, active ? remaining : Infinity);
+    };
+    // Hold until the platform timeout resolves, including on a slow native bridge.
+    defaultToastController.deferDismiss(toast, Infinity);
+    const recommendation = Platform.OS === 'android'
+      ? AccessibilityInfo.getRecommendedTimeoutMillis(base)
+      : Promise.resolve(base);
+    let ready = false;
+    void recommendation.catch(() => base).then((duration) => {
+      if (disposed) return;
+      remaining = Math.max(base, duration);
+      ready = true;
+      schedule();
+    });
+    const sub = AppState.addEventListener('change', (state) => {
+      const next = state === 'active';
+      if (next === active) return;
+      if (active && ready) remaining = Math.max(0, remaining - (Date.now() - started));
+      active = next;
+      if (ready) schedule();
+    });
+    return () => {
+      disposed = true;
+      sub.remove();
+      defaultToastController.deferDismiss(toast, remaining);
+    };
+  }, [toast]);
   // Animated.View is not Uniwind-mapped, so resolve its static classes to styles.
   const cardStyle = useResolveClassNames(
     'w-full max-w-[440px] flex-row items-center gap-3 rounded-2xl bg-surface px-4 py-3 shadow-raised',

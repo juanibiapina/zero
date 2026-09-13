@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
+import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import { defaultToastController } from '@zero/agent-core';
 
 import { Toaster } from '../toaster';
@@ -11,7 +12,35 @@ import { Toaster } from '../toaster';
 // app's other useSyncExternalStore stores (e.g. refine-session) behave the same
 // under jest — so these tests seed the controller BEFORE render.
 describe('Toaster', () => {
-  afterEach(() => defaultToastController.dismiss());
+  afterEach(() => { defaultToastController.dismiss(); jest.restoreAllMocks(); jest.useRealTimers(); });
+
+  it('honors the Android timeout and pauses while backgrounded', async () => {
+    jest.useFakeTimers();
+    const oldPlatform = Platform.OS;
+    Platform.OS = 'android';
+    jest.spyOn(AccessibilityInfo, 'getRecommendedTimeoutMillis').mockResolvedValue(12000);
+    let change: (state: 'active' | 'background') => void = () => {};
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      change = listener;
+      return { remove: () => {} };
+    });
+    defaultToastController.show({ message: 'Completed', action: { label: 'Undo', onPress: () => {} } });
+    const screen = await render(<Toaster />);
+    await act(async () => {});
+    expect(AccessibilityInfo.getRecommendedTimeoutMillis).toHaveBeenCalledWith(8000);
+    await act(async () => jest.advanceTimersByTime(5000));
+    expect(defaultToastController.getSnapshot()).toHaveLength(1);
+    await act(async () => change('background'));
+    await act(async () => jest.advanceTimersByTime(60000));
+    expect(defaultToastController.getSnapshot()).toHaveLength(1);
+    await act(async () => change('active'));
+    await act(async () => jest.advanceTimersByTime(6999));
+    expect(defaultToastController.getSnapshot()).toHaveLength(1);
+    await act(async () => jest.advanceTimersByTime(1));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+    await screen.unmount();
+    Platform.OS = oldPlatform;
+  });
 
   it('renders a toast message, description and action', async () => {
     defaultToastController.show({

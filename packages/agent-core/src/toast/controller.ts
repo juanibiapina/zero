@@ -36,6 +36,7 @@ export type Toast = {
   description?: string;
   action?: ToastAction;
   link?: ToastAction;
+  durationMs: number;
   createdAt: number;
 };
 
@@ -45,6 +46,8 @@ export type ToastController = {
   show: (input: ToastInput | string) => string;
   // Dismiss one toast by id, or all toasts when called with no id.
   dismiss: (id?: string) => void;
+  // Ignore stale snapshots: an async native timeout must not alter a replacement.
+  deferDismiss: (toast: Toast, durationMs: number) => void;
   // Observable seam for a renderer's useSyncExternalStore. Declared as arrow
   // properties (not methods) so callers can pass `controller.subscribe` /
   // `controller.getSnapshot` straight to useSyncExternalStore.
@@ -120,6 +123,7 @@ export function createToastController(
       description: normalized.description,
       action: normalized.action,
       link: normalized.link,
+      durationMs: normalized.durationMs ?? defaultDurationMs,
       // Keep the original position on a replace so it doesn't jump.
       createdAt: existing?.createdAt ?? Date.now(),
     };
@@ -149,7 +153,10 @@ export function createToastController(
   };
   const getSnapshot = (): readonly Toast[] => toasts;
 
-  return { show, dismiss, subscribe, getSnapshot };
+  const deferDismiss = (toast: Toast, durationMs: number): void => {
+    if (toasts.includes(toast)) scheduleDismiss(toast.id, durationMs);
+  };
+  return { show, dismiss, deferDismiss, subscribe, getSnapshot };
 }
 
 // The module-level default controller and the ergonomic bound function, mirroring
