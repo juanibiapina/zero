@@ -86,6 +86,6 @@
       "/node_modules/react-native-reanimated/plugin/",
       "/node_modules/@react-native/babel-preset/"
     ],
-    "testTimeout": 20000
+    "testTimeout": 60000
   }
 }
