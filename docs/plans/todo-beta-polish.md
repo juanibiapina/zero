@@ -158,6 +158,9 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 9: mobile checks pass. Pixel read both status explanations and moved the
+  throwaway Next → Backlog → Next through the pill (`/tmp/beta-9.yaml`).
+
 - Slice 8: mobile checks pass. Pixel created `ZZ Beta empty`, opened Add task from
   its guidance, and confirmed the guidance disappeared after creating its task
   (`/tmp/beta-8.yaml`). Retained this throwaway for status and calendar checks.

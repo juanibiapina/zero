@@ -942,7 +942,7 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Project status: Backlog'));
     });
     await act(async () => {
-      fireEvent.press(getByText('Put in play'));
+      fireEvent.press(getByText('Move out of backlog'));
     });
 
     expect(mockSetProjectStatus).toHaveBeenCalledTimes(1);
@@ -992,7 +992,7 @@ describe('ProjectDetailScreen', () => {
     });
     expect(getByText('Delete project')).toBeTruthy();
     expect(queryByText('Move to backlog')).toBeNull();
-    expect(queryByText('Put in play')).toBeNull();
+    expect(queryByText('Move out of backlog')).toBeNull();
     expect(queryByText('Mark done')).toBeNull();
     await act(async () => {
       fireEvent.press(getByText('Delete project'));

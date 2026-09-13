@@ -600,7 +600,7 @@ function ProjectHeader({
           hitSlop={8}
           android_ripple={{ color: ripple }}
           onPress={() => setStatusOpen(true)}
-          className="max-w-full overflow-hidden rounded-full bg-surface-muted px-3 py-1.5"
+          className="max-w-full flex-row items-center gap-2 overflow-hidden rounded-full bg-surface-muted px-3 py-1.5"
         >
           <Text
             numberOfLines={1}
@@ -608,6 +608,7 @@ function ProjectHeader({
           >
             {statusLabel}
           </Text>
+          <Text importantForAccessibility="no" className="text-foreground-secondary">▾</Text>
         </Pressable>
       </View>
 
@@ -638,11 +639,16 @@ function ProjectHeader({
             <UIText textStyle={{ color: secondary, fontSize: 14 }}>
               {statusLabel}
             </UIText>
+            <UIText textStyle={{ color: secondary, fontSize: 14 }}>
+              {project.status === 'backlog'
+                ? 'Backlog keeps this project off Home. Move it out of Backlog to let its tasks and waiting conditions determine its status.'
+                : 'Active, Next, and Waiting update automatically from your tasks and waiting conditions. Schedule a task for Today to bring it onto Home.'}
+            </UIText>
           </Column>
           {project.status === 'backlog' ? (
             <ListItem onPress={() => chooseStatus('next')}>
               <UIText textStyle={{ color: foreground, fontSize: 16 }}>
-                Put in play
+                Move out of backlog
               </UIText>
             </ListItem>
           ) : (

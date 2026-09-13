@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-13: Project status has a visible disclosure arrow and explains how tasks and waiting conditions determine it. “Move out of backlog” replaces “Put in play”.
+
 - 2026-09-13: Empty projects explain how to start and offer Add task directly, with separate guidance for projects in Backlog.
 
 - 2026-09-13: Scheduling, moving, and adding tasks outside your current list now explains where they went and offers View to open the destination.
