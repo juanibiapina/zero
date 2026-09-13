@@ -338,18 +338,24 @@ export function useTaskDetail({
     setSelectedId(item.id);
   }, []);
 
-  // Every dismissal commits the same trimmed draft before closing. Empty and
-  // unchanged drafts preserve the stored text.
-  const commitAndClose = useCallback(() => {
-    if (closingDetailRef.current) return;
-    closingDetailRef.current = true;
-    setSelectedId(null);
+  // Queue the title before opening another control. Waiting for the server here
+  // would block offline use; the outbox preserves write order for this task.
+  const commitDraft = useCallback((): Task | null => {
+    if (!selected) return null;
     const trimmed = draft.trim();
-    if (!selected || !trimmed || trimmed === selected.text) return;
+    if (!trimmed || trimmed === selected.text) return selected;
     onError(null);
     const tx = api.edit(selected.id, trimmed);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    return { ...selected, text: trimmed };
   }, [api, draft, selected, onError]);
+
+  const commitAndClose = useCallback(() => {
+    if (closingDetailRef.current) return;
+    commitDraft();
+    closingDetailRef.current = true;
+    setSelectedId(null);
+  }, [commitDraft]);
 
   const complete = useCallback(
     (item: Task) => {
@@ -367,11 +373,11 @@ export function useTaskDetail({
   );
 
   const completeFromSheet = useCallback(() => {
-    if (!selected) return;
-    const item = selected;
+    const item = commitDraft();
+    if (!item) return;
     setSelectedId(null);
     complete(item);
-  }, [selected, complete]);
+  }, [commitDraft, complete]);
 
   const onPickSchedule = useCallback(
     (date: string | null) => {
@@ -432,7 +438,7 @@ export function useTaskDetail({
                 label: scheduleLabel(selected.showUpDate, localToday()),
                 accessibilityLabel: 'Set schedule',
                 active: selected.showUpDate != null,
-                onPress: () => setScheduling(true),
+                onPress: () => { commitDraft(); setScheduling(true); },
                 testID: 'task-schedule',
               }
             : undefined
@@ -444,7 +450,7 @@ export function useTaskDetail({
                 icon: selectedProject?.icon ?? null,
                 accessibilityLabel: 'Set project',
                 active: selectedProject != null,
-                onPress: () => setPicking(true),
+                onPress: () => { commitDraft(); setPicking(true); },
                 testID: 'task-project',
               }
             : undefined

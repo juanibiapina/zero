@@ -500,6 +500,36 @@ describe('HomeScreen', () => {
     expect(mockEditTask.mock.calls[0][2]).toBe('buy oat milk');
   });
 
+  it.each(['Set schedule', 'Set project', 'Complete task'])(
+    'saves a renamed task before %s', async (action) => {
+      mockGetToken.mockResolvedValue('tok');
+      let task = taskRow('1', 'original');
+      mockFetchTasks.mockImplementation(async () => [task]);
+      mockEditTask.mockImplementation(async (_token, _id, text) => {
+        task = { ...task, text };
+        return task;
+      });
+      mockCompleteTask.mockImplementation(async () => {
+        task = { ...task, completedAt: new Date().toISOString() };
+        return task;
+      });
+      const screen = await renderScreen();
+      await waitFor(() => expect(screen.getByText('original')).toBeTruthy());
+      await act(async () => fireEvent.press(screen.getByLabelText('Edit "original"')));
+      await act(async () => fireEvent.changeText(screen.getByLabelText('Task text'), 'renamed'));
+      await act(async () => fireEvent.press(screen.getByLabelText(action)));
+      await waitFor(() => expect(task.text).toBe('renamed'));
+      if (action === 'Complete task') {
+        mockReopenTask.mockImplementation(async () => {
+          task = { ...task, completedAt: null };
+          return task;
+        });
+        await act(async () => defaultToastController.getSnapshot()[0].action?.onPress());
+        await waitFor(() => expect(screen.getByText('renamed')).toBeTruthy());
+      }
+    },
+  );
+
   it('does not call edit when the sheet text is unchanged', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
