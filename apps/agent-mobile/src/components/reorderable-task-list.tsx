@@ -37,6 +37,7 @@ import { useResolveClassNames } from 'uniwind';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useColor } from '@/lib/theme';
+import { showTaskDestination } from '@/lib/task-feedback';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const SWIPE_THRESHOLD = 140;
@@ -237,11 +238,12 @@ export function ReorderableTaskList({
     (item: Task) => {
       onError(null);
       const transaction = api.reschedule(item.id, tomorrow(today));
+      if (postponeMode === 'exit') showTaskDestination({ ...item, showUpDate: tomorrow(today) }, [], 'scheduled');
       transaction.isPersisted.promise.catch((error) =>
         onError(messageOf(error)),
       );
     },
-    [api, onError, today],
+    [api, onError, today, postponeMode],
   );
 
   const onReorder = useCallback(

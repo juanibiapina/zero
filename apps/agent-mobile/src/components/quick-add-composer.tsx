@@ -1,6 +1,5 @@
 import {
   ADD_MODE_PLACEHOLDER,
-  DEFAULT_ICON,
   localToday,
   messageOf,
   scheduleLabel,
@@ -21,6 +20,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { type TokenGetter } from '@/lib/api';
+import { showTaskDestination } from '@/lib/task-feedback';
 
 // The quick-add composer as one deep module: it owns the whole add surface — the
 // collapsed FAB, the create bottom drawer with its mode selector, the create-time
@@ -180,16 +180,10 @@ export function useQuickAdd({
     const tx = tasksApi.add(trimmed, addDate, effectiveProjectId);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     if (
-      addDate == null &&
-      effectiveProjectId != null &&
-      effectiveProjectId !== contextProjectId
+      (contextProjectId == null && addDate != null && addDate > localToday()) ||
+      (effectiveProjectId != null && effectiveProjectId !== contextProjectId)
     ) {
-      const project = projects.find((p) => p.id === effectiveProjectId);
-      toast('Filed to project', {
-        description: project
-          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
-          : undefined,
-      });
+      showTaskDestination({ showUpDate: addDate, projectId: effectiveProjectId }, projects, 'created');
     }
     closeAdd();
   }, [

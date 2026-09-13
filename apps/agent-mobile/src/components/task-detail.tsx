@@ -18,6 +18,7 @@ import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useColor } from '@/lib/theme';
+import { showTaskDestination } from '@/lib/task-feedback';
 
 // The project picker: a plain React Native modal listing the user's projects
 // plus a "No project" row (move back to loose). Mirrors ScheduleSheet's shape.
@@ -394,26 +395,30 @@ export function useTaskDetail({
 
   const onPickSchedule = useCallback(
     (date: string | null) => {
-      if (selected) {
+      if (selected && selected.showUpDate !== date) {
         onError(null);
         const tx = api.reschedule(selected.id, date);
         tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+        setSelectedId(null);
+        showTaskDestination({ ...selected, showUpDate: date }, projects, 'scheduled');
       }
       setScheduling(false);
     },
-    [api, selected, onError],
+    [api, selected, projects, onError],
   );
 
   const onPickProject = useCallback(
     (projectId: string | null) => {
-      if (selected) {
+      if (selected && selected.projectId !== projectId) {
         onError(null);
         const tx = api.moveToProject(selected.id, projectId);
         tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+        setSelectedId(null);
+        showTaskDestination({ ...selected, projectId }, projects, 'moved');
       }
       setPicking(false);
     },
-    [api, selected, onError],
+    [api, selected, projects, onError],
   );
 
   const handleBack = useCallback(() => {

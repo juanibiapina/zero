@@ -158,6 +158,12 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 7: mobile checks pass. Pixel scheduled `ZZ Beta destination` for Tomorrow,
+  showed feedback, and View opened Upcoming with that task (`/tmp/beta-7-finish.yaml`).
+  The earlier Undo fixture was absent on reopening its project; final verification
+  must repeat delayed Undo plus persisted restart rather than assume that old proof
+  settles it. No existing user entity was modified.
+
 - Slice 6: mobile checks pass, including rejected deletion after screen unmount.
   Pixel `/tmp/beta-6.yaml` verified a persistent error across Projects → Home and
   explicit Dismiss. This used a temporary, development-only throwaway-project
