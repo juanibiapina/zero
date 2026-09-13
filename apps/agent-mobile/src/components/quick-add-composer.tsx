@@ -322,6 +322,7 @@ export function useQuickAdd({
       />
 
       <ProjectPickerSheet
+        title="Project"
         open={pickingProject}
         projects={projects}
         selectedProjectId={addProjectId}

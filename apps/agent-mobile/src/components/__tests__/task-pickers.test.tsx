@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { ProjectPickerSheet } from '../task-detail';
+import { ProjectPickerSheet, ScheduleSheet } from '../task-detail';
 
 const projects = Array.from({ length: 30 }, (_, i) => ({
   id: String(i), title: `Project ${i}`, icon: '📁', description: null,
@@ -8,6 +8,19 @@ const projects = Array.from({ length: 30 }, (_, i) => ({
 }));
 
 describe('task pickers', () => {
+  it('reopens the calendar at the selected month instead of the browsed month', async () => {
+    const props = { showUpDate: '2026-09-13', onPick: () => {}, onClose: () => {} };
+    const screen = await render(<ScheduleSheet {...props} open />);
+    await fireEvent.press(screen.getByLabelText('Next month'));
+    expect(screen.getByText('October 2026')).toBeTruthy();
+    await screen.rerender(<ScheduleSheet {...props} open={false} />);
+    await screen.rerender(<ScheduleSheet {...props} open />);
+    expect(screen.getByText('September 2026')).toBeTruthy();
+    await screen.rerender(<ScheduleSheet {...props} open={false} />);
+    await screen.rerender(<ScheduleSheet {...props} showUpDate="2027-01-04" open />);
+    expect(screen.getByText('January 2027')).toBeTruthy();
+  });
+
   it('marks the current project and selects a visible project', async () => {
     const onPick = jest.fn();
     const screen = await render(<ProjectPickerSheet open projects={projects} selectedProjectId="1" onPick={onPick} onClose={() => {}} />);

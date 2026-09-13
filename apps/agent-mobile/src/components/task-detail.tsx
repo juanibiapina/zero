@@ -29,8 +29,10 @@ export function ProjectPickerSheet({
   selectedProjectId,
   onPick,
   onClose,
+  title = 'Move to project',
 }: {
   open: boolean;
+  title?: string;
   projects: Project[];
   selectedProjectId: string | null;
   onPick: (projectId: string | null) => void;
@@ -52,7 +54,7 @@ export function ProjectPickerSheet({
       >
         <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
         <Text className="px-screen-x pb-1 pt-2 text-[15px] font-semibold">
-          Move to project
+          {title}
         </Text>
 
         <QuickRow
@@ -139,17 +141,18 @@ function QuickRow({
 // right, an inline month calendar, and a "No date" row. It sets a task's
 // showUpDate (a plain date; no time, no recurrence). Exported so task creation
 // and editing open the same scheduler.
-export function ScheduleSheet({
-  open,
-  showUpDate,
-  onPick,
-  onClose,
-}: {
+type ScheduleSheetProps = {
   open: boolean;
   showUpDate: string | null | undefined;
   onPick: (date: string | null) => void;
   onClose: () => void;
-}) {
+};
+
+export function ScheduleSheet(props: ScheduleSheetProps) {
+  return props.open ? <OpenScheduleSheet {...props} /> : null;
+}
+
+function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetProps) {
   const insets = useSafeAreaInsets();
   const accent = useColor('--color-accent');
   const onAccent = useColor('--color-on-accent');
@@ -453,7 +456,7 @@ export function useTaskDetail({
         scheduleAction={
           selected
             ? {
-                label: scheduleLabel(selected.showUpDate, localToday()),
+                label: selected.showUpDate ? scheduleLabel(selected.showUpDate, localToday()) : 'No date',
                 accessibilityLabel: 'Set schedule',
                 active: selected.showUpDate != null,
                 onPress: () => { commitDraft(); setScheduling(true); },

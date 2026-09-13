@@ -158,6 +158,11 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 10: mobile checks pass. Pixel selected October 15, reopened at October,
+  browsed November, canceled, and reopened at October again (`/tmp/beta-10-continue.yaml`).
+  The initial project lookup failed because Projects retained its scroll offset;
+  scrolling up found the project unchanged.
+
 - Slice 9: mobile checks pass. Pixel read both status explanations and moved the
   throwaway Next → Backlog → Next through the pill (`/tmp/beta-9.yaml`).
 
