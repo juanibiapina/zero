@@ -1001,6 +1001,22 @@ describe('ProjectDetailScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
+  it('reports deletion failure globally after the screen has unmounted', async () => {
+    let rejectDelete: (error: Error) => void = () => {};
+    mockDeleteProject.mockImplementation(() => new Promise<void>((_resolve, reject) => { rejectDelete = reject; }));
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('Project settings')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Project settings'));
+    await fireEvent.press(screen.getByText('Delete project'));
+    await act(async () => confirmDelete());
+    await waitFor(() => expect(mockDeleteProject).toHaveBeenCalled());
+    await screen.unmount();
+    await act(async () => rejectDelete(new Error('terminal failure')));
+    await waitFor(() => expect(defaultToastController.getSnapshot()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: 'Could not delete project', durationMs: Infinity, description: expect.stringContaining('try again') }),
+    ])));
+  });
+
   it('re-pulls tasks and waits after a delete so cascaded orphans disappear', async () => {
     const { getByLabelText, getByText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project settings')).toBeTruthy());

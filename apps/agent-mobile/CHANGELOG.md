@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-13: If deleting or completing a project fails, the explanation stays visible after you leave the screen, with instructions to refresh and try again.
+
 - 2026-09-13: Creating a project from Projects uses the same drawer as Home and asks before discarding your draft; submitting still opens the new project.
 
 - 2026-09-13: The project picker scrolls within the screen and marks the selected project with a check, so longer lists stay usable.

@@ -158,6 +158,11 @@ and any remaining verification limits.
 
 ## Execution evidence
 
+- Slice 6: mobile checks pass, including rejected deletion after screen unmount.
+  Pixel `/tmp/beta-6.yaml` verified a persistent error across Projects → Home and
+  explicit Dismiss. This used a temporary, development-only throwaway-project
+  failure injection, removed before commit. No production failure was induced.
+
 - Slice 5: mobile suite, lint/typecheck pass. Pixel Back dismissed the keyboard,
   then requested discard; Cancel retained the draft; submit opened the new project.
   Deleted `ZZ Beta drawer` afterward. A Maestro scrim tap missed its target;

@@ -109,7 +109,7 @@ function ToastRow({ toast }: { toast: Toast }) {
           {toast.message}
         </Text>
         {toast.description ? (
-          <Text variant="caption" numberOfLines={1}>
+          <Text variant="caption">
             {toast.description}
           </Text>
         ) : null}

@@ -12,6 +12,7 @@ import {
   projectDisplayStatus,
   scheduleLabel,
   STATUS_LABELS,
+  toast,
   waitingBadge,
   type Project,
   type ProjectEditFields,
@@ -65,6 +66,13 @@ export default function ProjectDetailScreen() {
   ) : (
     <View className="flex-1 bg-background" />
   );
+}
+
+function reportProjectFailure(message: string, description: string) {
+  toast(message, {
+    id: 'project-error', description, durationMs: Infinity,
+    action: { label: 'Dismiss', onPress: () => toast.dismiss('project-error') },
+  });
 }
 
 function BackRow({ onBack }: { onBack: () => void }) {
@@ -127,8 +135,13 @@ function ProjectDetail({
     (status: ProjectStatus) => {
       if (!project) return;
       setError(null);
-      const tx = api.setStatus(project.id, status);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      const failed = (e: unknown) => status === 'done'
+        ? reportProjectFailure('Could not mark project done', `“${project.title}”: open Projects, refresh, and try again.`)
+        : setError(messageOf(e));
+      try {
+        const tx = api.setStatus(project.id, status);
+        tx.isPersisted.promise.catch(failed);
+      } catch (e) { failed(e); }
     },
     [api, project],
   );
@@ -142,10 +155,20 @@ function ProjectDetail({
     // conditions, so once it persists we re-pull those two collections to drop
     // any lingering orphan (a future-dated task of this project would otherwise
     // sit in Upcoming until the next refetch — Upcoming applies no project gate).
-    const tx = api.remove(project.id);
-    tx.isPersisted.promise
-      .then(() => Promise.all([tasksApi.refetch(), waitsApi.refetch()]))
-      .catch((e) => setError(messageOf(e)));
+    const failed = () => reportProjectFailure(
+      'Could not delete project', `“${project.title}”: open Projects, refresh, and try again.`,
+    );
+    try {
+      const tx = api.remove(project.id);
+      void tx.isPersisted.promise.then(async () => {
+        try {
+          await Promise.all([tasksApi.refetch(), waitsApi.refetch()]);
+          if (tasksApi.getLoadError() || waitsApi.getLoadError()) throw new Error('refresh');
+        } catch {
+          reportProjectFailure('Project deleted; lists could not refresh', 'Pull to refresh when you are connected.');
+        }
+      }, failed);
+    } catch { failed(); }
   }, [api, tasksApi, waitsApi, project]);
 
   // This project's open tasks, the list the shared task editor resolves against:
