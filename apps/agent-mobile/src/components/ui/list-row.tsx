@@ -27,8 +27,8 @@ export function CheckCircle({
 // A flat list row: a leading slot (check circle or emoji), the body, and an
 // optional trailing slot, over an opaque background with a hairline divider
 // beneath, inset to the body's left edge. This is the Todoist row shape shared
-// by Upcoming and Projects; the Captures row is hand-built (it wraps a swipe
-// gesture) but matches this vocabulary. Android press feedback is a ripple.
+// by Upcoming, Projects, and the project task list; Home's row is hand-built
+// around swipe and reorder gestures but matches it. Android feedback is a ripple.
 export function ListRow({
   leading,
   children,

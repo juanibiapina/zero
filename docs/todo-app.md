@@ -161,6 +161,22 @@ committed.
 
 ## Project tracking
 
+Implemented and device-verified on the Pixel 7 (2026-09-13): **Project task
+schedule clarity on mobile** (plan:
+`docs/plans/todo-project-task-list-clarity.md`). A future task no longer appears
+as an unexplained automatic row under Waiting on: the project status now reads
+`Waiting · until <day>`, while the source task reads `Scheduled · <day>`.
+Waiting on is reserved for real condition entities, with condition-before-date
+precedence still supplied by the shared `waitingBadge` module. Project tasks now
+reuse the standard mobile `ListRow`, giving them the established 46 dp minimum
+row, full-row edit target, and inset dividers; long titles wrap above their muted
+schedule caption. Shared derivation and persistence are unchanged. The mobile
+screen tests cover date-only and condition-plus-date states. **Pixel 7:** a
+throwaway project with undated and long Tomorrow tasks showed the contextual
+status, source caption, roomier rows, clean wrapping, and no Waiting-on section;
+the row opened the shared editor, completion Undo restored a throwaway task, and
+the project was deleted afterward.
+
 Shipped, device-verified on the Pixel 7 (2026-09-12): **Retire take-on — the
 show-up date is the sole commitment gate** (plan:
 `docs/plans/todo-retire-take-on.md`). The take-on/park star (`takenOnAt`) is gone

@@ -169,20 +169,22 @@ no speculative columns before their behavior is designed.
   a compact header (a de-emphasized emoji icon that opens its picker on tap, the
   **title** as an editable heading, a read-only **derived-status pill**, and a
   "⋯" **actions menu** with the status moves and **Delete project**), then the
-  project's **description** — its statement of intent, an always-visible editable
-  field directly under the title — then the project's **tasks** (complete each
-  with its circle; each row carries a **date chip** — pick a date to commit the
-  task to Home, or leave it "No date" to keep grooming; a task is added from a
-  plus button (a FAB) that opens a **task-only** quick-add bar docked to the
-  keyboard — no capture mode, so captures are not selectable here, and a new task
-  starts undated), then its **waiting conditions** (add
-  revealed on "+"). Field edits commit on blur/submit (the icon on tap). Choosing **Mark
-  done** or **Delete project** returns to the list and leaves the row briefly
-  struck-through with an inline **Undo** (~5s) before it leaves (delete then
-  hard-removes it server-side). Sheets/menus still serve the short
-  sub-interactions here (the icon picker and the status/delete actions on mobile
-  are each a pure `@expo/ui` sheet); the **Captures** detail — a single leaf
-  item — is still a bottom sheet (`components/ui/sheet.tsx`).
+  project's **description**, tasks, and waiting conditions. On mobile, a waiting
+  status includes its winning timing (`Waiting · until Tomorrow` or `Waiting ·
+  for 5 days`). Project tasks use the shared flat-list row rhythm; tapping the
+  full row opens the shared editor, and every dated task shows a muted
+  `Scheduled · <day>` caption beneath its title. Scheduling remains in the
+  editor, not in a second inline control. The project FAB opens the shared
+  Task/Waiting composer; a new task starts undated and preset to this project,
+  but both date and project can be changed before creation. On web, project task
+  rows retain their inline date chip. Real waiting conditions remain under
+  **Waiting on** on both surfaces; mobile does not render a future task date as
+  an automatic condition because the header and source task already explain it
+  (web retains that synthetic row for now). Field edits commit on blur/submit
+  (the icon on tap). Choosing **Mark done** or **Delete project** commits
+  immediately and returns to the list; task completion keeps its Undo snackbar.
+  Sheets/menus still serve the short sub-interactions here (the icon picker and
+  status/delete actions on mobile are each a pure `@expo/ui` sheet).
 - **Storage** — the server domain store is `DbProjectStore` (domain methods
   `add` / `list` / `setStatus` / `edit` / `delete`), a per-entity store like
   `DbCaptureStore` / `DbTaskStore` (do-orm is the shared layer; a store holds

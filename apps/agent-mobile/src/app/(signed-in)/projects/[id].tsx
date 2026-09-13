@@ -4,13 +4,13 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  dayLabel,
   isBasisStale,
   localToday,
   messageOf,
   projectDisplayStatus,
+  scheduleLabel,
   STATUS_LABELS,
-  waitingUntil,
+  waitingBadge,
   type Project,
   type ProjectEditFields,
   type ProjectStatus,
@@ -32,7 +32,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
-import { CheckCircle } from '@/components/ui/list-row';
+import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Input } from '@/components/ui/input';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { useTaskDetail } from '@/components/task-detail';
@@ -220,6 +220,10 @@ function ProjectDetail({
 
   const today = localToday();
   const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
+  const waitContext = waitingBadge(project, tasks, conds, list, today)?.label;
+  const statusLabel = `${STATUS_LABELS[displayStatus]}${
+    waitContext ? ` · ${waitContext}` : ''
+  }`;
 
   return (
     <View className="flex-1 bg-background">
@@ -245,7 +249,7 @@ function ProjectDetail({
 
         <ProjectHeader
           project={project}
-          displayStatus={displayStatus}
+          statusLabel={statusLabel}
           onEdit={commitEdit}
           onStatus={(status) => {
             if (status === 'done') {
@@ -270,6 +274,7 @@ function ProjectDetail({
         <ProjectTasks
           api={tasksApi}
           projectId={project.id}
+          today={today}
           onOpen={detail.open}
           onComplete={detail.complete}
         />
@@ -278,7 +283,6 @@ function ProjectDetail({
           project={project}
           waitsApi={waitsApi}
           tasks={tasks}
-          today={today}
           onError={setError}
         />
       </ScrollView>
@@ -434,17 +438,17 @@ function IconPickerSheet({
 }
 
 // The identity header: a de-emphasized icon (tap to open the picker sheet), the
-// title as an editable heading (commit on blur / submit), a derived-status pill,
-// and a "⋯" that opens the status/delete actions sheet.
+// title as an editable heading (commit on blur / submit), a derived-status pill
+// that names the winning wait context, and a "⋯" that opens the actions sheet.
 function ProjectHeader({
   project,
-  displayStatus,
+  statusLabel,
   onEdit,
   onStatus,
   onDelete,
 }: {
   project: Project;
-  displayStatus: ProjectStatus;
+  statusLabel: string;
   onEdit: (fields: ProjectEditFields) => void;
   onStatus: (status: ProjectStatus) => void;
   onDelete: () => void;
@@ -501,8 +505,11 @@ function ProjectHeader({
       </View>
       <View className="mt-2 flex-row">
         <View className="rounded-full bg-surface-muted px-2.5 py-0.5">
-          <Text className="text-[12px] text-foreground-muted">
-            {STATUS_LABELS[displayStatus]}
+          <Text
+            accessibilityLabel={`Project status: ${statusLabel}`}
+            className="text-[12px] text-foreground-muted"
+          >
+            {statusLabel}
           </Text>
         </View>
       </View>
@@ -559,19 +566,20 @@ function ProjectHeader({
   );
 }
 
-// The project's tasks: complete one with its circle, or tap its text to open the
-// full task editor — the same one Home and Upcoming open — where you rename,
-// schedule (dating a task commits it to Home), move it, or complete it. Plain RN
-// rows, like the list screens. Scheduling lives in the editor now (there is no
-// inline per-row date chip), so the row reads exactly like every other list row.
+// The project's tasks use the same roomy ListRow rhythm as the list screens.
+// A dated task names its schedule beneath the title, which connects a derived
+// project wait to the task that causes it. The caption is informational;
+// scheduling stays in the shared editor opened by tapping the row.
 function ProjectTasks({
   api,
   projectId,
+  today,
   onOpen,
   onComplete,
 }: {
   api: TasksApi;
   projectId: string;
+  today: string;
   // Open the shared task editor for a task (owned by the screen's useTaskDetail).
   onOpen: (task: Task) => void;
   // Complete a task with the shared single Undo snackbar (owned by the same hook).
@@ -591,26 +599,38 @@ function ProjectTasks({
   if (list.length === 0) return null;
 
   return (
-    <View className="px-screen-x pb-4">
-      <Text variant="section" className="pb-2">
+    <View className="pb-4">
+      <Text variant="section" className="px-screen-x pb-2">
         Tasks
       </Text>
-      {list.map((t) => (
-        <View key={t.id} className="flex-row items-center gap-3 py-2">
-          <CheckCircle
-            label={`Complete "${t.text}"`}
-            onPress={() => onComplete(t)}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Edit "${t.text}"`}
-            className="flex-1"
+      {list.map((t) => {
+        const scheduled =
+          t.showUpDate == null ? null : scheduleLabel(t.showUpDate, today);
+        const accessibilityLabel = `Edit "${t.text}"${
+          scheduled ? `, scheduled ${scheduled}` : ''
+        }`;
+
+        return (
+          <ListRow
+            key={t.id}
+            leading={
+              <CheckCircle
+                label={`Complete "${t.text}"`}
+                onPress={() => onComplete(t)}
+              />
+            }
+            accessibilityLabel={accessibilityLabel}
             onPress={() => onOpen(t)}
           >
-            <Text>{t.text}</Text>
-          </Pressable>
-        </View>
-      ))}
+            <View className="gap-0.5">
+              <Text>{t.text}</Text>
+              {scheduled ? (
+                <Text variant="caption">Scheduled · {scheduled}</Text>
+              ) : null}
+            </View>
+          </ListRow>
+        );
+      })}
     </View>
   );
 }
@@ -626,21 +646,19 @@ function conditionLabel(c: WaitingCondition, tasks: Task[], projects: Project[])
   return `until “${p?.title ?? '?'}” is ${c.targetStatus}`;
 }
 
-// The waiting conditions for a project: the open ones (resolve/delete). Adding a
-// condition moved to the screen's plus FAB (the Waiting mode), so this section is
-// list-only. Structured kinds (task-done, project-status) are created on web for
-// now; here they still render with a label and auto-resolve in code.
+// The project's real waiting conditions (resolve/delete). A future task date is
+// not a condition: the status pill and source task explain that derived wait.
+// Adding stays in the plus FAB's Waiting mode. Structured kinds are created on
+// web for now; mobile still renders and auto-resolves them.
 function ProjectWaits({
   project,
   waitsApi,
   tasks,
-  today,
   onError,
 }: {
   project: Project;
   waitsApi: WaitsApi;
   tasks: Task[];
-  today: string;
   onError: (message: string) => void;
 }) {
   const { data: allConditions } = useLiveQuery((q) =>
@@ -649,30 +667,20 @@ function ProjectWaits({
   const list = (allConditions ?? []).filter(
     (c: WaitingCondition) => c.projectId === project.id,
   );
-  // A future-dated taken-on task makes the project wait until that day, derived
-  // with no stored row — shown as an automatic reason (no Resolve/delete).
-  const until = waitingUntil(project, tasks, today);
-
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
 
-  // Nothing to show: no open conditions and no derived date wait. Render no
-  // section at all (not a bare heading). Adding a condition is the screen's plus
-  // FAB (Waiting mode), so hiding this removes no add path.
-  if (list.length === 0 && until == null) return null;
+  // Nothing to show: render no bare heading. A task-derived wait is explained
+  // by the project status and that task's schedule; this section is only for
+  // real conditions added through the screen's Waiting mode.
+  if (list.length === 0) return null;
 
   return (
     <View className="px-screen-x pb-4">
       <Text variant="section" className="pb-2">
         Waiting on
       </Text>
-      {until != null && (
-        <View className="flex-row items-center gap-2 py-2">
-          <Text className="flex-1 text-[14px]">until {dayLabel(until, today)}</Text>
-          <Text className="text-[12px] text-foreground-muted">auto</Text>
-        </View>
-      )}
       {list.map((c) => (
         <View key={c.id} className="flex-row items-center gap-2 py-2">
           <Text className="flex-1 text-[14px]">{conditionLabel(c, tasks, [project])}</Text>

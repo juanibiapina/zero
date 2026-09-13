@@ -90,15 +90,19 @@ with several postponed tasks. Conditions remain only for reasons that are *not* 
 task date (`free-text` / `task-done` / `project-status`). The Projects list badges
 a date wait "until <day>" (via `waitingBadge`, which folds both wait kinds into
 one label + sort key: elapsed time for a condition wait, the target day for a date
-wait), and the project screen shows the same "until <day>" as an automatic
-reason with no Resolve/delete. See
-`docs/plans/todo-single-list-3-date-availability.md`.
+wait). On mobile project detail, the status reads `Waiting · until <day>` and the
+source task reads `Scheduled · <day>`; **Waiting on** stays reserved for actual
+conditions. Web still shows the derived day as an automatic row because its task
+list presents scheduling through inline date controls. See
+`docs/plans/todo-single-list-3-date-availability.md` and
+`docs/plans/todo-project-task-list-clarity.md`.
 
 ## Interactions (per system)
 
-- **UI** — the project screen gains a **Waiting-on** section: the open
-  conditions (each with Resolve for free-text, or an "auto" tag for structured,
-  and a delete). Adding is behind a **"+" affordance**, not an inline form:
+- **UI** — the project screen's **Waiting-on** section lists the open condition
+  entities (each with Resolve for free-text, or an "auto" tag for structured,
+  and a delete). A derived task date is not one of these rows on mobile. Adding
+  is behind a **"+" affordance**, not an inline form:
   mobile adds a **Waiting** mode to the project screen's plus FAB (beside Task),
   free-text only; web opens the builder in a **popover** from a "+" control,
   offering all three kinds (free-text + task/project pickers). Structured kinds

@@ -9,7 +9,11 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 import { Pressable, Text as RNText, View } from 'react-native';
-import { defaultToastController } from '@zero/agent-core';
+import {
+  defaultToastController,
+  localToday,
+  tomorrow,
+} from '@zero/agent-core';
 
 import type { Project, ProjectStatus, Task, WaitingCondition } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
@@ -269,20 +273,54 @@ describe('ProjectDetailScreen', () => {
     expect(queryByText('Waiting on')).toBeNull();
   });
 
-  it('shows a derived "until <day>" reason for a future-dated task', async () => {
-    // A task dated in the far future makes the project wait until that day, with
-    // no stored condition. The Waiting-on section surfaces it as an automatic
-    // reason (no Resolve/delete).
+  it('explains a task-derived wait in the status and on its source task', async () => {
+    const nextDay = tomorrow(localToday());
     mockFetchTasks.mockResolvedValue([
       {
         ...taskRow('t1', 'book flights'),
-        showUpDate: '2099-12-31',
+        showUpDate: nextDay,
       },
     ]);
-    const { getByText, getAllByText } = await renderScreen();
-    await waitFor(() => expect(getByText('Waiting on')).toBeTruthy());
-    expect(getAllByText(/^until /).length).toBeGreaterThan(0);
-    expect(getByText('auto')).toBeTruthy();
+
+    const { getByText, queryByText } = await renderScreen();
+
+    await waitFor(() =>
+      expect(getByText('Waiting · until Tomorrow')).toBeTruthy(),
+    );
+    expect(getByText('Scheduled · Tomorrow')).toBeTruthy();
+    expect(queryByText('Waiting on')).toBeNull();
+    expect(queryByText('auto')).toBeNull();
+  });
+
+  it('keeps a real waiting condition primary while showing the task schedule', async () => {
+    const nextDay = tomorrow(localToday());
+    mockFetchTasks.mockResolvedValue([
+      {
+        ...taskRow('t1', 'book flights'),
+        showUpDate: nextDay,
+      },
+    ]);
+    mockFetchWaits.mockResolvedValue([
+      {
+        id: 'w1',
+        projectId: '1',
+        kind: 'free-text',
+        text: 'the letter comes back',
+        refId: null,
+        targetStatus: null,
+        resolvedAt: null,
+        createdAt: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+      },
+    ]);
+
+    const { getByText, queryByText } = await renderScreen();
+
+    await waitFor(() => expect(getByText(/^Waiting · for /)).toBeTruthy());
+    expect(queryByText('Waiting · until Tomorrow')).toBeNull();
+    expect(getByText('Scheduled · Tomorrow')).toBeTruthy();
+    expect(getByText('Waiting on')).toBeTruthy();
+    expect(getByText('the letter comes back')).toBeTruthy();
+    expect(queryByText(/^until Tomorrow$/)).toBeNull();
   });
 
   it('shows the Tasks heading once the project has an open task', async () => {
@@ -351,7 +389,9 @@ describe('ProjectDetailScreen', () => {
 
     // Tapping the task text opens the same editor Home/Upcoming open.
     await act(async () => {
-      fireEvent.press(getByLabelText('Edit "buy running shoes"'));
+      fireEvent.press(
+        getByLabelText('Edit "buy running shoes", scheduled Today'),
+      );
     });
     const input = getByDisplayValue('buy running shoes');
     await act(async () => {
