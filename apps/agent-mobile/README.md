@@ -109,20 +109,37 @@ back only where the native component does not fit.
 
 ## Brand assets
 
-`assets/brand/todo-icon.svg` is the approved white/graphite icon source. Run
-`bin/generate-todo-icons` from the repository root (Python 3 and ImageMagick 7)
-to regenerate mobile PNGs and `apps/agent-web/public` favicons. The command
-validates dimensions, transparency, neutral pixels, and Android's safe zone.
-Do not edit generated PNGs or the web SVG copy independently.
+Two approved sources own the app's white/graphite identity:
 
-Android uses a transparent foreground over white and a matching monochrome
-silhouette; iOS uses the opaque 1024px icon. Launcher and splash changes require
-a new native build. Application UI colors are independent of these assets.
-The EAS archive rules exclude generated `android/` and `ios/` directories so
-prebuild always applies `app.json`. A stale git-ignored native project otherwise
-silently overrides icon configuration. For the attached Pixel, use the
-`development-pixel` profile: it inherits the development client and builds only
-ARM64. The regular development and preview profiles retain all architectures.
+- `assets/brand/todo-icon.svg` is the static iOS, splash, and web mark.
+- `assets/brand/task-count/template.svg` plus the state definitions in
+  `bin/generate-todo-icons` own Android's launcher family. A checkmark represents
+  an empty Home; one to three tasks show that many rows; four or more show four.
+
+Run `bin/generate-todo-icons` from the repository root (Python 3, ImageMagick 7,
+and DejaVu Sans) to regenerate the mobile PNGs, state SVGs, comparison sheet,
+and `apps/agent-web/public` favicons. The command validates dimensions,
+transparency, neutral pixels, Android's safe zone, and deterministic output. Do
+not edit generated PNGs, state SVGs, comparison image, or web copy independently.
+
+Android's primary launcher icon is the empty-state checkmark. Four native
+activity aliases provide the non-empty states with transparent foregrounds over
+white and matching monochrome silhouettes. The local `home-app-icon` native
+module leaves `MainActivity` enabled for Expo dev-client launches, the app
+scheme, and Clerk's hosted callback; only its five aliases carry the launcher
+filter. The app derives the state from the same hydrated `homeTasks` list Home
+renders, queues only a changed count bucket, and applies it when the app enters
+the background. Remote or date-based changes made while the process is stopped
+appear after the next app sync and background transition. iOS, the splash mark,
+the tab icon, and web remain static.
+
+Launcher and splash changes require a new native build. Application UI colors
+are independent of these assets. The EAS archive rules exclude generated
+`android/` and `ios/` directories so prebuild always applies `app.json`. A stale
+git-ignored native project otherwise silently overrides icon configuration. For
+the attached Pixel, use the `development-pixel` profile: it inherits the
+development client and builds only ARM64. The regular development and preview
+profiles retain all architectures.
 
 ## Authentication and environment
 

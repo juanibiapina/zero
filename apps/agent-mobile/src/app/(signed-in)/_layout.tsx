@@ -3,6 +3,8 @@ import { Redirect } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
+import { HomeAppIconSync } from '../../components/home-app-icon-sync';
+import { syncHomeAppIcon } from '../../lib/home-app-icon';
 import { useColor } from '../../lib/theme';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
@@ -34,6 +36,9 @@ export default function SignedInLayout() {
   const iconColor = useColor('--color-foreground-secondary');
 
   useTimezoneSync(isLoaded && isSignedIn);
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) void syncHomeAppIcon(null);
+  }, [isLoaded, isSignedIn]);
 
   if (!isLoaded) {
     return (
@@ -54,19 +59,26 @@ export default function SignedInLayout() {
   // is a native navigator, so its first use needs a fresh EAS dev build to
   // appear on device (pure-JS reload will not show it).
   return (
-    <NativeTabs tintColor={accent} backgroundColor={surface} iconColor={iconColor}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Icon sf="tray.full" md="inbox" />
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="upcoming">
-        <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
-        <NativeTabs.Trigger.Label>Upcoming</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="projects">
-        <NativeTabs.Trigger.Icon sf="folder" md="folder" />
-        <NativeTabs.Trigger.Label>Projects</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <>
+      <HomeAppIconSync />
+      <NativeTabs
+        tintColor={accent}
+        backgroundColor={surface}
+        iconColor={iconColor}
+      >
+        <NativeTabs.Trigger name="index">
+          <NativeTabs.Trigger.Icon sf="tray.full" md="inbox" />
+          <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="upcoming">
+          <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
+          <NativeTabs.Trigger.Label>Upcoming</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="projects">
+          <NativeTabs.Trigger.Icon sf="folder" md="folder" />
+          <NativeTabs.Trigger.Label>Projects</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+      </NativeTabs>
+    </>
   );
 }

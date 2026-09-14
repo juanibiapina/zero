@@ -1,6 +1,6 @@
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import { render } from '@testing-library/react-native';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import SignedInLayout from '../(signed-in)/_layout';
 
@@ -18,6 +18,15 @@ jest.mock('@clerk/expo', () => ({
 
 jest.mock('../../lib/timezone-sync', () => ({
   createMobileTimezoneSync: (getToken: unknown) => mockCreateSync(getToken),
+}));
+
+jest.mock('../../components/home-app-icon-sync', () => ({
+  HomeAppIconSync: () => null,
+}));
+
+const mockSetAppIcon = jest.fn<(icon: string) => boolean>();
+jest.mock('../../../modules/home-app-icon', () => ({
+  setHomeAppIcon: (icon: string) => mockSetAppIcon(icon),
 }));
 
 jest.mock('expo-router', () => ({
@@ -53,6 +62,9 @@ jest.mock('expo-router/unstable-native-tabs', () => {
 
 describe('SignedInLayout', () => {
   beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    mockSetAppIcon.mockReset();
+    mockSetAppIcon.mockReturnValue(true);
     mockOnColdStart.mockClear();
     mockOnForeground.mockClear();
     mockCreateSync.mockClear();
@@ -62,6 +74,7 @@ describe('SignedInLayout', () => {
     mockUseAuth.mockReturnValue({ isLoaded: false, isSignedIn: false });
     const { toJSON } = await render(<SignedInLayout />);
     expect(JSON.stringify(toJSON())).toContain('ActivityIndicator');
+    expect(mockSetAppIcon).not.toHaveBeenCalled();
   });
 
   it('redirects to sign-in when signed out', async () => {
@@ -82,6 +95,13 @@ describe('SignedInLayout', () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
     await render(<SignedInLayout />);
     expect(mockCreateSync).not.toHaveBeenCalled();
+  });
+
+  it('restores the checkmark launcher icon when signed out', async () => {
+    mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
+    await render(<SignedInLayout />);
+
+    expect(mockSetAppIcon).toHaveBeenCalledWith('Default');
   });
 
   it('reconciles on cold start and on foreground when signed in', async () => {

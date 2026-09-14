@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-14: The launcher icon now mirrors Home: a checkmark when your list is clear, then one to four task rows as work appears.
+
 - 2026-09-14: Empty projects no longer show a “No tasks yet” prompt, and the project status sheet keeps just the status and its actions.
 
 - 2026-09-14: The app now uses the white-and-graphite task icon on the launcher and launch screen, with a matching Android themed icon.

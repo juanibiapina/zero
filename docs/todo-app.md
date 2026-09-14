@@ -161,6 +161,18 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-14): **Dynamic Home-task launcher
+icon.** Android now uses the approved checkmark when Home is clear, one to three
+rows for those exact task counts, and four rows for every larger count. The
+observer waits for Tasks, Projects, and WaitingConditions to hydrate and counts
+the existing `homeTasks` result, so future, completed, groomed, and unavailable
+work stays out. An app-owned Expo module changes launcher aliases only after the
+app backgrounds while leaving `MainActivity` enabled for Clerk, app links, and
+the development client. Asset generation is deterministic; unit tests, clean
+prebuild, native compilation, all five Pixel states, repeated alias relaunches,
+and default restoration pass. Plan and evidence:
+`docs/plans/todo-dynamic-task-count-icon.md`.
+
 Updated (2026-09-14): **Quiet project screens.** Removed the empty-project
 message/Add task shortcut and the explanatory paragraph in the status sheet at
 the user's request. The plus button, status disclosure, and status actions remain.

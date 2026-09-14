@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the approved todo SVG with Python 3 and ImageMagick 7."""
+"""Generate and validate Zero's static and task-count icon assets."""
 import copy
 import os
 from pathlib import Path
@@ -9,25 +9,55 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / 'apps/agent-mobile/assets/brand/todo-icon.svg'
+STATIC_SOURCE = ROOT / 'apps/agent-mobile/assets/brand/todo-icon.svg'
+TASK_COUNT = ROOT / 'apps/agent-mobile/assets/brand/task-count'
+TASK_COUNT_TEMPLATE = TASK_COUNT / 'template.svg'
 MOBILE = ROOT / 'apps/agent-mobile/assets/images'
+TASK_COUNT_IMAGES = MOBILE / 'task-count'
 WEB = ROOT / 'apps/agent-web/public'
+PROTOTYPE = ROOT / 'docs/prototypes/todo-icon'
 NS = 'http://www.w3.org/2000/svg'
+XLINK = 'http://www.w3.org/1999/xlink'
 ET.register_namespace('', NS)
-ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
+ET.register_namespace('xlink', XLINK)
 ENV = {**os.environ, 'MAGICK_THREAD_LIMIT': '1'}
+
+STATES = [
+    ('0-empty', 0, 1.0, []),
+    ('1-task', 1, 1.35, [500]),
+    ('2-tasks', 2, 1.30, [415, 585]),
+    ('3-tasks', 3, 1.25, [330, 500, 670]),
+    ('4-plus-tasks', 4, 1.08, [296, 432, 568, 704]),
+]
+LABELS = [
+    '0  Clear / checkmark',
+    '1  One task',
+    '2  Two tasks',
+    '3  Three tasks',
+    '4  Four or more',
+]
+
+
+def q(name):
+    return f'{{{NS}}}{name}'
 
 
 def magick(*args):
-    return subprocess.check_output(['magick', *map(str, args)], env=ENV, text=True).strip()
+    return subprocess.check_output(
+        ['magick', *map(str, args)], env=ENV, text=True
+    ).strip()
 
 
 def render(source, output, size, opaque=False):
     args = ['-background', 'none', source, '-resize', f'{size}x{size}']
     if opaque:
         args += ['-background', 'white', '-alpha', 'remove', '-alpha', 'off']
-    args += ['-strip', '-define', 'png:exclude-chunk=date,time',
-             ('PNG24:' if opaque else 'PNG32:') + str(output)]
+    args += [
+        '-strip',
+        '-define',
+        'png:exclude-chunk=date,time',
+        ('PNG24:' if opaque else 'PNG32:') + str(output),
+    ]
     magick(*args)
     dimensions = magick('identify', '-format', '%wx%h', output)
     if dimensions != f'{size}x{size}':
@@ -35,67 +65,215 @@ def render(source, output, size, opaque=False):
     is_opaque = magick('identify', '-format', '%[opaque]', output).lower() == 'true'
     if is_opaque != opaque:
         raise RuntimeError(f'{output}: unexpected opacity {is_opaque}')
-    # The approved design uses only neutral RGB values.
-    difference = float(magick(output, '-fx', 'abs(r-g)+abs(g-b)', '-format', '%[fx:maxima]', 'info:'))
+    difference = float(
+        magick(
+            output,
+            '-fx',
+            'abs(r-g)+abs(g-b)',
+            '-format',
+            '%[fx:maxima]',
+            'info:',
+        )
+    )
     if difference > 1 / 255:
         raise RuntimeError(f'{output}: unexpected colored pixels')
+
+
+def write_svg(tree, output):
+    tree.write(output, encoding='unicode', xml_declaration=True)
+    output.write_text(
+        '\n'.join(line.rstrip() for line in output.read_text().splitlines()) + '\n'
+    )
+
+
+def generate_task_count_svgs():
+    base = ET.parse(TASK_COUNT_TEMPLATE)
+    if base.getroot().get('viewBox') != '0 0 1024 1024':
+        raise RuntimeError('Task-count template viewBox changed; review safe-zone sizing.')
+
+    for slug, count, scale, rows in STATES:
+        tree = copy.deepcopy(base)
+        root = tree.getroot()
+        content = ET.SubElement(root, q('g'))
+        if count == 0:
+            path = 'M318 500L451 633L718 365'
+            shadow = ET.SubElement(content, q('g'), {'filter': 'url(#metalShadow)'})
+            for width, paint, offset in [
+                (78, 'metalSide', 3),
+                (76, 'ringBevel', 0),
+                (66, 'silverFace', 0),
+            ]:
+                ET.SubElement(
+                    shadow,
+                    q('path'),
+                    {
+                        'd': path,
+                        'fill': 'none',
+                        'stroke': f'url(#{paint})',
+                        'stroke-width': str(width),
+                        'stroke-linecap': 'round',
+                        'stroke-linejoin': 'round',
+                        'transform': f'translate(0 {offset})',
+                    },
+                )
+            title = 'Zero: clear day checkmark'
+            description = (
+                'A continuous dark graphite-metal checkmark centered on a flat '
+                'white circular ground.'
+            )
+        else:
+            content.set(
+                'transform',
+                f'translate(512 500) scale({scale}) translate(-512 -500)',
+            )
+            for y in rows:
+                ET.SubElement(
+                    content,
+                    q('use'),
+                    {
+                        f'{{{XLINK}}}href': '#taskRow',
+                        'transform': f'translate(330 {y})',
+                    },
+                )
+            amount = count if count < 4 else 'four or more'
+            title = f'Zero: {amount} available tasks'
+            description = (
+                f'{count} centered open task rows in dark graphite metal on a '
+                'flat white circular ground.'
+            )
+        root.find(q('title')).text = title
+        root.find(q('desc')).text = description
+        write_svg(tree, TASK_COUNT / f'{slug}.svg')
+
+
+def foreground_trees(source):
+    tree = ET.parse(source)
+    root = tree.getroot()
+    groups = root.findall(q('g'))
+    if len(groups) != 2 or groups[0].find(q('circle')) is None:
+        raise RuntimeError(f'{source}: unexpected background/artwork structure')
+
+    root.remove(groups[0])
+    root.remove(groups[1])
+    safe = ET.SubElement(
+        root,
+        q('g'),
+        {'transform': 'translate(512 512) scale(0.75) translate(-512 -500)'},
+    )
+    safe.append(groups[1])
+
+    monochrome = copy.deepcopy(tree)
+    for element in monochrome.getroot().iter():
+        element.attrib.pop('filter', None)
+        for attribute in ('fill', 'stroke'):
+            if attribute in element.attrib and element.get(attribute) != 'none':
+                element.set(attribute, '#000000')
+    return tree, monochrome
+
+
+def validate_safe_zone(path, mask):
+    escaped = float(
+        magick(
+            path,
+            '-alpha',
+            'extract',
+            mask,
+            '-compose',
+            'Multiply',
+            '-composite',
+            '-format',
+            '%[fx:maxima]',
+            'info:',
+        )
+    )
+    if escaped > 1 / 255:
+        raise RuntimeError(f'{path}: artwork escapes the adaptive safe zone')
 
 
 def main():
     if shutil.which('magick') is None:
         raise SystemExit('ImageMagick 7 (magick) is required.')
+    TASK_COUNT.mkdir(parents=True, exist_ok=True)
+    TASK_COUNT_IMAGES.mkdir(parents=True, exist_ok=True)
     MOBILE.mkdir(parents=True, exist_ok=True)
     WEB.mkdir(parents=True, exist_ok=True)
-    tree = ET.parse(SOURCE)
-    root = tree.getroot()
-    if root.get('viewBox') != '0 0 1024 1024':
-        raise RuntimeError('The approved SVG viewBox changed; review adaptive safe-zone sizing.')
-    groups = root.findall(f'{{{NS}}}g')
-    if len(groups) != 2 or groups[0].find(f'{{{NS}}}circle') is None:
-        raise RuntimeError('The approved background/artwork structure changed.')
+    PROTOTYPE.mkdir(parents=True, exist_ok=True)
+
+    generate_task_count_svgs()
 
     with tempfile.TemporaryDirectory(prefix='todo-icons-') as folder:
         temp = Path(folder)
-        # Android supplies its own opaque white background and launcher mask.
-        # Scale only the foreground into the central 66/108 safe-zone circle.
-        root.remove(groups[0])
-        root.remove(groups[1])
-        safe = ET.SubElement(root, f'{{{NS}}}g', {
-            'transform': 'translate(512 512) scale(0.75) translate(-512 -500)',
-        })
-        safe.append(groups[1])
-        foreground = temp / 'foreground.svg'
-        tree.write(foreground, encoding='utf-8', xml_declaration=True)
-
-        mono = copy.deepcopy(tree)
-        for element in mono.getroot().iter():
-            element.attrib.pop('filter', None)
-            for attr in ('fill', 'stroke'):
-                if attr in element.attrib and element.get(attr) != 'none':
-                    element.set(attr, '#000000')
-        monochrome = temp / 'monochrome.svg'
-        mono.write(monochrome, encoding='utf-8', xml_declaration=True)
-
-        render(SOURCE, MOBILE / 'icon.png', 1024, opaque=True)
-        render(foreground, MOBILE / 'android-icon-foreground.png', 1024)
-        render(monochrome, MOBILE / 'android-icon-monochrome.png', 1024)
-        render(SOURCE, MOBILE / 'splash-icon.png', 512)
-        render(SOURCE, MOBILE / 'favicon.png', 48, opaque=True)
-        render(SOURCE, WEB / 'apple-touch-icon.png', 180, opaque=True)
-        shutil.copyfile(SOURCE, WEB / 'todo-icon.svg')
-        shutil.copyfile(MOBILE / 'favicon.png', WEB / 'favicon.png')
-
-        # Every foreground pixel must fit in the Android guaranteed safe circle.
         mask = temp / 'outside-safe.png'
-        magick('-size', '1024x1024', 'xc:white', '-fill', 'black', '-draw',
-               'circle 512,512 824,512', mask)
-        for name in ('android-icon-foreground.png', 'android-icon-monochrome.png'):
-            escaped = float(magick(MOBILE / name, '-alpha', 'extract', mask,
-                                   '-compose', 'Multiply', '-composite',
-                                   '-format', '%[fx:maxima]', 'info:'))
-            if escaped > 1 / 255:
-                raise RuntimeError(f'{name}: artwork escapes the adaptive safe zone')
-    print('Generated and validated mobile icons and web favicons from', SOURCE.relative_to(ROOT))
+        magick(
+            '-size',
+            '1024x1024',
+            'xc:white',
+            '-fill',
+            'black',
+            '-draw',
+            'circle 512,512 824,512',
+            mask,
+        )
+
+        previews = []
+        for slug, *_ in STATES:
+            source = TASK_COUNT / f'{slug}.svg'
+            foreground, monochrome = foreground_trees(source)
+            foreground_svg = temp / f'{slug}-foreground.svg'
+            monochrome_svg = temp / f'{slug}-monochrome.svg'
+            write_svg(foreground, foreground_svg)
+            write_svg(monochrome, monochrome_svg)
+
+            legacy = TASK_COUNT_IMAGES / f'{slug}.png'
+            foreground_png = TASK_COUNT_IMAGES / f'{slug}-foreground.png'
+            monochrome_png = TASK_COUNT_IMAGES / f'{slug}-monochrome.png'
+            render(source, legacy, 1024, opaque=True)
+            render(foreground_svg, foreground_png, 1024)
+            render(monochrome_svg, monochrome_png, 1024)
+            validate_safe_zone(foreground_png, mask)
+            validate_safe_zone(monochrome_png, mask)
+
+            preview = temp / f'{slug}.png'
+            render(source, preview, 2048)
+            previews.append(preview)
+
+        montage_args = []
+        for preview, label in zip(previews, LABELS):
+            montage_args += ['-label', label, preview]
+        magick(
+            'montage',
+            '-font',
+            'DejaVu-Sans',
+            '-pointsize',
+            '22',
+            '-background',
+            '#e5e5e5',
+            '-fill',
+            '#222222',
+            *montage_args,
+            '-thumbnail',
+            '400x400',
+            '-tile',
+            '3x2',
+            '-geometry',
+            '+22+22',
+            PROTOTYPE / 'comparison.png',
+        )
+        magick(PROTOTYPE / 'comparison.png', '-strip', PROTOTYPE / 'comparison.png')
+
+    # The original three-row mark remains the static iOS, splash, and web brand.
+    render(STATIC_SOURCE, MOBILE / 'icon.png', 1024, opaque=True)
+    render(STATIC_SOURCE, MOBILE / 'splash-icon.png', 512)
+    render(STATIC_SOURCE, MOBILE / 'favicon.png', 48, opaque=True)
+    render(STATIC_SOURCE, WEB / 'apple-touch-icon.png', 180, opaque=True)
+    shutil.copyfile(STATIC_SOURCE, WEB / 'todo-icon.svg')
+    shutil.copyfile(MOBILE / 'favicon.png', WEB / 'favicon.png')
+
+    # These static Android layers were superseded by the task-count primary icon.
+    (MOBILE / 'android-icon-foreground.png').unlink(missing_ok=True)
+    (MOBILE / 'android-icon-monochrome.png').unlink(missing_ok=True)
+
+    print('Generated and validated static and task-count todo icons.')
 
 
 if __name__ == '__main__':

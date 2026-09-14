@@ -12,10 +12,11 @@
     },
     "android": {
       "package": "dev.juanibiapina.zeroagent",
+      "icon": "./assets/images/task-count/0-empty.png",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/task-count/0-empty-foreground.png",
+        "monochromeImage": "./assets/images/task-count/0-empty-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize"
@@ -26,6 +27,7 @@
     },
     "plugins": [
       "expo-router",
+      "./modules/home-app-icon/app.plugin.js",
       [
         "@clerk/expo",
         {
