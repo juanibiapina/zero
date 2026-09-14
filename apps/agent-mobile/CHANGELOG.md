@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-14: The clear-Home launcher checkmark is larger and bolder, so it reads more clearly at a glance.
+
 - 2026-09-14: Jump straight from a task's editor to its project with the arrow icon, and filter projects by name when assigning a task.
 
 - 2026-09-14: The launcher icon now mirrors Home: a checkmark when your list is clear, then one to four task rows as work appears.

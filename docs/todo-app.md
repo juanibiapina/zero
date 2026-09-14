@@ -161,6 +161,23 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-14): **Larger clear-Home launcher
+icon.** After three comparison rounds, the user selected B Full: the original
+check path is 1.45× larger and its graphite material strokes are 1.28× heavier.
+The adaptive foreground now occupies 520 × 377 pixels instead of 369 × 271,
+while remaining inside Android's guaranteed safe circle. The generator enforces
+those bounds and rejected the old output; two runs produced identical hashes
+across all 28 generated files, and only the empty-state SVG, its three Android
+PNGs, and the family comparison changed. Mobile's 21 suites / 140 tests, lint
+with 3 existing warnings, typecheck, Android export, and clean prebuild passed;
+the whole-repo check reached an unrelated existing dashboard test shutdown
+timeout after all mobile checks passed. Local development-client build 74 was
+installed on the Pixel 7. Launcher search showed the selected checkmark under
+the Pixel's circular mask, its default alias was the only enabled launcher
+entry, and tapping it opened Home. The test read existing production data but
+made no production-data writes. Plan:
+`docs/plans/todo-empty-launcher-icon-weight.md`.
+
 Implemented and verified in the browser and on the Pixel 7 (2026-09-14):
 **Transparent, full-size web favicon.** Browser tabs now receive the approved
 three-row graphite mark on transparency, enlarged to about 90% of its canvas, so

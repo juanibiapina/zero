@@ -46,6 +46,12 @@ LABELS = [
     '3  Three tasks',
     '4  Four or more',
 ]
+EMPTY_CHECK_CENTER = (512, 500)
+EMPTY_CHECK_POINTS = [(318, 500), (451, 633), (718, 365)]
+EMPTY_CHECK_PATH_SCALE = 1.45
+EMPTY_CHECK_STROKE_SCALE = 1.28
+EMPTY_FOREGROUND_BOUNDS = (520, 377, 259, 328)
+EMPTY_FOREGROUND_BOUNDS_TOLERANCE = 2
 
 
 def q(name):
@@ -118,7 +124,7 @@ def validate_corners(path, expected):
             raise RuntimeError(f'{path}: corner {x},{y} is not transparent')
 
 
-def validate_artwork_coverage(path):
+def artwork_bounds(path):
     width, height = map(
         int, magick('identify', '-format', '%w %h', path).split()
     )
@@ -135,8 +141,12 @@ def validate_artwork_coverage(path):
     match = re.fullmatch(r'(\d+)x(\d+)\+(\d+)\+(\d+)', geometry)
     if match is None:
         raise RuntimeError(f'{path}: could not measure artwork bounds {geometry!r}')
+    return width, height, tuple(map(int, match.groups()))
 
-    content_width, content_height, x, y = map(int, match.groups())
+
+def validate_artwork_coverage(path):
+    width, height, bounds = artwork_bounds(path)
+    content_width, content_height, x, y = bounds
     coverage = max(content_width / width, content_height / height)
     minimum, maximum = WEB_COVERAGE_RANGE
     if not minimum <= coverage <= maximum:
@@ -156,6 +166,18 @@ def validate_artwork_coverage(path):
         raise RuntimeError(
             f'{path}: artwork is not centered '
             f'(left={x}, right={right}, top={y}, bottom={bottom})'
+        )
+
+
+def validate_artwork_bounds(path, expected, tolerance):
+    _, _, actual = artwork_bounds(path)
+    if any(
+        abs(actual_value - expected_value) > tolerance
+        for actual_value, expected_value in zip(actual, expected)
+    ):
+        raise RuntimeError(
+            f'{path}: artwork bounds {actual} differ from approved bounds '
+            f'{expected} by more than {tolerance}px'
         )
 
 
@@ -206,7 +228,18 @@ def generate_task_count_svgs():
         root = tree.getroot()
         _, content = icon_layers(tree, TASK_COUNT_TEMPLATE)
         if count == 0:
-            path = 'M318 500L451 633L718 365'
+            center_x, center_y = EMPTY_CHECK_CENTER
+            points = [
+                (
+                    center_x + (x - center_x) * EMPTY_CHECK_PATH_SCALE,
+                    center_y + (y - center_y) * EMPTY_CHECK_PATH_SCALE,
+                )
+                for x, y in EMPTY_CHECK_POINTS
+            ]
+            path = ''.join(
+                f'{"M" if index == 0 else "L"}{x:g} {y:g}'
+                for index, (x, y) in enumerate(points)
+            )
             shadow = ET.SubElement(content, q('g'), {'filter': 'url(#metalShadow)'})
             for width, paint, offset in [
                 (78, 'metalSide', 3),
@@ -220,7 +253,7 @@ def generate_task_count_svgs():
                         'd': path,
                         'fill': 'none',
                         'stroke': f'url(#{paint})',
-                        'stroke-width': str(width),
+                        'stroke-width': f'{width * EMPTY_CHECK_STROKE_SCALE:g}',
                         'stroke-linecap': 'round',
                         'stroke-linejoin': 'round',
                         'transform': f'translate(0 {offset})',
@@ -361,6 +394,12 @@ def main():
             validate_corners(legacy, 'white')
             render(foreground_svg, foreground_png, 1024)
             validate_corners(foreground_png, 'transparent')
+            if slug == '0-empty':
+                validate_artwork_bounds(
+                    foreground_png,
+                    EMPTY_FOREGROUND_BOUNDS,
+                    EMPTY_FOREGROUND_BOUNDS_TOLERANCE,
+                )
             render(monochrome_svg, monochrome_png, 1024)
             validate_corners(monochrome_png, 'transparent')
             validate_safe_zone(foreground_png, mask)
