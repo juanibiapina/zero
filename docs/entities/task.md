@@ -72,7 +72,10 @@ subtasks. The show-up date is the **sole commitment gate** for a project task
   project changes only `projectId` — the show-up date is the commitment gate, so
   a dated task stays dated (and on Home if arrived) and an undated one is groomed
   on the project screen. Reachable from the task detail's Project row on mobile
-  (Home and Upcoming) and web (Home).
+  (Home and Upcoming) and web (Home). On mobile, that row opens a title-filterable
+  assignment picker; when the task has a project, a separate trailing arrow opens
+  that project's screen directly. The arrow is omitted when editing from the
+  owning project's screen.
 
 ## Data shape
 

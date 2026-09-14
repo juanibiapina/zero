@@ -479,13 +479,14 @@ describe('HomeScreen', () => {
       return edited;
     });
 
-    const { getByText, getByLabelText, getByDisplayValue } =
+    const { getByText, getByLabelText, getByDisplayValue, queryByLabelText } =
       await renderScreen();
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
 
     await act(async () => {
       fireEvent.press(getByLabelText('Edit "buy milk"'));
     });
+    expect(queryByLabelText(/^Open project /)).toBeNull();
     const input = getByDisplayValue('buy milk');
     await act(async () => {
       fireEvent.changeText(input, 'buy oat milk');
@@ -498,6 +499,53 @@ describe('HomeScreen', () => {
     expect(mockEditTask).toHaveBeenCalledTimes(1);
     expect(mockEditTask.mock.calls[0][1]).toBe('1');
     expect(mockEditTask.mock.calls[0][2]).toBe('buy oat milk');
+  });
+
+  it('saves a renamed task and jumps to its project from the editor icon', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p',
+        title: 'Diploma',
+        icon: '🎓',
+        description: null,
+        status: 'next',
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+    let task = taskRow('1', 'mail the letter', {
+      projectId: 'p',
+      showUpDate: '2023-01-02',
+    });
+    mockFetchTasks.mockImplementation(async () => [task]);
+    mockEditTask.mockImplementation(async (_token, _id, text) => {
+      task = { ...task, text };
+      return task;
+    });
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('mail the letter')).toBeTruthy());
+    await act(async () =>
+      fireEvent.press(screen.getByLabelText('Edit "mail the letter"')),
+    );
+    await act(async () =>
+      fireEvent.changeText(screen.getByLabelText('Task text'), 'mail the signed letter'),
+    );
+    await act(async () =>
+      fireEvent.press(screen.getByLabelText('Open project Diploma')),
+    );
+
+    await waitFor(() =>
+      expect(mockEditTask).toHaveBeenCalledWith(
+        expect.anything(),
+        '1',
+        'mail the signed letter',
+      ),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith('/projects/p', {
+      withAnchor: true,
+    });
+    expect(screen.queryByLabelText('sheet')).toBeNull();
   });
 
   it.each(['Set schedule', 'Set project', 'Complete task'])(

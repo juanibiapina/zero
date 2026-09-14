@@ -245,8 +245,8 @@ jest.mock('react-native-keyboard-controller', () => {
 // since a hoisted jest.mock factory can't safely hold JSX.
 //
 // The mock also enforces @expo/ui's host invariant: on Android every Jetpack
-// Compose component (Button, Column, Row, Text, TextInput) must be wrapped in a
-// `<Host>` or it fails to render with a Compose error banner. `Host` and
+// Compose component (Button, Column, Row, Text, TextInput, Icon) must be wrapped
+// in a `<Host>` or it fails to render with a Compose error banner. `Host` and
 // `BottomSheet` (which wraps its own Host natively) provide a context; the
 // hosted components throw when that context is absent. Without this guard a bare
 // `@expo/ui` component looks fine under jest but breaks on device.
@@ -293,6 +293,11 @@ jest.mock('@expo/ui', () => {
         (label != null ? mockReactForExpoUi.createElement(RNText, null, label) : null),
     );
   };
+  const Icon = ({ testID }) => {
+    useHosted('Icon');
+    return mockReactForExpoUi.createElement(View, { testID });
+  };
+  Icon.select = () => 'mock-icon';
   const TextInput = ({
     value,
     defaultValue,
@@ -335,6 +340,7 @@ jest.mock('@expo/ui', () => {
     Row,
     Text,
     Button,
+    Icon,
     TextInput,
     BottomSheet,
   };

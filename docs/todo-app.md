@@ -161,6 +161,20 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-14): **task project jump and filtered
+assignment** (plan: `docs/plans/todo-task-project-jump-and-filter.md`). A
+project-owned task's mobile editor now keeps its Project row for reassignment
+and adds a separate native arrow that opens the exact project from Home or
+Upcoming; the arrow stays hidden when that project is already open. The shared
+project picker filters titles without hiding No project and resets each opening.
+Pixel testing caught two native-only interaction failures: the icon host first
+intercepted its parent press, and the keyboard covered the picker panel; disabling
+icon hit testing and docking the bounded list above the keyboard fixed both.
+Automated tests cover independent actions, anchored navigation, owner-screen and
+loose-task suppression, matching, empty results, and reset. Device verification
+used and deleted four throwaway projects plus two throwaway tasks; final cleanup
+confirmed every throwaway entity was gone.
+
 Implemented and verified in the browser and on the Pixel 7 (2026-09-14):
 **Square-first, mask-safe icons.** The approved static and task-count artwork now starts on a
 full-bleed square instead of baking in a circular crop. Web displays that square

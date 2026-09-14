@@ -23,6 +23,12 @@ type EditorAction = {
   accessibilityLabel?: string;
   icon?: string | null;
   testID?: string;
+  trailingAction?: {
+    icon: ReactNode;
+    accessibilityLabel: string;
+    onPress: () => void;
+    testID?: string;
+  };
 };
 
 function EditorActionRow({
@@ -32,27 +38,47 @@ function EditorActionRow({
   accessibilityLabel,
   icon,
   testID,
+  trailingAction,
 }: EditorAction) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityValue={accessibilityLabel ? { text: label } : undefined}
-      testID={testID}
-      onPress={onPress}
-      className="min-h-14 max-w-full flex-row items-center px-screen-x py-3.5"
-    >
-      <Text
-        className={cn(
-          'flex-1 text-[16px]',
-          active
-            ? 'font-medium text-accent'
-            : 'text-foreground-secondary',
-        )}
+    <View className="max-w-full flex-row items-stretch">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityValue={accessibilityLabel ? { text: label } : undefined}
+        testID={testID}
+        onPress={onPress}
+        className="min-h-14 flex-1 flex-row items-center px-screen-x py-3.5"
       >
-        {icon != null ? `${icon} ${label}` : label}
-      </Text>
-    </Pressable>
+        <Text
+          className={cn(
+            'flex-1 text-[16px]',
+            active
+              ? 'font-medium text-accent'
+              : 'text-foreground-secondary',
+          )}
+        >
+          {icon != null ? `${icon} ${label}` : label}
+        </Text>
+      </Pressable>
+      {trailingAction ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={trailingAction.accessibilityLabel}
+          testID={trailingAction.testID}
+          onPress={trailingAction.onPress}
+          className="min-h-14 min-w-14 items-center justify-center px-3"
+        >
+          <View
+            pointerEvents="none"
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden
+          >
+            {trailingAction.icon}
+          </View>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 

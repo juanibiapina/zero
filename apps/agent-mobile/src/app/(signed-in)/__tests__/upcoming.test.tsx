@@ -30,6 +30,13 @@ jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: mockGetToken }),
 }));
 
+const mockNavigate = jest.fn<(href: string, options?: unknown) => void>();
+jest.mock('expo-router', () => ({
+  router: {
+    navigate: (href: string, options?: unknown) => mockNavigate(href, options),
+  },
+}));
+
 const mockUserButton = () => <View accessibilityLabel="Account" />;
 jest.mock('@clerk/expo/native', () => ({
   UserButton: () => mockUserButton(),
@@ -115,6 +122,7 @@ describe('UpcomingScreen', () => {
     mockReopenTask.mockReset();
     mockEditTask.mockReset();
     mockRescheduleTask.mockReset();
+    mockNavigate.mockReset();
   });
 
   it('lists a future-dated task and hides an undated one', async () => {
@@ -227,6 +235,28 @@ describe('UpcomingScreen', () => {
     expect(mockEditTask).toHaveBeenCalledTimes(1);
     expect(mockEditTask.mock.calls[0][1]).toBe('2');
     expect(mockEditTask.mock.calls[0][2]).toBe('ship the big release');
+  });
+
+  it("jumps from a project task's editor to its project", async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([project('p', '🎓')]);
+    mockFetchTasks.mockResolvedValue([
+      task('2', 'ship the release', '2099-01-01', 'p'),
+    ]);
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('ship the release')).toBeTruthy());
+    await act(async () =>
+      fireEvent.press(screen.getByLabelText('Edit "ship the release"')),
+    );
+    await act(async () =>
+      fireEvent.press(screen.getByLabelText('Open project Diploma')),
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/projects/p', {
+      withAnchor: true,
+    });
+    expect(screen.queryByLabelText('sheet')).toBeNull();
   });
 
   it('reschedules an upcoming task from the scheduler', async () => {

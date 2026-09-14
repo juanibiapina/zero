@@ -10,36 +10,75 @@ import {
   type Task,
   type TasksApi,
 } from '@zero/agent-core';
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Host, Icon } from '@expo/ui';
+import { router } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { FlatList, Keyboard, Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
+import { Input } from '@/components/ui/input';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useColor } from '@/lib/theme';
 import { showTaskDestination } from '@/lib/task-feedback';
 
-// The project picker: a plain React Native modal listing the user's projects
-// plus a "No project" row (move back to loose). Mirrors ScheduleSheet's shape.
-// Exported so the Home quick-add composer can pick a project at create time.
-export function ProjectPickerSheet({
-  open,
-  projects,
-  selectedProjectId,
-  onPick,
-  onClose,
-  title = 'Move to project',
-}: {
+const OPEN_PROJECT_ICON = Icon.select({
+  ios: 'arrow.up.right',
+  android: import('@expo/material-symbols/arrow_outward.xml'),
+});
+
+// The project picker: a bounded, keyboard-docked React Native modal with a
+// title filter and a pinned "No project" row (move back to loose). Mounting only
+// while open resets the filter between task edits and quick-add drafts.
+type ProjectPickerSheetProps = {
   open: boolean;
   title?: string;
   projects: Project[];
   selectedProjectId: string | null;
   onPick: (projectId: string | null) => void;
   onClose: () => void;
-}) {
+};
+
+export function ProjectPickerSheet(props: ProjectPickerSheetProps) {
+  return props.open ? <OpenProjectPickerSheet {...props} /> : null;
+}
+
+function OpenProjectPickerSheet({
+  open,
+  projects,
+  selectedProjectId,
+  onPick,
+  onClose,
+  title = 'Move to project',
+}: ProjectPickerSheetProps) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const [filter, setFilter] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (event) =>
+      setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () =>
+      setKeyboardHeight(0),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const needle = filter.trim().toLowerCase();
+  const filteredProjects = useMemo(
+    () =>
+      needle
+        ? projects.filter((project) =>
+            project.title.toLowerCase().includes(needle),
+          )
+        : projects,
+    [needle, projects],
+  );
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable
@@ -48,14 +87,36 @@ export function ProjectPickerSheet({
         className="flex-1 bg-scrim"
         onPress={onClose}
       />
+      <KeyboardStickyView
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+      >
       <View
-        style={{ paddingBottom: insets.bottom + 8, maxHeight: height - insets.top - 48 }}
-        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface pt-2 shadow-raised"
+        style={{
+          paddingBottom: insets.bottom + 8,
+          maxHeight: Math.max(
+            200,
+            height - keyboardHeight - insets.top - 48,
+          ),
+        }}
+        className="rounded-t-2xl bg-surface pt-2 shadow-raised"
       >
         <View className="mb-1 h-1 w-9 self-center rounded-full bg-divider" />
         <Text className="px-screen-x pb-1 pt-2 text-[15px] font-semibold">
           {title}
         </Text>
+
+        <View className="mx-screen-x my-2 min-h-12 justify-center rounded-xl bg-background px-3">
+          <Input
+            value={filter}
+            onChangeText={setFilter}
+            placeholder="Filter projects"
+            accessibilityLabel="Filter projects"
+            autoCorrect={false}
+            returnKeyType="search"
+            className="min-h-12"
+            testID="project-filter"
+          />
+        </View>
 
         <QuickRow
           icon="⊘"
@@ -68,9 +129,16 @@ export function ProjectPickerSheet({
         <FlatList
           style={{ flexShrink: 1 }}
           className="border-t border-divider"
-          data={projects}
+          data={filteredProjects}
           keyExtractor={(p) => p.id}
           keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            needle ? (
+              <Text className="px-screen-x py-4 text-foreground-secondary">
+                No matching projects
+              </Text>
+            ) : null
+          }
           renderItem={({ item: p }) => (
             <Pressable
               key={p.id}
@@ -96,6 +164,7 @@ export function ProjectPickerSheet({
           )}
         />
       </View>
+      </KeyboardStickyView>
     </Modal>
   );
 }
@@ -309,8 +378,8 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
   );
 }
 
-// The task detail editor as one deep module: it owns the detail sheet, the
-// schedule selector, and all of their state and writes, behind a small
+// The task detail editor as one deep module: it owns the drawer, schedule and
+// project pickers, project navigation, and their state and writes behind a small
 // interface. Home and Upcoming both open the same editor through this hook
 // instead of duplicating ~200 lines of sheet markup.
 //
@@ -326,12 +395,12 @@ export type TaskDetail = {
   // id). Used by the sheet's check and by each screen's row checks, so the Undo
   // behavior lives in one place.
   complete: (item: Task) => void;
-  // The detail sheet + schedule selector, ready to render at the screen root.
+  // The detail sheet + schedule/project pickers, ready to render at the screen root.
   sheets: ReactNode;
-  // Consume an Android Back press when a sheet or the scheduler is open. Returns
+  // Consume an Android Back press when the editor or a picker is open. Returns
   // true if it handled the press (the screen should then return true too).
   handleBack: () => boolean;
-  // Whether a sheet or the scheduler is currently open.
+  // Whether the editor or either picker is currently open.
   active: boolean;
 };
 
@@ -339,12 +408,15 @@ export function useTaskDetail({
   api,
   list,
   projects,
+  currentProjectId,
   onError,
 }: {
   api: TasksApi;
   list: Task[];
   // The user's projects, for the move-to-project picker and the row's label.
   projects: Project[];
+  // The project route already open behind this editor, when there is one.
+  currentProjectId?: string | null;
   // Each screen passes its own write-error setter (clears on null).
   onError: (message: string | null) => void;
 }): TaskDetail {
@@ -352,6 +424,7 @@ export function useTaskDetail({
   const [draft, setDraft] = useState('');
   const [scheduling, setScheduling] = useState(false);
   const [picking, setPicking] = useState(false);
+  const projectJumpColor = useColor('--color-accent');
   const closingDetailRef = useRef(false);
   const selected = selectedId
     ? (list.find((item) => item.id === selectedId) ?? null)
@@ -384,6 +457,14 @@ export function useTaskDetail({
     closingDetailRef.current = true;
     setSelectedId(null);
   }, [commitDraft]);
+
+  const openSelectedProject = useCallback(() => {
+    if (!selectedProject) return;
+    commitDraft();
+    closingDetailRef.current = true;
+    setSelectedId(null);
+    router.navigate(`/projects/${selectedProject.id}`, { withAnchor: true });
+  }, [commitDraft, selectedProject]);
 
   const complete = useCallback(
     (item: Task) => {
@@ -484,6 +565,23 @@ export function useTaskDetail({
                 active: selectedProject != null,
                 onPress: () => { commitDraft(); setPicking(true); },
                 testID: 'task-project',
+                trailingAction:
+                  selectedProject && selectedProject.id !== currentProjectId
+                    ? {
+                        icon: (
+                          <Host matchContents>
+                            <Icon
+                              name={OPEN_PROJECT_ICON}
+                              size={20}
+                              color={projectJumpColor}
+                            />
+                          </Host>
+                        ),
+                        accessibilityLabel: `Open project ${selectedProject.title}`,
+                        onPress: openSelectedProject,
+                        testID: 'task-project-open',
+                      }
+                    : undefined,
               }
             : undefined
         }

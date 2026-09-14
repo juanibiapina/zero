@@ -34,6 +34,44 @@ describe('task pickers', () => {
     expect(onPick).toHaveBeenCalledWith(null);
   });
 
+  it('filters project titles while keeping No project reachable', async () => {
+    const onPick = jest.fn();
+    const screen = await render(
+      <ProjectPickerSheet
+        open
+        projects={projects}
+        selectedProjectId="1"
+        onPick={onPick}
+        onClose={() => {}}
+      />,
+    );
+
+    await fireEvent.changeText(screen.getByLabelText('Filter projects'), 'PROJECT 29');
+    expect(screen.getByLabelText('Project 29')).toBeTruthy();
+    expect(screen.queryByLabelText('Project 28')).toBeNull();
+    expect(screen.getByLabelText('No project')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Project 29'));
+    expect(onPick).toHaveBeenCalledWith('29');
+  });
+
+  it('reports no matches and clears the filter on the next opening', async () => {
+    const props = {
+      projects,
+      selectedProjectId: null,
+      onPick: () => {},
+      onClose: () => {},
+    };
+    const screen = await render(<ProjectPickerSheet {...props} open />);
+
+    await fireEvent.changeText(screen.getByLabelText('Filter projects'), 'missing');
+    expect(screen.getByText('No matching projects')).toBeTruthy();
+    await screen.rerender(<ProjectPickerSheet {...props} open={false} />);
+    await screen.rerender(<ProjectPickerSheet {...props} open />);
+
+    expect(screen.getByLabelText('Filter projects').props.value).toBe('');
+    expect(screen.getByLabelText('Project 0')).toBeTruthy();
+  });
+
   it('marks No project as selected for a loose task', async () => {
     const screen = await render(<ProjectPickerSheet open projects={[]} selectedProjectId={null} onPick={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByLabelText('No project').props.accessibilityState).toEqual({ selected: true }));

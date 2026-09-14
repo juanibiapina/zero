@@ -111,6 +111,9 @@ importers:
       '@clerk/expo':
         specifier: ^4.6.0
         version: 4.6.0(127df332535d93b1893aeb01707c3836)
+      '@expo/material-symbols':
+        specifier: ^0.1.1
+        version: 0.1.1
       '@expo/ui':
         specifier: ~57.0.13
         version: 57.0.13(@babel/core@7.29.7)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(expo@57.0.16)(react-dom@19.2.3(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3))(react-native@0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)
@@ -2381,6 +2384,10 @@ packages:
       expo: '*'
       react: '*'
       react-native: '*'
+
+  '@expo/material-symbols@0.1.1':
+    resolution: {integrity: sha512-ruA6hZATOPKxo1qSd1NE3HI9FrmEDwcMDhsvzTAdMkP9AapdHfJ/0tKmBMWFJir85voxs1twYxLVrGW9OLGaOg==}
+    hasBin: true
 
   '@expo/metro-config@57.0.10':
     resolution: {integrity: sha512-YHcocILXfcBrwPlX5CtMKy0MitssjyHQg7ndFq+P26GzMnk8uXMpw9PFo/aNaAwh7d27/cOhbZON/TJdoHfVdQ==}
@@ -12825,6 +12832,8 @@ snapshots:
       react: 19.2.3
       react-native: 0.86.2(@babel/core@7.29.7)(@react-native/jest-preset@0.86.0(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.0(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.18)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
       stacktrace-parser: 0.1.11
+
+  '@expo/material-symbols@0.1.1': {}
 
   '@expo/metro-config@57.0.10(bufferutil@4.1.0)(expo@57.0.16)(typescript@6.0.3)(utf-8-validate@6.0.6)':
     dependencies:

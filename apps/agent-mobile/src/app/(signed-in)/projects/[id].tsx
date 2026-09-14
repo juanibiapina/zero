@@ -189,6 +189,7 @@ function ProjectDetail({
     api: tasksApi,
     list: projectTasks,
     projects: list,
+    currentProjectId: id,
     onError: setError,
   });
 

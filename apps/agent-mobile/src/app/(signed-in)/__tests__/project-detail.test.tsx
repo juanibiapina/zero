@@ -72,6 +72,10 @@ function MockButton({ label, onPress }: { label: string; onPress?: () => void })
     </Pressable>
   );
 }
+function MockIcon() {
+  return <View />;
+}
+MockIcon.select = () => 'mock-icon';
 function MockListItem({
   children,
   onPress,
@@ -100,6 +104,7 @@ jest.mock('@expo/ui', () => ({
   Row: MockView,
   Text: MockText,
   Button: MockButton,
+  Icon: MockIcon,
   ListItem: MockListItem,
   BottomSheet: MockBottomSheet,
 }));
@@ -632,7 +637,8 @@ describe('ProjectDetailScreen', () => {
       return edited;
     });
 
-    const { getByLabelText, getByDisplayValue, getByText } = await renderScreen();
+    const { getByLabelText, getByDisplayValue, getByText, queryByLabelText } =
+      await renderScreen();
     await waitFor(() =>
       expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
     );
@@ -643,6 +649,8 @@ describe('ProjectDetailScreen', () => {
         getByLabelText('Edit "buy running shoes", scheduled Today'),
       );
     });
+    expect(queryByLabelText('Open project Run a 5K')).toBeNull();
+    expect(getByLabelText('Set project')).toBeTruthy();
     const input = getByDisplayValue('buy running shoes');
     await act(async () => {
       fireEvent.changeText(input, 'buy trail shoes');

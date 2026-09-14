@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render } from '@testing-library/react-native';
+import { Text as RNText } from 'react-native';
 import { AddModeSelector, TaskEditorSheet } from '../task-editor-sheet';
 
 const base = {
@@ -30,6 +31,35 @@ describe('TaskEditorSheet', () => {
     expect(schedule).toHaveBeenCalledTimes(1);
     expect(project).toHaveBeenCalledTimes(1);
     expect(view.getByDisplayValue('Write proposal').props.autoFocus).toBe(false);
+  });
+
+  it('keeps project assignment and its icon-only jump action independent', async () => {
+    const assign = jest.fn();
+    const jump = jest.fn();
+    const view = await render(
+      <TaskEditorSheet
+        {...base}
+        projectAction={{
+          label: 'Launch',
+          icon: '🎯',
+          active: true,
+          onPress: assign,
+          trailingAction: {
+            icon: <RNText>jump</RNText>,
+            accessibilityLabel: 'Open project Launch',
+            onPress: jump,
+          },
+        }}
+      />,
+    );
+
+    await fireEvent.press(view.getByLabelText('Open project Launch'));
+    expect(jump).toHaveBeenCalledTimes(1);
+    expect(assign).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByLabelText('Launch'));
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(jump).toHaveBeenCalledTimes(1);
   });
 
   it('offers unset metadata rows and autofocuses only when requested', async () => {
