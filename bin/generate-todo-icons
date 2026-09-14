@@ -3,6 +3,7 @@
 import copy
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -15,8 +16,15 @@ TASK_COUNT_TEMPLATE = TASK_COUNT / 'template.svg'
 MOBILE = ROOT / 'apps/agent-mobile/assets/images'
 TASK_COUNT_IMAGES = MOBILE / 'task-count'
 WEB = ROOT / 'apps/agent-web/public'
-WEB_SVG = WEB / 'favicon.svg'
-RETIRED_WEB_SVG = WEB / 'todo-icon.svg'
+WEB_SVG = WEB / 'favicon-mark.svg'
+WEB_PNG = WEB / 'favicon-mark.png'
+RETIRED_WEB_ICONS = [
+    WEB / 'todo-icon.svg',
+    WEB / 'favicon.svg',
+    WEB / 'favicon.png',
+]
+WEB_ARTWORK_SCALE = 1.435514
+WEB_COVERAGE_RANGE = (0.88, 0.92)
 PROTOTYPE = ROOT / 'docs/prototypes/todo-icon'
 NS = 'http://www.w3.org/2000/svg'
 XLINK = 'http://www.w3.org/1999/xlink'
@@ -108,6 +116,47 @@ def validate_corners(path, expected):
             raise RuntimeError(f'{path}: corner {x},{y} is not opaque white')
         if expected == 'transparent' and pixel[3] > 1 / 255:
             raise RuntimeError(f'{path}: corner {x},{y} is not transparent')
+
+
+def validate_artwork_coverage(path):
+    width, height = map(
+        int, magick('identify', '-format', '%w %h', path).split()
+    )
+    geometry = magick(
+        path,
+        '-alpha',
+        'extract',
+        '-threshold',
+        '1',
+        '-format',
+        '%@',
+        'info:',
+    )
+    match = re.fullmatch(r'(\d+)x(\d+)\+(\d+)\+(\d+)', geometry)
+    if match is None:
+        raise RuntimeError(f'{path}: could not measure artwork bounds {geometry!r}')
+
+    content_width, content_height, x, y = map(int, match.groups())
+    coverage = max(content_width / width, content_height / height)
+    minimum, maximum = WEB_COVERAGE_RANGE
+    if not minimum <= coverage <= maximum:
+        raise RuntimeError(
+            f'{path}: artwork coverage {coverage:.3f} is outside '
+            f'{minimum:.2f}–{maximum:.2f}'
+        )
+
+    right = width - x - content_width
+    bottom = height - y - content_height
+    horizontal_tolerance = max(1, round(width * 0.01))
+    vertical_tolerance = max(1, round(height * 0.01))
+    if (
+        abs(x - right) > horizontal_tolerance
+        or abs(y - bottom) > vertical_tolerance
+    ):
+        raise RuntimeError(
+            f'{path}: artwork is not centered '
+            f'(left={x}, right={right}, top={y}, bottom={bottom})'
+        )
 
 
 def render(source, output, size, opaque=False):
@@ -217,6 +266,19 @@ def artwork_tree(source, transform=None):
         root.remove(artwork)
         wrapper = ET.SubElement(root, q('g'), {'transform': transform})
         wrapper.append(artwork)
+    return tree
+
+
+def web_favicon_tree(source):
+    tree = artwork_tree(
+        source,
+        f'translate(512 500) scale({WEB_ARTWORK_SCALE}) translate(-512 -500)',
+    )
+    root = tree.getroot()
+    root.find(q('title')).text = 'Zero: three bold graphite tasks'
+    root.find(q('desc')).text = (
+        'Three enlarged raised-metal task rings and bars on transparency.'
+    )
     return tree
 
 
@@ -333,7 +395,7 @@ def main():
         )
         magick(PROTOTYPE / 'comparison.png', '-strip', PROTOTYPE / 'comparison.png')
 
-        # The three-row mark remains the static iOS, splash, and web brand.
+        # The three-row source feeds native, splash, touch, and web adapters.
         icon = MOBILE / 'icon.png'
         render(STATIC_SOURCE, icon, 1024, opaque=True)
         validate_corners(icon, 'white')
@@ -345,15 +407,24 @@ def main():
         render(splash_svg, splash, 512)
         validate_corners(splash, 'transparent')
 
+        web_tree = web_favicon_tree(STATIC_SOURCE)
+        write_svg(web_tree, WEB_SVG)
+        web_preview = temp / 'favicon-mark.png'
+        render(WEB_SVG, web_preview, 512)
+        validate_corners(web_preview, 'transparent')
+        validate_artwork_coverage(web_preview)
+
         favicon = MOBILE / 'favicon.png'
-        render(STATIC_SOURCE, favicon, 48, opaque=True)
-        validate_corners(favicon, 'white')
+        render(WEB_SVG, favicon, 48)
+        validate_corners(favicon, 'transparent')
+        validate_artwork_coverage(favicon)
+        shutil.copyfile(favicon, WEB_PNG)
+
         touch_icon = WEB / 'apple-touch-icon.png'
         render(STATIC_SOURCE, touch_icon, 180, opaque=True)
         validate_corners(touch_icon, 'white')
-        shutil.copyfile(STATIC_SOURCE, WEB_SVG)
-        shutil.copyfile(favicon, WEB / 'favicon.png')
-        RETIRED_WEB_SVG.unlink(missing_ok=True)
+        for retired in RETIRED_WEB_ICONS:
+            retired.unlink(missing_ok=True)
 
     # These static Android layers were superseded by the task-count primary icon.
     (MOBILE / 'android-icon-foreground.png').unlink(missing_ok=True)

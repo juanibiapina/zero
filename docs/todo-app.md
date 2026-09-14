@@ -161,6 +161,20 @@ committed.
 
 ## Project tracking
 
+Implemented and verified in the browser and on the Pixel 7 (2026-09-14):
+**Transparent, full-size web favicon.** Browser tabs now receive the approved
+three-row graphite mark on transparency, enlarged to about 90% of its canvas, so
+it sits directly on light, gray, or dark browser chrome without a nested white
+square. The generator derives the SVG and PNG from the same layered source,
+validates alpha, dimensions, centering, 88–92% coverage, and deterministic
+output, and uses fresh web URLs to escape the previous favicon cache. This
+supersedes only the web presentation in the square-first icon item below: Apple
+touch, splash, iOS, Android legacy, and all five adaptive/monochrome launcher
+outputs remained byte-identical. Web tests/build and mobile tests/lint/typecheck,
+Android export, clean prebuild, real-size Chromium rendering, and Pixel launcher
+search plus app launch passed without production-data writes. Plan:
+`docs/plans/todo-transparent-full-size-web-favicon.md`.
+
 Implemented and Pixel-verified (2026-09-14): **task project jump and filtered
 assignment** (plan: `docs/plans/todo-task-project-jump-and-filter.md`). A
 project-owned task's mobile editor now keeps its Project row for reassignment

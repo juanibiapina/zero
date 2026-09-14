@@ -33,11 +33,14 @@ comparison labels.
 bin/generate-todo-icons
 ```
 
-The comparison sheet shows the unmasked square sources. The generator validates
-dimensions, full-bleed white corners, opacity, neutral colors, and Android's
-adaptive safe zone. The checkmark uses the task rows' graphite material with
-continuous geometry, so its corner has no overlapping-bar seam.
+The comparison sheet shows the unmasked square launcher sources. The generator
+validates dimensions, full-bleed white launcher corners, transparent favicon and
+splash corners, web artwork coverage, neutral colors, and Android's adaptive safe
+zone. The checkmark uses the task rows' graphite material with continuous
+geometry, so its corner has no overlapping-bar seam.
 
 Runtime switching is Android-only. The static iOS icon, splash mark, mobile tab
-icon, and web favicon continue to use
-`apps/agent-mobile/assets/brand/todo-icon.svg`.
+icon, and web favicon continue to derive from
+`apps/agent-mobile/assets/brand/todo-icon.svg`. Browser favicons remove its white
+background and enlarge the three-row artwork to about 90% of the canvas; native
+launcher and Apple touch outputs keep opaque backgrounds for platform masking.

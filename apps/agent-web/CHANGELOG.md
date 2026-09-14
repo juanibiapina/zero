@@ -2,6 +2,8 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-14: Browser tabs now show a larger graphite task mark without an extra white square, including on dark browser themes.
+
 - 2026-09-14: Browser tabs now show the task icon on a clean square instead of an awkward pre-cropped circle.
 
 - 2026-09-14: Browser tabs and saved home-screen shortcuts now use the same white-and-graphite task icon as the mobile app.
