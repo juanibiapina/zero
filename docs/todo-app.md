@@ -161,6 +161,14 @@ committed.
 
 ## Project tracking
 
+Implemented and verified in the browser and on the Pixel 7 (2026-09-14):
+**Square-first, mask-safe icons.** The approved static and task-count artwork now starts on a
+full-bleed square instead of baking in a circular crop. Web displays that square
+directly; iOS and Android receive generated platform derivatives and apply their
+own launcher masks. The splash keeps a transparent mark. Generation rejects bad
+background, alpha, color, dimension, or Android safe-zone output; see
+`docs/plans/todo-square-mask-safe-icons.md`.
+
 Implemented and Pixel-verified (2026-09-14): **Dynamic Home-task launcher
 icon.** Android now uses the approved checkmark when Home is clear, one to three
 rows for those exact task counts, and four rows for every larger count. The

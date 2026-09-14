@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2048" height="2048" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
   <title id="title">Zero: 1 available tasks</title>
-  <desc id="description">1 centered open task rows in dark graphite metal on a flat white circular ground.</desc>
+  <desc id="description">1 centered open task rows in dark graphite metal on a full-bleed white square.</desc>
   <defs>
 
     <linearGradient id="rimLight" x1="5%" y1="0" x2="95%" y2="100%">
@@ -65,7 +65,7 @@
       <path d="M119 20q3 5 14 5h272q11 0 16-5" fill="none" stroke="#f5f5f5" stroke-opacity="0.75" stroke-width="1.2" stroke-linecap="round" />
     </g>
   </defs>
-  <g>
-    <circle cx="512" cy="500" r="458" fill="#ffffff" /></g>
+  <g id="background">
+    <rect x="0" y="0" width="1024" height="1024" fill="#ffffff" /></g>
 
-  <g transform="translate(512 500) scale(1.35) translate(-512 -500)"><use xlink:href="#taskRow" transform="translate(330 500)" /></g></svg>
+  <g id="artwork" transform="translate(512 500) scale(1.35) translate(-512 -500)"><use xlink:href="#taskRow" transform="translate(330 500)" /></g></svg>

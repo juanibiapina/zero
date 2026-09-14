@@ -15,6 +15,8 @@ TASK_COUNT_TEMPLATE = TASK_COUNT / 'template.svg'
 MOBILE = ROOT / 'apps/agent-mobile/assets/images'
 TASK_COUNT_IMAGES = MOBILE / 'task-count'
 WEB = ROOT / 'apps/agent-web/public'
+WEB_SVG = WEB / 'favicon.svg'
+RETIRED_WEB_SVG = WEB / 'todo-icon.svg'
 PROTOTYPE = ROOT / 'docs/prototypes/todo-icon'
 NS = 'http://www.w3.org/2000/svg'
 XLINK = 'http://www.w3.org/1999/xlink'
@@ -42,10 +44,70 @@ def q(name):
     return f'{{{NS}}}{name}'
 
 
+def icon_layers(tree, source):
+    root = tree.getroot()
+    if root.get('viewBox') != '0 0 1024 1024':
+        raise RuntimeError(f'{source}: expected a 0 0 1024 1024 viewBox')
+
+    groups = root.findall(q('g'))
+    by_id = {group.get('id'): group for group in groups}
+    if len(groups) != 2 or set(by_id) != {'background', 'artwork'}:
+        raise RuntimeError(
+            f'{source}: expected top-level background and artwork groups'
+        )
+
+    background = by_id['background']
+    children = list(background)
+    expected = {
+        'x': '0',
+        'y': '0',
+        'width': '1024',
+        'height': '1024',
+        'fill': '#ffffff',
+    }
+    if len(children) != 1 or children[0].tag != q('rect'):
+        raise RuntimeError(f'{source}: background must contain one rectangle')
+    if children[0].attrib != expected:
+        raise RuntimeError(
+            f'{source}: background must be a full-bleed white square'
+        )
+
+    return background, by_id['artwork']
+
+
 def magick(*args):
     return subprocess.check_output(
         ['magick', *map(str, args)], env=ENV, text=True
     ).strip()
+
+
+def validate_corners(path, expected):
+    dimensions = magick('identify', '-format', '%w %h', path)
+    width, height = map(int, dimensions.split())
+    corners = [
+        (0, 0),
+        (width - 1, 0),
+        (0, height - 1),
+        (width - 1, height - 1),
+    ]
+    for x, y in corners:
+        pixel = tuple(
+            map(
+                float,
+                magick(
+                    path,
+                    '-format',
+                    f'%[fx:p{{{x},{y}}}.r] %[fx:p{{{x},{y}}}.g] '
+                    f'%[fx:p{{{x},{y}}}.b] %[fx:p{{{x},{y}}}.a]',
+                    'info:',
+                ).split(),
+            )
+        )
+        not_white = any(abs(channel - 1) > 1 / 255 for channel in pixel)
+        if expected == 'white' and not_white:
+            raise RuntimeError(f'{path}: corner {x},{y} is not opaque white')
+        if expected == 'transparent' and pixel[3] > 1 / 255:
+            raise RuntimeError(f'{path}: corner {x},{y} is not transparent')
 
 
 def render(source, output, size, opaque=False):
@@ -88,13 +150,12 @@ def write_svg(tree, output):
 
 def generate_task_count_svgs():
     base = ET.parse(TASK_COUNT_TEMPLATE)
-    if base.getroot().get('viewBox') != '0 0 1024 1024':
-        raise RuntimeError('Task-count template viewBox changed; review safe-zone sizing.')
+    icon_layers(base, TASK_COUNT_TEMPLATE)
 
     for slug, count, scale, rows in STATES:
         tree = copy.deepcopy(base)
         root = tree.getroot()
-        content = ET.SubElement(root, q('g'))
+        _, content = icon_layers(tree, TASK_COUNT_TEMPLATE)
         if count == 0:
             path = 'M318 500L451 633L718 365'
             shadow = ET.SubElement(content, q('g'), {'filter': 'url(#metalShadow)'})
@@ -118,8 +179,8 @@ def generate_task_count_svgs():
                 )
             title = 'Zero: clear day checkmark'
             description = (
-                'A continuous dark graphite-metal checkmark centered on a flat '
-                'white circular ground.'
+                'A continuous dark graphite-metal checkmark centered on a '
+                'full-bleed white square.'
             )
         else:
             content.set(
@@ -139,36 +200,42 @@ def generate_task_count_svgs():
             title = f'Zero: {amount} available tasks'
             description = (
                 f'{count} centered open task rows in dark graphite metal on a '
-                'flat white circular ground.'
+                'full-bleed white square.'
             )
         root.find(q('title')).text = title
         root.find(q('desc')).text = description
         write_svg(tree, TASK_COUNT / f'{slug}.svg')
 
 
-def foreground_trees(source):
+def artwork_tree(source, transform=None):
     tree = ET.parse(source)
     root = tree.getroot()
-    groups = root.findall(q('g'))
-    if len(groups) != 2 or groups[0].find(q('circle')) is None:
-        raise RuntimeError(f'{source}: unexpected background/artwork structure')
+    background, artwork = icon_layers(tree, source)
+    root.remove(background)
 
-    root.remove(groups[0])
-    root.remove(groups[1])
-    safe = ET.SubElement(
-        root,
-        q('g'),
-        {'transform': 'translate(512 512) scale(0.75) translate(-512 -500)'},
-    )
-    safe.append(groups[1])
+    if transform is not None:
+        root.remove(artwork)
+        wrapper = ET.SubElement(root, q('g'), {'transform': transform})
+        wrapper.append(artwork)
+    return tree
 
+
+def monochrome_tree(tree):
     monochrome = copy.deepcopy(tree)
     for element in monochrome.getroot().iter():
         element.attrib.pop('filter', None)
         for attribute in ('fill', 'stroke'):
             if attribute in element.attrib and element.get(attribute) != 'none':
                 element.set(attribute, '#000000')
-    return tree, monochrome
+    return monochrome
+
+
+def foreground_trees(source):
+    foreground = artwork_tree(
+        source,
+        'translate(512 512) scale(0.75) translate(-512 -500)',
+    )
+    return foreground, monochrome_tree(foreground)
 
 
 def validate_safe_zone(path, mask):
@@ -199,6 +266,7 @@ def main():
     WEB.mkdir(parents=True, exist_ok=True)
     PROTOTYPE.mkdir(parents=True, exist_ok=True)
 
+    icon_layers(ET.parse(STATIC_SOURCE), STATIC_SOURCE)
     generate_task_count_svgs()
 
     with tempfile.TemporaryDirectory(prefix='todo-icons-') as folder:
@@ -228,13 +296,17 @@ def main():
             foreground_png = TASK_COUNT_IMAGES / f'{slug}-foreground.png'
             monochrome_png = TASK_COUNT_IMAGES / f'{slug}-monochrome.png'
             render(source, legacy, 1024, opaque=True)
+            validate_corners(legacy, 'white')
             render(foreground_svg, foreground_png, 1024)
+            validate_corners(foreground_png, 'transparent')
             render(monochrome_svg, monochrome_png, 1024)
+            validate_corners(monochrome_png, 'transparent')
             validate_safe_zone(foreground_png, mask)
             validate_safe_zone(monochrome_png, mask)
 
             preview = temp / f'{slug}.png'
-            render(source, preview, 2048)
+            render(source, preview, 2048, opaque=True)
+            validate_corners(preview, 'white')
             previews.append(preview)
 
         montage_args = []
@@ -261,13 +333,27 @@ def main():
         )
         magick(PROTOTYPE / 'comparison.png', '-strip', PROTOTYPE / 'comparison.png')
 
-    # The original three-row mark remains the static iOS, splash, and web brand.
-    render(STATIC_SOURCE, MOBILE / 'icon.png', 1024, opaque=True)
-    render(STATIC_SOURCE, MOBILE / 'splash-icon.png', 512)
-    render(STATIC_SOURCE, MOBILE / 'favicon.png', 48, opaque=True)
-    render(STATIC_SOURCE, WEB / 'apple-touch-icon.png', 180, opaque=True)
-    shutil.copyfile(STATIC_SOURCE, WEB / 'todo-icon.svg')
-    shutil.copyfile(MOBILE / 'favicon.png', WEB / 'favicon.png')
+        # The three-row mark remains the static iOS, splash, and web brand.
+        icon = MOBILE / 'icon.png'
+        render(STATIC_SOURCE, icon, 1024, opaque=True)
+        validate_corners(icon, 'white')
+
+        splash_tree = artwork_tree(STATIC_SOURCE)
+        splash_svg = temp / 'splash.svg'
+        write_svg(splash_tree, splash_svg)
+        splash = MOBILE / 'splash-icon.png'
+        render(splash_svg, splash, 512)
+        validate_corners(splash, 'transparent')
+
+        favicon = MOBILE / 'favicon.png'
+        render(STATIC_SOURCE, favicon, 48, opaque=True)
+        validate_corners(favicon, 'white')
+        touch_icon = WEB / 'apple-touch-icon.png'
+        render(STATIC_SOURCE, touch_icon, 180, opaque=True)
+        validate_corners(touch_icon, 'white')
+        shutil.copyfile(STATIC_SOURCE, WEB_SVG)
+        shutil.copyfile(favicon, WEB / 'favicon.png')
+        RETIRED_WEB_SVG.unlink(missing_ok=True)
 
     # These static Android layers were superseded by the task-count primary icon.
     (MOBILE / 'android-icon-foreground.png').unlink(missing_ok=True)

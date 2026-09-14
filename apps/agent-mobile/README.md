@@ -109,16 +109,22 @@ back only where the native component does not fit.
 
 ## Brand assets
 
-Two approved sources own the app's white/graphite identity:
+Two approved square sources own the app's white/graphite identity:
 
-- `assets/brand/todo-icon.svg` is the static iOS, splash, and web mark.
+- `assets/brand/todo-icon.svg` is the static iOS, splash, and web composition.
 - `assets/brand/task-count/template.svg` plus the state definitions in
   `bin/generate-todo-icons` own Android's launcher family. A checkmark represents
   an empty Home; one to three tasks show that many rows; four or more show four.
 
-Run `bin/generate-todo-icons` from the repository root (Python 3, ImageMagick 7,
-and DejaVu Sans) to regenerate the mobile PNGs, state SVGs, comparison sheet,
-and `apps/agent-web/public` favicons. The command validates dimensions,
+Both sources use a full-bleed white square and a separate artwork group. They do
+not draw circular or rounded launcher masks. `bin/generate-todo-icons` publishes
+the square composite for web, iOS, and legacy Android; removes the background for
+the transparent splash mark; and scales backgroundless Android foregrounds into
+the adaptive safe zone. Android and iOS apply their own launcher masks.
+
+Run the generator from the repository root (Python 3, ImageMagick 7, and DejaVu
+Sans) to regenerate the mobile PNGs, state SVGs, comparison sheet, and
+`apps/agent-web/public` favicons. It validates dimensions, full-bleed corners,
 transparency, neutral pixels, Android's safe zone, and deterministic output. Do
 not edit generated PNGs, state SVGs, comparison image, or web copy independently.
 

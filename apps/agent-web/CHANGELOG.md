@@ -2,6 +2,8 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-14: Browser tabs now show the task icon on a clean square instead of an awkward pre-cropped circle.
+
 - 2026-09-14: Browser tabs and saved home-screen shortcuts now use the same white-and-graphite task icon as the mobile app.
 
 - 2026-09-12: The take-on star is gone — giving a project task a date is now how you commit it. On a project's page each task shows a date chip; click it and pick Today to bring the task to Home (the project turns active), or leave it with no date to keep grooming it there. New tasks you add on a project start with no date. Everything else works the same: a future date shows the project as waiting until that day, and a dated task returns to Home on its day.

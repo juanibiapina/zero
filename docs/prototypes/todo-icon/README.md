@@ -13,9 +13,11 @@ These selected designs are now the Android launcher's task-count states.
 | `apps/agent-mobile/assets/brand/task-count/3-tasks.svg` | Three Home tasks: three open rows. |
 | `apps/agent-mobile/assets/brand/task-count/4-plus-tasks.svg` | Four or more Home tasks: four open rows. |
 
-The icon count caps at four visible rows. All states use the same flat white
-circular ground and V7 dark graphite-metal finish. Task rows grow as the count
-falls so each state uses the icon area clearly.
+The icon count caps at four visible rows. All states use the same full-bleed
+white square and V7 dark graphite-metal finish. Task rows grow as the count falls
+so each state uses the icon area clearly. Android receives separate foreground,
+background, and monochrome layers, then applies the launcher's circle, squircle,
+rounded-square, or square mask.
 
 ## Source and rendering
 
@@ -31,7 +33,8 @@ comparison labels.
 bin/generate-todo-icons
 ```
 
-The generator validates dimensions, opacity, neutral colors, and Android's
+The comparison sheet shows the unmasked square sources. The generator validates
+dimensions, full-bleed white corners, opacity, neutral colors, and Android's
 adaptive safe zone. The checkmark uses the task rows' graphite material with
 continuous geometry, so its corner has no overlapping-bar seam.
 
