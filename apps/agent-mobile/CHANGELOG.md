@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-14: Empty projects no longer show a “No tasks yet” prompt, and the project status sheet keeps just the status and its actions.
+
 - 2026-09-14: The app now uses the white-and-graphite task icon on the launcher and launch screen, with a matching Android themed icon.
 
 - 2026-09-13: After signing in online, you can reopen the app without a connection and access your locally saved tasks instead of getting stuck during startup.

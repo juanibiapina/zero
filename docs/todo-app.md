@@ -161,6 +161,13 @@ committed.
 
 ## Project tracking
 
+Updated (2026-09-14): **Quiet project screens.** Removed the empty-project
+message/Add task shortcut and the explanatory paragraph in the status sheet at
+the user's request. The plus button, status disclosure, and status actions remain.
+This supersedes the guidance portions of beta-polish slices 8 and 9. Mobile tests,
+lint, and typecheck pass; Pixel verification covered empty Next/Backlog states and
+both status sheets using a throwaway project, deleted afterward.
+
 Implemented and launcher-verified on the Pixel 7 (2026-09-14): **Selected
 white/graphite icon** on mobile and web. The approved SVG generates platform
 assets and web favicons through `bin/generate-todo-icons`; see

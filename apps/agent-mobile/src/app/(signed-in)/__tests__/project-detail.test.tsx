@@ -973,14 +973,19 @@ describe('ProjectDetailScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('guides an empty project into its first task', async () => {
+  it('keeps empty projects and their status sheet free of explanatory prompts', async () => {
     mockFetchTasks.mockResolvedValue([]);
     const screen = await renderScreen();
-    await waitFor(() => expect(screen.getByText('No tasks yet')).toBeTruthy());
-    expect(screen.getByText('Add a task. Schedule it for Today to show it on Home.')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Add first task'));
-    expect(screen.getByLabelText('New item text')).toBeTruthy();
-    expect(screen.getByLabelText('Add a task').props.accessibilityState).toEqual({ selected: true });
+    await waitFor(() => expect(screen.getByLabelText('Project status: Next')).toBeTruthy());
+    expect(screen.queryByText('No tasks yet')).toBeNull();
+    expect(screen.queryByLabelText('Add first task')).toBeNull();
+    expect(screen.queryByText('Tasks')).toBeNull();
+    expect(screen.getByLabelText('Add')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Project status: Next'));
+    expect(screen.queryByText(/update automatically/)).toBeNull();
+    expect(screen.queryByText(/Backlog keeps/)).toBeNull();
+    expect(screen.getByText('Move to backlog')).toBeTruthy();
+    expect(screen.getByText('Mark done')).toBeTruthy();
   });
 
   it('keeps deletion in project settings without status controls', async () => {

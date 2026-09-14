@@ -317,20 +317,7 @@ function ProjectDetail({
               <Text variant="section" className="px-screen-x pb-2">
                 Tasks
               </Text>
-            ) : (
-              <View className="px-screen-x pb-4">
-                <Text variant="section">No tasks yet</Text>
-                <Text variant="subtitle" className="mt-2">
-                  {project.status === 'backlog'
-                    ? 'Add tasks here to plan ahead. Move this project out of Backlog when you are ready to work on it.'
-                    : 'Add a task. Schedule it for Today to show it on Home.'}
-                </Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Add first task"
-                  onPress={add.open} className="min-h-12 justify-center self-start py-3">
-                  <Text className="font-semibold text-accent">Add task</Text>
-                </Pressable>
-              </View>
-            )}
+            ) : null}
           </>
         }
         footer={
@@ -638,11 +625,6 @@ function ProjectHeader({
             </UIText>
             <UIText textStyle={{ color: secondary, fontSize: 14 }}>
               {statusLabel}
-            </UIText>
-            <UIText textStyle={{ color: secondary, fontSize: 14 }}>
-              {project.status === 'backlog'
-                ? 'Backlog keeps this project off Home. Move it out of Backlog to let its tasks and waiting conditions determine its status.'
-                : 'Active, Next, and Waiting update automatically from your tasks and waiting conditions. Schedule a task for Today to bring it onto Home.'}
             </UIText>
           </Column>
           {project.status === 'backlog' ? (
