@@ -298,6 +298,20 @@ Pixel 7 verification occurs with the new Worker and new Metro bundle together:
 
 The dependency feature starts only after this commit is green and device-verified.
 
+### Stage 1 implementation result
+
+Implemented and pushed to `main` as commit `929ede6d9` on 2026-09-15. The
+Cloudflare `zero-api` build succeeded. Agent-core (20 files / 142 tests), API (83
+/ 1031), web (3 / 38), and mobile (21 suites / 140 tests) passed with lint and
+typecheck; Android export passed. Existing warnings remained unchanged.
+
+Pixel 7 verification used one throwaway project: Next → Backlog → Next persisted
+through the status pill, then Delete removed it. After the collections had
+refilled online, disabling Wi-Fi/mobile data and force-stopping the dev client
+still cold-loaded Home and Projects from the version-2 snapshots. Connectivity
+was restored and no existing entity changed. Stage 2 remains unimplemented by
+explicit scope decision.
+
 ## Stage 2 — Explicit project dependencies
 
 ### 1. Add Blocked only to display status

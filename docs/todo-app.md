@@ -162,6 +162,24 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-15): **Project state is distinct from
+calculated status** (Stage 1 of
+`docs/plans/todo-project-completion-dependency.md`; dependency behavior remains
+unimplemented). Projects now persist only In-play / Backlog / Done through a
+`state` field; Active / Next / Waiting remain calculated presentation. Migration
+0053 preserved every Project while mapping the old in-play values. One shared
+`ENTITY_CACHE_VERSION` now invalidates every server-backed entity snapshot, while
+a separate `OFFLINE_OUTBOX_VERSION` makes destructive queued-write resets
+explicit; both moved to 2 for this breaking local shape. Agent-core's 20 files /
+142 tests, API's 83 / 1031, web's 3 / 38, mobile's 21 suites / 140 tests, all
+four lint/typecheck passes, and Android export passed (existing lint/test warnings
+only). The production Worker build succeeded. On the Pixel 7, the refreshed
+collections repopulated all four Project groups; a throwaway project moved Next
+→ Backlog → Next through the status pill and was deleted; after Wi-Fi/mobile data
+were disabled and the dev client was force-stopped, Home and Projects cold-loaded
+the refreshed local snapshots, including Croatia Trip. Connectivity was restored
+and no existing entity was changed.
+
 Implemented and Pixel-verified (2026-09-14): **Larger clear-Home launcher
 icon.** After three comparison rounds, the user selected B Full: the original
 check path is 1.45× larger and its graphite material strokes are 1.28× heavier.
