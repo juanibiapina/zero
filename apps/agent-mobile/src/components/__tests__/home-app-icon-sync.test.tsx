@@ -34,7 +34,7 @@ jest.mock('@/lib/api', () => ({
   setTaskProject: () => Promise.reject(new Error('not used')),
   fetchProjects: () => mockFetchProjects(),
   addProject: () => Promise.reject(new Error('not used')),
-  setProjectStatus: () => Promise.reject(new Error('not used')),
+  setProjectState: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.reject(new Error('not used')),
   fetchWaits: () => mockFetchWaits(),
@@ -85,7 +85,7 @@ describe('HomeAppIconSync', () => {
         title: 'Next project',
         icon: '📁',
         description: null,
-        status: 'next',
+        state: 'in-play',
         createdAt: '2026-09-14T06:00:00.000Z',
       },
       {
@@ -93,7 +93,7 @@ describe('HomeAppIconSync', () => {
         title: 'Backlog project',
         icon: '📁',
         description: null,
-        status: 'backlog',
+        state: 'backlog',
         createdAt: '2026-09-14T06:00:00.000Z',
       },
     ]);

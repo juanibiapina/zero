@@ -8,7 +8,7 @@ const project = (over: Partial<Project> & { id: string }): Project => ({
   title: "Project",
   icon: "🎓",
   description: null,
-  status: "next",
+  state: "in-play",
   createdAt: "2023-01-01T00:00:00.000Z",
   ...over,
 });

@@ -5,7 +5,7 @@ import type { Env } from "../types";
 import type {
   Project,
   ProjectDefaults,
-  ProjectStatus,
+  ProjectState,
 } from "../store/projects";
 import { createProjectsRoutes } from "./projects";
 
@@ -25,7 +25,7 @@ const fakeUserDO = (seed: Project[] = []) => {
         title,
         icon: opts.icon ?? "📁",
         description: opts.description ?? null,
-        status: opts.status ?? "next",
+        state: opts.state ?? "in-play",
         createdAt: new Date(1700000000000 + ++n).toISOString(),
         sourceCaptureId: opts.sourceCaptureId ?? null,
       };
@@ -33,12 +33,12 @@ const fakeUserDO = (seed: Project[] = []) => {
       return project;
     },
     listProjects(): Project[] {
-      return projects.filter((p) => p.status !== "done");
+      return projects.filter((p) => p.state !== "done");
     },
-    setProjectStatus(id: string, status: ProjectStatus): Project | null {
+    setProjectState(id: string, state: ProjectState): Project | null {
       const project = projects.find((p) => p.id === id);
       if (!project) return null;
-      project.status = status;
+      project.state = state;
       return project;
     },
     editProject(
@@ -112,7 +112,7 @@ describe("GET /api/projects", () => {
         title: "Run a 5K",
         icon: "🏃",
         description: null,
-        status: "next",
+        state: "in-play",
         createdAt: "2023-11-14T22:13:20.001Z",
         sourceCaptureId: null,
       },
@@ -129,7 +129,7 @@ describe("GET /api/projects", () => {
           title: "Run a 5K",
           icon: "🏃",
           description: null,
-          status: "next",
+          state: "in-play",
           createdAt: "2023-11-14T22:13:20.001Z",
           sourceCaptureId: null,
         },
@@ -161,7 +161,7 @@ describe("POST /api/projects", () => {
     expect(body.project.title).toBe("Have a baby");
     expect(body.project.icon).toBe("📁");
     expect(body.project.description).toBeNull();
-    expect(body.project.status).toBe("next");
+    expect(body.project.state).toBe("in-play");
   });
 
   it("rejects an empty title", async () => {
@@ -182,11 +182,20 @@ describe("POST /api/projects", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects an unknown status", async () => {
+  it("rejects the retired status field", async () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
     const res = await app.request(
       "/api/projects",
-      post({ id: UUID_1, title: "Run a 5K", status: "someday" }),
+      post({ id: UUID_1, title: "Run a 5K", status: "next" }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an unknown state", async () => {
+    const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
+    const res = await app.request(
+      "/api/projects",
+      post({ id: UUID_1, title: "Run a 5K", state: "someday" }),
     );
     expect(res.status).toBe(400);
   });
@@ -203,29 +212,29 @@ const seedProject = (over: Partial<Project> = {}): Project => ({
   title: "Run a 5K",
   icon: "📁",
   description: null,
-  status: "next",
+  state: "in-play",
   createdAt: "2023-11-14T22:13:20.001Z",
   sourceCaptureId: null,
   ...over,
 });
 
 describe("PATCH /api/projects/{id}", () => {
-  it("changes a project's status", async () => {
+  it("changes a project's state", async () => {
     const userDO = fakeUserDO([seedProject()]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
-    const res = await app.request("/api/projects/id-1", patch({ status: "active" }));
+    const res = await app.request("/api/projects/id-1", patch({ state: "backlog" }));
 
     expect(res.status).toBe(200);
     const body: { project: Project } = await res.json();
-    expect(body.project.status).toBe("active");
+    expect(body.project.state).toBe("backlog");
   });
 
-  it("drops a project from the list once its status is done", async () => {
+  it("drops a project from the list once its state is done", async () => {
     const userDO = fakeUserDO([seedProject()]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
 
-    await app.request("/api/projects/id-1", patch({ status: "done" }));
+    await app.request("/api/projects/id-1", patch({ state: "done" }));
     const res = await app.request("/api/projects");
 
     expect(await res.json()).toEqual({ projects: [] });
@@ -238,19 +247,29 @@ describe("PATCH /api/projects/{id}", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects an unknown status", async () => {
+  it("rejects the retired status field", async () => {
     const userDO = fakeUserDO([seedProject()]);
     const app = buildApp(fakeEnv(userDO), "user_abc");
     const res = await app.request(
       "/api/projects/id-1",
-      patch({ status: "someday" }),
+      patch({ status: "next" }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an unknown state", async () => {
+    const userDO = fakeUserDO([seedProject()]);
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+    const res = await app.request(
+      "/api/projects/id-1",
+      patch({ state: "someday" }),
     );
     expect(res.status).toBe(400);
   });
 
   it("returns 404 for an unknown id", async () => {
     const app = buildApp(fakeEnv(fakeUserDO()), "user_abc");
-    const res = await app.request("/api/projects/nope", patch({ status: "active" }));
+    const res = await app.request("/api/projects/nope", patch({ state: "backlog" }));
     expect(res.status).toBe(404);
   });
 

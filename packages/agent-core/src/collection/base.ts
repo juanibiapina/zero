@@ -16,6 +16,8 @@ import type {
   OfflineExecutor,
 } from "@tanstack/offline-transactions";
 
+import { ENTITY_CACHE_VERSION } from "./version";
+
 // The shared offline collection factory behind every todo-app entity (Capture,
 // Task, Project). An entity describes itself with an EntitySpec — its name, how
 // to fetch its working set, and a table of verbs — and gets back a TanStack DB
@@ -160,8 +162,6 @@ export type EntitySpec<Row extends EntityRow, Verbs extends AnyVerbs<Row>> = {
   // After a write returns such a row it is removed from the synced base instead
   // of upserted, so the row leaves at once rather than on the trailing refetch.
   leavesCollection?: (row: Row) => boolean;
-  // Bumping this clears the persisted local copy and re-syncs from the server.
-  schemaVersion?: number;
 };
 
 // One handle over an entity's data layer. Screens read `collection` through a
@@ -608,7 +608,7 @@ export function createPersistedEntityApi<
     persistedCollectionOptions<Row, string>({
       id: spec.name,
       getKey: (r: Row) => r.id,
-      schemaVersion: spec.schemaVersion ?? 1,
+      schemaVersion: ENTITY_CACHE_VERSION,
       persistence,
       sync,
     }),

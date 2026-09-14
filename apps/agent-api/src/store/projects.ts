@@ -1,6 +1,6 @@
 // Projects: the third entity of the todo app. A Project is a named,
-// outcome-oriented container with a status, distinct from a Capture (untyped) and
-// a Task (a dated next-action). Standalone from the agent's Store on purpose so
+// outcome-oriented container with lifecycle state, distinct from a Capture and
+// a Task. Standalone from the agent's Store on purpose so
 // it does not widen the agent's interface, and separate from DbCaptureStore /
 // DbTaskStore because the entities have different verbs (do-orm is the shared
 // layer; a store holds only domain verbs, see docs/storage.md). See
@@ -10,8 +10,8 @@ import { asc, eq, ne, type Database } from "do-orm";
 
 import { projects } from "../UserDO/db/schema";
 
-// The working status set. 'done' is terminal; the other four are working states.
-export type ProjectStatus = "active" | "next" | "waiting" | "backlog" | "done";
+// Persisted lifecycle only. Active, Next, and Waiting are calculated by clients.
+export type ProjectState = "in-play" | "backlog" | "done";
 
 export interface Project {
   id: string;
@@ -20,23 +20,23 @@ export interface Project {
   icon: string;
   // Free-text notes; null when unset.
   description: string | null;
-  status: ProjectStatus;
+  state: ProjectState;
   createdAt: string;
   // The capture this project was refined from, or null.
   sourceCaptureId: string | null;
 }
 
 // The defaults a name-only create applies. Creation stays fast (just a title);
-// icon/description/status are enriched later from the detail sheet.
+// icon/description are enriched later; display status is calculated.
 const DEFAULT_ICON = "📁";
-const DEFAULT_STATUS: ProjectStatus = "next";
+const DEFAULT_STATE: ProjectState = "in-play";
 
 // Fields a caller may override at creation. Creation normally passes none of
 // these, so the store applies the defaults above.
 export type ProjectDefaults = {
   icon?: string;
   description?: string | null;
-  status?: ProjectStatus;
+  state?: ProjectState;
   sourceCaptureId?: string | null;
 };
 
@@ -55,7 +55,7 @@ function toProject(row: {
   title: string;
   icon: string;
   description: string | null;
-  status: string;
+  state: string;
   createdAt: string;
   sourceCaptureId: string | null;
 }): Project {
@@ -64,7 +64,7 @@ function toProject(row: {
     title: row.title,
     icon: row.icon,
     description: row.description,
-    status: row.status as ProjectStatus,
+    state: row.state as ProjectState,
     createdAt: row.createdAt,
     sourceCaptureId: row.sourceCaptureId,
   };
@@ -76,7 +76,7 @@ export class DbProjectStore {
   // The client mints the project id, so the add is exactly-once on the id alone:
   // a replay (a retried write after a lost ACK) re-sends the same id and gets the
   // already-stored row back instead of inserting a second one. `opts` may carry
-  // icon/description/status, but a name-only create passes none, so the store
+  // icon/description/state, but a name-only create passes none, so the store
   // fills the defaults.
   add(id: string, title: string, opts: ProjectDefaults = {}): Project {
     const existingById = this.db.get(projects, { where: eq("id", id) });
@@ -86,7 +86,7 @@ export class DbProjectStore {
       title,
       icon: opts.icon ?? DEFAULT_ICON,
       description: opts.description ?? null,
-      status: opts.status ?? DEFAULT_STATUS,
+      state: opts.state ?? DEFAULT_STATE,
       createdAt: new Date().toISOString(),
       sourceCaptureId: opts.sourceCaptureId ?? null,
     };
@@ -94,28 +94,27 @@ export class DbProjectStore {
     return project;
   }
 
-  // The working set: every non-'done' project, oldest first. 'done' is terminal
-  // and drops out of the list (the client re-groups the four working statuses
+  // The working set: every non-Done project, oldest first. Done is terminal
+  // and drops out of the list (the client calculates and groups display statuses
   // into sections and animates the row out). The `projects_open` partial index
   // covers this filter.
   list(): Project[] {
     return this.db
-      .all(projects, { where: ne("status", "done"), orderBy: asc("createdAt") })
+      .all(projects, { where: ne("state", "done"), orderBy: asc("createdAt") })
       .map(toProject);
   }
 
-  // Move a project to another status (including to/from the terminal 'done').
-  // Returns the updated row, or null when no row has that id. One verb carries
-  // every transition; the caller decides which of the five states to pass.
-  setStatus(id: string, status: ProjectStatus): Project | null {
-    this.db.update(projects, { status }, { where: eq("id", id) });
+  // Persist one of the three lifecycle states. Returns the updated row, or null
+  // when no row has that id.
+  setState(id: string, state: ProjectState): Project | null {
+    this.db.update(projects, { state }, { where: eq("id", id) });
     const row = this.db.get(projects, { where: eq("id", id) });
     return row ? toProject(row) : null;
   }
 
   // Edit a project's title/icon/description. Only the present keys are written
   // (a partial update on the stable id, so a replayed offline edit re-applies
-  // the same values harmlessly). Status is not editable here (setStatus owns
+  // the same values harmlessly). State is not editable here (`setState` owns
   // it). Returns the updated row, or null when no row has that id.
   edit(id: string, fields: ProjectEdit): Project | null {
     const patch: ProjectEdit = {};
@@ -129,7 +128,7 @@ export class DbProjectStore {
     return row ? toProject(row) : null;
   }
 
-  // Permanently remove a project by id. Distinct from setStatus('done'), which
+  // Permanently remove a project by id. Distinct from setState('done'), which
   // keeps the row (out of the working list) — delete hard-removes it. Idempotent
   // on the id: deleting a missing project is a no-op, so a replayed offline
   // delete (a retry after a lost ACK) is safe. Returns whether a row existed.

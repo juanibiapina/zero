@@ -6,7 +6,7 @@ import {
   deleteProject,
   editProject,
   fetchProjects,
-  setProjectStatus,
+  setProjectState,
 } from "./projects";
 
 export type { ProjectsApi };
@@ -18,7 +18,7 @@ export const getProjectsApi = defineWebEntityApi((deps) =>
     rest: {
       fetchProjects,
       addProject,
-      setProjectStatus,
+      setProjectState,
       editProject,
       deleteProject,
     },

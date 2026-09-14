@@ -11,7 +11,7 @@ import {
   type Project,
   type ProjectDefaults,
   type ProjectEdit,
-  type ProjectStatus,
+  type ProjectState,
 } from "../store/projects";
 import {
   DbWaitingConditionStore,
@@ -193,8 +193,8 @@ export class UserDO extends DurableObject<Env> {
     return this.projects.list();
   }
 
-  setProjectStatus(id: string, status: ProjectStatus): Project | null {
-    return this.projects.setStatus(id, status);
+  setProjectState(id: string, state: ProjectState): Project | null {
+    return this.projects.setState(id, state);
   }
 
   editProject(id: string, fields: ProjectEdit): Project | null {

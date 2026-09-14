@@ -32,9 +32,11 @@ reconciles with the server in the background.
   delete verb — each with its REST call) — and the factory supplies everything
   below: reads persist to a local
   SQLite database for offline use; writes go through an **offline outbox** that
-  retries on reconnect. The verb names are the outbox's mutationFn names and the
-  entity name is the local table id, so both are part of the durable contract
-  and never renamed.
+  retries on reconnect. Every persisted collection uses the shared
+  `ENTITY_CACHE_VERSION` from `src/collection/version.ts`; bumping it resets all
+  synchronized entity snapshots and refills them from the server. Verb names are
+  the outbox's mutationFn names and remain durable until the separate outbox
+  epoch is intentionally bumped.
 - **One local database file for the whole app: `zero-app.sqlite`.** TanStack DB
   derives a separate table per collection from its collection id (recorded in a
   `collection_registry` table), so every entity gets its own table inside the one
@@ -46,10 +48,11 @@ reconciles with the server in the background.
   into a nested `BEGIN IMMEDIATE`. Building a persistence object per collection —
   even over the same handle — would create a second queue over the one connection
   and corrupt transactions.
-- **Offline write outbox.** Web uses `@tanstack/offline-transactions` on
-  IndexedDB (unrelated to the SQLite file). Mobile has no IndexedDB, so it keeps
-  the outbox in its own SQLite file, `zero-app-outbox.sqlite`, separate from the
-  data file so a persistence schema reset never wipes queued writes.
+- **Offline write outbox.** Web uses a versioned IndexedDB adapter. Mobile has no
+  IndexedDB, so it uses a versioned `zero-app-outbox-v<N>.sqlite` file. Both read
+  `<N>` from the shared `OFFLINE_OUTBOX_VERSION`. The outbox version is separate
+  from `ENTITY_CACHE_VERSION` because it contains unsent user writes, not cached
+  server rows; a normal cache reset must not discard it.
 - **Reads are local-first.** A collection is ready from its cached snapshot
   immediately: a custom sync calls `markReady()` as soon as the local hydrate
   finishes, then fetches the server in the background and reconciles the result
@@ -93,14 +96,13 @@ reconciles with the server in the background.
 
 ## The cache is disposable
 
-Losing the local SQLite cache costs nothing but a one-time re-sync: on the next
-open, each collection rebuilds from the server, instant thereafter. So a change
-to the cache shape (a new collection id, or merging the old per-entity files
-`zero-inbox.sqlite` / `zero-today.sqlite` into `zero-app.sqlite`) orphans the old
-local files and re-syncs once on first launch after upgrade. No migration copies
-the old cache; it is not worth it.
+Losing synchronized entity snapshots costs one server re-sync. Bump
+`ENTITY_CACHE_VERSION` once to invalidate every collection on mobile and web;
+each normal fetch then rebuilds its local table. Do not add per-entity versions
+or cache-shape migrations.
 
-The **one** thing at risk is an unsynced write still sitting in the mobile
-outbox: renaming or resetting the outbox file strands writes made while offline
-that never reached the server. The outbox file is therefore treated as more
-durable than the data cache and is not renamed casually.
+The outbox is different: it can contain writes that reached no server. A cache
+version bump leaves it intact. Bump `OFFLINE_OUTBOX_VERSION` only when a breaking
+mutation change makes queued writes unreadable and product policy explicitly
+accepts discarding them. The Project state refactor is the first such reset: it
+renames the Project row and mutation verb, so both versions move to 2.

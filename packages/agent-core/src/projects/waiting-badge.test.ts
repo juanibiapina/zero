@@ -16,7 +16,7 @@ function project(over: Partial<Project> = {}): Project {
     title: over.title ?? "p",
     icon: "📁",
     description: null,
-    status: over.status ?? "next",
+    state: over.state ?? "in-play",
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
   };
 }

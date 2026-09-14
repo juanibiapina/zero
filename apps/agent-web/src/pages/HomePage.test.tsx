@@ -56,10 +56,10 @@ const emptyProjectsRest: ProjectsRest = {
     title,
     icon: "📁",
     description: null,
-    status: "next",
+    state: "in-play",
     createdAt: new Date().toISOString(),
   }),
-  setProjectStatus: async (id) => {
+  setProjectState: async (id) => {
     throw new Error(`no project ${id}`);
   },
   editProject: async (id) => {
@@ -157,7 +157,7 @@ const projectRow = (id: string, over: Partial<Project> = {}): Project => ({
   title: over.title ?? id,
   icon: over.icon ?? "📁",
   description: over.description ?? null,
-  status: over.status ?? "next",
+  state: over.state ?? "in-play",
   createdAt: over.createdAt ?? "2023-01-01T00:00:00.000Z",
 });
 
@@ -195,7 +195,7 @@ describe("HomePage", () => {
   });
 
   it("shows the plan CTA when the list is empty and a project is next", async () => {
-    setApi([], [projectRow("p", { status: "next" })]);
+    setApi([], [projectRow("p")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     const cta = await screen.findByRole("link", { name: "Plan your day" });
@@ -213,7 +213,7 @@ describe("HomePage", () => {
   });
 
   it("renders a loose task and no CTA", async () => {
-    setApi([taskRow("1", "buy milk")], [projectRow("p", { status: "next" })]);
+    setApi([taskRow("1", "buy milk")], [projectRow("p")]);
     render(<HomePage />, { wrapper: MemoryRouter });
 
     expect(
@@ -230,7 +230,7 @@ describe("HomePage", () => {
           showUpDate: "2023-01-01",
         }),
       ],
-      [projectRow("p", { status: "next", icon: "🎓" })],
+      [projectRow("p", { icon: "🎓" })],
     );
     render(<HomePage />, { wrapper: MemoryRouter });
 
@@ -446,7 +446,7 @@ describe("HomePage", () => {
   it("moves a loose task into a project from the detail sheet", async () => {
     setApi(
       [taskRow("1", "buy milk")],
-      [projectRow("p", { title: "Groceries", status: "next" })],
+      [projectRow("p", { title: "Groceries" })],
     );
     render(<HomePage />, { wrapper: MemoryRouter });
 

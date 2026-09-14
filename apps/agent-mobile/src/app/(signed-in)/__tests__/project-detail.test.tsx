@@ -15,7 +15,7 @@ import {
   tomorrow,
 } from '@zero/agent-core';
 
-import type { Project, ProjectStatus, Task, WaitingCondition } from '@/lib/api';
+import type { Project, ProjectState, Task, WaitingCondition } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
@@ -178,8 +178,8 @@ const mockAddProject =
       project: { id: string; title: string; sourceCaptureId: string | null },
     ) => Promise<Project>
   >();
-const mockSetProjectStatus =
-  jest.fn<(getToken: unknown, id: string, status: ProjectStatus) => Promise<Project>>();
+const mockSetProjectState =
+  jest.fn<(getToken: unknown, id: string, state: ProjectState) => Promise<Project>>();
 const mockDeleteProject =
   jest.fn<(getToken: unknown, id: string) => Promise<void>>();
 const mockEditProject =
@@ -228,8 +228,8 @@ jest.mock('@/lib/api', () => ({
     getToken: unknown,
     project: { id: string; title: string; sourceCaptureId: string | null },
   ) => mockAddProject(getToken, project),
-  setProjectStatus: (getToken: unknown, id: string, status: ProjectStatus) =>
-    mockSetProjectStatus(getToken, id, status),
+  setProjectState: (getToken: unknown, id: string, state: ProjectState) =>
+    mockSetProjectState(getToken, id, state),
   editProject: (getToken: unknown, id: string, fields: Record<string, unknown>) =>
     mockEditProject(getToken, id, fields),
   deleteProject: (getToken: unknown, id: string) =>
@@ -266,13 +266,13 @@ const project = (
   id: string,
   title: string,
   icon = '📁',
-  status: ProjectStatus = 'next',
+  state: ProjectState | 'next' = 'in-play',
 ): Project => ({
   id,
   title,
   icon,
   description: null,
-  status,
+  state: state === 'next' ? 'in-play' : state,
   createdAt: '2023-01-01T00:00:00.000Z',
 });
 
@@ -315,7 +315,7 @@ describe('ProjectDetailScreen', () => {
     mockAddProject.mockReset();
     mockDeleteProject.mockReset();
     mockDeleteProject.mockResolvedValue(undefined);
-    mockSetProjectStatus.mockClear();
+    mockSetProjectState.mockClear();
     mockEditProject.mockClear();
     mockAddTask.mockReset();
     mockCompleteTask.mockReset();
@@ -330,7 +330,7 @@ describe('ProjectDetailScreen', () => {
     mockFetchWaits.mockReset();
     mockFetchWaits.mockResolvedValue([]);
     mockFetchProjects.mockReset();
-    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);
+    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);
     mockGetToken.mockResolvedValue('tok');
     __resetIconSuggestions();
     mockFetchIconSuggestions.mockReset();
@@ -719,8 +719,8 @@ describe('ProjectDetailScreen', () => {
 
   it('lets the composer project row move a new task off this project', async () => {
     mockFetchProjects.mockResolvedValue([
-      project('1', 'Run a 5K', '🏃', 'next'),
-      project('2', 'Learn piano', '🎹', 'next'),
+      project('1', 'Run a 5K', '🏃'),
+      project('2', 'Learn piano', '🎹'),
     ]);
     mockAddTask.mockImplementation(async (_t, task) => {
       const added: Task = {
@@ -914,7 +914,7 @@ describe('ProjectDetailScreen', () => {
   });
 
   it('moves the project to backlog from its status', async () => {
-    mockSetProjectStatus.mockResolvedValue(project('1', 'Run a 5K', '🏃', 'backlog'));
+    mockSetProjectState.mockResolvedValue(project('1', 'Run a 5K', '🏃', 'backlog'));
 
     const { getByLabelText, getByText } = await renderScreen();
     await waitFor(() =>
@@ -929,16 +929,16 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByText('Move to backlog'));
     });
 
-    expect(mockSetProjectStatus).toHaveBeenCalledTimes(1);
-    expect(mockSetProjectStatus.mock.calls[0][2]).toBe('backlog');
+    expect(mockSetProjectState).toHaveBeenCalledTimes(1);
+    expect(mockSetProjectState.mock.calls[0][2]).toBe('backlog');
   });
 
   it('puts a backlog project back in play from its status', async () => {
     mockFetchProjects.mockResolvedValue([
       project('1', 'Run a 5K', '🏃', 'backlog'),
     ]);
-    mockSetProjectStatus.mockResolvedValue(
-      project('1', 'Run a 5K', '🏃', 'next'),
+    mockSetProjectState.mockResolvedValue(
+      project('1', 'Run a 5K', '🏃', 'in-play'),
     );
 
     const { getByLabelText, getByText } = await renderScreen();
@@ -953,12 +953,12 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByText('Move out of backlog'));
     });
 
-    expect(mockSetProjectStatus).toHaveBeenCalledTimes(1);
-    expect(mockSetProjectStatus.mock.calls[0][2]).toBe('next');
+    expect(mockSetProjectState).toHaveBeenCalledTimes(1);
+    expect(mockSetProjectState.mock.calls[0][2]).toBe('in-play');
   });
 
   it('marks done immediately from the status and pops', async () => {
-    mockSetProjectStatus.mockResolvedValue(project('1', 'ship', '📁', 'done'));
+    mockSetProjectState.mockResolvedValue(project('1', 'ship', '📁', 'done'));
     const { getByLabelText, getByText } = await renderScreen();
     await waitFor(() =>
       expect(getByLabelText('Project status: Next')).toBeTruthy(),
@@ -972,7 +972,7 @@ describe('ProjectDetailScreen', () => {
     });
 
     await waitFor(() =>
-      expect(mockSetProjectStatus).toHaveBeenCalledWith(
+      expect(mockSetProjectState).toHaveBeenCalledWith(
         expect.anything(),
         '1',
         'done',

@@ -1,273 +1,166 @@
 # Project
 
-The third entity of the todo app (after Capture and Task), and the first
-container: a named, outcome-oriented thing you intend to reach, with a status.
-Distinct from a Capture (a raw, untyped thought) and a Task (a single dated
-next-action). A Project groups work toward an outcome; Tasks will later belong to
-one.
+A Project is a named, outcome-oriented container in the todo app. It groups work
+toward an outcome and carries a small persisted lifecycle state; the app
+calculates its visible status from that state, its tasks, and its waiting
+conditions.
 
-Each entity documents how it plugs into every system of the app (the
-Minecraft-block philosophy). This file is the source of truth for Project; keep
-it current as the entity grows.
+This file is the source of truth for Project behavior. Historical implementation
+plans remain under `docs/plans/`.
 
 ## Why Project is its own entity
 
-A Project answers "what outcome am I working toward", which neither Capture nor
-Task expresses. It has its own producer set (the user by hand now; the AI
-converting a Capture later) and its own lifecycle verb — a status that moves
-across `active` / `next` / `waiting` / `backlog` / `done` — none of which fits on
-Capture or Task. So Project earns entity status with its own `addProject` verb
-and `projects` table, a sibling of `DbCaptureStore` / `DbTaskStore`.
-
-The name is `Project`.
-
-## Status: slice A complete (A1 + A2 + A3 shipped)
-
-Project was built in vertical slices (plan: `docs/plans/todo-project-entity.md`).
-
-- **A1 (shipped):** create a Project by name and see a flat list, on web
-  (`/projects`) and mobile (a Projects tab). Persists and syncs; mobile create
-  works offline.
-- **A2 (shipped):** the five-status model is real — the list is grouped into
-  Active / Next / Waiting / Backlog sections (counts, collapse, hide-empty), a
-  detail bottom sheet holds a Status group, and setting `done` removes a project
-  from the working list with an inline Undo (~5s). Ships on web and mobile,
-  offline-safe.
-- **A3 (shipped):** enrich in the sheet — a full emoji icon picker (web
-  `frimousse`, mobile `rn-emoji-keyboard`; any standard emoji), an editable title,
-  and an editable description. Edits commit on blur/submit (the icon on tap), keep
-  the sheet open, persist, and sync offline. Ships on web and mobile.
-- **Delete (shipped, post-A3):** permanently remove a Project from its detail
-  sheet, distinct from `done`. A destructive button drops the row behind the same
-  ~5s Undo as `done`, then hard-removes it (`DELETE /api/projects/{id}`, 204,
-  idempotent). Offline-safe on both surfaces. Added the shared collection
-  factory's first `delete` verb kind (`docs/storage.md`).
-
-Slice A (the hand-managed Project entity, no AI, no Task membership) is complete.
-The icon and description columns existed from A1's migration, so A3 needed none.
-The Rule-of-Three extraction of the shared client plumbing followed
-(`docs/plans/todo-rule-of-three-extraction.md`); the next tracked change is
-slice B (Task-under-Project).
-
-## What it is
-
-A named container with a status: `title`, an `icon` (emoji), an optional
-`description`, and a `status`. At creation only the title is asked for; the rest
-take defaults and are enriched later on the project's own screen (icon picker,
-editable title and notes).
-
-## Derived status (slice 5)
-
-The stored `status` column is only the deliberate parking value: `backlog` and
-`done` are set by hand. The three in-play states are **derived on the client**
-from the project's tasks by `projectDisplayStatus` (in `@zero/agent-core`): a
-project shows as `active` while it has an open task with a date that has
-**arrived** (`showUpDate != null && showUpDate <= today`), else `next` ("come
-groom / schedule one"). The date is the sole commitment gate (the take-on/park
-star was retired — see `docs/plans/todo-retire-take-on.md`). The derivation is
-**date-aware**: an undated task is groomed (never makes a project active); a task
-dated in the future does not keep its project active — the project instead
-**waits until that day** (`waitingUntil`, the soonest such `showUpDate`), and the
-day it arrives makes the project active again with no write. An open waiting
-condition also shows the project as `waiting`, but **a shown-up dated open task
-overrides waiting** — dating a shown-up task pulls a waiting project back to
-`active`; completing that task returns it to `waiting` (the condition is still
-open), not `next`. The list
-groups by this derived status (`projectsByStatus` takes a `statusOf` mapper). A
-waiting project also shows **why/how long it is waiting** as a muted trailing
-badge — the elapsed time since its oldest unresolved condition ("3 days") for a
-condition wait, or the target day ("until Tue") for a date wait — via the shared
-`waitingBadge` seam, which also supplies the Waiting section's sort key
-(`projectsByStatus` takes an optional `sortKeyOf`; the list passes
-`waitingBadge(p, …)?.sortKey ?? p.createdAt`, ordering condition waits
-longest-first, then date waits soonest-first, while other sections keep their
-created-at order). The project screen offers three manual moves — **Put in play** (writes `next`),
-**Move to backlog**, **Mark done** — not a five-way picker. Web keeps them in
-its actions menu; mobile opens them by tapping the visible status pill. No status
-migration: the column stays; the display is computed. See `docs/plans/todo-availability-model.md`.
+A Project answers “what outcome am I working toward,” which a Task does not. It
+has its own title, icon, description, lifecycle, tasks, waiting conditions, and
+delete cascade. Its server store remains specific to Project rather than joining
+a generic entity repository.
 
 ## Vocabulary
 
-- **Project** — the item (table `projects`, type `Project`).
-- **Outcome name** — the `title`, phrased as a measurable, observable result
-  ("Run a 5K under 30 min", "Have a baby"), not a vague area ("Fitness"). The
-  create field teaches this through helper text.
-- **Status** — one of `active` (being worked now), `next` (on deck), `waiting`
-  (blocked on someone/something), `backlog` (someday pile), `done` (finished).
-  `done` is terminal. Defaults to `next` at creation. **`active`/`next` are now
-  derived, not hand-set** (see Derived status).
-- **Icon** — a single emoji, defaulting to 📁, changed later from the detail
-  sheet.
+- **Project** — the entity stored in `projects`.
+- **Outcome name** — the required `title`, phrased as an observable result.
+- **State** — the persisted lifecycle decision: `in-play`, `backlog`, or `done`.
+- **Display status** — the calculated list/header value: Active, Next, Waiting,
+  Backlog, or Done.
+- **Put in play** — persist `state: "in-play"`, then calculate the current display
+  status.
+- **Icon** — one emoji, default 📁.
+
+State and display status are intentionally separate. Active, Next, and Waiting
+cannot cross a persistence interface.
 
 ## Data shape
 
-`projects` table in the per-user `UserDO` (SQLite). Client-facing `Project`:
+`projects` lives in each user's `UserDO` SQLite database. Client-facing Project:
 
-- `id` — string id, a UUID the **client mints** and the server persists verbatim
-  as the primary key (stable end to end, so the optimistic row never swaps keys,
-  and it is the dedupe key: a replayed add re-sends the same id)
-- `title` — the outcome name (required, non-empty)
-- `icon` — a single emoji; defaults to 📁
-- `description` — nullable free text (a sentence of intent); null when unset
-- `status` — `active` | `next` | `waiting` | `backlog` | `done`; defaults to
-  `next`
-- `createdAt` — ISO timestamp
+- `id` — client-minted UUID and exactly-once insert key;
+- `title` — required outcome name;
+- `icon` — one emoji, default 📁;
+- `description` — nullable free text;
+- `state` — `in-play | backlog | done`, default `in-play`;
+- `createdAt` — ISO timestamp;
+- `sourceCaptureId` — nullable provenance from the retired Capture/refine flow.
 
-The partial index `projects_open` on `("createdAt")` `WHERE "status" != 'done'`
-serves the working-list query (mirrors `tasks_open`; keeps a large `done` pile
-out of the index). In A1 every row is `next`, so nothing is excluded yet.
+The `projects_open` partial index covers `state != 'done'` ordered by
+`createdAt`, keeping completed projects out of the working-set index.
 
-### Deferred columns
+Migration `0053_project_state.sql` replaced the overloaded `status` column. It
+mapped stored Active, Next, and Waiting values to In-play while preserving
+Backlog, Done, and every other Project field.
 
-`projectId` on the `tasks` table (Task membership) is deliberately **not** a
-column yet. It arrives with the Task-under-Project slice (slice B), after A2/A3.
-No `sortKey` (manual reorder), `color`, year/time-horizon, or category columns:
-no speculative columns before their behavior is designed.
+## Calculated display status
+
+`projectDisplayStatus` in `@zero/agent-core` is the single pure interface for
+Project presentation. It uses the user's local `today` and applies this order:
+
+1. persisted Backlog or Done;
+2. Active when an open project task has a non-null `showUpDate <= today`;
+3. Waiting when an unresolved waiting condition exists;
+4. Waiting when an open project task has a future date;
+5. Next otherwise.
+
+An undated project task is groomed and does not make the project Active. A future
+task makes the project wait until its day. An arrived scheduled task currently
+overrides an ordinary waiting condition, so deliberate scheduled work can
+continue; completing that task exposes the remaining wait again.
+
+`waitingBadge` supplies Waiting context and ordering:
+
+- an ordinary condition shows elapsed time and sorts longest-waiting first;
+- a future task shows `until <day>` and sorts soonest first.
+
+The Projects list groups through `projectsByStatus`; it never groups directly by
+persisted state.
 
 ## Behavior
 
-- **Add** a Project by name. The client sends only `id` + `title`; the server
-  fills the defaults (icon 📁, description null, status `next`). New projects
-  land visible in the working set. Creating is name-only and fast, like a
-  Capture.
-- **List** — the working set: every non-`done` project, oldest first. The client
-  groups them into status sections (`projectsByStatus`).
-- **Set status** — move a Project to any of the five states. Setting `done` is
-  terminal and drops it from the working list. One `setStatus` verb carries every
-  transition.
-- **Edit** — change a Project's `title`, `icon`, or `description` (only the given
-  fields; the description may be cleared to null). One `edit` verb, separate from
-  `setStatus` (status has terminal semantics). Idempotent on the id, so an
-  offline edit replays safely.
-- **Delete** — permanently remove a Project **and everything that belongs to
-  it**: the delete cascades to the project's Tasks and its waiting conditions, so
-  no orphaned rows survive (an orphaned task is a ghost — hidden from Home because
-  its project is gone, yet still an open row the server returns). Distinct from
-  `done`: `done` keeps the row (out of the working list) while delete hard-removes
-  it. Idempotent on the id (a replayed delete of an already-gone Project is a
-  no-op, and re-cascades over nothing), so an offline delete replays safely.
-  Destructive with no server-side undo. The cascade lives in the `UserDO`
-  composition root (which holds all three stores), not in `DbProjectStore`, so
-  the per-entity store still owns only the `projects` table.
+- **Add** — create by title with state In-play, icon 📁, and null description.
+- **List** — return every non-Done project, oldest first; clients calculate and
+  group display status.
+- **Set state** — persist In-play, Backlog, or Done. Done removes the row from the
+  working collection. In-play recalculates Active, Next, or Waiting.
+- **Edit** — update any supplied title, icon, or description field.
+- **Delete** — hard-remove the Project, all its tasks, and all waiting conditions
+  owned by it. The `UserDO` composition root coordinates the three entity
+  stores. Delete is idempotent and has no Undo.
 
-## Interactions (per system)
+All writes use the stable client id, so offline replay is exactly-once or
+idempotent according to the verb.
 
-- **UI** — web `/projects` (`apps/agent-web`, a `SideNav` entry) and the mobile
-  Projects tab (`apps/agent-mobile`, a `NativeTabs` trigger). A name-only
-  quick-add (with persistent helper text teaching outcome-based naming — helper
-  text, not the placeholder) over a status-grouped list: collapsible Active /
-  Next / Waiting / Backlog sections with counts, empty sections hidden, Backlog
-  collapsed when large. A row is a single tap target that **navigates to the
-  project's own screen** — a destination, not a bottom sheet (web: a
-  `/projects/:id` route within the app shell; mobile: a screen pushed within the
-  Projects tab, keeping the tab bar, with native Back). A project is a place you
-  work, and the bottom-sheet guidance is explicit that a transient sheet is for
-  short interactions, not a surface you dwell on and navigate within; a pushed
-  React Native screen also avoids hosting raw RN rows inside an `@expo/ui` native
-  tree (the bug that broke the old mobile detail sheet's task/waiting rows). See
-  `docs/plans/todo-project-detail-rework.md`. The screen leads with the **work**:
-  a compact header (a de-emphasized emoji icon that opens its picker on tap, the
-  **title** as an editable heading, a **derived-status pill**, and a trailing
-  `⋯`), then the project's **description**, tasks, and waiting conditions. On
-  mobile the status pill is the status-change control: it opens a short sheet
-  with the valid manual moves, while `⋯` opens a compact native Project settings
-  menu with **Delete project**. Web keeps its read-only status pill and combined actions
-  menu. A mobile waiting status includes its winning timing (`Waiting · until
-  Tomorrow` or `Waiting · for 5 days`). On mobile, project tasks use the same manually ordered
-  swipe-and-drag list as Home: long-press to reorder within the project, or swipe
-  right to set the task to Tomorrow. An undated task gains that date; the task
-  stays on the project screen and shows a muted `Scheduled · Tomorrow` caption.
-  Tapping the full row still opens the shared editor. Every dated task continues
-  to show its `Scheduled · <day>` context in the list without a second inline
-  control. The list remains the screen's single scroll and pull-to-refresh
-  surface. The project FAB opens the shared Task/Waiting/Project composer, with
-  Task selected by default. Project mode creates an independent project rather
-  than a child of the open one. A new task starts undated and preset to this
-  project, but both date and project can be changed before creation. On web,
-  project task rows retain their inline date chip. Real waiting conditions remain
-  under **Waiting on** on both surfaces; mobile does not render a future task date as
-  an automatic condition because the header and source task already explain it
-  (web retains that synthetic row for now). Field edits commit on blur/submit
-  (the icon on tap). Choosing **Mark done** or **Delete project** commits
-  immediately and returns to the list; task completion keeps its Undo snackbar.
-  Sheets/menus still serve the short sub-interactions here. On mobile, status
-  uses a pure `@expo/ui` sheet, settings uses a native anchored menu, and the
-  emoji picker remains a plain RN modal because its searchable grid is RN.
-- **Storage** — the server domain store is `DbProjectStore` (domain methods
-  `add` / `list` / `setStatus` / `edit` / `delete`), a per-entity store like
-  `DbCaptureStore` / `DbTaskStore` (do-orm is the shared layer; a store holds
-  only domain verbs). The delete cascade is not a `DbProjectStore` method: it is
-  orchestrated in `UserDO.deleteProject`, which calls `DbProjectStore.delete`,
-  then `DbTaskStore.deleteByProject` and `DbWaitingConditionStore.deleteByProject`
-  — each store still owns only its own table. See `docs/storage.md`.
-- **API** — per-user isolated:
-  - `GET /api/projects` → `{ projects }`, the non-`done` working set, oldest-first.
-  - `POST /api/projects { id, title, icon?, description?, status? }` →
-    `201 { project }`; the client normally sends only `id` + `title` and the
-    server fills the defaults. `400` on empty title, a non-UUID id, or an unknown
-    status.
-  - `PATCH /api/projects/{id} { status?, title?, icon?, description? }` →
-    `200 { project }`; `400` (no fields / empty title or icon / unknown status) /
-    `404`. Carries both the status transition (`done` drops the row from the
-    list) and the edit fields; an edit sends only the changed field.
-  - `DELETE /api/projects/{id}` → `204` (empty body). Cascades to the project's
-    tasks and waiting conditions (see Behavior → Delete). Idempotent: returns
-    `204` whether or not the row existed, so a replayed offline delete never makes
-    the outbox throw and retry forever (deliberately no `404`, unlike `PATCH`).
-    The `project_deleted` log carries the cascade counts (`tasks`, `conditions`).
-  - `POST /api/projects/icon-suggestions { title, description? }` →
-    `200 { icons }`, single-emoji suggestions; `400` on empty title. **Stateless**
-    on purpose: it reads/writes no project row (it is the first todo-app server
-    LLM call, not a collection verb), so both the create-time pre-warm and the
-    picker's fetch-on-open call it. A soft miss (the model returns nothing usable)
-    is still `200 { icons: [] }`.
-  - Logs `project_added`, `project_status_changed`, `project_edited`,
-    `project_deleted`, and `project_icon_suggested` (with the count).
-- **Data layer** — a TanStack DB collection (`createProjectsApi` in
-  `@zero/agent-core`) built on the shared collection factory: a verb table
-  (`addProject` / `setProjectStatus` / `editProject` / `deleteProject`, also the
-  offline outbox names) over the factory's in-memory fallback and durable
-  persisted offline mode, plus the pure `projectsByStatus` helper. `setStatus`
-  and `edit` share one `collection.update`, told apart by the changed field set;
-  a row whose status becomes `done` leaves the collection at once. `deleteProject`
-  is the shared factory's `delete` verb kind — it optimistically drops the row and
-  issues the `DELETE`, rolling back on failure. See `docs/storage.md`.
-- **AI icon suggestion** — the first AI integration of the todo app. When a
-  project is created (name-only, so from the title alone), the app fires a
-  background request to the stateless `icon-suggestions` endpoint and caches the
-  result **on the device** (not synced; no server row). When the icon picker
-  opens, a "Suggested" row shows the cached emoji instantly (or "Loading suggested
-  icons…" if still in flight); tapping one applies it through the existing `edit`
-  path. A cache miss (a different device, an eviction, an offline creation)
-  fetches on open; a Refresh control recomputes after the title/description
-  changes. A failed or empty suggestion degrades silently to the full manual
-  picker below — it is logged, never surfaced as an error. The server call runs a
-  one-shot, tool-less model request (agent label `icon_suggest`, `low` effort);
-  the pure cache-staleness check is shared in `@zero/agent-core`, the persistence
-  and fetch are per surface. See `docs/plans/todo-project-icon-suggestions.md`.
-- **Other entities** — **Task membership** is wired (`projectId` on `tasks`,
-  migration 0047): the project screen lists the project's open tasks and adds one
-  from a plus-button quick-add bar (grooming). A task added from a project starts
-  **undated** (groomed); giving it a date commits it to Home. **Waiting conditions** attach to a project
-  (see `docs/entities/waiting-condition.md`). **Refine provenance**:
-  `sourceCaptureId` (migration 0050) records the capture a project was refined
-  from. The AI Capture → Project conversion is a later slice. **Deleting a project
-  cascades** to both dependent entities: every task with this `projectId` and
-  every waiting condition on this project is hard-removed (in
-  `UserDO.deleteProject`), so a project delete leaves no orphans.
+## UI
 
-## Shared view rule
+Projects appear on web `/projects` and the mobile Projects tab. Both surfaces
+show collapsible Active, Next, Waiting, and Backlog sections; Done is absent.
+Backlog starts collapsed when large.
 
-The Projects list region gates on the row count, not the collection's
-`isLoading`, via the shared `listView` helper in `@zero/agent-core` (one rule for
-every entity list: rows whenever present; the spinner only when empty and
-loading). The persisted collection hydrates the local snapshot before
-the network sync marks ready, so gating on `isLoading` would hide a hydrated
-snapshot behind a spinner.
+A project row opens a dedicated project screen. The screen contains:
+
+- editable icon and title;
+- calculated status pill;
+- editable description;
+- project tasks;
+- real waiting conditions under **Waiting on**;
+- lifecycle/delete actions.
+
+Mobile uses the visible status pill as the lifecycle control. Its actions are
+Move to backlog, Move out of backlog, and Mark done. The settings menu contains
+Delete project. Web keeps lifecycle and delete actions in its overflow menu.
+
+On mobile, project tasks reuse `ReorderableTaskList`: tap to edit, complete with
+Undo, swipe right to schedule Tomorrow, and long-press to reorder. New project
+tasks start undated. The Task/Waiting/Project add drawer presets Task to the open
+project; Project mode creates an independent project.
+
+A mobile Waiting status includes its context (`Waiting · until Tomorrow` or
+`Waiting · for 5 days`). Future task dates are explained by the status and source
+task, not duplicated under Waiting on. Web still shows its automatic date row.
+
+## Storage and REST interfaces
+
+`DbProjectStore` owns `add`, `list`, `setState`, `edit`, and `delete` over
+the `projects` table. `UserDO.deleteProject` owns cross-entity deletion.
+
+Per-user routes:
+
+- `GET /api/projects` → `{ projects }`, non-Done working set;
+- `POST /api/projects { id, title, icon?, description?, state? }` →
+  `201 { project }`;
+- `PATCH /api/projects/{id} { state?, title?, icon?, description? }` →
+  `200 { project }`;
+- `DELETE /api/projects/{id}` → `204`, including when already absent;
+- `POST /api/projects/icon-suggestions { title, description? }` → `{ icons }`.
+
+Project persistence accepts only `in-play`, `backlog`, and `done`. Unknown or
+retired `status` fields are rejected.
+
+The TanStack DB Project collection exposes `add`, `setState`, `edit`, `remove`,
+and `refetch`. Its durable mutation names are `addProject`, `setProjectState`,
+`editProject`, and `deleteProject`.
+
+## Local data versions
+
+`ENTITY_CACHE_VERSION` in `packages/agent-core/src/collection/version.ts` is the
+single version for every server-backed entity snapshot. A bump resets all mobile
+and web collection snapshots and refills them from the server.
+
+`OFFLINE_OUTBOX_VERSION` is separate because the outbox contains unsent writes,
+not cached data. Bump it only when a breaking mutation change intentionally
+discards queued writes. Migration 0053's Project shape and verb rename bump both
+versions once.
+
+Clerk credentials, timezone preferences, and icon-suggestion hints are outside
+these versions.
+
+## Other entities
+
+- Task membership uses nullable `Task.projectId`.
+- WaitingCondition attaches to Project and can reference a Task or Project.
+- Deleting a Project cascades to its Tasks and owned waiting conditions.
+- Project icon suggestions are an ephemeral device-local hint, not Project data.
 
 ## Next
 
-- **Task → Project (slice B)** — a Task belongs to a Project (adds `projectId` on
-  `tasks`); the sheet grows the project's Task list.
-- **AI conversion** — swipe a Capture, propose a Project, confirm (later slices of
-  `docs/plans/todo-capture-to-project-ai.md`).
+Explicit project-completion dependencies are designed in
+`docs/plans/todo-project-completion-dependency.md`. They are not part of the
+state refactor: creation and current Waiting behavior remain unchanged until
+that feature is implemented.

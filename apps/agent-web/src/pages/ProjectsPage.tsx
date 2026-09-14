@@ -13,9 +13,9 @@ import {
   projectDisplayStatus,
   projectsByStatus,
   listView,
-  STATUS_LABELS,
+  PROJECT_DISPLAY_STATUS_LABELS,
   waitingBadge,
-  type ProjectStatus,
+  type ProjectDisplayStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
@@ -208,7 +208,7 @@ function ProjectSectionView({
   labelOf,
   onOpen,
 }: {
-  status: ProjectStatus;
+  status: ProjectDisplayStatus;
   projects: Project[];
   labelOf: (p: Project) => string | null;
   onOpen: (p: Project) => void;
@@ -236,7 +236,7 @@ function ProjectSectionView({
         >
           <path d="m6 9 6 6 6-6" />
         </svg>
-        <span>{STATUS_LABELS[status]}</span>
+        <span>{PROJECT_DISPLAY_STATUS_LABELS[status]}</span>
         <span className="text-muted-foreground/70">· {projects.length}</span>
       </button>
       {!collapsed && (

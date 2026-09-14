@@ -1,23 +1,25 @@
-// A Project: the third entity of the todo app (after Capture and Task). A named,
-// outcome-oriented container with a status, enriched over time. The single shared
-// entity type for the Project data layer, used by web and mobile. See
-// docs/entities/project.md.
+// A Project: a named, outcome-oriented container. Persistence stores only its
+// deliberate lifecycle state; Active, Next, and Waiting are calculated from its
+// work and conditions. See docs/entities/project.md.
 
-// The status set. 'done' is terminal; the other four are working states. The
-// union is defined now so slices A2/A3 reuse it; slice A1 only ever writes 'next'.
-export type ProjectStatus = "active" | "next" | "waiting" | "backlog" | "done";
+export type ProjectState = "in-play" | "backlog" | "done";
+
+export type ProjectDisplayStatus =
+  | "active"
+  | "next"
+  | "waiting"
+  | "backlog"
+  | "done";
 
 export type Project = {
   id: string;
   title: string;
-  // A single emoji. Defaults to 📁 at creation; changed later from the detail
-  // sheet. A plain string so the representation can evolve without a migration.
+  // A single emoji. Defaults to 📁 at creation.
   icon: string;
-  // Free-text notes (a sentence of intent). Null when unset.
   description: string | null;
-  status: ProjectStatus;
+  state: ProjectState;
   createdAt: string;
-  // The capture this project was refined from, or null. Optional so existing
-  // rows and optimistic drafts need not carry it.
+  // The capture this project was refined from, or null. Optional so legacy
+  // provenance-free rows remain readable.
   sourceCaptureId?: string | null;
 };

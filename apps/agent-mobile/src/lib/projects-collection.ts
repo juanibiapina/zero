@@ -9,7 +9,7 @@ import {
   deleteProject,
   editProject,
   fetchProjects,
-  setProjectStatus,
+  setProjectState,
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
@@ -22,7 +22,7 @@ function makeRest(getToken: TokenGetter): ProjectsRest {
   return {
     fetchProjects: () => fetchProjects(getToken),
     addProject: (project) => addProject(getToken, project),
-    setProjectStatus: (id, status) => setProjectStatus(getToken, id, status),
+    setProjectState: (id, state) => setProjectState(getToken, id, state),
     editProject: (id, fields) => editProject(getToken, id, fields),
     deleteProject: (id) => deleteProject(getToken, id),
   };

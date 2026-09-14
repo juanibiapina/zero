@@ -10,8 +10,6 @@ import {
 } from "./collection";
 import type { Project } from "./types";
 
-// A fake Projects server with a small latency so the optimistic overlay and the
-// reconciling refetch resolve on separate ticks (where a flicker would show).
 function fakeRest(initial: Project[]): ProjectsRest {
   const server = initial.map((p) => ({ ...p }));
   return {
@@ -23,28 +21,24 @@ function fakeRest(initial: Project[]): ProjectsRest {
       await sleep(5);
       const existing = server.find((p) => p.id === id);
       if (existing) return { ...existing };
-      const project: Project = {
+      const row: Project = {
         id,
         title,
         icon: "📁",
         description: null,
-        status: "next",
+        state: "in-play",
         createdAt: new Date().toISOString(),
       };
-      server.push(project);
-      return { ...project };
+      server.push(row);
+      return { ...row };
     },
-    setProjectStatus: async (id, status) => {
+    setProjectState: async (id, state) => {
       await sleep(5);
       const row = server.find((p) => p.id === id);
       if (!row) throw new Error(`no project ${id}`);
-      row.status = status;
-      // A done project leaves the working set the server returns.
-      if (status === "done") {
-        const i = server.indexOf(row);
-        if (i >= 0) server.splice(i, 1);
-      }
-      return { ...row, status };
+      row.state = state;
+      if (state === "done") server.splice(server.indexOf(row), 1);
+      return { ...row, state };
     },
     editProject: async (id, fields) => {
       await sleep(5);
@@ -57,26 +51,21 @@ function fakeRest(initial: Project[]): ProjectsRest {
     },
     deleteProject: async (id) => {
       await sleep(5);
-      const i = server.findIndex((p) => p.id === id);
-      // Idempotent: deleting a missing row is a no-op (like the server's 204).
-      if (i >= 0) server.splice(i, 1);
+      const index = server.findIndex((p) => p.id === id);
+      if (index >= 0) server.splice(index, 1);
     },
   };
 }
 
-// Presence of an item across snapshots must be a single contiguous block of
-// `true`, never doubled. Same invariant as the Task collection test.
 function expectNoFlicker(snapshots: string[][], id: string): void {
   for (const snapshot of snapshots) {
     expect(snapshot.filter((x) => x === id).length).toBeLessThanOrEqual(1);
   }
   const present = snapshots.map((s) => s.includes(id));
-  const firstTrue = present.indexOf(true);
-  if (firstTrue === -1) return;
-  const lastTrue = present.lastIndexOf(true);
-  for (let i = firstTrue; i <= lastTrue; i++) {
-    expect(present[i]).toBe(true);
-  }
+  const first = present.indexOf(true);
+  if (first === -1) return;
+  const last = present.lastIndexOf(true);
+  for (let i = first; i <= last; i++) expect(present[i]).toBe(true);
 }
 
 const project = (id: string, over: Partial<Project> = {}): Project => ({
@@ -84,22 +73,18 @@ const project = (id: string, over: Partial<Project> = {}): Project => ({
   title: id,
   icon: "📁",
   description: null,
-  status: "next",
+  state: "in-play",
   createdAt: "2020-01-01T00:00:00.000Z",
   ...over,
 });
 
 describe("projects collection", () => {
-  it("adding a project shows it once, without a vanish/reappear flicker", async () => {
+  it("adds a canonical In-play row without flicker", async () => {
     const api = createInMemoryProjectsApi({
       queryClient: new QueryClient(),
       rest: fakeRest([project("s1", { title: "alpha" })]),
     });
-
-    const list = createLiveQueryCollection((q) =>
-      q.from({ p: api.collection }),
-    );
-
+    const list = createLiveQueryCollection((q) => q.from({ p: api.collection }));
     const snapshots: string[][] = [];
     const record = () => snapshots.push(list.toArray.map((p: Project) => p.title));
     list.subscribeChanges(record);
@@ -110,92 +95,92 @@ describe("projects collection", () => {
     record();
 
     const tx = api.add("beta");
+    const optimistic = tx.mutations[0]?.modified as Project | undefined;
+    expect(optimistic?.state).toBe("in-play");
     await tx.isPersisted.promise;
     await sleep(50);
     record();
 
-    const finalTitles = list.toArray.map((p: Project) => p.title);
-    expect([...finalTitles].sort()).toEqual(["alpha", "beta"]);
+    expect([...list.toArray.map((p: Project) => p.title)].sort()).toEqual([
+      "alpha",
+      "beta",
+    ]);
     expectNoFlicker(snapshots, "beta");
   });
 
-  it("changes a project's status in place", async () => {
+  it("changes lifecycle state in place", async () => {
     const api = createInMemoryProjectsApi({
       queryClient: new QueryClient(),
-      rest: fakeRest([project("s1", { status: "next" })]),
+      rest: fakeRest([project("s1")]),
     });
     await api.collection.stateWhenReady();
 
-    const tx = api.setStatus("s1", "active");
+    const tx = api.setState("s1", "backlog");
     await tx.isPersisted.promise;
     await sleep(50);
 
-    expect(api.collection.get("s1")?.status).toBe("active");
+    expect(api.collection.get("s1")?.state).toBe("backlog");
   });
 
-  it("removes a project from the collection once it is done", async () => {
+  it("removes a project once its state is Done", async () => {
     const api = createInMemoryProjectsApi({
       queryClient: new QueryClient(),
-      rest: fakeRest([project("s1", { status: "next" })]),
+      rest: fakeRest([project("s1")]),
     });
     await api.collection.stateWhenReady();
 
-    const tx = api.setStatus("s1", "done");
-    await tx.isPersisted.promise;
+    await api.setState("s1", "done").isPersisted.promise;
     await sleep(50);
 
     expect(api.collection.has("s1")).toBe(false);
   });
 
-  it("edits a project's fields in place and keeps it in the collection", async () => {
+  it("edits fields without changing state", async () => {
     const api = createInMemoryProjectsApi({
       queryClient: new QueryClient(),
-      rest: fakeRest([project("s1", { title: "old", status: "active" })]),
+      rest: fakeRest([project("s1", { title: "old", state: "backlog" })]),
     });
     await api.collection.stateWhenReady();
 
-    const tx = api.edit("s1", {
-      title: "Run a 5K under 30 min",
-      icon: "🏃",
-      description: "By June",
-    });
-    await tx.isPersisted.promise;
+    await api
+      .edit("s1", {
+        title: "Run a 5K under 30 min",
+        icon: "🏃",
+        description: "By June",
+      })
+      .isPersisted.promise;
     await sleep(50);
 
     const row = api.collection.get("s1");
     expect(row?.title).toBe("Run a 5K under 30 min");
     expect(row?.icon).toBe("🏃");
     expect(row?.description).toBe("By June");
-    // An edit never changes status, and never drops the row.
-    expect(row?.status).toBe("active");
+    expect(row?.state).toBe("backlog");
   });
 
-  it("removes a project from the collection when deleted", async () => {
+  it("removes a deleted project", async () => {
     const api = createInMemoryProjectsApi({
       queryClient: new QueryClient(),
-      rest: fakeRest([project("s1", { title: "gone" })]),
+      rest: fakeRest([project("s1")]),
     });
     await api.collection.stateWhenReady();
 
-    const tx = api.remove("s1");
-    await tx.isPersisted.promise;
+    await api.remove("s1").isPersisted.promise;
     await sleep(50);
 
     expect(api.collection.has("s1")).toBe(false);
   });
 });
 
-// The outbox persists queued offline writes by these names and the local cache
-// table by the entity name. Renaming any strands offline writes.
 describe("projects durable names", () => {
-  it("keeps the collection id and outbox mutationFn names", () => {
+  it("uses the new state mutation name after the outbox epoch reset", () => {
     const spec = projectsSpec(fakeRest([]));
     expect(spec.name).toBe("projects");
     expect(Object.keys(spec.verbs).sort()).toEqual([
       "addProject",
       "deleteProject",
       "editProject",
-      "setProjectStatus",
+      "setProjectState",
     ]);
   });
 });

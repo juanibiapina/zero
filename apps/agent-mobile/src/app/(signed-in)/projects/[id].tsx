@@ -11,12 +11,12 @@ import {
   messageOf,
   projectDisplayStatus,
   scheduleLabel,
-  STATUS_LABELS,
+  PROJECT_DISPLAY_STATUS_LABELS,
   toast,
   waitingBadge,
   type Project,
   type ProjectEditFields,
-  type ProjectStatus,
+  type ProjectState,
   type ProjectsApi,
   type Task,
   type TasksApi,
@@ -131,15 +131,15 @@ function ProjectDetail({
     [api, project],
   );
 
-  const commitStatus = useCallback(
-    (status: ProjectStatus) => {
+  const commitState = useCallback(
+    (state: ProjectState) => {
       if (!project) return;
       setError(null);
-      const failed = (e: unknown) => status === 'done'
+      const failed = (e: unknown) => state === 'done'
         ? reportProjectFailure('Could not mark project done', `“${project.title}”: open Projects, refresh, and try again.`)
         : setError(messageOf(e));
       try {
-        const tx = api.setStatus(project.id, status);
+        const tx = api.setState(project.id, state);
         tx.isPersisted.promise.catch(failed);
       } catch (e) { failed(e); }
     },
@@ -263,7 +263,7 @@ function ProjectDetail({
 
   const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
   const waitContext = waitingBadge(project, tasks, conds, list, today)?.label;
-  const statusLabel = `${STATUS_LABELS[displayStatus]}${
+  const statusLabel = `${PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}${
     waitContext ? ` · ${waitContext}` : ''
   }`;
 
@@ -294,14 +294,14 @@ function ProjectDetail({
               project={project}
               statusLabel={statusLabel}
               onEdit={commitEdit}
-              onStatus={(status) => {
-                if (status === 'done') {
+              onState={(state) => {
+                if (state === 'done') {
                   // Marking done removes the project from the working list;
                   // commit immediately and pop back to it.
-                  commitStatus(status);
+                  commitState(state);
                   back();
                 } else {
-                  commitStatus(status);
+                  commitState(state);
                 }
               }}
               onDelete={() => {
@@ -487,13 +487,13 @@ function ProjectHeader({
   project,
   statusLabel,
   onEdit,
-  onStatus,
+  onState,
   onDelete,
 }: {
   project: Project;
   statusLabel: string;
   onEdit: (fields: ProjectEditFields) => void;
-  onStatus: (status: ProjectStatus) => void;
+  onState: (state: ProjectState) => void;
   onDelete: () => void;
 }) {
   const [title, setTitle] = useState(project.title);
@@ -520,9 +520,9 @@ function ProjectHeader({
     setPickerOpen(false);
   };
 
-  const chooseStatus = (status: ProjectStatus) => {
+  const chooseState = (state: ProjectState) => {
     setStatusOpen(false);
-    onStatus(status);
+    onState(state);
   };
 
   return (
@@ -628,20 +628,20 @@ function ProjectHeader({
               {statusLabel}
             </UIText>
           </Column>
-          {project.status === 'backlog' ? (
-            <ListItem onPress={() => chooseStatus('next')}>
+          {project.state === 'backlog' ? (
+            <ListItem onPress={() => chooseState('in-play')}>
               <UIText textStyle={{ color: foreground, fontSize: 16 }}>
                 Move out of backlog
               </UIText>
             </ListItem>
           ) : (
-            <ListItem onPress={() => chooseStatus('backlog')}>
+            <ListItem onPress={() => chooseState('backlog')}>
               <UIText textStyle={{ color: foreground, fontSize: 16 }}>
                 Move to backlog
               </UIText>
             </ListItem>
           )}
-          <ListItem onPress={() => chooseStatus('done')}>
+          <ListItem onPress={() => chooseState('done')}>
             <UIText textStyle={{ color: foreground, fontSize: 16 }}>
               Mark done
             </UIText>

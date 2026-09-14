@@ -4,6 +4,7 @@ import type {
   OnlineDetector,
   StorageAdapter,
 } from '@tanstack/offline-transactions';
+import { OFFLINE_OUTBOX_VERSION } from '@zero/agent-core';
 
 type ReactNativeSQLitePersistence =
   typeof import('@tanstack/react-native-db-sqlite-persistence')['createReactNativeSQLitePersistence'];
@@ -19,7 +20,7 @@ const DB_NAME = 'zero-app.sqlite';
 // executor shares this one store: the outbox namespaces entries by transaction
 // id (`tx:` keys) and each executor only replays the transactions it can
 // deserialize into its own collections, so one file serves all entities safely.
-const OUTBOX_DB_NAME = 'zero-app-outbox.sqlite';
+const OUTBOX_DB_NAME = `zero-app-outbox-v${OFFLINE_OUTBOX_VERSION}.sqlite`;
 
 let persistencePromise: Promise<AppPersistence> | null = null;
 

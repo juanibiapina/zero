@@ -15,7 +15,7 @@ import {
   type WarnFn,
 } from "../collection/base";
 import { DEFAULT_ICON } from "./display";
-import type { Project, ProjectStatus } from "./types";
+import type { Project, ProjectState } from "./types";
 
 // The Project data layer: the Project verbs (add, setStatus, edit) over the
 // shared collection factory in ../collection/base. Everything about offline
@@ -36,9 +36,9 @@ export type ProjectsRest = {
     title: string;
     sourceCaptureId: string | null;
   }) => Promise<Project>;
-  // Move a project to another status (including the terminal 'done', which drops
-  // it from the working list). Idempotent on the id.
-  setProjectStatus: (id: string, status: ProjectStatus) => Promise<Project>;
+  // Persist lifecycle state; Done drops the row from the working list.
+  // Idempotent on the id.
+  setProjectState: (id: string, state: ProjectState) => Promise<Project>;
   // Edit a project's title/icon/description (only the present fields). Idempotent
   // on the id, so a replayed offline edit re-applies the same values.
   editProject: (id: string, fields: ProjectEditFields) => Promise<Project>;
@@ -47,8 +47,7 @@ export type ProjectsRest = {
   deleteProject: (id: string) => Promise<void>;
 };
 
-// The fields a detail-sheet edit may change. Status is a separate verb
-// (setStatus) because 'done' drops the row from the list.
+// The fields an ordinary edit may change. Lifecycle state has its own verb.
 export type ProjectEditFields = {
   title?: string;
   icon?: string;
@@ -56,13 +55,13 @@ export type ProjectEditFields = {
 };
 
 // One handle over the Project data layer. Both Projects screens read
-// `collection` through a live query and write with `add` / `setStatus` / `edit`,
+// `collection` through a live query and write with `add` / `setState` / `edit`,
 // which return the underlying transaction so the page can surface a write error
 // via `tx.isPersisted.promise`.
 export type ProjectsApi = {
   collection: Collection<Project, string>;
   add: (title: string, sourceCaptureId?: string | null) => Transaction;
-  setStatus: (id: string, status: ProjectStatus) => Transaction;
+  setState: (id: string, state: ProjectState) => Transaction;
   edit: (id: string, fields: ProjectEditFields) => Transaction;
   remove: (id: string) => Transaction;
   offline: boolean;
@@ -76,7 +75,7 @@ export type ProjectsApi = {
 export const PROJECTS_QUERY_KEY = entityQueryKey("projects");
 
 // Pick the edited fields out of a mutation's changed-field set. Only the fields
-// an edit may touch (title/icon/description) are forwarded to the server; status
+// an edit may touch (title/icon/description) are forwarded to the server; state
 // has its own verb. Reading `changes` (not the whole row) means an icon-only
 // edit sends only `{ icon }`, never clobbering a title with a stale value.
 function editFieldsFromChanges(changes: Partial<Project>): ProjectEditFields {
@@ -89,21 +88,17 @@ function editFieldsFromChanges(changes: Partial<Project>): ProjectEditFields {
   return fields;
 }
 
-// The verb table. Each key is the outbox mutationFn name (durable: a queued
-// offline write replays by it), so the keys never change. One collection.update
-// backs both setStatus and edit; the in-memory path tells them apart by the
-// changed field set: status changed → setProjectStatus, else editProject.
+// The verb table. Each key is the outbox mutationFn name. The state refactor
+// intentionally starts a new outbox epoch, so the canonical key is renamed too.
 export function projectsSpec(rest: ProjectsRest) {
   const v = verbsFor<Project>();
   const verbs = {
     addProject: v.insert<{ title: string; sourceCaptureId: string | null }>({
-      // The other fields match the server's creation defaults (icon 📁,
-      // description null, status next), so the optimistic row is the server row.
       row: ({ title, sourceCaptureId }) => ({
         title,
         icon: DEFAULT_ICON,
         description: null,
-        status: "next",
+        state: "in-play",
         sourceCaptureId,
       }),
       persist: (row) =>
@@ -113,17 +108,15 @@ export function projectsSpec(rest: ProjectsRest) {
           sourceCaptureId: row.sourceCaptureId ?? null,
         }),
     }),
-    setProjectStatus: v.update<{ id: string; status: ProjectStatus }>({
+    setProjectState: v.update<{ id: string; state: ProjectState }>({
       id: ({ id }) => id,
-      // Set the status in place so the list re-groups immediately (a move to
-      // 'done' drops the row once the server confirms).
       draft:
-        ({ status }) =>
+        ({ state }) =>
         (draft) => {
-          draft.status = status;
+          draft.state = state;
         },
-      matches: ({ changes }) => "status" in changes,
-      persist: (id, { modified }) => rest.setProjectStatus(id, modified.status),
+      matches: ({ changes }) => "state" in changes,
+      persist: (id, { modified }) => rest.setProjectState(id, modified.state),
     }),
     editProject: v.update<{ id: string; fields: ProjectEditFields }>({
       id: ({ id }) => id,
@@ -152,8 +145,8 @@ export function projectsSpec(rest: ProjectsRest) {
     name: "projects",
     fetch: () => rest.fetchProjects(),
     verbs,
-    // A project set to 'done' leaves the working set the server returns.
-    leavesCollection: (p) => p.status === "done",
+    // A project set to Done leaves the working set the server returns.
+    leavesCollection: (p) => p.state === "done",
   };
   return spec;
 }
@@ -165,7 +158,7 @@ function toProjectsApi(
     collection: api.collection,
     add: (title, sourceCaptureId = null) =>
       api.actions.addProject({ title, sourceCaptureId }),
-    setStatus: (id, status) => api.actions.setProjectStatus({ id, status }),
+    setState: (id, state) => api.actions.setProjectState({ id, state }),
     edit: (id, fields) => api.actions.editProject({ id, fields }),
     remove: (id) => api.actions.deleteProject({ id }),
     offline: api.offline,

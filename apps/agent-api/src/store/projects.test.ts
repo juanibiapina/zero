@@ -27,7 +27,7 @@ describe("DbProjectStore", () => {
 
     expect(project.icon).toBe("📁");
     expect(project.description).toBeNull();
-    expect(project.status).toBe("next");
+    expect(project.state).toBe("in-play");
     expect(project.createdAt).toBeTruthy();
   });
 
@@ -37,12 +37,12 @@ describe("DbProjectStore", () => {
     const project = store.add("id-1", "Move house", {
       icon: "🏠",
       description: "Everything boxed by March",
-      status: "active",
+      state: "backlog",
     });
 
     expect(project.icon).toBe("🏠");
     expect(project.description).toBe("Everything boxed by March");
-    expect(project.status).toBe("active");
+    expect(project.state).toBe("backlog");
     expect(store.list()).toEqual([project]);
   });
 
@@ -80,26 +80,26 @@ describe("DbProjectStore", () => {
     expect(store.list()).toEqual([a, b]);
   });
 
-  it("changes a project's status and returns the updated row", () => {
+  it("changes a project's state and returns the updated row", () => {
     const store = makeStore();
     store.add("id-1", "Run a 5K");
 
-    const updated = store.setStatus("id-1", "active");
+    const updated = store.setState("id-1", "backlog");
 
-    expect(updated?.status).toBe("active");
-    expect(store.list()[0].status).toBe("active");
+    expect(updated?.state).toBe("backlog");
+    expect(store.list()[0].state).toBe("backlog");
   });
 
-  it("returns null when setting the status of a missing project", () => {
-    expect(makeStore().setStatus("nope", "active")).toBeNull();
+  it("returns null when setting the state of a missing project", () => {
+    expect(makeStore().setState("nope", "backlog")).toBeNull();
   });
 
-  it("drops a project from the list once its status is done", () => {
+  it("drops a project from the list once its state is done", () => {
     const store = makeStore();
     store.add("id-1", "keep");
     store.add("id-2", "finish");
 
-    store.setStatus("id-2", "done");
+    store.setState("id-2", "done");
 
     expect(store.list().map((p) => p.id)).toEqual(["id-1"]);
   });
@@ -139,13 +139,13 @@ describe("DbProjectStore", () => {
     expect(updated?.description).toBeNull();
   });
 
-  it("does not change status through edit", () => {
+  it("does not change state through edit", () => {
     const store = makeStore();
-    store.add("id-1", "Run a 5K", { status: "active" });
+    store.add("id-1", "Run a 5K", { state: "backlog" });
 
     const updated = store.edit("id-1", { title: "renamed" });
 
-    expect(updated?.status).toBe("active");
+    expect(updated?.state).toBe("backlog");
   });
 
   it("returns null when editing a missing project", () => {

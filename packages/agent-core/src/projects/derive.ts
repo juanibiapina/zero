@@ -1,11 +1,10 @@
 import type { Task } from "../tasks/types";
 import type { WaitingCondition } from "../waits/types";
-import type { Project, ProjectStatus } from "./types";
+import type { Project, ProjectDisplayStatus } from "./types";
 
-// The display status of a project is derived on the client, not read straight
-// from the stored column. The stored `status` is only the deliberate parking
-// value: `backlog` and `done` are set by hand. The three in-play states are
-// computed from the project's tasks and its waiting conditions (see
+// Display status is derived on the client. Persisted `state` records only
+// in-play/backlog/done; Active, Next, and Waiting are computed from tasks and
+// waiting conditions (see
 // docs/plans/todo-availability-model.md, slices 5-6, and
 // docs/plans/todo-single-list-3-date-availability.md for the date-aware rule):
 //
@@ -55,9 +54,9 @@ function projectBaseStatus(
   project: Project,
   tasks: Task[],
   today: string,
-): ProjectStatus {
-  if (project.status === "backlog" || project.status === "done") {
-    return project.status;
+): ProjectDisplayStatus {
+  if (project.state === "backlog" || project.state === "done") {
+    return project.state;
   }
   const hasShownUpDatedOpenTask = tasks.some(
     (t) => t.projectId === project.id && isShownUpDatedOpen(t, today),
@@ -162,7 +161,7 @@ export function projectDisplayStatus(
   today: string,
   conditions: WaitingCondition[] = [],
   projects: Project[] = [],
-): ProjectStatus {
+): ProjectDisplayStatus {
   const base = projectBaseStatus(project, tasks, today);
   // backlog/done are terminal; an active project (a shown-up dated open task)
   // stays active even with an open condition — dating a task overrides waiting.

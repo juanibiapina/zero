@@ -1,7 +1,7 @@
 import type {
   Project,
   ProjectEditFields,
-  ProjectStatus,
+  ProjectState,
   Task,
   WaitingCondition,
   WaitingConditionKind,
@@ -13,7 +13,7 @@ import { API_BASE_URL } from './env';
 export type {
   Project,
   ProjectEditFields,
-  ProjectStatus,
+  ProjectState,
   Task,
   WaitingCondition,
   WaitingConditionKind,
@@ -244,7 +244,7 @@ export async function setTaskProject(
 
 // Project REST helpers: siblings of the Task ones above, hitting /api/projects.
 // The client sends only id + title; the server fills the defaults (icon 📁,
-// description null, status next).
+// description null, state in-play).
 export async function fetchProjects(
   getToken: TokenGetter,
   baseUrl: string = API_BASE_URL,
@@ -279,10 +279,10 @@ export async function addProject(
   return body.project;
 }
 
-export async function setProjectStatus(
+export async function setProjectState(
   getToken: TokenGetter,
   id: string,
-  status: ProjectStatus,
+  state: ProjectState,
   baseUrl: string = API_BASE_URL,
 ): Promise<Project> {
   const res = await apiFetch(
@@ -291,7 +291,7 @@ export async function setProjectStatus(
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ state }),
     },
     baseUrl,
   );

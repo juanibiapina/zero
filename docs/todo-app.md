@@ -95,8 +95,9 @@ committed.
   `docs/plans/todo-project-entity.md`; source of truth: `docs/entities/project.md`).
   Goal-oriented (baby, diploma, buy a house, watch a movie), sometimes
   maintenance-oriented (a "baby maintenance" project should maybe not exist). Has
-  a nice icon (baby face, diploma) and a status (active / next / waiting / backlog
-  / done). Slices A1 + A2 shipped: name-only create and a status-grouped list on
+  a nice icon (baby face, diploma), persisted lifecycle state (in-play / backlog /
+  done), and calculated status (Active / Next / Waiting / Backlog / Done). Slices
+  A1 + A2 shipped: name-only create and a status-grouped list on
   both surfaces; A3 added enrichment (an emoji icon picker over all standard emoji
   with search, editable title and notes). Slice A (the hand-managed entity) is
   complete. A project now opens **its own screen** (web `/projects/:id`, mobile a

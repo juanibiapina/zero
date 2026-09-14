@@ -69,7 +69,7 @@ jest.mock('@/lib/api', () => ({
   fetchProjects: (getToken: unknown) => mockFetchProjects(getToken),
   addProject: jest.fn(),
   fetchIconSuggestions: () => Promise.resolve([]),
-  setProjectStatus: jest.fn(),
+  setProjectState: jest.fn(),
   editProject: jest.fn(),
   deleteProject: () => Promise.resolve(),
 }));
@@ -94,7 +94,7 @@ const project = (id: string, icon: string): Project => ({
   title: 'Diploma',
   icon,
   description: null,
-  status: 'next',
+  state: 'in-play',
   createdAt: '2023-01-01T00:00:00.000Z',
 });
 

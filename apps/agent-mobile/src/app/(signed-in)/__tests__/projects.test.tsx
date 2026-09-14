@@ -8,7 +8,7 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 
-import type { Project, ProjectStatus } from '@/lib/api';
+import type { Project, ProjectState } from '@/lib/api';
 import type { WaitingCondition } from '@zero/agent-core';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
@@ -74,7 +74,7 @@ jest.mock('@/lib/api', () => ({
     getToken: unknown,
     input: { title: string; description?: string | null },
   ) => mockFetchIconSuggestions(getToken, input),
-  setProjectStatus: () => Promise.reject(new Error('not used')),
+  setProjectState: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.resolve(),
   // Projects loads tasks/waits/captures for derivation and the refine banner; []
@@ -92,13 +92,13 @@ const project = (
   id: string,
   title: string,
   icon = '📁',
-  status: ProjectStatus = 'next',
+  state: ProjectState = 'in-play',
 ): Project => ({
   id,
   title,
   icon,
   description: null,
-  status,
+  state,
   createdAt: '2023-01-01T00:00:00.000Z',
 });
 
@@ -264,7 +264,7 @@ describe('ProjectsScreen (list)', () => {
 
   it('groups projects under a status section header', async () => {
     mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃', 'next')]);
+    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);
 
     const { getByLabelText } = await renderScreen();
 
@@ -277,8 +277,8 @@ describe('ProjectsScreen (list)', () => {
     // waiting. "Older wait" has the earlier condition (waited longer) and must
     // sort above "Newer wait".
     mockFetchProjects.mockResolvedValue([
-      project('1', 'Newer wait', '📁', 'next'),
-      project('2', 'Older wait', '📁', 'next'),
+      project('1', 'Newer wait'),
+      project('2', 'Older wait'),
     ]);
     const wait = (
       id: string,

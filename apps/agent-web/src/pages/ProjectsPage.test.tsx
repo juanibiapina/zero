@@ -17,7 +17,7 @@ import {
   type Project,
   type ProjectsApi,
   type ProjectsRest,
-  type ProjectStatus,
+  type ProjectState,
   type Task,
   type TasksApi,
   type TasksRest,
@@ -118,14 +118,14 @@ function fakeWaitsRest(initial: WaitingCondition[] = []): WaitsRest {
 const project = (
   id: string,
   title: string,
-  status: ProjectStatus = "next",
+  state: ProjectState | "next" = "in-play",
   icon = "📁",
 ): Project => ({
   id,
   title,
   icon,
   description: null,
-  status,
+  state: state === "next" ? "in-play" : state,
   createdAt: `2023-01-0${id.slice(-1)}T00:00:00.000Z`,
 });
 
@@ -150,12 +150,12 @@ function fakeRest(initial: Project[]): ProjectsRest {
       server.push(row);
       return { ...row };
     },
-    setProjectStatus: async (id, status) => {
+    setProjectState: async (id, state) => {
       const row = server.find((p) => p.id === id);
       if (!row) throw new Error(`no project ${id}`);
-      row.status = status;
-      if (status === "done") server.splice(server.indexOf(row), 1);
-      return { ...row, status };
+      row.state = state;
+      if (state === "done") server.splice(server.indexOf(row), 1);
+      return { ...row, state };
     },
     editProject: async (id, fields) => {
       const row = server.find((p) => p.id === id);

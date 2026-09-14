@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import { homeCallToAction } from "./call-to-action";
-
-const TODAY = "2026-06-01";
-import type { Project, ProjectStatus } from "./types";
+import type { Project, ProjectState } from "./types";
 import type { Task } from "../tasks/types";
 import type { WaitingCondition } from "../waits/types";
 
-function project(id: string, status: ProjectStatus): Project {
+const TODAY = "2026-06-01";
+
+function project(id: string, state: ProjectState = "in-play"): Project {
   return {
     id,
     title: id,
     icon: "📁",
     description: null,
-    status,
+    state,
     createdAt: "2026-01-01T00:00:00.000Z",
   };
 }
@@ -45,72 +45,74 @@ function freeTextCondition(projectId: string): WaitingCondition {
 
 describe("homeCallToAction", () => {
   it("returns null when the plate has tasks", () => {
-    expect(homeCallToAction(1, 0, [project("p", "next")], [], TODAY)).toBeNull();
+    expect(homeCallToAction(1, 0, [project("p")], [], TODAY)).toBeNull();
   });
 
-  it("returns null when the plate is empty but the inbox has captures", () => {
-    expect(homeCallToAction(0, 3, [project("p", "next")], [], TODAY)).toBeNull();
+  it("returns null when the inbox has captures", () => {
+    expect(homeCallToAction(0, 3, [project("p")], [], TODAY)).toBeNull();
   });
 
-  it("plans when the plate and inbox are empty and a project is next", () => {
-    expect(homeCallToAction(0, 0, [project("p", "next")], [], TODAY)).toEqual({
+  it("plans for an in-play project calculated as Next", () => {
+    expect(homeCallToAction(0, 0, [project("p")], [], TODAY)).toEqual({
       kind: "plan",
       next: 1,
       waiting: 0,
     });
   });
 
-  it("counts next and waiting projects by derived status", () => {
+  it("counts calculated Next and Waiting projects", () => {
     const projects = [
-      project("n1", "next"),
-      project("n2", "next"),
-      project("w", "next"), // becomes waiting via its condition below
+      project("n1"),
+      project("n2"),
+      project("w"),
       project("b", "backlog"),
     ];
-    const out = homeCallToAction(
-      0,
-      0,
-      projects,
-      [],
-      TODAY,
-      [freeTextCondition("w")],
-    );
-    expect(out).toEqual({ kind: "plan", next: 2, waiting: 1 });
+    expect(
+      homeCallToAction(
+        0,
+        0,
+        projects,
+        [],
+        TODAY,
+        [freeTextCondition("w")],
+      ),
+    ).toEqual({ kind: "plan", next: 2, waiting: 1 });
   });
 
-  it("activates the backlog when only backlog/done projects exist", () => {
-    const out = homeCallToAction(0, 0, [
-      project("b1", "backlog"),
-      project("b2", "backlog"),
-      project("d", "done"),
-    ], [], TODAY);
-    expect(out).toEqual({ kind: "activate-backlog", backlog: 2 });
+  it("activates the backlog when only Backlog and Done exist", () => {
+    expect(
+      homeCallToAction(
+        0,
+        0,
+        [project("b1", "backlog"), project("b2", "backlog"), project("d", "done")],
+        [],
+        TODAY,
+      ),
+    ).toEqual({ kind: "activate-backlog", backlog: 2 });
   });
 
-  it("asks to create when there are no projects", () => {
+  it("asks to create with no projects or only Done projects", () => {
     expect(homeCallToAction(0, 0, [], [], TODAY)).toEqual({ kind: "create" });
+    expect(
+      homeCallToAction(
+        0,
+        0,
+        [project("d1", "done"), project("d2", "done")],
+        [],
+        TODAY,
+      ),
+    ).toEqual({ kind: "create" });
   });
 
-  it("asks to create when every project is done", () => {
-    const out = homeCallToAction(0, 0, [
-      project("d1", "done"),
-      project("d2", "done"),
-    ], [], TODAY);
-    expect(out).toEqual({ kind: "create" });
-  });
-
-  it("uses the derived status: a project with a shown-up dated open task is active, not counted", () => {
-    // `p` has a shown-up dated open task, so its display status is `active` and it
-    // is excluded from the working next/waiting/backlog counts. (The plate would
-    // not really be empty here, but the helper is gated on plateCount, which the
-    // caller supplies — this asserts the derivation, given plateCount 0.)
-    const out = homeCallToAction(
-      0,
-      0,
-      [project("p", "next")],
-      [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
-      TODAY,
-    );
-    expect(out).toEqual({ kind: "create" });
+  it("does not count an in-play project calculated as Active", () => {
+    expect(
+      homeCallToAction(
+        0,
+        0,
+        [project("p")],
+        [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
+        TODAY,
+      ),
+    ).toEqual({ kind: "create" });
   });
 });

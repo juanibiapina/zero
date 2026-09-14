@@ -33,13 +33,13 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
   };
 }
 
-function project(id: string, status: Project["status"]): Project {
+function project(id: string, state: Project["state"] = "in-play"): Project {
   return {
     id,
     title: id,
     icon: "📁",
     description: null,
-    status,
+    state,
     createdAt: "2026-01-01T00:00:00.000Z",
   };
 }
@@ -117,7 +117,7 @@ describe("homeTasks", () => {
     // A project task needs an arrived date; a future date parks it in Upcoming.
     const out = homeTasks(
       [task({ id: "t", projectId: "p", showUpDate: "2099-01-01" })],
-      [project("p", "active")],
+      [project("p")],
       TODAY,
     );
     expect(out).toEqual([]);
@@ -126,7 +126,7 @@ describe("homeTasks", () => {
   it("shows a project task whose arrived date makes its project active", () => {
     const out = homeTasks(
       [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
-      [project("p", "next")],
+      [project("p")],
       TODAY,
     );
     expect(out.map((t) => t.id)).toEqual(["t"]);
@@ -140,7 +140,7 @@ describe("homeTasks", () => {
         task({ id: "dated", projectId: "p", showUpDate: "2026-01-01" }),
         task({ id: "groomed", projectId: "p", showUpDate: null }),
       ],
-      [project("p", "next")],
+      [project("p")],
       TODAY,
     );
     expect(out.map((t) => t.id)).toEqual(["dated"]);
@@ -151,7 +151,7 @@ describe("homeTasks", () => {
     // task shows.
     const out = homeTasks(
       [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
-      [project("p", "next")],
+      [project("p")],
       TODAY,
       [freeTextCondition("p")],
     );
@@ -161,7 +161,7 @@ describe("homeTasks", () => {
   it("hides an undated project task on a project with an unresolved condition (waiting)", () => {
     const out = homeTasks(
       [task({ id: "t", projectId: "p", showUpDate: null })],
-      [project("p", "next")],
+      [project("p")],
       TODAY,
       [freeTextCondition("p")],
     );

@@ -1,11 +1,21 @@
 import { QueryClient } from "@tanstack/react-query";
-import { startOfflineExecutor } from "@tanstack/offline-transactions";
-import type { EntityApiDeps } from "@zero/agent-core";
+import {
+  IndexedDBAdapter,
+  startOfflineExecutor,
+} from "@tanstack/offline-transactions";
+import {
+  OFFLINE_OUTBOX_VERSION,
+  type EntityApiDeps,
+} from "@zero/agent-core";
 
 import { getAppPersistence } from "./db";
 
-// The one QueryClient every in-memory (fallback) collection reads through.
+// The one QueryClient every in-memory fallback reads through, and the one
+// versioned outbox shared by all durable entity executors in this tab.
 export const queryClient = new QueryClient();
+const outboxStorage = new IndexedDBAdapter(
+  `zero-offline-transactions-v${OFFLINE_OUTBOX_VERSION}`,
+);
 
 // The deps every web entity data layer passes to its shared factory: the OPFS
 // persistence (opened once per tab, see ./db) and the browser offline outbox.
@@ -15,7 +25,8 @@ function webDeps(): EntityApiDeps {
   return {
     queryClient,
     persistence: () => getAppPersistence(),
-    startOfflineExecutor,
+    startOfflineExecutor: (config) =>
+      startOfflineExecutor({ ...config, storage: outboxStorage }),
     onWarn: (message, error) => console.warn(message, error),
   };
 }

@@ -25,20 +25,14 @@ const defaultSuggestIcons: SuggestIcons = async (env, userId, input) => {
   return suggestProjectIcons(model, input);
 };
 
-const ProjectStatus = z.enum([
-  "active",
-  "next",
-  "waiting",
-  "backlog",
-  "done",
-]);
+const ProjectState = z.enum(["in-play", "backlog", "done"]);
 
 const ProjectSchema = z.object({
   id: z.string(),
   title: z.string(),
   icon: z.string(),
   description: z.string().nullable(),
-  status: ProjectStatus,
+  state: ProjectState,
   createdAt: z.string(),
   sourceCaptureId: z.string().nullable(),
 });
@@ -86,13 +80,13 @@ export const createProjectsRoutes = (
               id: z.string().uuid(),
               title: z.string().min(1),
               // The client normally sends only id + title; the server fills
-              // these defaults (icon 📁, description null, status next).
+              // these defaults (icon 📁, description null, state in-play).
               icon: z.string().min(1).optional(),
               description: z.string().nullable().optional(),
-              status: ProjectStatus.optional(),
+              state: ProjectState.optional(),
               // Optional: the capture this project was refined from.
               sourceCaptureId: z.string().uuid().nullable().optional(),
-            }),
+            }).strict(),
           },
         },
       },
@@ -108,14 +102,14 @@ export const createProjectsRoutes = (
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
         },
-        description: "Empty title, non-UUID id, or an unknown status",
+        description: "Empty title, non-UUID id, or an unknown state",
       },
     },
   });
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, title, icon, description, status, sourceCaptureId } =
+    const { id, title, icon, description, state, sourceCaptureId } =
       c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
@@ -124,7 +118,7 @@ export const createProjectsRoutes = (
     const project = await userDO.addProject(id, title, {
       icon,
       description,
-      status,
+      state,
       sourceCaptureId,
     });
     log("project_added", { clerk_user_id: userId });
@@ -183,22 +177,21 @@ export const createProjectsRoutes = (
     method: "patch",
     path: "/api/projects/{id}",
     tags: ["Projects"],
-    summary: "Edit a project or change its status",
+    summary: "Edit a project or change its lifecycle state",
     request: {
       params: z.object({ id: z.string() }),
       body: {
         content: {
           "application/json": {
             // A partial update on the project's stable id. It carries either the
-            // status transition (`status`, where `done` drops the row from the
-            // working list) or the editable fields (title/icon/description), or
-            // both. Empty title/icon are rejected; description may be null.
+            // lifecycle transition (`state`, where `done` drops the row from the
+            // working list) or editable fields, or both.
             schema: z.object({
-              status: ProjectStatus.optional(),
+              state: ProjectState.optional(),
               title: z.string().min(1).optional(),
               icon: z.string().min(1).optional(),
               description: z.string().nullable().optional(),
-            }),
+            }).strict(),
           },
         },
       },
@@ -214,7 +207,7 @@ export const createProjectsRoutes = (
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
         },
-        description: "No fields to update, or an empty title/icon or bad status",
+        description: "No fields to update, or an empty title/icon or bad state",
       },
       404: {
         content: {
@@ -225,15 +218,13 @@ export const createProjectsRoutes = (
     },
   });
 
-  // PATCH (not a POST …/action) because both editing a project and changing its
-  // status are idempotent field updates on its stable id. One endpoint carries
-  // every transition and every edit: the edit fields go through `editProject`,
-  // the status transition through `setProjectStatus`. See
+  // PATCH carries idempotent edits and deliberate lifecycle-state transitions
+  // on the stable project id. Display status remains client-derived. See
   // docs/entities/project.md.
   router.openapi(editRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const { status, title, icon, description } = c.req.valid("json");
+    const { state, title, icon, description } = c.req.valid("json");
     const editFields: {
       title?: string;
       icon?: string;
@@ -243,7 +234,7 @@ export const createProjectsRoutes = (
     if (icon !== undefined) editFields.icon = icon;
     if (description !== undefined) editFields.description = description;
     const hasEdit = Object.keys(editFields).length > 0;
-    if (!hasEdit && status === undefined) {
+    if (!hasEdit && state === undefined) {
       return c.json({ error: "no fields to update" }, 400);
     }
     const userDO = getUserDO(c.env, userId);
@@ -255,12 +246,12 @@ export const createProjectsRoutes = (
       }
       log("project_edited", { clerk_user_id: userId });
     }
-    if (status !== undefined) {
-      project = await userDO.setProjectStatus(id, status);
+    if (state !== undefined) {
+      project = await userDO.setProjectState(id, state);
       if (!project) {
         return c.json({ error: "project not found" }, 404);
       }
-      log("project_status_changed", { clerk_user_id: userId });
+      log("project_state_changed", { clerk_user_id: userId });
     }
     // Unreachable: the empty-body case returned 400 above, so at least one branch
     // set `project`. The guard narrows it to non-null for the typed response.
@@ -285,7 +276,7 @@ export const createProjectsRoutes = (
     },
   });
 
-  // DELETE hard-removes the project (distinct from PATCH status 'done', which
+  // DELETE hard-removes the project (distinct from PATCH state 'done', which
   // keeps the row out of the working list) and cascades to its tasks and waiting
   // conditions (UserDO.deleteProject). Idempotent on the id: a missing row still
   // returns 204, so a replayed offline delete (a retry after a lost ACK) never

@@ -4,10 +4,10 @@
 import type {
   Project,
   ProjectEditFields,
-  ProjectStatus,
+  ProjectState,
 } from "@zero/agent-core";
 
-export type { Project, ProjectEditFields, ProjectStatus };
+export type { Project, ProjectEditFields, ProjectState };
 
 export async function fetchProjects(): Promise<Project[]> {
   const res = await fetch("/api/projects");
@@ -35,14 +35,14 @@ export async function addProject(project: {
   return body.project;
 }
 
-export async function setProjectStatus(
+export async function setProjectState(
   id: string,
-  status: ProjectStatus,
+  state: ProjectState,
 ): Promise<Project> {
   const res = await fetch(`/api/projects/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ state }),
   });
   if (!res.ok) {
     throw new Error(`PATCH /api/projects/${id} failed: ${res.status}`);

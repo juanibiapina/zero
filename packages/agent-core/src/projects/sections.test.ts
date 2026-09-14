@@ -1,33 +1,40 @@
 import { describe, expect, it } from "vitest";
 
-import type { Project, ProjectStatus } from "./types";
+import type { Project, ProjectDisplayStatus, ProjectState } from "./types";
 import { projectsByStatus } from "./sections";
 
 const project = (
   id: string,
-  status: ProjectStatus,
+  state: ProjectState = "in-play",
   createdAt = "2023-01-01T00:00:00.000Z",
 ): Project => ({
   id,
   title: id,
   icon: "📁",
   description: null,
-  status,
+  state,
   createdAt,
 });
 
+const statusMapper = (statuses: Record<string, ProjectDisplayStatus>) =>
+  (p: Project): ProjectDisplayStatus => statuses[p.id];
+
 describe("projectsByStatus", () => {
-  it("returns an empty array for an empty list", () => {
-    expect(projectsByStatus([])).toEqual([]);
+  it("returns an empty array", () => {
+    expect(projectsByStatus([], () => "next")).toEqual([]);
   });
 
-  it("groups into sections in the fixed Active/Next/Waiting/Backlog order", () => {
-    const sections = projectsByStatus([
+  it("groups calculated statuses in fixed order", () => {
+    const list = [
       project("b", "backlog"),
-      project("a", "active"),
-      project("w", "waiting"),
-      project("n", "next"),
-    ]);
+      project("a"),
+      project("w"),
+      project("n"),
+    ];
+    const sections = projectsByStatus(
+      list,
+      statusMapper({ b: "backlog", a: "active", w: "waiting", n: "next" }),
+    );
     expect(sections.map((s) => s.status)).toEqual([
       "active",
       "next",
@@ -37,19 +44,23 @@ describe("projectsByStatus", () => {
   });
 
   it("omits empty sections", () => {
-    const sections = projectsByStatus([
-      project("a", "active"),
-      project("n", "next"),
-    ]);
+    const sections = projectsByStatus(
+      [project("a"), project("n")],
+      statusMapper({ a: "active", n: "next" }),
+    );
     expect(sections.map((s) => s.status)).toEqual(["active", "next"]);
   });
 
-  it("orders projects within a section oldest-first", () => {
-    const sections = projectsByStatus([
-      project("late", "active", "2023-03-01T00:00:00.000Z"),
-      project("early", "active", "2023-01-01T00:00:00.000Z"),
-      project("mid", "active", "2023-02-01T00:00:00.000Z"),
-    ]);
+  it("orders a section oldest-first", () => {
+    const list = [
+      project("late", "in-play", "2023-03-01T00:00:00.000Z"),
+      project("early", "in-play", "2023-01-01T00:00:00.000Z"),
+      project("mid", "in-play", "2023-02-01T00:00:00.000Z"),
+    ];
+    const sections = projectsByStatus(
+      list,
+      statusMapper({ late: "active", early: "active", mid: "active" }),
+    );
     expect(sections[0].projects.map((p) => p.id)).toEqual([
       "early",
       "mid",
@@ -57,36 +68,35 @@ describe("projectsByStatus", () => {
     ]);
   });
 
-  it("orders a section by a supplied sortKey, leaving others on createdAt", () => {
-    // waitingSince-style key: waiting projects sort by a blocked-since instant,
-    // others fall back to createdAt.
+  it("uses a supplied section sort key", () => {
     const since: Record<string, string> = {
-      w1: "2023-05-01T00:00:00.000Z", // waited longest (oldest since)
+      w1: "2023-05-01T00:00:00.000Z",
       w2: "2023-06-01T00:00:00.000Z",
     };
+    const list = [
+      project("w2", "in-play", "2023-02-01T00:00:00.000Z"),
+      project("w1", "in-play", "2023-03-01T00:00:00.000Z"),
+      project("late", "in-play", "2023-03-01T00:00:00.000Z"),
+      project("early", "in-play", "2023-01-01T00:00:00.000Z"),
+    ];
     const sections = projectsByStatus(
-      [
-        project("w2", "waiting", "2023-02-01T00:00:00.000Z"),
-        project("w1", "waiting", "2023-03-01T00:00:00.000Z"),
-        project("late", "active", "2023-03-01T00:00:00.000Z"),
-        project("early", "active", "2023-01-01T00:00:00.000Z"),
-      ],
-      (p) => p.status,
+      list,
+      statusMapper({ w1: "waiting", w2: "waiting", late: "active", early: "active" }),
       (p) => since[p.id] ?? p.createdAt,
     );
-    const waiting = sections.find((s) => s.status === "waiting")!;
-    // Oldest since first: w1 then w2 (not their createdAt order).
-    expect(waiting.projects.map((p) => p.id)).toEqual(["w1", "w2"]);
-    const active = sections.find((s) => s.status === "active")!;
-    // No override for active rows, so they keep createdAt order.
-    expect(active.projects.map((p) => p.id)).toEqual(["early", "late"]);
+    expect(
+      sections.find((s) => s.status === "waiting")!.projects.map((p) => p.id),
+    ).toEqual(["w1", "w2"]);
+    expect(
+      sections.find((s) => s.status === "active")!.projects.map((p) => p.id),
+    ).toEqual(["early", "late"]);
   });
 
-  it("never emits a done section", () => {
-    const sections = projectsByStatus([
-      project("a", "active"),
-      project("d", "done"),
-    ]);
+  it("never emits Done", () => {
+    const sections = projectsByStatus(
+      [project("a"), project("d", "done")],
+      statusMapper({ a: "active", d: "done" }),
+    );
     expect(sections.map((s) => s.status)).toEqual(["active"]);
     expect(sections.flatMap((s) => s.projects.map((p) => p.id))).toEqual(["a"]);
   });

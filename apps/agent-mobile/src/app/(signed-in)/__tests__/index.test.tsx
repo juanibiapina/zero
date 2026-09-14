@@ -108,7 +108,7 @@ jest.mock('@/lib/api', () => ({
     project: { id: string; title: string; sourceCaptureId: string | null },
   ) => mockAddProject(getToken, project),
   fetchIconSuggestions: () => Promise.resolve([]),
-  setProjectStatus: () => Promise.reject(new Error('not used')),
+  setProjectState: () => Promise.reject(new Error('not used')),
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.resolve(),
   // Waiting conditions feed the Home gate; a fetch returning [] is enough.
@@ -193,7 +193,7 @@ describe('HomeScreen', () => {
         title: 'Diploma',
         icon: '🎓',
         description: null,
-        status: 'next',
+        state: 'in-play',
         createdAt: '2023-01-01T00:00:00.000Z',
       },
     ]);
@@ -246,7 +246,7 @@ describe('HomeScreen', () => {
         title: 'Diploma',
         icon: '🎓',
         description: null,
-        status: 'next',
+        state: 'in-play',
         createdAt: '2023-01-01T00:00:00.000Z',
       },
     ]);
@@ -294,7 +294,7 @@ describe('HomeScreen', () => {
       title: project.title,
       icon: '📁',
       description: null,
-      status: 'next',
+      state: 'in-play',
       createdAt: '2023-01-01T00:00:00.000Z',
     }));
 
@@ -385,7 +385,7 @@ describe('HomeScreen', () => {
         title: 'Diploma',
         icon: '🎓',
         description: null,
-        status: 'next',
+        state: 'in-play',
         createdAt: '2023-01-01T00:00:00.000Z',
       },
     ]);
@@ -509,7 +509,7 @@ describe('HomeScreen', () => {
         title: 'Diploma',
         icon: '🎓',
         description: null,
-        status: 'next',
+        state: 'in-play',
         createdAt: '2023-01-01T00:00:00.000Z',
       },
     ]);

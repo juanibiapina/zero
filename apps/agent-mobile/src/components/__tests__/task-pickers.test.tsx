@@ -4,7 +4,7 @@ import { ProjectPickerSheet, ScheduleSheet } from '../task-detail';
 
 const projects = Array.from({ length: 30 }, (_, i) => ({
   id: String(i), title: `Project ${i}`, icon: '📁', description: null,
-  status: 'next' as const, createdAt: '2026-01-01',
+  state: 'in-play' as const, createdAt: '2026-01-01',
 }));
 
 describe('task pickers', () => {

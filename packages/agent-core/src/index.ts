@@ -47,7 +47,11 @@ export {
 } from "./projects/icon-suggestions";
 
 // The Project data layer (Projects list).
-export type { Project, ProjectStatus } from "./projects/types";
+export type {
+  Project,
+  ProjectState,
+  ProjectDisplayStatus,
+} from "./projects/types";
 export {
   PROJECTS_QUERY_KEY,
   createProjectsApi,
@@ -90,12 +94,16 @@ export {
   type WaitingConditionFields,
 } from "./waits/collection";
 export {
-  ALL_STATUSES,
+  ALL_PROJECT_DISPLAY_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
   DEFAULT_ICON,
-  STATUS_LABELS,
+  PROJECT_DISPLAY_STATUS_LABELS,
   taskIcon,
 } from "./projects/display";
+export {
+  ENTITY_CACHE_VERSION,
+  OFFLINE_OUTBOX_VERSION,
+} from "./collection/version";
 
 // The add-mode registry: what the quick-add box can create, shared web + mobile.
 export {

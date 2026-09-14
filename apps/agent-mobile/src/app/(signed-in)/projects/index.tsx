@@ -4,8 +4,10 @@ import { useLiveQuery } from '@tanstack/react-db';
 import { useRouter } from 'expo-router';
 import {
   BACKLOG_COLLAPSE_THRESHOLD, LOADING_TEXT_DELAY_MS, localToday,
-  projectDisplayStatus, projectsByStatus, listView, STATUS_LABELS, waitingBadge,
-  type Project, type ProjectsApi, type ProjectStatus, type TasksApi, type WaitsApi,
+  projectDisplayStatus, projectsByStatus, listView,
+  PROJECT_DISPLAY_STATUS_LABELS, waitingBadge,
+  type Project, type ProjectsApi, type ProjectDisplayStatus, type TasksApi,
+  type WaitsApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, RefreshControl, SectionList, View } from 'react-native';
@@ -34,15 +36,15 @@ function ProjectRow({ item, waited, onOpen }: {
 }
 
 function SectionHeader({ status, count, collapsed, onToggle }: {
-  status: ProjectStatus; count: number; collapsed: boolean;
-  onToggle: (status: ProjectStatus, current: boolean) => void;
+  status: ProjectDisplayStatus; count: number; collapsed: boolean;
+  onToggle: (status: ProjectDisplayStatus, current: boolean) => void;
 }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${STATUS_LABELS[status]}, ${count}`}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${PROJECT_DISPLAY_STATUS_LABELS[status]}, ${count}`}
       accessibilityState={{ expanded: !collapsed }}
       onPress={() => onToggle(status, collapsed)}
       className="flex-row items-center gap-2 border-b border-divider bg-background px-screen-x pb-2 pt-6">
-      <Text variant="section">{collapsed ? '▸' : '▾'} {STATUS_LABELS[status]}</Text>
+      <Text variant="section">{collapsed ? '▸' : '▾'} {PROJECT_DISPLAY_STATUS_LABELS[status]}</Text>
       <Text variant="caption">· {count}</Text>
     </Pressable>
   );
@@ -77,12 +79,12 @@ function Projects({ api, tasksApi, waitsApi }: {
   const conds = useMemo(() => conditions ?? [], [conditions]);
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
-  const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectStatus, boolean>>>({});
+  const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
   useForegroundRefetch(api.refetch);
   const accent = useColor('--color-accent');
   const refetchAll = useCallback(() => Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]), [api, tasksApi, waitsApi]);
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
-  const onToggle = useCallback((status: ProjectStatus, current: boolean) => {
+  const onToggle = useCallback((status: ProjectDisplayStatus, current: boolean) => {
     setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
   }, []);
   const view = listView({ count: list.length, isLoading, loadError });

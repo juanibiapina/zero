@@ -19,11 +19,12 @@ import {
   messageOf,
   projectDisplayStatus,
   scheduleLabel,
-  STATUS_LABELS,
+  PROJECT_DISPLAY_STATUS_LABELS,
   undoableAction,
   waitingUntil,
+  type ProjectDisplayStatus,
   type ProjectEditFields,
-  type ProjectStatus,
+  type ProjectState,
   type WaitingCondition,
   type WaitingConditionKind,
 } from "@zero/agent-core";
@@ -112,10 +113,10 @@ function ProjectDetailReady({
     [api],
   );
 
-  const commitStatus = useCallback(
-    (pid: string, status: ProjectStatus) => {
+  const commitState = useCallback(
+    (pid: string, state: ProjectState) => {
       setError(null);
-      const tx = api.setStatus(pid, status);
+      const tx = api.setState(pid, state);
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
     },
     [api],
@@ -168,12 +169,12 @@ function ProjectDetailReady({
         project={project}
         displayStatus={displayStatus}
         onEdit={commitEdit}
-        onStatus={(status) => {
-          if (status === "done") {
-            commitStatus(project.id, "done");
+        onState={(state) => {
+          if (state === "done") {
+            commitState(project.id, "done");
             void navigate("/projects");
           } else {
-            commitStatus(project.id, status);
+            commitState(project.id, state);
           }
         }}
         onDelete={() => commitDelete(project.id)}
@@ -289,13 +290,13 @@ function ProjectHeader({
   project,
   displayStatus,
   onEdit,
-  onStatus,
+  onState,
   onDelete,
 }: {
   project: Project;
-  displayStatus: ProjectStatus;
+  displayStatus: ProjectDisplayStatus;
   onEdit: (id: string, fields: ProjectEditFields) => void;
-  onStatus: (status: ProjectStatus) => void;
+  onState: (state: ProjectState) => void;
   onDelete: () => void;
 }) {
   // Seeded from the project once; keyed by project id at the call site, so a
@@ -399,17 +400,17 @@ function ProjectHeader({
         />
         <div className="flex shrink-0 items-center gap-2 pt-1">
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-            {STATUS_LABELS[displayStatus]}
+            {PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}
           </span>
           <OverflowMenu>
-            {project.status === "backlog" ? (
-              <MenuItem onSelect={() => onStatus("next")}>Put in play</MenuItem>
+            {project.state === "backlog" ? (
+              <MenuItem onSelect={() => onState("in-play")}>Put in play</MenuItem>
             ) : (
-              <MenuItem onSelect={() => onStatus("backlog")}>
+              <MenuItem onSelect={() => onState("backlog")}>
                 Move to backlog
               </MenuItem>
             )}
-            <MenuItem onSelect={() => onStatus("done")}>Mark done</MenuItem>
+            <MenuItem onSelect={() => onState("done")}>Mark done</MenuItem>
             <MenuItem destructive onSelect={onDelete}>
               Delete project
             </MenuItem>
@@ -692,7 +693,8 @@ function ProjectWaits({
   const [kind, setKind] = useState<WaitingConditionKind>("free-text");
   const [text, setText] = useState("");
   const [refId, setRefId] = useState("");
-  const [targetStatus, setTargetStatus] = useState<ProjectStatus>("done");
+  const [targetStatus, setTargetStatus] =
+    useState<ProjectDisplayStatus>("done");
 
   const otherProjects = projects.filter((p) => p.id !== project.id);
   const openTasks = tasks.filter((t) => t.completedAt == null);
@@ -828,13 +830,15 @@ function ProjectWaits({
               <select
                 aria-label="Target status"
                 value={targetStatus}
-                onChange={(e) => setTargetStatus(e.target.value as ProjectStatus)}
+                onChange={(e) =>
+                  setTargetStatus(e.target.value as ProjectDisplayStatus)
+                }
                 className="h-9 rounded-md border bg-transparent px-2 text-sm"
               >
                 {(["active", "next", "waiting", "backlog", "done"] as const).map(
                   (s) => (
                     <option key={s} value={s}>
-                      {STATUS_LABELS[s]}
+                      {PROJECT_DISPLAY_STATUS_LABELS[s]}
                     </option>
                   ),
                 )}
