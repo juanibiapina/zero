@@ -37,7 +37,7 @@ export default function SignedInLayout() {
 
   useTimezoneSync(isLoaded && isSignedIn);
   useEffect(() => {
-    if (isLoaded && !isSignedIn) void syncHomeAppIcon(null);
+    if (isLoaded && !isSignedIn) void syncHomeAppIcon('Default');
   }, [isLoaded, isSignedIn]);
 
   if (!isLoaded) {

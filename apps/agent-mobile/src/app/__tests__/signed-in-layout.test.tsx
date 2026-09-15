@@ -97,7 +97,7 @@ describe('SignedInLayout', () => {
     expect(mockCreateSync).not.toHaveBeenCalled();
   });
 
-  it('restores the checkmark launcher icon when signed out', async () => {
+  it('restores the three-row default launcher icon when signed out', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
     await render(<SignedInLayout />);
 

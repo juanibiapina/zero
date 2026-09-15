@@ -439,6 +439,19 @@ def main():
         render(STATIC_SOURCE, icon, 1024, opaque=True)
         validate_corners(icon, 'white')
 
+        static_foreground, static_monochrome = foreground_trees(STATIC_SOURCE)
+        static_foreground_svg = temp / 'android-icon-foreground.svg'
+        static_monochrome_svg = temp / 'android-icon-monochrome.svg'
+        write_svg(static_foreground, static_foreground_svg)
+        write_svg(static_monochrome, static_monochrome_svg)
+        android_foreground = MOBILE / 'android-icon-foreground.png'
+        android_monochrome = MOBILE / 'android-icon-monochrome.png'
+        render(static_foreground_svg, android_foreground, 1024)
+        render(static_monochrome_svg, android_monochrome, 1024)
+        for android_layer in (android_foreground, android_monochrome):
+            validate_corners(android_layer, 'transparent')
+            validate_safe_zone(android_layer, mask)
+
         splash_tree = artwork_tree(STATIC_SOURCE)
         splash_svg = temp / 'splash.svg'
         write_svg(splash_tree, splash_svg)
@@ -464,10 +477,6 @@ def main():
         validate_corners(touch_icon, 'white')
         for retired in RETIRED_WEB_ICONS:
             retired.unlink(missing_ok=True)
-
-    # These static Android layers were superseded by the task-count primary icon.
-    (MOBILE / 'android-icon-foreground.png').unlink(missing_ok=True)
-    (MOBILE / 'android-icon-monochrome.png').unlink(missing_ok=True)
 
     print('Generated and validated static and task-count todo icons.')
 

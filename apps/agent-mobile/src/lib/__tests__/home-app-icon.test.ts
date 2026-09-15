@@ -20,7 +20,7 @@ beforeEach(() => {
 
 describe('homeAppIconForTaskCount', () => {
   it.each<[number, HomeAppIcon]>([
-    [0, null],
+    [0, 'Empty'],
     [1, 'OneTask'],
     [2, 'TwoTasks'],
     [3, 'ThreeTasks'],

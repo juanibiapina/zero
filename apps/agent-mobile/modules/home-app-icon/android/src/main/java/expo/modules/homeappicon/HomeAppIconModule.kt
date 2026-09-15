@@ -10,6 +10,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 class HomeAppIconModule : Module() {
   private val iconNames = listOf(
     "Default",
+    "Empty",
     "OneTask",
     "TwoTasks",
     "ThreeTasks",

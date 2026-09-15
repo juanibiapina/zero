@@ -4,6 +4,7 @@ const path = require('path');
 
 const ALIAS_PREFIX = 'MainActivityIcon';
 const ALTERNATES = {
+  Empty: '0-empty',
   OneTask: '1-task',
   TwoTasks: '2-tasks',
   ThreeTasks: '3-tasks',

@@ -101,6 +101,14 @@ describe('HomeAppIconSync', () => {
     mockFetchWaits.mockResolvedValue([]);
   });
 
+  it('selects the Empty alias after an empty Home hydrates', async () => {
+    mockFetchTasks.mockResolvedValue([]);
+
+    await renderSync();
+
+    await waitFor(() => expect(mockSetAppIcon).toHaveBeenCalledWith('Empty'));
+  });
+
   it('waits for hydration and then counts only tasks Home shows', async () => {
     let resolveTasks!: (tasks: Task[]) => void;
     mockFetchTasks.mockReset();

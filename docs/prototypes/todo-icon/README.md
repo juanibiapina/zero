@@ -41,8 +41,10 @@ geometry, so its corner has no overlapping-bar seam. The selected B Full design
 scales the original path by 1.45 and its material strokes by 1.28; the generated
 adaptive foreground occupies 520 × 377 pixels of its 1024 × 1024 layer.
 
-Runtime switching is Android-only. The static iOS icon, splash mark, mobile tab
-icon, and web favicon continue to derive from
-`apps/agent-mobile/assets/brand/todo-icon.svg`. Browser favicons remove its white
-background and enlarge the three-row artwork to about 90% of the canvas; native
-launcher and Apple touch outputs keep opaque backgrounds for platform masking.
+Runtime switching is Android-only. Android's primary APK and pre-hydration icon
+is the static three-row mark from `apps/agent-mobile/assets/brand/todo-icon.svg`;
+these five task-count designs are alternate launcher states selected after Home
+hydrates. The static iOS icon, splash mark, mobile tab icon, and web favicon also
+derive from that three-row source. Browser favicons remove its white background
+and enlarge the artwork to about 90% of the canvas; native launcher and Apple
+touch outputs keep opaque backgrounds for platform masking.

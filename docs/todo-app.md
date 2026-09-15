@@ -162,6 +162,31 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-15): **Three-row Android default
+icon.** Android's primary APK, pre-hydration, and signed-out icon now uses the
+approved static three-row mark. The dynamic launcher feature remains intact:
+a new explicit Empty alias carries the checkmark after a hydrated Home resolves
+to zero tasks, while one through four-plus keep their existing row states. The
+generator now emits safe static adaptive and monochrome layers; two runs
+produced identical hashes across all 31 outputs, and every existing task-count
+asset stayed byte-identical. Mobile's 22 suites / 153 tests, lint with 3 existing
+warnings, typecheck, Android export, clean prebuild, and local ARM64 native build
+passed. Prebuild and the APK contain one enabled static Default alias plus five
+disabled runtime aliases while leaving `MainActivity` and its deep links
+available. Development-client versionCode 81 was clean-installed on the Pixel 7;
+launcher search showed the three-row icon before first app launch, then a
+temporary non-data-mutating harness switched to the checkmark on background and
+back to the three-row default with exactly one alias enabled each time. The
+production source was restored, sign-in read existing production state without
+any write, and the real empty Home then selected the Empty alias normally. The
+whole-repo check reached the existing unrelated dashboard
+test shutdown timeout after the touched mobile checks passed. The four-ABI
+`1.2.0` preview APK then built locally as versionCode 82 with runtime fingerprint
+`e8aabe44052797dbbcb55bd179a7edeeb78896db`; its manifest retains the six
+launcher aliases and preview update channel. The link-shareable APK replaced
+versionCode 80 in the dedicated Drive folder and is the folder's only file. Plan:
+`docs/plans/todo-android-three-row-app-icon.md`.
+
 Implemented and Pixel-verified (2026-09-15): **Swipe project tasks to Today.**
 A right swipe on a mobile project task now reveals Today, writes the reactive
 local day through the existing offline-durable reschedule path, springs the

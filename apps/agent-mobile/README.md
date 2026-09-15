@@ -111,18 +111,19 @@ back only where the native component does not fit.
 
 Two approved layered square sources own the app's white/graphite identity:
 
-- `assets/brand/todo-icon.svg` is the source for static iOS, touch, splash, and
-  web adapters.
+- `assets/brand/todo-icon.svg` is the source for Android's primary APK icon and
+  the static iOS, touch, splash, and web adapters.
 - `assets/brand/task-count/template.svg` plus the state definitions in
   `bin/generate-todo-icons` own Android's launcher family. A checkmark represents
   an empty Home; one to three tasks show that many rows; four or more show four.
 
 Both sources use a full-bleed white square and a separate artwork group. They do
 not draw circular or rounded launcher masks. `bin/generate-todo-icons` publishes
-the opaque composite for iOS, Apple touch, and legacy Android; removes the
-background and enlarges the artwork to about 90% of the canvas for browser and
-Expo web favicons; removes the background at its authored scale for the splash;
-and scales backgroundless Android foregrounds into the adaptive safe zone.
+the opaque composite for Android's primary legacy icon, iOS, and Apple touch;
+removes the background and enlarges the artwork to about 90% of the canvas for
+browser and Expo web favicons; removes the background at its authored scale for
+the splash; and scales static and task-count Android foregrounds into the
+adaptive safe zone.
 Android and iOS apply their own launcher masks. The mobile
 `assets/images/favicon.png` file is an Expo web asset, not a native launcher
 input.
@@ -133,16 +134,17 @@ Sans) to regenerate the mobile PNGs, state SVGs, comparison sheet, and
 transparency, neutral pixels, Android's safe zone, and deterministic output. Do
 not edit generated PNGs, state SVGs, comparison image, or web copy independently.
 
-Android's primary launcher icon is the empty-state checkmark. Four native
-activity aliases provide the non-empty states with transparent foregrounds over
-white and matching monochrome silhouettes. The local `home-app-icon` native
-module leaves `MainActivity` enabled for Expo dev-client launches, the app
-scheme, and Clerk's hosted callback; only its five aliases carry the launcher
-filter. The app derives the state from the same hydrated `homeTasks` list Home
-renders, queues only a changed count bucket, and applies it when the app enters
-the background. Remote or date-based changes made while the process is stopped
-appear after the next app sync and background transition. iOS, the splash mark,
-the tab icon, and web remain static.
+Android's primary APK and pre-hydration launcher icon is the static three-row
+mark. Five native activity aliases provide the hydrated Home-count states — the
+empty checkmark plus one to four rows — with transparent foregrounds over white
+and matching monochrome silhouettes. The local `home-app-icon` native module
+leaves `MainActivity` enabled for Expo dev-client launches, the app scheme, and
+Clerk's hosted callback; only its six aliases carry the launcher filter. The app
+derives the state from the same hydrated `homeTasks` list Home renders, queues
+only a changed count bucket, and applies it when the app enters the background.
+Signed-out state restores the three-row default. Remote or date-based changes
+made while the process is stopped appear after the next app sync and background
+transition. iOS, the splash mark, the tab icon, and web remain static.
 
 Launcher and splash changes require a new native build. Application UI colors
 are independent of these assets. The EAS archive rules exclude generated
