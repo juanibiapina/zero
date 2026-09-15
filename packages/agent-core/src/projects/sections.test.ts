@@ -29,16 +29,24 @@ describe("projectsByStatus", () => {
       project("b", "backlog"),
       project("a"),
       project("w"),
+      project("blocked"),
       project("n"),
     ];
     const sections = projectsByStatus(
       list,
-      statusMapper({ b: "backlog", a: "active", w: "waiting", n: "next" }),
+      statusMapper({
+        b: "backlog",
+        a: "active",
+        w: "waiting",
+        blocked: "blocked",
+        n: "next",
+      }),
     );
     expect(sections.map((s) => s.status)).toEqual([
       "active",
       "next",
       "waiting",
+      "blocked",
       "backlog",
     ]);
   });

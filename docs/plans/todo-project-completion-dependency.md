@@ -1,45 +1,46 @@
-# Project state cleanup and completion dependencies
-
-> **Current delivery scope (2026-09-15):** implement and release Stage 1 only.
-> Project dependency behavior remains planned and receives no code or changelog
-> in this delivery.
+# Project completion dependencies
 
 ## Bottom line
 
-Build this in two stages on one branch.
+Let a user explicitly make one existing project depend on completion of another
+existing project. The dependent project gets a calculated **Blocked** status,
+appears in a separate Blocked section after Waiting and before Backlog, and lists
+its prerequisites under a separate **Depends on** section.
 
-1. **Pre-refactor commit:** replace the overloaded stored status with an honest
-   three-state model, rename it end to end, and reset local offline state instead
-   of carrying compatibility code.
-2. **Feature commits:** add explicit dependencies between existing projects and a
-   calculated **Blocked** status. Blocked sits after Waiting and before Backlog.
-   Removing the final blocker recalculates the project normally: Active for
-   arrived scheduled work, Waiting for another remaining reason, and Next
-   otherwise.
+Completing the final prerequisite removes the dependency and recalculates the
+dependent project normally:
 
-Project creation remains unchanged and creates no automatic dependency.
+- Active when arrived scheduled work exists;
+- Waiting when another ordinary condition or future date remains;
+- Next otherwise.
 
-## End-state model
+Project creation remains independent and unchanged. Blocking never changes task
+dates: all dependent tasks stay off Home while blocked, and arrived tasks return
+immediately when the final dependency settles or is removed.
 
-### Persisted state
+Use the existing waiting-condition storage shape:
+
+```ts
+{
+  kind: "project-status",
+  projectId: dependentProjectId,
+  refId: prerequisiteProjectId,
+  targetStatus: "done"
+}
+```
+
+Do not add a parent-project column or persist Blocked on Project. The dependency
+row is the source of truth; Blocked is calculated from unresolved dependency
+rows.
+
+## Prerequisite already complete
+
+Commit `929ede6d9` separated persisted Project state from calculated display
+status and shipped on 2026-09-15:
 
 ```ts
 type ProjectState = "in-play" | "backlog" | "done";
 
-type Project = {
-  // existing fields
-  state: ProjectState;
-};
-```
-
-- `in-play` means the app calculates where the project belongs.
-- `backlog` and `done` are deliberate user decisions.
-
-### Calculated status
-
-Before dependencies:
-
-```ts
 type ProjectDisplayStatus =
   | "active"
   | "next"
@@ -48,28 +49,11 @@ type ProjectDisplayStatus =
   | "done";
 ```
 
-After dependencies:
+Project persistence now uses `Project.state`; `projectDisplayStatus` owns
+presentation. This feature extends only `ProjectDisplayStatus` with `blocked`.
+No further Project schema migration is needed.
 
-```ts
-type ProjectDisplayStatus =
-  | "active"
-  | "next"
-  | "waiting"
-  | "blocked"
-  | "backlog"
-  | "done";
-```
-
-Final derivation order:
-
-1. persisted Backlog or Done;
-2. unresolved project-completion dependency → Blocked;
-3. arrived scheduled open task → Active;
-4. another unresolved condition → Waiting;
-5. future scheduled task → Waiting;
-6. Next.
-
-### Dependency representation
+## User flow
 
 For existing projects **Move house** and **Sell old house**:
 
@@ -77,7 +61,7 @@ For existing projects **Move house** and **Sell old house**:
 2. Tap its status pill.
 3. Tap **Depends on project…**.
 4. Pick **Sell old house**.
-5. See:
+5. Stay on **Move house** and see:
 
    ```text
    Blocked · after 🏠 Sell old house
@@ -88,39 +72,38 @@ For existing projects **Move house** and **Sell old house**:
        Must be completed first
    ```
 
-6. Tap the row to open the prerequisite, or use its separate remove action.
-7. Find **Move house** in a Blocked section after Waiting and before Backlog.
-8. Complete **Sell old house**. **Move house** becomes Active, Waiting, or Next
-   from its remaining work.
+6. Tap the dependency row to open **Sell old house**.
+7. Use the row's separate remove action to remove only that relationship.
+8. In Projects, find **Move house** under Blocked after Waiting and before
+   Backlog.
+9. Complete **Sell old house**. **Move house** automatically becomes Active,
+   Waiting, or Next from its remaining state.
 
-Several prerequisites are allowed. Compact context reads
-`after <icon> <title>` for one and `after N projects` for several.
+A project can have several prerequisites. Compact context reads
+`after <icon> <title>` for one prerequisite and `after N projects` for several.
 
-## Why the refactor comes first
+A Backlog project may retain dependency rows, but its deliberate Backlog state
+wins. After **Move out of backlog**, it displays Blocked while any prerequisite
+remains.
 
-The current `ProjectStatus` means two different things:
-
-- the database and write interface accept Active, Next, Waiting, Backlog, Done;
-- the UI calculates Active, Next, and Waiting and only meaningfully persists
-  “put in play,” Backlog, and Done.
-
-Adding Blocked to that type would let a calculated relationship state leak into
-storage, routes, and collection writes. The pre-refactor gives persistence and
-presentation separate interfaces before the feature adds another calculated
-state.
+Deleting a prerequisite remains allowed. Its confirmation names one affected
+project or reports the affected count, and distinguishes projects that will be
+unblocked from projects that retain other prerequisites. Confirming removes the
+incoming relationships and recalculates every dependent.
 
 ## Why Blocked is separate
 
-- **Waiting** — an in-play project is waiting on a person, event, ordinary
+- **Waiting** means an in-play project is waiting on a person, event, ordinary
   condition, or scheduled date.
-- **Blocked** — an in-play project cannot proceed until another project is Done.
-- **Backlog** — the user deliberately parked the project.
+- **Blocked** means an in-play project cannot proceed until another project is
+  Done.
+- **Backlog** means the user deliberately parked the project.
 
 Putting dependencies in Waiting mixes deterministic project sequencing with
 open-ended waits and clutters Waiting on. Putting them in Backlog overloads a
 manual “someday” state with an automatically reversible relationship.
 
-The final section order is:
+Final Projects order:
 
 ```text
 Active
@@ -132,439 +115,454 @@ Backlog
 
 ## Current state and constraints
 
-- The checkout is current with `origin/main` at `e3fbb5877` on 2026-09-15. The
-  only untracked file is this plan.
-- `projects.status` and `ProjectStatus` currently allow
-  `active | next | waiting | backlog | done`.
-- The UI writes only Next (“Put in play”), Backlog, and Done. Active, Next, and
-  Waiting are calculated by `projectDisplayStatus`; stored Active/Waiting rows
-  are already treated as in play.
-- New projects store Next. Historical rows can contain Active or Waiting.
-- Mobile and web persist entity snapshots locally, and mobile has a separate
-  durable outbox. The user has approved a full local refresh, including dropping
-  queued offline writes, so this plan adds no legacy row, route, or mutation
-  compatibility.
-- `waiting_conditions` already stores a project completion relation as dependent
-  `projectId`, prerequisite `refId`, `kind: "project-status"`, and
-  `targetStatus: "done"`.
-- Done projects leave the working Projects collection, so terminal dependency
-  settlement must persist before the prerequisite disappears.
-- The mobile app uses Expo SDK 57 and `@expo/ui` 57. The feature reuses the
-  existing status sheet and project picker and needs no native dependency or new
-  development-client build.
+- `ProjectDisplayStatus` is separate from `ProjectState`, so Blocked can remain
+  presentation-only.
+- `waiting_conditions` already stores dependent `projectId`, referenced `refId`,
+  `project-status` kind, and a target display status.
+- `WaitsApi.add` can already create the required row, but callers must currently
+  know its internal kind/target fields.
+- Mobile renders structured waiting conditions but can create only free-text
+  conditions. Web exposes a generic “project reaches status” builder.
+- Both detail screens currently place all waiting-condition kinds under Waiting
+  on and label structured rows `auto`.
+- Mobile's status pill already opens the lifecycle-action sheet.
+- Mobile's `ProjectPickerSheet` already supports search, bounded scrolling,
+  keyboard docking, a configurable title, and selected-row state. It always
+  includes No project and has no unfiltered empty state.
+- Done projects leave the working Projects collection. A client-only comparison
+  can see optimistic Done but cannot keep a condition satisfied after the target
+  row disappears.
+- Project deletion removes conditions owned by the deleted project, but not
+  incoming project-status conditions that reference it.
+- `homeCallToAction` does not know Blocked and would misclassify an all-Blocked
+  working set.
+- The mobile app is Expo SDK 57. This feature adds no native dependency or
+  configuration.
 
-## Stage 1 — Pre-refactor commit
+## Technical design
 
-### Goal
+### 1. Extend only calculated display status
 
-Land one behavior-preserving commit before dependency work:
+Add `blocked` to `ProjectDisplayStatus`. Keep `ProjectState`, Project REST
+schemas, and Project collection writes unchanged.
 
-```text
-refactor(todo): separate project state from display status
-```
+Change `projectDisplayStatus` precedence to:
 
-The commit removes `ProjectStatus` rather than preserving it as a legacy type.
-Every active module uses either `ProjectState` or `ProjectDisplayStatus`.
+1. persisted Backlog or Done;
+2. unresolved project-completion dependency → Blocked;
+3. arrived scheduled open task → Active;
+4. another unresolved condition → Waiting;
+5. future scheduled task → Waiting;
+6. Next.
 
-### 1. Rename the persisted model end to end
+A completion dependency is a hard blocker. An arrived task cannot make the
+project Active until the dependency settles. Ordinary conditions retain their
+current softer behavior: arrived scheduled work can still override them.
 
-In shared code:
+When the final dependency disappears, do not write Project state or alter task
+dates. Run the same derivation again; any arrived dated tasks return to Home
+immediately.
 
-- replace `ProjectStatus` with `ProjectState` and `ProjectDisplayStatus`;
-- rename `Project.status` to `Project.state`;
-- rename `ProjectsApi.setStatus` to `setState`;
-- rename the project collection verb and durable mutation key from
-  `setProjectStatus` to `setProjectState`;
-- create projects optimistically with `state: "in-play"`;
-- keep Done as the only state that leaves the working collection.
+### 2. Add one deep dependency module
 
-In the server:
+Create a focused pure module under `packages/agent-core/src/projects/` that owns
+all project-dependency interpretation:
 
-- rename the `projects.status` SQLite column to `state`;
-- normalize Active, Next, and Waiting rows to `in-play`;
-- rename store, `UserDO`, and route vocabulary to state;
-- change project request/response JSON from `status` to `state`;
-- accept only `in-play | backlog | done` at persistence routes;
-- default new projects to In-play.
-
-In callers:
-
-- **Put in play** writes `in-play`;
-- Backlog and Done write their matching state;
-- list grouping, status labels, and project headers use
-  `ProjectDisplayStatus`;
-- `projectDisplayStatus` reads `project.state`, returns stored Backlog/Done, and
-  calculates Active/Next/Waiting for In-play.
-
-Rename `STATUS_LABELS` to a display-specific name and remove `ALL_STATUSES` or
-replace it with a value whose type cannot be passed to `setState`.
-
-### 2. Migrate authoritative server data
-
-Add `0053_project_state.sql` and register it.
-
-The migration rebuilds or renames the Project column while mapping:
-
-```text
-active  → in-play
-next    → in-play
-waiting → in-play
-backlog → backlog
-done    → done
-```
-
-Preserve every other field and rebuild the open-project partial index against
-`state != 'done'`.
-
-No legacy value remains in authoritative SQLite after migration.
-
-### 3. Add one central cache-version mechanism
-
-There is currently a per-entity `EntitySpec.schemaVersion`, defaulted to the
-literal `1` in `collection/base.ts`. The persistence adapter already resets a
-collection automatically when that integer changes, but there is no single
-version that invalidates every synchronized entity cache.
-
-Add `packages/agent-core/src/collection/version.ts` as the one control point:
-
-```ts
-export const ENTITY_CACHE_VERSION = 2;
-export const OFFLINE_OUTBOX_VERSION = 2;
-```
-
-Use `ENTITY_CACHE_VERSION` for every persisted entity collection in
-`collection/base.ts` and remove the per-entity `schemaVersion` option. A single
-future bump then clears Capture/Task/Project/WaitingCondition synchronized
-snapshots on mobile and web. Each collection refills through its normal server
-fetch. This is the reusable, non-destructive cache-invalidation mechanism.
-
-The outbox is not a cache: it contains unsent writes. Keep its epoch separate so
-a routine cache refresh cannot silently discard user work. Use
-`OFFLINE_OUTBOX_VERSION` in:
-
-- the mobile outbox SQLite filename;
-- a versioned web IndexedDB outbox adapter supplied to each executor.
-
-Commit 1 changes both constants because its renamed Project row and mutation verb
-make old queued writes unreadable, and dropping those writes is explicitly
-accepted. A future cache-only reset changes only `ENTITY_CACHE_VERSION`.
-
-Do not write hydration adapters or retain old outbox mutation names. Treat the
-server as authoritative after the reset. Old local tables/outbox databases may
-remain unreachable until normal platform storage cleanup; new code never opens
-or replays them.
-
-This mechanism covers server-backed entity snapshots and the mutation outbox. It
-deliberately does not clear Clerk credentials, timezone preferences, or the
-separately versioned icon-suggestion hint cache.
-
-### 4. Keep visible behavior unchanged
-
-Update all shared, server, web, and mobile fixtures and callers in the same
-commit. The screens still show Active, Next, Waiting, Backlog, and Done exactly
-as before. Only the internal persisted concept changes.
-
-Update `docs/entities/project.md` and `docs/todo-app.md` with the state/status
-split. Add no product changelog because the intended product behavior is
-unchanged; record the one-time local refresh in the technical documentation.
-
-### 5. Verify Commit 1 independently
-
-Tests must prove:
-
-- `ProjectState` has exactly In-play, Backlog, Done;
-- `ProjectDisplayStatus` has exactly Active, Next, Waiting, Backlog, Done;
-- display values cannot reach `setState`;
-- migration `0053` preserves rows and maps every old value correctly;
-- new projects persist In-play;
-- project REST JSON uses `state` and rejects the old `status` field;
-- collection writes use `setProjectState` and the new Project shape;
-- every persisted entity collection receives `ENTITY_CACHE_VERSION`;
-- one cache-version bump resets all synchronized entity snapshots;
-- mobile and web outboxes are namespaced by `OFFLINE_OUTBOX_VERSION`;
-- a cache-only bump does not clear queued writes;
-- existing display derivation produces the same visible result for equivalent
-  In-play fixtures;
-- all current Projects, Home, and project-detail screen behavior remains green.
-
-Pixel 7 verification occurs with the new Worker and new Metro bundle together:
-
-1. Launch online so the refreshed local collections refill from the server.
-2. Inspect project grouping and one project detail read-only.
-3. Create a throwaway project.
-4. Move it to Backlog, put it back in play, and delete it.
-5. Relaunch offline after the online refill and confirm the new Project snapshot
-   loads locally.
-
-The dependency feature starts only after this commit is green and device-verified.
-
-### Stage 1 implementation result
-
-Implemented and pushed to `main` as commit `929ede6d9` on 2026-09-15. The
-Cloudflare `zero-api` build succeeded. Agent-core (20 files / 142 tests), API (83
-/ 1031), web (3 / 38), and mobile (21 suites / 140 tests) passed with lint and
-typecheck; Android export passed. Existing warnings remained unchanged.
-
-Pixel 7 verification used one throwaway project: Next → Backlog → Next persisted
-through the status pill, then Delete removed it. After the collections had
-refilled online, disabling Wi-Fi/mobile data and force-stopping the dev client
-still cold-loaded Home and Projects from the version-2 snapshots. Connectivity
-was restored and no existing entity changed. Local preview APK `1.0.0`
-versionCode 76 built successfully and replaced versionCode 75 in the dedicated
-Google Drive folder. Stage 2 remains unimplemented by explicit scope decision.
-
-## Stage 2 — Explicit project dependencies
-
-### 1. Add Blocked only to display status
-
-Extend `ProjectDisplayStatus` with `blocked`. Do not add it to `ProjectState`,
-SQLite, project write routes, or collection persistence verbs.
-
-Apply the final derivation and section order defined above. A stored Backlog or
-Done still wins. Removing the final dependency reruns normal derivation; it does
-not write In-play or force Next.
-
-### 2. Add one dependency module
-
-Keep WaitingCondition as the stored entity. Add:
-
-```ts
-waitsApi.dependOnProject(dependentProjectId, prerequisiteProjectId)
-```
-
-It owns the existing internal shape:
-
-```ts
-{
-  kind: "project-status",
-  projectId: dependentProjectId,
-  refId: prerequisiteProjectId,
-  targetStatus: "done"
-}
-```
-
-A focused pure module in `@zero/agent-core` owns:
-
-- completion-dependency identification;
-- unresolved dependencies for one project;
+- `isProjectCompletionDependency(condition)`;
+- unresolved dependency rows for one dependent project;
+- referenced prerequisite lookup;
 - candidate filtering;
 - direct and transitive cycle detection;
 - one/many/missing-target context;
-- oldest-dependency sort key.
+- oldest dependency timestamp for Blocked ordering;
+- incoming dependents and accurate prerequisite-removal impact copy.
 
-The graph is acyclic. Exclude self, duplicate prerequisites, Done projects, and
-candidates that can already reach the dependent.
+Its inputs are plain Project and WaitingCondition arrays. All dependencies are
+in-process, so tests call this interface directly; no adapter is needed.
 
-### 3. Represent Blocked separately
+Add a narrow convenience verb to `WaitsApi`:
 
-Add shared status context:
+```ts
+dependOnProject(dependentProjectId, prerequisiteProjectId): Transaction
+```
 
-- Waiting condition: `for <elapsed>`;
-- future date: `until <day>`;
-- one dependency: `after <icon> <title>`;
-- several dependencies: `after N projects`.
+It delegates to the existing `addWaitingCondition` collection action with
+`kind: "project-status"`, `targetStatus: "done"`, and null text. Keep the durable
+outbox mutation name `addWaitingCondition`; the local row shape and persistence
+contract do not change.
 
-Split project detail into:
+Screens use `dependOnProject` and never construct the storage fields.
 
-- **Waiting on** for free-text, task, and historical non-completion conditions;
-- **Depends on** for project-completion prerequisites.
+### 3. Keep the dependency graph acyclic
 
-A dependency row shows the prerequisite icon/title, **Must be completed first**,
-navigation, and a separate remove action. Do not show `auto`. Hide empty
-sections.
+The proposed edge direction is:
 
-### 4. Add explicit linking
+```text
+dependent → prerequisite
+```
 
-Mobile:
+Adding A → B is invalid when B can already reach A through completion-dependency
+edges.
 
-1. Add **Depends on project…** to the status sheet.
-2. Close the native status sheet before opening the plain React Native picker.
-3. Deepen the picker with configurable title, optional No-project row, supplied
-   candidates, and **No available projects**.
-4. Call `dependOnProject` and keep the dependent screen open.
-5. Navigate through dependency rows.
+Client candidate filtering excludes:
 
-Web:
+- the dependent project itself;
+- an existing direct prerequisite;
+- Done projects, already absent from the working collection;
+- any candidate that creates a direct or transitive cycle.
 
-- rename the existing structured choice to **Project completion**;
-- remove its generic target-status picker;
-- use the same dependency verb and candidate rules;
-- render Depends on separately.
+The server repeats these checks because a client can be stale. Server validation
+also rejects a missing dependent, missing prerequisite, or prerequisite that is
+already Done.
 
-Keep free-text Waiting and every project-creation flow unchanged.
+Use `409 Conflict` for a well-formed relationship that cannot be added. Keep
+`400` for malformed ids/kinds/fields and `404` for ordinary missing-resource
+routes.
 
-### 5. Enforce and settle on the server
+### 4. Calculate Blocked presentation in one shared module
 
-Add store behavior for:
+Keep `waitingBadge` focused on Waiting. Add a higher-level status-context helper
+that returns the compact label and within-section sort key:
 
-- prerequisite lookup;
-- missing-side, self, duplicate, and cycle validation;
-- idempotent `resolveForCompletedProject(projectId)`;
+- condition wait: `for <elapsed>`;
+- date wait: `until <day>`;
+- one project dependency: `after <icon> <title>`;
+- several dependencies: `after N projects`;
+- missing target during recovery: `after another project`.
+
+Both Projects screens and both project headers consume this interface. Do not
+repeat grammar or ordering branches per surface.
+
+Within Blocked, sort by the oldest unresolved dependency first. The separate
+section supplies the cross-status placement, so Waiting's existing
+condition-before-date order remains unchanged.
+
+Compact context stays on one line and truncates before it competes with the
+dependent project's own title.
+
+### 5. Represent dependencies separately from Waiting on
+
+Split each project's open conditions into:
+
+- project-completion dependencies;
+- every other waiting condition.
+
+Render dependencies under **Depends on**. One row contains:
+
+- prerequisite emoji;
+- prerequisite title;
+- secondary text **Must be completed first**;
+- disclosure indicator;
+- full-row navigation to `/projects/{prerequisiteId}`;
+- a separate accessible remove action.
+
+Do not display `auto`; it describes implementation rather than user intent.
+
+Keep free-text, task-done, and historical non-completion project-status rows
+under **Waiting on**. Hide either section when empty.
+
+### 6. Add the explicit mobile linking action
+
+Add **Depends on project…** to the existing mobile status sheet.
+
+The screen owns the presentation sequence:
+
+1. close the native `@expo/ui` status sheet;
+2. open the plain React Native Project picker;
+3. pass candidates from the shared dependency module;
+4. call `waitsApi.dependOnProject(currentProject.id, selectedProject.id)`;
+5. keep the current project screen open;
+6. report persistence failures through the existing error channel.
+
+Do not nest the React Native picker inside the native sheet.
+
+Deepen `ProjectPickerSheet` only as required:
+
+- make the No-project row optional;
+- allow supplied empty-state copy when no candidates exist;
+- retain its existing configurable title and search behavior.
+
+Dependency configuration:
+
+```text
+title: Depends on
+show No project: false
+empty copy: No available projects
+```
+
+Keep the add drawer's free-text Waiting mode and every Project creation path
+unchanged.
+
+### 7. Tighten the web linking flow
+
+In the existing Waiting-condition builder:
+
+- rename the option to **Project completion**;
+- remove the generic target-status picker from this path;
+- show only the prerequisite picker;
+- filter candidates through the shared dependency module;
+- call `waitsApi.dependOnProject`.
+
+Render Depends on separately using web-native controls. Do not share React
+renderers with mobile; share only domain/presentation data.
+
+### 8. Persist terminal settlement on the server
+
+Add `DbProjectStore.get(id)` so the `UserDO` composition root can validate
+working or Done projects.
+
+Deepen `DbWaitingConditionStore` with:
+
+- dependency edge listing/checking for server graph validation;
+- `addProjectDependency(id, dependentId, prerequisiteId)`;
+- `resolveForCompletedProject(projectId)`;
 - `deleteByReferencedProject(projectId)`;
-- stable first `resolvedAt`.
+- idempotent single-condition resolution that preserves its first `resolvedAt`.
+
+`addProjectDependency` inserts the existing waiting-condition shape. It does not
+create a new table or entity type.
 
 Compose in `UserDO`:
 
-- dependency add requires two existing projects and an unfinished prerequisite;
-- project Done resolves incoming dependencies before returning;
-- project deletion removes incoming dependencies in addition to the current
-  task/owned-condition cascade.
+- validate both projects and the graph before dependency insert;
+- after `setProjectState(id, "done")` succeeds, resolve every incoming completion
+  dependency before returning;
+- on hard delete, remove incoming dependency rows in addition to the existing
+  tasks and owned-waits cascade; both clients show the locally known affected and
+  unblocked project impact before confirmation.
 
-Keep the existing waiting-condition route and row shape. Map graph conflicts to
-`409`. Log ids and counts only.
+In `routes/waits.ts`, recognize the completion-dependency shape and call the
+validated dependency path. Return the same `{ condition }` response. Map domain
+conflicts to 409 and log ids/counts only, never titles.
 
-After a Done project-state transaction persists, mobile and web refetch waits.
-The optimistic Done state gives immediate feedback; persisted `resolvedAt` keeps
-the relation settled after the prerequisite leaves the working collection.
+After a Done state transaction persists, mobile and web refetch waits. During
+the optimistic transaction the prerequisite row still carries Done, providing
+immediate local feedback. Persisted `resolvedAt` keeps the relationship settled
+after the prerequisite leaves the working collection and across restarts or
+other devices.
 
-Add `0054_resolve_completed_project_dependencies.sql` for historical open
-completion dependencies whose prerequisite is already Done.
+Add migration `0054_resolve_completed_project_dependencies.sql`. It changes no
+schema. It sets `resolvedAt` on historical open project-status/Done conditions
+whose referenced project is already stored as Done.
 
-### 6. Wire Blocked into Home
+### 9. Wire Blocked into Home's empty state
 
-`homeCallToAction` counts Blocked separately.
+Extend `HomeCallToAction` with Blocked counts.
 
-- Mixed Next/Waiting/Blocked states include the Blocked count.
-- An all-Blocked set shows **Everything is blocked** and
-  **Review dependencies**.
-- It never falls through to Create-first-project or Bring-forward copy.
+- Mixed Next/Waiting/Blocked working sets include non-zero counts in the summary.
+- An all-Blocked set shows **Everything is blocked** and a
+  **Review dependencies** action to Projects.
+- Blocked projects must not fall through to **Create your first project** or
+  **Bring a project forward**.
 
-## Commit sequence
+`homeTasks` already gates project tasks through `projectDisplayStatus`; the hard
+Blocked status hides those tasks without another rule.
 
-### Commit 1
+## Implementation sequence
 
-```text
-refactor(todo): separate project state from display status
-```
-
-Includes the clean rename, migration `0053`, central cache/outbox version
-controls, a full synchronized-cache reset, a full outbox epoch reset, callers,
-tests, and technical docs. It has no compatibility layer and must be green
-before feature code starts.
-
-### Commit 2
+### Commit 1 — Dependency domain and durable settlement
 
 ```text
 feat(todo): add project completion dependency model
 ```
 
-Includes the dependency verb/graph, server validation and settlement, deletion
-cleanup, migration `0054`, and domain/store/route tests.
+Implement:
 
-### Commit 3
+- shared dependency module and `dependOnProject` convenience verb;
+- cycle/candidate rules;
+- server validation;
+- completion settlement and delete cleanup;
+- migration 0054;
+- pure, collection, store, route, and cross-store tests.
+
+This commit may remain user-inaccessible until Commit 2. Keep both commits in the
+same branch/PR or push them together so no partial product ships.
+
+### Commit 2 — Blocked status and linking surfaces
 
 ```text
 feat(todo): show project dependencies as blocked
 ```
 
-Includes Blocked derivation/section/context, mobile/web linking, Depends-on
-presentation, Home handling, surface tests, changelogs, docs, and Pixel evidence.
+Implement:
 
-Commits 2 and 3 ship together.
+- Blocked derivation and section order;
+- shared compact status context;
+- mobile status action and picker configuration;
+- mobile/web Depends-on sections and navigation/removal;
+- simplified web Project completion builder;
+- Home empty-state handling;
+- screen tests;
+- mobile/web changelogs and current documentation;
+- Pixel 7 evidence.
 
 ## Alternatives considered
 
-- **Compatibility adapters:** rejected by explicit decision. Local state and
-  queued offline writes may be discarded and fetched again.
-- **Keep the serialized `status` name:** rejected. With reset accepted, rename
-  the concept fully to `state` instead of preserving ambiguity.
-- **Add Blocked to persisted state:** rejected. It is derived from relationship
-  rows and would duplicate state.
-- **Use Waiting:** rejected because it mixes project sequencing with people,
-  events, conditions, and dates.
-- **Use Backlog:** rejected because Backlog is a manual parking decision.
-- **Force Next after unblocking:** rejected because arrived scheduled work makes
-  the project Active.
-- **Link during project creation:** out of scope. Dependencies are explicit links
-  between existing projects.
+### Link projects during creation
+
+Rejected for this increment. Creation timing does not define the relationship.
+Explicit linking works for any two existing projects and keeps Project creation
+predictable.
+
+### Put dependencies in Waiting
+
+Rejected. It mixes deterministic sequencing with people, events, ordinary
+conditions, and dates, and clutters Waiting on.
+
+### Put dependencies in Backlog
+
+Rejected. Backlog is a deliberate parking decision and does not identify what
+must finish.
+
+### Persist Blocked as Project state
+
+Rejected. Blocked follows from unresolved dependency rows. Persisting both would
+duplicate state and permit disagreement.
+
+### Add `dependsOnProjectId` to Project
+
+Rejected. It duplicates waiting conditions and permits only one prerequisite.
+
+### Force Next after unblocking
+
+Rejected. Arrived scheduled work makes the project Active; another remaining
+wait keeps it Waiting. Next is correct only when neither exists.
+
+### Add a new dependency table
+
+Rejected. The existing waiting-condition row already carries ownership,
+reference, target status, timestamps, offline insertion, and removal behavior.
 
 ## System-wide impact
 
-- Commit 1 is a breaking internal data-shape change across server, web, mobile,
-  local snapshots, and outbox storage.
-- Authoritative server data is migrated without loss.
-- `ENTITY_CACHE_VERSION` resets all synchronized entity snapshots once; the
-  server refills them.
-- `OFFLINE_OUTBOX_VERSION` separately discards queued writes once for this
-  breaking refactor.
-- Old mobile bundles stop syncing after the new Worker deploys; the new client
-  bundle must be used with the new server. This is accepted by the no-compatibility
-  decision.
-- Commit 2 adds Blocked presentation and dependency settlement without changing
-  Project persistence again.
-- Pushes affecting API/web redeploy `zero-api`; space deployments to avoid
-  repeated Durable Object resets.
+- **Project persistence:** unchanged; Blocked never crosses `ProjectState`.
+- **WaitingCondition persistence:** same row shape; completion can now persist
+  `resolvedAt` for terminal dependencies.
+- **Projects:** new Blocked section on mobile and web.
+- **Home:** blocked project tasks stay hidden; empty-state copy recognizes
+  Blocked.
+- **Project detail:** dependencies move to a navigable Depends-on section.
+- **Offline:** dependency add/remove uses the existing durable waiting outbox.
+  No entity cache or outbox version bump is needed because row and mutation
+  shapes remain compatible.
+- **Deletion:** deleting either side leaves no dangling dependency row.
+- **Deployment:** API/web changes redeploy `zero-api`; mobile remains a separate
+  preview release.
 
 ## Out of scope
 
-- Any legacy status/state, REST, local-row, or outbox compatibility.
-- Preserving queued offline writes across Commit 1.
 - Automatic creation-time dependencies.
-- Creating prerequisites from the picker.
-- Parent/child ownership, nested project trees, inherited tasks, or cascade
-  completion.
-- Full graph visualization or transitive explanatory copy.
-- Manual dependency ordering.
+- Creating a prerequisite from the dependency picker.
+- Parent/child ownership or nested project trees.
+- Inherited tasks or cascade completion.
+- A full dependency graph screen.
+- Transitive copy such as “blocked through B on C”.
+- Manual ordering of dependency rows.
 - Persisting reversible task-done or non-terminal project-status satisfaction.
+- Changing Backlog precedence.
 - New native packages or collection-factory verb kinds.
 
 ## Test strategy
 
-### Refactor tests
+### Shared dependency tests
 
-- SQL migration maps every old value and preserves every Project field.
-- Store and route contracts use only `state`.
-- Old `status` requests fail validation.
-- Shared/client Project rows contain `state`, never `status`.
-- Collection mutation is `setProjectState`.
-- Every entity cache uses the central `ENTITY_CACHE_VERSION` and resets on its
-  bump.
-- Mobile/web outboxes use the central `OFFLINE_OUTBOX_VERSION`, and changing only
-  the cache version leaves them intact.
-- Active/Next/Waiting display derivation remains behaviorally identical.
-- Existing screen suites retain their visible behavior.
-- Typecheck prevents passing display values into persistence.
+Test through the pure dependency interface:
 
-### Dependency tests
+- recognize only project-status/Done conditions;
+- return one or several prerequisites for a dependent;
+- exclude resolved rows;
+- reject self and duplicate edges;
+- detect direct and transitive cycles;
+- accept an acyclic edge;
+- summarize one, many, and missing targets;
+- return the oldest dependency timestamp.
 
-- Recognition excludes non-completion conditions.
-- Graph validation rejects self, duplicate, direct cycle, and transitive cycle.
-- Creation writes the existing condition shape exactly once.
-- Completion resolves matching incoming dependencies only and is idempotent.
-- Delete removes incoming and owned relations without touching unrelated rows.
-- Migration `0054` repairs only dependencies whose prerequisite is Done.
+### Derivation and Home tests
 
-### Display/surface tests
-
-- Blocked outranks Active and Waiting for In-play projects.
-- Backlog and Done outrank Blocked.
-- Unblocking derives Active, Waiting, or Next correctly.
+- In-play plus dependency → Blocked.
+- Blocked overrides an arrived task and ordinary Waiting.
+- Backlog and Done override Blocked.
+- Removing the final dependency leaves task dates unchanged, yields Active with
+  arrived work, and returns that work to Home immediately.
+- Removing it yields Waiting with another condition/date.
+- Removing it yields Next otherwise.
 - Section order is Active, Next, Waiting, Blocked, Backlog.
-- One/many/missing-target context is correct.
-- Home task visibility and empty state handle Blocked.
-- Mobile status sheet, picker filtering, link, navigation, and removal work.
-- Web Project completion and Depends-on presentation match.
-- Creation remains independent.
+- `homeTasks` hides blocked-project tasks.
+- mixed and all-Blocked Home calls to action are correct.
+
+### Collection tests
+
+- `dependOnProject` creates the exact existing condition shape.
+- It uses `addWaitingCondition` as the durable mutation.
+- Optimistic insertion changes calculated status immediately.
+- Removal remains idempotent and offline-replayable.
+
+### Server tests
+
+Use the real do-orm SQLite stand-in:
+
+- valid acyclic dependency persists exactly once;
+- missing side, Done prerequisite, self, duplicate, direct cycle, and transitive
+  cycle fail without a row;
+- completing a prerequisite resolves only matching incoming dependencies;
+- resolution preserves the first timestamp and replay changes zero rows;
+- deleting a prerequisite removes incoming dependencies;
+- deleting a dependent removes owned conditions through the existing cascade;
+- unrelated conditions remain;
+- migration 0054 repairs only open completion dependencies whose prerequisite is
+  Done.
+
+The `UserDO` has no non-workerd local harness. Follow the existing
+cross-store composition-test pattern over one shared mock database.
+
+### Mobile tests
+
+- status sheet exposes **Depends on project…**;
+- status sheet closes before the picker opens;
+- picker excludes invalid/cyclic candidates;
+- picker has no No-project row and shows **No available projects** when empty;
+- selection writes dependent/prerequisite ids and keeps the screen open;
+- header reads `Blocked · after …`;
+- dependency appears under Depends on, not Waiting on;
+- row navigation opens the prerequisite;
+- remove deletes only that relation;
+- Done refetches waits after persistence;
+- prerequisite deletion reports affected/unblocked dependents before confirmation;
+- creation and free-text Waiting remain unchanged.
+
+### Web tests
+
+- builder offers Project completion without a target-status picker;
+- invalid candidates are absent;
+- selection creates the dependency;
+- Depends on is separate and navigable;
+- Projects renders Blocked after Waiting and before Backlog;
+- completion refetches and derives Active/Waiting/Next correctly;
+- prerequisite deletion reports affected/unblocked dependents before confirmation.
 
 ## Documentation and changelogs
 
-Commit 1 updates `docs/entities/project.md` and `docs/todo-app.md` with the
-state/display split, the central cache/outbox versions, and the one-time offline
-refresh. It adds no product changelog because project behavior is unchanged.
+Load the `changelog` skill before editing.
 
-The feature commit loads the `changelog` skill and updates:
+Update in the user-visible commit:
 
-- `apps/agent-mobile/CHANGELOG.md`;
-- `apps/agent-web/CHANGELOG.md`;
-- `docs/entities/project.md`;
-- `docs/entities/waiting-condition.md`;
-- `docs/todo-app.md`.
+- `apps/agent-mobile/CHANGELOG.md` — existing projects can depend on another;
+  Blocked and Depends on make the relationship visible and completion clears it.
+- `apps/agent-web/CHANGELOG.md` — same capability and durable unblocking.
+- `docs/entities/project.md` — Blocked display status, section order, explicit
+  linking, multiple prerequisites, navigation/removal, and post-unblock
+  derivation.
+- `docs/entities/waiting-condition.md` — completion-dependency subset, acyclic
+  graph, persisted terminal settlement, and separate presentation.
+- `docs/todo-app.md` — shipped result and Pixel evidence.
 
-Do not add an Agent changelog entry.
+Do not add an Agent changelog entry. This belongs to the mobile and web todo
+products.
 
 ## Verification
 
-Run affected package checks because this NixOS host cannot start `workerd`:
+Stop Metro and local Gradle before checks. This NixOS host cannot start
+`workerd`, so run affected packages directly:
 
 1. `gob run pnpm --filter @zero/agent-core test`
 2. `gob run pnpm --filter @zero/agent-core lint`
@@ -578,80 +576,72 @@ Run affected package checks because this NixOS host cannot start `workerd`:
 10. `gob run pnpm --filter @zero/agent-mobile test`
 11. `gob run pnpm --filter @zero/agent-mobile lint`
 12. `gob run pnpm --filter @zero/agent-mobile typecheck`
-13. `gob run pnpm --filter @zero/agent-mobile exec expo export --platform android --output-dir /tmp/zero-agent-mobile-project-dependency`
+13. `gob run pnpm --filter @zero/agent-mobile exec expo export --platform android --output-dir /tmp/zero-agent-mobile-project-dependencies`
 
-GitHub Actions supplies whole-repo checks and the deploy dry-run.
+GitHub Actions supplies whole-repo checks and the deploy dry run.
 
-### Pixel 7 — Commit 1
+### Pixel 7 proof
 
-Use the new Worker and new Metro bundle together:
-
-1. Launch online and let every collection refill.
-2. Inspect project grouping and one detail screen read-only.
-3. Create a throwaway project.
-4. Move it to Backlog, put it in play, and delete it.
-5. Relaunch offline and confirm the refreshed Project snapshot loads.
-
-### Pixel 7 — Feature
+Use the development client, USB Metro, and Maestro. The client targets
+production, so mutate only throwaway entities:
 
 1. Create throwaway dependent and prerequisite projects.
 2. Link them through **Depends on project…**.
 3. Capture the Blocked header and Depends-on row.
-4. Navigate through the prerequisite row.
+4. Navigate through the prerequisite row and Back.
 5. Verify Blocked appears after Waiting and before Backlog.
 6. Remove the relation and verify Next.
-7. Add an arrived scheduled task, restore/remove the relation, and verify Active.
-8. Delete the task and both projects. Leave no throwaway production data.
+7. Add an arrived scheduled task, restore the relation, and verify the task leaves
+   Home while its date stays unchanged.
+8. Delete the prerequisite, verify the confirmation names the dependent, and
+   verify the dependent becomes Active with its dated task back on Home.
+9. Delete the task and dependent; confirm no throwaway condition remains.
 
-Automated tests prove Done settlement without leaving a hidden completed project
-in production. No EAS rebuild is required.
+Automated server tests prove the Done path without leaving a hidden completed
+throwaway project in production. No EAS rebuild is required.
 
 ## Skills to use
 
-- `tdd` — land the refactor and feature through red-green-refactor.
-- `testing` — test through state, derivation, store, collection, and screen
+- `tdd` — implement each domain/server/surface slice through one failing behavior
+  at a time.
+- `testing` — test through module, store, collection, route, and screen
   interfaces.
-- `deep-modules` and `vocabulary` — keep persisted state and calculated status
-  separate and localize dependency behavior.
+- `deep-modules` and `vocabulary` — keep dependency interpretation in one deep
+  module and Blocked out of persistence.
 - `expo-overview`, `expo-ui`, and `expo-data-fetching` — preserve SDK 57 native
-  controls and verify the deliberate offline refresh.
-- `impeccable` — verify Blocked and Depends on remain compact and direct.
-- `changelog` and `documentation` — update the technical model with Commit 1 and
-  user-visible behavior with the feature.
-- `reproducible-locally` — retain package and Pixel evidence.
-- `git-commit` — keep Commit 1 independently green and commit feature behavior
-  with tests and release notes.
+  presentation and offline writes/refetch.
+- `impeccable` — verify Blocked and Depends on are compact, clear, and scannable.
+- `changelog` and `documentation` — ship user-facing notes and current entity
+  sources of truth with the feature.
+- `reproducible-locally` — retain package, migration, Pixel, and screenshot
+  evidence.
+- `git-commit` — keep domain and user-visible commits independently green.
 
 ## Acceptance criteria
 
-### Commit 1
-
-- Project persistence uses `state: in-play | backlog | done` end to end.
-- Calculated status has a separate type.
-- No `ProjectStatus`, Project `status` field, `setProjectStatus`, or legacy status
-  route remains.
-- Authoritative server rows migrate without loss.
-- One `ENTITY_CACHE_VERSION` bump resets every synchronized entity snapshot;
-  one separate `OFFLINE_OUTBOX_VERSION` bump discards queued writes for this
-  refactor.
-- Existing Active/Next/Waiting/Backlog/Done presentation remains unchanged.
-- Package checks, Android export, online refill, and offline relaunch pass before
-  dependency work starts.
-
-### Dependency feature
-
-- Users explicitly link existing projects; creation remains independent.
-- Self, duplicate, missing-target, and cyclic links are rejected.
-- Blocked exists only as calculated status.
-- Section order is Active, Next, Waiting, Blocked, Backlog.
-- Dependencies appear under Depends on as navigable project rows, not under
-  Waiting on.
-- Blocked projects hide Home tasks.
-- Unblocking derives Active for arrived work, Waiting for another reason, and
-  Next otherwise.
+- A user can explicitly make one existing project depend on another existing
+  project's completion.
+- Creation flows remain independent.
+- Self, duplicate, missing-target, Done-target, and cyclic relationships are
+  rejected.
+- One or several prerequisites can block the same project.
+- Blocked exists only in `ProjectDisplayStatus`; Project persistence remains
+  In-play/Backlog/Done.
+- Project section order is Active, Next, Waiting, Blocked, Backlog on mobile and
+  web.
+- Dependency rows appear under Depends on as navigable project identities and do
+  not clutter Waiting on.
+- Compact status/list copy identifies one prerequisite or summarizes several.
+- A blocked project's tasks stay off Home without changing their dates.
+- Removing/completing the final prerequisite returns arrived work to Home
+  immediately and derives Active, Waiting for another reason, or Next.
+- Deleting a prerequisite warns about affected and newly unblocked dependents,
+  then removes incoming relationships.
 - Completion settles incoming dependencies before the prerequisite leaves the
-  working set; deletion removes incoming links.
-- Home empty-state copy handles Blocked.
-- Agent-core, agent-api, web, and mobile checks pass; Android export and both
-  Pixel gates pass; all throwaway production data is deleted.
-- Feature changelogs and entity/todo documentation ship with the feature.
+  working set; deletion removes incoming relationships.
+- Home empty-state copy handles mixed and all-Blocked project sets.
+- No cache/outbox version bump or native dependency is introduced.
+- Agent-core, agent-api, web, and mobile checks pass; Android export and Pixel 7
+  verification pass; all throwaway production data is deleted.
+- Mobile/web changelogs and current Project/WaitingCondition/todo documentation
+  ship with the feature.

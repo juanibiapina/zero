@@ -48,6 +48,10 @@ export type WaitsApi = {
     kind: WaitingConditionKind,
     fields?: WaitingConditionFields,
   ) => Transaction;
+  dependOnProject: (
+    dependentProjectId: string,
+    prerequisiteProjectId: string,
+  ) => Transaction;
   resolve: (id: string) => Transaction;
   remove: (id: string) => Transaction;
   offline: boolean;
@@ -103,7 +107,7 @@ export function waitsSpec(rest: WaitsRest) {
     name: "waits",
     fetch: () => rest.fetchWaits(),
     verbs,
-    // A resolved free-text condition leaves the open set the server returns.
+    // Any persisted resolution leaves the open set the server returns.
     leavesCollection: (c) => c.resolvedAt != null,
   };
   return spec;
@@ -121,6 +125,14 @@ function toWaitsApi(
         text: fields.text ?? null,
         refId: fields.refId ?? null,
         targetStatus: fields.targetStatus ?? null,
+      }),
+    dependOnProject: (dependentProjectId, prerequisiteProjectId) =>
+      api.actions.addWaitingCondition({
+        projectId: dependentProjectId,
+        kind: "project-status",
+        text: null,
+        refId: prerequisiteProjectId,
+        targetStatus: "done",
       }),
     resolve: (id) => api.actions.resolveWaitingCondition({ id }),
     remove: (id) => api.actions.deleteWaitingCondition({ id }),

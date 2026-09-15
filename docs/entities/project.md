@@ -21,13 +21,13 @@ a generic entity repository.
 - **Outcome name** — the required `title`, phrased as an observable result.
 - **State** — the persisted lifecycle decision: `in-play`, `backlog`, or `done`.
 - **Display status** — the calculated list/header value: Active, Next, Waiting,
-  Backlog, or Done.
+  Blocked, Backlog, or Done.
 - **Put in play** — persist `state: "in-play"`, then calculate the current display
   status.
 - **Icon** — one emoji, default 📁.
 
-State and display status are intentionally separate. Active, Next, and Waiting
-cannot cross a persistence interface.
+State and display status are intentionally separate. Active, Next, Waiting, and
+Blocked cannot cross a persistence interface.
 
 ## Data shape
 
@@ -54,20 +54,26 @@ Backlog, Done, and every other Project field.
 Project presentation. It uses the user's local `today` and applies this order:
 
 1. persisted Backlog or Done;
-2. Active when an open project task has a non-null `showUpDate <= today`;
-3. Waiting when an unresolved waiting condition exists;
-4. Waiting when an open project task has a future date;
-5. Next otherwise.
+2. Blocked when an unresolved project-completion dependency exists;
+3. Active when an open project task has a non-null `showUpDate <= today`;
+4. Waiting when an unresolved ordinary waiting condition exists;
+5. Waiting when an open project task has a future date;
+6. Next otherwise.
 
 An undated project task is groomed and does not make the project Active. A future
-task makes the project wait until its day. An arrived scheduled task currently
-overrides an ordinary waiting condition, so deliberate scheduled work can
-continue; completing that task exposes the remaining wait again.
+task makes the project wait until its day. An arrived scheduled task overrides an
+ordinary waiting condition, but it cannot override a project dependency. Every
+task of a Blocked project stays off Home. Its dates remain unchanged and take
+effect immediately after the final dependency settles or is removed.
 
 `waitingBadge` supplies Waiting context and ordering:
 
 - an ordinary condition shows elapsed time and sorts longest-waiting first;
 - a future task shows `until <day>` and sorts soonest first.
+
+`projectStatusContext` adds Blocked context: `after <icon> <title>` for one
+prerequisite, `after N projects` for several, and the oldest unresolved
+relationship as the Blocked sort key.
 
 The Projects list groups through `projectsByStatus`; it never groups directly by
 persisted state.
@@ -80,9 +86,15 @@ persisted state.
 - **Set state** — persist In-play, Backlog, or Done. Done removes the row from the
   working collection. In-play recalculates Active, Next, or Waiting.
 - **Edit** — update any supplied title, icon, or description field.
-- **Delete** — hard-remove the Project, all its tasks, and all waiting conditions
-  owned by it. The `UserDO` composition root coordinates the three entity
-  stores. Delete is idempotent and has no Undo.
+- **Depend on Project completion** — add a directed relationship to another
+  existing non-Done Project. Self, duplicate, missing, and cyclic relationships
+  are rejected. Several prerequisites use AND semantics.
+- **Complete** — persist Done and settle every incoming completion dependency
+  before returning. Settlement is permanent; reopening does not recreate the
+  relationship.
+- **Delete** — hard-remove the Project, all its tasks, all waiting conditions it
+  owns, and every incoming completion dependency that references it. Deletion is
+  idempotent and has no Undo; its confirmation discloses affected dependents.
 
 All writes use the stable client id, so offline replay is exactly-once or
 idempotent according to the verb.
@@ -90,8 +102,8 @@ idempotent according to the verb.
 ## UI
 
 Projects appear on web `/projects` and the mobile Projects tab. Both surfaces
-show collapsible Active, Next, Waiting, and Backlog sections; Done is absent.
-Backlog starts collapsed when large.
+show collapsible Active, Next, Waiting, Blocked, and Backlog sections in that
+order; Done is absent. Backlog starts collapsed when large.
 
 A project row opens a dedicated project screen. The screen contains:
 
@@ -99,12 +111,19 @@ A project row opens a dedicated project screen. The screen contains:
 - calculated status pill;
 - editable description;
 - project tasks;
-- real waiting conditions under **Waiting on**;
+- project-completion prerequisites under **Depends on**;
+- ordinary waiting conditions under **Waiting on**;
 - lifecycle/delete actions.
 
-Mobile uses the visible status pill as the lifecycle control. Its actions are
-Move to backlog, Move out of backlog, and Mark done. The settings menu contains
-Delete project. Web keeps lifecycle and delete actions in its overflow menu.
+Mobile uses the visible status pill as the lifecycle and dependency control. Its
+actions are Move to backlog, Move out of backlog, Depends on project…, and Mark
+done. Dependency selection uses the searchable Project picker without a No
+project row. The settings menu contains Delete project. Web creates a dependency
+through the Project completion branch of the Waiting-condition builder and keeps
+lifecycle and delete actions in its overflow menu.
+
+A Depends on row opens its prerequisite and has a separate Remove action that
+deletes only the relationship.
 
 On mobile, project tasks reuse `ReorderableTaskList`: tap to edit, complete with
 Undo, swipe right to schedule Tomorrow, and long-press to reorder. New project
@@ -117,8 +136,9 @@ task, not duplicated under Waiting on. Web still shows its automatic date row.
 
 ## Storage and REST interfaces
 
-`DbProjectStore` owns `add`, `list`, `setState`, `edit`, and `delete` over
-the `projects` table. `UserDO.deleteProject` owns cross-entity deletion.
+`DbProjectStore` owns `add`, `get`, `list`, `setState`, `edit`, and `delete`
+over the `projects` table. The `UserDO` composition root coordinates dependency
+validation, Done settlement, and cross-entity deletion.
 
 Per-user routes:
 
@@ -155,12 +175,13 @@ these versions.
 
 - Task membership uses nullable `Task.projectId`.
 - WaitingCondition attaches to Project and can reference a Task or Project.
-- Deleting a Project cascades to its Tasks and owned waiting conditions.
+- A project-completion dependency is a `project-status`/Done condition whose
+  `projectId` is the dependent and `refId` is the prerequisite.
+- Deleting a Project cascades to its Tasks, owned waiting conditions, and incoming
+  completion dependencies.
 - Project icon suggestions are an ephemeral device-local hint, not Project data.
 
 ## Next
 
-Explicit project-completion dependencies are designed in
-`docs/plans/todo-project-completion-dependency.md`. They are not part of the
-state refactor: creation and current Waiting behavior remain unchanged until
-that feature is implemented.
+Project dependencies remain completion-only. Parent/child ownership, inherited
+work, cascade completion, and a full graph view remain separate future choices.

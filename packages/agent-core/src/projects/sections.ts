@@ -7,6 +7,7 @@ export const PROJECT_SECTION_ORDER: readonly ProjectDisplayStatus[] = [
   "active",
   "next",
   "waiting",
+  "blocked",
   "backlog",
 ];
 

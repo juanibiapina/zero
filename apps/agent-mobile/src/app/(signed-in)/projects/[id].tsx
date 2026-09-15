@@ -5,15 +5,20 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  candidatePrerequisiteProjects,
   compareByOrder,
   isBasisStale,
+  isProjectCompletionDependency,
   localToday,
   messageOf,
+  projectDependencies,
+  projectDependencyRemovalImpact,
+  projectDependencyRemovalWarning,
   projectDisplayStatus,
+  projectStatusContext,
   scheduleLabel,
   PROJECT_DISPLAY_STATUS_LABELS,
   toast,
-  waitingBadge,
   type Project,
   type ProjectEditFields,
   type ProjectState,
@@ -37,7 +42,7 @@ import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
 import { Input } from '@/components/ui/input';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
-import { useTaskDetail } from '@/components/task-detail';
+import { ProjectPickerSheet, useTaskDetail } from '@/components/task-detail';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import {
@@ -47,7 +52,7 @@ import {
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
-import { usePullRefresh } from '@/lib/screen-hooks';
+import { useForegroundRefetch, usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
 // A project's own screen (pushed within the Projects tab). This is a plain React
@@ -105,6 +110,7 @@ function ProjectDetail({
   const { getToken } = useAuth();
   const back = useCallback(() => router.back(), [router]);
   const [error, setError] = useState<string | null>(null);
+  const [pickingDependency, setPickingDependency] = useState(false);
 
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
@@ -116,10 +122,14 @@ function ProjectDetail({
     q.from({ w: waitsApi.collection }),
   );
 
-  const list = projects ?? [];
-  const tasks = openTasks ?? [];
-  const conds = conditions ?? [];
+  const list = useMemo(() => projects ?? [], [projects]);
+  const tasks = useMemo(() => openTasks ?? [], [openTasks]);
+  const conds = useMemo(() => conditions ?? [], [conditions]);
   const project = list.find((p) => p.id === id) ?? null;
+  const dependencyCandidates = useMemo(
+    () => candidatePrerequisiteProjects(id, list, conds),
+    [id, list, conds],
+  );
 
   const commitEdit = useCallback(
     (fields: ProjectEditFields) => {
@@ -140,10 +150,32 @@ function ProjectDetail({
         : setError(messageOf(e));
       try {
         const tx = api.setState(project.id, state);
-        tx.isPersisted.promise.catch(failed);
+        void tx.isPersisted.promise.then(
+          () => (state === 'done' ? waitsApi.refetch() : undefined),
+          failed,
+        ).catch(() =>
+          reportProjectFailure(
+            'Project done; dependencies could not refresh',
+            'Open Projects and pull to refresh when you are connected.',
+          ),
+        );
       } catch (e) { failed(e); }
     },
-    [api, project],
+    [api, project, waitsApi],
+  );
+
+  const commitDependency = useCallback(
+    (prerequisiteProjectId: string | null) => {
+      setPickingDependency(false);
+      if (!project || prerequisiteProjectId == null) return;
+      setError(null);
+      const tx = waitsApi.dependOnProject(
+        project.id,
+        prerequisiteProjectId,
+      );
+      tx.isPersisted.promise.catch((cause) => setError(messageOf(cause)));
+    },
+    [project, waitsApi],
   );
 
   const commitDelete = useCallback(() => {
@@ -212,19 +244,23 @@ function ProjectDetail({
   // it pops the screen.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (pickingDependency) {
+        setPickingDependency(false);
+        return true;
+      }
       if (detail.handleBack()) return true;
       if (add.handleBack()) return true;
       return false;
     });
     return () => sub.remove();
-  }, [detail, add]);
+  }, [detail, add, pickingDependency]);
 
   // The header's derived status reads tasks and waits, so a pull re-pulls all
   // three lists this screen shows.
-  const refetchAll = useCallback(
-    () => Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]),
-    [api, tasksApi, waitsApi],
-  );
+  const refetchAll = useCallback(async () => {
+    await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]);
+  }, [api, tasksApi, waitsApi]);
+  useForegroundRefetch(refetchAll);
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
   const today = localToday();
   const presentationOf = useCallback(
@@ -262,9 +298,15 @@ function ProjectDetail({
   }
 
   const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
-  const waitContext = waitingBadge(project, tasks, conds, list, today)?.label;
+  const statusContext = projectStatusContext(
+    project,
+    tasks,
+    conds,
+    list,
+    today,
+  )?.label;
   const statusLabel = `${PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}${
-    waitContext ? ` · ${waitContext}` : ''
+    statusContext ? ` · ${statusContext}` : ''
   }`;
 
   return (
@@ -293,6 +335,10 @@ function ProjectDetail({
             <ProjectHeader
               project={project}
               statusLabel={statusLabel}
+              deletionWarning={projectDependencyRemovalWarning(
+                projectDependencyRemovalImpact(project.id, conds, list),
+              )}
+              onDepend={() => setPickingDependency(true)}
               onEdit={commitEdit}
               onState={(state) => {
                 if (state === 'done') {
@@ -326,12 +372,24 @@ function ProjectDetail({
             project={project}
             waitsApi={waitsApi}
             tasks={tasks}
+            projects={list}
             onError={setError}
           />
         }
       />
 
       {detail.sheets}
+
+      <ProjectPickerSheet
+        open={pickingDependency}
+        title="Depends on"
+        projects={dependencyCandidates}
+        selectedProjectId={null}
+        showNoProject={false}
+        emptyCopy="No available projects"
+        onPick={commitDependency}
+        onClose={() => setPickingDependency(false)}
+      />
 
       {/* Project quick-add: Task, Waiting, and Project tabs, with task metadata
           preset to this project and Waiting scoped to it. */}
@@ -486,12 +544,16 @@ function IconPickerSheet({
 function ProjectHeader({
   project,
   statusLabel,
+  deletionWarning,
+  onDepend,
   onEdit,
   onState,
   onDelete,
 }: {
   project: Project;
   statusLabel: string;
+  deletionWarning: string | null;
+  onDepend: () => void;
   onEdit: (fields: ProjectEditFields) => void;
   onState: (state: ProjectState) => void;
   onDelete: () => void;
@@ -523,6 +585,10 @@ function ProjectHeader({
   const chooseState = (state: ProjectState) => {
     setStatusOpen(false);
     onState(state);
+  };
+  const chooseDependency = () => {
+    setStatusOpen(false);
+    requestAnimationFrame(onDepend);
   };
 
   return (
@@ -560,7 +626,7 @@ function ProjectHeader({
             if (nativeEvent.event === 'delete') {
               Alert.alert(
                 `Delete “${project.title}”?`,
-                'This permanently deletes the project, all its tasks (including completed tasks), and its waiting conditions. This cannot be undone.',
+                `This permanently deletes the project, all its tasks (including completed tasks), and its waiting conditions. This cannot be undone.${deletionWarning ? ` ${deletionWarning}` : ''}`,
                 [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Delete', style: 'destructive', onPress: onDelete },
@@ -584,7 +650,7 @@ function ProjectHeader({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Project status: ${statusLabel}`}
-          accessibilityHint="Change project status"
+          accessibilityHint="Change project status or dependencies"
           hitSlop={8}
           android_ripple={{ color: ripple }}
           onPress={() => setStatusOpen(true)}
@@ -641,6 +707,11 @@ function ProjectHeader({
               </UIText>
             </ListItem>
           )}
+          <ListItem onPress={chooseDependency}>
+            <UIText textStyle={{ color: foreground, fontSize: 16 }}>
+              Depends on project…
+            </UIText>
+          </ListItem>
           <ListItem onPress={() => chooseState('done')}>
             <UIText textStyle={{ color: foreground, fontSize: 16 }}>
               Mark done
@@ -663,68 +734,126 @@ function conditionLabel(c: WaitingCondition, tasks: Task[], projects: Project[])
   return `until “${p?.title ?? '?'}” is ${c.targetStatus}`;
 }
 
-// The project's real waiting conditions (resolve/delete). A future task date is
-// not a condition: the status pill and source task explain that derived wait.
-// Adding stays in the plus FAB's Waiting mode. Structured kinds are created on
-// web for now; mobile still renders and auto-resolves them.
+// Completion dependencies render as navigable Project identities under Depends
+// on. Every other stored condition remains under Waiting on. A future task date
+// is explained by the status pill and source task instead of another row.
 function ProjectWaits({
   project,
   waitsApi,
   tasks,
+  projects,
   onError,
 }: {
   project: Project;
   waitsApi: WaitsApi;
   tasks: Task[];
+  projects: Project[];
   onError: (message: string) => void;
 }) {
+  const router = useRouter();
   const { data: allConditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
+  const dependencies = projectDependencies(
+    project.id,
+    allConditions ?? [],
+    projects,
+  );
   const list = (allConditions ?? []).filter(
-    (c: WaitingCondition) => c.projectId === project.id,
+    (condition: WaitingCondition) =>
+      condition.projectId === project.id &&
+      !isProjectCompletionDependency(condition),
   );
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
 
-  // Nothing to show: render no bare heading. A task-derived wait is explained
-  // by the project status and that task's schedule; this section is only for
-  // real conditions added through the screen's Waiting mode.
-  if (list.length === 0) return null;
+  if (list.length === 0 && dependencies.length === 0) return null;
 
   return (
-    <View className="px-screen-x pb-4">
-      <Text variant="section" className="pb-2">
-        Waiting on
-      </Text>
-      {list.map((c) => (
-        <View key={c.id} className="flex-row items-center gap-2 py-2">
-          <Text className="flex-1 text-[14px]">{conditionLabel(c, tasks, [project])}</Text>
-          {c.kind === 'free-text' ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Resolve condition: ${conditionLabel(c, tasks, [project])}`}
-              className="min-h-12 min-w-12 items-center justify-center"
-              hitSlop={8}
-              onPress={() => write(waitsApi.resolve(c.id))}
+    <View className="pb-4">
+      {dependencies.length > 0 ? (
+        <View className="pb-3">
+          <Text variant="section" className="px-screen-x pb-2">
+            Depends on
+          </Text>
+          {dependencies.map(({ condition, prerequisite }) => (
+            <View
+              key={condition.id}
+              className="flex-row items-stretch border-b border-divider"
             >
-              <Text className="text-[13px] font-semibold text-accent">Resolve</Text>
-            </Pressable>
-          ) : (
-            <Text className="text-[12px] text-foreground-muted">auto</Text>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Delete condition: ${conditionLabel(c, tasks, [project])}`}
-            className="min-h-12 min-w-12 items-center justify-center"
-            hitSlop={8}
-            onPress={() => write(waitsApi.remove(c.id))}
-          >
-            <Text className="text-[16px] text-foreground-muted">✕</Text>
-          </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open project ${prerequisite?.title ?? 'prerequisite'}`}
+                disabled={!prerequisite}
+                className="min-h-14 flex-1 flex-row items-center gap-3 px-screen-x py-2"
+                onPress={() => {
+                  if (prerequisite) router.push(`/projects/${prerequisite.id}`);
+                }}
+              >
+                <Text className="w-6 text-center text-[18px]">
+                  {prerequisite?.icon ?? '📁'}
+                </Text>
+                <View className="min-w-0 flex-1">
+                  <Text numberOfLines={1} className="text-[15px] font-medium">
+                    {prerequisite?.title ?? 'Another project'}
+                  </Text>
+                  <Text variant="caption">Must be completed first</Text>
+                </View>
+                <Text importantForAccessibility="no" className="text-foreground-muted">
+                  ›
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove dependency on ${prerequisite?.title ?? 'project'}`}
+                className="min-h-14 min-w-16 items-center justify-center px-2"
+                onPress={() => write(waitsApi.remove(condition.id))}
+              >
+                <Text className="text-[13px] font-semibold text-accent">Remove</Text>
+              </Pressable>
+            </View>
+          ))}
         </View>
-      ))}
+      ) : null}
+
+      {list.length > 0 ? (
+        <View className="px-screen-x">
+          <Text variant="section" className="pb-2">
+            Waiting on
+          </Text>
+          {list.map((condition) => {
+            const label = conditionLabel(condition, tasks, projects);
+            return (
+              <View key={condition.id} className="flex-row items-center gap-2 py-2">
+                <Text className="flex-1 text-[14px]">{label}</Text>
+                {condition.kind === 'free-text' ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Resolve condition: ${label}`}
+                    className="min-h-12 min-w-12 items-center justify-center"
+                    hitSlop={8}
+                    onPress={() => write(waitsApi.resolve(condition.id))}
+                  >
+                    <Text className="text-[13px] font-semibold text-accent">Resolve</Text>
+                  </Pressable>
+                ) : (
+                  <Text className="text-[12px] text-foreground-muted">auto</Text>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete condition: ${label}`}
+                  className="min-h-12 min-w-12 items-center justify-center"
+                  hitSlop={8}
+                  onPress={() => write(waitsApi.remove(condition.id))}
+                >
+                  <Text className="text-[16px] text-foreground-muted">✕</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }

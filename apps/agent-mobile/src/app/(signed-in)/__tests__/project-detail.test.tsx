@@ -218,9 +218,17 @@ const mockSetTaskProject =
     (getToken: unknown, id: string, projectId: string | null) => Promise<Task>
   >();
 const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
+const mockDeleteWaitingCondition = jest.fn<(id: string) => Promise<void>>();
 const mockAddWaitingCondition =
   jest.fn<
-    (condition: { id: string; projectId: string; kind: string; text: string | null }) => Promise<WaitingCondition>
+    (condition: {
+      id: string;
+      projectId: string;
+      kind: string;
+      text: string | null;
+      refId: string | null;
+      targetStatus: string | null;
+    }) => Promise<WaitingCondition>
   >();
 jest.mock('@/lib/api', () => ({
   fetchProjects: () => mockFetchProjects(),
@@ -241,10 +249,18 @@ jest.mock('@/lib/api', () => ({
   fetchWaits: () => mockFetchWaits(),
   addWaitingCondition: (
     _getToken: unknown,
-    condition: { id: string; projectId: string; kind: string; text: string | null },
+    condition: {
+      id: string;
+      projectId: string;
+      kind: string;
+      text: string | null;
+      refId: string | null;
+      targetStatus: string | null;
+    },
   ) => mockAddWaitingCondition(condition),
   resolveWaitingCondition: () => Promise.reject(new Error('not used')),
-  deleteWaitingCondition: () => Promise.resolve(),
+  deleteWaitingCondition: (_getToken: unknown, id: string) =>
+    mockDeleteWaitingCondition(id),
   fetchTasks: () => mockFetchTasks(),
   addTask: (
     getToken: unknown,
@@ -273,6 +289,21 @@ const project = (
   icon,
   description: null,
   state: state === 'next' ? 'in-play' : state,
+  createdAt: '2023-01-01T00:00:00.000Z',
+});
+
+const dependencyRow = (
+  id: string,
+  projectId: string,
+  refId: string,
+): WaitingCondition => ({
+  id,
+  projectId,
+  kind: 'project-status',
+  text: null,
+  refId,
+  targetStatus: 'done',
+  resolvedAt: null,
   createdAt: '2023-01-01T00:00:00.000Z',
 });
 
@@ -309,6 +340,7 @@ describe('ProjectDetailScreen', () => {
     resetProjectsApiForTest();
     resetTasksApiForTest();
     resetWaitsApiForTest();
+    mockAlert.mockClear();
     mockBack.mockReset();
     mockNavigate.mockReset();
     mockPush.mockReset();
@@ -318,6 +350,9 @@ describe('ProjectDetailScreen', () => {
     mockSetProjectState.mockClear();
     mockEditProject.mockClear();
     mockAddTask.mockReset();
+    mockAddWaitingCondition.mockReset();
+    mockDeleteWaitingCondition.mockReset();
+    mockDeleteWaitingCondition.mockResolvedValue(undefined);
     mockCompleteTask.mockReset();
     mockReopenTask.mockReset();
     mockEditTask.mockReset();
@@ -405,6 +440,83 @@ describe('ProjectDetailScreen', () => {
     expect(getByText('Waiting on')).toBeTruthy();
     expect(getByText('the letter comes back')).toBeTruthy();
     expect(queryByText(/^until Tomorrow$/)).toBeNull();
+  });
+
+  it('shows a dependency separately and opens its prerequisite', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Move house'),
+      project('2', 'Sell old house', '🏠'),
+    ]);
+    mockFetchWaits.mockResolvedValue([dependencyRow('dependency', '1', '2')]);
+
+    const screen = await renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText('Blocked · after 🏠 Sell old house')).toBeTruthy(),
+    );
+    expect(screen.getByText('Depends on')).toBeTruthy();
+    expect(screen.getByText('Must be completed first')).toBeTruthy();
+    expect(screen.queryByText('auto')).toBeNull();
+
+    await fireEvent.press(
+      screen.getByLabelText('Open project Sell old house'),
+    );
+    expect(mockPush).toHaveBeenCalledWith('/projects/2');
+  });
+
+  it('removes only the selected dependency and recalculates the project', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Move house'),
+      project('2', 'Sell old house'),
+    ]);
+    mockFetchWaits.mockResolvedValue([dependencyRow('dependency', '1', '2')]);
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('Depends on')).toBeTruthy());
+
+    await fireEvent.press(
+      screen.getByLabelText('Remove dependency on Sell old house'),
+    );
+
+    await waitFor(() =>
+      expect(mockDeleteWaitingCondition).toHaveBeenCalledWith('dependency'),
+    );
+    expect(screen.queryByText('Depends on')).toBeNull();
+    expect(screen.getByText('Next')).toBeTruthy();
+  });
+
+  it('links an eligible prerequisite from the status sheet and keeps the project open', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Move house'),
+      project('2', 'Sell old house', '🏠'),
+    ]);
+    mockAddWaitingCondition.mockImplementation(async (condition) => ({
+      ...condition,
+      kind: condition.kind as WaitingCondition['kind'],
+      resolvedAt: null,
+      createdAt: '2023-01-01T00:00:00.000Z',
+    }));
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('Next')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Project status: Next'));
+    await fireEvent.press(screen.getByText('Depends on project…'));
+
+    await waitFor(() => expect(screen.getByText('Depends on')).toBeTruthy());
+    expect(screen.queryByText('Project status')).toBeNull();
+    expect(screen.queryByLabelText('No project')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Sell old house'));
+
+    await waitFor(() =>
+      expect(mockAddWaitingCondition).toHaveBeenCalledTimes(1),
+    );
+    expect(mockAddWaitingCondition.mock.calls[0][0]).toMatchObject({
+      projectId: '1',
+      kind: 'project-status',
+      text: null,
+      refId: '2',
+      targetStatus: 'done',
+    });
+    expect(screen.getByLabelText('Project title').props.value).toBe('Move house');
   });
 
   it('shows the Tasks heading once the project has an open task', async () => {
@@ -1022,6 +1134,26 @@ describe('ProjectDetailScreen', () => {
       expect(mockDeleteProject).toHaveBeenCalledWith(expect.anything(), '1'),
     );
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns when deleting a prerequisite will unblock another project', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Sell old house'),
+      project('2', 'Move house'),
+    ]);
+    mockFetchWaits.mockResolvedValue([dependencyRow('dependency', '2', '1')]);
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('Project settings')).toBeTruthy());
+
+    await fireEvent.press(screen.getByLabelText('Project settings'));
+    await fireEvent.press(screen.getByText('Delete project'));
+
+    expect(mockAlert).toHaveBeenLastCalledWith(
+      'Delete “Sell old house”?',
+      expect.stringContaining('“Move house” depends on it and will be unblocked.'),
+      expect.any(Array),
+      { cancelable: true },
+    );
   });
 
   it('reports deletion failure globally after the screen has unmounted', async () => {

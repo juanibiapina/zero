@@ -72,6 +72,24 @@ describe('task pickers', () => {
     expect(screen.getByLabelText('Project 0')).toBeTruthy();
   });
 
+  it('can hide No project and show an unfiltered dependency empty state', async () => {
+    const screen = await render(
+      <ProjectPickerSheet
+        open
+        title="Depends on"
+        projects={[]}
+        selectedProjectId={null}
+        showNoProject={false}
+        emptyCopy="No available projects"
+        onPick={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText('Depends on')).toBeTruthy();
+    expect(screen.queryByLabelText('No project')).toBeNull();
+    expect(screen.getByText('No available projects')).toBeTruthy();
+  });
+
   it('marks No project as selected for a loose task', async () => {
     const screen = await render(<ProjectPickerSheet open projects={[]} selectedProjectId={null} onPick={() => {}} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByLabelText('No project').props.accessibilityState).toEqual({ selected: true }));

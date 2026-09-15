@@ -233,7 +233,10 @@ function TaskList({
   const { data: conditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
-  useForegroundRefetch(api.refetch);
+  const refetchAll = useCallback(async () => {
+    await Promise.all([api.refetch(), projectsApi.refetch(), waitsApi.refetch()]);
+  }, [api, projectsApi, waitsApi]);
+  useForegroundRefetch(refetchAll);
 
   const today = localToday();
   const list = homeTasks(tasks ?? [], projects ?? [], today, conditions ?? []);

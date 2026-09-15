@@ -20,6 +20,11 @@ import {
   type WaitingConditionKind,
 } from "../store/waiting-conditions";
 import {
+  addProjectDependency as coordinateProjectDependency,
+  setProjectState as coordinateProjectState,
+  type AddProjectDependencyResult,
+} from "../store/project-dependencies";
+import {
   SystemTopicStore,
   systemTopicsFingerprint,
 } from "../store/system-topics";
@@ -194,7 +199,12 @@ export class UserDO extends DurableObject<Env> {
   }
 
   setProjectState(id: string, state: ProjectState): Project | null {
-    return this.projects.setState(id, state);
+    return coordinateProjectState(
+      this.projects,
+      this.waitingConditions,
+      id,
+      state,
+    ).project;
   }
 
   editProject(id: string, fields: ProjectEdit): Project | null {
@@ -213,11 +223,13 @@ export class UserDO extends DurableObject<Env> {
     existed: boolean;
     tasks: number;
     conditions: number;
+    dependencies: number;
   } {
     const existed = this.projects.delete(id);
     const tasks = this.tasks.deleteByProject(id);
     const conditions = this.waitingConditions.deleteByProject(id);
-    return { existed, tasks, conditions };
+    const dependencies = this.waitingConditions.deleteByReferencedProject(id);
+    return { existed, tasks, conditions, dependencies };
   }
 
   // --- Waiting conditions ---
@@ -229,6 +241,20 @@ export class UserDO extends DurableObject<Env> {
     fields?: WaitingConditionFields,
   ): WaitingCondition {
     return this.waitingConditions.add(id, projectId, kind, fields);
+  }
+
+  addProjectDependency(
+    id: string,
+    dependentProjectId: string,
+    prerequisiteProjectId: string,
+  ): AddProjectDependencyResult {
+    return coordinateProjectDependency(
+      this.projects,
+      this.waitingConditions,
+      id,
+      dependentProjectId,
+      prerequisiteProjectId,
+    );
   }
 
   listWaitingConditions(): WaitingCondition[] {

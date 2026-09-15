@@ -37,6 +37,8 @@ type ProjectPickerSheetProps = {
   title?: string;
   projects: Project[];
   selectedProjectId: string | null;
+  showNoProject?: boolean;
+  emptyCopy?: string;
   onPick: (projectId: string | null) => void;
   onClose: () => void;
 };
@@ -52,6 +54,8 @@ function OpenProjectPickerSheet({
   onPick,
   onClose,
   title = 'Move to project',
+  showNoProject = true,
+  emptyCopy,
 }: ProjectPickerSheetProps) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -118,13 +122,15 @@ function OpenProjectPickerSheet({
           />
         </View>
 
-        <QuickRow
-          icon="⊘"
-          label="No project"
-          onPress={() => onPick(null)}
-          testID="project-none"
-          selected={selectedProjectId == null}
-        />
+        {showNoProject ? (
+          <QuickRow
+            icon="⊘"
+            label="No project"
+            onPress={() => onPick(null)}
+            testID="project-none"
+            selected={selectedProjectId == null}
+          />
+        ) : null}
 
         <FlatList
           style={{ flexShrink: 1 }}
@@ -133,9 +139,9 @@ function OpenProjectPickerSheet({
           keyExtractor={(p) => p.id}
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
-            needle ? (
+            needle || emptyCopy ? (
               <Text className="px-screen-x py-4 text-foreground-secondary">
-                No matching projects
+                {needle ? 'No matching projects' : emptyCopy}
               </Text>
             ) : null
           }

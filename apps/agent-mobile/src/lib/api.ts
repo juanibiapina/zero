@@ -408,7 +408,10 @@ export async function addWaitingCondition(
     baseUrl,
   );
   if (!res.ok) {
-    throw new Error(`POST /api/waits failed: ${res.status}`);
+    const body = (await res.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new Error(body?.error ?? `POST /api/waits failed: ${res.status}`);
   }
   const body = (await res.json()) as { condition: WaitingCondition };
   return body.condition;

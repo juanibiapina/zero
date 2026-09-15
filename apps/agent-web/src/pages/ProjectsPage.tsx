@@ -14,7 +14,7 @@ import {
   projectsByStatus,
   listView,
   PROJECT_DISPLAY_STATUS_LABELS,
-  waitingBadge,
+  projectStatusContext,
   type ProjectDisplayStatus,
 } from "@zero/agent-core";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
@@ -90,7 +90,10 @@ function ProjectsReady({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useForegroundRefetch(api.refetch);
+  const refetchAll = useCallback(async () => {
+    await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]);
+  }, [api, tasksApi, waitsApi]);
+  useForegroundRefetch(refetchAll);
 
   const onAdd = useCallback(() => {
     const trimmed = title.trim();
@@ -125,14 +128,17 @@ function ProjectsReady({
         // The Waiting section orders by the shared badge's sort key (condition
         // waits longest-first, then date waits soonest-first); others fall back
         // to createdAt.
-        (p) => waitingBadge(p, tasks, conds, list, today)?.sortKey ?? p.createdAt,
+        (p) =>
+          projectStatusContext(p, tasks, conds, list, today)?.sortKey ??
+          p.createdAt,
       ),
     [list, tasks, conds, today],
   );
   // A project's waiting badge text, non-null only for waiting projects:
   // "for <elapsed>" for a condition wait, "until <day>" for a date wait.
   const labelOf = useCallback(
-    (p: Project) => waitingBadge(p, tasks, conds, list, today)?.label ?? null,
+    (p: Project) =>
+      projectStatusContext(p, tasks, conds, list, today)?.label ?? null,
     [tasks, conds, list, today],
   );
   const view = listView({ count: list.length, isLoading, loadError: null });
@@ -258,8 +264,8 @@ function ProjectSectionView({
                   </button>
                   {waited && (
                     <span
-                      className="shrink-0 text-sm text-muted-foreground"
-                      aria-label={`Waiting ${waited}`}
+                      className="max-w-56 shrink-0 truncate text-sm text-muted-foreground"
+                      aria-label={`${PROJECT_DISPLAY_STATUS_LABELS[status]} ${waited}`}
                     >
                       {waited}
                     </span>

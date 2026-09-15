@@ -249,8 +249,8 @@ export const projects = table("projects", {
 
 // Waiting conditions: why a project is waiting (see migration 0049). Owned by
 // DbWaitingConditionStore. Open conditions are the rows where resolvedAt IS
-// NULL; structured kinds (task-done, project-status) are derived-satisfied on
-// the client and never persist resolvedAt.
+// NULL. Project-status/Done dependencies persist terminal settlement; other
+// structured kinds remain derived-satisfied on the client.
 export const waitingConditions = table("waiting_conditions", {
   id: column.text().notNull().primaryKey(),
   projectId: column.text().notNull(),

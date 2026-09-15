@@ -1,14 +1,17 @@
 import type { Task } from "../tasks/types";
 import type { WaitingCondition } from "../waits/types";
+import { unresolvedProjectDependencies } from "./dependencies";
 import type { Project, ProjectDisplayStatus } from "./types";
 
 // Display status is derived on the client. Persisted `state` records only
-// in-play/backlog/done; Active, Next, and Waiting are computed from tasks and
-// waiting conditions (see
+// in-play/backlog/done; Active, Next, Waiting, and Blocked are computed from
+// tasks and waiting conditions (see
 // docs/plans/todo-availability-model.md, slices 5-6, and
 // docs/plans/todo-single-list-3-date-availability.md for the date-aware rule):
 //
 //   - backlog / done: the stored value (manual parking).
+//   - blocked: in play, with an unresolved project-completion dependency. This
+//     hard gate wins over every task and ordinary wait.
 //   - active: in play, with an open task that has a date that has *arrived*
 //     (showUpDate != null AND <= today). The date is the commitment gate (the
 //     take-on star is retired; see docs/plans/todo-retire-take-on.md). This wins
@@ -99,9 +102,10 @@ export function conditionSatisfied(
   projects: Project[],
   today: string,
 ): boolean {
+  if (cond.resolvedAt != null) return true;
   switch (cond.kind) {
     case "free-text":
-      return cond.resolvedAt != null;
+      return false;
     case "task-done": {
       const t = tasks.find((x) => x.id === cond.refId);
       return t != null && t.completedAt != null;
@@ -163,11 +167,17 @@ export function projectDisplayStatus(
   projects: Project[] = [],
 ): ProjectDisplayStatus {
   const base = projectBaseStatus(project, tasks, today);
-  // backlog/done are terminal; an active project (a shown-up dated open task)
-  // stays active even with an open condition — dating a task overrides waiting.
-  if (base !== "next") {
-    return base;
+  if (base === "backlog" || base === "done") return base;
+  // A completion dependency is a hard project gate: arrived work cannot make
+  // the project Active until every prerequisite has been completed or removed.
+  if (
+    unresolvedProjectDependencies(project.id, conditions, projects).length > 0
+  ) {
+    return "blocked";
   }
+  // An active project (a shown-up dated open task) stays active over every
+  // ordinary waiting condition — dating a task overrides a soft wait.
+  if (base === "active") return base;
   // In play with nothing shown-up-and-dated: an open condition or a future-dated
   // task (waiting until its day) both read as waiting.
   if (

@@ -94,6 +94,13 @@ export class DbProjectStore {
     return project;
   }
 
+  // Read one project regardless of lifecycle state. Dependency validation and
+  // terminal settlement must still see Done projects after they leave list().
+  get(id: string): Project | null {
+    const row = this.db.get(projects, { where: eq("id", id) });
+    return row ? toProject(row) : null;
+  }
+
   // The working set: every non-Done project, oldest first. Done is terminal
   // and drops out of the list (the client calculates and groups display statuses
   // into sections and animates the row out). The `projects_open` partial index

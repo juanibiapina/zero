@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import {
   BACKLOG_COLLAPSE_THRESHOLD, LOADING_TEXT_DELAY_MS, localToday,
   projectDisplayStatus, projectsByStatus, listView,
-  PROJECT_DISPLAY_STATUS_LABELS, waitingBadge,
+  PROJECT_DISPLAY_STATUS_LABELS, projectStatusContext,
   type Project, type ProjectsApi, type ProjectDisplayStatus, type TasksApi,
   type WaitsApi,
 } from '@zero/agent-core';
@@ -21,12 +21,13 @@ import { useWaitsApi } from '@/lib/waits-collection';
 import { useDelayed, useForegroundRefetch, useLoadError, usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
-function ProjectRow({ item, waited, onOpen }: {
-  item: Project; waited: string | null; onOpen: (p: Project) => void;
+function ProjectRow({ item, status, context, onOpen }: {
+  item: Project; status: ProjectDisplayStatus; context: string | null;
+  onOpen: (p: Project) => void;
 }) {
   const icon = <View className="w-[22px] items-center"><Text className="text-[20px]">{item.icon}</Text></View>;
-  const trailing = waited ? (
-    <Text variant="caption" className="shrink-0" accessibilityLabel={`Waiting ${waited}`}>{waited}</Text>
+  const trailing = context ? (
+    <Text numberOfLines={1} variant="caption" className="max-w-[50%] shrink-0" accessibilityLabel={`${PROJECT_DISPLAY_STATUS_LABELS[status]} ${context}`}>{context}</Text>
   ) : undefined;
   return (
     <ListRow leading={icon} trailing={trailing} accessibilityLabel={item.title} onPress={() => onOpen(item)}>
@@ -80,9 +81,9 @@ function Projects({ api, tasksApi, waitsApi }: {
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
   const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
-  useForegroundRefetch(api.refetch);
   const accent = useColor('--color-accent');
-  const refetchAll = useCallback(() => Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]), [api, tasksApi, waitsApi]);
+  const refetchAll = useCallback(async () => { await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]); }, [api, tasksApi, waitsApi]);
+  useForegroundRefetch(refetchAll);
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
   const onToggle = useCallback((status: ProjectDisplayStatus, current: boolean) => {
     setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
@@ -94,9 +95,9 @@ function Projects({ api, tasksApi, waitsApi }: {
   const grouped = useMemo(() => projectsByStatus(
     list,
     (p) => projectDisplayStatus(p, tasks, today, conds, list),
-    (p) => waitingBadge(p, tasks, conds, list, today)?.sortKey ?? p.createdAt,
+    (p) => projectStatusContext(p, tasks, conds, list, today)?.sortKey ?? p.createdAt,
   ), [list, tasks, conds, today]);
-  const labelOf = useCallback((p: Project) => waitingBadge(p, tasks, conds, list, today)?.label ?? null, [tasks, conds, list, today]);
+  const labelOf = useCallback((p: Project) => projectStatusContext(p, tasks, conds, list, today)?.label ?? null, [tasks, conds, list, today]);
   const sections = useMemo(() => grouped.map((s) => {
     const count = s.projects.length;
     const collapsed = collapseOverride[s.status] ?? (s.status === 'backlog' && count > BACKLOG_COLLAPSE_THRESHOLD);
@@ -124,7 +125,7 @@ function Projects({ api, tasksApi, waitsApi }: {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={accent} colors={[accent]} />}
           sections={sections} keyExtractor={(item) => item.id} stickySectionHeadersEnabled
           renderSectionHeader={({ section }) => <SectionHeader status={section.status} count={section.count} collapsed={section.collapsed} onToggle={onToggle} />}
-          renderItem={({ item }) => <ProjectRow item={item} waited={labelOf(item)} onOpen={onOpen} />}
+          renderItem={({ item, section }) => <ProjectRow item={item} status={section.status} context={labelOf(item)} onOpen={onOpen} />}
         />
       )}
       {add.bar}

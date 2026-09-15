@@ -162,6 +162,26 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-15): **Project completion
+dependencies.** An existing project can now depend on completion of one or more
+other existing projects. Unresolved relationships produce a calculated Blocked
+status, hard-hide the dependent project's dated tasks from Home without changing
+their dates, and appear as navigable rows under Depends on. Completion settles
+incoming relationships durably before the prerequisite leaves the working set;
+the final settlement returns arrived tasks to Home immediately. Self, duplicate,
+Done-target, and cyclic relationships are rejected, and deleting a prerequisite
+warns about affected dependents before removing incoming relationships. Mobile
+links from the status sheet; web uses the Project completion builder. Agent-core's
+23 files / 156 tests, API's 86 / 1045, web's 3 / 44, and mobile's 21 suites / 148
+tests passed with lint and typecheck (existing warnings only); Android export
+passed. On the Pixel 7, two throwaway projects linked through the native status
+sheet and searchable picker, the dependent showed its Blocked context and
+separate Depends on row, row navigation opened the prerequisite, prerequisite
+deletion disclosed the dependent impact, removing the relationship restored
+Next, and both throwaway projects were deleted. Screenshot evidence captured the
+Blocked detail. No existing entity changed and no EAS rebuild was required. Plan:
+`docs/plans/todo-project-completion-dependency.md`.
+
 Implemented and Pixel-verified (2026-09-15): **Project state is distinct from
 calculated status** (Stage 1 of
 `docs/plans/todo-project-completion-dependency.md`; dependency behavior remains

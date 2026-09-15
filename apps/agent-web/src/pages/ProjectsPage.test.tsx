@@ -226,6 +226,22 @@ function fakeTasksRest(initial: Task[]): TasksRest {
   };
 }
 
+const dependencyCondition = (
+  id: string,
+  projectId: string,
+  refId: string,
+  createdAt = "2023-01-01T00:00:00.000Z",
+): WaitingCondition => ({
+  id,
+  projectId,
+  kind: "project-status",
+  text: null,
+  refId,
+  targetStatus: "done",
+  resolvedAt: null,
+  createdAt,
+});
+
 const waitCondition = (
   id: string,
   projectId: string,
@@ -353,6 +369,30 @@ describe("ProjectsPage", () => {
     expect(screen.getAllByText("auto").length).toBeGreaterThan(0);
   });
 
+  it("shows dependencies in a Blocked section after Waiting with compact context", async () => {
+    setApi(
+      [
+        project("1", "Blocked project"),
+        project("2", "Prerequisite", "next", "🏠"),
+        project("3", "Waiting project"),
+      ],
+      [],
+      [
+        dependencyCondition("dependency", "1", "2"),
+        waitCondition("wait", "3", "2023-01-01T00:00:00.000Z"),
+      ],
+    );
+    renderApp();
+
+    expect(await screen.findByText("Blocked")).toBeInTheDocument();
+    expect(screen.getByText("after 🏠 Prerequisite")).toBeInTheDocument();
+    const waiting = screen.getByText("Waiting");
+    const blocked = screen.getByText("Blocked");
+    expect(
+      waiting.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("navigates from a list row to the project's own screen", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp();
@@ -414,6 +454,57 @@ describe("ProjectsPage", () => {
     );
   });
 
+  it("shows a dependency separately and navigates to its prerequisite", async () => {
+    setApi(
+      [
+        project("1", "Move house"),
+        project("2", "Sell old house", "next", "🏠"),
+      ],
+      [],
+      [dependencyCondition("dependency", "1", "2")],
+    );
+    renderApp();
+    await openDetail("Move house");
+
+    expect(screen.getByText("Blocked · after 🏠 Sell old house")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Depends on" })).toBeInTheDocument();
+    expect(screen.getByText("Must be completed first")).toBeInTheDocument();
+    expect(screen.queryByText("auto")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open project Sell old house" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "Project title" })).toHaveValue(
+        "Sell old house",
+      ),
+    );
+  });
+
+  it("removes only the selected dependency and recalculates the project", async () => {
+    setApi(
+      [project("1", "Move house"), project("2", "Sell old house")],
+      [],
+      [dependencyCondition("dependency", "1", "2")],
+    );
+    renderApp();
+    await openDetail("Move house");
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Remove dependency on Sell old house",
+        }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Depends on" })).toBeNull(),
+    );
+    expect(screen.getByText("Next")).toBeInTheDocument();
+    expect(screen.getByText("Waiting on")).toBeInTheDocument();
+  });
+
   it("adds a free-text waiting condition from the detail screen", async () => {
     setApi([project("1", "Send tax letter", "next")]);
     renderApp();
@@ -433,6 +524,35 @@ describe("ProjectsPage", () => {
     await waitFor(() =>
       expect(screen.getByText("the letter comes back")).toBeInTheDocument(),
     );
+  });
+
+  it("adds a Project completion dependency without a target-status picker", async () => {
+    setApi([
+      project("1", "Move house"),
+      project("2", "Sell old house", "next", "🏠"),
+    ]);
+    renderApp();
+    await openDetail("Move house");
+    fireEvent.click(
+      screen.getByRole("button", { name: "+ Waiting condition" }),
+    );
+    fireEvent.change(screen.getByLabelText("Condition kind"), {
+      target: { value: "project-status" },
+    });
+
+    expect(screen.getByText("Project completion")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Target status")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Prerequisite project"), {
+      target: { value: "2" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Depends on" })).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Sell old house")).toBeInTheDocument();
   });
 
   it("changes the project icon from the detail screen picker", async () => {
@@ -505,14 +625,35 @@ describe("ProjectsPage", () => {
     renderApp();
     await openDetail("Run a 5K");
     fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     });
     await screen.findByRole("heading", { name: "Projects" });
     await waitFor(() =>
       expect(screen.queryByText("Run a 5K")).not.toBeInTheDocument(),
     );
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("warns when deleting a prerequisite will unblock another project", async () => {
+    setApi(
+      [project("1", "Sell old house"), project("2", "Move house")],
+      [],
+      [dependencyCondition("dependency", "2", "1")],
+    );
+    renderApp();
+    await openDetail("Sell old house");
+    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
+
+    expect(
+      screen.getByText(/“Move house” depends on it and will be unblocked/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("textbox", { name: "Project title" })).toHaveValue(
+      "Sell old house",
+    );
   });
 
   it("re-pulls tasks and waits after a delete so cascaded orphans disappear", async () => {
@@ -525,8 +666,9 @@ describe("ProjectsPage", () => {
     renderApp();
     await openDetail("Run a 5K");
     fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     });
     await waitFor(() => expect(tasksRefetch).toHaveBeenCalled());
     await waitFor(() => expect(waitsRefetch).toHaveBeenCalled());

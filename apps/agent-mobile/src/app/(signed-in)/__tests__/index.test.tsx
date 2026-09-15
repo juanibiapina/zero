@@ -8,7 +8,7 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 import { View } from 'react-native';
-import { defaultToastController } from '@zero/agent-core';
+import { defaultToastController, type WaitingCondition } from '@zero/agent-core';
 
 import type { Task } from '@/lib/api';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
@@ -74,6 +74,7 @@ const mockReorderTask =
   jest.fn<(getToken: unknown, id: string, sortKey: string) => Promise<Task>>();
 const mockFetchProjects =
   jest.fn<(getToken: unknown) => Promise<unknown[]>>();
+const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
 const mockAddProject =
   jest.fn<
     (
@@ -112,7 +113,7 @@ jest.mock('@/lib/api', () => ({
   editProject: () => Promise.reject(new Error('not used')),
   deleteProject: () => Promise.resolve(),
   // Waiting conditions feed the Home gate; a fetch returning [] is enough.
-  fetchWaits: () => Promise.resolve([]),
+  fetchWaits: () => mockFetchWaits(),
   addWaitingCondition: () => Promise.reject(new Error('not used')),
   resolveWaitingCondition: () => Promise.reject(new Error('not used')),
   deleteWaitingCondition: () => Promise.resolve(),
@@ -158,6 +159,8 @@ describe('HomeScreen', () => {
     mockFetchTasks.mockResolvedValue([]);
     mockFetchProjects.mockReset();
     mockFetchProjects.mockResolvedValue([]);
+    mockFetchWaits.mockReset();
+    mockFetchWaits.mockResolvedValue([]);
     mockAddProject.mockReset();
     mockNavigate.mockReset();
     defaultToastController.dismiss();
@@ -206,6 +209,44 @@ describe('HomeScreen', () => {
     const { getByText } = await renderScreen();
     await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
     expect(getByText('🎓')).toBeTruthy();
+  });
+
+  it('hides blocked project tasks and offers dependency review', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([
+      {
+        id: 'p',
+        title: 'Move house',
+        icon: '🏠',
+        description: null,
+        state: 'in-play',
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+    mockFetchTasks.mockResolvedValue([
+      taskRow('t', 'pack boxes', {
+        projectId: 'p',
+        showUpDate: '2023-01-01',
+      }),
+    ]);
+    mockFetchWaits.mockResolvedValue([
+      {
+        id: 'dependency',
+        projectId: 'p',
+        kind: 'project-status',
+        text: null,
+        refId: 'missing-prerequisite',
+        targetStatus: 'done',
+        resolvedAt: null,
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('Everything is blocked')).toBeTruthy());
+    expect(screen.queryByText('pack boxes')).toBeNull();
+    await fireEvent.press(screen.getByText('Review dependencies'));
+    expect(mockNavigate).toHaveBeenCalledWith('/projects', undefined);
   });
 
   it('adds a loose task from the default quick-add', async () => {

@@ -19,11 +19,12 @@ import type { WaitingCondition } from "../waits/types";
 // `plateCount` is the length of the already-computed homeTasks list (passed in,
 // not recomputed here). The plate being empty means no project is `active`
 // (an active project would have a taken-on open task on the plate), so the only
-// working statuses left to reflect are next / waiting / backlog. An all-`done`
+// working statuses left to reflect are next / waiting / blocked / backlog. An all-`done`
 // user (no next/waiting/backlog) falls into `create`, which is honest since the
 // Projects list hides done projects anyway. Pure and in-process; tested directly.
 export type HomeCallToAction =
-  | { kind: "plan"; next: number; waiting: number }
+  | { kind: "plan"; next: number; waiting: number; blocked: number }
+  | { kind: "blocked"; blocked: number }
   | { kind: "activate-backlog"; backlog: number }
   | { kind: "create" };
 
@@ -40,16 +41,19 @@ export function homeCallToAction(
 
   let next = 0;
   let waiting = 0;
+  let blocked = 0;
   let backlog = 0;
   for (const project of projects) {
     const status = projectDisplayStatus(project, tasks, today, conditions, projects);
     if (status === "next") next++;
     else if (status === "waiting") waiting++;
+    else if (status === "blocked") blocked++;
     else if (status === "backlog") backlog++;
     // `active` cannot occur on an empty plate; `done` is terminal and ignored.
   }
 
-  if (next + waiting > 0) return { kind: "plan", next, waiting };
+  if (next + waiting > 0) return { kind: "plan", next, waiting, blocked };
+  if (blocked > 0) return { kind: "blocked", blocked };
   if (backlog > 0) return { kind: "activate-backlog", backlog };
   return { kind: "create" };
 }
@@ -74,12 +78,19 @@ export function homeCallToActionCopy(
       const parts: string[] = [];
       if (action.next > 0) parts.push(`${action.next} Next`);
       if (action.waiting > 0) parts.push(`${action.waiting} Waiting`);
+      if (action.blocked > 0) parts.push(`${action.blocked} Blocked`);
       return {
         title: "Nothing on your plate yet",
         body: parts.join(" · "),
         button: "Plan your day",
       };
     }
+    case "blocked":
+      return {
+        title: "Everything is blocked",
+        body: `${action.blocked} Blocked`,
+        button: "Review dependencies",
+      };
     case "activate-backlog":
       return {
         title: "Your plate's clear",

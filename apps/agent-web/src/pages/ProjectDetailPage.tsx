@@ -4,6 +4,7 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet } from "@/components/ui/sheet";
 import {
   Popover,
   PopoverContent,
@@ -16,8 +17,14 @@ import {
   dayLabel,
   isBasisStale,
   localToday,
+  candidatePrerequisiteProjects,
+  isProjectCompletionDependency,
   messageOf,
+  projectDependencies,
+  projectDependencyRemovalImpact,
+  projectDependencyRemovalWarning,
   projectDisplayStatus,
+  projectStatusContext,
   scheduleLabel,
   PROJECT_DISPLAY_STATUS_LABELS,
   undoableAction,
@@ -87,7 +94,10 @@ function ProjectDetailReady({
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
-  useForegroundRefetch(api.refetch);
+  const refetchAll = useCallback(async () => {
+    await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]);
+  }, [api, tasksApi, waitsApi]);
+  useForegroundRefetch(refetchAll);
 
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, "asc"),
@@ -117,9 +127,11 @@ function ProjectDetailReady({
     (pid: string, state: ProjectState) => {
       setError(null);
       const tx = api.setState(pid, state);
-      tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      void tx.isPersisted.promise
+        .then(() => (state === "done" ? waitsApi.refetch() : undefined))
+        .catch((e) => setError(messageOf(e)));
     },
-    [api],
+    [api, waitsApi],
   );
 
   // Delete happens immediately (it is already behind the overflow menu — a
@@ -151,6 +163,13 @@ function ProjectDetailReady({
 
   const today = localToday();
   const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
+  const statusContext = projectStatusContext(
+    project,
+    tasks,
+    conds,
+    list,
+    today,
+  );
 
   return (
     <div className="space-y-6">
@@ -166,8 +185,13 @@ function ProjectDetailReady({
       {error && <ErrorText>{error}</ErrorText>}
 
       <ProjectHeader
+        key={`header-${project.id}`}
         project={project}
         displayStatus={displayStatus}
+        statusContext={statusContext?.label ?? null}
+        deletionWarning={projectDependencyRemovalWarning(
+          projectDependencyRemovalImpact(project.id, conds, list),
+        )}
         onEdit={commitEdit}
         onState={(state) => {
           if (state === "done") {
@@ -182,7 +206,11 @@ function ProjectDetailReady({
 
       {/* The description is the project's statement of intent — why this outcome
           matters. It sits directly under the title, above the work. */}
-      <ProjectDescription project={project} onEdit={commitEdit} />
+      <ProjectDescription
+        key={`description-${project.id}`}
+        project={project}
+        onEdit={commitEdit}
+      />
 
       <ProjectTasks api={tasksApi} projectId={project.id} onError={setError} />
 
@@ -289,12 +317,16 @@ function SuggestedIconRow({
 function ProjectHeader({
   project,
   displayStatus,
+  statusContext,
+  deletionWarning,
   onEdit,
   onState,
   onDelete,
 }: {
   project: Project;
   displayStatus: ProjectDisplayStatus;
+  statusContext: string | null;
+  deletionWarning: string | null;
   onEdit: (id: string, fields: ProjectEditFields) => void;
   onState: (state: ProjectState) => void;
   onDelete: () => void;
@@ -303,6 +335,7 @@ function ProjectHeader({
   // different project remounts this with fresh state instead of a reseed effect.
   const [title, setTitle] = useState(project.title);
   const [pickingIcon, setPickingIcon] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const commitTitle = () => {
     const trimmed = title.trim();
@@ -321,6 +354,7 @@ function ProjectHeader({
   };
 
   return (
+    <>
     <div className="space-y-3">
       <div className="flex items-start gap-3">
         <Popover open={pickingIcon} onOpenChange={setPickingIcon}>
@@ -399,8 +433,9 @@ function ProjectHeader({
           className="min-w-0 flex-1 border-0 bg-transparent p-0 text-2xl font-bold tracking-tight outline-none focus-visible:ring-0"
         />
         <div className="flex shrink-0 items-center gap-2 pt-1">
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          <span className="max-w-64 truncate rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
             {PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}
+            {statusContext ? ` · ${statusContext}` : ""}
           </span>
           <OverflowMenu>
             {project.state === "backlog" ? (
@@ -411,13 +446,41 @@ function ProjectHeader({
               </MenuItem>
             )}
             <MenuItem onSelect={() => onState("done")}>Mark done</MenuItem>
-            <MenuItem destructive onSelect={onDelete}>
+            <MenuItem destructive onSelect={() => setDeleting(true)}>
               Delete project
             </MenuItem>
           </OverflowMenu>
         </div>
       </div>
     </div>
+    <Sheet
+      open={deleting}
+      onClose={() => setDeleting(false)}
+      title={`Delete “${project.title}”?`}
+    >
+      <div className="flex flex-col gap-6">
+        <p className="text-sm text-muted-foreground">
+          This permanently deletes the project, all its tasks, and its waiting
+          conditions. This cannot be undone.
+          {deletionWarning ? ` ${deletionWarning}` : ""}
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeleting(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              setDeleting(false);
+              onDelete();
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+    </Sheet>
+    </>
   );
 }
 
@@ -658,11 +721,9 @@ function conditionLabel(
   return `until “${p?.title ?? "?"}” is ${c.targetStatus}`;
 }
 
-// The waiting conditions for a project: the open ones, plus a "+ Waiting
-// condition" control that opens the kind/param builder in a popover (off the
-// main flow, not an inline form that shifts the section). Structured kinds
-// (task-done, project-status) clear themselves in code; a free-text one is
-// resolved by hand (or later the AI).
+// Completion dependencies render under Depends on. Ordinary waits and the
+// compact add builder stay under Waiting on; Project completion narrows that
+// builder branch to an eligible prerequisite picker.
 function ProjectWaits({
   project,
   waitsApi,
@@ -678,11 +739,19 @@ function ProjectWaits({
   today: string;
   onError: (message: string) => void;
 }) {
+  const navigate = useNavigate();
   const { data: allConditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
+  const dependencies = projectDependencies(
+    project.id,
+    allConditions ?? [],
+    projects,
+  );
   const list = (allConditions ?? []).filter(
-    (c: WaitingCondition) => c.projectId === project.id,
+    (condition: WaitingCondition) =>
+      condition.projectId === project.id &&
+      !isProjectCompletionDependency(condition),
   );
   // A future-dated taken-on task makes the project wait until that day, derived
   // with no stored row. Shown as an automatic reason (no Resolve/delete); it
@@ -693,10 +762,12 @@ function ProjectWaits({
   const [kind, setKind] = useState<WaitingConditionKind>("free-text");
   const [text, setText] = useState("");
   const [refId, setRefId] = useState("");
-  const [targetStatus, setTargetStatus] =
-    useState<ProjectDisplayStatus>("done");
 
-  const otherProjects = projects.filter((p) => p.id !== project.id);
+  const otherProjects = candidatePrerequisiteProjects(
+    project.id,
+    projects,
+    allConditions ?? [],
+  );
   const openTasks = tasks.filter((t) => t.completedAt == null);
 
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }): void => {
@@ -723,14 +794,68 @@ function ProjectWaits({
       write(waitsApi.add(project.id, "task-done", { refId }));
     } else {
       if (!refId) return;
-      write(waitsApi.add(project.id, "project-status", { refId, targetStatus }));
+      write(waitsApi.dependOnProject(project.id, refId));
     }
     onOpenChange(false);
   };
 
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-semibold text-muted-foreground">Waiting on</h2>
+    <>
+      {dependencies.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            Depends on
+          </h2>
+          <ul className="flex flex-col gap-1">
+            {dependencies.map(({ condition, prerequisite }) => (
+              <li
+                key={condition.id}
+                className="flex items-center gap-2 rounded-lg border px-3 py-2"
+              >
+                <button
+                  type="button"
+                  aria-label={`Open project ${prerequisite?.title ?? "prerequisite"}`}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  disabled={!prerequisite}
+                  onClick={() => {
+                    if (prerequisite) {
+                      void navigate(`/projects/${prerequisite.id}`);
+                    }
+                  }}
+                >
+                  <span className="shrink-0 text-lg" aria-hidden>
+                    {prerequisite?.icon ?? "📁"}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium">
+                      {prerequisite?.title ?? "Another project"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Must be completed first
+                    </span>
+                  </span>
+                  <span className="text-muted-foreground" aria-hidden>
+                    ›
+                  </span>
+                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove dependency on ${prerequisite?.title ?? "project"}`}
+                  onClick={() => write(waitsApi.remove(condition.id))}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-muted-foreground">
+          Waiting on
+        </h2>
       {until != null && (
         <ul className="space-y-1">
           <li className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
@@ -785,7 +910,7 @@ function ProjectWaits({
           >
             <option value="free-text">Free text / external</option>
             <option value="task-done">Until a task is done</option>
-            <option value="project-status">Until a project reaches a status</option>
+            <option value="project-status">Project completion</option>
           </select>
           {kind === "free-text" && (
             <Input
@@ -813,44 +938,27 @@ function ProjectWaits({
             </select>
           )}
           {kind === "project-status" && (
-            <div className="flex gap-2">
-              <select
-                aria-label="Project"
-                value={refId}
-                onChange={(e) => setRefId(e.target.value)}
-                className="h-9 flex-1 rounded-md border bg-transparent px-2 text-sm"
-              >
-                <option value="">Pick a project…</option>
-                {otherProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.icon} {p.title}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Target status"
-                value={targetStatus}
-                onChange={(e) =>
-                  setTargetStatus(e.target.value as ProjectDisplayStatus)
-                }
-                className="h-9 rounded-md border bg-transparent px-2 text-sm"
-              >
-                {(["active", "next", "waiting", "backlog", "done"] as const).map(
-                  (s) => (
-                    <option key={s} value={s}>
-                      {PROJECT_DISPLAY_STATUS_LABELS[s]}
-                    </option>
-                  ),
-                )}
-              </select>
-            </div>
+            <select
+              aria-label="Prerequisite project"
+              value={refId}
+              onChange={(e) => setRefId(e.target.value)}
+              className="h-9 w-full rounded-md border bg-transparent px-2 text-sm"
+            >
+              <option value="">Pick a project…</option>
+              {otherProjects.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.icon} {candidate.title}
+                </option>
+              ))}
+            </select>
           )}
           <Button size="sm" className="w-full" onClick={onAdd}>
             Add condition
           </Button>
         </PopoverContent>
       </Popover>
-    </section>
+      </section>
+    </>
   );
 }
 

@@ -29,6 +29,7 @@ const deleteProject = (s: ReturnType<typeof makeStores>, id: string) => ({
   existed: s.projects.delete(id),
   tasks: s.tasks.deleteByProject(id),
   conditions: s.conditions.deleteByProject(id),
+  dependencies: s.conditions.deleteByReferencedProject(id),
 });
 
 describe("project delete cascade", () => {
@@ -45,13 +46,40 @@ describe("project delete cascade", () => {
 
     const result = deleteProject(s, "p1");
 
-    expect(result).toEqual({ existed: true, tasks: 2, conditions: 1 });
+    expect(result).toEqual({
+      existed: true,
+      tasks: 2,
+      conditions: 1,
+      dependencies: 0,
+    });
     // The project is gone from the working list.
     expect(s.projects.list().map((p) => p.id)).toEqual(["p2"]);
     // The loose task and p2's task remain; p1's tasks are gone.
     expect(s.tasks.list().map((t) => t.id).sort()).toEqual(["t-loose", "t-p2"]);
     // p1's condition is gone; p2's stays.
     expect(s.conditions.listOpen().map((c) => c.id)).toEqual(["c-p2"]);
+  });
+
+  it("removes incoming dependencies while preserving their dependent projects", () => {
+    const s = makeStores();
+    s.projects.add("dependent", "Move house");
+    s.projects.add("prerequisite", "Sell old house");
+    s.conditions.addProjectDependency(
+      "dependency",
+      "dependent",
+      "prerequisite",
+    );
+
+    expect(deleteProject(s, "prerequisite")).toEqual({
+      existed: true,
+      tasks: 0,
+      conditions: 0,
+      dependencies: 1,
+    });
+    expect(s.projects.list().map((project) => project.id)).toEqual([
+      "dependent",
+    ]);
+    expect(s.conditions.listOpen()).toEqual([]);
   });
 
   it("is idempotent: a replayed delete of an already-gone project is a clean no-op", () => {
@@ -63,12 +91,14 @@ describe("project delete cascade", () => {
       existed: true,
       tasks: 1,
       conditions: 0,
+      dependencies: 0,
     });
     // A second delete finds nothing on all three.
     expect(deleteProject(s, "p1")).toEqual({
       existed: false,
       tasks: 0,
       conditions: 0,
+      dependencies: 0,
     });
   });
 });

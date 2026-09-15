@@ -15,8 +15,8 @@ export type WaitingCondition = {
   refId: string | null;
   // Target status the referenced project must reach ('project-status'); else null.
   targetStatus: string | null;
-  // When a 'free-text' condition was resolved by hand/AI; null while open.
-  // Structured kinds never set this (derived-satisfied on the client).
+  // When a free-text wait was resolved or a project-completion dependency was
+  // terminally settled; null while open. Other structured kinds stay derived.
   resolvedAt: string | null;
   createdAt: string;
 };

@@ -36,6 +36,23 @@ describe("DbWaitingConditionStore", () => {
     expect(store.listOpen()).toEqual([]);
   });
 
+  it("adds and lists canonical project-completion dependencies", () => {
+    const store = makeStore();
+    const dependency = store.addProjectDependency("d1", "dependent", "prerequisite");
+    store.add("ordinary", "dependent", "free-text", { text: "wait" });
+
+    expect(dependency).toMatchObject({
+      id: "d1",
+      projectId: "dependent",
+      kind: "project-status",
+      text: null,
+      refId: "prerequisite",
+      targetStatus: "done",
+      resolvedAt: null,
+    });
+    expect(store.listOpenProjectDependencies()).toEqual([dependency]);
+  });
+
   it("stores a structured condition's ref and target", () => {
     const store = makeStore();
     const c = store.add("c2", "p1", "project-status", {
@@ -46,12 +63,52 @@ describe("DbWaitingConditionStore", () => {
     expect(c.targetStatus).toBe("done");
   });
 
+  it("resolves matching incoming dependencies once and preserves the first timestamp", () => {
+    const store = makeStore();
+    store.addProjectDependency("match", "dependent", "completed");
+    store.addProjectDependency("other", "dependent", "other-project");
+    store.add("non-terminal", "dependent", "project-status", {
+      refId: "completed",
+      targetStatus: "active",
+    });
+
+    expect(store.resolveForCompletedProject("completed")).toBe(1);
+    const firstResolvedAt = store.get("match")?.resolvedAt;
+    expect(firstResolvedAt).toBeTruthy();
+    expect(store.listOpen().map((condition) => condition.id).sort()).toEqual([
+      "non-terminal",
+      "other",
+    ]);
+
+    expect(store.resolveForCompletedProject("completed")).toBe(0);
+    expect(store.get("match")?.resolvedAt).toBe(firstResolvedAt);
+  });
+
   it("delete is idempotent on the id", () => {
     const store = makeStore();
     store.add("c1", "p1", "free-text", { text: "wait" });
     expect(store.delete("c1")).toBe(true);
     expect(store.delete("c1")).toBe(false);
     expect(store.listOpen()).toEqual([]);
+  });
+
+  describe("deleteByReferencedProject", () => {
+    it("deletes only completion dependencies that reference the project", () => {
+      const store = makeStore();
+      store.addProjectDependency("incoming", "dependent", "target");
+      store.addProjectDependency("other", "dependent", "other-target");
+      store.add("non-terminal", "dependent", "project-status", {
+        refId: "target",
+        targetStatus: "active",
+      });
+
+      expect(store.deleteByReferencedProject("target")).toBe(1);
+      expect(store.listOpen().map((condition) => condition.id).sort()).toEqual([
+        "non-terminal",
+        "other",
+      ]);
+      expect(store.deleteByReferencedProject("target")).toBe(0);
+    });
   });
 
   describe("deleteByProject", () => {

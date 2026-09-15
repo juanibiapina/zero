@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 import {
   addTask,
+  addWaitingCondition,
   apiFetch,
   completeTask,
   editTask,
@@ -114,6 +115,37 @@ describe('addTask', () => {
       projectId: null,
       sourceCaptureId: null,
     });
+  });
+});
+
+describe('addWaitingCondition', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('surfaces the server conflict explanation', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'This dependency would create a loop.' }),
+        { status: 409 },
+      ),
+    );
+    const getToken = jest.fn<TokenGetter>().mockResolvedValue('tok');
+
+    await expect(
+      addWaitingCondition(
+        getToken,
+        {
+          id: 'dependency',
+          projectId: 'dependent',
+          kind: 'project-status',
+          text: null,
+          refId: 'prerequisite',
+          targetStatus: 'done',
+        },
+        'https://example.test',
+      ),
+    ).rejects.toThrow('This dependency would create a loop.');
   });
 });
 

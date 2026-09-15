@@ -12,6 +12,7 @@ import {
   type Task,
   type TasksApi,
   type TasksRest,
+  type WaitingCondition,
   type WaitsApi,
   type WaitsRest,
   defaultToastController,
@@ -48,6 +49,13 @@ const emptyWaitsRest: WaitsRest = {
   },
   deleteWaitingCondition: async () => {},
 };
+
+function fakeWaitsRest(initial: WaitingCondition[]): WaitsRest {
+  return {
+    ...emptyWaitsRest,
+    fetchWaits: async () => initial.map((condition) => ({ ...condition })),
+  };
+}
 
 const emptyProjectsRest: ProjectsRest = {
   fetchProjects: async () => [],
@@ -161,7 +169,11 @@ const projectRow = (id: string, over: Partial<Project> = {}): Project => ({
   createdAt: over.createdAt ?? "2023-01-01T00:00:00.000Z",
 });
 
-function setApi(tasks: Task[] = [], projects: Project[] = []) {
+function setApi(
+  tasks: Task[] = [],
+  projects: Project[] = [],
+  waits: WaitingCondition[] = [],
+) {
   rescheduled.length = 0;
   moved.length = 0;
   h.tasksApi = createInMemoryTasksApi({
@@ -174,7 +186,7 @@ function setApi(tasks: Task[] = [], projects: Project[] = []) {
   });
   h.waitsApi = createInMemoryWaitsApi({
     queryClient: new QueryClient(),
-    rest: emptyWaitsRest,
+    rest: fakeWaitsRest(waits),
   });
 }
 
@@ -236,6 +248,37 @@ describe("HomePage", () => {
 
     await screen.findByRole("button", { name: 'Complete "mail the letter"' });
     expect(screen.getByText("🎓")).toBeInTheDocument();
+  });
+
+  it("hides blocked project tasks and offers dependency review", async () => {
+    setApi(
+      [
+        taskRow("1", "pack boxes", {
+          projectId: "p",
+          showUpDate: "2023-01-01",
+        }),
+      ],
+      [projectRow("p", { title: "Move house" })],
+      [
+        {
+          id: "dependency",
+          projectId: "p",
+          kind: "project-status",
+          text: null,
+          refId: "missing-prerequisite",
+          targetStatus: "done",
+          resolvedAt: null,
+          createdAt: "2023-01-01T00:00:00.000Z",
+        },
+      ],
+    );
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    expect(
+      await screen.findByRole("link", { name: "Review dependencies" }),
+    ).toHaveAttribute("href", "/projects");
+    expect(screen.getByText("Everything is blocked")).toBeInTheDocument();
+    expect(screen.queryByText("pack boxes")).toBeNull();
   });
 
   it("adds a loose task from the default Task quick-add", async () => {

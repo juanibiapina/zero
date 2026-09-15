@@ -73,6 +73,24 @@ export {
   waitingSince,
   waitingUntil,
 } from "./projects/derive";
+export {
+  candidatePrerequisiteProjects,
+  dependentProjectsForPrerequisite,
+  isProjectCompletionDependency,
+  projectDependencies,
+  projectDependencyContext,
+  projectDependencyRemovalImpact,
+  projectDependencyRemovalWarning,
+  unresolvedProjectDependencies,
+  wouldCreateProjectDependencyCycle,
+  type ProjectDependency,
+  type ProjectDependencyContext,
+  type ProjectDependencyRemovalImpact,
+} from "./projects/dependencies";
+export {
+  projectStatusContext,
+  type ProjectStatusContext,
+} from "./projects/status-context";
 export { waitingLabel } from "./projects/waiting-label";
 export { waitingBadge, type WaitingBadge } from "./projects/waiting-badge";
 export {

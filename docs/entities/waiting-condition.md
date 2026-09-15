@@ -1,10 +1,10 @@
 # Waiting condition
 
-The fourth entity of the todo app, and the first that expresses *why* something
-is blocked. A waiting condition attaches to a **Project** and answers "what is
-this project waiting on". Any unresolved condition makes the project display as
-`waiting` and hides its tasks from Today. Introduced in slice 6 of
-`docs/plans/todo-availability-model.md`.
+The fourth entity of the todo app expresses why work is unavailable. A waiting
+condition attaches to a **Project**. Ordinary conditions produce the soft
+**Waiting** status when no arrived task overrides them. The project-status/Done
+subset is a hard project-completion dependency and produces **Blocked**.
+Introduced in slice 6 of `docs/plans/todo-availability-model.md`.
 
 This file is the source of truth for the waiting condition; keep it current as
 the entity grows.
@@ -30,11 +30,13 @@ extend the list when a new target makes sense in the UI).
     completed.
   - `project-status` — `refId` is a project id, `targetStatus` the status it must
     reach; **code**-satisfied when it does.
-- **Open** — `resolvedAt IS NULL`. Structured kinds stay open in storage and are
-  *derived-satisfied* on the client; only free-text persists `resolvedAt`.
-- **Satisfied** — whether a condition is currently met (`conditionSatisfied`);
-  the free-text principle in one function — code settles the structured kinds, a
-  human/AI settles the prose.
+- **Project-completion dependency** — a `project-status` condition with
+  `targetStatus: "done"`; `projectId` is the dependent and `refId` is the
+  prerequisite.
+- **Open** — `resolvedAt IS NULL`.
+- **Satisfied** — whether a condition is currently met (`conditionSatisfied`).
+  Free-text resolution and project-completion settlement persist `resolvedAt`.
+  Other structured conditions remain dynamically satisfied from their referent.
 
 ## Data shape
 
@@ -48,11 +50,22 @@ extend the list when a new target makes sense in the UI).
 - **Add** a condition to a project (client mints the id; exactly-once on it).
 - **List** the open conditions (across projects; the client filters by project).
 - **Resolve** a free-text condition (sets `resolvedAt`; drops it from the open
-  list). Structured kinds are not resolved by hand; they clear when their
-  referent changes.
-- **Delete** a condition (idempotent on the id).
+  list).
+- **Depend on Project completion** through a validated convenience verb. The
+  directed graph rejects self, duplicate, missing, Done-target, and cyclic edges.
+- **Settle Project completion** when the prerequisite becomes Done. The server
+  sets `resolvedAt` before the Done project leaves working collections and keeps
+  the first timestamp on retries.
+- **Delete** a condition (idempotent on the id). Deleting either Project removes
+  relationship rows that would otherwise dangle.
 
 ## Derivation (where the logic lives)
+
+Project-completion dependencies are interpreted by the shared dependency module.
+An in-play Project with one or more unresolved dependencies is Blocked before
+arrived tasks, ordinary conditions, or future dates are considered. Every task
+in that Project stays off Home while blocked; dates remain unchanged and take
+effect when the final relationship settles or is removed.
 
 `projectDisplayStatus`, `conditionSatisfied`, and `unresolvedConditions` live in
 one module (`packages/agent-core/src/projects/derive.ts`) because a
@@ -99,23 +112,24 @@ list presents scheduling through inline date controls. See
 
 ## Interactions (per system)
 
-- **UI** — the project screen's **Waiting-on** section lists the open condition
-  entities (each with Resolve for free-text, or an "auto" tag for structured,
-  and a delete). A derived task date is not one of these rows on mobile. Adding
-  is behind a **"+" affordance**, not an inline form:
-  mobile adds a **Waiting** mode to the project screen's plus FAB (beside Task),
-  free-text only; web opens the builder in a **popover** from a "+" control,
-  offering all three kinds (free-text + task/project pickers). Structured kinds
-  stay web-first for now (still shown and auto-resolved on mobile).
-- **Storage** — `DbWaitingConditionStore` (`add` / `listOpen` / `resolve` /
-  `delete`), a per-entity store over do-orm. See `docs/storage.md`.
+- **UI** — project-completion rows appear under **Depends on** as navigable
+  Project identities with a separate Remove action. Every other condition stays
+  under **Waiting on**; free-text has Resolve, and historical structured rows
+  retain automatic presentation. Mobile creates completion dependencies from
+  the status sheet and creates free-text waits from the plus drawer. Web creates
+  completion dependencies through the builder's **Project completion** branch,
+  which has only an eligible prerequisite picker. A derived task date is not a
+  waiting-condition row on mobile.
+- **Storage** — `DbWaitingConditionStore` owns ordinary writes plus completion
+  edge listing, canonical dependency insertion, idempotent terminal settlement,
+  and deletion by owner or referenced prerequisite. See `docs/storage.md`.
 - **API** — per-user isolated: `GET /api/waits`, `POST /api/waits`,
   `POST /api/waits/{id}/resolve`, `DELETE /api/waits/{id}` (204, idempotent). Logs
   `waiting_condition_added` / `_resolved` / `_deleted`.
-- **Data layer** — `createWaitsApi` (`@zero/agent-core`), a verb table
-  (`addWaitingCondition` / `resolveWaitingCondition` / `deleteWaitingCondition`)
-  over the shared collection factory; a resolved free-text condition leaves the
-  open set (`leavesCollection`).
+- **Data layer** — `createWaitsApi` (`@zero/agent-core`) exposes
+  `dependOnProject` while retaining `addWaitingCondition` as the durable mutation
+  name. Resolve and delete retain their existing durable verbs; every row with a
+  non-null `resolvedAt` leaves the open collection.
 - **Other entities** — attaches to **Project** (blocks it) and references a
   **Task** (`task-done`) or another **Project** (`project-status`). The AI
   resolving a free-text condition from content is a later slice.
@@ -123,4 +137,4 @@ list presents scheduling through inline date controls. See
 ## Next
 
 - AI-resolve a free-text condition from email/calendar/content.
-- Structured-kind creation on mobile (web-first today).
+- Other structured-kind creation on mobile; project completion is now available.

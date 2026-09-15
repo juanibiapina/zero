@@ -11,6 +11,7 @@ export const PROJECT_DISPLAY_STATUS_LABELS: Record<
   active: "Active",
   next: "Next",
   waiting: "Waiting",
+  blocked: "Blocked",
   backlog: "Backlog",
   done: "Done",
 };
@@ -19,6 +20,7 @@ export const ALL_PROJECT_DISPLAY_STATUSES: ProjectDisplayStatus[] = [
   "active",
   "next",
   "waiting",
+  "blocked",
   "backlog",
   "done",
 ];

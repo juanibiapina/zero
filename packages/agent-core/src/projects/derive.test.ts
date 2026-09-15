@@ -96,6 +96,42 @@ describe("projectDisplayStatus", () => {
     );
   });
 
+  it("lets a completion dependency hard-block shown-up scheduled work", () => {
+    expect(
+      projectDisplayStatus(
+        project(),
+        [task({ showUpDate: "2026-01-01" })],
+        TODAY,
+        [
+          condition({
+            kind: "project-status",
+            refId: "prerequisite",
+            targetStatus: "done",
+          }),
+        ],
+        [{ ...project(), id: "prerequisite" }],
+      ),
+    ).toBe("blocked");
+  });
+
+  it("recalculates normally after the final dependency is consumed", () => {
+    const dependency = condition({
+      kind: "project-status",
+      refId: "prerequisite",
+      targetStatus: "done",
+    });
+    expect(
+      projectDisplayStatus(project(), [task()], TODAY, [dependency], [
+        { ...project("done"), id: "prerequisite" },
+      ]),
+    ).toBe("active");
+    expect(
+      projectDisplayStatus(project(), [], TODAY, [
+        { ...dependency, resolvedAt: "2026-06-01T00:00:00.000Z" },
+      ]),
+    ).toBe("next");
+  });
+
   it("lets shown-up scheduled work override an unresolved condition", () => {
     expect(
       projectDisplayStatus(

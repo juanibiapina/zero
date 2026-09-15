@@ -8,6 +8,19 @@ import type { WaitingCondition } from "../waits/types";
 // The default task's showUpDate; TODAY is a day after it so it is "shown up".
 const TODAY = "2026-01-02";
 
+function projectDependency(projectId: string, refId: string): WaitingCondition {
+  return {
+    id: `${projectId}-${refId}`,
+    projectId,
+    kind: "project-status",
+    text: null,
+    refId,
+    targetStatus: "done",
+    resolvedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
 function freeTextCondition(projectId: string): WaitingCondition {
   return {
     id: "c",
@@ -156,6 +169,16 @@ describe("homeTasks", () => {
       [freeTextCondition("p")],
     );
     expect(out.map((t) => t.id)).toEqual(["t"]);
+  });
+
+  it("hides an arrived project task while a completion dependency is unresolved", () => {
+    const out = homeTasks(
+      [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
+      [project("p"), project("prerequisite")],
+      TODAY,
+      [projectDependency("p", "prerequisite")],
+    );
+    expect(out).toEqual([]);
   });
 
   it("hides an undated project task on a project with an unresolved condition (waiting)", () => {

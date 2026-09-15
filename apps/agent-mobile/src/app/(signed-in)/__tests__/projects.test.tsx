@@ -309,6 +309,31 @@ describe('ProjectsScreen (list)', () => {
     expect(titles).toEqual(['Older wait', 'Newer wait']);
   });
 
+  it('shows dependencies in a Blocked section with prerequisite context', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Move house'),
+      project('2', 'Sell old house', '🏠'),
+    ]);
+    mockFetchWaits.mockResolvedValue([
+      {
+        id: 'dependency',
+        projectId: '1',
+        kind: 'project-status',
+        text: null,
+        refId: '2',
+        targetStatus: 'done',
+        resolvedAt: null,
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const screen = await renderScreen();
+
+    await waitFor(() => expect(screen.getByLabelText('Blocked, 1')).toBeTruthy());
+    expect(screen.getByLabelText('Blocked after 🏠 Sell old house')).toBeTruthy();
+  });
+
   it('re-pulls the projects when the list is pulled to refresh', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);

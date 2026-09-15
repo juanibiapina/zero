@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 
 import { log } from "../log";
+import type { ProjectDependencyConflict } from "../store/project-dependencies";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
 
@@ -10,6 +11,16 @@ type Variables = {
 };
 
 const Kind = z.enum(["free-text", "task-done", "project-status"]);
+
+const dependencyConflictMessage: Record<ProjectDependencyConflict, string> = {
+  "id-conflict": "A different waiting condition already uses this id.",
+  "missing-dependent": "This project no longer exists.",
+  "missing-prerequisite": "That prerequisite project no longer exists.",
+  "prerequisite-done": "That project is already done.",
+  self: "A project cannot depend on itself.",
+  duplicate: "This dependency already exists.",
+  cycle: "This dependency would create a loop.",
+};
 
 const WaitingConditionSchema = z.object({
   id: z.string(),
@@ -86,7 +97,13 @@ export const createWaitsRoutes = () => {
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
         },
-        description: "A non-UUID id/projectId or an unknown kind",
+        description: "Malformed ids, kind, or fields",
+      },
+      409: {
+        content: {
+          "application/json": { schema: z.object({ error: z.string() }) },
+        },
+        description: "The project dependency cannot be added",
       },
     },
   });
@@ -96,6 +113,21 @@ export const createWaitsRoutes = () => {
     const { id, projectId, kind, text, refId, targetStatus } =
       c.req.valid("json");
     const userDO = getUserDO(c.env, userId);
+    if (kind === "project-status" && targetStatus === "done") {
+      if (text != null || !refId || !z.string().uuid().safeParse(refId).success) {
+        return c.json({ error: "invalid project dependency" }, 400);
+      }
+      const result = await userDO.addProjectDependency(id, projectId, refId);
+      if ("conflict" in result) {
+        return c.json({ error: dependencyConflictMessage[result.conflict] }, 409);
+      }
+      log("project_dependency_added", {
+        clerk_user_id: userId,
+        project_id: projectId,
+        ref_id: refId,
+      });
+      return c.json({ condition: result.condition }, 201);
+    }
     const condition = await userDO.addWaitingCondition(id, projectId, kind, {
       text: text ?? null,
       refId: refId ?? null,

@@ -2,6 +2,8 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-15: Make an existing project depend on another project, see hard blockers under Depends on and in a separate Blocked section, and return its dated tasks to Home when the final prerequisite clears. Project deletion now confirms the permanent cascade and warns when removing a prerequisite affects other projects.
+
 - 2026-09-14: Browser tabs now show a larger graphite task mark without an extra white square, including on dark browser themes.
 
 - 2026-09-14: Browser tabs now show the task icon on a clean square instead of an awkward pre-cropped circle.

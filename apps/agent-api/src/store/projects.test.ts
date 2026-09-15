@@ -55,6 +55,17 @@ describe("DbProjectStore", () => {
     expect(store.list()).toEqual([first, second]);
   });
 
+  it("gets working and Done projects by id", () => {
+    const store = makeStore();
+    const working = store.add("working", "Working");
+    store.add("done", "Done");
+    store.setState("done", "done");
+
+    expect(store.get("working")).toEqual(working);
+    expect(store.get("done")?.state).toBe("done");
+    expect(store.get("missing")).toBeNull();
+  });
+
   it("starts empty", () => {
     expect(makeStore().list()).toEqual([]);
   });

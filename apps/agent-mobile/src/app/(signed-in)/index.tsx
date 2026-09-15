@@ -131,13 +131,10 @@ function Home({
   const loadError = useLoadError(api);
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  useForegroundRefetch(api.refetch);
-
-  const refetchAll = useCallback(
-    () =>
-      Promise.all([api.refetch(), projectsApi.refetch(), waitsApi.refetch()]),
-    [api, projectsApi, waitsApi],
-  );
+  const refetchAll = useCallback(async () => {
+    await Promise.all([api.refetch(), projectsApi.refetch(), waitsApi.refetch()]);
+  }, [api, projectsApi, waitsApi]);
+  useForegroundRefetch(refetchAll);
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
   const view = listView({ count: list.length, isLoading, loadError });
   const error = writeError ?? (list.length === 0 ? loadError : null);

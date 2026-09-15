@@ -30,6 +30,22 @@ function task(over: Partial<Task> & Pick<Task, "id">): Task {
   };
 }
 
+function projectDependency(
+  projectId: string,
+  refId: string,
+): WaitingCondition {
+  return {
+    id: `${projectId}-${refId}`,
+    projectId,
+    kind: "project-status",
+    text: null,
+    refId,
+    targetStatus: "done",
+    resolvedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
 function freeTextCondition(projectId: string): WaitingCondition {
   return {
     id: "c",
@@ -57,6 +73,7 @@ describe("homeCallToAction", () => {
       kind: "plan",
       next: 1,
       waiting: 0,
+      blocked: 0,
     });
   });
 
@@ -76,7 +93,37 @@ describe("homeCallToAction", () => {
         TODAY,
         [freeTextCondition("w")],
       ),
-    ).toEqual({ kind: "plan", next: 2, waiting: 1 });
+    ).toEqual({ kind: "plan", next: 2, waiting: 1, blocked: 0 });
+  });
+
+  it("counts Blocked in a mixed plan and reviews dependencies when all in-play projects are Blocked", () => {
+    const mixed = [project("next"), project("blocked"), project("prerequisite")];
+    expect(
+      homeCallToAction(
+        0,
+        0,
+        mixed,
+        [],
+        TODAY,
+        [projectDependency("blocked", "prerequisite")],
+      ),
+    ).toEqual({ kind: "plan", next: 2, waiting: 0, blocked: 1 });
+
+    const allBlocked = [project("a"), project("b"), project("prerequisite")];
+    expect(
+      homeCallToAction(
+        0,
+        0,
+        allBlocked,
+        [],
+        TODAY,
+        [
+          projectDependency("a", "prerequisite"),
+          projectDependency("b", "prerequisite"),
+          projectDependency("prerequisite", "missing"),
+        ],
+      ),
+    ).toEqual({ kind: "blocked", blocked: 3 });
   });
 
   it("activates the backlog when only Backlog and Done exist", () => {
