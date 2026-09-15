@@ -179,7 +179,10 @@ sheet and searchable picker, the dependent showed its Blocked context and
 separate Depends on row, row navigation opened the prerequisite, prerequisite
 deletion disclosed the dependent impact, removing the relationship restored
 Next, and both throwaway projects were deleted. Screenshot evidence captured the
-Blocked detail. No existing entity changed and no EAS rebuild was required. Plan:
+Blocked detail. No existing entity changed and no EAS rebuild was required for
+device verification. Local preview APK `1.0.0` versionCode 77 then built
+successfully and replaced versionCode 76 in the dedicated Drive folder; the new
+file is link-shareable and is the folder's only APK. Plan:
 `docs/plans/todo-project-completion-dependency.md`.
 
 Implemented and Pixel-verified (2026-09-15): **Project state is distinct from
