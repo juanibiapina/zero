@@ -178,7 +178,9 @@ collections repopulated all four Project groups; a throwaway project moved Next
 → Backlog → Next through the status pill and was deleted; after Wi-Fi/mobile data
 were disabled and the dev client was force-stopped, Home and Projects cold-loaded
 the refreshed local snapshots, including Croatia Trip. Connectivity was restored
-and no existing entity was changed.
+and no existing entity was changed. Local preview APK `1.0.0` versionCode 76
+built successfully and replaced versionCode 75 in the dedicated Drive folder;
+the new file is link-shareable and is the folder's only APK.
 
 Implemented and Pixel-verified (2026-09-14): **Larger clear-Home launcher
 icon.** After three comparison rounds, the user selected B Full: the original

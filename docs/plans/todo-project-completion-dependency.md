@@ -309,8 +309,9 @@ Pixel 7 verification used one throwaway project: Next → Backlog → Next persi
 through the status pill, then Delete removed it. After the collections had
 refilled online, disabling Wi-Fi/mobile data and force-stopping the dev client
 still cold-loaded Home and Projects from the version-2 snapshots. Connectivity
-was restored and no existing entity changed. Stage 2 remains unimplemented by
-explicit scope decision.
+was restored and no existing entity changed. Local preview APK `1.0.0`
+versionCode 76 built successfully and replaced versionCode 75 in the dedicated
+Google Drive folder. Stage 2 remains unimplemented by explicit scope decision.
 
 ## Stage 2 — Explicit project dependencies
 
