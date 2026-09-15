@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-15: Swipe right on a project task to schedule it for Today; swiping on Home still postpones a task to Tomorrow.
+
 - 2026-09-15: Home now brings scheduled tasks in automatically when the day changes, and pull-to-refresh works while Home is empty.
 
 - 2026-09-15: Preview installs now download compatible releases automatically, so most updates arrive after reopening the app without downloading another APK.

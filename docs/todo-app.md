@@ -162,6 +162,25 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-15): **Swipe project tasks to Today.**
+A right swipe on a mobile project task now reveals Today, writes the reactive
+local day through the existing offline-durable reschedule path, springs the
+retained row back, and shows `Scheduled · Today`; an undated task thereby
+commits the project to Active and appears on Home when the project is available.
+Home keeps its separate swipe-to-Tomorrow exit and destination feedback. The
+shared `ReorderableTaskList` interface now selects either complete semantic
+policy instead of exposing return/exit mechanics. Mobile's 22 suites / 152
+tests, lint, typecheck, and Android export passed with the existing 3 lint
+warnings and test warnings; the whole-repo check reached the documented NixOS
+`workerd` `EPIPE` failure in untouched dashboard Worker tests. On the Pixel 7,
+an isolated throwaway project stayed Next after a below-threshold swipe,
+revealed Today during the committed swipe,
+settled as Active with `Scheduled · Today`, appeared on Home, retained Home's
+Tomorrow reveal, and persisted after project refresh. Screenshot and hierarchy
+evidence captured both the Today reveal and settled caption; deleting the
+throwaway project removed its task from Home. Plan:
+`docs/plans/todo-project-task-swipe-today.md`.
+
 Implemented and Pixel-verified (2026-09-15): **Automatic local-day
 rollover and empty-Home refresh.** The mobile app now keeps one reactive
 local-day clock for Home, Upcoming, Projects, project detail, task date controls,
@@ -375,9 +394,11 @@ child persisted in the Projects list; reopening defaulted to Task. Both
 throwaway projects were deleted and no existing entity was changed.
 
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Project task
-reorder and swipe-to-Tomorrow on mobile** (plan:
-`docs/plans/todo-project-task-reorder-postpone.md`). Project detail now uses the
-same deep `ReorderableTaskList` module as Home: long-press drag writes the moved
+reorder and the original swipe-to-Tomorrow behavior on mobile** (plan:
+`docs/plans/todo-project-task-reorder-postpone.md`). The project swipe target was
+superseded by Today on 2026-09-15; the rest of this item records the original
+gesture shipment. Project detail introduced the same deep
+`ReorderableTaskList` module as Home: long-press drag writes the moved
 task's existing fractional `sortKey`, while a committed right swipe sets local
 Tomorrow through the existing offline-durable reschedule verb and springs the
 retained project row back with its new schedule caption. The project page is one

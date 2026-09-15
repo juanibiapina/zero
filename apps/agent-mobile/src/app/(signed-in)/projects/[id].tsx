@@ -322,7 +322,7 @@ function ProjectDetail({
         onOpen={detail.open}
         onError={setError}
         presentationOf={presentationOf}
-        postponeMode="return"
+        swipeAction="schedule-today"
         keyboardShouldPersistTaps="handled"
         header={
           <>

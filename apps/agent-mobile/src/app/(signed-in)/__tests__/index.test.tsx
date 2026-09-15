@@ -665,6 +665,16 @@ describe('HomeScreen', () => {
     expect(mockCompleteTask.mock.calls[0][1]).toBe('1');
   });
 
+  it('keeps Tomorrow as the Home row swipe action', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
+
+    const { getByText } = await renderScreen();
+    await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
+
+    expect(getByText('Tomorrow')).toBeTruthy();
+  });
+
   it('schedules a task to tomorrow from the scheduler', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);

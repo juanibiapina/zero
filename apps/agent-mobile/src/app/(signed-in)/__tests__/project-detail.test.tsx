@@ -586,7 +586,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockReorderTask.mock.calls[0][2] < 'a0').toBe(true);
   });
 
-  it('postpones an undated project task to tomorrow only after the swipe commits', async () => {
+  it('schedules an undated project task for today only after the swipe commits', async () => {
     mockFetchTasks.mockResolvedValue([
       taskRow('t1', 'Book flights', { showUpDate: null, sortKey: 'a0' }),
     ]);
@@ -596,6 +596,8 @@ describe('ProjectDetailScreen', () => {
 
     const { getByText } = await renderScreen();
     await waitFor(() => expect(getByText('Book flights')).toBeTruthy());
+    expect(getByText('Next')).toBeTruthy();
+    expect(getByText('Today')).toBeTruthy();
 
     const pan = (global as unknown as {
       __lastPanGesture: {
@@ -620,8 +622,9 @@ describe('ProjectDetailScreen', () => {
 
     await waitFor(() => expect(mockRescheduleTask).toHaveBeenCalledTimes(1));
     expect(mockRescheduleTask.mock.calls[0][1]).toBe('t1');
-    expect(mockRescheduleTask.mock.calls[0][2]).toBe(tomorrow(localToday()));
-    await waitFor(() => expect(getByText('Scheduled · Tomorrow')).toBeTruthy());
+    expect(mockRescheduleTask.mock.calls[0][2]).toBe(localToday());
+    await waitFor(() => expect(getByText('Scheduled · Today')).toBeTruthy());
+    await waitFor(() => expect(getByText('Active')).toBeTruthy());
   });
 
   it('adds a task to the project from its screen', async () => {

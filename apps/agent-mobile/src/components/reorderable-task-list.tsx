@@ -53,19 +53,21 @@ export type TaskRowPresentation = {
   accessibilityLabel?: string;
 };
 
+type TaskSwipeAction = 'postpone-tomorrow' | 'schedule-today';
+
 function TaskRow({
   item,
   presentation,
-  postponeMode,
+  swipeAction,
   onComplete,
-  onPostpone,
+  onSwipe,
   onOpen,
 }: {
   item: Task;
   presentation: TaskRowPresentation;
-  postponeMode: 'exit' | 'return';
+  swipeAction: TaskSwipeAction;
   onComplete: (item: Task) => void;
-  onPostpone: (item: Task) => void;
+  onSwipe: (item: Task) => void;
   onOpen: (item: Task) => void;
 }) {
   const { width } = useWindowDimensions();
@@ -101,8 +103,8 @@ function TaskRow({
             return;
           }
 
-          if (postponeMode === 'return') {
-            scheduleOnRN(onPostpone, item);
+          if (swipeAction === 'schedule-today') {
+            scheduleOnRN(onSwipe, item);
             x.set(
               withSpring(0, {
                 duration: 300,
@@ -123,12 +125,12 @@ function TaskRow({
                 reduceMotion: ReduceMotion.System,
               },
               (finished) => {
-                if (finished) scheduleOnRN(onPostpone, item);
+                if (finished) scheduleOnRN(onSwipe, item);
               },
             ),
           );
         }),
-    [item, onPostpone, postponeMode, startX, width, x],
+    [item, onSwipe, startX, swipeAction, width, x],
   );
 
   const rowStyle = useAnimatedStyle(() => ({
@@ -140,9 +142,11 @@ function TaskRow({
       <View className="overflow-hidden bg-background">
         <View
           style={StyleSheet.absoluteFill}
-          className="flex-row items-center bg-swipe-postpone px-screen-x"
+          className="flex-row items-center bg-swipe-schedule px-screen-x"
         >
-          <Text className="font-medium text-on-accent">Tomorrow</Text>
+          <Text className="font-medium text-on-accent">
+            {swipeAction === 'schedule-today' ? 'Today' : 'Tomorrow'}
+          </Text>
         </View>
         <GestureDetector gesture={pan}>
           <Animated.View style={[surfaceStyle, rowStyle]}>
@@ -194,7 +198,7 @@ export function ReorderableTaskList({
   onOpen,
   onError,
   presentationOf,
-  postponeMode,
+  swipeAction,
   header,
   footer,
   empty,
@@ -209,7 +213,7 @@ export function ReorderableTaskList({
   onOpen: (item: Task) => void;
   onError: (message: string | null) => void;
   presentationOf?: (item: Task) => TaskRowPresentation;
-  postponeMode: 'exit' | 'return';
+  swipeAction: TaskSwipeAction;
   header?: ReactElement | null;
   footer?: ReactElement | null;
   empty?: ReactElement | null;
@@ -236,16 +240,24 @@ export function ReorderableTaskList({
     }
   }, []);
 
-  const onPostpone = useCallback(
+  const onSwipe = useCallback(
     (item: Task) => {
       onError(null);
-      const transaction = api.reschedule(item.id, tomorrow(today));
-      if (postponeMode === 'exit') showTaskDestination({ ...item, showUpDate: tomorrow(today) }, [], 'scheduled');
+      const targetDate =
+        swipeAction === 'schedule-today' ? today : tomorrow(today);
+      const transaction = api.reschedule(item.id, targetDate);
+      if (swipeAction === 'postpone-tomorrow') {
+        showTaskDestination(
+          { ...item, showUpDate: targetDate },
+          [],
+          'scheduled',
+        );
+      }
       transaction.isPersisted.promise.catch((error) =>
         onError(messageOf(error)),
       );
     },
-    [api, onError, today, postponeMode],
+    [api, onError, swipeAction, today],
   );
 
   const onReorder = useCallback(
@@ -273,13 +285,13 @@ export function ReorderableTaskList({
       <TaskRow
         item={item}
         presentation={presentationOf?.(item) ?? {}}
-        postponeMode={postponeMode}
+        swipeAction={swipeAction}
         onComplete={onComplete}
-        onPostpone={onPostpone}
+        onSwipe={onSwipe}
         onOpen={onOpen}
       />
     ),
-    [onComplete, onOpen, onPostpone, postponeMode, presentationOf],
+    [onComplete, onOpen, onSwipe, presentationOf, swipeAction],
   );
 
   return (

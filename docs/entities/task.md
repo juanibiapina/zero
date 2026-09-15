@@ -46,17 +46,19 @@ subtasks. The show-up date is the **sole commitment gate** for a project task
 - **Edit** — change `text` in place. Store verb `editText`, RPC `editTask`, log
   `task_edited`.
 - **Postpone / reschedule** — set (or clear, with `null`) `showUpDate`. Swiping a
-  row right on mobile Home or a project's screen sets it to local Tomorrow,
-  including an undated task; the web uses its "Tomorrow" button. Store verb
-  `reschedule`, RPC `rescheduleTask`, log `task_rescheduled`.
+  row right on mobile Home postpones it to local Tomorrow. Swiping right on a
+  mobile project screen schedules it for local Today, including an undated
+  groomed task; the web Home uses its "Tomorrow" button. Store verb `reschedule`,
+  RPC `rescheduleTask`, log `task_rescheduled`.
 - **Reorder** — set `sortKey` to move a task in the manual order. Long-press-drag
   works on mobile Home and within a project's screen; web uses a grip drag. Store
   verb `reorder`, RPC `reorderTask`, log `task_reordered`. `sortKey` is a
   fractional index (see Ordering).
 - **Commit / groom** — a project task reaches Home by having a **date that has
   arrived**; giving it a date (Today) is the commitment, clearing the date keeps
-  it groomed on the project screen. There is no separate take-on/park verb — this
-  is `reschedule` (set/clear `showUpDate`). This replaced the retired
+  it groomed on the project screen. The mobile project screen's right swipe is
+  the direct Today commitment gesture. There is no separate take-on/park verb —
+  this is `reschedule` (set/clear `showUpDate`). This replaced the retired
   take-on/park star (`takenOnAt`, dropped in migration 0052).
 - **Deleted with its project** — a task is not orphaned when its project is
   deleted: `DELETE /api/projects/{id}` cascades to every task with that
@@ -128,9 +130,10 @@ serves the open-tasks query.
 - **Upcoming** = open ∧ future-dated (`showUpDate > today`), grouped by day, **no
   other gate** — every postponed task, loose or project, taken-on or not
   (`upcomingSections` in `@zero/agent-core`).
-- **Edit / postpone / reschedule** from Home and project rows (swipe or drag) or
-  the detail sheet (editable title + a Today / Tomorrow / calendar / clear
-  scheduler). Optimistic and offline-durable.
+- **Edit / reschedule** through the rows or detail sheet. A mobile Home swipe
+  postpones to Tomorrow; a mobile project-screen swipe schedules Today; the
+  editor offers Today / Tomorrow / calendar / clear. Writes are optimistic and
+  offline-durable.
 - **Ordering.** The list orders by `sortKey` ascending, `createdAt` as the
   tiebreak. `sortKey` is a fractional index (`fractional-indexing`'s
   `generateKeyBetween`): moving a row mints one key strictly between its
@@ -151,9 +154,10 @@ serves the open-tasks query.
 
 - **UI** — mobile Home + Upcoming tabs and project screens
   (`apps/agent-mobile`), and web `/captures` (Home, path unchanged) + `/upcoming`
-  (`apps/agent-web`). Home and mobile project screens are reorderable; their rows
-  swipe right to Tomorrow, tap the circle to complete, and tap the row to open
-  the detail sheet. Quick-add adds a task by default and can switch to a project.
+  (`apps/agent-web`). Home and mobile project screens are reorderable. A Home row
+  swipes right to Tomorrow; a project row swipes right to Today. Both tap the
+  circle to complete and the row to open the detail sheet. Quick-add adds a task
+  by default and can switch to a project.
 - **Storage** — the server domain store is `DbTaskStore` (`add` mints the trailing
   `sortKey`; `list` = every open task in manual order, no visibility filter — the
   client splits Home/Upcoming; `complete` / `reopen` / `editText` /

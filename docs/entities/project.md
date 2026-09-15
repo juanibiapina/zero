@@ -126,9 +126,11 @@ A Depends on row opens its prerequisite and has a separate Remove action that
 deletes only the relationship.
 
 On mobile, project tasks reuse `ReorderableTaskList`: tap to edit, complete with
-Undo, swipe right to schedule Tomorrow, and long-press to reorder. New project
-tasks start undated. The Task/Waiting/Project add drawer presets Task to the open
-project; Project mode creates an independent project.
+Undo, swipe right to schedule Today, and long-press to reorder. The retained row
+then reads `Scheduled · Today`; normal availability rules decide whether it also
+appears on Home. New project tasks start undated. The Task/Waiting/Project add
+drawer presets Task to the open project; Project mode creates an independent
+project.
 
 A mobile Waiting status includes its context (`Waiting · until Tomorrow` or
 `Waiting · for 5 days`). Future task dates are explained by the status and source

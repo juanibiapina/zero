@@ -241,7 +241,7 @@ function Home({
           onOpen={detail.open}
           onError={setWriteError}
           presentationOf={presentationOf}
-          postponeMode="exit"
+          swipeAction="postpone-tomorrow"
           empty={
             view === 'empty' && cta && !loadError ? (
               hydrating ? (
