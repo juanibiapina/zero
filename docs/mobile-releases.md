@@ -1,118 +1,202 @@
-# Mobile releases (`apps/agent-mobile` preview APK)
+# Mobile releases (`apps/agent-mobile` Android preview)
 
-A release is a self-contained, sideloadable **preview** APK (production Clerk +
-`https://zero.juanibiapina.dev` API baked in) handed to a real device, then
-published to a dedicated Google Drive folder so exactly one release APK is live
-at a time. This is separate from the dev-client build the `mini` Pixel runs (see
-`apps/agent-mobile/README.md`).
+The mobile app has two release paths:
 
-Three rules govern a release:
+1. **Routine release:** GitHub publishes a compatible EAS Update after CI passes on `main`.
+2. **Native release:** Build and replace the preview APK when the native fingerprint changes.
 
-1. **Build locally by default.** Build the APK on `mini` in the Nix dev shell
-   with `--profile preview --local`. Build in the cloud only when explicitly
-   asked (see [Cloud build](#cloud-build-only-when-asked)).
-2. **Publish replaces.** Upload the new APK, then delete the previous one, so the
-   Drive folder holds exactly one APK.
-3. **One dedicated folder.** The APK lives in the Drive folder **`Zero Agent
-   releases`** (`folderId` `1aQScniH9VH9sT7ejWUWhMvXtNvs6CWY_`), never in My Drive
-   root.
+The app uses the EAS `preview` channel and environment. The runtime policy is
+`fingerprint`, so an incompatible update cannot load on an older APK.
 
-## 1. Build locally (default)
+The USB Pixel 7 on `mini` remains a development-client device. Never install a
+preview or production APK on it. Use a separate device for preview APK and EAS
+Update tests.
 
-The build runs on `mini` in the Nix `android` dev shell. That shell (toolchain
-pins, the NixOS `aapt2` fix, `pnpm dlx eas-cli`, Expo-session auth) is documented
-once in the README section [Local builds on the `mini` NixOS
-box](../apps/agent-mobile/README.md#local-builds-on-the-mini-nixos-box-no-eas-quota);
-this doc does not restate it.
+## Routine release: EAS Update
 
-The build takes ~50 min (gradle compiles native for all four ABIs). It runs with
-`appVersionSource: remote` + `autoIncrement`, so EAS bumps the remote
-`versionCode` (e.g. 60 → 61) and prints it. The app `version` is in `app.json`
-(`expo.version`, e.g. `1.0.0`).
+A push to `main` publishes an Android update after lint, typecheck, build, and
+tests pass. The CI job publishes only for changes to these paths:
+
+- `apps/agent-mobile/`
+- `packages/agent-core/`
+- `pnpm-lock.yaml`
+- `pnpm-workspace.yaml`
+- `package.json`
+- `patches/`
+
+CI runs this command from `apps/agent-mobile`:
 
 ```bash
-# From the zero repo root, on mini. ~50 min.
+eas update \
+  --channel preview \
+  --platform android \
+  --environment preview \
+  --message "<commit subject> (<short SHA>)" \
+  --non-interactive
+```
+
+The `preview` environment contains the public
+`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`. The app uses
+`https://zero.juanibiapina.dev` when `EXPO_PUBLIC_API_URL` is not present.
+
+The update check does not block startup. On a cold launch, the app starts its
+cached code and downloads a compatible update. The app uses that update on a
+later cold launch.
+
+No APK build, Drive download, or reinstall is necessary for this path.
+
+### Server compatibility
+
+Older installed apps continue to use the server after a mobile release. Keep
+server interfaces backward-compatible.
+
+If mobile code needs a new server interface, release the server change first.
+Then release the mobile caller in a later `main` push.
+
+### Recovery
+
+Prefer a fix or revert on `main`. Green CI publishes the next compatible update.
+
+Republish an older update only when it is compatible with data from the newer
+code:
+
+```bash
+eas update:republish --group <group-id> --platform android
+```
+
+An update changes application code. It does not undo local or remote data
+changes.
+
+Use EAS Update insights after the metrics become available:
+
+```bash
+eas update:list --branch preview --json --non-interactive
+eas update:insights <group-id> --platform android
+eas channel:insights --channel preview --runtime-version <runtime-version>
+```
+
+## Native release: preview APK
+
+Build a new APK when the native fingerprint changes. Native inputs include Expo
+configuration, config plugins, native modules, native dependencies, and the Expo
+SDK.
+
+A CI update with a new fingerprint is safe. Existing APKs reject it until a
+compatible APK is installed.
+
+Three rules govern an APK release:
+
+1. **Build locally by default.** Use the Nix Android shell on `mini`.
+2. **Replace the Drive file.** Keep exactly one live APK in the release folder.
+3. **Use a preview device.** Do not install the APK on the USB Pixel 7.
+
+Bump `expo.version` for each native release. EAS manages and increments Android
+`versionCode` through `appVersionSource: remote`.
+
+### 1. Build the APK locally
+
+The Android toolchain and NixOS requirements live in the mobile README section
+[Local builds on the `mini` NixOS box](../apps/agent-mobile/README.md#local-builds-on-the-mini-nixos-box-no-eas-quota).
+
+Run this command from the repository root on `mini`:
+
+```bash
 export NIXPKGS_ACCEPT_ANDROID_SDK_LICENSE=1
 nix develop ~/workspace/juanibiapina/dotfiles#android --command bash -c '
   cd apps/agent-mobile
   pnpm dlx eas-cli@latest build --platform android --profile preview --local \
     --non-interactive --output /tmp/zero-agent-preview.apk
 '
-# The log ends with "Incremented versionCode from N to N+1" and
-# "You can find the build artifacts in /tmp/zero-agent-preview.apk".
-
-# Name it <version>-vc<versionCode>, matching the Drive convention.
-mv /tmp/zero-agent-preview.apk /tmp/zero-agent-v1.0.0-vc61-preview.apk
 ```
 
-Notes:
-- `eas build --local` still fetches the signing keystore from EAS ("Using remote
-  Android credentials"), so the APK installs over the existing app with no
-  uninstall. It runs the same prebuild + gradle steps as the cloud, on this box.
-- Never `adb install` a `preview`/`production` APK onto the `mini` Pixel — a
-  standalone build breaks hot-reload there (see the README callout). The release
-  APK is for other devices.
+The preview profile uses the EAS `preview` environment and remote Android
+credentials. The local build does not consume cloud-build quota.
 
-## 2. Publish to Drive (replace)
+Rename the file with its app version and EAS-managed version code:
 
-Always upload the new APK into the `Zero Agent releases` folder, share it, then
-delete every older APK so exactly one remains.
+```bash
+mv /tmp/zero-agent-preview.apk /tmp/zero-agent-v1.1.0-vc80-preview.apk
+```
+
+Replace the example version code with the value from the build log.
+
+### 2. Replace the APK in Drive
+
+The dedicated folder is **`Zero Agent releases`**. Its folder ID is
+`1aQScniH9VH9sT7ejWUWhMvXtNvs6CWY_`.
 
 ```bash
 FOLDER=1aQScniH9VH9sT7ejWUWhMvXtNvs6CWY_
 
-# 1) Upload into the folder.
-gdcli juanibiapina@gmail.com upload /tmp/zero-agent-v1.0.0-vc61-preview.apk --folder $FOLDER
-
-# 2) Make the new file link-shareable; the printed link is the install URL.
+gdcli juanibiapina@gmail.com upload \
+  /tmp/zero-agent-v1.1.0-vc80-preview.apk --folder "$FOLDER"
 gdcli juanibiapina@gmail.com share <newFileId> --anyone
-
-# 3) Delete every other APK in the folder so only the latest remains.
-gdcli juanibiapina@gmail.com ls $FOLDER
+gdcli juanibiapina@gmail.com ls "$FOLDER"
 gdcli juanibiapina@gmail.com delete <oldFileId>
 ```
 
-`gdcli delete` moves the old APK to Trash (recoverable). The `--anyone` link is
-what a phone opens to sideload (allow "install from unknown sources").
+Upload and share the new APK before you delete the old APK. `gdcli delete` moves
+the old file to Trash.
 
-If the folder is ever lost, recreate it and update the `folderId` above:
+If the folder is lost, create it again and update the folder ID in this file:
 
 ```bash
 gdcli juanibiapina@gmail.com mkdir "Zero Agent releases"
 ```
 
-## 3. Install on a physical Android device
+### 3. Install and test the APK
 
-1. Open the shared `--anyone` link from step 2 on the phone.
-2. Allow **install from unknown sources** if prompted, then install.
-3. Launch **Zero Agent** — it opens to the sign-in screen; sign in with Google to
-   reach the home screen.
+1. Open the shared Drive link on the preview device.
+2. Allow installation from unknown sources when Android requests it.
+3. Install the APK over the existing app.
+4. Launch Zero Agent and sign in with Google.
+5. Make sure that the app opens while the device is offline.
 
-## Cloud build (only when asked)
+Do not change existing production entities during the test. Use throwaway
+entities for a test that requires a write. Remove those entities after the test.
 
-Build on EAS instead of locally only when explicitly requested (e.g. the local
-Nix shell is unavailable). This spends the EAS free-tier Android quota (30
-builds/month).
+## First EAS Update bootstrap
+
+Every tester must install the first update-enabled APK once. APKs before version
+`1.1.0` do not contain `expo-updates` and cannot receive updates.
+
+Use this sequence for the first release:
+
+1. Build and install `development-pixel` on the USB Pixel 7.
+2. Make sure that the development client still loads headless Metro.
+3. Build and publish the `1.1.0` preview APK.
+4. Install the APK on a separate preview device.
+5. Re-run the successful CI workflow for the same commit.
+6. Cold-launch the preview app once to download the update.
+7. Stop the app fully.
+8. Cold-launch the app again to use the update.
+9. Stop network access and cold-launch the app again.
+
+This sequence proves that the GitHub update fingerprint matches the APK from
+`mini`. A cross-machine fingerprint mismatch prevents the update from loading.
+
+The fake-auth E2E APK has remote updates disabled. It always uses its embedded
+test bundle and local worker.
+
+## Cloud build: explicit request only
+
+Use a cloud build only when the user asks for one. The Expo Free plan includes
+15 Android and 15 iOS cloud builds.
 
 ```bash
-# From apps/agent-mobile. EAS prints a build URL with a QR code when done.
-eas build -p android --profile preview
+cd apps/agent-mobile
+eas build --platform android --profile preview
 ```
 
-On the phone, open the URL / scan the QR from the EAS build page, then install as
-above. After the cloud build finishes, download the artifact and publish it to
-Drive with the same [replace step](#2-publish-to-drive-replace).
+Download the artifact after the build. Then use the same Drive replacement
+procedure.
 
-Find past builds and their install URLs:
+Use this command to list past builds:
 
 ```bash
 eas build:list
 ```
 
-### CI build (manual)
-
-A `mobile-build` job in `.github/workflows/ci.yml` runs an EAS `preview` build.
-It is gated on **`workflow_dispatch`** (manual) — not on every push — to conserve
-the free EAS quota. Trigger it from the GitHub Actions tab ("Run workflow"). It
-requires an `EXPO_TOKEN` repository secret (create a token in the Expo dashboard →
-Account settings → Access tokens).
+The manual `mobile-build` job in `.github/workflows/ci.yml` also creates a cloud
+preview build. Start it with `workflow_dispatch`. The job uses the GitHub
+`EXPO_TOKEN` secret.

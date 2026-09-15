@@ -188,11 +188,12 @@ publishing until the trusted publisher entry on npmjs.com is edited to match.
 
 ### Mobile releases
 
-The mobile todo app (`apps/agent-mobile`) ships as a sideloadable preview APK,
-separate from the Workers deploy. A release builds **locally by default** on the
-`mini` box (Nix dev shell), and in the cloud (EAS) only when explicitly asked.
-The APK is published to the dedicated `Zero Agent releases` Google Drive folder,
-always replacing the previous one so exactly one release APK is live. See
+The mobile todo app (`apps/agent-mobile`) releases compatible JavaScript and
+assets through EAS Update. A relevant push to `main` publishes to the Android
+`preview` channel after CI passes. Native fingerprint changes still use a
+sideloadable preview APK built **locally by default** on `mini`; use an EAS cloud
+build only when explicitly asked. Publish that APK to the dedicated `Zero Agent
+releases` Google Drive folder and replace the previous APK. See
 `docs/mobile-releases.md`.
 
 ## Architecture
@@ -203,7 +204,7 @@ Packages:
 
 - **Worker:** `apps/agent-api` (`@zero/agent-api`)
 - **Frontend:** `apps/agent-web` (`@zero/agent-web`)
-- **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). A release is a preview APK built **locally by default** on the `mini` box with a Nix dev shell (no system change), and only in the cloud (EAS) when explicitly asked; it is published to a dedicated Google Drive folder, replacing the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/agent-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
+- **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Routine releases publish compatible JavaScript and assets to the EAS `preview` channel after green `main` CI. Native fingerprint changes use a preview APK built **locally by default** on `mini` with a Nix dev shell; use an EAS cloud build only when explicitly asked. Publish the APK to a dedicated Google Drive folder and replace the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/agent-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
 - **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and OpenAI servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
 - **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).

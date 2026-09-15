@@ -31,9 +31,8 @@
       },
       "node": "22.23.1",
       "pnpm": "10.21.0",
-      "env": {
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuemVyby5qdWFuaWJpYXBpbmEuZGV2JA"
-      }
+      "channel": "preview",
+      "environment": "preview"
     },
     "production": {
       "autoIncrement": true,

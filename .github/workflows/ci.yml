@@ -68,10 +68,76 @@ jobs:
       - name: Deploy dry run
         run: pnpm exec turbo run deploy -- --dry-run
 
+  mobile-update-changes:
+    name: Detect mobile update changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      relevant: ${{ steps.diff.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check the pushed commits
+        id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if git diff --quiet "$BEFORE" "$AFTER" -- \
+            apps/agent-mobile packages/agent-core \
+            pnpm-lock.yaml pnpm-workspace.yaml package.json patches; then
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  mobile-update:
+    name: Publish Android preview update
+    runs-on: ubuntu-latest
+    needs: [mobile-update-changes, lint-and-typecheck, build]
+    if: needs.mobile-update-changes.outputs.relevant == 'true'
+    concurrency:
+      group: mobile-update-preview
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish Android preview update
+        working-directory: apps/agent-mobile
+        run: |
+          SUBJECT=$(git log -1 --pretty=%s)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          eas update \
+            --channel preview \
+            --platform android \
+            --environment preview \
+            --message "$SUBJECT ($SHORT_SHA)" \
+            --non-interactive
+
   mobile-build:
     name: Mobile EAS Build (Android preview)
     runs-on: ubuntu-latest
-    # Manual only: EAS free tier is 30 builds/month, so this never runs on push/PR.
+    # Manual only: EAS free tier includes 15 Android cloud builds, so this never runs on push/PR.
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v7

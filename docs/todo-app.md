@@ -162,6 +162,30 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-15; release bootstrap pending):
+**Frequent private Android releases.** The preview app now includes
+`expo-updates`, uses the EAS `preview` channel and environment, and guards each
+release with the native `fingerprint` runtime policy. Relevant `main` pushes
+publish an Android update only after lint/typecheck and build/test pass; a
+separate full-history path gate prevents irrelevant pushes from entering the
+publisher's cancellation group. The hermetic E2E configuration disables remote
+updates. The public Clerk key now lives in the project-scoped EAS `preview`
+environment. Normal and E2E Expo configuration checks passed, two Android
+fingerprints matched (`02b05f3014c70d1c67ddcfb8654e9471190f2488`), actionlint
+passed, and mobile's 21 suites / 148 tests, lint, typecheck, and Android export
+passed with existing warnings only. The whole-repo check reached the existing
+unrelated dashboard test shutdown timeout. Adding `expo-updates` exposed its use
+of Android Gradle Plugin's default NDK 27.0.12077973; the declarative Android
+shell in `juanibiapina/dotfiles` now includes that NDK beside React Native's
+27.1.12297006. A local ARM64 development-client build then passed as versionCode
+79, installed on the Pixel 7, loaded headless Metro, and completed a read-only
+Home → Projects Maestro flow. The signed four-ABI `1.1.0` preview APK then built
+as versionCode 80 with the expected URL, channel, runtime fingerprint, and
+nonblocking launch values. The APK and an EAS Update remain unpublished: the
+implementation must reach `main`, then the separate preview-device APK-to-update
+round trip completes the bootstrap. Plan:
+`docs/plans/todo-mobile-frequent-releases.md`.
+
 Implemented and Pixel-verified (2026-09-15): **Project completion
 dependencies.** An existing project can now depend on completion of one or more
 other existing projects. Unresolved relationships produce a calculated Blocked

@@ -195,9 +195,10 @@ Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
 | `EXPO_PUBLIC_API_URL`               | no       | `https://zero.juanibiapina.dev`  | Base URL for authenticated `/api/*` calls           |
 
 The Clerk **publishable** key is public by design (`pk_...`, already shipped in
-the web bundle), so it is committed in the `env` block of every `eas.json` build
-profile — it is **not** an EAS Secret. For local `expo start`, export the same
-value in your shell or put it in `apps/agent-mobile/.env.local` (gitignored):
+the web bundle). The `preview` profile reads it from the EAS `preview`
+environment. Other build profiles keep it in their `eas.json` `env` block. For
+local `expo start`, export the same value or put it in
+`apps/agent-mobile/.env.local` (gitignored):
 
 ```bash
 export EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
@@ -330,6 +331,7 @@ How it works:
   is signed-in with a static token (`e2e-test-user`); no screen imports change,
   and production/preview builds resolve Clerk as normal. Build it with the `e2e`
   EAS profile (`EXPO_PUBLIC_E2E_FAKE_AUTH=1`, `EXPO_PUBLIC_API_URL=http://localhost:8787`).
+  This profile disables EAS Update, so the suite always runs its embedded bundle.
 - **Local worker.** `wrangler dev --config apps/agent-api/wrangler.e2e.jsonc`
   runs the real worker with a throwaway local Durable Object (`--persist-to` a
   temp dir, wiped per run). Under `ENVIRONMENT=test` the `/api/*` guard trusts
@@ -468,19 +470,22 @@ eas build -p android --profile preview
 `preview` profile produces a sideloadable **APK** (not an AAB); `production`
 produces an AAB for the Play Store (defined but unused for now). The `preview`
 build (a **distributable artifact**) is not sideloaded onto the mini Pixel, which
-stays on the dev client (see the callout under Physical device testing) — for the
-full preview-APK release flow see **[Mobile releases](../../docs/mobile-releases.md)**.
+stays on the dev client (see the callout under Physical device testing).
 
-Builds run **locally on `mini`** by default (next section); the cloud (EAS) path
-is used only when explicitly asked (EAS free tier caps Android cloud builds per
-month).
+Routine JavaScript and asset releases use EAS Update after CI passes. Native
+fingerprint changes require a new preview APK. The complete release procedure is
+in **[Mobile releases](../../docs/mobile-releases.md)**.
+
+Native builds run **locally on `mini`** by default (next section). Use the cloud
+(EAS) build path only when the user asks for it.
 
 ### Local builds on the `mini` NixOS box (no EAS quota)
 
 Build the **dev client** APK **locally on `mini`** and install it on the Pixel
 (this device is dev-client-only — see the callout above). Use a Nix dev shell that
-ships the exact Android toolchain Expo SDK 57 / React Native 0.86 pin (SDK platform 36,
-build-tools 36.0.0, NDK 27.1.12297006, cmake 3.22.1, JDK 17). The shell lives in
+ships the Android toolchain for Expo SDK 57 / React Native 0.86 (SDK platform 36,
+build-tools 36.0.0, React Native NDK 27.1.12297006, Android Gradle Plugin default
+NDK 27.0.12077973, cmake 3.22.1, JDK 17). The shell lives in
 `juanibiapina/dotfiles` (`nix/shells/android.nix`, exposed as the flake output
 `devShells.x86_64-linux.android`) — it is a dev shell, so it needs **no**
 `nixos-rebuild` / system change.
@@ -510,10 +515,9 @@ adb install -r -d /tmp/local-devclient.apk
 
 Do **not** build `--profile preview`/`production` and `adb install` it here — a
 standalone build breaks hot-reload on this device (see the callout above). A
-standalone **preview** APK is a distributable artifact; build it locally and
-publish it to Google Drive — never sideload it onto the mini Pixel. The full
-preview-APK release flow (local build, Drive publish, install) lives in
-**[Mobile releases](../../docs/mobile-releases.md)**.
+standalone **preview** APK is a distributable artifact. Build it locally and
+publish it to Google Drive. Never sideload it onto the mini Pixel. The native
+release path lives in **[Mobile releases](../../docs/mobile-releases.md)**.
 
 Notes on local builds:
 - `eas build --local` still fetches the signing keystore from EAS ("Using remote
@@ -528,13 +532,17 @@ Notes on local builds:
 - Plain `pnpm`/`node` from the outer environment stay on `PATH` inside the shell,
   so the repo's package manager is used as usual.
 
-## Releases (preview APK → Google Drive)
+## Releases (EAS Update and preview APK)
 
-The preview-APK release process — local-by-default build, publish into the
-dedicated `Zero Agent releases` Drive folder (replacing the previous APK), and
-install on a device — lives in **[Mobile releases](../../docs/mobile-releases.md)**.
-The manual `mobile-build` CI job (EAS `preview`, `workflow_dispatch`, needs an
-`EXPO_TOKEN` secret) is documented there too.
+Routine JavaScript and asset releases publish to the EAS `preview` channel after
+green `main` CI. Native fingerprint changes use a locally built preview APK and
+the dedicated Drive folder. Both paths live in
+**[Mobile releases](../../docs/mobile-releases.md)**.
+
+The manual `mobile-build` CI job creates a cloud preview APK only through
+`workflow_dispatch`. The automatic `mobile-update` job publishes compatible
+Android updates after relevant `main` pushes. Both jobs use the `EXPO_TOKEN`
+secret.
 
 The `lint` / `typecheck` / `test` jobs still run on every push and PR and include
-this app via Turbo.
+this app through Turbo.

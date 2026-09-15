@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-15: Preview installs now download compatible releases automatically, so most updates arrive after reopening the app without downloading another APK.
+
 - 2026-09-15: Make an existing project depend on another project, see hard blockers under Depends on and in a separate Blocked section, and return its dated tasks to Home when the final prerequisite clears. Deleting a prerequisite warns when it affects other projects.
 
 - 2026-09-14: The clear-Home launcher checkmark is larger and bolder, so it reads more clearly at a glance.
