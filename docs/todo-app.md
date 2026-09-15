@@ -162,7 +162,7 @@ committed.
 
 ## Project tracking
 
-Implemented and Pixel-verified (2026-09-15; release bootstrap pending):
+Implemented, published, and Pixel-verified (2026-09-15; preview-device delivery pending):
 **Frequent private Android releases.** The preview app now includes
 `expo-updates`, uses the EAS `preview` channel and environment, and guards each
 release with the native `fingerprint` runtime policy. Relevant `main` pushes
@@ -181,9 +181,13 @@ shell in `juanibiapina/dotfiles` now includes that NDK beside React Native's
 79, installed on the Pixel 7, loaded headless Metro, and completed a read-only
 Home → Projects Maestro flow. The signed four-ABI `1.1.0` preview APK then built
 as versionCode 80 with the expected URL, channel, runtime fingerprint, and
-nonblocking launch values. The APK and an EAS Update remain unpublished: the
-implementation must reach `main`, then the separate preview-device APK-to-update
-round trip completes the bootstrap. Plan:
+nonblocking launch values. GitHub CI passed and published an Android update whose
+runtime exactly matches the APK. A matching update-protocol request returned the
+published update, while an incompatible runtime returned 204 with
+`NO_UPDATE_AVAILABLE`. The versionCode 80 APK replaced versionCode 77 in Drive,
+is link-shareable, and is the folder's only file. EAS Simulator is unavailable
+for this account and no second Android device is attached, so the two-cold-launch
+preview-device delivery proof remains pending. Plan:
 `docs/plans/todo-mobile-frequent-releases.md`.
 
 Implemented and Pixel-verified (2026-09-15): **Project completion
