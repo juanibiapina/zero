@@ -3,7 +3,7 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useRouter } from 'expo-router';
 import {
-  BACKLOG_COLLAPSE_THRESHOLD, LOADING_TEXT_DELAY_MS, localToday,
+  BACKLOG_COLLAPSE_THRESHOLD, LOADING_TEXT_DELAY_MS,
   projectDisplayStatus, projectsByStatus, listView,
   PROJECT_DISPLAY_STATUS_LABELS, projectStatusContext,
   type Project, type ProjectsApi, type ProjectDisplayStatus, type TasksApi,
@@ -15,6 +15,7 @@ import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
 import { ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
+import { useLocalDay } from '@/lib/local-day';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -91,7 +92,7 @@ function Projects({ api, tasksApi, waitsApi }: {
   const view = listView({ count: list.length, isLoading, loadError });
   const error = writeError ?? (list.length === 0 ? loadError : null);
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
-  const today = localToday();
+  const today = useLocalDay();
   const grouped = useMemo(() => projectsByStatus(
     list,
     (p) => projectDisplayStatus(p, tasks, today, conds, list),

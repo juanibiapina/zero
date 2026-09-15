@@ -162,6 +162,24 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-15): **Automatic local-day
+rollover and empty-Home refresh.** The mobile app now keeps one reactive
+local-day clock for Home, Upcoming, Projects, project detail, task date controls,
+and the Home launcher count. It publishes at local midnight and catches up on
+foreground after Android suspends timers. Home's empty call to action now stays
+inside the reorderable list, so the same pull-to-refresh surface remains
+available with zero visible tasks. A Home screen regression proves a locally
+cached next-day task appears after midnight without another server fetch;
+another proves empty Home re-pulls Tasks, Projects, and Waiting Conditions. The
+local-day lifecycle test covers an active midnight and a missed background
+rollover. Mobile's 22 suites / 151 tests, lint, typecheck, and Android export
+passed with existing warnings only; the whole-repo check reached the documented
+NixOS `workerd` `EPIPE` failure in the untouched dashboard Worker tests. On the
+Pixel 7, with networking disabled and the clock temporarily set to 23:59, an
+existing future task appeared on Home at 00:00 and disappeared from Upcoming
+without a pull, relaunch, or production-data write; automatic time and
+networking were restored. Plan: `docs/plans/todo-mobile-midnight-refresh.md`.
+
 Implemented, published, and device-verified (2026-09-15):
 **Frequent private Android releases.** The preview app now includes
 `expo-updates`, uses the EAS `preview` channel and environment, and guards each

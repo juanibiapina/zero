@@ -1,6 +1,5 @@
 import {
   ADD_MODE_PLACEHOLDER,
-  localToday,
   messageOf,
   scheduleLabel,
   toast,
@@ -19,6 +18,7 @@ import { AddModeSelector, TaskEditorSheet } from '@/components/task-editor-sheet
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
+import { useLocalDay } from '@/lib/local-day';
 import { type TokenGetter } from '@/lib/api';
 import { showTaskDestination } from '@/lib/task-feedback';
 
@@ -105,7 +105,7 @@ export function useQuickAdd({
 
   // The screen's home project, normalized (Home passes none).
   const contextProjectId = projectId ?? null;
-  const today = localToday();
+  const today = useLocalDay();
 
   const closeAdd = useCallback(() => {
     setText('');
@@ -180,7 +180,7 @@ export function useQuickAdd({
     const tx = tasksApi.add(trimmed, addDate, effectiveProjectId);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     if (
-      (contextProjectId == null && addDate != null && addDate > localToday()) ||
+      (contextProjectId == null && addDate != null && addDate > today) ||
       (effectiveProjectId != null && effectiveProjectId !== contextProjectId)
     ) {
       showTaskDestination({ showUpDate: addDate, projectId: effectiveProjectId }, projects, 'created');
@@ -193,6 +193,7 @@ export function useQuickAdd({
     addDate,
     addProjectId,
     contextProjectId,
+    today,
     projects,
     tasksApi,
     projectsApi,

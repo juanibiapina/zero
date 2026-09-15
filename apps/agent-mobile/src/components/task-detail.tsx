@@ -1,5 +1,4 @@
 import {
-  localToday,
   messageOf,
   monthMatrix,
   scheduleLabel,
@@ -21,6 +20,7 @@ import { TaskEditorSheet } from '@/components/task-editor-sheet';
 import { Input } from '@/components/ui/input';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
+import { useLocalDay } from '@/lib/local-day';
 import { useColor } from '@/lib/theme';
 import { showTaskDestination } from '@/lib/task-feedback';
 
@@ -232,7 +232,7 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
   const { height } = useWindowDimensions();
   const accent = useColor('--color-accent');
   const onAccent = useColor('--color-on-accent');
-  const today = localToday();
+  const today = useLocalDay();
   const tmr = tomorrow(today);
   const selected = showUpDate ?? null;
 
@@ -430,6 +430,7 @@ export function useTaskDetail({
   const [draft, setDraft] = useState('');
   const [scheduling, setScheduling] = useState(false);
   const [picking, setPicking] = useState(false);
+  const today = useLocalDay();
   const projectJumpColor = useColor('--color-accent');
   const closingDetailRef = useRef(false);
   const selected = selectedId
@@ -554,7 +555,7 @@ export function useTaskDetail({
         scheduleAction={
           selected
             ? {
-                label: selected.showUpDate ? scheduleLabel(selected.showUpDate, localToday()) : 'No date',
+                label: selected.showUpDate ? scheduleLabel(selected.showUpDate, today) : 'No date',
                 accessibilityLabel: 'Set schedule',
                 active: selected.showUpDate != null,
                 onPress: () => { commitDraft(); setScheduling(true); },

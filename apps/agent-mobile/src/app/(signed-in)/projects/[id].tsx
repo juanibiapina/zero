@@ -9,7 +9,6 @@ import {
   compareByOrder,
   isBasisStale,
   isProjectCompletionDependency,
-  localToday,
   messageOf,
   projectDependencies,
   projectDependencyRemovalImpact,
@@ -49,6 +48,7 @@ import {
   requestIconSuggestions,
   useIconSuggestions,
 } from '@/lib/icon-suggestions';
+import { useLocalDay } from '@/lib/local-day';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -262,7 +262,7 @@ function ProjectDetail({
   }, [api, tasksApi, waitsApi]);
   useForegroundRefetch(refetchAll);
   const { refreshing, onRefresh } = usePullRefresh(refetchAll);
-  const today = localToday();
+  const today = useLocalDay();
   const presentationOf = useCallback(
     (task: Task) => {
       const scheduled =

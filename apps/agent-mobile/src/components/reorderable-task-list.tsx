@@ -197,6 +197,7 @@ export function ReorderableTaskList({
   postponeMode,
   header,
   footer,
+  empty,
   keyboardShouldPersistTaps,
 }: {
   api: TasksApi;
@@ -211,6 +212,7 @@ export function ReorderableTaskList({
   postponeMode: 'exit' | 'return';
   header?: ReactElement | null;
   footer?: ReactElement | null;
+  empty?: ReactElement | null;
   keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
 }) {
   const accent = useColor('--color-accent');
@@ -300,6 +302,7 @@ export function ReorderableTaskList({
       renderItem={renderItem}
       ListHeaderComponent={header}
       ListFooterComponent={footer}
+      ListEmptyComponent={empty}
       itemLayoutAnimation={LinearTransition.duration(200)}
       onReorder={onReorder}
       onDragStart={onDragStart}

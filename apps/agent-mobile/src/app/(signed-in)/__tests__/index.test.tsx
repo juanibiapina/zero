@@ -836,4 +836,53 @@ describe('HomeScreen', () => {
       expect(mockFetchTasks.mock.calls.length).toBeGreaterThan(before),
     );
   });
+
+  it('re-pulls every Home collection when the empty state is pulled to refresh', async () => {
+    mockGetToken.mockResolvedValue('tok');
+
+    const screen = await renderScreen();
+    await waitFor(() =>
+      expect(screen.getByText('Create your first project')).toBeTruthy(),
+    );
+    const tasksBefore = mockFetchTasks.mock.calls.length;
+    const projectsBefore = mockFetchProjects.mock.calls.length;
+    const waitsBefore = mockFetchWaits.mock.calls.length;
+
+    await act(async () => {
+      pullToRefresh(screen);
+    });
+
+    await waitFor(() => {
+      expect(mockFetchTasks.mock.calls.length).toBeGreaterThan(tasksBefore);
+      expect(mockFetchProjects.mock.calls.length).toBeGreaterThan(projectsBefore);
+      expect(mockFetchWaits.mock.calls.length).toBeGreaterThan(waitsBefore);
+    });
+  });
+
+  it('shows a task when its local day arrives without refetching', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 8, 15, 23, 59, 50));
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchTasks.mockResolvedValue([
+      taskRow('tomorrow', 'arrived overnight', {
+        showUpDate: '2026-09-16',
+      }),
+    ]);
+
+    const screen = await renderScreen();
+    await waitFor(() =>
+      expect(screen.getByText('Create your first project')).toBeTruthy(),
+    );
+    expect(screen.queryByText('arrived overnight')).toBeNull();
+    const fetchesBeforeMidnight = mockFetchTasks.mock.calls.length;
+
+    await act(async () => {
+      jest.advanceTimersByTime(10_001);
+    });
+
+    expect(screen.getByText('arrived overnight')).toBeTruthy();
+    expect(mockFetchTasks).toHaveBeenCalledTimes(fetchesBeforeMidnight);
+    await screen.unmount();
+    jest.useRealTimers();
+  });
 });

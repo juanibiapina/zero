@@ -8,7 +8,6 @@ import {
   homeCallToActionCopy,
   homeTasks,
   DEFAULT_ICON,
-  localToday,
   taskIcon,
   undoableAction,
   type HomeCallToAction,
@@ -27,6 +26,7 @@ import { ReorderableTaskList } from '@/components/reorderable-task-list';
 import { ScreenHeader } from '@/components/screen-header';
 import { useTaskDetail } from '@/components/task-detail';
 import { Text } from '@/components/ui/text';
+import { useLocalDay } from '@/lib/local-day';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -107,7 +107,7 @@ function Home({
     q.from({ w: waitsApi.collection }),
   );
 
-  const today = localToday();
+  const today = useLocalDay();
   // The single Home list: open ∧ shown-up ∧ available, ordered by the manual
   // sort key. The server returns all open tasks; this pass drops future-dated
   // ones (they belong to Upcoming) and unavailable project tasks.
@@ -230,12 +230,6 @@ function Home({
         ) : (
           <View className="flex-1" />
         )
-      ) : view === 'empty' && cta && !loadError ? (
-        hydrating ? (
-          <View className="flex-1" />
-        ) : (
-          <HomeCallToActionView action={cta} />
-        )
       ) : (
         <ReorderableTaskList
           api={api}
@@ -248,6 +242,15 @@ function Home({
           onError={setWriteError}
           presentationOf={presentationOf}
           postponeMode="exit"
+          empty={
+            view === 'empty' && cta && !loadError ? (
+              hydrating ? (
+                <View className="flex-1" />
+              ) : (
+                <HomeCallToActionView action={cta} />
+              )
+            ) : null
+          }
         />
       )}
 

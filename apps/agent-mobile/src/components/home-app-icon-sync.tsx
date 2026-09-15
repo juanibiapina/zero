@@ -2,7 +2,6 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
   homeTasks,
-  localToday,
   type ProjectsApi,
   type TasksApi,
   type WaitsApi,
@@ -13,6 +12,7 @@ import {
   homeAppIconForTaskCount,
   syncHomeAppIcon,
 } from '@/lib/home-app-icon';
+import { useLocalDay } from '@/lib/local-day';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
 import { useWaitsApi } from '@/lib/waits-collection';
@@ -56,6 +56,7 @@ function HydratedHomeAppIconSync({
   const { data: conditions, isLoading: conditionsLoading } = useLiveQuery((q) =>
     q.from({ condition: waitsApi.collection }),
   );
+  const today = useLocalDay();
 
   const hydrated = !tasksLoading && !projectsLoading && !conditionsLoading;
   const icon = hydrated
@@ -63,7 +64,7 @@ function HydratedHomeAppIconSync({
         homeTasks(
           tasks ?? [],
           projects ?? [],
-          localToday(),
+          today,
           conditions ?? [],
         ).length,
       )
