@@ -24,8 +24,10 @@ if (parsed.kind === "scheduled" && parsed.schedule.kind === "recurring") {
 
 - `parseSchedule(text, context)` parses a complete English task title. It
   returns the cleaned title, consumed text ranges, and either a one-time date or
-  normalized recurrence. The caller supplies its local `today`; the package
-  never reads the host clock or timezone.
+  normalized recurrence. `context.ignored` can mask previously dismissed ranges
+  without shifting their UTF-16 offsets, so the next rightmost candidate becomes
+  active. The caller supplies its local `today`; the package never reads the host
+  clock or timezone.
 - `advance(recurrence, event)` completes one occurrence. `every` rules advance
   from `scheduledOn`; `every!` rules advance from `completedOn`.
 - `toText(recurrence)` renders a canonical English summary.

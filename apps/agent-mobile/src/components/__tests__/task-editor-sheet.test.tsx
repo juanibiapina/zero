@@ -74,6 +74,24 @@ describe('TaskEditorSheet', () => {
     expect(view.getByDisplayValue('Write proposal').props.autoFocus).toBe(true);
   });
 
+  it('highlights parser-consumed schedule text in a quick-add draft', async () => {
+    const dismiss = jest.fn();
+    const view = await render(
+      <TaskEditorSheet
+        {...base}
+        draft="Stand up every day"
+        highlightRanges={[{ start: 9, end: 18, text: 'every day' }]}
+        onDismissHighlight={dismiss}
+      />,
+    );
+
+    expect(
+      view.getByTestId('schedule-highlight', { includeHiddenElements: true }).props
+        .children,
+    ).toBe('every day');
+    expect(view.getByDisplayValue('Stand up every day')).toBeTruthy();
+  });
+
   it('offers the configured create modes without task metadata for other types', async () => {
     const change = jest.fn();
     const view = await render(

@@ -310,7 +310,9 @@ describe("HomePage", () => {
       await screen.findByRole("textbox", { name: "Add a task" }),
       { target: { value: "stand up every day" } },
     );
-    expect(screen.getByText("every day")).toBeInTheDocument();
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent(
+      "every day",
+    );
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
     });
@@ -318,6 +320,49 @@ describe("HomePage", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: 'Edit "stand up"' }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("highlights only a one-time date and leaves time words in the draft", async () => {
+    setApi();
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: "Add a task" }),
+      { target: { value: "Call Ana tomorrow at 3pm" } },
+    );
+
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent(
+      "tomorrow",
+    );
+    expect(screen.getByTestId("schedule-highlight-mirror")).toHaveTextContent(
+      "Call Ana tomorrow at 3pm",
+    );
+  });
+
+  it("falls back to the previous date when the active highlight is dismissed", async () => {
+    setApi();
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    const input = await screen.findByRole<HTMLInputElement>("textbox", {
+      name: "Add a task",
+    });
+    fireEvent.change(input, { target: { value: "Work today tomorrow" } });
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent(
+      "tomorrow",
+    );
+
+    input.setSelectionRange(14, 14);
+    fireEvent.pointerUp(input);
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("today");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: 'Edit "Work tomorrow"' }),
       ).toBeInTheDocument(),
     );
   });

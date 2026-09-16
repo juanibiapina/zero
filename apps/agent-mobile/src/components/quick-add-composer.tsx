@@ -9,7 +9,11 @@ import {
   type TasksApi,
   type WaitsApi,
 } from '@zero/agent-core';
-import { parseSchedule, toText } from '@zeroapps/recurrence';
+import {
+  parseSchedule,
+  toText,
+  type TextRange,
+} from '@zeroapps/recurrence';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
@@ -90,7 +94,10 @@ export function useQuickAdd({
   onProjectCreated?: (id: string) => void;
 }): QuickAddController {
   const [text, setText] = useState('');
-  const [ignoredScheduleText, setIgnoredScheduleText] = useState<string | null>(null);
+  const [ignoredSchedule, setIgnoredSchedule] = useState<{
+    text: string;
+    ranges: TextRange[];
+  } | null>(null);
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
@@ -111,10 +118,14 @@ export function useQuickAdd({
   const today = useLocalDay();
   const parsedSchedule = useMemo(
     () =>
-      mode === 'task' && ignoredScheduleText !== text
-        ? parseSchedule(text, { today, weekStartsOn: 'MO' })
+      mode === 'task'
+        ? parseSchedule(text, {
+            today,
+            weekStartsOn: 'MO',
+            ignored: ignoredSchedule?.text === text ? ignoredSchedule.ranges : [],
+          })
         : { kind: 'none' as const },
-    [mode, text, today, ignoredScheduleText],
+    [mode, text, today, ignoredSchedule],
   );
   const parsedValue =
     parsedSchedule.kind === 'scheduled' ? parsedSchedule.schedule : null;
@@ -128,10 +139,17 @@ export function useQuickAdd({
     parsedValue?.kind === 'once'
       ? parsedValue.date
       : effectiveRecurrence?.origin ?? addDate;
+  const ignoreScheduleRange = (range: TextRange) => {
+    setIgnoredSchedule((current) => ({
+      text,
+      ranges:
+        current?.text === text ? [...current.ranges, range] : [range],
+    }));
+  };
 
   const closeAdd = useCallback(() => {
     setText('');
-    setIgnoredScheduleText(null);
+    setIgnoredSchedule(null);
     setConfirmingDiscard(false);
     setAdding(false);
     setAddDate(null);
@@ -297,8 +315,16 @@ export function useQuickAdd({
         draft={text}
         onChangeDraft={(next) => {
           setText(next);
-          if (next !== ignoredScheduleText) setIgnoredScheduleText(null);
+          if (next !== ignoredSchedule?.text) setIgnoredSchedule(null);
         }}
+        highlightRanges={
+          mode === 'task'
+            ? parsedSchedule.kind === 'scheduled'
+              ? parsedSchedule.consumed
+              : []
+            : undefined
+        }
+        onDismissHighlight={ignoreScheduleRange}
         onSubmit={onAdd}
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus
@@ -329,7 +355,10 @@ export function useQuickAdd({
                     ? {
                         icon: <Text className="text-[20px]">×</Text>,
                         accessibilityLabel: 'Keep schedule words in task title',
-                        onPress: () => setIgnoredScheduleText(text),
+                        onPress: () => {
+                          const range = parsedSchedule.consumed[0];
+                          if (range) ignoreScheduleRange(range);
+                        },
                         testID: 'quick-add-unrecognize-schedule',
                       }
                     : undefined,
@@ -368,7 +397,15 @@ export function useQuickAdd({
         open={schedulingAdd}
         showUpDate={addDate}
         onPick={(d) => {
-          if (parsedSchedule.kind === 'scheduled') setText(effectiveText);
+          if (parsedSchedule.kind === 'scheduled') {
+            setText(effectiveText);
+            setIgnoredSchedule({
+              text: effectiveText,
+              ranges: effectiveText
+                ? [{ start: 0, end: effectiveText.length, text: effectiveText }]
+                : [],
+            });
+          }
           setAddDate(d);
           setSchedulingAdd(false);
         }}

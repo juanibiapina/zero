@@ -2,6 +2,8 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-16: Dates and repeats recognized while adding a task now appear on a colored background; click the active phrase to keep those words and move recognition to the previous date in the title.
+
 - 2026-09-16: Weekly and monthly repeat phrases now keep their explicit weekday: “every week on Saturday” schedules Saturday, and “first Tuesday of every month” schedules the first Tuesday instead of today’s month day.
 
 - 2026-09-16: Type dates and repeats into a task, such as “tomorrow”, “every Monday”, or “after 3 days”. Repeating tasks advance in place with Undo; fixed schedules catch up missed occurrences instead of skipping them, while `every!` schedules from when you complete the task.

@@ -1,4 +1,5 @@
 import { ADD_MODE_LABEL, addModeA11yLabel, type AddMode } from '@zero/agent-core';
+import type { TextRange } from '@zeroapps/recurrence';
 import {
   useEffect,
   useImperativeHandle,
@@ -11,6 +12,7 @@ import { Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimens
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
+import { ScheduleHighlightInput } from '@/components/schedule-highlight-input';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
@@ -135,6 +137,7 @@ export function TaskEditorSheet({
   open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inputRef,
   leading, modeSelector, trailing, scheduleAction, projectAction, overlay,
+  highlightRanges, onDismissHighlight,
 }: {
   open: boolean;
   onClose: () => void;
@@ -151,6 +154,8 @@ export function TaskEditorSheet({
   scheduleAction?: EditorAction;
   projectAction?: EditorAction;
   overlay?: ReactNode;
+  highlightRanges?: TextRange[];
+  onDismissHighlight?: (range: TextRange) => void;
 }) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -197,22 +202,43 @@ export function TaskEditorSheet({
           {modeSelector}
           <View className="min-h-16 flex-row items-center gap-3 px-screen-x py-4">
             {leading}
-            <Input
-              ref={field}
-              value={draft}
-              onChangeText={onChangeDraft}
-              onSubmitEditing={onSubmit}
-              returnKeyType="done"
-              blurOnSubmit
-              multiline
-              placeholder={placeholder}
-              accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
-              autoFocus={autoFocus}
-              style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
-              variant="editor"
-              className="flex-1"
-              testID="task-edit-input"
-            />
+            {highlightRanges ? (
+              <ScheduleHighlightInput
+                ref={field}
+                value={draft}
+                ranges={highlightRanges}
+                onDismissRange={onDismissHighlight}
+                onChangeText={onChangeDraft}
+                onSubmitEditing={onSubmit}
+                returnKeyType="done"
+                blurOnSubmit
+                multiline
+                placeholder={placeholder}
+                accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
+                autoFocus={autoFocus}
+                style={{ padding: 0, maxHeight: 120 }}
+                variant="editor"
+                className="flex-1"
+                testID="task-edit-input"
+              />
+            ) : (
+              <Input
+                ref={field}
+                value={draft}
+                onChangeText={onChangeDraft}
+                onSubmitEditing={onSubmit}
+                returnKeyType="done"
+                blurOnSubmit
+                multiline
+                placeholder={placeholder}
+                accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
+                autoFocus={autoFocus}
+                style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
+                variant="editor"
+                className="flex-1"
+                testID="task-edit-input"
+              />
+            )}
             {trailing}
           </View>
           {scheduleAction || projectAction ? (

@@ -113,6 +113,7 @@ describe("parseSchedule", () => {
           },
         },
       },
+      consumed: [{ start: 9, end: 18, text: "every 1st" }],
     });
   });
 
@@ -122,6 +123,15 @@ describe("parseSchedule", () => {
       remainingText: "Call Ana at 3pm",
       schedule: { kind: "once", date: "2026-09-17" },
       consumed: [{ text: "tomorrow" }],
+    });
+  });
+
+  it("reports UTF-16 offsets when an emoji precedes a one-time date", () => {
+    expect(parseSchedule("📞 Call Ana tomorrow at 3pm", context)).toMatchObject({
+      kind: "scheduled",
+      remainingText: "📞 Call Ana at 3pm",
+      schedule: { kind: "once", date: "2026-09-17" },
+      consumed: [{ start: 12, end: 20, text: "tomorrow" }],
     });
   });
 
@@ -226,6 +236,36 @@ describe("parseSchedule", () => {
       schedule: { kind: "once", date: "2026-09-29" },
       consumed: [{ text: "in two weeks on Tuesday" }],
     });
+  });
+
+  it("selects the previous schedule when the active range is ignored", () => {
+    const text = "Work today tomorrow";
+    const current = parseSchedule(text, context);
+    expect(current).toMatchObject({
+      kind: "scheduled",
+      schedule: { kind: "once", date: "2026-09-17" },
+      consumed: [{ start: 11, end: 19, text: "tomorrow" }],
+    });
+    if (current.kind !== "scheduled") throw new Error("expected schedule");
+
+    const previous = parseSchedule(text, {
+      ...context,
+      ignored: current.consumed,
+    });
+    expect(previous).toMatchObject({
+      kind: "scheduled",
+      remainingText: "Work tomorrow",
+      schedule: { kind: "once", date: "2026-09-16" },
+      consumed: [{ start: 5, end: 10, text: "today" }],
+    });
+    if (previous.kind !== "scheduled") throw new Error("expected schedule");
+
+    expect(
+      parseSchedule(text, {
+        ...context,
+        ignored: [...current.consumed, ...previous.consumed],
+      }),
+    ).toEqual({ kind: "none" });
   });
 
   it("does not reinterpret subdaily recurrence", () => {

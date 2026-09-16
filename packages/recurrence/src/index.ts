@@ -56,6 +56,12 @@ export type ParseScheduleResult =
     }
   | { kind: "none" };
 
+export type ParseScheduleContext = {
+  today: PlainDate;
+  weekStartsOn: WeekStart;
+  ignored?: TextRange[];
+};
+
 export type ValidationError = { path: string; message: string };
 export type ValidationResult =
   | { ok: true; value: Recurrence }
@@ -296,6 +302,39 @@ function removeRange(text: string, start: number, end: number): string {
   return `${text.slice(0, start)}${text.slice(end)}`
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function maskRanges(text: string, ranges: TextRange[]): string {
+  let masked = "";
+  let offset = 0;
+  for (const range of [...ranges].sort((a, b) => a.start - b.start)) {
+    const start = Math.max(offset, Math.min(text.length, range.start));
+    const end = Math.max(start, Math.min(text.length, range.end));
+    masked += text.slice(offset, start);
+    masked += " ".repeat(end - start);
+    offset = end;
+  }
+  return masked + text.slice(offset);
+}
+
+function restoreText(
+  original: string,
+  parsed: ParseScheduleResult,
+): ParseScheduleResult {
+  if (parsed.kind === "none") return parsed;
+  const consumed = parsed.consumed.map((range) => ({
+    ...range,
+    text: original.slice(range.start, range.end),
+  }));
+  let remainingText = original;
+  for (const range of [...consumed].sort((a, b) => b.start - a.start)) {
+    remainingText = `${remainingText.slice(0, range.start)}${remainingText.slice(range.end)}`;
+  }
+  return {
+    ...parsed,
+    consumed,
+    remainingText: remainingText.replace(/\s+/g, " ").trim(),
+  };
 }
 
 const monthByName: Record<string, number> = {
@@ -698,7 +737,7 @@ function parseRecurrence(
   };
 }
 
-export function parseSchedule(
+function parseScheduleRaw(
   text: string,
   context: { today: PlainDate; weekStartsOn: WeekStart },
 ): ParseScheduleResult {
@@ -762,6 +801,17 @@ export function parseSchedule(
       },
     ],
   };
+}
+
+export function parseSchedule(
+  text: string,
+  context: ParseScheduleContext,
+): ParseScheduleResult {
+  const parsed = parseScheduleRaw(
+    context.ignored?.length ? maskRanges(text, context.ignored) : text,
+    context,
+  );
+  return restoreText(text, parsed);
 }
 
 const weekdayLabel: Record<Weekday, string> = {

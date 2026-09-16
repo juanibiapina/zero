@@ -113,7 +113,12 @@ serves the open-tasks query.
 ## Behavior
 
 - **Add** a task. A quick-add with no project mints a loose task (no day); a
-  project-screen add mints a parked task under that project.
+  project-screen add mints a parked task under that project. On parse-enabled
+  task quick-adds, the active one-time or recurring schedule phrase appears on
+  a colored background and is removed from the stored title. Tapping/clicking it
+  keeps that phrase as ordinary title text and activates the previous schedule
+  candidate in the same title; dismissing every candidate leaves the task
+  unscheduled.
 - **Complete** an ordinary task: it leaves the list at once and a single bottom
   **Undo** snackbar reopens it. A recurring task instead advances the same row:
   scheduled recurrence can remain overdue for catch-up, while `every!` advances

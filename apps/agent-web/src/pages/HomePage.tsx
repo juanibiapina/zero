@@ -29,6 +29,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
 import { ErrorText } from "@/components/ConnectionStatus";
+import { ScheduleHighlightInput } from "@/components/ScheduleHighlightInput";
 import { Link, useNavigate } from "react-router";
 import {
   ADD_MODE_LABEL,
@@ -50,7 +51,11 @@ import {
   type AddMode,
   type HomeCallToAction,
 } from "@zero/agent-core";
-import { parseSchedule, toText } from "@zeroapps/recurrence";
+import {
+  parseSchedule,
+  toText,
+  type TextRange,
+} from "@zeroapps/recurrence";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
@@ -107,7 +112,10 @@ function Home({
 }) {
   const [mode, setMode] = useState<AddMode>("task");
   const [text, setText] = useState("");
-  const [ignoredScheduleText, setIgnoredScheduleText] = useState<string | null>(null);
+  const [ignoredSchedule, setIgnoredSchedule] = useState<{
+    text: string;
+    ranges: TextRange[];
+  } | null>(null);
   // Create-time date and project for a task quick-add (the mini-composer). Both
   // default to "unset": null date + no project = a loose Home task. Reset after
   // each add. See docs/plans/todo-retire-take-on.md.
@@ -122,10 +130,14 @@ function Home({
   const today = localToday();
   const parsedSchedule = useMemo(
     () =>
-      mode === "task" && ignoredScheduleText !== text
-        ? parseSchedule(text, { today, weekStartsOn: "MO" })
+      mode === "task"
+        ? parseSchedule(text, {
+            today,
+            weekStartsOn: "MO",
+            ignored: ignoredSchedule?.text === text ? ignoredSchedule.ranges : [],
+          })
         : { kind: "none" as const },
-    [mode, text, today, ignoredScheduleText],
+    [mode, text, today, ignoredSchedule],
   );
   const parsedValue =
     parsedSchedule.kind === "scheduled" ? parsedSchedule.schedule : null;
@@ -139,6 +151,13 @@ function Home({
     parsedSchedule.kind === "scheduled"
       ? parsedSchedule.remainingText
       : text.trim();
+  const ignoreScheduleRange = (range: TextRange) => {
+    setIgnoredSchedule((current) => ({
+      text,
+      ranges:
+        current?.text === text ? [...current.ranges, range] : [range],
+    }));
+  };
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
@@ -165,7 +184,7 @@ function Home({
         },
       });
       setText("");
-      setIgnoredScheduleText(null);
+      setIgnoredSchedule(null);
       inputRef.current?.focus();
       return;
     }
@@ -192,7 +211,7 @@ function Home({
       });
     }
     setText("");
-    setIgnoredScheduleText(null);
+    setIgnoredSchedule(null);
     setDate(null);
     setProjectId(null);
     inputRef.current?.focus();
@@ -217,15 +236,26 @@ function Home({
         onModeChange={setMode}
         onChange={(next) => {
           setText(next);
-          if (next !== ignoredScheduleText) setIgnoredScheduleText(null);
+          if (next !== ignoredSchedule?.text) setIgnoredSchedule(null);
         }}
-        onUnrecognizeSchedule={() => setIgnoredScheduleText(text)}
+        scheduleRanges={
+          parsedSchedule.kind === "scheduled" ? parsedSchedule.consumed : []
+        }
+        onUnrecognizeSchedule={ignoreScheduleRange}
         onSubmit={onAdd}
         inputRef={inputRef}
         date={effectiveDate}
         recurrenceText={recurrence ? toText(recurrence) : null}
         onDateChange={(nextDate) => {
-          if (parsedSchedule.kind === "scheduled") setText(effectiveText);
+          if (parsedSchedule.kind === "scheduled") {
+            setText(effectiveText);
+            setIgnoredSchedule({
+              text: effectiveText,
+              ranges: effectiveText
+                ? [{ start: 0, end: effectiveText.length, text: effectiveText }]
+                : [],
+            });
+          }
           setDate(nextDate);
         }}
         projectId={projectId}
@@ -529,6 +559,7 @@ function QuickAdd({
   value,
   onModeChange,
   onChange,
+  scheduleRanges,
   onUnrecognizeSchedule,
   onSubmit,
   inputRef,
@@ -543,7 +574,8 @@ function QuickAdd({
   value: string;
   onModeChange: (m: AddMode) => void;
   onChange: (v: string) => void;
-  onUnrecognizeSchedule: () => void;
+  scheduleRanges: TextRange[];
+  onUnrecognizeSchedule: (range: TextRange) => void;
   onSubmit: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   // Create-time date + project for a task quick-add (the mini-composer). Shown
@@ -587,14 +619,16 @@ function QuickAdd({
           onSubmit();
         }}
       >
-        <Input
+        <ScheduleHighlightInput
           ref={inputRef}
           autoFocus
           value={value}
+          ranges={scheduleRanges}
           placeholder={ADD_MODE_PLACEHOLDER[mode]}
           aria-label={ADD_MODE_PLACEHOLDER[mode]}
           className="h-11"
           onChange={(e) => onChange(e.target.value)}
+          onDismissRange={onUnrecognizeSchedule}
         />
         <Button
           type="submit"
@@ -610,7 +644,11 @@ function QuickAdd({
           <QuickAddDateChip
             date={date}
             recurrenceText={recurrenceText}
-            onUnrecognize={recurrenceText ? onUnrecognizeSchedule : undefined}
+            onUnrecognize={
+              recurrenceText && scheduleRanges[0]
+                ? () => onUnrecognizeSchedule(scheduleRanges[0])
+                : undefined
+            }
             onPick={onDateChange}
           />
           <QuickAddProjectChip

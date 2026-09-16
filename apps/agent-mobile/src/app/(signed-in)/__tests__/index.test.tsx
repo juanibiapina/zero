@@ -57,6 +57,7 @@ const mockAddTask =
         text: string;
         showUpDate: string | null;
         projectId: string | null;
+        recurrence?: Task['recurrence'];
       },
     ) => Promise<Task>
   >();
@@ -91,6 +92,7 @@ jest.mock('@/lib/api', () => ({
         text: string;
         showUpDate: string | null;
         projectId: string | null;
+        recurrence?: Task['recurrence'];
       },
   ) => mockAddTask(getToken, task),
   completeTask: (getToken: unknown, id: string) => mockCompleteTask(getToken, id),
@@ -277,6 +279,93 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(getByText('call the dentist')).toBeTruthy());
     expect(mockAddTask).toHaveBeenCalledTimes(1);
     expect(mockAddTask.mock.calls[0][1].text).toBe('call the dentist');
+  });
+
+  it('highlights and creates a recurring task from natural-language quick-add', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockAddTask.mockImplementation(async (_g, task) => {
+      const added = {
+        ...taskRow(task.id, task.text, { showUpDate: task.showUpDate }),
+        recurrence: task.recurrence ?? null,
+        recurrenceDate: task.recurrence?.origin ?? null,
+      };
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const screen = await renderScreen();
+    await act(async () => {
+      await fireEvent.press(screen.getByLabelText('Task'));
+    });
+    await act(async () => {
+      await fireEvent.changeText(
+        screen.getByPlaceholderText('Add a task'),
+        'stand up every day',
+      );
+    });
+
+    expect(
+      screen.getByTestId('schedule-highlight', {
+        includeHiddenElements: true,
+      }).props.children,
+    ).toBe('every day');
+    await act(async () => {
+      await fireEvent(
+        screen.getByPlaceholderText('Add a task'),
+        'submitEditing',
+      );
+    });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    expect(mockAddTask.mock.calls[0][1].text).toBe('stand up');
+    expect(mockAddTask.mock.calls[0][1].recurrence?.pattern).toEqual({
+      unit: 'day',
+      interval: 1,
+    });
+  });
+
+  it('falls back to the previous date when the active highlight is tapped', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockAddTask.mockImplementation(async (_g, task) => {
+      const added = taskRow(task.id, task.text, {
+        showUpDate: task.showUpDate,
+      });
+      mockFetchTasks.mockResolvedValue([added]);
+      return added;
+    });
+
+    const screen = await renderScreen();
+    await act(async () => {
+      await fireEvent.press(screen.getByLabelText('Task'));
+    });
+    const input = screen.getByPlaceholderText('Add a task');
+    await act(async () => {
+      await fireEvent.changeText(input, 'Work today tomorrow');
+    });
+    expect(
+      screen.getByTestId('schedule-highlight', {
+        includeHiddenElements: true,
+      }).props.children,
+    ).toBe('tomorrow');
+
+    await act(async () => {
+      await fireEvent(input, 'selectionChange', {
+        nativeEvent: { selection: { start: 14, end: 14 } },
+      });
+    });
+    expect(
+      screen.getByTestId('schedule-highlight', {
+        includeHiddenElements: true,
+      }).props.children,
+    ).toBe('today');
+
+    await act(async () => {
+      await fireEvent(input, 'submitEditing');
+    });
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    expect(mockAddTask.mock.calls[0][1].text).toBe('Work tomorrow');
+    expect(mockAddTask.mock.calls[0][1].showUpDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(mockAddTask.mock.calls[0][1].recurrence ?? null).toBeNull();
   });
 
   it('files a dateless task to a project from the composer: off Home', async () => {
