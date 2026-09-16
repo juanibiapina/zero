@@ -7,7 +7,7 @@ These selected designs are now the Android launcher's task-count states.
 
 | Production source | Meaning |
 |---|---|
-| `apps/agent-mobile/assets/brand/task-count/0-empty.svg` | No Home tasks: the enlarged, heavier B Full graphite-metal checkmark. |
+| `apps/agent-mobile/assets/brand/task-count/0-empty.svg` | No Home tasks: the reduced graphite-metal checkmark with more launcher-mask clearance. |
 | `apps/agent-mobile/assets/brand/task-count/1-task.svg` | One Home task: one open ring and bar. |
 | `apps/agent-mobile/assets/brand/task-count/2-tasks.svg` | Two Home tasks: two open rows. |
 | `apps/agent-mobile/assets/brand/task-count/3-tasks.svg` | Three Home tasks: three open rows. |
@@ -37,9 +37,9 @@ The comparison sheet shows the unmasked square launcher sources. The generator
 validates dimensions, full-bleed white launcher corners, transparent favicon and
 splash corners, web artwork coverage, neutral colors, and Android's adaptive safe
 zone. The checkmark uses the task rows' graphite material with continuous
-geometry, so its corner has no overlapping-bar seam. The selected B Full design
-scales the original path by 1.45 and its material strokes by 1.28; the generated
-adaptive foreground occupies 520 × 377 pixels of its 1024 × 1024 layer.
+geometry, so its corner has no overlapping-bar seam. The current design scales
+the original path by 1.2325 and its material strokes by 1.088; the generated
+adaptive foreground occupies 444 × 323 pixels of its 1024 × 1024 layer.
 
 Runtime switching is Android-only. Android's primary APK and pre-hydration icon
 is the static three-row mark from `apps/agent-mobile/assets/brand/todo-icon.svg`;

@@ -162,6 +162,8 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-16): **Smaller clear-Home launcher icon.** The user selected candidate A from a Pixel-corrected comparison: the current checkmark path and material strokes are both 15% smaller, leaving visible white space around the mark under Pixel Launcher's circular mask. The adaptive foreground now occupies 444 × 323 pixels instead of 520 × 377 while preserving the checkmark's angle, proportions, graphite material, center, and safe-zone containment. Two generator runs produced identical hashes across all 31 tracked outputs; only the empty SVG, its three Android PNGs, and the family comparison changed. Mobile's 22 suites / 153 tests, lint with 3 existing warnings, typecheck, Android export, and clean prebuild passed. The whole-repo check reached the existing unrelated dashboard test shutdown timeout. Local ARM64 development-client versionCode 83 built successfully and installed on the Pixel 7 while preserving the naturally enabled Empty alias. Launcher search showed the selected reduced checkmark, and tapping it opened the development client. Verification made no production-data writes. Plan: `docs/plans/todo-smaller-empty-launcher-icon.md`.
+
 Implemented and Pixel-verified (2026-09-15): **Three-row Android default
 icon.** Android's primary APK, pre-hydration, and signed-out icon now uses the
 approved static three-row mark. The dynamic launcher feature remains intact:

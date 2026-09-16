@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-16: The clear-Home launcher checkmark is smaller and leaves more breathing room around itself.
+
 - 2026-09-16: New Android installs use the three-row task mark as the app icon while the launcher still mirrors Home after the app loads.
 
 - 2026-09-15: Swipe right on a project task to schedule it for Today; swiping on Home still postpones a task to Tomorrow.
