@@ -121,8 +121,9 @@ serves the open-tasks query.
   unscheduled.
 - **Complete** an ordinary task: it leaves the list at once and a single bottom
   **Undo** snackbar reopens it. For a Project Task, the same feedback names and
-  links the Project and offers **Waiting for…**, which opens a focused manual
-  Waiting composer without delaying completion. A recurring task instead advances the same row:
+  links the Project and offers **Waiting for…**, which opens the shared Project
+  add drawer on Waiting and identifies the destination without delaying
+  completion. A recurring task instead advances the same row:
   scheduled recurrence can remain overdue for catch-up, while `every!` advances
   from the completion day. The row leaves only when the next date is future or
   the series is exhausted. The same single Undo restores the prior occurrence.

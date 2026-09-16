@@ -49,18 +49,14 @@ When no manual conditions exist, the heading, rows, add control, input, helper
 copy, and empty state are absent. The first condition comes from the Project Add
 surface. A non-empty section gains a local `+` for another condition.
 
-Both entry points open one focused composer:
-
-```text
-Add waiting condition
-What are you waiting for?
-Cancel  Add
-```
-
-There is no condition-kind selector.
+Every mobile entry point opens the shared Project add drawer with **Waiting**
+selected. The drawer keeps Task, Waiting, After, and Project visible, identifies
+the destination under **Waiting on** with its icon and title, and asks **What
+needs to happen?** Its circular add action submits the condition. There is no
+standalone form or condition-kind selector.
 
 Completing a Project Task offers **Waiting for…** in transient feedback. It opens
-the same focused composer for that Task's Project without delaying or owning the
+the same drawer for that Task's Project without delaying or owning the
 completion write.
 
 ## Persistence interface

@@ -93,26 +93,28 @@ A Project opens its own screen. One scroll host may implement the screen, but th
 visual hierarchy has sibling regions:
 
 1. editable identity;
-2. editable description;
-3. dominant status and lifecycle control;
+2. dominant status and lifecycle control;
+3. editable description;
 4. manual Waiting conditions, when present;
 5. After relationships, when present;
-6. a full section interval;
-7. Tasks, when present.
+6. Tasks, when present.
 
 Waiting and After are never Task-list footers and receive no Task gestures,
 reorder behavior, dividers, or row spacing. Empty relationship regions have no
 heading, prompt, input, helper copy, or local add control.
 
-The main Add control opens Task, Waiting condition, After project, or Project.
-Once a region exists, its local `+` opens the same focused flow directly. The
-status control remains lifecycle-only.
+The main Add control opens the shared drawer directly with Task selected and
+Task, Waiting, After, and Project selectors visible. Once a region exists, its
+local `+` opens that drawer with the matching selector active. After opens its
+filtered Project picker above the drawer. The status control remains
+lifecycle-only.
 
 ## Completion feedback
 
 Task completion persists immediately. A Project Task's transient feedback names
 and links its Project and offers Undo plus **Waiting for…**, which opens the
-focused manual-Waiting composer. Loose Tasks omit Project actions.
+shared add drawer with Waiting selected, names the destination Project, and asks
+**What needs to happen?** Loose Tasks omit Project actions.
 
 Project completion also persists immediately and offers Undo. There are no
 notifications when an After relationship resolves.

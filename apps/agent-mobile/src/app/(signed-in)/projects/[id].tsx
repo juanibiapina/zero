@@ -1,4 +1,4 @@
-import { Column, ListItem, Text as UIText } from '@expo/ui';
+import { Column, Host, Icon, ListItem, Text as UIText } from '@expo/ui';
 import { MenuView } from '@expo/ui/community/menu';
 import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
@@ -55,12 +55,29 @@ import { useWaitsApi } from '@/lib/waits-collection';
 import { useForegroundRefetch, usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
-// A project's own screen (pushed within the Projects tab). This is a plain React
-// Native view tree — NOT an @expo/ui native tree. Identity, description,
-// dominant status, manual Waiting, After relationships, and Tasks are sibling
-// regions in that order. Status and Project Add use short @expo/ui sheets;
-// focused text and Project pickers use React Native modals.
-// See docs/plans/todo-project-waiting-after.md.
+const ADD_ICON = Icon.select({
+  ios: 'plus',
+  android: import('@expo/material-symbols/add.xml'),
+});
+const REMOVE_ICON = Icon.select({
+  ios: 'xmark',
+  android: import('@expo/material-symbols/close_small.xml'),
+});
+const STATUS_DISCLOSURE_ICON = Icon.select({
+  ios: 'chevron.down',
+  android: import('@expo/material-symbols/keyboard_arrow_down.xml'),
+});
+const ROW_DISCLOSURE_ICON = Icon.select({
+  ios: 'chevron.right',
+  android: import('@expo/material-symbols/chevron_right.xml'),
+});
+
+// A project's own screen (pushed within the Projects tab). React Native owns the
+// layout while @expo/ui supplies leaf icons and the short status sheet. Identity,
+// dominant status, description, manual Waiting, After relationships, and Tasks
+// are sibling regions in that order. Text creation and Project pickers use the
+// shared React Native add drawer.
+// See docs/entities/project.md.
 export default function ProjectDetailScreen() {
   const projectsApi = useProjectsApi();
   const tasksApi = useTasksApi();
@@ -218,26 +235,25 @@ function ProjectDetail({
     [openTasks, id],
   );
 
-  // The task detail editor — the same one Home and Upcoming open. Tapping a task
-  // row opens it; its circle completes with the shared Undo.
-  const detail = useTaskDetail({
-    api: tasksApi,
-    waitsApi,
-    list: projectTasks,
-    projects: list,
-    currentProjectId: id,
-    onError: setError,
-  });
-
   const add = useProjectAdd({
     project,
-    projectId: id,
     projects: list,
     conditions: conds,
     tasksApi,
     projectsApi: api,
     waitsApi,
     getToken,
+    onError: setError,
+  });
+
+  // The task detail editor delegates Waiting feedback to the same Project add
+  // drawer used by the FAB and section actions.
+  const detail = useTaskDetail({
+    api: tasksApi,
+    list: projectTasks,
+    projects: list,
+    currentProjectId: id,
+    onAddWaiting: (destination) => add.openFor(destination, 'waiting'),
     onError: setError,
   });
 
@@ -327,50 +343,46 @@ function ProjectDetail({
               </Text>
             ) : null}
 
-            <ProjectHeader
-              project={project}
-              statusLabel={statusLabel}
-              deletionWarning={projectAfterRemovalWarning(
-                projectAfterRemovalImpact(project.id, conds, list),
-              )}
-              onEdit={commitEdit}
-              description={<ProjectDescription project={project} onEdit={commitEdit} />}
-              onState={(state) => {
-                if (state === 'done') {
-                  completeProject();
+            <View className="gap-6 pb-2">
+              <ProjectHeader
+                project={project}
+                statusLabel={statusLabel}
+                deletionWarning={projectAfterRemovalWarning(
+                  projectAfterRemovalImpact(project.id, conds, list),
+                )}
+                onEdit={commitEdit}
+                description={<ProjectDescription project={project} onEdit={commitEdit} />}
+                onState={(state) => {
+                  if (state === 'done') {
+                    completeProject();
+                    back();
+                  } else {
+                    commitState(state);
+                  }
+                }}
+                onDelete={() => {
+                  commitDelete();
                   back();
-                } else {
-                  commitState(state);
-                }
-              }}
-              onDelete={() => {
-                commitDelete();
-                back();
-              }}
-            />
+                }}
+              />
 
-            <ProjectWaits
-              project={project}
-              waitsApi={waitsApi}
-              projects={list}
-              onAddWaiting={add.openWaiting}
-              onAddAfter={add.openAfter}
-              onError={setError}
-            />
+              <ProjectWaits
+                project={project}
+                waitsApi={waitsApi}
+                projects={list}
+                onAddWaiting={add.openWaiting}
+                onAddAfter={add.openAfter}
+                onError={setError}
+              />
 
-            {projectTasks.length > 0 ? (
-              <View className="flex-row items-center justify-between px-screen-x pb-2 pt-8">
-                <Text variant="section">Tasks</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Add task"
-                  className="min-h-12 min-w-12 items-center justify-center"
-                  onPress={add.openTask}
-                >
-                  <Text className="text-[22px] text-accent">＋</Text>
-                </Pressable>
-              </View>
-            ) : null}
+              {projectTasks.length > 0 ? (
+                <ProjectSectionHeader
+                  title="Tasks"
+                  addLabel="Add task"
+                  onAdd={add.openTask}
+                />
+              ) : null}
+            </View>
           </>
         }
       />
@@ -524,7 +536,8 @@ function IconPickerSheet({
 
 // The identity header: a de-emphasized icon (tap to open the picker sheet), the
 // title as an editable heading (commit on blur / submit), a tappable derived-
-// status pill, and a "⋯" reserved for project settings.
+// status pill directly below it, then the supporting description. Settings stay
+// secondary in the identity row.
 function ProjectHeader({
   project,
   statusLabel,
@@ -571,15 +584,16 @@ function ProjectHeader({
     onState(state);
   };
   return (
-    <View className="px-screen-x pb-4">
-      <View className="flex-row items-center gap-3">
+    <View className="gap-2 px-screen-x">
+      <View className="min-h-12 flex-row items-center gap-2">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Change icon"
           hitSlop={8}
+          className="min-h-12 min-w-12 items-center justify-center"
           onPress={() => setPickerOpen(true)}
         >
-          <Text className="text-[30px]">{project.icon}</Text>
+          <Text className="text-[24px]">{project.icon}</Text>
         </Pressable>
         <Input
           value={title}
@@ -589,7 +603,7 @@ function ProjectHeader({
           returnKeyType="done"
           blurOnSubmit
           accessibilityLabel="Project title"
-          className="flex-1 text-[22px] font-bold"
+          className="flex-1 text-editor"
         />
         <MenuView
           title="Project settings"
@@ -619,32 +633,37 @@ function ProjectHeader({
             accessible
             accessibilityRole="button"
             accessibilityLabel="Project settings"
-            className="p-2"
+            className="min-h-12 min-w-12 items-center justify-center"
           >
             <Text className="text-[22px] text-foreground-muted">⋯</Text>
           </View>
         </MenuView>
       </View>
-      {description}
       <View className="flex-row">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Project status: ${statusLabel}`}
           accessibilityHint="Change project status"
-          hitSlop={8}
+          hitSlop={9}
           android_ripple={{ color: ripple }}
           onPress={() => setStatusOpen(true)}
           className="max-w-full flex-row items-center gap-2 overflow-hidden rounded-full bg-surface-muted px-3 py-1.5"
         >
           <Text
+            variant="caption"
             numberOfLines={1}
-            className="text-[13px] font-medium text-foreground-secondary"
+            className="font-medium"
           >
             {statusLabel}
           </Text>
-          <Text importantForAccessibility="no" className="text-foreground-secondary">▾</Text>
+          <View pointerEvents="none" importantForAccessibility="no">
+            <Host matchContents>
+              <Icon name={STATUS_DISCLOSURE_ICON} size={16} color={secondary} />
+            </Host>
+          </View>
         </Pressable>
       </View>
+      {description}
       {/* One combined surface: AI suggestions on top, the full searchable emoji
           grid below — mirroring the web popover, no second tap. */}
       <IconPickerSheet
@@ -697,6 +716,65 @@ function ProjectHeader({
   );
 }
 
+function ProjectSectionHeader({
+  title,
+  addLabel,
+  onAdd,
+}: {
+  title: string;
+  addLabel: string;
+  onAdd: () => void;
+}) {
+  const accent = useColor('--color-accent');
+  return (
+    <View className="min-h-12 flex-row items-center justify-between px-screen-x">
+      <Text variant="section">{title}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={addLabel}
+        className="min-h-12 min-w-12 items-center justify-center"
+        onPress={onAdd}
+      >
+        <View pointerEvents="none" importantForAccessibility="no">
+          <Host matchContents>
+            <Icon name={ADD_ICON} size={22} color={accent} />
+          </Host>
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
+function RemoveAction({
+  accessibilityLabel,
+  onPress,
+  roomy = false,
+}: {
+  accessibilityLabel: string;
+  onPress: () => void;
+  roomy?: boolean;
+}) {
+  const muted = useColor('--color-foreground-muted');
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      className={
+        roomy
+          ? 'min-h-14 min-w-16 items-center justify-center px-2'
+          : 'min-h-12 min-w-12 items-center justify-center'
+      }
+      onPress={onPress}
+    >
+      <View pointerEvents="none" importantForAccessibility="no">
+        <Host matchContents>
+          <Icon name={REMOVE_ICON} size={20} color={muted} />
+        </Host>
+      </View>
+    </Pressable>
+  );
+}
+
 function conditionLabel(condition: WaitingCondition): string {
   return condition.kind === 'free-text' ? condition.text : '';
 }
@@ -719,6 +797,7 @@ function ProjectWaits({
   onError: (message: string) => void;
 }) {
   const router = useRouter();
+  const muted = useColor('--color-foreground-muted');
   const { data: allConditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
@@ -734,42 +813,34 @@ function ProjectWaits({
   if (list.length === 0 && afters.length === 0) return null;
 
   return (
-    <View className="gap-4">
+    <View className="gap-6">
       {list.length > 0 ? (
         <View>
-          <View className="flex-row items-center justify-between px-screen-x">
-            <Text variant="section">Waiting on</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add waiting condition"
-              className="min-h-12 min-w-12 items-center justify-center"
-              onPress={onAddWaiting}
-            >
-              <Text className="text-[22px] text-accent">＋</Text>
-            </Pressable>
-          </View>
+          <ProjectSectionHeader
+            title="Waiting on"
+            addLabel="Add waiting condition"
+            onAdd={onAddWaiting}
+          />
           <View className="px-screen-x">
             {list.map((condition) => {
               const label = conditionLabel(condition);
               return (
-                <View key={condition.id} className="flex-row items-center gap-2 py-2">
-                  <Text className="flex-1 text-[14px]">{label}</Text>
+                <View key={condition.id} className="flex-row items-center gap-2 py-1">
+                  <Text className="flex-1">{label}</Text>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Resolve condition: ${label}`}
                     className="min-h-12 min-w-12 items-center justify-center"
                     onPress={() => write(waitsApi.resolveWaiting(condition.id))}
                   >
-                    <Text className="text-[13px] font-semibold text-accent">Resolve</Text>
+                    <Text variant="caption" className="font-semibold text-accent">
+                      Resolve
+                    </Text>
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
+                  <RemoveAction
                     accessibilityLabel={`Delete condition: ${label}`}
-                    className="min-h-12 min-w-12 items-center justify-center"
                     onPress={() => write(waitsApi.remove(condition.id))}
-                  >
-                    <Text className="text-[16px] text-foreground-muted">✕</Text>
-                  </Pressable>
+                  />
                 </View>
               );
             })}
@@ -779,17 +850,11 @@ function ProjectWaits({
 
       {afters.length > 0 ? (
         <View>
-          <View className="flex-row items-center justify-between px-screen-x">
-            <Text variant="section">After</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add After project"
-              className="min-h-12 min-w-12 items-center justify-center"
-              onPress={onAddAfter}
-            >
-              <Text className="text-[22px] text-accent">＋</Text>
-            </Pressable>
-          </View>
+          <ProjectSectionHeader
+            title="After"
+            addLabel="Add After project"
+            onAdd={onAddAfter}
+          />
           {afters.map(({ relationship, target }) => (
             <View key={relationship.id} className="flex-row items-stretch border-b border-divider">
               <Pressable
@@ -802,19 +867,20 @@ function ProjectWaits({
                 }}
               >
                 <Text className="w-6 text-center text-[18px]">{target?.icon ?? '📁'}</Text>
-                <Text className="min-w-0 flex-1 text-[15px] font-medium">
+                <Text className="min-w-0 flex-1 font-medium">
                   {target?.title ?? 'Another project'}
                 </Text>
-                <Text importantForAccessibility="no" className="text-foreground-muted">›</Text>
+                <View pointerEvents="none" importantForAccessibility="no">
+                  <Host matchContents>
+                    <Icon name={ROW_DISCLOSURE_ICON} size={20} color={muted} />
+                  </Host>
+                </View>
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
+              <RemoveAction
                 accessibilityLabel={`Remove After relationship with ${target?.title ?? 'project'}`}
-                className="min-h-14 min-w-16 items-center justify-center px-2"
+                roomy
                 onPress={() => write(waitsApi.remove(relationship.id))}
-              >
-                <Text className="text-[13px] font-semibold text-accent">Remove</Text>
-              </Pressable>
+              />
             </View>
           ))}
         </View>
@@ -824,7 +890,7 @@ function ProjectWaits({
 }
 
 // The project's description: its statement of intent, an always-visible editable
-// field under the title (above the work). Commits on blur; can be cleared to
+// field beneath the status (above the work). Commits on blur; can be cleared to
 // null.
 function ProjectDescription({
   project,
@@ -842,17 +908,15 @@ function ProjectDescription({
   };
 
   return (
-    <View className="pb-4 pt-2">
-      <Input
-        value={description}
-        onChangeText={setDescription}
-        onBlur={commit}
-        multiline
-        placeholder="What outcome are you after, and why does it matter?"
-        accessibilityLabel="Project description"
-        placeholderTextColorClassName="text-foreground-secondary"
-        className="text-[15px] text-foreground-secondary"
-      />
-    </View>
+    <Input
+      value={description}
+      onChangeText={setDescription}
+      onBlur={commit}
+      multiline
+      placeholder="What outcome are you after, and why does it matter?"
+      accessibilityLabel="Project description"
+      placeholderTextColorClassName="text-foreground-secondary"
+      className="text-subtitle"
+    />
   );
 }

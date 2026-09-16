@@ -118,7 +118,8 @@ function Projects({ api, tasksApi, waitsApi }: {
   const onProjectCreated = useCallback((id: string) => router.push(`/projects/${id}`), [router]);
   const add = useQuickAdd({
     tasksApi, projectsApi: api, projects: list, modes: ['project'],
-    getToken, onError: setWriteError, fabLabel: 'New project', onProjectCreated,
+    scope: { kind: 'global' }, getToken, onError: setWriteError,
+    fabLabel: 'New project', onProjectCreated,
   });
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', add.handleBack);

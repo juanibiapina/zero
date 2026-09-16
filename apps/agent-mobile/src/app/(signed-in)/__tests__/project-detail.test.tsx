@@ -485,8 +485,9 @@ describe('ProjectDetailScreen', () => {
     const screen = await renderScreen();
     await waitFor(() => expect(screen.getByText('Next')).toBeTruthy());
     await fireEvent.press(screen.getByLabelText('Add'));
-    expect(screen.getByText('Add to Move house')).toBeTruthy();
-    await fireEvent.press(screen.getByText('After project'));
+    expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
+    expect(screen.queryByText('Add to Move house')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Add an After project'));
 
     await waitFor(() => expect(screen.getByLabelText('Filter projects')).toBeTruthy());
     expect(screen.queryByLabelText('No project')).toBeNull();
@@ -640,14 +641,12 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add'));
     });
     expect(getByText('Task')).toBeTruthy();
-    expect(getByText('Waiting condition')).toBeTruthy();
-    expect(getByText('After project')).toBeTruthy();
+    expect(getByText('Waiting')).toBeTruthy();
+    expect(getByText('After')).toBeTruthy();
     expect(getByText('Project')).toBeTruthy();
+    expect(getByLabelText('Add a task').props.accessibilityState.selected).toBe(true);
     expect(queryByLabelText('Add a capture')).toBeNull();
     expect(getByLabelText('Project title')).toBeTruthy();
-    await act(async () => {
-      fireEvent.press(getByText('Task'));
-    });
 
     const input = getByPlaceholderText('Add a task');
     await act(async () => {
@@ -668,17 +667,21 @@ describe('ProjectDetailScreen', () => {
       project(input.id, input.title),
     );
 
-    const { getByLabelText, getByPlaceholderText, getByText, queryByPlaceholderText } =
-      await renderScreen();
+    const {
+      getByLabelText,
+      getByPlaceholderText,
+      queryByPlaceholderText,
+      queryByText,
+    } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
     });
 
-    expect(getByText('Add to Run a 5K')).toBeTruthy();
+    expect(queryByText('Add to Run a 5K')).toBeNull();
     await act(async () => {
-      fireEvent.press(getByText('Project'));
+      fireEvent.press(getByLabelText('Add a project'));
     });
     const input = getByPlaceholderText('Name an outcome');
     await act(async () => {
@@ -708,10 +711,7 @@ describe('ProjectDetailScreen', () => {
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
     });
-    expect(getByText('Add to Run a 5K')).toBeTruthy();
-    await act(async () => {
-      fireEvent.press(getByText('Task'));
-    });
+    expect(queryByText('Add to Run a 5K')).toBeNull();
     expect(getByPlaceholderText('Add a task')).toBeTruthy();
     await act(async () => {
       fireEvent.press(getByLabelText('Dismiss quick add'));
@@ -870,7 +870,8 @@ describe('ProjectDetailScreen', () => {
     });
     mockReopenTask.mockResolvedValue(taskRow('t1', 'buy running shoes'));
 
-    const { getByLabelText, getByPlaceholderText, queryByText } = await renderScreen();
+    const { getByLabelText, getByPlaceholderText, getByText, queryByText } =
+      await renderScreen();
     await waitFor(() =>
       expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
     );
@@ -889,8 +890,11 @@ describe('ProjectDetailScreen', () => {
     expect(snap[0].secondaryAction?.label).toBe('Waiting for…');
     expect(snap[0].action?.label).toBe('Undo');
     await act(async () => snap[0].secondaryAction?.onPress());
-    expect(getByPlaceholderText('What are you waiting for?')).toBeTruthy();
-    await fireEvent.press(getByLabelText('Cancel'));
+    expect(getByPlaceholderText('What needs to happen?')).toBeTruthy();
+    expect(getByText('Waiting on')).toBeTruthy();
+    expect(getByLabelText('Waiting on project Run a 5K')).toBeTruthy();
+    expect(queryByText('What are you waiting for?')).toBeNull();
+    await fireEvent.press(getByLabelText('Dismiss quick add'));
     await act(async () => {
       snap[0].action?.onPress();
     });
@@ -918,9 +922,11 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add'));
     });
     await act(async () => {
-      fireEvent.press(getByText('Waiting condition'));
+      fireEvent.press(getByLabelText('Add a waiting condition'));
     });
-    const input = getByPlaceholderText('What are you waiting for?');
+    expect(getByText('Waiting on')).toBeTruthy();
+    expect(getByLabelText('Waiting on project Run a 5K')).toBeTruthy();
+    const input = getByPlaceholderText('What needs to happen?');
     await act(async () => {
       fireEvent.changeText(input, 'the letter comes back');
     });
@@ -933,6 +939,86 @@ describe('ProjectDetailScreen', () => {
       'the letter comes back',
     );
     expect(mockAddWaitingCondition.mock.calls[0][0].kind).toBe('free-text');
+  });
+
+  it('opens each populated section action in the same matching drawer mode', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Run a 5K', '🏃'),
+      project('2', 'Buy shoes', '👟'),
+    ]);
+    mockFetchTasks.mockResolvedValue([taskRow('t1', 'train')]);
+    mockFetchWaits.mockResolvedValue([
+      {
+        id: 'w1',
+        projectId: '1',
+        kind: 'free-text',
+        text: 'coach replies',
+        refId: null,
+        targetStatus: null,
+        resolvedAt: null,
+        createdAt: '2023-01-01T00:00:00.000Z',
+      },
+      dependencyRow('a1', '1', '2'),
+    ]);
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('Tasks')).toBeTruthy());
+
+    await fireEvent.press(screen.getByLabelText('Add task'));
+    expect(screen.getByLabelText('Add a task').props.accessibilityState.selected).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
+
+    await fireEvent.press(screen.getByLabelText('Add waiting condition'));
+    expect(
+      screen.getByLabelText('Add a waiting condition').props.accessibilityState
+        .selected,
+    ).toBe(true);
+    expect(screen.getByPlaceholderText('What needs to happen?')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
+
+    await fireEvent.press(screen.getByLabelText('Add After project'));
+    expect(screen.getByLabelText('Filter projects')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Close project picker'));
+    expect(
+      screen.getByLabelText('Add an After project').props.accessibilityState
+        .selected,
+    ).toBe(true);
+  });
+
+  it('preserves per-mode drafts through After cancellation and resets after discard', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Run a 5K', '🏃'),
+      project('2', 'Buy shoes', '👟'),
+    ]);
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('Add')).toBeTruthy());
+
+    await fireEvent.press(screen.getByLabelText('Add'));
+    await fireEvent.changeText(
+      screen.getByPlaceholderText('Add a task'),
+      'task draft',
+    );
+    await fireEvent.press(screen.getByLabelText('Add a waiting condition'));
+    await fireEvent.changeText(
+      screen.getByPlaceholderText('What needs to happen?'),
+      'waiting draft',
+    );
+    await fireEvent.press(screen.getByLabelText('Add an After project'));
+    await fireEvent.press(screen.getByLabelText('Close project picker'));
+
+    await fireEvent.press(screen.getByLabelText('Add a task'));
+    expect(screen.getByDisplayValue('task draft')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Add a waiting condition'));
+    expect(screen.getByDisplayValue('waiting draft')).toBeTruthy();
+
+    await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
+    expect(screen.getByText('Discard changes?')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Discard'));
+    await fireEvent.press(screen.getByLabelText('Add'));
+    expect(screen.getByPlaceholderText('Add a task').props.value).toBe('');
+    expect(screen.getByLabelText('Add a task').props.accessibilityState.selected).toBe(true);
+    expect(screen.queryByText('Add waiting condition')).toBeNull();
+    expect(screen.queryByPlaceholderText('What are you waiting for?')).toBeNull();
   });
 
   it('changes the icon from the emoji picker', async () => {

@@ -8,7 +8,6 @@ import {
   type Project,
   type Task,
   type TasksApi,
-  type WaitsApi,
 } from '@zero/agent-core';
 import { toText } from '@zeroapps/recurrence';
 import { Host, Icon } from '@expo/ui';
@@ -19,7 +18,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
-import { WaitingComposer } from '@/components/waiting-composer';
 import { Input } from '@/components/ui/input';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
@@ -444,19 +442,21 @@ export type TaskDetail = {
 
 export function useTaskDetail({
   api,
-  waitsApi,
   list,
   projects,
   currentProjectId,
+  onAddWaiting,
   onError,
 }: {
   api: TasksApi;
-  waitsApi: WaitsApi;
   list: Task[];
   // The user's projects, for the move-to-project picker and the row's label.
   projects: Project[];
   // The project route already open behind this editor, when there is one.
   currentProjectId?: string | null;
+  // Project-task completion delegates contextual Waiting creation to the one
+  // Project add module mounted by the host screen.
+  onAddWaiting: (project: Project) => void;
   // Each screen passes its own write-error setter (clears on null).
   onError: (message: string | null) => void;
 }): TaskDetail {
@@ -464,7 +464,6 @@ export function useTaskDetail({
   const [draft, setDraft] = useState('');
   const [scheduling, setScheduling] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [waitingProjectId, setWaitingProjectId] = useState<string | null>(null);
   const today = useLocalDay();
   const projectJumpColor = useColor('--color-accent');
   const closingDetailRef = useRef(false);
@@ -527,7 +526,7 @@ export function useTaskDetail({
         secondaryAction: project
           ? {
               label: 'Waiting for…',
-              onPress: () => setWaitingProjectId(project.id),
+              onPress: () => onAddWaiting(project),
             }
           : undefined,
         act: () => api.complete(item.id, today),
@@ -538,7 +537,7 @@ export function useTaskDetail({
         onError,
       });
     },
-    [api, onError, projects, today],
+    [api, onAddWaiting, onError, projects, today],
   );
 
   const completeFromSheet = useCallback(() => {
@@ -598,10 +597,6 @@ export function useTaskDetail({
   );
 
   const handleBack = useCallback(() => {
-    if (waitingProjectId) {
-      setWaitingProjectId(null);
-      return true;
-    }
     if (picking) {
       setPicking(false);
       return true;
@@ -615,7 +610,7 @@ export function useTaskDetail({
       return true;
     }
     return false;
-  }, [waitingProjectId, picking, scheduling, selected, commitAndClose]);
+  }, [picking, scheduling, selected, commitAndClose]);
 
   const sheets = (
     <>
@@ -694,17 +689,6 @@ export function useTaskDetail({
         onPick={onPickProject}
         onClose={() => setPicking(false)}
       />
-
-      <WaitingComposer
-        open={waitingProjectId != null}
-        onClose={() => setWaitingProjectId(null)}
-        onAdd={(text) => {
-          if (!waitingProjectId) return;
-          const tx = waitsApi.addWaiting(waitingProjectId, text);
-          tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
-          setWaitingProjectId(null);
-        }}
-      />
     </>
   );
 
@@ -713,6 +697,6 @@ export function useTaskDetail({
     complete,
     sheets,
     handleBack,
-    active: selected != null || scheduling || picking || waitingProjectId != null,
+    active: selected != null || scheduling || picking,
   };
 }

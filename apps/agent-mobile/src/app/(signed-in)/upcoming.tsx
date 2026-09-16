@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -12,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, RefreshControl, SectionList, View } from 'react-native';
 
+import { useProjectAdd } from '@/components/project-add';
 import { ScreenHeader } from '@/components/screen-header';
 import { useTaskDetail } from '@/components/task-detail';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
@@ -84,11 +86,15 @@ function Upcoming({
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
 }) {
+  const { getToken } = useAuth();
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: projectsApi.collection }),
+  );
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
   );
 
   const today = useLocalDay();
@@ -105,25 +111,36 @@ function Upcoming({
   const list = useMemo(() => sections.flatMap((s) => s.data), [sections]);
 
   const [writeError, setWriteError] = useState<string | null>(null);
+  const projectAdd = useProjectAdd({
+    project: null,
+    projects: projects ?? [],
+    conditions: conditions ?? [],
+    tasksApi: api,
+    projectsApi,
+    waitsApi,
+    getToken,
+    onError: setWriteError,
+    showFab: false,
+  });
 
-  // The task detail editor — the same one Home opens — owns the sheet,
-  // scheduler, edit-on-dismiss, and complete-with-Undo.
+  // The task detail editor delegates Project-scoped Waiting feedback to the
+  // shared four-mode Project drawer mounted by this screen.
   const detail = useTaskDetail({
     api,
-    waitsApi,
     list,
     projects: projects ?? [],
+    onAddWaiting: (project) => projectAdd.openFor(project, 'waiting'),
     onError: setWriteError,
   });
 
-  // Android Back closes the scheduler, then the detail sheet. Upcoming has no
-  // quick-add, so the hook is the only Back consumer here.
+  // Android Back closes the deepest task or Project-add surface first.
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () =>
-      detail.handleBack(),
-    );
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (detail.handleBack()) return true;
+      return projectAdd.handleBack();
+    });
     return () => sub.remove();
-  }, [detail]);
+  }, [detail, projectAdd]);
 
   const accent = useColor('--color-accent');
   const { refreshing, onRefresh } = usePullRefresh(api.refetch);
@@ -177,6 +194,7 @@ function Upcoming({
       />
 
       {detail.sheets}
+      {projectAdd.bar}
     </>
   );
 }

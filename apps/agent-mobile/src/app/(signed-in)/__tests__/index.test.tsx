@@ -8,7 +8,11 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 import { View } from 'react-native';
-import { defaultToastController, type WaitingCondition } from '@zero/agent-core';
+import {
+  defaultToastController,
+  type AddProjectAttention,
+  type WaitingCondition,
+} from '@zero/agent-core';
 
 import type { Task } from '@/lib/api';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
@@ -76,6 +80,10 @@ const mockReorderTask =
 const mockFetchProjects =
   jest.fn<(getToken: unknown) => Promise<unknown[]>>();
 const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
+const mockAddWaitingCondition =
+  jest.fn<
+    (condition: AddProjectAttention & { id: string }) => Promise<WaitingCondition>
+  >();
 const mockAddProject =
   jest.fn<
     (
@@ -116,7 +124,10 @@ jest.mock('@/lib/api', () => ({
   deleteProject: () => Promise.resolve(),
   // Waiting conditions feed the Home gate; a fetch returning [] is enough.
   fetchWaits: () => mockFetchWaits(),
-  addWaitingCondition: () => Promise.reject(new Error('not used')),
+  addWaitingCondition: (
+    _getToken: unknown,
+    condition: AddProjectAttention & { id: string },
+  ) => mockAddWaitingCondition(condition),
   resolveWaitingCondition: () => Promise.reject(new Error('not used')),
   deleteWaitingCondition: () => Promise.resolve(),
 }));
@@ -163,6 +174,7 @@ describe('HomeScreen', () => {
     mockFetchProjects.mockResolvedValue([]);
     mockFetchWaits.mockReset();
     mockFetchWaits.mockResolvedValue([]);
+    mockAddWaitingCondition.mockReset();
     mockAddProject.mockReset();
     mockNavigate.mockReset();
     defaultToastController.dismiss();
@@ -505,7 +517,7 @@ describe('HomeScreen', () => {
     );
   });
 
-  it('names the Project and offers Waiting plus quiet navigation after completion', async () => {
+  it('opens the Project add drawer on Waiting after completion', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([
       {
@@ -531,7 +543,8 @@ describe('HomeScreen', () => {
       });
     });
 
-    const { getByLabelText, getByText, queryByText } = await renderScreen();
+    const { getByLabelText, getByPlaceholderText, getByText, queryByText } =
+      await renderScreen();
     await waitFor(() => expect(getByText('mail the letter')).toBeTruthy());
 
     await act(async () => {
@@ -545,6 +558,13 @@ describe('HomeScreen', () => {
     expect(snap[0].description).toBe('🎓 Diploma');
     expect(snap[0].secondaryAction?.label).toBe('Waiting for…');
     expect(snap[0].descriptionAction?.accessibilityLabel).toBe('Open project Diploma');
+    await act(async () => snap[0].secondaryAction?.onPress());
+    expect(getByPlaceholderText('What needs to happen?')).toBeTruthy();
+    expect(getByText('Waiting on')).toBeTruthy();
+    expect(getByLabelText('Waiting on project Diploma')).toBeTruthy();
+    expect(
+      getByLabelText('Add a waiting condition').props.accessibilityState.selected,
+    ).toBe(true);
     snap[0].descriptionAction?.onPress();
     expect(mockNavigate).toHaveBeenCalledWith('/projects/p', {
       withAnchor: true,

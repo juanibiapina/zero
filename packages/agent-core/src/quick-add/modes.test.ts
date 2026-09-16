@@ -16,6 +16,8 @@ describe("add-mode registry", () => {
   it("has copy and an accessibility label for every mode", () => {
     const cases: Record<AddMode, string> = {
       task: "Add a task",
+      waiting: "Add a waiting condition",
+      after: "Add an After project",
       project: "Add a project",
     };
     for (const mode of Object.keys(cases) as AddMode[]) {

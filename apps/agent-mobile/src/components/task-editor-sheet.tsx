@@ -94,7 +94,7 @@ export function AddModeSelector({
   onModeChange: (mode: AddMode) => void;
 }) {
   return (
-    <View className="flex-row gap-6 border-b border-divider px-screen-x">
+    <View className="flex-row border-b border-divider px-screen-x">
       {modes.map((candidate) => {
         const selected = mode === candidate;
         return (
@@ -104,7 +104,7 @@ export function AddModeSelector({
             accessibilityLabel={addModeA11yLabel(candidate)}
             accessibilityState={{ selected }}
             onPress={() => onModeChange(candidate)}
-            className="min-h-12 justify-end pt-2"
+            className="min-h-12 flex-1 items-center justify-end px-1 pt-2"
           >
             <Text
               variant="subtitle"
@@ -136,8 +136,8 @@ export function AddModeSelector({
 export function TaskEditorSheet({
   open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inputRef,
-  leading, modeSelector, trailing, scheduleAction, projectAction, overlay,
-  highlightRanges, onDismissHighlight,
+  leading, modeSelector, context, editorContent, trailing,
+  scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
 }: {
   open: boolean;
   onClose: () => void;
@@ -150,6 +150,8 @@ export function TaskEditorSheet({
   inputRef?: Ref<{ focus: () => void }>;
   leading?: ReactNode;
   modeSelector?: ReactNode;
+  context?: ReactNode;
+  editorContent?: ReactNode;
   trailing?: ReactNode;
   scheduleAction?: EditorAction;
   projectAction?: EditorAction;
@@ -200,47 +202,50 @@ export function TaskEditorSheet({
             className="mb-1 h-1 w-9 self-center rounded-full bg-divider"
           />
           {modeSelector}
-          <View className="min-h-16 flex-row items-center gap-3 px-screen-x py-4">
-            {leading}
-            {highlightRanges ? (
-              <ScheduleHighlightInput
-                ref={field}
-                value={draft}
-                ranges={highlightRanges}
-                onDismissRange={onDismissHighlight}
-                onChangeText={onChangeDraft}
-                onSubmitEditing={onSubmit}
-                returnKeyType="done"
-                blurOnSubmit
-                multiline
-                placeholder={placeholder}
-                accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
-                autoFocus={autoFocus}
-                style={{ padding: 0, maxHeight: 120 }}
-                variant="editor"
-                className="flex-1"
-                testID="task-edit-input"
-              />
-            ) : (
-              <Input
-                ref={field}
-                value={draft}
-                onChangeText={onChangeDraft}
-                onSubmitEditing={onSubmit}
-                returnKeyType="done"
-                blurOnSubmit
-                multiline
-                placeholder={placeholder}
-                accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
-                autoFocus={autoFocus}
-                style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
-                variant="editor"
-                className="flex-1"
-                testID="task-edit-input"
-              />
-            )}
-            {trailing}
-          </View>
+          {context}
+          {editorContent ?? (
+            <View className="min-h-16 flex-row items-center gap-3 px-screen-x py-4">
+              {leading}
+              {highlightRanges ? (
+                <ScheduleHighlightInput
+                  ref={field}
+                  value={draft}
+                  ranges={highlightRanges}
+                  onDismissRange={onDismissHighlight}
+                  onChangeText={onChangeDraft}
+                  onSubmitEditing={onSubmit}
+                  returnKeyType="done"
+                  blurOnSubmit
+                  multiline
+                  placeholder={placeholder}
+                  accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
+                  autoFocus={autoFocus}
+                  style={{ padding: 0, maxHeight: 120 }}
+                  variant="editor"
+                  className="flex-1"
+                  testID="task-edit-input"
+                />
+              ) : (
+                <Input
+                  ref={field}
+                  value={draft}
+                  onChangeText={onChangeDraft}
+                  onSubmitEditing={onSubmit}
+                  returnKeyType="done"
+                  blurOnSubmit
+                  multiline
+                  placeholder={placeholder}
+                  accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
+                  autoFocus={autoFocus}
+                  style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
+                  variant="editor"
+                  className="flex-1"
+                  testID="task-edit-input"
+                />
+              )}
+              {trailing}
+            </View>
+          )}
           {scheduleAction || projectAction ? (
             <View className="border-t border-divider">
               {scheduleAction ? (

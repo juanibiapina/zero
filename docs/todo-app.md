@@ -102,7 +102,7 @@ committed.
   with search, editable title and notes). Slice A (the hand-managed entity) is
   complete. A project now opens **its own screen** (web `/projects/:id`, mobile a
   pushed screen), not a bottom sheet. It is a Project workspace whose identity,
-  description, dominant status, manual Waiting conditions, After relationships,
+  dominant status, description, manual Waiting conditions, After relationships,
   and Tasks are sibling regions. After is Project-to-Project completion
   sequencing and remains a fallback behind deliberate dated work and manual
   review. Vision beyond that: can contain Todos, agent sessions, documents. Can
@@ -170,13 +170,15 @@ requires review; After is separate Project-completion sequencing that resolves
 automatically. In-play display precedence is Active → Waiting → After → Next, so
 arrived or future-dated work and manual review can bring an After Project forward
 without resolving its relationships. Projects lists After after Waiting and
-collapsed by default. Each Project workspace now orders identity, description,
-dominant status, all Waiting conditions, After Project rows, then Tasks; empty
-relationship regions disappear. The Project Add surface opens focused Task,
-Waiting condition, After project, or independent Project flows, with local add
-controls on existing regions. Completing a Project Task persists immediately and
-offers Undo plus Waiting for…; completing a Project offers Undo and restores the
-After rows that completion resolved. Historical Task and arbitrary Project-status
+collapsed by default. Each Project workspace now orders identity, dominant
+status, description, all Waiting conditions, After Project rows, then Tasks with
+one compact section rhythm; empty relationship regions disappear. Project Add
+opens the shared drawer directly with Task, Waiting, After, and Project selectors,
+and local add controls select their matching type. Completing a Project Task
+persists immediately and offers Undo plus Waiting for…, which opens that drawer
+on Waiting, shows the destination Project, and asks what needs to happen.
+Completing a Project offers Undo and restores the After rows that completion
+resolved. Historical Task and arbitrary Project-status
 condition rows are removed. This supersedes the hard Blocked / Depends on behavior
 recorded in the 2026-09-15 completion-dependencies entry below. **Pixel 7:** two
 throwaway Projects proved focused After and Waiting creation, Waiting-over-After

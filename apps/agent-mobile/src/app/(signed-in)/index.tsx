@@ -19,6 +19,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 
+import { useProjectAdd } from '@/components/project-add';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
 import { ScreenHeader } from '@/components/screen-header';
@@ -137,14 +138,25 @@ function Home({
   const view = listView({ count: list.length, isLoading, loadError });
   const error = writeError ?? (list.length === 0 ? loadError : null);
 
-  // The task detail editor (sheet + schedule selector + their writes). It
-  // resolves the selected task from Home's visible `list`, so rescheduling a
-  // task to a future day drops it from the list and closes the sheet.
+  const projectAdd = useProjectAdd({
+    project: null,
+    projects: projects ?? [],
+    conditions: conditions ?? [],
+    tasksApi: api,
+    projectsApi,
+    waitsApi,
+    getToken,
+    onError: setWriteError,
+    showFab: false,
+  });
+
+  // The task detail editor delegates Project-scoped Waiting feedback to the
+  // shared four-mode Project drawer mounted by this screen.
   const detail = useTaskDetail({
     api,
-    waitsApi,
     list,
     projects: projects ?? [],
+    onAddWaiting: (project) => projectAdd.openFor(project, 'waiting'),
     onError: setWriteError,
   });
 
@@ -163,6 +175,7 @@ function Home({
     projectsApi,
     projects: projects ?? [],
     modes: ['task', 'project'],
+    scope: { kind: 'global' },
     getToken,
     onError: setWriteError,
     fabLabel: 'Task',
@@ -173,13 +186,16 @@ function Home({
       if (detail.handleBack()) {
         return true;
       }
+      if (projectAdd.handleBack()) {
+        return true;
+      }
       if (add.handleBack()) {
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [detail, add]);
+  }, [detail, projectAdd, add]);
 
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
@@ -224,7 +240,7 @@ function Home({
       )}
 
       {detail.sheets}
-
+      {projectAdd.bar}
       {add.bar}
     </>
   );

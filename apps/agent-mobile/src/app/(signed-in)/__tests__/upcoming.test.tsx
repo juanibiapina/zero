@@ -8,10 +8,16 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 import { View } from 'react-native';
+import {
+  defaultToastController,
+  type AddProjectAttention,
+  type WaitingCondition,
+} from '@zero/agent-core';
 
 import type { Project, Task } from '@/lib/api';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
+import { resetWaitsApiForTest } from '@/lib/waits-collection';
 
 import UpcomingScreen from '../upcoming';
 
@@ -44,6 +50,11 @@ jest.mock('@clerk/expo/native', () => ({
 
 const mockFetchTasks = jest.fn<(getToken: unknown) => Promise<Task[]>>();
 const mockFetchProjects = jest.fn<(getToken: unknown) => Promise<Project[]>>();
+const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
+const mockAddWaitingCondition =
+  jest.fn<
+    (condition: AddProjectAttention & { id: string }) => Promise<WaitingCondition>
+  >();
 const mockCompleteTask =
   jest.fn<(getToken: unknown, id: string) => Promise<Task>>();
 const mockReopenTask =
@@ -72,6 +83,13 @@ jest.mock('@/lib/api', () => ({
   setProjectState: jest.fn(),
   editProject: jest.fn(),
   deleteProject: () => Promise.resolve(),
+  fetchWaits: () => mockFetchWaits(),
+  addWaitingCondition: (
+    _getToken: unknown,
+    condition: AddProjectAttention & { id: string },
+  ) => mockAddWaitingCondition(condition),
+  resolveWaitingCondition: jest.fn(),
+  deleteWaitingCondition: jest.fn(),
 }));
 
 const task = (
@@ -116,13 +134,18 @@ describe('UpcomingScreen', () => {
   beforeEach(() => {
     resetTasksApiForTest();
     resetProjectsApiForTest();
+    resetWaitsApiForTest();
     mockFetchProjects.mockReset();
     mockFetchProjects.mockResolvedValue([]);
+    mockFetchWaits.mockReset();
+    mockFetchWaits.mockResolvedValue([]);
+    mockAddWaitingCondition.mockReset();
     mockCompleteTask.mockReset();
     mockReopenTask.mockReset();
     mockEditTask.mockReset();
     mockRescheduleTask.mockReset();
     mockNavigate.mockReset();
+    defaultToastController.dismiss();
   });
 
   it('lists a future-dated task and hides an undated one', async () => {
@@ -188,6 +211,36 @@ describe('UpcomingScreen', () => {
     await waitFor(() => expect(queryByText('ship the release')).toBeNull());
     expect(mockCompleteTask).toHaveBeenCalledTimes(1);
     expect(mockCompleteTask.mock.calls[0][1]).toBe('2');
+  });
+
+  it('opens the Project add drawer on Waiting after completion', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([project('p', '🎓')]);
+    mockFetchTasks.mockResolvedValue([
+      task('2', 'ship the release', '2099-01-01', 'p'),
+    ]);
+    mockCompleteTask.mockImplementation(async () => {
+      mockFetchTasks.mockResolvedValue([]);
+      return {
+        ...task('2', 'ship the release', '2099-01-01', 'p'),
+        completedAt: '2023-01-02T00:00:00.000Z',
+      };
+    });
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('ship the release')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Complete "ship the release"'));
+    await waitFor(() => expect(mockCompleteTask).toHaveBeenCalledTimes(1));
+
+    const toast = defaultToastController.getSnapshot()[0];
+    await act(async () => toast?.secondaryAction?.onPress());
+    expect(screen.getByPlaceholderText('What needs to happen?')).toBeTruthy();
+    expect(screen.getByText('Waiting on')).toBeTruthy();
+    expect(screen.getByLabelText('Waiting on project Diploma')).toBeTruthy();
+    expect(
+      screen.getByLabelText('Add a waiting condition').props.accessibilityState
+        .selected,
+    ).toBe(true);
   });
 
   it('re-pulls the tasks when the list is pulled to refresh', async () => {

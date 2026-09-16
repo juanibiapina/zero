@@ -2,9 +2,9 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
-- 2026-09-16: Projects now separate manual Waiting from automatic After relationships. Dated work can bring an After project forward, Waiting and After appear before Tasks in the Project workspace, After starts collapsed in Projects, and Add opens focused Task, Waiting condition, After project, or Project flows.
+- 2026-09-16: Projects keep manual Waiting and automatic After separate, while their screens now put status before description in a tighter workspace. Pressing + opens the familiar Task, Waiting, After, and Project selector directly; section + controls open it on the matching type.
 
-- 2026-09-16: Completing a Project task still saves immediately and now offers Waiting for… beside Undo; completing a Project also offers Undo and restores the After relationships that completion resolved.
+- 2026-09-16: Completing a Project task still saves immediately and offers Waiting for… beside Undo; that action now shows the destination Project and asks what needs to happen in the same add drawer. Completing a Project also offers Undo and restores the After relationships that completion resolved.
 
 - 2026-09-16: Dates and repeats recognized while adding a task now appear on a colored background; tap the active phrase to keep those words and move recognition to the previous date in the title.
 
