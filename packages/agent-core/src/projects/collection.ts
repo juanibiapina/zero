@@ -39,6 +39,8 @@ export type ProjectsRest = {
   // Persist lifecycle state; Done drops the row from the working list.
   // Idempotent on the id.
   setProjectState: (id: string, state: ProjectState) => Promise<Project>;
+  // Undo completion by restoring the Project's prior lifecycle state.
+  reopenProject: (id: string, state: Exclude<ProjectState, "done">) => Promise<Project>;
   // Edit a project's title/icon/description (only the present fields). Idempotent
   // on the id, so a replayed offline edit re-applies the same values.
   editProject: (id: string, fields: ProjectEditFields) => Promise<Project>;
@@ -62,6 +64,7 @@ export type ProjectsApi = {
   collection: Collection<Project, string>;
   add: (title: string, sourceCaptureId?: string | null) => Transaction;
   setState: (id: string, state: ProjectState) => Transaction;
+  reopen: (project: Project) => Transaction;
   edit: (id: string, fields: ProjectEditFields) => Transaction;
   remove: (id: string) => Transaction;
   offline: boolean;
@@ -118,6 +121,19 @@ export function projectsSpec(rest: ProjectsRest) {
       matches: ({ changes }) => "state" in changes,
       persist: (id, { modified }) => rest.setProjectState(id, modified.state),
     }),
+    reopenProject: v.revive<Project>({
+      id: (project) => project.id,
+      row: (project) => ({ ...project }),
+      draft: (project) => (draft) => {
+        Object.assign(draft, project);
+      },
+      persist: (id, _mutation, project) => {
+        if (!project || project.state === "done") {
+          throw new Error("Project Undo is missing its prior lifecycle state");
+        }
+        return rest.reopenProject(id, project.state);
+      },
+    }),
     editProject: v.update<{ id: string; fields: ProjectEditFields }>({
       id: ({ id }) => id,
       // Set each present field in place so the sheet and the row reflect the
@@ -159,6 +175,7 @@ function toProjectsApi(
     add: (title, sourceCaptureId = null) =>
       api.actions.addProject({ title, sourceCaptureId }),
     setState: (id, state) => api.actions.setProjectState({ id, state }),
+    reopen: (project) => api.actions.reopenProject(project),
     edit: (id, fields) => api.actions.editProject({ id, fields }),
     remove: (id) => api.actions.deleteProject({ id }),
     offline: api.offline,

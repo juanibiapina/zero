@@ -28,7 +28,18 @@ function ProjectRow({ item, status, context, onOpen }: {
 }) {
   const icon = <View className="w-[22px] items-center"><Text className="text-[20px]">{item.icon}</Text></View>;
   const trailing = context ? (
-    <Text numberOfLines={1} variant="caption" className="max-w-[50%] shrink-0" accessibilityLabel={`${PROJECT_DISPLAY_STATUS_LABELS[status]} ${context}`}>{context}</Text>
+    <Text
+      numberOfLines={1}
+      variant="caption"
+      className="max-w-[50%] shrink-0"
+      accessibilityLabel={
+        status === 'after'
+          ? `After ${context.replace(/^after /, '')}`
+          : `${PROJECT_DISPLAY_STATUS_LABELS[status]} ${context}`
+      }
+    >
+      {context}
+    </Text>
   ) : undefined;
   return (
     <ListRow leading={icon} trailing={trailing} accessibilityLabel={item.title} onPress={() => onOpen(item)}>
@@ -98,15 +109,15 @@ function Projects({ api, tasksApi, waitsApi }: {
     (p) => projectDisplayStatus(p, tasks, today, conds, list),
     (p) => projectStatusContext(p, tasks, conds, list, today)?.sortKey ?? p.createdAt,
   ), [list, tasks, conds, today]);
-  const labelOf = useCallback((p: Project) => projectStatusContext(p, tasks, conds, list, today)?.label ?? null, [tasks, conds, list, today]);
+  const labelOf = useCallback((p: Project) => projectStatusContext(p, tasks, conds, list, today)?.rowLabel ?? null, [tasks, conds, list, today]);
   const sections = useMemo(() => grouped.map((s) => {
     const count = s.projects.length;
-    const collapsed = collapseOverride[s.status] ?? (s.status === 'backlog' && count > BACKLOG_COLLAPSE_THRESHOLD);
+    const collapsed = collapseOverride[s.status] ?? (s.status === 'after' || (s.status === 'backlog' && count > BACKLOG_COLLAPSE_THRESHOLD));
     return { status: s.status, count, data: collapsed ? [] : s.projects, collapsed };
   }), [grouped, collapseOverride]);
   const onProjectCreated = useCallback((id: string) => router.push(`/projects/${id}`), [router]);
   const add = useQuickAdd({
-    tasksApi, projectsApi: api, waitsApi, projects: list, modes: ['project'],
+    tasksApi, projectsApi: api, projects: list, modes: ['project'],
     getToken, onError: setWriteError, fabLabel: 'New project', onProjectCreated,
   });
   useEffect(() => {

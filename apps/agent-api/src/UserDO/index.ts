@@ -17,14 +17,12 @@ import {
 import {
   DbWaitingConditionStore,
   type WaitingCondition,
-  type WaitingConditionFields,
-  type WaitingConditionKind,
 } from "../store/waiting-conditions";
 import {
-  addProjectDependency as coordinateProjectDependency,
+  addProjectAfter as coordinateProjectAfter,
   setProjectState as coordinateProjectState,
-  type AddProjectDependencyResult,
-} from "../store/project-dependencies";
+  type AddProjectAfterResult,
+} from "../store/project-afters";
 import {
   SystemTopicStore,
   systemTopicsFingerprint,
@@ -236,61 +234,67 @@ export class UserDO extends DurableObject<Env> {
   }
 
   setProjectState(id: string, state: ProjectState): Project | null {
-    return coordinateProjectState(
-      this.projects,
-      this.waitingConditions,
-      id,
-      state,
-    ).project;
+    return this.db.transaction(
+      () =>
+        coordinateProjectState(
+          this.projects,
+          this.waitingConditions,
+          id,
+          state,
+        ).project,
+    );
   }
 
   editProject(id: string, fields: ProjectEdit): Project | null {
     return this.projects.edit(id, fields);
   }
 
-  // Delete a project and cascade to every row that references it: its tasks and
-  // its waiting conditions. The cascade lives here, in the composition root that
-  // holds all three stores, not in DbProjectStore (which owns only the projects
-  // table) — deleting a project must pass over every entity that references it
+  // Delete a Project and atomically cascade its Tasks, manual Waiting rows,
+  // outgoing After rows, and incoming After rows. The cascade lives here in the
+  // composition root, not in DbProjectStore, because deletion must pass over
+  // every entity that references the Project
   // (docs/todo-app.md), or those rows orphan (an orphaned task is a ghost: hidden
   // from Home because its project is gone, yet still an open row). Idempotent on
-  // the id: a replayed offline delete finds nothing and no-ops on all three.
+  // the id: a replayed offline delete finds nothing and every cascade no-ops.
   // Returns the cascade counts for the route's log line.
   deleteProject(id: string): {
     existed: boolean;
     tasks: number;
     conditions: number;
-    dependencies: number;
+    afters: number;
   } {
-    const existed = this.projects.delete(id);
-    const tasks = this.tasks.deleteByProject(id);
-    const conditions = this.waitingConditions.deleteByProject(id);
-    const dependencies = this.waitingConditions.deleteByReferencedProject(id);
-    return { existed, tasks, conditions, dependencies };
+    return this.db.transaction(() => {
+      const existed = this.projects.delete(id);
+      const tasks = this.tasks.deleteByProject(id);
+      const conditions = this.waitingConditions.deleteByProject(id);
+      const afters = this.waitingConditions.deleteByReferencedProject(id);
+      return { existed, tasks, conditions, afters };
+    });
   }
 
-  // --- Waiting conditions ---
+  // --- Manual Waiting and Project After relationships ---
 
   addWaitingCondition(
     id: string,
     projectId: string,
-    kind: WaitingConditionKind,
-    fields?: WaitingConditionFields,
+    text: string,
   ): WaitingCondition {
-    return this.waitingConditions.add(id, projectId, kind, fields);
+    return this.waitingConditions.addWaiting(id, projectId, text);
   }
 
-  addProjectDependency(
+  addProjectAfter(
     id: string,
-    dependentProjectId: string,
-    prerequisiteProjectId: string,
-  ): AddProjectDependencyResult {
-    return coordinateProjectDependency(
-      this.projects,
-      this.waitingConditions,
-      id,
-      dependentProjectId,
-      prerequisiteProjectId,
+    projectId: string,
+    afterProjectId: string,
+  ): AddProjectAfterResult {
+    return this.db.transaction(() =>
+      coordinateProjectAfter(
+        this.projects,
+        this.waitingConditions,
+        id,
+        projectId,
+        afterProjectId,
+      ),
     );
   }
 
@@ -299,7 +303,7 @@ export class UserDO extends DurableObject<Env> {
   }
 
   resolveWaitingCondition(id: string): WaitingCondition | null {
-    return this.waitingConditions.resolve(id);
+    return this.waitingConditions.resolveWaiting(id);
   }
 
   deleteWaitingCondition(id: string): boolean {

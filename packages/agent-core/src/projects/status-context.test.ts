@@ -15,38 +15,39 @@ const project = (id: string, title = id, icon = "📁"): Project => ({
   createdAt: "2026-01-01T00:00:00.000Z",
 });
 
-const dependency = (): WaitingCondition => ({
-  id: "dependency",
-  projectId: "dependent",
+const after = (): WaitingCondition => ({
+  id: "after",
+  projectId: "source",
   kind: "project-status",
   text: null,
-  refId: "prerequisite",
+  refId: "target",
   targetStatus: "done",
   resolvedAt: null,
   createdAt: "2026-02-01T00:00:00.000Z",
 });
 
 describe("projectStatusContext", () => {
-  it("identifies the prerequisite and ordering for a Blocked project", () => {
-    const dependent = project("dependent");
+  it("identifies the target and ordering for an After Project", () => {
+    const source = project("source");
     expect(
       projectStatusContext(
-        dependent,
+        source,
         [],
-        [dependency()],
-        [dependent, project("prerequisite", "Sell old house", "🏠")],
+        [after()],
+        [source, project("target", "Sell old house", "🏠")],
         TODAY,
       ),
     ).toEqual({
-      label: "after 🏠 Sell old house",
+      label: "🏠 Sell old house",
+      rowLabel: "after 🏠 Sell old house",
       sortKey: "2026-02-01T00:00:00.000Z",
     });
   });
 
   it("keeps ordinary Waiting context", () => {
-    const dependent = project("dependent");
+    const source = project("source");
     const wait: WaitingCondition = {
-      ...dependency(),
+      ...after(),
       kind: "free-text",
       text: "the letter arrives",
       refId: null,
@@ -54,10 +55,10 @@ describe("projectStatusContext", () => {
     };
     expect(
       projectStatusContext(
-        dependent,
+        source,
         [],
         [wait],
-        [dependent],
+        [source],
         TODAY,
         new Date("2026-06-01T00:00:00.000Z"),
       )?.label,

@@ -14,14 +14,29 @@ describe("toast controller", () => {
     expect(snap[0]).toMatchObject({ id, message: "Saved" });
   });
 
-  it("carries description and action through", () => {
+  it("carries description, primary, secondary, and description actions through", () => {
     const c = createToastController();
-    const onPress = vi.fn();
-    c.show({ message: "Project created", description: "ship the app", action: { label: "View", onPress } });
-    const [t] = c.getSnapshot();
-    expect(t.description).toBe("ship the app");
-    t.action?.onPress();
-    expect(onPress).toHaveBeenCalledTimes(1);
+    const primary = vi.fn();
+    const secondary = vi.fn();
+    const openDescription = vi.fn();
+    c.show({
+      message: "Completed",
+      description: "🏠 Move house",
+      action: { label: "Undo", onPress: primary },
+      secondaryAction: { label: "Waiting for…", onPress: secondary },
+      descriptionAction: {
+        accessibilityLabel: "Open project Move house",
+        onPress: openDescription,
+      },
+    });
+    const [toast] = c.getSnapshot();
+    expect(toast.description).toBe("🏠 Move house");
+    toast.action?.onPress();
+    toast.secondaryAction?.onPress();
+    toast.descriptionAction?.onPress();
+    expect(primary).toHaveBeenCalledTimes(1);
+    expect(secondary).toHaveBeenCalledTimes(1);
+    expect(openDescription).toHaveBeenCalledTimes(1);
   });
 
   it("auto-dismisses after the default duration", () => {

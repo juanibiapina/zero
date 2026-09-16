@@ -245,7 +245,7 @@ describe('ProjectsScreen (list)', () => {
     expect(mockAddProject).not.toHaveBeenCalled();
   });
 
-  it('shows a Project pill when the quick-add bar is open', async () => {
+  it('opens focused Project creation without a redundant mode pill', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([]);
 
@@ -258,8 +258,8 @@ describe('ProjectsScreen (list)', () => {
       fireEvent.press(getByLabelText('New project'));
     });
 
-    // Opening the bar reveals the single Project mode pill, reading like Home's.
-    await waitFor(() => expect(getByLabelText('Add a project')).toBeTruthy());
+    await waitFor(() => expect(getByLabelText('New item text')).toBeTruthy());
+    expect(queryByLabelText('Add a project')).toBeNull();
   });
 
   it('groups projects under a status section header', async () => {
@@ -288,7 +288,7 @@ describe('ProjectsScreen (list)', () => {
       id,
       projectId,
       kind: 'free-text',
-      text: 'blocked',
+      text: 'a reply',
       refId: null,
       targetStatus: null,
       resolvedAt: null,
@@ -309,7 +309,7 @@ describe('ProjectsScreen (list)', () => {
     expect(titles).toEqual(['Older wait', 'Newer wait']);
   });
 
-  it('shows dependencies in a Blocked section with prerequisite context', async () => {
+  it('shows After collapsed by default with target context', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([
       project('1', 'Move house'),
@@ -330,8 +330,11 @@ describe('ProjectsScreen (list)', () => {
 
     const screen = await renderScreen();
 
-    await waitFor(() => expect(screen.getByLabelText('Blocked, 1')).toBeTruthy());
-    expect(screen.getByLabelText('Blocked after 🏠 Sell old house')).toBeTruthy();
+    const header = await waitFor(() => screen.getByLabelText('After, 1'));
+    expect(header.props.accessibilityState.expanded).toBe(false);
+    expect(screen.queryByLabelText('After 🏠 Sell old house')).toBeNull();
+    await fireEvent.press(header);
+    expect(screen.getByLabelText('After 🏠 Sell old house')).toBeTruthy();
   });
 
   it('re-pulls the projects when the list is pulled to refresh', async () => {

@@ -142,7 +142,8 @@ const task = (id: string, text: string, projectId: string): Task => ({
 function fakeRest(initial: Project[]): ProjectsRest {
   const server = initial.map((p) => ({ ...p }));
   return {
-    fetchProjects: async () => server.map((p) => ({ ...p })),
+    fetchProjects: async () =>
+      server.filter((item) => item.state !== "done").map((item) => ({ ...item })),
     addProject: async ({ id, title }) => {
       const existing = server.find((p) => p.id === id);
       if (existing) return { ...existing };
@@ -154,8 +155,13 @@ function fakeRest(initial: Project[]): ProjectsRest {
       const row = server.find((p) => p.id === id);
       if (!row) throw new Error(`no project ${id}`);
       row.state = state;
-      if (state === "done") server.splice(server.indexOf(row), 1);
       return { ...row, state };
+    },
+    reopenProject: async (id, state) => {
+      const row = server.find((item) => item.id === id);
+      if (!row) throw new Error(`no project ${id}`);
+      row.state = state;
+      return { ...row };
     },
     editProject: async (id, fields) => {
       const row = server.find((p) => p.id === id);
@@ -250,7 +256,7 @@ const waitCondition = (
   id,
   projectId,
   kind: "free-text",
-  text: "blocked",
+  text: "a reply",
   refId: null,
   targetStatus: null,
   resolvedAt: null,
@@ -291,9 +297,17 @@ function renderApp(entries: string[] = ["/projects"]) {
 
 // Open a project's detail screen by clicking its list row.
 async function openDetail(title: string) {
-  fireEvent.click(await screen.findByText(title));
-  // The detail screen owns the task composer; wait for it to render.
-  await screen.findByRole("textbox", { name: "Add a task" });
+  let row = screen.queryByText(title);
+  if (!row) {
+    const after = screen.queryByRole("button", { name: /^After/ });
+    if (after) {
+      fireEvent.click(after);
+      await waitFor(() => expect(after).toHaveAttribute("aria-expanded", "true"));
+    }
+    row = await screen.findByText(title);
+  }
+  fireEvent.click(row);
+  await screen.findByRole("textbox", { name: "Project title" });
 }
 
 describe("ProjectsPage", () => {
@@ -361,18 +375,16 @@ describe("ProjectsPage", () => {
     // The Projects list badges it "until <day>" (aria "Waiting until …").
     expect(screen.getByLabelText(/^Waiting until /)).toBeInTheDocument();
 
-    // The detail screen renders the same derived reason as an automatic row.
     await openDetail("Trip planning");
-    const untilRows = screen.getAllByText(/^until /);
-    expect(untilRows.length).toBeGreaterThan(0);
-    // It is automatic (no Resolve), so it carries the "auto" marker.
-    expect(screen.getAllByText("auto").length).toBeGreaterThan(0);
+    expect(screen.getByText(/^Waiting · until /)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Waiting on" })).toBeNull();
+    expect(screen.queryByText("auto")).toBeNull();
   });
 
-  it("shows dependencies in a Blocked section after Waiting with compact context", async () => {
+  it("shows After after Waiting, collapsed by default, with compact context", async () => {
     setApi(
       [
-        project("1", "Blocked project"),
+        project("1", "After project"),
         project("2", "Prerequisite", "next", "🏠"),
         project("3", "Waiting project"),
       ],
@@ -384,13 +396,14 @@ describe("ProjectsPage", () => {
     );
     renderApp();
 
-    expect(await screen.findByText("Blocked")).toBeInTheDocument();
-    expect(screen.getByText("after 🏠 Prerequisite")).toBeInTheDocument();
-    const waiting = screen.getByText("Waiting");
-    const blocked = screen.getByText("Blocked");
+    const after = await screen.findByRole("button", { name: /^After/ });
+    expect(after).toHaveAttribute("aria-expanded", "false");
+    const waiting = screen.getByRole("button", { name: /^Waiting·/ });
     expect(
-      waiting.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING,
+      waiting.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    fireEvent.click(after);
+    expect(screen.getByText("after 🏠 Prerequisite")).toBeInTheDocument();
   });
 
   it("navigates from a list row to the project's own screen", async () => {
@@ -407,9 +420,9 @@ describe("ProjectsPage", () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp();
     await openDetail("Run a 5K");
-    const input = screen.getByRole("textbox", {
-      name: "Add a task",
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Add to Run a 5K" }));
+    fireEvent.click(screen.getByRole("button", { name: "Task" }));
+    const input = screen.getByRole("textbox", { name: "Add task" });
     fireEvent.change(input, { target: { value: "buy running shoes" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
@@ -443,7 +456,12 @@ describe("ProjectsPage", () => {
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe("Completed");
+    expect(snap[0].description).toBe("📁 Run a 5K");
+    expect(snap[0].secondaryAction?.label).toBe("Waiting for…");
     expect(snap[0].action?.label).toBe("Undo");
+    await act(async () => snap[0].secondaryAction?.onPress());
+    expect(screen.getByRole("textbox", { name: "Waiting condition" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await act(async () => {
       snap[0].action?.onPress();
     });
@@ -454,7 +472,7 @@ describe("ProjectsPage", () => {
     );
   });
 
-  it("shows a dependency separately and navigates to its prerequisite", async () => {
+  it("shows an After relationship separately and navigates to its target", async () => {
     setApi(
       [
         project("1", "Move house"),
@@ -463,12 +481,12 @@ describe("ProjectsPage", () => {
       [],
       [dependencyCondition("dependency", "1", "2")],
     );
-    renderApp();
-    await openDetail("Move house");
+    renderApp(["/projects/1"]);
+    await screen.findByRole("textbox", { name: "Project title" });
 
-    expect(screen.getByText("Blocked · after 🏠 Sell old house")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Depends on" })).toBeInTheDocument();
-    expect(screen.getByText("Must be completed first")).toBeInTheDocument();
+    expect(screen.getByText("After · 🏠 Sell old house")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "After" })).toBeInTheDocument();
+    expect(screen.queryByText("Must be completed first")).toBeNull();
     expect(screen.queryByText("auto")).toBeNull();
 
     fireEvent.click(
@@ -481,76 +499,68 @@ describe("ProjectsPage", () => {
     );
   });
 
-  it("removes only the selected dependency and recalculates the project", async () => {
+  it("removes only the selected After relationship and recalculates the Project", async () => {
     setApi(
       [project("1", "Move house"), project("2", "Sell old house")],
       [],
       [dependencyCondition("dependency", "1", "2")],
     );
-    renderApp();
-    await openDetail("Move house");
+    renderApp(["/projects/1"]);
+    await screen.findByRole("textbox", { name: "Project title" });
 
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", {
-          name: "Remove dependency on Sell old house",
+          name: "Remove After relationship with Sell old house",
         }),
       );
     });
 
     await waitFor(() =>
-      expect(screen.queryByRole("heading", { name: "Depends on" })).toBeNull(),
+      expect(screen.queryByRole("heading", { name: "After" })).toBeNull(),
     );
     expect(screen.getByText("Next")).toBeInTheDocument();
-    expect(screen.getByText("Waiting on")).toBeInTheDocument();
+    expect(screen.queryByText("Waiting on")).toBeNull();
   });
 
   it("adds a free-text waiting condition from the detail screen", async () => {
     setApi([project("1", "Send tax letter", "next")]);
     renderApp();
     await openDetail("Send tax letter");
-    // The builder lives in a popover opened by the '+ Waiting condition'
-    // control (not an inline form that shifts the section).
-    fireEvent.click(
-      screen.getByRole("button", { name: "+ Waiting condition" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Add to Send tax letter" }));
+    fireEvent.click(screen.getByRole("button", { name: "Waiting condition" }));
     fireEvent.change(
-      screen.getByRole("textbox", { name: "Waiting condition" }),
+      screen.getByRole("textbox", { name: "Add waiting condition" }),
       { target: { value: "the letter comes back" } },
     );
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
     });
     await waitFor(() =>
       expect(screen.getByText("the letter comes back")).toBeInTheDocument(),
     );
   });
 
-  it("adds a Project completion dependency without a target-status picker", async () => {
+  it("adds an After relationship through a searchable Project-only picker", async () => {
     setApi([
       project("1", "Move house"),
       project("2", "Sell old house", "next", "🏠"),
     ]);
     renderApp();
     await openDetail("Move house");
-    fireEvent.click(
-      screen.getByRole("button", { name: "+ Waiting condition" }),
-    );
-    fireEvent.change(screen.getByLabelText("Condition kind"), {
-      target: { value: "project-status" },
-    });
-
-    expect(screen.getByText("Project completion")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add to Move house" }));
+    fireEvent.click(screen.getByRole("button", { name: "After project" }));
+    expect(screen.queryByLabelText("Condition kind")).toBeNull();
     expect(screen.queryByLabelText("Target status")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Prerequisite project"), {
-      target: { value: "2" },
+    fireEvent.change(screen.getByLabelText("Filter After projects"), {
+      target: { value: "Sell" },
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+      fireEvent.click(screen.getByRole("button", { name: /Sell old house/ }));
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: "Depends on" })).toBeInTheDocument(),
+      expect(screen.getByRole("heading", { name: "After" })).toBeInTheDocument(),
     );
     expect(screen.getByText("Sell old house")).toBeInTheDocument();
   });
@@ -604,7 +614,7 @@ describe("ProjectsPage", () => {
     await waitFor(() => expect(screen.getByText("Active")).toBeInTheDocument());
   });
 
-  it("marks a project done from detail and it leaves the list immediately", async () => {
+  it("marks a Project done immediately and offers Undo", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp();
     await openDetail("Run a 5K");
@@ -612,12 +622,15 @@ describe("ProjectsPage", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Mark done" }));
     });
-    // Back on the list, the row is gone at once and there is no Undo affordance.
     await screen.findByRole("heading", { name: "Projects" });
     await waitFor(() =>
       expect(screen.queryByText("Run a 5K")).not.toBeInTheDocument(),
     );
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast?.message).toBe("Project completed");
+    expect(toast?.action?.label).toBe("Undo");
+    await act(async () => toast?.action?.onPress());
+    expect(await screen.findByText("Run a 5K")).toBeInTheDocument();
   });
 
   it("deletes a project from detail and it leaves the list immediately", async () => {
@@ -636,7 +649,7 @@ describe("ProjectsPage", () => {
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
-  it("warns when deleting a prerequisite will unblock another project", async () => {
+  it("warns when deleting an After target may move another Project", async () => {
     setApi(
       [project("1", "Sell old house"), project("2", "Move house")],
       [],
@@ -648,7 +661,7 @@ describe("ProjectsPage", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
 
     expect(
-      screen.getByText(/“Move house” depends on it and will be unblocked/),
+      screen.getByText(/“Move house” is after it and may move to another section/),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("textbox", { name: "Project title" })).toHaveValue(

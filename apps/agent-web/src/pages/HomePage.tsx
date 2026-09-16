@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { ScheduleHighlightInput } from "@/components/ScheduleHighlightInput";
+import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
 import { Link, useNavigate } from "react-router";
 import {
   ADD_MODE_LABEL,
@@ -320,29 +321,19 @@ function TaskList({
   useForegroundRefetch(refetchAll);
 
   const today = localToday();
-  const list = homeTasks(tasks ?? [], projects ?? [], today, conditions ?? []);
+  const list = homeTasks(tasks ?? [], projects ?? [], today);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const closingDetailRef = useRef(false);
 
-  // Completing commits immediately (the row leaves at once) and raises a single
-  // bottom Undo snackbar. A fixed toast id means a second completion replaces the
-  // first toast, so only one Undo is ever offered. Undo reopens the task.
-  const onComplete = useCallback(
-    (item: Task) => {
-      undoableAction({
-        message: "Completed",
-        act: () => api.complete(item.id, today),
-        undo: () =>
-          item.recurrence
-            ? api.undoOccurrence(item, today)
-            : api.reopen(item),
-        onError,
-      });
-    },
-    [api, onError, today],
-  );
+  const completion = useTaskCompletionFeedback({
+    api,
+    waitsApi,
+    projects: projects ?? [],
+    today,
+    onError,
+  });
 
   // Postpone to tomorrow; the optimistic reschedule drops the row from Home at
   // once (the shown-up gate) and lands it in Upcoming.
@@ -374,12 +365,12 @@ function TaskList({
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   }, [api, draft, selected, onError]);
 
-  const onCompleteFromDetail = useCallback(() => {
+  const onCompleteFromDetail = () => {
     if (!selected) return;
     const item = selected;
     setSelectedId(null);
-    onComplete(item);
-  }, [selected, onComplete]);
+    completion.complete(item);
+  };
 
   const onPickSchedule = useCallback(
     (date: string | null) => {
@@ -464,14 +455,24 @@ function TaskList({
   const hydrating = isLoading || projectsLoading;
 
   if (view === "empty") {
-    return hydrating ? <div className="min-h-24" /> : cta ? <CallToAction action={cta} /> : null;
+    return (
+      <>
+        {hydrating ? <div className="min-h-24" /> : cta ? <CallToAction action={cta} /> : null}
+        {completion.composer}
+      </>
+    );
   }
 
   if (view === "loading") {
-    return showLoadingText ? (
-      <p className="text-sm text-muted-foreground">Loading your tasks…</p>
-    ) : (
-      <div className="min-h-24" />
+    return (
+      <>
+        {showLoadingText ? (
+          <p className="text-sm text-muted-foreground">Loading your tasks…</p>
+        ) : (
+          <div className="min-h-24" />
+        )}
+        {completion.composer}
+      </>
     );
   }
 
@@ -493,7 +494,7 @@ function TaskList({
                 id={item.id}
                 text={item.text}
                 icon={item.projectId ? iconOf(item.projectId) : null}
-                onComplete={() => onComplete(item)}
+                onComplete={() => completion.complete(item)}
                 onOpen={() => openDetail(item)}
                 onReschedule={() => onReschedule(item)}
               />
@@ -550,6 +551,7 @@ function TaskList({
           </form>
         ) : null}
       </Sheet>
+      {completion.composer}
     </section>
   );
 }

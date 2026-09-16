@@ -126,7 +126,7 @@ describe('addWaitingCondition', () => {
   it('surfaces the server conflict explanation', async () => {
     jest.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
-        JSON.stringify({ error: 'This dependency would create a loop.' }),
+        JSON.stringify({ error: 'This After relationship would create a loop.' }),
         { status: 409 },
       ),
     );
@@ -145,7 +145,7 @@ describe('addWaitingCondition', () => {
         },
         'https://example.test',
       ),
-    ).rejects.toThrow('This dependency would create a loop.');
+    ).rejects.toThrow('This After relationship would create a loop.');
   });
 });
 

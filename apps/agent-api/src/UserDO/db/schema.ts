@@ -252,10 +252,11 @@ export const projects = table("projects", {
   sourceCaptureId: column.text(),
 });
 
-// Waiting conditions: why a project is waiting (see migration 0049). Owned by
-// DbWaitingConditionStore. Open conditions are the rows where resolvedAt IS
-// NULL. Project-status/Done dependencies persist terminal settlement; other
-// structured kinds remain derived-satisfied on the client.
+// Project attention rows use one private tagged table: free-text rows are manual
+// Waiting conditions; project-status/Done rows are Project After relationships.
+// No Task references or arbitrary target statuses are valid after migration 0056.
+// Open rows have resolvedAt NULL; completion settles incoming After rows and
+// Undo restores them.
 export const waitingConditions = table("waiting_conditions", {
   id: column.text().notNull().primaryKey(),
   projectId: column.text().notNull(),

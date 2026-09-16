@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import { createDb } from "do-orm";
 import { createMockStorage } from "do-orm/src/test-utils";
+import { describe, expect, it } from "vitest";
 
 import { DbWaitingConditionStore } from "./waiting-conditions";
 
@@ -8,138 +8,59 @@ const makeStore = () =>
   new DbWaitingConditionStore(createDb(createMockStorage()));
 
 describe("DbWaitingConditionStore", () => {
-  it("adds a free-text condition and lists it open", () => {
+  it("adds and replays a manual Waiting condition exactly once", () => {
     const store = makeStore();
-    const c = store.add("c1", "p1", "free-text", { text: "the letter comes back" });
-    expect(c.id).toBe("c1");
-    expect(c.projectId).toBe("p1");
-    expect(c.kind).toBe("free-text");
-    expect(c.text).toBe("the letter comes back");
-    expect(c.resolvedAt).toBeNull();
-    expect(store.listOpen()).toEqual([c]);
+    const first = store.addWaiting("wait", "project", "the letter arrives");
+    const replay = store.addWaiting("wait", "project", "different text");
+    expect(replay).toEqual(first);
+    expect(store.listOpen()).toEqual([first]);
   });
 
-  it("is exactly-once on the client id", () => {
+  it("resolves only manual Waiting conditions", () => {
     const store = makeStore();
-    store.add("c1", "p1", "free-text", { text: "wait" });
-    store.add("c1", "p1", "free-text", { text: "again" });
-    const open = store.listOpen();
-    expect(open).toHaveLength(1);
-    expect(open[0].text).toBe("wait");
+    store.addWaiting("wait", "project", "the letter arrives");
+    store.addAfter("after", "project", "target");
+
+    expect(store.resolveWaiting("wait")?.resolvedAt).toBeTruthy();
+    expect(store.resolveWaiting("after")?.resolvedAt).toBeNull();
+    expect(store.listOpen().map((condition) => condition.id)).toEqual([
+      "after",
+    ]);
   });
 
-  it("resolving a condition drops it from the open list", () => {
+  it("settles and restores every incoming After relationship", () => {
     const store = makeStore();
-    store.add("c1", "p1", "free-text", { text: "wait" });
-    const resolved = store.resolve("c1");
-    expect(resolved?.resolvedAt).toBeTruthy();
-    expect(store.listOpen()).toEqual([]);
-  });
+    store.addAfter("first", "a", "target");
+    store.addAfter("second", "b", "target");
+    store.addAfter("other", "a", "other-target");
 
-  it("adds and lists canonical project-completion dependencies", () => {
-    const store = makeStore();
-    const dependency = store.addProjectDependency("d1", "dependent", "prerequisite");
-    store.add("ordinary", "dependent", "free-text", { text: "wait" });
-
-    expect(dependency).toMatchObject({
-      id: "d1",
-      projectId: "dependent",
-      kind: "project-status",
-      text: null,
-      refId: "prerequisite",
-      targetStatus: "done",
-      resolvedAt: null,
-    });
-    expect(store.listOpenProjectDependencies()).toEqual([dependency]);
-  });
-
-  it("stores a structured condition's ref and target", () => {
-    const store = makeStore();
-    const c = store.add("c2", "p1", "project-status", {
-      refId: "p2",
-      targetStatus: "done",
-    });
-    expect(c.refId).toBe("p2");
-    expect(c.targetStatus).toBe("done");
-  });
-
-  it("resolves matching incoming dependencies once and preserves the first timestamp", () => {
-    const store = makeStore();
-    store.addProjectDependency("match", "dependent", "completed");
-    store.addProjectDependency("other", "dependent", "other-project");
-    store.add("non-terminal", "dependent", "project-status", {
-      refId: "completed",
-      targetStatus: "active",
-    });
-
-    expect(store.resolveForCompletedProject("completed")).toBe(1);
-    const firstResolvedAt = store.get("match")?.resolvedAt;
-    expect(firstResolvedAt).toBeTruthy();
-    expect(store.listOpen().map((condition) => condition.id).sort()).toEqual([
-      "non-terminal",
+    expect(store.resolveAftersForCompletedProject("target")).toBe(2);
+    expect(store.listOpenAfters().map((condition) => condition.id)).toEqual([
       "other",
     ]);
-
-    expect(store.resolveForCompletedProject("completed")).toBe(0);
-    expect(store.get("match")?.resolvedAt).toBe(firstResolvedAt);
+    expect(store.restoreAftersForReopenedProject("target")).toBe(2);
+    expect(store.listOpenAfters().map((condition) => condition.id).sort()).toEqual([
+      "first",
+      "other",
+      "second",
+    ]);
   });
 
-  it("delete is idempotent on the id", () => {
+  it("deletes owned and incoming rows independently", () => {
     const store = makeStore();
-    store.add("c1", "p1", "free-text", { text: "wait" });
-    expect(store.delete("c1")).toBe(true);
-    expect(store.delete("c1")).toBe(false);
+    store.addWaiting("owned-wait", "source", "a reply");
+    store.addAfter("owned-after", "source", "other");
+    store.addAfter("incoming", "dependent", "source");
+
+    expect(store.deleteByProject("source")).toBe(2);
+    expect(store.deleteByReferencedProject("source")).toBe(1);
     expect(store.listOpen()).toEqual([]);
   });
 
-  describe("deleteByReferencedProject", () => {
-    it("deletes only completion dependencies that reference the project", () => {
-      const store = makeStore();
-      store.addProjectDependency("incoming", "dependent", "target");
-      store.addProjectDependency("other", "dependent", "other-target");
-      store.add("non-terminal", "dependent", "project-status", {
-        refId: "target",
-        targetStatus: "active",
-      });
-
-      expect(store.deleteByReferencedProject("target")).toBe(1);
-      expect(store.listOpen().map((condition) => condition.id).sort()).toEqual([
-        "non-terminal",
-        "other",
-      ]);
-      expect(store.deleteByReferencedProject("target")).toBe(0);
-    });
-  });
-
-  describe("deleteByProject", () => {
-    it("deletes only conditions of the given project", () => {
-      const store = makeStore();
-      store.add("c1", "p1", "free-text", { text: "a" });
-      store.add("c2", "p1", "free-text", { text: "b" });
-      store.add("c3", "p2", "free-text", { text: "c" });
-
-      const removed = store.deleteByProject("p1");
-
-      expect(removed).toBe(2);
-      expect(store.listOpen().map((c) => c.id)).toEqual(["c3"]);
-    });
-
-    it("deletes a resolved condition of the project too", () => {
-      const store = makeStore();
-      store.add("c1", "p1", "free-text", { text: "a" });
-      store.resolve("c1");
-
-      // The resolved row is off the open list but still stored; the cascade
-      // removes it (1).
-      expect(store.deleteByProject("p1")).toBe(1);
-    });
-
-    it("is a no-op for a project with no conditions", () => {
-      const store = makeStore();
-      store.add("c1", "p1", "free-text", { text: "a" });
-
-      expect(store.deleteByProject("p2")).toBe(0);
-      expect(store.listOpen()).toHaveLength(1);
-    });
+  it("keeps delete idempotent", () => {
+    const store = makeStore();
+    store.addWaiting("wait", "project", "a reply");
+    expect(store.delete("wait")).toBe(true);
+    expect(store.delete("wait")).toBe(false);
   });
 });

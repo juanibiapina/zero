@@ -13,6 +13,7 @@ import {
   defaultToastController,
   localToday,
   tomorrow,
+  type AddProjectAttention,
 } from '@zero/agent-core';
 
 import type { Project, ProjectState, Task, WaitingCondition } from '@/lib/api';
@@ -221,14 +222,7 @@ const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
 const mockDeleteWaitingCondition = jest.fn<(id: string) => Promise<void>>();
 const mockAddWaitingCondition =
   jest.fn<
-    (condition: {
-      id: string;
-      projectId: string;
-      kind: string;
-      text: string | null;
-      refId: string | null;
-      targetStatus: string | null;
-    }) => Promise<WaitingCondition>
+    (condition: AddProjectAttention & { id: string }) => Promise<WaitingCondition>
   >();
 jest.mock('@/lib/api', () => ({
   fetchProjects: () => mockFetchProjects(),
@@ -249,14 +243,7 @@ jest.mock('@/lib/api', () => ({
   fetchWaits: () => mockFetchWaits(),
   addWaitingCondition: (
     _getToken: unknown,
-    condition: {
-      id: string;
-      projectId: string;
-      kind: string;
-      text: string | null;
-      refId: string | null;
-      targetStatus: string | null;
-    },
+    condition: AddProjectAttention & { id: string },
   ) => mockAddWaitingCondition(condition),
   resolveWaitingCondition: () => Promise.reject(new Error('not used')),
   deleteWaitingCondition: (_getToken: unknown, id: string) =>
@@ -442,7 +429,7 @@ describe('ProjectDetailScreen', () => {
     expect(queryByText(/^until Tomorrow$/)).toBeNull();
   });
 
-  it('shows a dependency separately and opens its prerequisite', async () => {
+  it('shows an After relationship separately and opens its target Project', async () => {
     mockFetchProjects.mockResolvedValue([
       project('1', 'Move house'),
       project('2', 'Sell old house', '🏠'),
@@ -452,10 +439,10 @@ describe('ProjectDetailScreen', () => {
     const screen = await renderScreen();
 
     await waitFor(() =>
-      expect(screen.getByText('Blocked · after 🏠 Sell old house')).toBeTruthy(),
+      expect(screen.getByText('After · 🏠 Sell old house')).toBeTruthy(),
     );
-    expect(screen.getByText('Depends on')).toBeTruthy();
-    expect(screen.getByText('Must be completed first')).toBeTruthy();
+    expect(screen.getByText('After')).toBeTruthy();
+    expect(screen.queryByText('Must be completed first')).toBeNull();
     expect(screen.queryByText('auto')).toBeNull();
 
     await fireEvent.press(
@@ -464,45 +451,44 @@ describe('ProjectDetailScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/projects/2');
   });
 
-  it('removes only the selected dependency and recalculates the project', async () => {
+  it('removes only the selected After relationship and recalculates the Project', async () => {
     mockFetchProjects.mockResolvedValue([
       project('1', 'Move house'),
       project('2', 'Sell old house'),
     ]);
     mockFetchWaits.mockResolvedValue([dependencyRow('dependency', '1', '2')]);
     const screen = await renderScreen();
-    await waitFor(() => expect(screen.getByText('Depends on')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('After')).toBeTruthy());
 
     await fireEvent.press(
-      screen.getByLabelText('Remove dependency on Sell old house'),
+      screen.getByLabelText('Remove After relationship with Sell old house'),
     );
 
     await waitFor(() =>
       expect(mockDeleteWaitingCondition).toHaveBeenCalledWith('dependency'),
     );
-    expect(screen.queryByText('Depends on')).toBeNull();
+    expect(screen.queryByText('After')).toBeNull();
     expect(screen.getByText('Next')).toBeTruthy();
   });
 
-  it('links an eligible prerequisite from the status sheet and keeps the project open', async () => {
+  it('adds an eligible After Project from the main Add surface', async () => {
     mockFetchProjects.mockResolvedValue([
       project('1', 'Move house'),
       project('2', 'Sell old house', '🏠'),
     ]);
     mockAddWaitingCondition.mockImplementation(async (condition) => ({
       ...condition,
-      kind: condition.kind as WaitingCondition['kind'],
       resolvedAt: null,
       createdAt: '2023-01-01T00:00:00.000Z',
     }));
 
     const screen = await renderScreen();
     await waitFor(() => expect(screen.getByText('Next')).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText('Project status: Next'));
-    await fireEvent.press(screen.getByText('Depends on project…'));
+    await fireEvent.press(screen.getByLabelText('Add'));
+    expect(screen.getByText('Add to Move house')).toBeTruthy();
+    await fireEvent.press(screen.getByText('After project'));
 
-    await waitFor(() => expect(screen.getByText('Depends on')).toBeTruthy());
-    expect(screen.queryByText('Project status')).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText('Filter projects')).toBeTruthy());
     expect(screen.queryByLabelText('No project')).toBeNull();
     await fireEvent.press(screen.getByLabelText('Sell old house'));
 
@@ -643,29 +629,25 @@ describe('ProjectDetailScreen', () => {
     });
 
     const {
-      getAllByLabelText,
       getByLabelText,
       getByPlaceholderText,
+      getByText,
       queryByLabelText,
     } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
-    // Adding is a plus FAB that expands into the quick-add bar.
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
     });
-
-    // The drawer offers Task, project-scoped Waiting, and Project. Task remains
-    // the default, so its placeholder and metadata rows show first.
-    expect(
-      getByLabelText('Add a task').props.accessibilityState.selected,
-    ).toBe(true);
-    expect(
-      getAllByLabelText(/^Add a (task|project|waiting condition)$/).map(
-        (tab) => tab.props.accessibilityLabel,
-      ),
-    ).toEqual(['Add a task', 'Add a waiting condition', 'Add a project']);
+    expect(getByText('Task')).toBeTruthy();
+    expect(getByText('Waiting condition')).toBeTruthy();
+    expect(getByText('After project')).toBeTruthy();
+    expect(getByText('Project')).toBeTruthy();
     expect(queryByLabelText('Add a capture')).toBeNull();
+    expect(getByLabelText('Project title')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(getByText('Task'));
+    });
 
     const input = getByPlaceholderText('Add a task');
     await act(async () => {
@@ -681,12 +663,12 @@ describe('ProjectDetailScreen', () => {
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('1');
   });
 
-  it('creates another project from the add drawer and defaults back to Task', async () => {
+  it('creates an independent Project from the Project Add action', async () => {
     mockAddProject.mockImplementation(async (_token, input) =>
       project(input.id, input.title),
     );
 
-    const { getByLabelText, getByPlaceholderText, queryByPlaceholderText } =
+    const { getByLabelText, getByPlaceholderText, getByText, queryByPlaceholderText } =
       await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
@@ -694,13 +676,9 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add'));
     });
 
-    expect(
-      getByLabelText('Add a task').props.accessibilityState.selected,
-    ).toBe(true);
-    expect(getByPlaceholderText('Add a task')).toBeTruthy();
-
+    expect(getByText('Add to Run a 5K')).toBeTruthy();
     await act(async () => {
-      fireEvent.press(getByLabelText('Add a project'));
+      fireEvent.press(getByText('Project'));
     });
     const input = getByPlaceholderText('Name an outcome');
     await act(async () => {
@@ -730,9 +708,10 @@ describe('ProjectDetailScreen', () => {
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
     });
-    expect(
-      getByLabelText('Add a task').props.accessibilityState.selected,
-    ).toBe(true);
+    expect(getByText('Add to Run a 5K')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(getByText('Task'));
+    });
     expect(getByPlaceholderText('Add a task')).toBeTruthy();
     await act(async () => {
       fireEvent.press(getByLabelText('Dismiss quick add'));
@@ -796,11 +775,14 @@ describe('ProjectDetailScreen', () => {
       return added;
     });
 
-    const { getByLabelText, getByPlaceholderText } = await renderScreen();
+    const { getByLabelText, getByPlaceholderText, getByText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Task'));
     });
 
     // The same composer Home uses: create-time date and project rows, with the
@@ -850,11 +832,14 @@ describe('ProjectDetailScreen', () => {
       return added;
     });
 
-    const { getByLabelText, getByPlaceholderText } = await renderScreen();
+    const { getByLabelText, getByPlaceholderText, getByText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Task'));
     });
     // The row is preset to this project; open the picker and switch to another.
     await act(async () => {
@@ -877,7 +862,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('2');
   });
 
-  it('completes a task and offers Undo in a toast that reopens it', async () => {
+  it('completes a Project Task with Undo and Waiting actions', async () => {
     mockFetchTasks.mockResolvedValue([taskRow('t1', 'buy running shoes')]);
     mockCompleteTask.mockImplementation(async () => {
       mockFetchTasks.mockResolvedValue([]);
@@ -885,7 +870,7 @@ describe('ProjectDetailScreen', () => {
     });
     mockReopenTask.mockResolvedValue(taskRow('t1', 'buy running shoes'));
 
-    const { getByLabelText, queryByText } = await renderScreen();
+    const { getByLabelText, getByPlaceholderText, queryByText } = await renderScreen();
     await waitFor(() =>
       expect(getByLabelText('Complete "buy running shoes"')).toBeTruthy(),
     );
@@ -900,7 +885,12 @@ describe('ProjectDetailScreen', () => {
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe('Completed');
+    expect(snap[0].description).toBe('🏃 Run a 5K');
+    expect(snap[0].secondaryAction?.label).toBe('Waiting for…');
     expect(snap[0].action?.label).toBe('Undo');
+    await act(async () => snap[0].secondaryAction?.onPress());
+    expect(getByPlaceholderText('What are you waiting for?')).toBeTruthy();
+    await fireEvent.press(getByLabelText('Cancel'));
     await act(async () => {
       snap[0].action?.onPress();
     });
@@ -911,11 +901,9 @@ describe('ProjectDetailScreen', () => {
 
   it('adds a free-text waiting condition', async () => {
     mockAddWaitingCondition.mockImplementation(async (condition) => {
+      if (condition.kind !== 'free-text') throw new Error('expected manual Waiting');
       const added: WaitingCondition = {
         ...condition,
-        kind: condition.kind as WaitingCondition['kind'],
-        refId: null,
-        targetStatus: null,
         resolvedAt: null,
         createdAt: '2023-01-01T00:00:00.000Z',
       };
@@ -923,18 +911,16 @@ describe('ProjectDetailScreen', () => {
       return added;
     });
 
-    const { getByLabelText, getByPlaceholderText } = await renderScreen();
+    const { getByLabelText, getByPlaceholderText, getByText } = await renderScreen();
     await waitFor(() => expect(getByLabelText('Project title')).toBeTruthy());
 
-    // Adding a condition is the plus FAB's Waiting mode, not an inline field:
-    // open the bar, pick Waiting, type, submit.
     await act(async () => {
       fireEvent.press(getByLabelText('Add'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('Add a waiting condition'));
+      fireEvent.press(getByText('Waiting condition'));
     });
-    const input = getByPlaceholderText('Waiting on…');
+    const input = getByPlaceholderText('What are you waiting for?');
     await act(async () => {
       fireEvent.changeText(input, 'the letter comes back');
     });
@@ -1072,7 +1058,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockSetProjectState.mock.calls[0][2]).toBe('in-play');
   });
 
-  it('marks done immediately from the status and pops', async () => {
+  it('marks done immediately, pops, and offers Undo', async () => {
     mockSetProjectState.mockResolvedValue(project('1', 'ship', '📁', 'done'));
     const { getByLabelText, getByText } = await renderScreen();
     await waitFor(() =>
@@ -1094,6 +1080,17 @@ describe('ProjectDetailScreen', () => {
       ),
     );
     expect(mockBack).toHaveBeenCalledTimes(1);
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast?.message).toBe('Project completed');
+    expect(toast?.action?.label).toBe('Undo');
+    await act(async () => toast?.action?.onPress());
+    await waitFor(() =>
+      expect(mockSetProjectState).toHaveBeenCalledWith(
+        expect.anything(),
+        '1',
+        'in-play',
+      ),
+    );
   });
 
   it('keeps empty projects and their status sheet free of explanatory prompts', async () => {
@@ -1139,7 +1136,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('warns when deleting a prerequisite will unblock another project', async () => {
+  it('warns when deleting an After target may move another Project', async () => {
     mockFetchProjects.mockResolvedValue([
       project('1', 'Sell old house'),
       project('2', 'Move house'),
@@ -1153,7 +1150,7 @@ describe('ProjectDetailScreen', () => {
 
     expect(mockAlert).toHaveBeenLastCalledWith(
       'Delete “Sell old house”?',
-      expect.stringContaining('“Move house” depends on it and will be unblocked.'),
+      expect.stringContaining('“Move house” is after it and may move to another section.'),
       expect.any(Array),
       { cancelable: true },
     );

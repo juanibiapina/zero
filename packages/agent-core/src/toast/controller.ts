@@ -12,6 +12,10 @@ import { safeRandomUUID } from "@tanstack/db";
 // name: the web renderer wires it to a button click, the mobile renderer to a
 // Pressable press.
 export type ToastAction = { label: string; onPress: () => void };
+export type ToastDescriptionAction = {
+  accessibilityLabel: string;
+  onPress: () => void;
+};
 
 // What a caller passes to show a toast. `id` lets a caller key a toast so a
 // re-show replaces it in place (and restarts its timer) instead of stacking a
@@ -22,6 +26,8 @@ export type ToastInput = {
   message: string;
   description?: string;
   action?: ToastAction;
+  secondaryAction?: ToastAction;
+  descriptionAction?: ToastDescriptionAction;
   link?: ToastAction;
   durationMs?: number;
   id?: string;
@@ -35,6 +41,8 @@ export type Toast = {
   message: string;
   description?: string;
   action?: ToastAction;
+  secondaryAction?: ToastAction;
+  descriptionAction?: ToastDescriptionAction;
   link?: ToastAction;
   durationMs: number;
   createdAt: number;
@@ -122,6 +130,8 @@ export function createToastController(
       message: normalized.message,
       description: normalized.description,
       action: normalized.action,
+      secondaryAction: normalized.secondaryAction,
+      descriptionAction: normalized.descriptionAction,
       link: normalized.link,
       durationMs: normalized.durationMs ?? defaultDurationMs,
       // Keep the original position on a replace so it doesn't jump.

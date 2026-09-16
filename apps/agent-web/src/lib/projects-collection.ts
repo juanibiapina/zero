@@ -19,6 +19,7 @@ export const getProjectsApi = defineWebEntityApi((deps) =>
       fetchProjects,
       addProject,
       setProjectState,
+      reopenProject: setProjectState,
       editProject,
       deleteProject,
     },

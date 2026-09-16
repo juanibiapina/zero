@@ -2,7 +2,7 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 
 import { log } from "../log";
-import type { ProjectDependencyConflict } from "../store/project-dependencies";
+import type { ProjectAfterConflict } from "../store/project-afters";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
 
@@ -10,16 +10,16 @@ type Variables = {
   userId: string;
 };
 
-const Kind = z.enum(["free-text", "task-done", "project-status"]);
+const Kind = z.enum(["free-text", "project-status"]);
 
-const dependencyConflictMessage: Record<ProjectDependencyConflict, string> = {
-  "id-conflict": "A different waiting condition already uses this id.",
-  "missing-dependent": "This project no longer exists.",
-  "missing-prerequisite": "That prerequisite project no longer exists.",
-  "prerequisite-done": "That project is already done.",
-  self: "A project cannot depend on itself.",
-  duplicate: "This dependency already exists.",
-  cycle: "This dependency would create a loop.",
+const afterConflictMessage: Record<ProjectAfterConflict, string> = {
+  "id-conflict": "A different relationship already uses this id.",
+  "missing-source": "This project no longer exists.",
+  "missing-target": "That project no longer exists.",
+  "target-done": "That project is already done.",
+  self: "A project cannot be after itself.",
+  duplicate: "This After relationship already exists.",
+  cycle: "This After relationship would create a loop.",
 };
 
 const WaitingConditionSchema = z.object({
@@ -103,7 +103,7 @@ export const createWaitsRoutes = () => {
         content: {
           "application/json": { schema: z.object({ error: z.string() }) },
         },
-        description: "The project dependency cannot be added",
+        description: "The After relationship cannot be added",
       },
     },
   });
@@ -113,26 +113,35 @@ export const createWaitsRoutes = () => {
     const { id, projectId, kind, text, refId, targetStatus } =
       c.req.valid("json");
     const userDO = getUserDO(c.env, userId);
-    if (kind === "project-status" && targetStatus === "done") {
-      if (text != null || !refId || !z.string().uuid().safeParse(refId).success) {
-        return c.json({ error: "invalid project dependency" }, 400);
+    if (kind === "project-status") {
+      if (
+        targetStatus !== "done" ||
+        text != null ||
+        !refId ||
+        !z.string().uuid().safeParse(refId).success
+      ) {
+        return c.json({ error: "invalid After relationship" }, 400);
       }
-      const result = await userDO.addProjectDependency(id, projectId, refId);
+      const result = await userDO.addProjectAfter(id, projectId, refId);
       if ("conflict" in result) {
-        return c.json({ error: dependencyConflictMessage[result.conflict] }, 409);
+        return c.json({ error: afterConflictMessage[result.conflict] }, 409);
       }
-      log("project_dependency_added", {
+      log("project_after_added", {
         clerk_user_id: userId,
         project_id: projectId,
         ref_id: refId,
       });
-      return c.json({ condition: result.condition }, 201);
+      return c.json({ condition: result.relationship }, 201);
     }
-    const condition = await userDO.addWaitingCondition(id, projectId, kind, {
-      text: text ?? null,
-      refId: refId ?? null,
-      targetStatus: targetStatus ?? null,
-    });
+    const waitingText = text?.trim();
+    if (!waitingText || refId != null || targetStatus != null) {
+      return c.json({ error: "invalid waiting condition" }, 400);
+    }
+    const condition = await userDO.addWaitingCondition(
+      id,
+      projectId,
+      waitingText,
+    );
     log("waiting_condition_added", { clerk_user_id: userId });
     return c.json({ condition }, 201);
   });

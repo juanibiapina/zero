@@ -29,7 +29,7 @@ describe("projectsByStatus", () => {
       project("b", "backlog"),
       project("a"),
       project("w"),
-      project("blocked"),
+      project("after"),
       project("n"),
     ];
     const sections = projectsByStatus(
@@ -38,7 +38,7 @@ describe("projectsByStatus", () => {
         b: "backlog",
         a: "active",
         w: "waiting",
-        blocked: "blocked",
+        after: "after",
         n: "next",
       }),
     );
@@ -46,7 +46,7 @@ describe("projectsByStatus", () => {
       "active",
       "next",
       "waiting",
-      "blocked",
+      "after",
       "backlog",
     ]);
   });

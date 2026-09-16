@@ -60,12 +60,12 @@ const fakeUserDO = (seed: Project[] = []) => {
       existed: boolean;
       tasks: number;
       conditions: number;
-      dependencies: number;
+      afters: number;
     } {
       const i = projects.findIndex((p) => p.id === id);
       const existed = i >= 0;
       if (existed) projects.splice(i, 1);
-      return { existed, tasks: 0, conditions: 0, dependencies: 0 };
+      return { existed, tasks: 0, conditions: 0, afters: 0 };
     },
     _projects: projects,
   };

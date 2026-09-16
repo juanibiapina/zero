@@ -12,28 +12,27 @@ import {
 } from "@/components/ui/popover";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
+import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
 import { EmojiPicker } from "frimousse";
 import {
-  dayLabel,
   isBasisStale,
   localToday,
-  candidatePrerequisiteProjects,
-  isProjectCompletionDependency,
+  candidateAfterProjects,
+  isProjectAfter,
   messageOf,
-  projectDependencies,
-  projectDependencyRemovalImpact,
-  projectDependencyRemovalWarning,
+  projectAfters,
+  projectAfterRemovalImpact,
+  projectAfterRemovalWarning,
   projectDisplayStatus,
   projectStatusContext,
   scheduleLabel,
   PROJECT_DISPLAY_STATUS_LABELS,
+  toast,
   undoableAction,
-  waitingUntil,
   type ProjectDisplayStatus,
   type ProjectEditFields,
   type ProjectState,
   type WaitingCondition,
-  type WaitingConditionKind,
 } from "@zero/agent-core";
 import {
   requestIconSuggestions,
@@ -48,11 +47,9 @@ import { type Project } from "@/lib/projects";
 import { type Task } from "@/lib/tasks";
 
 // A project opens its OWN screen (route /projects/:id), not a bottom sheet: it
-// is a place you work (groom tasks, record what it waits on), which the
-// bottom-sheet guidance says not to put in a transient sheet. The screen leads
-// with the work (tasks, then waiting) and keeps identity/management compact (an
-// editable title, a de-emphasized icon, a derived-status pill, and an overflow
-// menu for the status moves + delete). See docs/plans/todo-project-detail-rework.md.
+// is a place you work, not a transient sheet. Identity, description, dominant
+// status, manual Waiting, After relationships, and Tasks are sibling regions in
+// that order. See docs/plans/todo-project-waiting-after.md.
 export function ProjectDetailPage() {
   const [api, setApi] = useState<ProjectsApi | null>(null);
   const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
@@ -134,6 +131,27 @@ function ProjectDetailReady({
     [api, waitsApi],
   );
 
+  const completeProject = useCallback(
+    (item: Project) => {
+      undoableAction({
+        message: "Project completed",
+        description: `${item.icon} ${item.title}`,
+        act: () => {
+          const tx = api.setState(item.id, "done");
+          void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
+          return tx;
+        },
+        undo: () => {
+          const tx = api.reopen(item);
+          void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
+          return tx;
+        },
+        onError: setError,
+      });
+    },
+    [api, waitsApi],
+  );
+
   // Delete happens immediately (it is already behind the overflow menu — a
   // deliberate act), then we return to the list. The write lives on the shared
   // projects data layer, so it persists even as this screen unmounts. The server
@@ -153,6 +171,15 @@ function ProjectDetailReady({
     [api, tasksApi, waitsApi, navigate],
   );
 
+  const today = localToday();
+  const completion = useTaskCompletionFeedback({
+    api: tasksApi,
+    waitsApi,
+    projects: list,
+    today,
+    onError: setError,
+  });
+
   // The project isn't in the loaded set: a bad or deleted id. Once the
   // collection has loaded (not just an empty pre-hydration snapshot), redirect
   // back to the list.
@@ -161,7 +188,6 @@ function ProjectDetailReady({
     return <Navigate to="/projects" replace />;
   }
 
-  const today = localToday();
   const displayStatus = projectDisplayStatus(project, tasks, today, conds, list);
   const statusContext = projectStatusContext(
     project,
@@ -189,13 +215,20 @@ function ProjectDetailReady({
         project={project}
         displayStatus={displayStatus}
         statusContext={statusContext?.label ?? null}
-        deletionWarning={projectDependencyRemovalWarning(
-          projectDependencyRemovalImpact(project.id, conds, list),
+        deletionWarning={projectAfterRemovalWarning(
+          projectAfterRemovalImpact(project.id, conds, list),
         )}
         onEdit={commitEdit}
+        description={
+          <ProjectDescription
+            key={`description-${project.id}`}
+            project={project}
+            onEdit={commitEdit}
+          />
+        }
         onState={(state) => {
           if (state === "done") {
-            commitState(project.id, "done");
+            completeProject(project);
             void navigate("/projects");
           } else {
             commitState(project.id, state);
@@ -204,24 +237,32 @@ function ProjectDetailReady({
         onDelete={() => commitDelete(project.id)}
       />
 
-      {/* The description is the project's statement of intent — why this outcome
-          matters. It sits directly under the title, above the work. */}
-      <ProjectDescription
-        key={`description-${project.id}`}
+      <ProjectAddMenu
         project={project}
-        onEdit={commitEdit}
-      />
-
-      <ProjectTasks api={tasksApi} projectId={project.id} onError={setError} />
-
-      <ProjectWaits
-        project={project}
-        waitsApi={waitsApi}
-        tasks={tasks}
         projects={list}
-        today={today}
+        conditions={conds}
+        tasksApi={tasksApi}
+        projectsApi={api}
+        waitsApi={waitsApi}
         onError={setError}
       />
+
+      <ProjectRelations
+        project={project}
+        waitsApi={waitsApi}
+        projects={list}
+        onError={setError}
+      />
+
+      <div className="pt-4">
+        <ProjectTasks
+          api={tasksApi}
+          projectId={project.id}
+          onComplete={completion.complete}
+          onError={setError}
+        />
+      </div>
+      {completion.composer}
     </div>
   );
 }
@@ -320,6 +361,7 @@ function ProjectHeader({
   statusContext,
   deletionWarning,
   onEdit,
+  description,
   onState,
   onDelete,
 }: {
@@ -328,6 +370,7 @@ function ProjectHeader({
   statusContext: string | null;
   deletionWarning: string | null;
   onEdit: (id: string, fields: ProjectEditFields) => void;
+  description: React.ReactNode;
   onState: (state: ProjectState) => void;
   onDelete: () => void;
 }) {
@@ -433,10 +476,6 @@ function ProjectHeader({
           className="min-w-0 flex-1 border-0 bg-transparent p-0 text-2xl font-bold tracking-tight outline-none focus-visible:ring-0"
         />
         <div className="flex shrink-0 items-center gap-2 pt-1">
-          <span className="max-w-64 truncate rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-            {PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}
-            {statusContext ? ` · ${statusContext}` : ""}
-          </span>
           <OverflowMenu>
             {project.state === "backlog" ? (
               <MenuItem onSelect={() => onState("in-play")}>Put in play</MenuItem>
@@ -452,6 +491,13 @@ function ProjectHeader({
           </OverflowMenu>
         </div>
       </div>
+      {description}
+      <div>
+        <span className="inline-flex max-w-full truncate rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          {PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}
+          {statusContext ? ` · ${statusContext}` : ""}
+        </span>
+      </div>
     </div>
     <Sheet
       open={deleting}
@@ -460,8 +506,8 @@ function ProjectHeader({
     >
       <div className="flex flex-col gap-6">
         <p className="text-sm text-muted-foreground">
-          This permanently deletes the project, all its tasks, and its waiting
-          conditions. This cannot be undone.
+          This permanently deletes the Project, all its Tasks, its Waiting
+          conditions, and its After relationships. This cannot be undone.
           {deletionWarning ? ` ${deletionWarning}` : ""}
         </p>
         <div className="flex justify-end gap-2">
@@ -612,10 +658,12 @@ function TaskDateChip({
 function ProjectTasks({
   api,
   projectId,
+  onComplete,
   onError,
 }: {
   api: TasksApi;
   projectId: string;
+  onComplete: (task: Task) => void;
   onError: (message: string) => void;
 }) {
   const { data: tasks } = useLiveQuery((q) =>
@@ -625,7 +673,7 @@ function ProjectTasks({
       .orderBy(({ t }) => t.createdAt, "asc"),
   );
   const [text, setText] = useState("");
-  const today = localToday();
+  const [adding, setAdding] = useState(false);
   const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
 
   const onAdd = useCallback(() => {
@@ -636,24 +684,8 @@ function ProjectTasks({
     const tx = api.add(trimmed, null, projectId);
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     setText("");
+    setAdding(false);
   }, [api, text, projectId, onError]);
-
-  // Completing commits immediately (the row leaves at once) and raises the same
-  // single bottom Undo snackbar used on Home; Undo reopens the task.
-  const onComplete = useCallback(
-    (task: Task) => {
-      undoableAction({
-        message: "Completed",
-        act: () => api.complete(task.id, today),
-        undo: () =>
-          task.recurrence
-            ? api.undoOccurrence(task, today)
-            : api.reopen(task),
-        onError,
-      });
-    },
-    [api, onError, today],
-  );
 
   const onSchedule = useCallback(
     (t: Task, showUpDate: string | null) => {
@@ -663,191 +695,396 @@ function ProjectTasks({
     [api, onError],
   );
 
+  if (list.length === 0) return null;
+
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-semibold text-muted-foreground">Tasks</h2>
-      {list.length > 0 && (
-        <ul className="space-y-2">
-          {list.map((t) => (
-            <li
-              key={t.id}
-              className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
-            >
-              <button
-                type="button"
-                aria-label={`Complete "${t.text}"`}
-                className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
-                onClick={() => onComplete(t)}
-              />
-              <span className="flex-1 text-sm">{t.text}</span>
-              <TaskDateChip
-                showUpDate={t.showUpDate}
-                onPick={(d) => onSchedule(t, d)}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      <form
-        className="flex items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onAdd();
-        }}
-      >
-        <Input
-          value={text}
-          placeholder="Add a task"
-          aria-label="Add a task"
-          className="h-10"
-          onChange={(e) => setText(e.target.value)}
-        />
-        <Button type="submit" size="sm" disabled={text.trim() === ""}>
-          Add
-        </Button>
-      </form>
+    <section className="flex flex-col gap-2">
+      <div className="flex min-h-12 items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-muted-foreground">Tasks</h2>
+        <Popover open={adding} onOpenChange={setAdding}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" aria-label="Add task">+</Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="flex w-80 flex-col gap-3">
+            <h3 className="font-semibold">Add task</h3>
+            <Input
+              value={text}
+              autoFocus
+              placeholder="Add a task"
+              aria-label="Add a task"
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onAdd();
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
+              <Button disabled={!text.trim()} onClick={onAdd}>Add</Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {list.map((task) => (
+          <li
+            key={task.id}
+            className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+          >
+            <button
+              type="button"
+              aria-label={`Complete "${task.text}"`}
+              className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
+              onClick={() => onComplete(task)}
+            />
+            <span className="flex-1 text-sm">{task.text}</span>
+            <TaskDateChip
+              showUpDate={task.showUpDate}
+              onPick={(date) => onSchedule(task, date)}
+            />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
 
-// A human label for a waiting condition.
-function conditionLabel(
-  c: WaitingCondition,
-  tasks: Task[],
-  projects: Project[],
-): string {
-  if (c.kind === "free-text") return c.text ?? "(unspecified)";
-  if (c.kind === "task-done") {
-    const t = tasks.find((x) => x.id === c.refId);
-    return `until “${t?.text ?? "?"}” is done`;
-  }
-  const p = projects.find((x) => x.id === c.refId);
-  return `until “${p?.title ?? "?"}” is ${c.targetStatus}`;
+type ProjectAddFlow = "task" | "waiting" | "after" | "project";
+
+function ProjectAddMenu({
+  project,
+  projects,
+  conditions,
+  tasksApi,
+  projectsApi,
+  waitsApi,
+  onError,
+}: {
+  project: Project;
+  projects: Project[];
+  conditions: WaitingCondition[];
+  tasksApi: TasksApi;
+  projectsApi: ProjectsApi;
+  waitsApi: WaitsApi;
+  onError: (message: string) => void;
+}) {
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [flow, setFlow] = useState<ProjectAddFlow | null>(null);
+  const [text, setText] = useState("");
+  const [filter, setFilter] = useState("");
+  const candidates = candidateAfterProjects(project.id, projects, conditions);
+  const needle = filter.trim().toLowerCase();
+  const filteredCandidates = needle
+    ? candidates.filter((candidate) =>
+        candidate.title.toLowerCase().includes(needle),
+      )
+    : candidates;
+  const open = (next: ProjectAddFlow) => {
+    setMenuOpen(false);
+    setFlow(next);
+  };
+  const close = () => {
+    setFlow(null);
+    setText("");
+    setFilter("");
+  };
+  const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
+    tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
+  };
+  const submitText = () => {
+    const trimmed = text.trim();
+    if (!trimmed || !flow) return;
+    if (flow === "task") write(tasksApi.add(trimmed, null, project.id));
+    if (flow === "waiting") write(waitsApi.addWaiting(project.id, trimmed));
+    if (flow === "project") {
+      const tx = projectsApi.add(trimmed);
+      write(tx);
+      const id = String(tx.mutations[0]?.key);
+      void requestIconSuggestions(id, { title: trimmed, description: null });
+      toast("Project created", {
+        description: trimmed,
+        action: { label: "View", onPress: () => void navigate(`/projects/${id}`) },
+      });
+    }
+    close();
+  };
+  const title = flow === "task"
+    ? "Add task"
+    : flow === "waiting"
+      ? "Add waiting condition"
+      : flow === "after"
+        ? "After project"
+        : "Add project";
+
+  return (
+    <div className="flex justify-end">
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+        <PopoverTrigger asChild>
+          <Button aria-label={`Add to ${project.title}`}>+ Add</Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="flex w-56 flex-col gap-1 p-1">
+          <p className="px-3 py-2 text-sm font-semibold">Add to {project.title}</p>
+          {([
+            ["task", "Task"],
+            ["waiting", "Waiting condition"],
+            ["after", "After project"],
+            ["project", "Project"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className="min-h-10 rounded-md px-3 text-left text-sm hover:bg-accent"
+              onClick={() => open(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
+
+      <Sheet open={flow != null} onClose={close} title={title}>
+        {flow === "after" ? (
+          <div className="flex flex-col gap-3">
+            <Input
+              value={filter}
+              autoFocus
+              aria-label="Filter After projects"
+              placeholder="Filter projects"
+              onChange={(event) => setFilter(event.target.value)}
+            />
+            <div className="max-h-72 overflow-y-auto">
+              {filteredCandidates.length === 0 ? (
+                <p className="px-2 py-3 text-sm text-muted-foreground">
+                  {needle ? "No matching projects" : "No available projects"}
+                </p>
+              ) : (
+                filteredCandidates.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left hover:bg-accent"
+                    onClick={() => {
+                      write(waitsApi.addAfter(project.id, candidate.id));
+                      close();
+                    }}
+                  >
+                    <span aria-hidden>{candidate.icon}</span>
+                    <span className="min-w-0 flex-1 truncate">{candidate.title}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <Input
+              value={text}
+              autoFocus
+              aria-label={title}
+              placeholder={flow === "waiting" ? "What are you waiting for?" : flow === "project" ? "Name an outcome" : "Add a task"}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") submitText();
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={close}>Cancel</Button>
+              <Button disabled={!text.trim()} onClick={submitText}>Add</Button>
+            </div>
+          </div>
+        )}
+      </Sheet>
+    </div>
+  );
 }
 
-// Completion dependencies render under Depends on. Ordinary waits and the
-// compact add builder stay under Waiting on; Project completion narrows that
-// builder branch to an eligible prerequisite picker.
-function ProjectWaits({
+function conditionLabel(condition: WaitingCondition): string {
+  return condition.kind === "free-text" ? condition.text : "";
+}
+
+function ProjectRelations({
   project,
   waitsApi,
-  tasks,
   projects,
-  today,
   onError,
 }: {
   project: Project;
   waitsApi: WaitsApi;
-  tasks: Task[];
   projects: Project[];
-  today: string;
   onError: (message: string) => void;
 }) {
   const navigate = useNavigate();
   const { data: allConditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
-  const dependencies = projectDependencies(
-    project.id,
-    allConditions ?? [],
-    projects,
-  );
-  const list = (allConditions ?? []).filter(
+  const conditions = allConditions ?? [];
+  const afters = projectAfters(project.id, conditions, projects);
+  const waiting = conditions.filter(
     (condition: WaitingCondition) =>
-      condition.projectId === project.id &&
-      !isProjectCompletionDependency(condition),
+      condition.projectId === project.id && !isProjectAfter(condition),
   );
-  // A future-dated taken-on task makes the project wait until that day, derived
-  // with no stored row. Shown as an automatic reason (no Resolve/delete); it
-  // clears when the day comes or the task moves.
-  const until = waitingUntil(project, tasks, today);
-
-  const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<WaitingConditionKind>("free-text");
+  const candidates = candidateAfterProjects(project.id, projects, conditions);
+  const [waitingOpen, setWaitingOpen] = useState(false);
+  const [afterOpen, setAfterOpen] = useState(false);
   const [text, setText] = useState("");
-  const [refId, setRefId] = useState("");
-
-  const otherProjects = candidatePrerequisiteProjects(
-    project.id,
-    projects,
-    allConditions ?? [],
-  );
-  const openTasks = tasks.filter((t) => t.completedAt == null);
+  const [filter, setFilter] = useState("");
+  const needle = filter.trim().toLowerCase();
+  const filteredCandidates = needle
+    ? candidates.filter((candidate) =>
+        candidate.title.toLowerCase().includes(needle),
+      )
+    : candidates;
 
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }): void => {
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
+  };
+  const addWaiting = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    write(waitsApi.addWaiting(project.id, trimmed));
+    setText("");
+    setWaitingOpen(false);
+  };
+  const addAfter = (afterProjectId: string) => {
+    write(waitsApi.addAfter(project.id, afterProjectId));
+    setFilter("");
+    setAfterOpen(false);
   };
 
-  // Reset the draft whenever the popover closes (a cancel via outside click, or
-  // a successful add), so it reopens clean.
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setText("");
-      setRefId("");
-    }
-  };
-
-  const onAdd = () => {
-    if (kind === "free-text") {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      write(waitsApi.add(project.id, "free-text", { text: trimmed }));
-    } else if (kind === "task-done") {
-      if (!refId) return;
-      write(waitsApi.add(project.id, "task-done", { refId }));
-    } else {
-      if (!refId) return;
-      write(waitsApi.dependOnProject(project.id, refId));
-    }
-    onOpenChange(false);
-  };
+  if (waiting.length === 0 && afters.length === 0) return null;
 
   return (
-    <>
-      {dependencies.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">
-            Depends on
-          </h2>
+    <div className="flex flex-col gap-6">
+      {waiting.length > 0 && (
+        <section className="flex flex-col gap-2" aria-labelledby="waiting-heading">
+          <div className="flex min-h-12 items-center justify-between gap-3">
+            <h2 id="waiting-heading" className="text-sm font-semibold text-muted-foreground">
+              Waiting on
+            </h2>
+            <Popover open={waitingOpen} onOpenChange={setWaitingOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" aria-label="Add waiting condition">
+                  +
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="flex w-80 flex-col gap-3">
+                <h3 className="font-semibold">Add waiting condition</h3>
+                <Input
+                  value={text}
+                  aria-label="Waiting condition"
+                  placeholder="What are you waiting for?"
+                  autoFocus
+                  onChange={(event) => setText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") addWaiting();
+                  }}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setWaitingOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={addWaiting} disabled={!text.trim()}>
+                    Add
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
           <ul className="flex flex-col gap-1">
-            {dependencies.map(({ condition, prerequisite }) => (
-              <li
-                key={condition.id}
-                className="flex items-center gap-2 rounded-lg border px-3 py-2"
-              >
+            {waiting.map((condition) => {
+              const label = conditionLabel(condition);
+              return (
+                <li key={condition.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 whitespace-normal">{label}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Resolve condition: ${label}`}
+                    onClick={() => write(waitsApi.resolveWaiting(condition.id))}
+                  >
+                    Resolve
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Delete condition: ${label}`}
+                    onClick={() => write(waitsApi.remove(condition.id))}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {afters.length > 0 && (
+        <section className="flex flex-col gap-2" aria-labelledby="after-heading">
+          <div className="flex min-h-12 items-center justify-between gap-3">
+            <h2 id="after-heading" className="text-sm font-semibold text-muted-foreground">
+              After
+            </h2>
+            <Popover open={afterOpen} onOpenChange={setAfterOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" aria-label="Add After project">
+                  +
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="flex w-80 flex-col gap-2">
+                <h3 className="font-semibold">After project</h3>
+                <Input
+                  value={filter}
+                  aria-label="Filter After projects"
+                  placeholder="Filter projects"
+                  autoFocus
+                  onChange={(event) => setFilter(event.target.value)}
+                />
+                <div className="max-h-64 overflow-y-auto">
+                  {filteredCandidates.length === 0 ? (
+                    <p className="px-2 py-3 text-sm text-muted-foreground">
+                      {needle ? "No matching projects" : "No available projects"}
+                    </p>
+                  ) : (
+                    filteredCandidates.map((candidate) => (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left hover:bg-accent"
+                        onClick={() => addAfter(candidate.id)}
+                      >
+                        <span aria-hidden>{candidate.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{candidate.title}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <ul className="flex flex-col gap-1">
+            {afters.map(({ relationship, target }) => (
+              <li key={relationship.id} className="flex items-center gap-2 rounded-lg border px-3 py-2">
                 <button
                   type="button"
-                  aria-label={`Open project ${prerequisite?.title ?? "prerequisite"}`}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  disabled={!prerequisite}
+                  aria-label={`Open project ${target?.title ?? "After project"}`}
+                  className="flex min-h-12 min-w-0 flex-1 items-center gap-3 text-left"
+                  disabled={!target}
                   onClick={() => {
-                    if (prerequisite) {
-                      void navigate(`/projects/${prerequisite.id}`);
-                    }
+                    if (target) void navigate(`/projects/${target.id}`);
                   }}
                 >
-                  <span className="shrink-0 text-lg" aria-hidden>
-                    {prerequisite?.icon ?? "📁"}
+                  <span className="shrink-0 text-lg" aria-hidden>{target?.icon ?? "📁"}</span>
+                  <span className="min-w-0 flex-1 whitespace-normal text-sm font-medium">
+                    {target?.title ?? "Another project"}
                   </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium">
-                      {prerequisite?.title ?? "Another project"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Must be completed first
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground" aria-hidden>
-                    ›
-                  </span>
+                  <span className="text-muted-foreground" aria-hidden>›</span>
                 </button>
                 <Button
-                  type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={`Remove dependency on ${prerequisite?.title ?? "project"}`}
-                  onClick={() => write(waitsApi.remove(condition.id))}
+                  aria-label={`Remove After relationship with ${target?.title ?? "project"}`}
+                  onClick={() => write(waitsApi.remove(relationship.id))}
                 >
                   Remove
                 </Button>
@@ -856,113 +1093,7 @@ function ProjectWaits({
           </ul>
         </section>
       )}
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">
-          Waiting on
-        </h2>
-      {until != null && (
-        <ul className="space-y-1">
-          <li className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-            <span className="flex-1">until {dayLabel(until, today)}</span>
-            <span className="text-xs text-muted-foreground">auto</span>
-          </li>
-        </ul>
-      )}
-      {list.length > 0 && (
-        <ul className="space-y-1">
-          {list.map((c) => (
-            <li
-              key={c.id}
-              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
-            >
-              <span className="flex-1">{conditionLabel(c, tasks, projects)}</span>
-              {c.kind === "free-text" ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => write(waitsApi.resolve(c.id))}
-                >
-                  Resolve
-                </Button>
-              ) : (
-                <span className="text-xs text-muted-foreground">auto</span>
-              )}
-              <button
-                type="button"
-                aria-label={`Delete condition`}
-                className="text-muted-foreground/60 hover:text-foreground"
-                onClick={() => write(waitsApi.remove(c.id))}
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          <Button size="sm" variant="outline" className="w-full">
-            + Waiting condition
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 space-y-2">
-          <select
-            aria-label="Condition kind"
-            value={kind}
-            onChange={(e) => setKind(e.target.value as WaitingConditionKind)}
-            className="h-9 w-full rounded-md border bg-transparent px-2 text-sm"
-          >
-            <option value="free-text">Free text / external</option>
-            <option value="task-done">Until a task is done</option>
-            <option value="project-status">Project completion</option>
-          </select>
-          {kind === "free-text" && (
-            <Input
-              value={text}
-              aria-label="Waiting condition"
-              placeholder="e.g. the letter comes back"
-              className="h-9"
-              autoFocus
-              onChange={(e) => setText(e.target.value)}
-            />
-          )}
-          {kind === "task-done" && (
-            <select
-              aria-label="Task"
-              value={refId}
-              onChange={(e) => setRefId(e.target.value)}
-              className="h-9 w-full rounded-md border bg-transparent px-2 text-sm"
-            >
-              <option value="">Pick a task…</option>
-              {openTasks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.text}
-                </option>
-              ))}
-            </select>
-          )}
-          {kind === "project-status" && (
-            <select
-              aria-label="Prerequisite project"
-              value={refId}
-              onChange={(e) => setRefId(e.target.value)}
-              className="h-9 w-full rounded-md border bg-transparent px-2 text-sm"
-            >
-              <option value="">Pick a project…</option>
-              {otherProjects.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.icon} {candidate.title}
-                </option>
-              ))}
-            </select>
-          )}
-          <Button size="sm" className="w-full" onClick={onAdd}>
-            Add condition
-          </Button>
-        </PopoverContent>
-      </Popover>
-      </section>
-    </>
+    </div>
   );
 }
 

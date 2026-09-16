@@ -14,45 +14,38 @@ import {
   type StartOfflineExecutor,
   type WarnFn,
 } from "../collection/base";
-import type { WaitingCondition, WaitingConditionKind } from "./types";
+import type { ProjectAttention } from "./types";
 
-// The WaitingCondition data layer: the verbs (add, resolve, delete) over the
-// shared collection factory. Only what is condition-specific lives here.
-
-export type WaitingConditionFields = {
-  text?: string | null;
-  refId?: string | null;
-  targetStatus?: string | null;
-};
+export type AddProjectAttention =
+  | {
+      projectId: string;
+      kind: "free-text";
+      text: string;
+      refId: null;
+      targetStatus: null;
+    }
+  | {
+      projectId: string;
+      kind: "project-status";
+      text: null;
+      refId: string;
+      targetStatus: "done";
+    };
 
 export type WaitsRest = {
-  fetchWaits: () => Promise<WaitingCondition[]>;
-  // The client mints the condition's id, so a retried add re-sends the same id
-  // and gets the stored row back, not a duplicate.
-  addWaitingCondition: (condition: {
-    id: string;
-    projectId: string;
-    kind: WaitingConditionKind;
-    text: string | null;
-    refId: string | null;
-    targetStatus: string | null;
-  }) => Promise<WaitingCondition>;
-  resolveWaitingCondition: (id: string) => Promise<WaitingCondition>;
+  fetchWaits: () => Promise<ProjectAttention[]>;
+  addWaitingCondition: (
+    condition: AddProjectAttention & { id: string },
+  ) => Promise<ProjectAttention>;
+  resolveWaitingCondition: (id: string) => Promise<ProjectAttention>;
   deleteWaitingCondition: (id: string) => Promise<void>;
 };
 
 export type WaitsApi = {
-  collection: Collection<WaitingCondition, string>;
-  add: (
-    projectId: string,
-    kind: WaitingConditionKind,
-    fields?: WaitingConditionFields,
-  ) => Transaction;
-  dependOnProject: (
-    dependentProjectId: string,
-    prerequisiteProjectId: string,
-  ) => Transaction;
-  resolve: (id: string) => Transaction;
+  collection: Collection<ProjectAttention, string>;
+  addWaiting: (projectId: string, text: string) => Transaction;
+  addAfter: (projectId: string, afterProjectId: string) => Transaction;
+  resolveWaiting: (id: string) => Transaction;
   remove: (id: string) => Transaction;
   offline: boolean;
   refetch: () => Promise<void>;
@@ -63,32 +56,52 @@ export type WaitsApi = {
 export const WAITS_QUERY_KEY = entityQueryKey("waits");
 
 export function waitsSpec(rest: WaitsRest) {
-  const v = verbsFor<WaitingCondition>();
+  const v = verbsFor<ProjectAttention>();
   const verbs = {
-    addWaitingCondition: v.insert<{
-      projectId: string;
-      kind: WaitingConditionKind;
-      text: string | null;
-      refId: string | null;
-      targetStatus: string | null;
-    }>({
-      row: ({ projectId, kind, text, refId, targetStatus }) => ({
-        projectId,
-        kind,
-        text,
-        refId,
-        targetStatus,
-        resolvedAt: null,
-      }),
-      persist: (row) =>
-        rest.addWaitingCondition({
-          id: row.id,
-          projectId: row.projectId,
-          kind: row.kind,
-          text: row.text,
-          refId: row.refId,
-          targetStatus: row.targetStatus,
-        }),
+    // Keep this durable name so queued free-text and Project-completion writes
+    // from the prior client remain readable after the public interface narrows.
+    addWaitingCondition: v.insert<AddProjectAttention>({
+      row: (args) => {
+        const legacy: {
+          projectId: string;
+          kind: string;
+          targetStatus: string | null;
+        } = args;
+        if (
+          legacy.kind !== "free-text" &&
+          !(legacy.kind === "project-status" && legacy.targetStatus === "done")
+        ) {
+          return {
+            projectId: legacy.projectId,
+            kind: "free-text" as const,
+            text: "",
+            refId: null,
+            targetStatus: null,
+            resolvedAt: new Date().toISOString(),
+          };
+        }
+        return { ...args, resolvedAt: null };
+      },
+      persist: (row) => {
+        if (row.resolvedAt != null) return Promise.resolve(row);
+        return row.kind === "free-text"
+          ? rest.addWaitingCondition({
+              id: row.id,
+              projectId: row.projectId,
+              kind: "free-text",
+              text: row.text,
+              refId: null,
+              targetStatus: null,
+            })
+          : rest.addWaitingCondition({
+              id: row.id,
+              projectId: row.projectId,
+              kind: "project-status",
+              text: null,
+              refId: row.refId,
+              targetStatus: "done",
+            });
+      },
     }),
     resolveWaitingCondition: v.update<{ id: string }>({
       id: ({ id }) => id,
@@ -103,38 +116,37 @@ export function waitsSpec(rest: WaitsRest) {
       persist: (id) => rest.deleteWaitingCondition(id),
     }),
   };
-  const spec: EntitySpec<WaitingCondition, typeof verbs> = {
+  const spec: EntitySpec<ProjectAttention, typeof verbs> = {
     name: "waits",
-    fetch: () => rest.fetchWaits(),
+    fetch: rest.fetchWaits,
     verbs,
-    // Any persisted resolution leaves the open set the server returns.
-    leavesCollection: (c) => c.resolvedAt != null,
+    leavesCollection: (condition) => condition.resolvedAt != null,
   };
   return spec;
 }
 
 function toWaitsApi(
-  api: EntityApi<WaitingCondition, ReturnType<typeof waitsSpec>["verbs"]>,
+  api: EntityApi<ProjectAttention, ReturnType<typeof waitsSpec>["verbs"]>,
 ): WaitsApi {
   return {
     collection: api.collection,
-    add: (projectId, kind, fields = {}) =>
+    addWaiting: (projectId, text) =>
       api.actions.addWaitingCondition({
         projectId,
-        kind,
-        text: fields.text ?? null,
-        refId: fields.refId ?? null,
-        targetStatus: fields.targetStatus ?? null,
+        kind: "free-text",
+        text,
+        refId: null,
+        targetStatus: null,
       }),
-    dependOnProject: (dependentProjectId, prerequisiteProjectId) =>
+    addAfter: (projectId, afterProjectId) =>
       api.actions.addWaitingCondition({
-        projectId: dependentProjectId,
+        projectId,
         kind: "project-status",
         text: null,
-        refId: prerequisiteProjectId,
+        refId: afterProjectId,
         targetStatus: "done",
       }),
-    resolve: (id) => api.actions.resolveWaitingCondition({ id }),
+    resolveWaiting: (id) => api.actions.resolveWaitingCondition({ id }),
     remove: (id) => api.actions.deleteWaitingCondition({ id }),
     offline: api.offline,
     refetch: api.refetch,

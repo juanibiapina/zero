@@ -70,6 +70,9 @@ const emptyProjectsRest: ProjectsRest = {
   setProjectState: async (id) => {
     throw new Error(`no project ${id}`);
   },
+  reopenProject: async (id) => {
+    throw new Error(`no project ${id}`);
+  },
   editProject: async (id) => {
     throw new Error(`no project ${id}`);
   },
@@ -252,7 +255,7 @@ describe("HomePage", () => {
     expect(screen.getByText("🎓")).toBeInTheDocument();
   });
 
-  it("hides blocked project tasks and offers dependency review", async () => {
+  it("shows arrived Project Tasks despite an unresolved After relationship", async () => {
     setApi(
       [
         taskRow("1", "pack boxes", {
@@ -276,11 +279,8 @@ describe("HomePage", () => {
     );
     render(<HomePage />, { wrapper: MemoryRouter });
 
-    expect(
-      await screen.findByRole("link", { name: "Review dependencies" }),
-    ).toHaveAttribute("href", "/projects");
-    expect(screen.getByText("Everything is blocked")).toBeInTheDocument();
-    expect(screen.queryByText("pack boxes")).toBeNull();
+    expect(await screen.findByText("pack boxes")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing needs attention right now")).toBeNull();
   });
 
   it("adds a loose task from the default Task quick-add", async () => {

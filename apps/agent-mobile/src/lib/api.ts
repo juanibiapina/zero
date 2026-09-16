@@ -1,10 +1,10 @@
 import type {
+  AddProjectAttention,
   Project,
   ProjectEditFields,
   ProjectState,
   Task,
   WaitingCondition,
-  WaitingConditionKind,
 } from '@zero/agent-core';
 import type { PlainDate, Recurrence } from '@zeroapps/recurrence';
 
@@ -17,7 +17,6 @@ export type {
   ProjectState,
   Task,
   WaitingCondition,
-  WaitingConditionKind,
 };
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
@@ -453,14 +452,7 @@ export async function fetchWaits(
 
 export async function addWaitingCondition(
   getToken: TokenGetter,
-  condition: {
-    id: string;
-    projectId: string;
-    kind: WaitingConditionKind;
-    text: string | null;
-    refId: string | null;
-    targetStatus: string | null;
-  },
+  condition: AddProjectAttention & { id: string },
   baseUrl: string = API_BASE_URL,
 ): Promise<WaitingCondition> {
   const res = await apiFetch(

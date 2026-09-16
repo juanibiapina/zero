@@ -72,11 +72,11 @@ describe('task pickers', () => {
     expect(screen.getByLabelText('Project 0')).toBeTruthy();
   });
 
-  it('can hide No project and show an unfiltered dependency empty state', async () => {
+  it('can hide No project and show an unfiltered After empty state', async () => {
     const screen = await render(
       <ProjectPickerSheet
         open
-        title="Depends on"
+        title="After project"
         projects={[]}
         selectedProjectId={null}
         showNoProject={false}
@@ -85,7 +85,7 @@ describe('task pickers', () => {
         onClose={() => {}}
       />,
     );
-    expect(screen.getByText('Depends on')).toBeTruthy();
+    expect(screen.getByText('After project')).toBeTruthy();
     expect(screen.queryByLabelText('No project')).toBeNull();
     expect(screen.getByText('No available projects')).toBeTruthy();
   });

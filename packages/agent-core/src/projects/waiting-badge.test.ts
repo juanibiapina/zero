@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Project } from "./types";
 import type { Task } from "../tasks/types";
-import type { WaitingCondition } from "../waits/types";
+import type { ManualWaitingCondition } from "../waits/types";
 import { waitingBadge } from "./waiting-badge";
 
 const TODAY = "2026-06-01";
@@ -33,14 +33,16 @@ function task(over: Partial<Task>): Task {
   };
 }
 
-function condition(over: Partial<WaitingCondition>): WaitingCondition {
+function condition(
+  over: Partial<ManualWaitingCondition>,
+): ManualWaitingCondition {
   return {
     id: over.id ?? "c",
     projectId: over.projectId ?? "p",
-    kind: over.kind ?? "free-text",
-    text: over.text ?? null,
-    refId: over.refId ?? null,
-    targetStatus: over.targetStatus ?? null,
+    kind: "free-text",
+    text: over.text ?? "a reply",
+    refId: null,
+    targetStatus: null,
     resolvedAt: over.resolvedAt ?? null,
     createdAt: over.createdAt ?? "2026-01-15T00:00:00.000Z",
   };

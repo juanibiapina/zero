@@ -96,15 +96,17 @@ committed.
   Goal-oriented (baby, diploma, buy a house, watch a movie), sometimes
   maintenance-oriented (a "baby maintenance" project should maybe not exist). Has
   a nice icon (baby face, diploma), persisted lifecycle state (in-play / backlog /
-  done), and calculated status (Active / Next / Waiting / Backlog / Done). Slices
+  done), and calculated status (Active / Next / Waiting / After / Backlog / Done). Slices
   A1 + A2 shipped: name-only create and a status-grouped list on
   both surfaces; A3 added enrichment (an emoji icon picker over all standard emoji
   with search, editable title and notes). Slice A (the hand-managed entity) is
   complete. A project now opens **its own screen** (web `/projects/:id`, mobile a
-  pushed screen), not a bottom sheet — that is where status is changed, tasks are
-  groomed, and what it's waiting on is recorded. Vision beyond that:
-  can contain Todos, agent sessions, documents. Can spin off other Projects and
-  even People. Notify dependent Projects when they move; can unblock them. Idea:
+  pushed screen), not a bottom sheet. It is a Project workspace whose identity,
+  description, dominant status, manual Waiting conditions, After relationships,
+  and Tasks are sibling regions. After is Project-to-Project completion
+  sequencing and remains a fallback behind deliberate dated work and manual
+  review. Vision beyond that: can contain Todos, agent sessions, documents. Can
+  spin off other Projects and even People. Idea:
   project "slots", start with one slot to teach the game.
 - **Person** — first-class. New to the user's workflow; named as a gap. Circle
   avatar. Connect to Todos and Projects. "People" is a basic filter: see how
@@ -161,6 +163,29 @@ committed.
 ---
 
 ## Project tracking
+
+Implemented (2026-09-16; Pixel workspace flow verified): **Project Waiting,
+After, and workspace redesign.** Manual Waiting is now Project-scoped prose that
+requires review; After is separate Project-completion sequencing that resolves
+automatically. In-play display precedence is Active → Waiting → After → Next, so
+arrived or future-dated work and manual review can bring an After Project forward
+without resolving its relationships. Projects lists After after Waiting and
+collapsed by default. Each Project workspace now orders identity, description,
+dominant status, all Waiting conditions, After Project rows, then Tasks; empty
+relationship regions disappear. The Project Add surface opens focused Task,
+Waiting condition, After project, or independent Project flows, with local add
+controls on existing regions. Completing a Project Task persists immediately and
+offers Undo plus Waiting for…; completing a Project offers Undo and restores the
+After rows that completion resolved. Historical Task and arbitrary Project-status
+condition rows are removed. This supersedes the hard Blocked / Depends on behavior
+recorded in the 2026-09-15 completion-dependencies entry below. **Pixel 7:** two
+throwaway Projects proved focused After and Waiting creation, Waiting-over-After
+and Active-over-both precedence, workspace order, local section add controls,
+Project Task completion with Waiting for…, default-collapsed After, and light,
+dark, and 1.3× font layouts. Both Projects and their cascaded Task/relationships
+were deleted and device settings restored. Project-completion relationship
+restoration remains package-tested but cannot be proven end to end until the new
+Worker is deployed. Plan: `docs/plans/todo-project-waiting-after.md`.
 
 Implemented and Pixel-verified (2026-09-16): **Recurring tasks and natural-language dates.** Task quick-add on web and mobile recognizes one-time dates and date-level repeat phrases through the new private `@zeroapps/recurrence` package, which hides Chrono, Temporal, and RRULE behind normalized versioned JSON. Tasks persist a separate recurrence cursor so one-off postpones do not move the pattern. Scheduled `every` rules catch up every missed occurrence, `every!` rules advance from completion, invalid month days clamp backward, inclusive end dates finish normally, and the existing single Undo restores the prior occurrence. Migration 0055 adds recurrence JSON + cursor columns; completion is expected-cursor guarded so offline replay cannot advance twice. **Device proof:** a throwaway `every day` task created through natural-language quick-add persisted its `every day` summary, advanced from Home into Upcoming, returned through Undo, and disappeared through Complete forever; production Workers Logs recorded two occurrence completions, one occurrence Undo, and the permanent completion. The throwaway task was removed. A follow-up now places the exact parsed schedule phrase on a colored inline background on mobile and web; tapping/clicking it keeps that phrase as title text and moves recognition to the previous date phrase in the same draft. On the Pixel 7, light and dark themes showed aligned ordinary text and high-contrast schedule badges, a long recurrence wrapped cleanly across three lines, tapping the active `Friday` badge moved the background and schedule summary to `today` without losing focus, recognized submission stored the cleaned title, and every throwaway task or draft was completed or discarded. Plans: `docs/plans/todo-recurring-tasks.md` and `docs/plans/todo-inline-schedule-highlighting.md`.
 

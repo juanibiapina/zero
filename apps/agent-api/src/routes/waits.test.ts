@@ -2,38 +2,51 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 
 import type { Env } from "../types";
-import type { AddProjectDependencyResult } from "../store/project-dependencies";
-import type { WaitingCondition } from "../store/waiting-conditions";
+import type { AddProjectAfterResult } from "../store/project-afters";
+import type { ProjectAfter } from "../store/waiting-conditions";
 import { createWaitsRoutes } from "./waits";
 
-const DEPENDENCY_ID = "11111111-1111-4111-8111-111111111111";
-const DEPENDENT_ID = "22222222-2222-4222-8222-222222222222";
-const PREREQUISITE_ID = "33333333-3333-4333-8333-333333333333";
+const RELATIONSHIP_ID = "11111111-1111-4111-8111-111111111111";
+const SOURCE_ID = "22222222-2222-4222-8222-222222222222";
+const TARGET_ID = "33333333-3333-4333-8333-333333333333";
 
-const dependency: WaitingCondition = {
-  id: DEPENDENCY_ID,
-  projectId: DEPENDENT_ID,
+const relationship: ProjectAfter = {
+  id: RELATIONSHIP_ID,
+  projectId: SOURCE_ID,
   kind: "project-status",
   text: null,
-  refId: PREREQUISITE_ID,
+  refId: TARGET_ID,
   targetStatus: "done",
   resolvedAt: null,
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
 function fakeUserDO(
-  dependencyResult: AddProjectDependencyResult = { condition: dependency },
+  afterResult: AddProjectAfterResult = { relationship },
 ) {
   const calls: string[] = [];
   return {
     listWaitingConditions: () => [],
-    addWaitingCondition: () => {
-      calls.push("generic");
-      return dependency;
+    addWaitingCondition: (
+      id: string,
+      projectId: string,
+      text: string,
+    ) => {
+      calls.push(`waiting:${text}`);
+      return {
+        id,
+        projectId,
+        kind: "free-text" as const,
+        text,
+        refId: null,
+        targetStatus: null,
+        resolvedAt: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      };
     },
-    addProjectDependency: () => {
-      calls.push("dependency");
-      return dependencyResult;
+    addProjectAfter: () => {
+      calls.push("after");
+      return afterResult;
     },
     resolveWaitingCondition: () => null,
     deleteWaitingCondition: () => false,
@@ -68,75 +81,83 @@ const post = (body: unknown): RequestInit => ({
 });
 
 describe("POST /api/waits", () => {
-  it("routes a project-completion shape through validated dependency creation", async () => {
+  it("adds a complete manual Waiting condition", async () => {
     const userDO = fakeUserDO();
-    const request = buildApp(userDO);
-
-    const response = await request(
+    const response = await buildApp(userDO)(
       "/api/waits",
       post({
-        id: DEPENDENCY_ID,
-        projectId: DEPENDENT_ID,
+        id: RELATIONSHIP_ID,
+        projectId: SOURCE_ID,
+        kind: "free-text",
+        text: " the letter arrives ",
+        refId: null,
+        targetStatus: null,
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(userDO.calls).toEqual(["waiting:the letter arrives"]);
+  });
+
+  it("routes Project-completion rows through After validation", async () => {
+    const userDO = fakeUserDO();
+    const response = await buildApp(userDO)(
+      "/api/waits",
+      post({
+        id: RELATIONSHIP_ID,
+        projectId: SOURCE_ID,
         kind: "project-status",
         text: null,
-        refId: PREREQUISITE_ID,
+        refId: TARGET_ID,
         targetStatus: "done",
       }),
     );
 
     expect(response.status).toBe(201);
-    expect(userDO.calls).toEqual(["dependency"]);
-    expect(await response.json()).toEqual({ condition: dependency });
+    expect(userDO.calls).toEqual(["after"]);
+    expect(await response.json()).toEqual({ condition: relationship });
   });
 
-  it("returns Conflict when the dependency would create a cycle", async () => {
-    const userDO = fakeUserDO({ conflict: "cycle" });
-    const response = await buildApp(userDO)(
+  it("returns Conflict when After would create a cycle", async () => {
+    const response = await buildApp(fakeUserDO({ conflict: "cycle" }))(
       "/api/waits",
       post({
-        id: DEPENDENCY_ID,
-        projectId: DEPENDENT_ID,
+        id: RELATIONSHIP_ID,
+        projectId: SOURCE_ID,
         kind: "project-status",
-        refId: PREREQUISITE_ID,
+        refId: TARGET_ID,
         targetStatus: "done",
       }),
     );
-
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: "This dependency would create a loop.",
+      error: "This After relationship would create a loop.",
     });
   });
 
-  it("rejects a malformed completion dependency", async () => {
-    const userDO = fakeUserDO();
-    const response = await buildApp(userDO)(
+  it("rejects Task relationships and arbitrary Project statuses", async () => {
+    const request = buildApp(fakeUserDO());
+    const task = await request(
       "/api/waits",
       post({
-        id: DEPENDENCY_ID,
-        projectId: DEPENDENT_ID,
+        id: RELATIONSHIP_ID,
+        projectId: SOURCE_ID,
+        kind: "task-done",
+        refId: TARGET_ID,
+      }),
+    );
+    expect(task.status).toBe(400);
+
+    const status = await request(
+      "/api/waits",
+      post({
+        id: RELATIONSHIP_ID,
+        projectId: SOURCE_ID,
         kind: "project-status",
-        targetStatus: "done",
+        refId: TARGET_ID,
+        targetStatus: "active",
       }),
     );
-
-    expect(response.status).toBe(400);
-    expect(userDO.calls).toEqual([]);
-  });
-
-  it("keeps ordinary waiting conditions on the generic path", async () => {
-    const userDO = fakeUserDO();
-    const response = await buildApp(userDO)(
-      "/api/waits",
-      post({
-        id: DEPENDENCY_ID,
-        projectId: DEPENDENT_ID,
-        kind: "free-text",
-        text: "the letter arrives",
-      }),
-    );
-
-    expect(response.status).toBe(201);
-    expect(userDO.calls).toEqual(["generic"]);
+    expect(status.status).toBe(400);
   });
 });

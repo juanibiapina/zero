@@ -3,36 +3,8 @@ import { describe, expect, it } from "vitest";
 import { homeTasks } from "./home";
 import type { Task } from "./types";
 import type { Project } from "../projects/types";
-import type { WaitingCondition } from "../waits/types";
-
 // The default task's showUpDate; TODAY is a day after it so it is "shown up".
 const TODAY = "2026-01-02";
-
-function projectDependency(projectId: string, refId: string): WaitingCondition {
-  return {
-    id: `${projectId}-${refId}`,
-    projectId,
-    kind: "project-status",
-    text: null,
-    refId,
-    targetStatus: "done",
-    resolvedAt: null,
-    createdAt: "2026-01-01T00:00:00.000Z",
-  };
-}
-
-function freeTextCondition(projectId: string): WaitingCondition {
-  return {
-    id: "c",
-    projectId,
-    kind: "free-text",
-    text: "the letter comes back",
-    refId: null,
-    targetStatus: null,
-    resolvedAt: null,
-    createdAt: "2026-01-01T00:00:00.000Z",
-  };
-}
 
 function task(over: Partial<Task> & Pick<Task, "id">): Task {
   return {
@@ -159,34 +131,20 @@ describe("homeTasks", () => {
     expect(out.map((t) => t.id)).toEqual(["dated"]);
   });
 
-  it("shows a dated project task even when its project has an unresolved condition", () => {
-    // Dating a task overrides waiting: the project displays active again, so the
-    // task shows.
+  it("shows an arrived Project Task because relationship states do not gate Home", () => {
     const out = homeTasks(
       [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
       [project("p")],
       TODAY,
-      [freeTextCondition("p")],
     );
     expect(out.map((t) => t.id)).toEqual(["t"]);
   });
 
-  it("hides an arrived project task while a completion dependency is unresolved", () => {
-    const out = homeTasks(
-      [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],
-      [project("p"), project("prerequisite")],
-      TODAY,
-      [projectDependency("p", "prerequisite")],
-    );
-    expect(out).toEqual([]);
-  });
-
-  it("hides an undated project task on a project with an unresolved condition (waiting)", () => {
+  it("hides an undated groomed Project Task", () => {
     const out = homeTasks(
       [task({ id: "t", projectId: "p", showUpDate: null })],
       [project("p")],
       TODAY,
-      [freeTextCondition("p")],
     );
     expect(out).toEqual([]);
   });

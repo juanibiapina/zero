@@ -1,5 +1,5 @@
 // A Project: a named, outcome-oriented container. Persistence stores only its
-// deliberate lifecycle state; Active, Next, Waiting, and Blocked are calculated from its
+// deliberate lifecycle state; Active, Next, Waiting, and After are calculated from its
 // work and conditions. See docs/entities/project.md.
 
 export type ProjectState = "in-play" | "backlog" | "done";
@@ -8,7 +8,7 @@ export type ProjectDisplayStatus =
   | "active"
   | "next"
   | "waiting"
-  | "blocked"
+  | "after"
   | "backlog"
   | "done";
 

@@ -213,7 +213,7 @@ describe('HomeScreen', () => {
     expect(getByText('🎓')).toBeTruthy();
   });
 
-  it('hides blocked project tasks and offers dependency review', async () => {
+  it('shows arrived Project Tasks despite an unresolved After relationship', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([
       {
@@ -245,10 +245,8 @@ describe('HomeScreen', () => {
     ]);
 
     const screen = await renderScreen();
-    await waitFor(() => expect(screen.getByText('Everything is blocked')).toBeTruthy());
-    expect(screen.queryByText('pack boxes')).toBeNull();
-    await fireEvent.press(screen.getByText('Review dependencies'));
-    expect(mockNavigate).toHaveBeenCalledWith('/projects', undefined);
+    await waitFor(() => expect(screen.getByText('pack boxes')).toBeTruthy());
+    expect(screen.queryByText('Nothing needs attention right now')).toBeNull();
   });
 
   it('adds a loose task from the default quick-add', async () => {
@@ -507,7 +505,7 @@ describe('HomeScreen', () => {
     );
   });
 
-  it('names the project and offers an Open deep-link when a project task is completed', async () => {
+  it('names the Project and offers Waiting plus quiet navigation after completion', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([
       {
@@ -545,8 +543,9 @@ describe('HomeScreen', () => {
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].description).toBe('🎓 Diploma');
-    expect(snap[0].link?.label).toBe('Open');
-    snap[0].link?.onPress();
+    expect(snap[0].secondaryAction?.label).toBe('Waiting for…');
+    expect(snap[0].descriptionAction?.accessibilityLabel).toBe('Open project Diploma');
+    snap[0].descriptionAction?.onPress();
     expect(mockNavigate).toHaveBeenCalledWith('/projects/p', {
       withAnchor: true,
     });

@@ -5,12 +5,16 @@ import {
   dayLabel,
   localToday,
   messageOf,
-  undoableAction,
   upcomingSections,
+  type ProjectsApi,
+  type WaitsApi,
 } from "@zero/agent-core";
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
+import { getProjectsApi } from "@/lib/projects-collection";
+import { getWaitsApi } from "@/lib/waits-collection";
+import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
 import { useForegroundRefetch } from "@/lib/screen-hooks";
 import { type Task } from "@/lib/tasks";
 
@@ -33,21 +37,43 @@ export function UpcomingPage() {
 
 function UpcomingPanel() {
   const [api, setApi] = useState<TasksApi | null>(null);
+  const [projectsApi, setProjectsApi] = useState<ProjectsApi | null>(null);
+  const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
   useEffect(() => {
     let live = true;
-    void getTasksApi().then((a) => {
-      if (live) setApi(a);
-    });
+    void Promise.all([getTasksApi(), getProjectsApi(), getWaitsApi()]).then(
+      ([tasks, projects, waits]) => {
+        if (!live) return;
+        setApi(tasks);
+        setProjectsApi(projects);
+        setWaitsApi(waits);
+      },
+    );
     return () => {
       live = false;
     };
   }, []);
-  return api ? <UpcomingReady api={api} /> : <div className="min-h-24" />;
+  return api && projectsApi && waitsApi ? (
+    <UpcomingReady api={api} projectsApi={projectsApi} waitsApi={waitsApi} />
+  ) : (
+    <div className="min-h-24" />
+  );
 }
 
-function UpcomingReady({ api }: { api: TasksApi }) {
+function UpcomingReady({
+  api,
+  projectsApi,
+  waitsApi,
+}: {
+  api: TasksApi;
+  projectsApi: ProjectsApi;
+  waitsApi: WaitsApi;
+}) {
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
+  const { data: projects } = useLiveQuery((q) =>
+    q.from({ p: projectsApi.collection }),
   );
 
   const today = localToday();
@@ -60,22 +86,13 @@ function UpcomingReady({ api }: { api: TasksApi }) {
 
   useForegroundRefetch(api.refetch);
 
-  const onComplete = useCallback(
-    (item: Task) => {
-      setError(null);
-      // Same single bottom Undo snackbar as elsewhere; Undo reopens the task.
-      undoableAction({
-        message: "Completed",
-        act: () => api.complete(item.id, today),
-        undo: () =>
-          item.recurrence
-            ? api.undoOccurrence(item, today)
-            : api.reopen(item),
-        onError: setError,
-      });
-    },
-    [api, today],
-  );
+  const completion = useTaskCompletionFeedback({
+    api,
+    waitsApi,
+    projects: projects ?? [],
+    today,
+    onError: setError,
+  });
 
   const onEdit = useCallback(
     (item: Task, text: string) => {
@@ -104,7 +121,7 @@ function UpcomingReady({ api }: { api: TasksApi }) {
                   <Row
                     key={item.id}
                     text={item.text}
-                    onComplete={() => onComplete(item)}
+                    onComplete={() => completion.complete(item)}
                     onEdit={(text) => onEdit(item, text)}
                   />
                 ))}
@@ -113,6 +130,7 @@ function UpcomingReady({ api }: { api: TasksApi }) {
           ))}
         </div>
       )}
+      {completion.composer}
     </div>
   );
 }

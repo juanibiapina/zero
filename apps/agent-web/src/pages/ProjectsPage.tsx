@@ -138,7 +138,7 @@ function ProjectsReady({
   // "for <elapsed>" for a condition wait, "until <day>" for a date wait.
   const labelOf = useCallback(
     (p: Project) =>
-      projectStatusContext(p, tasks, conds, list, today)?.label ?? null,
+      projectStatusContext(p, tasks, conds, list, today)?.rowLabel ?? null,
     [tasks, conds, list, today],
   );
   const view = listView({ count: list.length, isLoading, loadError: null });
@@ -220,7 +220,8 @@ function ProjectSectionView({
   onOpen: (p: Project) => void;
 }) {
   const [collapsed, setCollapsed] = useState(
-    status === "backlog" && projects.length > BACKLOG_COLLAPSE_THRESHOLD,
+    status === "after" ||
+      (status === "backlog" && projects.length > BACKLOG_COLLAPSE_THRESHOLD),
   );
   return (
     <section className="space-y-3">

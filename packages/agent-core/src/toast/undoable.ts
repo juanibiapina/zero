@@ -1,7 +1,11 @@
 import type { Transaction } from "@tanstack/db";
 
 import { messageOf } from "../errors";
-import { toast, type ToastAction } from "./controller";
+import {
+  toast,
+  type ToastAction,
+  type ToastDescriptionAction,
+} from "./controller";
 
 // Commit an optimistic action immediately, then raise the single shared Undo
 // snackbar whose action runs the inverse verb. The fixed "undo" toast id is owned
@@ -21,12 +25,16 @@ export function undoableAction(opts: {
   // Optional secondary line and navigation link (e.g. the completed task's
   // project name and a jump to its screen), rendered beside the Undo action.
   description?: string;
+  descriptionAction?: ToastDescriptionAction;
+  secondaryAction?: ToastAction;
   link?: ToastAction;
 }): void {
   opts.act().isPersisted.promise.catch((e) => opts.onError(messageOf(e)));
   toast(opts.message, {
     id: "undo",
     description: opts.description,
+    descriptionAction: opts.descriptionAction,
+    secondaryAction: opts.secondaryAction,
     link: opts.link,
     action: {
       label: "Undo",

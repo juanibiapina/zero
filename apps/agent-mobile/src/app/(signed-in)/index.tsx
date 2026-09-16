@@ -7,9 +7,7 @@ import {
   homeCallToAction,
   homeCallToActionCopy,
   homeTasks,
-  DEFAULT_ICON,
   taskIcon,
-  undoableAction,
   type HomeCallToAction,
   type ProjectsApi,
   type Task,
@@ -112,8 +110,8 @@ function Home({
   // sort key. The server returns all open tasks; this pass drops future-dated
   // ones (they belong to Upcoming) and unavailable project tasks.
   const list = useMemo(
-    () => homeTasks(tasks ?? [], projects ?? [], today, conditions ?? []),
-    [tasks, projects, conditions, today],
+    () => homeTasks(tasks ?? [], projects ?? [], today),
+    [tasks, projects, today],
   );
 
   const cta = homeCallToAction(
@@ -144,6 +142,7 @@ function Home({
   // task to a future day drops it from the list and closes the sheet.
   const detail = useTaskDetail({
     api,
+    waitsApi,
     list,
     projects: projects ?? [],
     onError: setWriteError,
@@ -162,7 +161,6 @@ function Home({
   const add = useQuickAdd({
     tasksApi: api,
     projectsApi,
-    waitsApi,
     projects: projects ?? [],
     modes: ['task', 'project'],
     getToken,
@@ -182,38 +180,6 @@ function Home({
     });
     return () => sub.remove();
   }, [detail, add]);
-
-  // Complete: commit immediately (the row leaves at once) + a single bottom Undo
-  // snackbar (shared 'undo' id). A project task also names its project and offers
-  // an Open deep-link; a loose task shows neither. Undo reopens the task.
-  const onComplete = useCallback(
-    (item: Task) => {
-      const project =
-        item.projectId != null
-          ? (projects ?? []).find((p) => p.id === item.projectId)
-          : undefined;
-      undoableAction({
-        message: 'Completed',
-        description: project
-          ? `${project.icon ?? DEFAULT_ICON} ${project.title}`
-          : undefined,
-        link: project
-          ? {
-              label: 'Open',
-              onPress: () =>
-                router.navigate(`/projects/${project.id}`, { withAnchor: true }),
-            }
-          : undefined,
-        act: () => api.complete(item.id, today),
-        undo: () =>
-          item.recurrence
-            ? api.undoOccurrence(item, today)
-            : api.reopen(item),
-        onError: setWriteError,
-      });
-    },
-    [api, projects, today],
-  );
 
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
 
@@ -240,7 +206,7 @@ function Home({
           today={today}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          onComplete={onComplete}
+          onComplete={detail.complete}
           onOpen={detail.open}
           onError={setWriteError}
           presentationOf={presentationOf}

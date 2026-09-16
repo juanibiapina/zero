@@ -2,6 +2,10 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-16: Projects now separate manual Waiting from automatic After relationships. Dated work can bring an After project forward, Waiting and After appear before Tasks in the Project workspace, After starts collapsed in Projects, and Add opens focused Task, Waiting condition, After project, or Project flows.
+
+- 2026-09-16: Completing a Project task still saves immediately and now offers Waiting for… beside Undo; completing a Project also offers Undo and restores the After relationships that completion resolved.
+
 - 2026-09-16: Dates and repeats recognized while adding a task now appear on a colored background; click the active phrase to keep those words and move recognition to the previous date in the title.
 
 - 2026-09-16: Weekly and monthly repeat phrases now keep their explicit weekday: “every week on Saturday” schedules Saturday, and “first Tuesday of every month” schedules the first Tuesday instead of today’s month day.

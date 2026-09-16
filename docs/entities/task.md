@@ -120,7 +120,9 @@ serves the open-tasks query.
   candidate in the same title; dismissing every candidate leaves the task
   unscheduled.
 - **Complete** an ordinary task: it leaves the list at once and a single bottom
-  **Undo** snackbar reopens it. A recurring task instead advances the same row:
+  **Undo** snackbar reopens it. For a Project Task, the same feedback names and
+  links the Project and offers **Waiting for…**, which opens a focused manual
+  Waiting composer without delaying completion. A recurring task instead advances the same row:
   scheduled recurrence can remain overdue for catch-up, while `every!` advances
   from the completion day. The row leaves only when the next date is future or
   the series is exhausted. The same single Undo restores the prior occurrence.
@@ -130,8 +132,9 @@ serves the open-tasks query.
     null` (always relevant) or `showUpDate <= today`. A null date keeps a loose
     task on Home.
   - a **project** task is available only when it has a date that has **arrived**
-    (`showUpDate != null && showUpDate <= today`) and its project displays
-    `active`. A null date means the task is **groomed** — project screen only,
+    (`showUpDate != null && showUpDate <= today`) and its Project is In-play.
+    Manual Waiting and After never suppress deliberately dated work. A null date
+    means the Task is **groomed** — Project screen only,
     never Home (the loose/project asymmetry on null). Postponing any task parks it
     in Upcoming and it returns to Home on its day. The rule lives in the pure
     `homeTasks` seam in `@zero/agent-core`.
@@ -142,7 +145,7 @@ serves the open-tasks query.
   project task is groomed: it never reaches Home and leaves the project `next`
   (come groom / schedule one). This date-aware derivation lives in
   `projectDisplayStatus` / `waitingUntil` (see
-  `docs/entities/waiting-condition.md` and `docs/plans/todo-retire-take-on.md`).
+  `docs/entities/project.md` and `docs/plans/todo-retire-take-on.md`).
 - **Upcoming** = open ∧ future-dated (`showUpDate > today`), grouped by day, **no
   other gate** — every postponed task, loose or project, taken-on or not
   (`upcomingSections` in `@zero/agent-core`).

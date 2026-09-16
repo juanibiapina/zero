@@ -15,7 +15,7 @@ function fakeRest(initial: Project[]): ProjectsRest {
   return {
     fetchProjects: async () => {
       await sleep(5);
-      return server.map((p) => ({ ...p }));
+      return server.filter((project) => project.state !== "done").map((p) => ({ ...p }));
     },
     addProject: async ({ id, title }) => {
       await sleep(5);
@@ -37,8 +37,14 @@ function fakeRest(initial: Project[]): ProjectsRest {
       const row = server.find((p) => p.id === id);
       if (!row) throw new Error(`no project ${id}`);
       row.state = state;
-      if (state === "done") server.splice(server.indexOf(row), 1);
       return { ...row, state };
+    },
+    reopenProject: async (id, state) => {
+      await sleep(5);
+      const row = server.find((project) => project.id === id);
+      if (!row) throw new Error(`no project ${id}`);
+      row.state = state;
+      return { ...row };
     },
     editProject: async (id, fields) => {
       await sleep(5);
@@ -135,6 +141,23 @@ describe("projects collection", () => {
     expect(api.collection.has("s1")).toBe(false);
   });
 
+  it("revives a Done Project with its prior lifecycle state", async () => {
+    const before = project("s1", { state: "backlog" });
+    const api = createInMemoryProjectsApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([before]),
+    });
+    await api.collection.stateWhenReady();
+
+    await api.setState("s1", "done").isPersisted.promise;
+    await sleep(50);
+    expect(api.collection.has("s1")).toBe(false);
+
+    await api.reopen(before).isPersisted.promise;
+    await sleep(50);
+    expect(api.collection.get("s1")?.state).toBe("backlog");
+  });
+
   it("edits fields without changing state", async () => {
     const api = createInMemoryProjectsApi({
       queryClient: new QueryClient(),
@@ -180,6 +203,7 @@ describe("projects durable names", () => {
       "addProject",
       "deleteProject",
       "editProject",
+      "reopenProject",
       "setProjectState",
     ]);
   });

@@ -7,7 +7,6 @@ import {
   type Project,
   type ProjectsApi,
   type TasksApi,
-  type WaitsApi,
 } from '@zero/agent-core';
 import {
   parseSchedule,
@@ -43,11 +42,10 @@ import { showTaskDestination } from '@/lib/task-feedback';
 // dismissal is a scrim tap or Back, which raises the discard-confirm over unsaved
 // text.
 //
-// A `projectId` (a project's own screen) is the composer's home project: it
-// presets the project row to that project (still changeable — you can move the
-// new task to another project or make it loose), a `waiting` add records a
-// free-text condition on it, and filing a dateless task to it fires no "Filed to
-// project" toast (it appears right there in the project's Tasks). With no
+// A `projectId` presets a Task's project row (still changeable — you can move
+// the new Task to another Project or make it loose), and filing a dateless Task
+// to it fires no "Filed to project" toast because it appears on that workspace.
+// With no
 // `projectId` (Home) the row starts on "No project". Either way the row is shown
 // in task mode.
 export type QuickAddController = {
@@ -59,12 +57,12 @@ export type QuickAddController = {
   handleBack: () => boolean;
   // Whether the drawer or any of its sheets/dialogs is open.
   active: boolean;
+  open: () => void;
 };
 
 export function useQuickAdd({
   tasksApi,
   projectsApi,
-  waitsApi,
   projects,
   modes,
   projectId,
@@ -72,14 +70,13 @@ export function useQuickAdd({
   onError,
   fabLabel,
   onProjectCreated,
+  showFab = true,
 }: {
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
   // The user's projects, for the project row label and the "Filed" toast copy.
   projects: Project[];
-  // Which mode tabs to offer, in order. Home: ['task','project']; a project's
-  // own screen: ['task','waiting','project'].
+  // Which Task/Project mode tabs to offer, in order.
   modes: AddMode[];
   // This screen's home project (a project's own screen): presets the project
   // row to it (still changeable) and scopes a waiting add to it. Omit/null on
@@ -92,6 +89,7 @@ export function useQuickAdd({
   // Wording of the collapsed FAB and its accessibility label.
   fabLabel: string;
   onProjectCreated?: (id: string) => void;
+  showFab?: boolean;
 }): QuickAddController {
   const [text, setText] = useState('');
   const [ignoredSchedule, setIgnoredSchedule] = useState<{
@@ -198,17 +196,6 @@ export function useQuickAdd({
       return;
     }
 
-    if (mode === 'waiting') {
-      // Waiting mode records a free-text waiting condition on this screen's own
-      // project (a condition belongs to the project, so it is not the changeable
-      // project row's target).
-      if (projectId == null) return;
-      const tx = waitsApi.add(projectId, 'free-text', { text: trimmed });
-      tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-      closeAdd();
-      return;
-    }
-
     // Task mode. The task attaches to the project chosen in the row (preset to
     // this screen's project, changeable). No project + null date = a loose Home
     // task; a date
@@ -242,7 +229,6 @@ export function useQuickAdd({
   }, [
     text,
     mode,
-    projectId,
     effectiveDate,
     effectiveRecurrence,
     effectiveText,
@@ -252,7 +238,6 @@ export function useQuickAdd({
     projects,
     tasksApi,
     projectsApi,
-    waitsApi,
     getToken,
     onError,
     closeAdd,
@@ -288,8 +273,8 @@ export function useQuickAdd({
     return false;
   }, [confirmingDiscard, adding, text, closeAdd]);
 
-  // Date and project rows belong to task mode only; project/waiting create no
-  // task, so they show the mode selector, text, and submit action without task
+  // Date and project rows belong to Task mode only; Project creates no Task,
+  // so it shows the mode selector, text, and submit action without Task
   // metadata. The project row stays changeable when preset by a project screen.
   const taskActionsVisible = mode === 'task';
   const selectedProject = projects.find((p) => p.id === addProjectId) ?? null;
@@ -299,7 +284,7 @@ export function useQuickAdd({
       {/* Collapsed entry: the FAB, pinned bottom-right; box-none lets taps
           through to the list everywhere except the FAB. Tapping it opens the
           drawer. */}
-      {!adding ? (
+      {showFab && !adding ? (
         <View
           pointerEvents="box-none"
           className="absolute inset-x-0 bottom-0 items-end px-screen-x pb-6"
@@ -330,7 +315,9 @@ export function useQuickAdd({
         autoFocus
         inputRef={inputRef}
         modeSelector={
-          <AddModeSelector mode={mode} modes={modes} onModeChange={setMode} />
+          modes.length > 1 ? (
+            <AddModeSelector mode={mode} modes={modes} onModeChange={setMode} />
+          ) : undefined
         }
         trailing={
           <Fab
@@ -428,6 +415,7 @@ export function useQuickAdd({
 
   return {
     bar,
+    open: () => setAdding(true),
     handleBack,
     active: adding || schedulingAdd || pickingProject || confirmingDiscard,
   };

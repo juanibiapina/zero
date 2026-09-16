@@ -1,33 +1,25 @@
 # Project
 
 A Project is a named, outcome-oriented container in the todo app. It groups work
-toward an outcome and carries a small persisted lifecycle state; the app
-calculates its visible status from that state, its tasks, and its waiting
-conditions.
+toward an outcome, persists a small manual lifecycle state, and calculates the
+attention state the user sees from Tasks, manual Waiting conditions, and After
+relationships.
 
-This file is the source of truth for Project behavior. Historical implementation
-plans remain under `docs/plans/`.
-
-## Why Project is its own entity
-
-A Project answers “what outcome am I working toward,” which a Task does not. It
-has its own title, icon, description, lifecycle, tasks, waiting conditions, and
-delete cascade. Its server store remains specific to Project rather than joining
-a generic entity repository.
+This file is the source of truth for Project behavior. Historical design and
+implementation plans remain under `docs/plans/`.
 
 ## Vocabulary
 
-- **Project** — the entity stored in `projects`.
-- **Outcome name** — the required `title`, phrased as an observable result.
-- **State** — the persisted lifecycle decision: `in-play`, `backlog`, or `done`.
-- **Display status** — the calculated list/header value: Active, Next, Waiting,
-  Blocked, Backlog, or Done.
-- **Put in play** — persist `state: "in-play"`, then calculate the current display
-  status.
-- **Icon** — one emoji, default 📁.
+- **State** — persisted lifecycle: `in-play`, `backlog`, or `done`.
+- **Display status** — calculated presentation: Active, Next, Waiting, After,
+  Backlog, or Done.
+- **Waiting** — the Project still needs human review or follow-up because a
+  manual text condition remains unresolved, or it has future-dated work.
+- **After** — nothing needs attention until one or more referenced Projects are
+  Done. It is sequencing, not necessarily a hard prerequisite.
+- **Put in play** — persist `state: "in-play"`, then calculate display status.
 
-State and display status are intentionally separate. Active, Next, Waiting, and
-Blocked cannot cross a persistence interface.
+Calculated statuses never cross the Project persistence interface.
 
 ## Data shape
 
@@ -39,151 +31,115 @@ Blocked cannot cross a persistence interface.
 - `description` — nullable free text;
 - `state` — `in-play | backlog | done`, default `in-play`;
 - `createdAt` — ISO timestamp;
-- `sourceCaptureId` — nullable provenance from the retired Capture/refine flow.
-
-The `projects_open` partial index covers `state != 'done'` ordered by
-`createdAt`, keeping completed projects out of the working-set index.
-
-Migration `0053_project_state.sql` replaced the overloaded `status` column. It
-mapped stored Active, Next, and Waiting values to In-play while preserving
-Backlog, Done, and every other Project field.
+- `sourceCaptureId` — nullable dormant provenance.
 
 ## Calculated display status
 
-`projectDisplayStatus` in `@zero/agent-core` is the single pure interface for
-Project presentation. It uses the user's local `today` and applies this order:
+Shared Project presentation applies this order:
 
 1. persisted Backlog or Done;
-2. Blocked when an unresolved project-completion dependency exists;
-3. Active when an open project task has a non-null `showUpDate <= today`;
-4. Waiting when an unresolved ordinary waiting condition exists;
-5. Waiting when an open project task has a future date;
-6. Next otherwise.
+2. Active when an open Project Task has a date at or before the local day;
+3. Waiting when a manual condition is unresolved or an open Task has a future
+   date;
+4. After when an unresolved Project After relationship remains;
+5. Next otherwise.
 
-An undated project task is groomed and does not make the project Active. A future
-task makes the project wait until its day. An arrived scheduled task overrides an
-ordinary waiting condition, but it cannot override a project dependency. Every
-task of a Blocked project stays off Home. Its dates remain unchanged and take
-effect immediately after the final dependency settles or is removed.
+An empty In-play Project is Next. An undated Project Task is groomed and does not
+make the Project Active.
 
-`waitingBadge` supplies Waiting context and ordering:
+After is a fallback attention state. Scheduling a Task deliberately brings the
+Project forward without resolving its relationships. When that work completes,
+the unresolved relationship can make the Project After again. Manual Waiting
+also outranks After. Backlog and Done always outrank calculated attention.
 
-- an ordinary condition shows elapsed time and sorts longest-waiting first;
-- a future task shows `until <day>` and sorts soonest first.
-
-`projectStatusContext` adds Blocked context: `after <icon> <title>` for one
-prerequisite, `after N projects` for several, and the oldest unresolved
-relationship as the Blocked sort key.
-
-The Projects list groups through `projectsByStatus`; it never groups directly by
-persisted state.
+`projectStatusContext` supplies Waiting and After copy and ordering. The detail
+pill uses `After · 🏠 Buy a house`; a Projects row uses `after 🏠 Buy a house`.
+Several relationships read `2 projects` / `after 2 projects`.
 
 ## Behavior
 
 - **Add** — create by title with state In-play, icon 📁, and null description.
-- **List** — return every non-Done project, oldest first; clients calculate and
-  group display status.
-- **Set state** — persist In-play, Backlog, or Done. Done removes the row from the
-  working collection. In-play recalculates Active, Next, or Waiting.
-- **Edit** — update any supplied title, icon, or description field.
-- **Depend on Project completion** — add a directed relationship to another
-  existing non-Done Project. Self, duplicate, missing, and cyclic relationships
-  are rejected. Several prerequisites use AND semantics.
-- **Complete** — persist Done and settle every incoming completion dependency
-  before returning. Settlement is permanent; reopening does not recreate the
-  relationship.
-- **Delete** — hard-remove the Project, all its tasks, all waiting conditions it
-  owns, and every incoming completion dependency that references it. Deletion is
-  idempotent and has no Undo; its confirmation discloses affected dependents.
+- **List** — return every non-Done Project, oldest first.
+- **Set state** — persist In-play, Backlog, or Done.
+- **Edit** — update supplied title, icon, or description fields.
+- **Complete** — atomically persist Done and resolve every incoming After
+  relationship before returning.
+- **Undo completion** — revive the Project to its prior In-play or Backlog state
+  and atomically restore the After relationships that completion resolved.
+- **Delete** — atomically remove the Project, all its Tasks, manual Waiting
+  conditions, outgoing After relationships, and incoming After relationships.
+  Confirmation discloses which source Projects may move to another section.
 
-All writes use the stable client id, so offline replay is exactly-once or
-idempotent according to the verb.
+All writes use stable ids so offline replay remains exactly-once or idempotent.
 
-## UI
+## Projects list
 
-Projects appear on web `/projects` and the mobile Projects tab. Both surfaces
-show collapsible Active, Next, Waiting, Blocked, and Backlog sections in that
-order; Done is absent. Backlog starts collapsed when large.
+Both surfaces group Projects in this order:
 
-A project row opens a dedicated project screen. The screen contains:
+1. Active;
+2. Next;
+3. Waiting;
+4. After;
+5. Backlog.
 
-- editable icon and title;
-- calculated status pill;
-- editable description;
-- project tasks;
-- project-completion prerequisites under **Depends on**;
-- ordinary waiting conditions under **Waiting on**;
-- lifecycle/delete actions.
+Empty sections are absent. Waiting stays expanded. After is collapsed by
+default. Backlog retains its existing large-section collapse policy. A row shows
+only its dominant status context; overridden After relationships remain visible
+inside the Project workspace.
 
-Mobile uses the visible status pill as the lifecycle and dependency control. Its
-actions are Move to backlog, Move out of backlog, Depends on project…, and Mark
-done. Dependency selection uses the searchable Project picker without a No
-project row. The settings menu contains Delete project. Web creates a dependency
-through the Project completion branch of the Waiting-condition builder and keeps
-lifecycle and delete actions in its overflow menu.
+## Project workspace
 
-A Depends on row opens its prerequisite and has a separate Remove action that
-deletes only the relationship.
+A Project opens its own screen. One scroll host may implement the screen, but the
+visual hierarchy has sibling regions:
 
-On mobile, project tasks reuse `ReorderableTaskList`: tap to edit, complete with
-Undo, swipe right to schedule Today, and long-press to reorder. The retained row
-then reads `Scheduled · Today`; normal availability rules decide whether it also
-appears on Home. New project tasks start undated. The Task/Waiting/Project add
-drawer presets Task to the open project; Project mode creates an independent
-project.
+1. editable identity;
+2. editable description;
+3. dominant status and lifecycle control;
+4. manual Waiting conditions, when present;
+5. After relationships, when present;
+6. a full section interval;
+7. Tasks, when present.
 
-A mobile Waiting status includes its context (`Waiting · until Tomorrow` or
-`Waiting · for 5 days`). Future task dates are explained by the status and source
-task, not duplicated under Waiting on. Web still shows its automatic date row.
+Waiting and After are never Task-list footers and receive no Task gestures,
+reorder behavior, dividers, or row spacing. Empty relationship regions have no
+heading, prompt, input, helper copy, or local add control.
+
+The main Add control opens Task, Waiting condition, After project, or Project.
+Once a region exists, its local `+` opens the same focused flow directly. The
+status control remains lifecycle-only.
+
+## Completion feedback
+
+Task completion persists immediately. A Project Task's transient feedback names
+and links its Project and offers Undo plus **Waiting for…**, which opens the
+focused manual-Waiting composer. Loose Tasks omit Project actions.
+
+Project completion also persists immediately and offers Undo. There are no
+notifications when an After relationship resolves.
 
 ## Storage and REST interfaces
 
-`DbProjectStore` owns `add`, `get`, `list`, `setState`, `edit`, and `delete`
-over the `projects` table. The `UserDO` composition root coordinates dependency
-validation, Done settlement, and cross-entity deletion.
+`DbProjectStore` owns Project-table verbs. `UserDO` coordinates Project state
+with the Project-attention store in one SQLite transaction for completion, Undo,
+and deletion.
 
-Per-user routes:
+Per-user Project routes remain:
 
-- `GET /api/projects` → `{ projects }`, non-Done working set;
-- `POST /api/projects { id, title, icon?, description?, state? }` →
-  `201 { project }`;
-- `PATCH /api/projects/{id} { state?, title?, icon?, description? }` →
-  `200 { project }`;
-- `DELETE /api/projects/{id}` → `204`, including when already absent;
-- `POST /api/projects/icon-suggestions { title, description? }` → `{ icons }`.
+- `GET /api/projects`;
+- `POST /api/projects`;
+- `PATCH /api/projects/{id}`;
+- `DELETE /api/projects/{id}`;
+- `POST /api/projects/icon-suggestions`.
 
-Project persistence accepts only `in-play`, `backlog`, and `done`. Unknown or
-retired `status` fields are rejected.
+The Project collection exposes `add`, `setState`, `reopen`, `edit`, `remove`, and
+`refetch`. `reopen` is a revive verb because Done Projects leave the working
+collection before Undo can run.
 
-The TanStack DB Project collection exposes `add`, `setState`, `edit`, `remove`,
-and `refetch`. Its durable mutation names are `addProject`, `setProjectState`,
-`editProject`, and `deleteProject`.
-
-## Local data versions
-
-`ENTITY_CACHE_VERSION` in `packages/agent-core/src/collection/version.ts` is the
-single version for every server-backed entity snapshot. A bump resets all mobile
-and web collection snapshots and refills them from the server.
-
-`OFFLINE_OUTBOX_VERSION` is separate because the outbox contains unsent writes,
-not cached data. Bump it only when a breaking mutation change intentionally
-discards queued writes. Migration 0053's Project shape and verb rename bump both
-versions once.
-
-Clerk credentials, timezone preferences, and icon-suggestion hints are outside
-these versions.
-
-## Other entities
+## Related entities
 
 - Task membership uses nullable `Task.projectId`.
-- WaitingCondition attaches to Project and can reference a Task or Project.
-- A project-completion dependency is a `project-status`/Done condition whose
-  `projectId` is the dependent and `refId` is the prerequisite.
-- Deleting a Project cascades to its Tasks, owned waiting conditions, and incoming
-  completion dependencies.
-- Project icon suggestions are an ephemeral device-local hint, not Project data.
-
-## Next
-
-Project dependencies remain completion-only. Parent/child ownership, inherited
-work, cascade completion, and a full graph view remain separate future choices.
+- Manual Waiting conditions are documented in
+  `docs/entities/waiting-condition.md`.
+- Project After relationships are documented in
+  `docs/entities/project-after.md`.
+- Dates belong only to Tasks.

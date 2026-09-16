@@ -23,6 +23,7 @@ function makeRest(getToken: TokenGetter): ProjectsRest {
     fetchProjects: () => fetchProjects(getToken),
     addProject: (project) => addProject(getToken, project),
     setProjectState: (id, state) => setProjectState(getToken, id, state),
+    reopenProject: (id, state) => setProjectState(getToken, id, state),
     editProject: (id, fields) => editProject(getToken, id, fields),
     deleteProject: (id) => deleteProject(getToken, id),
   };

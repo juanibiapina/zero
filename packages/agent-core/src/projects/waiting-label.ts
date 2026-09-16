@@ -1,6 +1,6 @@
 import { formatDistanceStrict } from "date-fns/formatDistanceStrict";
 
-// A readable "how long waiting" phrase for a blocked-since instant, e.g.
+// A readable "how long waiting" phrase for a manual-Waiting instant, e.g.
 // "3 days", "2 months", "1 year". No "ago" suffix: the Waiting section header
 // already frames it, and the wait is ongoing, not a past event. `now` is
 // injectable (formatDistanceStrict takes both endpoints) so the label is

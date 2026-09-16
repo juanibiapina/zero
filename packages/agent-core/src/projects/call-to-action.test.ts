@@ -73,7 +73,7 @@ describe("homeCallToAction", () => {
       kind: "plan",
       next: 1,
       waiting: 0,
-      blocked: 0,
+      after: 0,
     });
   });
 
@@ -93,11 +93,11 @@ describe("homeCallToAction", () => {
         TODAY,
         [freeTextCondition("w")],
       ),
-    ).toEqual({ kind: "plan", next: 2, waiting: 1, blocked: 0 });
+    ).toEqual({ kind: "plan", next: 2, waiting: 1, after: 0 });
   });
 
-  it("counts Blocked in a mixed plan and reviews dependencies when all in-play projects are Blocked", () => {
-    const mixed = [project("next"), project("blocked"), project("prerequisite")];
+  it("counts After in a mixed plan and stays quiet when every In-play Project is After", () => {
+    const mixed = [project("next"), project("after"), project("prerequisite")];
     expect(
       homeCallToAction(
         0,
@@ -105,16 +105,16 @@ describe("homeCallToAction", () => {
         mixed,
         [],
         TODAY,
-        [projectDependency("blocked", "prerequisite")],
+        [projectDependency("after", "prerequisite")],
       ),
-    ).toEqual({ kind: "plan", next: 2, waiting: 0, blocked: 1 });
+    ).toEqual({ kind: "plan", next: 2, waiting: 0, after: 1 });
 
-    const allBlocked = [project("a"), project("b"), project("prerequisite")];
+    const allAfter = [project("a"), project("b"), project("prerequisite")];
     expect(
       homeCallToAction(
         0,
         0,
-        allBlocked,
+        allAfter,
         [],
         TODAY,
         [
@@ -123,7 +123,7 @@ describe("homeCallToAction", () => {
           projectDependency("prerequisite", "missing"),
         ],
       ),
-    ).toEqual({ kind: "blocked", blocked: 3 });
+    ).toEqual({ kind: "after", after: 3 });
   });
 
   it("activates the backlog when only Backlog and Done exist", () => {

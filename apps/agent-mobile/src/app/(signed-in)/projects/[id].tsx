@@ -5,19 +5,19 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  candidatePrerequisiteProjects,
   compareByOrder,
   isBasisStale,
-  isProjectCompletionDependency,
+  isProjectAfter,
   messageOf,
-  projectDependencies,
-  projectDependencyRemovalImpact,
-  projectDependencyRemovalWarning,
+  projectAfters,
+  projectAfterRemovalImpact,
+  projectAfterRemovalWarning,
   projectDisplayStatus,
   projectStatusContext,
   scheduleLabel,
   PROJECT_DISPLAY_STATUS_LABELS,
   toast,
+  undoableAction,
   type Project,
   type ProjectEditFields,
   type ProjectState,
@@ -27,7 +27,7 @@ import {
   type WaitingCondition,
   type WaitsApi,
 } from '@zero/agent-core';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Alert,
   BackHandler,
@@ -39,9 +39,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmojiKeyboard, type EmojiType } from 'rn-emoji-keyboard';
 import { Input } from '@/components/ui/input';
-import { useQuickAdd } from '@/components/quick-add-composer';
+import { useProjectAdd } from '@/components/project-add';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
-import { ProjectPickerSheet, useTaskDetail } from '@/components/task-detail';
+import { useTaskDetail } from '@/components/task-detail';
 import { Sheet } from '@/components/ui/sheet';
 import { Text } from '@/components/ui/text';
 import {
@@ -56,12 +56,11 @@ import { useForegroundRefetch, usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
 // A project's own screen (pushed within the Projects tab). This is a plain React
-// Native view tree — NOT an @expo/ui native tree — so its task and waiting rows
-// render like every other list screen. (The old bottom-sheet detail dropped raw
-// RN rows inside an @expo/ui Column, which the native host cannot lay out; that
-// is the bug this screen removes.) Status uses a short @expo/ui sheet, settings
-// uses a native menu, and the emoji picker is a plain RN modal for its RN grid.
-// See docs/plans/todo-project-detail-rework.md.
+// Native view tree — NOT an @expo/ui native tree. Identity, description,
+// dominant status, manual Waiting, After relationships, and Tasks are sibling
+// regions in that order. Status and Project Add use short @expo/ui sheets;
+// focused text and Project pickers use React Native modals.
+// See docs/plans/todo-project-waiting-after.md.
 export default function ProjectDetailScreen() {
   const projectsApi = useProjectsApi();
   const tasksApi = useTasksApi();
@@ -110,7 +109,6 @@ function ProjectDetail({
   const { getToken } = useAuth();
   const back = useCallback(() => router.back(), [router]);
   const [error, setError] = useState<string | null>(null);
-  const [pickingDependency, setPickingDependency] = useState(false);
 
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, 'asc'),
@@ -126,10 +124,6 @@ function ProjectDetail({
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
   const project = list.find((p) => p.id === id) ?? null;
-  const dependencyCandidates = useMemo(
-    () => candidatePrerequisiteProjects(id, list, conds),
-    [id, list, conds],
-  );
 
   const commitEdit = useCallback(
     (fields: ProjectEditFields) => {
@@ -155,7 +149,7 @@ function ProjectDetail({
           failed,
         ).catch(() =>
           reportProjectFailure(
-            'Project done; dependencies could not refresh',
+            'Project done; After relationships could not refresh',
             'Open Projects and pull to refresh when you are connected.',
           ),
         );
@@ -164,19 +158,28 @@ function ProjectDetail({
     [api, project, waitsApi],
   );
 
-  const commitDependency = useCallback(
-    (prerequisiteProjectId: string | null) => {
-      setPickingDependency(false);
-      if (!project || prerequisiteProjectId == null) return;
-      setError(null);
-      const tx = waitsApi.dependOnProject(
-        project.id,
-        prerequisiteProjectId,
-      );
-      tx.isPersisted.promise.catch((cause) => setError(messageOf(cause)));
-    },
-    [project, waitsApi],
-  );
+  const completeProject = useCallback(() => {
+    if (!project) return;
+    undoableAction({
+      message: 'Project completed',
+      description: `${project.icon} ${project.title}`,
+      act: () => {
+        const tx = api.setState(project.id, 'done');
+        void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
+        return tx;
+      },
+      undo: () => {
+        const tx = api.reopen(project);
+        void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
+        return tx;
+      },
+      onError: () =>
+        reportProjectFailure(
+          'Could not change project completion',
+          `“${project.title}”: open Projects, refresh, and try again.`,
+        ),
+    });
+  }, [api, project, waitsApi]);
 
   const commitDelete = useCallback(() => {
     if (!project) return;
@@ -219,41 +222,33 @@ function ProjectDetail({
   // row opens it; its circle completes with the shared Undo.
   const detail = useTaskDetail({
     api: tasksApi,
+    waitsApi,
     list: projectTasks,
     projects: list,
     currentProjectId: id,
     onError: setError,
   });
 
-  // The quick-add composer offers Task, Waiting, and Project. Task stays first
-  // so every open defaults to adding work under this project; Waiting remains
-  // scoped here, and Project reuses the ordinary independent-project path.
-  const add = useQuickAdd({
+  const add = useProjectAdd({
+    project,
+    projectId: id,
+    projects: list,
+    conditions: conds,
     tasksApi,
     projectsApi: api,
     waitsApi,
-    projects: list,
-    modes: ['task', 'waiting', 'project'],
-    projectId: id,
     getToken,
     onError: setError,
-    fabLabel: 'Add',
   });
 
-  // Android hardware Back: close an open editor sheet, then the quick-add, before
-  // it pops the screen.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (pickingDependency) {
-        setPickingDependency(false);
-        return true;
-      }
       if (detail.handleBack()) return true;
       if (add.handleBack()) return true;
       return false;
     });
     return () => sub.remove();
-  }, [detail, add, pickingDependency]);
+  }, [detail, add]);
 
   // The header's derived status reads tasks and waits, so a pull re-pulls all
   // three lists this screen shows.
@@ -335,16 +330,14 @@ function ProjectDetail({
             <ProjectHeader
               project={project}
               statusLabel={statusLabel}
-              deletionWarning={projectDependencyRemovalWarning(
-                projectDependencyRemovalImpact(project.id, conds, list),
+              deletionWarning={projectAfterRemovalWarning(
+                projectAfterRemovalImpact(project.id, conds, list),
               )}
-              onDepend={() => setPickingDependency(true)}
               onEdit={commitEdit}
+              description={<ProjectDescription project={project} onEdit={commitEdit} />}
               onState={(state) => {
                 if (state === 'done') {
-                  // Marking done removes the project from the working list;
-                  // commit immediately and pop back to it.
-                  commitState(state);
+                  completeProject();
                   back();
                 } else {
                   commitState(state);
@@ -356,43 +349,34 @@ function ProjectDetail({
               }}
             />
 
-            {/* The description is the project's statement of intent — why this
-                outcome matters. It sits under the title, above the work. */}
-            <ProjectDescription project={project} onEdit={commitEdit} />
+            <ProjectWaits
+              project={project}
+              waitsApi={waitsApi}
+              projects={list}
+              onAddWaiting={add.openWaiting}
+              onAddAfter={add.openAfter}
+              onError={setError}
+            />
 
             {projectTasks.length > 0 ? (
-              <Text variant="section" className="px-screen-x pb-2">
-                Tasks
-              </Text>
+              <View className="flex-row items-center justify-between px-screen-x pb-2 pt-8">
+                <Text variant="section">Tasks</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Add task"
+                  className="min-h-12 min-w-12 items-center justify-center"
+                  onPress={add.openTask}
+                >
+                  <Text className="text-[22px] text-accent">＋</Text>
+                </Pressable>
+              </View>
             ) : null}
           </>
-        }
-        footer={
-          <ProjectWaits
-            project={project}
-            waitsApi={waitsApi}
-            tasks={tasks}
-            projects={list}
-            onError={setError}
-          />
         }
       />
 
       {detail.sheets}
 
-      <ProjectPickerSheet
-        open={pickingDependency}
-        title="Depends on"
-        projects={dependencyCandidates}
-        selectedProjectId={null}
-        showNoProject={false}
-        emptyCopy="No available projects"
-        onPick={commitDependency}
-        onClose={() => setPickingDependency(false)}
-      />
-
-      {/* Project quick-add: Task, Waiting, and Project tabs, with task metadata
-          preset to this project and Waiting scoped to it. */}
       {add.bar}
     </View>
   );
@@ -545,16 +529,16 @@ function ProjectHeader({
   project,
   statusLabel,
   deletionWarning,
-  onDepend,
   onEdit,
+  description,
   onState,
   onDelete,
 }: {
   project: Project;
   statusLabel: string;
   deletionWarning: string | null;
-  onDepend: () => void;
   onEdit: (fields: ProjectEditFields) => void;
+  description: ReactNode;
   onState: (state: ProjectState) => void;
   onDelete: () => void;
 }) {
@@ -586,11 +570,6 @@ function ProjectHeader({
     setStatusOpen(false);
     onState(state);
   };
-  const chooseDependency = () => {
-    setStatusOpen(false);
-    requestAnimationFrame(onDepend);
-  };
-
   return (
     <View className="px-screen-x pb-4">
       <View className="flex-row items-center gap-3">
@@ -626,7 +605,7 @@ function ProjectHeader({
             if (nativeEvent.event === 'delete') {
               Alert.alert(
                 `Delete “${project.title}”?`,
-                `This permanently deletes the project, all its tasks (including completed tasks), and its waiting conditions. This cannot be undone.${deletionWarning ? ` ${deletionWarning}` : ''}`,
+                `This permanently deletes the project, all its tasks (including completed tasks), its waiting conditions, and its After relationships. This cannot be undone.${deletionWarning ? ` ${deletionWarning}` : ''}`,
                 [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Delete', style: 'destructive', onPress: onDelete },
@@ -646,11 +625,12 @@ function ProjectHeader({
           </View>
         </MenuView>
       </View>
-      <View className="mt-2 flex-row">
+      {description}
+      <View className="flex-row">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Project status: ${statusLabel}`}
-          accessibilityHint="Change project status or dependencies"
+          accessibilityHint="Change project status"
           hitSlop={8}
           android_ripple={{ color: ripple }}
           onPress={() => setStatusOpen(true)}
@@ -665,7 +645,6 @@ function ProjectHeader({
           <Text importantForAccessibility="no" className="text-foreground-secondary">▾</Text>
         </Pressable>
       </View>
-
       {/* One combined surface: AI suggestions on top, the full searchable emoji
           grid below — mirroring the web popover, no second tap. */}
       <IconPickerSheet
@@ -707,11 +686,6 @@ function ProjectHeader({
               </UIText>
             </ListItem>
           )}
-          <ListItem onPress={chooseDependency}>
-            <UIText textStyle={{ color: foreground, fontSize: 16 }}>
-              Depends on project…
-            </UIText>
-          </ListItem>
           <ListItem onPress={() => chooseState('done')}>
             <UIText textStyle={{ color: foreground, fontSize: 16 }}>
               Mark done
@@ -723,135 +697,126 @@ function ProjectHeader({
   );
 }
 
-// A human label for a waiting condition.
-function conditionLabel(c: WaitingCondition, tasks: Task[], projects: Project[]): string {
-  if (c.kind === 'free-text') return c.text ?? '(unspecified)';
-  if (c.kind === 'task-done') {
-    const t = tasks.find((x) => x.id === c.refId);
-    return `until “${t?.text ?? '?'}” is done`;
-  }
-  const p = projects.find((x) => x.id === c.refId);
-  return `until “${p?.title ?? '?'}” is ${c.targetStatus}`;
+function conditionLabel(condition: WaitingCondition): string {
+  return condition.kind === 'free-text' ? condition.text : '';
 }
 
-// Completion dependencies render as navigable Project identities under Depends
-// on. Every other stored condition remains under Waiting on. A future task date
-// is explained by the status pill and source task instead of another row.
+// After rows render as navigable Project identities. Manual conditions remain
+// under Waiting on. Future Task dates stay in status and Task presentation.
 function ProjectWaits({
   project,
   waitsApi,
-  tasks,
   projects,
+  onAddWaiting,
+  onAddAfter,
   onError,
 }: {
   project: Project;
   waitsApi: WaitsApi;
-  tasks: Task[];
   projects: Project[];
+  onAddWaiting: () => void;
+  onAddAfter: () => void;
   onError: (message: string) => void;
 }) {
   const router = useRouter();
   const { data: allConditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
-  const dependencies = projectDependencies(
-    project.id,
-    allConditions ?? [],
-    projects,
-  );
+  const afters = projectAfters(project.id, allConditions ?? [], projects);
   const list = (allConditions ?? []).filter(
     (condition: WaitingCondition) =>
-      condition.projectId === project.id &&
-      !isProjectCompletionDependency(condition),
+      condition.projectId === project.id && !isProjectAfter(condition),
   );
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
   };
 
-  if (list.length === 0 && dependencies.length === 0) return null;
+  if (list.length === 0 && afters.length === 0) return null;
 
   return (
-    <View className="pb-4">
-      {dependencies.length > 0 ? (
-        <View className="pb-3">
-          <Text variant="section" className="px-screen-x pb-2">
-            Depends on
-          </Text>
-          {dependencies.map(({ condition, prerequisite }) => (
-            <View
-              key={condition.id}
-              className="flex-row items-stretch border-b border-divider"
+    <View className="gap-4">
+      {list.length > 0 ? (
+        <View>
+          <View className="flex-row items-center justify-between px-screen-x">
+            <Text variant="section">Waiting on</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add waiting condition"
+              className="min-h-12 min-w-12 items-center justify-center"
+              onPress={onAddWaiting}
             >
+              <Text className="text-[22px] text-accent">＋</Text>
+            </Pressable>
+          </View>
+          <View className="px-screen-x">
+            {list.map((condition) => {
+              const label = conditionLabel(condition);
+              return (
+                <View key={condition.id} className="flex-row items-center gap-2 py-2">
+                  <Text className="flex-1 text-[14px]">{label}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Resolve condition: ${label}`}
+                    className="min-h-12 min-w-12 items-center justify-center"
+                    onPress={() => write(waitsApi.resolveWaiting(condition.id))}
+                  >
+                    <Text className="text-[13px] font-semibold text-accent">Resolve</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete condition: ${label}`}
+                    className="min-h-12 min-w-12 items-center justify-center"
+                    onPress={() => write(waitsApi.remove(condition.id))}
+                  >
+                    <Text className="text-[16px] text-foreground-muted">✕</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
+      {afters.length > 0 ? (
+        <View>
+          <View className="flex-row items-center justify-between px-screen-x">
+            <Text variant="section">After</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add After project"
+              className="min-h-12 min-w-12 items-center justify-center"
+              onPress={onAddAfter}
+            >
+              <Text className="text-[22px] text-accent">＋</Text>
+            </Pressable>
+          </View>
+          {afters.map(({ relationship, target }) => (
+            <View key={relationship.id} className="flex-row items-stretch border-b border-divider">
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open project ${prerequisite?.title ?? 'prerequisite'}`}
-                disabled={!prerequisite}
+                accessibilityLabel={`Open project ${target?.title ?? 'After project'}`}
+                disabled={!target}
                 className="min-h-14 flex-1 flex-row items-center gap-3 px-screen-x py-2"
                 onPress={() => {
-                  if (prerequisite) router.push(`/projects/${prerequisite.id}`);
+                  if (target) router.push(`/projects/${target.id}`);
                 }}
               >
-                <Text className="w-6 text-center text-[18px]">
-                  {prerequisite?.icon ?? '📁'}
+                <Text className="w-6 text-center text-[18px]">{target?.icon ?? '📁'}</Text>
+                <Text className="min-w-0 flex-1 text-[15px] font-medium">
+                  {target?.title ?? 'Another project'}
                 </Text>
-                <View className="min-w-0 flex-1">
-                  <Text numberOfLines={1} className="text-[15px] font-medium">
-                    {prerequisite?.title ?? 'Another project'}
-                  </Text>
-                  <Text variant="caption">Must be completed first</Text>
-                </View>
-                <Text importantForAccessibility="no" className="text-foreground-muted">
-                  ›
-                </Text>
+                <Text importantForAccessibility="no" className="text-foreground-muted">›</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Remove dependency on ${prerequisite?.title ?? 'project'}`}
+                accessibilityLabel={`Remove After relationship with ${target?.title ?? 'project'}`}
                 className="min-h-14 min-w-16 items-center justify-center px-2"
-                onPress={() => write(waitsApi.remove(condition.id))}
+                onPress={() => write(waitsApi.remove(relationship.id))}
               >
                 <Text className="text-[13px] font-semibold text-accent">Remove</Text>
               </Pressable>
             </View>
           ))}
-        </View>
-      ) : null}
-
-      {list.length > 0 ? (
-        <View className="px-screen-x">
-          <Text variant="section" className="pb-2">
-            Waiting on
-          </Text>
-          {list.map((condition) => {
-            const label = conditionLabel(condition, tasks, projects);
-            return (
-              <View key={condition.id} className="flex-row items-center gap-2 py-2">
-                <Text className="flex-1 text-[14px]">{label}</Text>
-                {condition.kind === 'free-text' ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Resolve condition: ${label}`}
-                    className="min-h-12 min-w-12 items-center justify-center"
-                    hitSlop={8}
-                    onPress={() => write(waitsApi.resolve(condition.id))}
-                  >
-                    <Text className="text-[13px] font-semibold text-accent">Resolve</Text>
-                  </Pressable>
-                ) : (
-                  <Text className="text-[12px] text-foreground-muted">auto</Text>
-                )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Delete condition: ${label}`}
-                  className="min-h-12 min-w-12 items-center justify-center"
-                  hitSlop={8}
-                  onPress={() => write(waitsApi.remove(condition.id))}
-                >
-                  <Text className="text-[16px] text-foreground-muted">✕</Text>
-                </Pressable>
-              </View>
-            );
-          })}
         </View>
       ) : null}
     </View>
@@ -877,7 +842,7 @@ function ProjectDescription({
   };
 
   return (
-    <View className="px-screen-x pb-4">
+    <View className="pb-4 pt-2">
       <Input
         value={description}
         onChangeText={setDescription}

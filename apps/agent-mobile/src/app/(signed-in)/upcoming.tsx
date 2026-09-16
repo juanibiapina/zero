@@ -7,6 +7,7 @@ import {
   type ProjectsApi,
   type Task,
   type TasksApi,
+  type WaitsApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, RefreshControl, SectionList, View } from 'react-native';
@@ -18,6 +19,7 @@ import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
 import { useProjectsApi } from '@/lib/projects-collection';
 import { useTasksApi } from '@/lib/tasks-collection';
+import { useWaitsApi } from '@/lib/waits-collection';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
@@ -59,12 +61,13 @@ function UpcomingRow({
 export default function UpcomingScreen() {
   const tasksApi = useTasksApi();
   const projectsApi = useProjectsApi();
+  const waitsApi = useWaitsApi();
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Upcoming" />
-      {tasksApi && projectsApi ? (
-        <Upcoming api={tasksApi} projectsApi={projectsApi} />
+      {tasksApi && projectsApi && waitsApi ? (
+        <Upcoming api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} />
       ) : (
         <View className="flex-1" />
       )}
@@ -75,9 +78,11 @@ export default function UpcomingScreen() {
 function Upcoming({
   api,
   projectsApi,
+  waitsApi,
 }: {
   api: TasksApi;
   projectsApi: ProjectsApi;
+  waitsApi: WaitsApi;
 }) {
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
@@ -105,6 +110,7 @@ function Upcoming({
   // scheduler, edit-on-dismiss, and complete-with-Undo.
   const detail = useTaskDetail({
     api,
+    waitsApi,
     list,
     projects: projects ?? [],
     onError: setWriteError,

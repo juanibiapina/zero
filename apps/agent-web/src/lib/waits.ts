@@ -1,6 +1,9 @@
 // Same-origin requests: the browser carries the Clerk session cookie.
 
-import type { WaitingCondition, WaitingConditionKind } from "@zero/agent-core";
+import type {
+  AddProjectAttention,
+  WaitingCondition,
+} from "@zero/agent-core";
 
 export type { WaitingCondition };
 
@@ -11,14 +14,9 @@ export async function fetchWaits(): Promise<WaitingCondition[]> {
   return body.conditions;
 }
 
-export async function addWaitingCondition(condition: {
-  id: string;
-  projectId: string;
-  kind: WaitingConditionKind;
-  text: string | null;
-  refId: string | null;
-  targetStatus: string | null;
-}): Promise<WaitingCondition> {
+export async function addWaitingCondition(
+  condition: AddProjectAttention & { id: string },
+): Promise<WaitingCondition> {
   const res = await fetch("/api/waits", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

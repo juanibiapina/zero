@@ -1,32 +1,30 @@
-// Waiting conditions: why a project is waiting. A per-entity store like
-// DbCaptureStore / DbTaskStore / DbProjectStore (do-orm is the shared layer; a
-// store holds only domain verbs). Standalone from the agent's tables. See
-// docs/entities/waiting-condition.md.
-
 import { asc, eq, isNull, type Database } from "do-orm";
 
 import { waitingConditions } from "../UserDO/db/schema";
 
-export type WaitingConditionKind = "free-text" | "task-done" | "project-status";
-
-export interface WaitingCondition {
+export type ManualWaitingCondition = {
   id: string;
-  // The project this condition blocks.
   projectId: string;
-  kind: WaitingConditionKind;
-  // Prose condition, for kind 'free-text'; null otherwise.
-  text: string | null;
-  // Referenced task ('task-done') or project ('project-status') id; null for
-  // 'free-text'.
-  refId: string | null;
-  // Target status the referenced project must reach ('project-status'); null
-  // otherwise.
-  targetStatus: string | null;
-  // When a free-text wait was resolved or a project-completion dependency was
-  // terminally settled; null while open. Other structured kinds stay derived.
+  kind: "free-text";
+  text: string;
+  refId: null;
+  targetStatus: null;
   resolvedAt: string | null;
   createdAt: string;
-}
+};
+
+export type ProjectAfter = {
+  id: string;
+  projectId: string;
+  kind: "project-status";
+  text: null;
+  refId: string;
+  targetStatus: "done";
+  resolvedAt: string | null;
+  createdAt: string;
+};
+
+export type WaitingCondition = ManualWaitingCondition | ProjectAfter;
 
 type Row = {
   id: string;
@@ -39,75 +37,47 @@ type Row = {
   createdAt: string;
 };
 
-export function isProjectCompletionDependency(
+export function isProjectAfter(
   condition: WaitingCondition,
-): boolean {
-  return (
-    condition.kind === "project-status" &&
-    condition.targetStatus === "done" &&
-    condition.refId != null
-  );
+): condition is ProjectAfter {
+  return condition.kind === "project-status";
 }
 
 function toCondition(row: Row): WaitingCondition {
+  if (
+    row.kind === "project-status" &&
+    row.targetStatus === "done" &&
+    row.refId != null
+  ) {
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      kind: "project-status",
+      text: null,
+      refId: row.refId,
+      targetStatus: "done",
+      resolvedAt: row.resolvedAt,
+      createdAt: row.createdAt,
+    };
+  }
   return {
     id: row.id,
     projectId: row.projectId,
-    kind: row.kind as WaitingConditionKind,
-    text: row.text,
-    refId: row.refId,
-    targetStatus: row.targetStatus,
+    kind: "free-text",
+    text: row.text ?? "",
+    refId: null,
+    targetStatus: null,
     resolvedAt: row.resolvedAt,
     createdAt: row.createdAt,
   };
 }
 
-export type WaitingConditionFields = {
-  text?: string | null;
-  refId?: string | null;
-  targetStatus?: string | null;
-};
-
 export class DbWaitingConditionStore {
   constructor(private db: Database) {}
 
-  // The client mints the id, so add is exactly-once on the id: a replay re-sends
-  // the same id and gets the stored row back instead of inserting a second one.
-  add(
-    id: string,
-    projectId: string,
-    kind: WaitingConditionKind,
-    fields: WaitingConditionFields = {},
-  ): WaitingCondition {
-    const existing = this.db.get(waitingConditions, { where: eq("id", id) });
-    if (existing) return toCondition(existing);
-    const condition: WaitingCondition = {
-      id,
-      projectId,
-      kind,
-      text: fields.text ?? null,
-      refId: fields.refId ?? null,
-      targetStatus: fields.targetStatus ?? null,
-      resolvedAt: null,
-      createdAt: new Date().toISOString(),
-    };
+  private insert(condition: WaitingCondition): WaitingCondition {
     this.db.insert(waitingConditions, condition);
     return condition;
-  }
-
-  addProjectDependency(
-    id: string,
-    dependentProjectId: string,
-    prerequisiteProjectId: string,
-  ): WaitingCondition {
-    return this.add(id, dependentProjectId, "project-status", {
-      refId: prerequisiteProjectId,
-      targetStatus: "done",
-    });
-  }
-
-  listOpenProjectDependencies(): WaitingCondition[] {
-    return this.listOpen().filter(isProjectCompletionDependency);
   }
 
   get(id: string): WaitingCondition | null {
@@ -115,10 +85,41 @@ export class DbWaitingConditionStore {
     return row ? toCondition(row) : null;
   }
 
-  // Every open condition (resolvedAt IS NULL), oldest first. Other structured
-  // kinds stay here for client derivation; resolved free-text and terminal
-  // project-dependency rows drop out. The
-  // client filters by project.
+  addWaiting(id: string, projectId: string, text: string): WaitingCondition {
+    const existing = this.get(id);
+    if (existing) return existing;
+    return this.insert({
+      id,
+      projectId,
+      kind: "free-text",
+      text,
+      refId: null,
+      targetStatus: null,
+      resolvedAt: null,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  addAfter(
+    id: string,
+    projectId: string,
+    afterProjectId: string,
+  ): ProjectAfter {
+    const existing = this.get(id);
+    if (existing && isProjectAfter(existing)) return existing;
+    if (existing) throw new Error("Project attention id conflict");
+    return this.insert({
+      id,
+      projectId,
+      kind: "project-status",
+      text: null,
+      refId: afterProjectId,
+      targetStatus: "done",
+      resolvedAt: null,
+      createdAt: new Date().toISOString(),
+    }) as ProjectAfter;
+  }
+
   listOpen(): WaitingCondition[] {
     return this.db
       .all(waitingConditions, {
@@ -128,29 +129,43 @@ export class DbWaitingConditionStore {
       .map(toCondition);
   }
 
-  // Resolve a free-text condition by hand/AI (sets resolvedAt). Idempotent on
-  // the id. Returns the updated row, or null when no row has that id.
-  resolve(id: string): WaitingCondition | null {
+  listOpenAfters(): ProjectAfter[] {
+    return this.listOpen().filter(isProjectAfter);
+  }
+
+  resolveWaiting(id: string): WaitingCondition | null {
     const existing = this.get(id);
     if (!existing || existing.resolvedAt != null) return existing;
-    this.db.update(
-      waitingConditions,
-      { resolvedAt: new Date().toISOString() },
-      { where: eq("id", id) },
-    );
+    if (isProjectAfter(existing)) return existing;
+    this.setResolved(id, new Date().toISOString());
     return this.get(id);
   }
 
-  resolveForCompletedProject(projectId: string): number {
-    const matching = this.listOpenProjectDependencies().filter(
+  private setResolved(id: string, resolvedAt: string | null): void {
+    this.db.update(waitingConditions, { resolvedAt }, { where: eq("id", id) });
+  }
+
+  resolveAftersForCompletedProject(projectId: string): number {
+    const matching = this.listOpenAfters().filter(
       (condition) => condition.refId === projectId,
     );
-    for (const condition of matching) this.resolve(condition.id);
+    const resolvedAt = new Date().toISOString();
+    for (const condition of matching) this.setResolved(condition.id, resolvedAt);
     return matching.length;
   }
 
-  // Permanently remove a condition. Idempotent on the id (a replayed delete of
-  // an already-gone row is a no-op). Returns whether a row existed.
+  restoreAftersForReopenedProject(projectId: string): number {
+    const matching = this.db
+      .all(waitingConditions, { where: eq("refId", projectId) })
+      .map(toCondition)
+      .filter(
+        (condition): condition is ProjectAfter =>
+          isProjectAfter(condition) && condition.resolvedAt != null,
+      );
+    for (const condition of matching) this.setResolved(condition.id, null);
+    return matching.length;
+  }
+
   delete(id: string): boolean {
     const existing = this.db.get(waitingConditions, { where: eq("id", id) });
     if (!existing) return false;
@@ -162,16 +177,11 @@ export class DbWaitingConditionStore {
     const matching = this.db
       .all(waitingConditions, { where: eq("refId", projectId) })
       .map(toCondition)
-      .filter(isProjectCompletionDependency);
+      .filter(isProjectAfter);
     for (const condition of matching) this.delete(condition.id);
     return matching.length;
   }
 
-  // Delete every waiting condition belonging to a project, resolved or open.
-  // Called when the project itself is deleted (the cascade lives in
-  // UserDO.deleteProject), so a project delete never leaves conditions pointing
-  // at a missing project. Idempotent — a project with none deletes 0. Returns
-  // the number of rows removed.
   deleteByProject(projectId: string): number {
     const rows = this.db.all(waitingConditions, {
       where: eq("projectId", projectId),

@@ -92,15 +92,15 @@ describe('TaskEditorSheet', () => {
     expect(view.getByDisplayValue('Stand up every day')).toBeTruthy();
   });
 
-  it('offers the configured create modes without task metadata for other types', async () => {
+  it('offers Task and Project modes without task metadata in Project mode', async () => {
     const change = jest.fn();
     const view = await render(
       <TaskEditorSheet {...base} modeSelector={
-        <AddModeSelector mode="project" modes={['task', 'project', 'waiting']} onModeChange={change} />
+        <AddModeSelector mode="project" modes={['task', 'project']} onModeChange={change} />
       } />,
     );
-    await fireEvent.press(view.getByLabelText('Add a waiting condition'));
-    expect(change).toHaveBeenCalledWith('waiting');
+    await fireEvent.press(view.getByLabelText('Add a task'));
+    expect(change).toHaveBeenCalledWith('task');
     expect(view.getByLabelText('Add a project').props.accessibilityState.selected).toBe(true);
     expect(view.queryByLabelText('No date')).toBeNull();
     expect(view.queryByLabelText('No project')).toBeNull();

@@ -25,8 +25,8 @@ function fakeRest(): WaitsRest & { added: WaitingCondition[] } {
   };
 }
 
-describe("waiting-condition collection", () => {
-  it("creates the existing project-status/Done shape through dependOnProject", async () => {
+describe("Project attention collection", () => {
+  it("creates the Project-completion shape through addAfter", async () => {
     const rest = fakeRest();
     const api = createInMemoryWaitsApi({
       queryClient: new QueryClient(),
@@ -34,7 +34,7 @@ describe("waiting-condition collection", () => {
     });
     await api.collection.stateWhenReady();
 
-    const tx = api.dependOnProject("dependent", "prerequisite");
+    const tx = api.addAfter("dependent", "prerequisite");
     const optimistic = tx.mutations[0]?.modified as WaitingCondition;
     expect(optimistic).toMatchObject({
       projectId: "dependent",

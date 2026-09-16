@@ -62,7 +62,9 @@ function ToastRow({ toast }: { toast: Toast }) {
     AccessibilityInfo.announceForAccessibility([toast.message, toast.description].filter(Boolean).join('. '));
   }, [toast]);
   useEffect(() => {
-    const base = toast.action || toast.link ? Math.max(8000, toast.durationMs) : toast.durationMs;
+    const base = toast.action || toast.secondaryAction || toast.link || toast.descriptionAction
+      ? Math.max(8000, toast.durationMs)
+      : toast.durationMs;
     if (!Number.isFinite(base)) return;
     let remaining = base;
     let started = Date.now();
@@ -99,51 +101,66 @@ function ToastRow({ toast }: { toast: Toast }) {
   }, [toast]);
   // Animated.View is not Uniwind-mapped, so resolve its static classes to styles.
   const cardStyle = useResolveClassNames(
-    'w-full max-w-[440px] flex-row items-center gap-3 rounded-2xl bg-surface px-4 py-3 shadow-raised',
+    'w-full max-w-[440px] rounded-2xl bg-surface px-4 py-3 shadow-raised',
   );
+  const dismissAfter = (action: { onPress: () => void } | undefined) => {
+    action?.onPress();
+    defaultToastController.dismiss(toast.id);
+  };
   return (
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(150)}
       style={cardStyle}
     >
-      <View className="flex-1">
-        <Text className="font-medium">
-          {toast.message}
-        </Text>
-        {toast.description ? (
-          <Text variant="caption">
-            {toast.description}
-          </Text>
-        ) : null}
-      </View>
-      {toast.link ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={toast.link.label}
-          className="min-h-12 min-w-12 items-center justify-center"
-          hitSlop={8}
-          onPress={() => {
-            toast.link?.onPress();
-            defaultToastController.dismiss(toast.id);
-          }}
-        >
-          <Text className="font-semibold text-accent">{toast.link.label}</Text>
-        </Pressable>
+      <Text className="font-medium">{toast.message}</Text>
+      {toast.description ? (
+        toast.descriptionAction ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={toast.descriptionAction.accessibilityLabel}
+            className="min-h-12 justify-center"
+            onPress={() => dismissAfter(toast.descriptionAction)}
+          >
+            <Text variant="caption">{toast.description}</Text>
+          </Pressable>
+        ) : (
+          <Text variant="caption">{toast.description}</Text>
+        )
       ) : null}
-      {toast.action ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={toast.action.label}
-          className="min-h-12 min-w-12 items-center justify-center"
-          hitSlop={8}
-          onPress={() => {
-            toast.action?.onPress();
-            defaultToastController.dismiss(toast.id);
-          }}
-        >
-          <Text className="font-semibold text-accent">{toast.action.label}</Text>
-        </Pressable>
+      {toast.action || toast.secondaryAction || toast.link ? (
+        <View className="flex-row flex-wrap justify-end gap-1 pt-1">
+          {toast.action ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={toast.action.label}
+              className="min-h-12 min-w-12 items-center justify-center px-2"
+              onPress={() => dismissAfter(toast.action)}
+            >
+              <Text className="font-semibold text-accent">{toast.action.label}</Text>
+            </Pressable>
+          ) : null}
+          {toast.secondaryAction ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={toast.secondaryAction.label}
+              className="min-h-12 min-w-12 items-center justify-center px-2"
+              onPress={() => dismissAfter(toast.secondaryAction)}
+            >
+              <Text className="font-semibold text-accent">{toast.secondaryAction.label}</Text>
+            </Pressable>
+          ) : null}
+          {toast.link ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={toast.link.label}
+              className="min-h-12 min-w-12 items-center justify-center px-2"
+              onPress={() => dismissAfter(toast.link)}
+            >
+              <Text className="font-semibold text-accent">{toast.link.label}</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
     </Animated.View>
   );

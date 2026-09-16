@@ -124,5 +124,9 @@ or cache-shape migrations.
 The outbox is different: it can contain writes that reached no server. A cache
 version bump leaves it intact. Bump `OFFLINE_OUTBOX_VERSION` only when a breaking
 mutation change makes queued writes unreadable and product policy explicitly
-accepts discarding them. The Project state refactor is the first such reset: it
-renames the Project row and mutation verb, so both versions move to 2.
+accepts discarding them. The Project state refactor moved both versions to 2.
+The Waiting/After change moves only `ENTITY_CACHE_VERSION` to 3: it clears cached
+Task relationships and Blocked presentation, while the existing durable
+`addWaitingCondition` payload remains readable for queued manual Waiting and
+Project-completion writes. Queued Task or arbitrary-status relationship writes
+are acknowledged locally as removed legacy operations and never recreated.

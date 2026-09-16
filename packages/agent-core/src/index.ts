@@ -68,25 +68,25 @@ export {
 } from "./projects/sections";
 export {
   projectDisplayStatus,
-  conditionSatisfied,
   unresolvedConditions,
   waitingSince,
   waitingUntil,
 } from "./projects/derive";
 export {
-  candidatePrerequisiteProjects,
-  dependentProjectsForPrerequisite,
-  isProjectCompletionDependency,
-  projectDependencies,
-  projectDependencyContext,
-  projectDependencyRemovalImpact,
-  projectDependencyRemovalWarning,
-  unresolvedProjectDependencies,
-  wouldCreateProjectDependencyCycle,
-  type ProjectDependency,
-  type ProjectDependencyContext,
-  type ProjectDependencyRemovalImpact,
-} from "./projects/dependencies";
+  candidateAfterProjects,
+  isManualWaitingCondition,
+  isProjectAfter,
+  projectAfters,
+  projectAfterContext,
+  projectAfterRemovalImpact,
+  projectAfterRemovalWarning,
+  projectsAfterTarget,
+  unresolvedProjectAfters,
+  wouldCreateAfterCycle,
+  type ProjectAfterContext,
+  type ProjectAfterRelationship,
+  type ProjectAfterRemovalImpact,
+} from "./projects/afters";
 export {
   projectStatusContext,
   type ProjectStatusContext,
@@ -100,8 +100,13 @@ export {
   type HomeCallToActionCopy,
 } from "./projects/call-to-action";
 
-// The WaitingCondition data layer (why a project is waiting).
-export type { WaitingCondition, WaitingConditionKind } from "./waits/types";
+// Manual Waiting and Project After share persistence, not product semantics.
+export type {
+  ManualWaitingCondition,
+  ProjectAfter,
+  ProjectAttention,
+  WaitingCondition,
+} from "./waits/types";
 export {
   WAITS_QUERY_KEY,
   createWaitsApi,
@@ -109,7 +114,7 @@ export {
   createPersistedWaitsApi,
   type WaitsApi,
   type WaitsRest,
-  type WaitingConditionFields,
+  type AddProjectAttention,
 } from "./waits/collection";
 export {
   ALL_PROJECT_DISPLAY_STATUSES,
@@ -141,6 +146,7 @@ export {
   type ToastAction,
   type ToastController,
   type ToastControllerOptions,
+  type ToastDescriptionAction,
   type ToastInput,
 } from "./toast/controller";
 export { undoableAction } from "./toast/undoable";

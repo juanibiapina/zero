@@ -8,6 +8,7 @@ import {
   type Project,
   type Task,
   type TasksApi,
+  type WaitsApi,
 } from '@zero/agent-core';
 import { toText } from '@zeroapps/recurrence';
 import { Host, Icon } from '@expo/ui';
@@ -18,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
 import { TaskEditorSheet } from '@/components/task-editor-sheet';
+import { WaitingComposer } from '@/components/waiting-composer';
 import { Input } from '@/components/ui/input';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
@@ -442,12 +444,14 @@ export type TaskDetail = {
 
 export function useTaskDetail({
   api,
+  waitsApi,
   list,
   projects,
   currentProjectId,
   onError,
 }: {
   api: TasksApi;
+  waitsApi: WaitsApi;
   list: Task[];
   // The user's projects, for the move-to-project picker and the row's label.
   projects: Project[];
@@ -460,6 +464,7 @@ export function useTaskDetail({
   const [draft, setDraft] = useState('');
   const [scheduling, setScheduling] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [waitingProjectId, setWaitingProjectId] = useState<string | null>(null);
   const today = useLocalDay();
   const projectJumpColor = useColor('--color-accent');
   const closingDetailRef = useRef(false);
@@ -506,10 +511,25 @@ export function useTaskDetail({
   const complete = useCallback(
     (item: Task) => {
       onError(null);
-      // Single bottom Undo snackbar (shared 'undo' id, so only one shows at a
-      // time). Undo reopens the task.
+      const project = item.projectId
+        ? projects.find((candidate) => candidate.id === item.projectId)
+        : null;
       undoableAction({
         message: 'Completed',
+        description: project ? `${project.icon} ${project.title}` : undefined,
+        descriptionAction: project
+          ? {
+              accessibilityLabel: `Open project ${project.title}`,
+              onPress: () =>
+                router.navigate(`/projects/${project.id}`, { withAnchor: true }),
+            }
+          : undefined,
+        secondaryAction: project
+          ? {
+              label: 'Waiting for…',
+              onPress: () => setWaitingProjectId(project.id),
+            }
+          : undefined,
         act: () => api.complete(item.id, today),
         undo: () =>
           item.recurrence
@@ -518,7 +538,7 @@ export function useTaskDetail({
         onError,
       });
     },
-    [api, onError, today],
+    [api, onError, projects, today],
   );
 
   const completeFromSheet = useCallback(() => {
@@ -578,6 +598,10 @@ export function useTaskDetail({
   );
 
   const handleBack = useCallback(() => {
+    if (waitingProjectId) {
+      setWaitingProjectId(null);
+      return true;
+    }
     if (picking) {
       setPicking(false);
       return true;
@@ -591,7 +615,7 @@ export function useTaskDetail({
       return true;
     }
     return false;
-  }, [picking, scheduling, selected, commitAndClose]);
+  }, [waitingProjectId, picking, scheduling, selected, commitAndClose]);
 
   const sheets = (
     <>
@@ -670,6 +694,17 @@ export function useTaskDetail({
         onPick={onPickProject}
         onClose={() => setPicking(false)}
       />
+
+      <WaitingComposer
+        open={waitingProjectId != null}
+        onClose={() => setWaitingProjectId(null)}
+        onAdd={(text) => {
+          if (!waitingProjectId) return;
+          const tx = waitsApi.addWaiting(waitingProjectId, text);
+          tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
+          setWaitingProjectId(null);
+        }}
+      />
     </>
   );
 
@@ -678,6 +713,6 @@ export function useTaskDetail({
     complete,
     sheets,
     handleBack,
-    active: selected != null || scheduling || picking,
+    active: selected != null || scheduling || picking || waitingProjectId != null,
   };
 }

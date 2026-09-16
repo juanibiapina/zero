@@ -104,35 +104,63 @@ function ToastRow({ toast }: { toast: Rendered }) {
           {toast.message}
         </p>
         {toast.description ? (
-          <p className="truncate text-sm text-muted-foreground">
-            {toast.description}
-          </p>
+          toast.descriptionAction ? (
+            <button
+              type="button"
+              className="block max-w-full truncate text-left text-sm text-muted-foreground hover:text-foreground"
+              aria-label={toast.descriptionAction.accessibilityLabel}
+              onClick={() => {
+                toast.descriptionAction?.onPress();
+                defaultToastController.dismiss(toast.id);
+              }}
+            >
+              {toast.description}
+            </button>
+          ) : (
+            <p className="truncate text-sm text-muted-foreground">
+              {toast.description}
+            </p>
+          )
         ) : null}
       </div>
-      {toast.link ? (
-        <button
-          type="button"
-          className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold text-primary hover:bg-primary/10"
-          onClick={() => {
-            toast.link?.onPress();
-            defaultToastController.dismiss(toast.id);
-          }}
-        >
-          {toast.link.label}
-        </button>
-      ) : null}
-      {toast.action ? (
-        <button
-          type="button"
-          className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold text-primary hover:bg-primary/10"
-          onClick={() => {
-            toast.action?.onPress();
-            defaultToastController.dismiss(toast.id);
-          }}
-        >
-          {toast.action.label}
-        </button>
-      ) : null}
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+        {toast.action ? (
+          <button
+            type="button"
+            className="min-h-10 rounded-md px-2 text-sm font-semibold text-primary hover:bg-primary/10"
+            onClick={() => {
+              toast.action?.onPress();
+              defaultToastController.dismiss(toast.id);
+            }}
+          >
+            {toast.action.label}
+          </button>
+        ) : null}
+        {toast.secondaryAction ? (
+          <button
+            type="button"
+            className="min-h-10 rounded-md px-2 text-sm font-semibold text-primary hover:bg-primary/10"
+            onClick={() => {
+              toast.secondaryAction?.onPress();
+              defaultToastController.dismiss(toast.id);
+            }}
+          >
+            {toast.secondaryAction.label}
+          </button>
+        ) : null}
+        {toast.link ? (
+          <button
+            type="button"
+            className="min-h-10 rounded-md px-2 text-sm font-semibold text-primary hover:bg-primary/10"
+            onClick={() => {
+              toast.link?.onPress();
+              defaultToastController.dismiss(toast.id);
+            }}
+          >
+            {toast.link.label}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

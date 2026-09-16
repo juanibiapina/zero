@@ -1,17 +1,21 @@
 import type { Task } from "../tasks/types";
-import type { WaitingCondition } from "../waits/types";
-import { projectDependencyContext } from "./dependencies";
+import type { ProjectAttention } from "../waits/types";
+import { projectAfterContext } from "./afters";
 import { projectDisplayStatus } from "./derive";
 import type { Project } from "./types";
-import { waitingBadge, type WaitingBadge } from "./waiting-badge";
+import { waitingBadge } from "./waiting-badge";
 
-export type ProjectStatusContext = WaitingBadge;
+export type ProjectStatusContext = {
+  label: string;
+  rowLabel: string;
+  sortKey: string;
+};
 
 export function projectStatusContext(
   project: Project,
-  tasks: Task[],
-  conditions: WaitingCondition[],
-  projects: Project[],
+  tasks: readonly Task[],
+  conditions: readonly ProjectAttention[],
+  projects: readonly Project[],
   today: string,
   now: Date = new Date(),
 ): ProjectStatusContext | null {
@@ -22,11 +26,26 @@ export function projectStatusContext(
     conditions,
     projects,
   );
-  if (status === "blocked") {
-    return projectDependencyContext(project.id, conditions, projects);
+  if (status === "after") {
+    const context = projectAfterContext(project.id, conditions, projects);
+    return context
+      ? {
+          label: context.detailLabel,
+          rowLabel: context.rowLabel,
+          sortKey: context.sortKey,
+        }
+      : null;
   }
   if (status === "waiting") {
-    return waitingBadge(project, tasks, conditions, projects, today, now);
+    const context = waitingBadge(
+      project,
+      tasks,
+      conditions,
+      projects,
+      today,
+      now,
+    );
+    return context ? { ...context, rowLabel: context.label } : null;
   }
   return null;
 }

@@ -286,12 +286,12 @@ export const createProjectsRoutes = (
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
     const userDO = getUserDO(c.env, userId);
-    const { tasks, conditions, dependencies } = await userDO.deleteProject(id);
+    const { tasks, conditions, afters } = await userDO.deleteProject(id);
     log("project_deleted", {
       clerk_user_id: userId,
       tasks,
       conditions,
-      dependencies,
+      after_relationships: afters,
     });
     return c.body(null, 204);
   });
