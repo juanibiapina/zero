@@ -85,9 +85,12 @@ jest.mock('react-native-reanimated', () => {
     },
     useAnimatedStyle: () => ({}),
     useReducedMotion: () => false,
-    // Return the target synchronously; the completion callback (3rd arg) is a
-    // no-op under jest (the commit slide is verified on-device, not in jest).
-    withTiming: (v) => v,
+    // Return the target synchronously and complete it immediately so tests can
+    // observe work that is deliberately deferred until a slide finishes.
+    withTiming: (v, _config, callback) => {
+      callback?.(true);
+      return v;
+    },
     withSpring: (v) => v,
     Easing: { bezier: () => () => 0 },
     interpolate: () => 0,

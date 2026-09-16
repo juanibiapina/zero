@@ -826,6 +826,18 @@ for captures). Verified on the Pixel 7 (reopen and unprocess both restore the ro
 design record: `docs/plans/todo-undo-restore-fix.md`, `docs/storage.md`. This is
 why every mobile change must be verified on the Pixel 7 (now a rule in `AGENTS.md`).
 
+Shipped (2026-09-16, device-verified on the Pixel 7): **mobile snackbars can be
+swiped away horizontally and sit above the plus FAB** (plan:
+`docs/plans/todo-toast-swipe-dismiss.md`). A short drag springs back; a committed
+drag or flick slides off-screen and dismisses only that toast snapshot, so a
+same-id replacement is safe. The root renderer reserves the 56dp FAB and its
+bottom spacing while keeping tab and safe-area clearance. This is mobile-renderer
+behavior only; the shared controller and web renderer are unchanged. The focused
+renderer test and all 163 mobile tests passed. On the Pixel 7, completing the
+user-prepared “Delete this task” row showed Undo above the unobscured plus button;
+a continuous horizontal swipe removed the snackbar, and the task stayed
+completed.
+
 Shipped (2026-09-10): **how long a project has been waiting**, on both surfaces
 (plan: `docs/plans/todo-project-waiting-time.md`). Each waiting project's row
 shows a muted trailing badge with the elapsed time since its oldest unresolved

@@ -1,6 +1,24 @@
-import { useEffect, useSyncExternalStore } from 'react';
-import { AccessibilityInfo, AppState, Platform, Pressable, View } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import {
+  AccessibilityInfo,
+  AppState,
+  Platform,
+  Pressable,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResolveClassNames } from 'uniwind';
 
@@ -15,7 +33,7 @@ import { Text } from '@/components/ui/text';
 //
 // Deliberately simple to sidestep the react-native-screens + reanimated failure
 // that sank sonner-native on this stack (see docs/plans/toast-primitive.md): a
-// fixed top position (no height measurement, no stacking math) and the same
+// fixed position (no height measurement or dynamic stacking math) and the same
 // FadeIn/FadeOut layout animation the quick-add already runs on-device. Exit
 // plays on unmount when the controller drops the toast.
 
@@ -27,12 +45,21 @@ function useToasts(): readonly Toast[] {
   );
 }
 
-// The native Material bottom tab bar's content height (labelled tabs, ~80dp),
-// excluding the safe-area inset which is added separately. The toast docks a
-// comfortable margin above the whole bar, Todoist-style, so it never overlaps
-// the tabs.
+// The native Material bottom tab bar excludes the safe-area inset. A medium FAB
+// sits 24dp above that content edge and is 56dp tall. Reserve the whole lane so
+// the toast's lower edge stays 16dp above the plus button on every tab.
 const TAB_BAR_HEIGHT = 80;
+const FAB_BOTTOM_SPACING = 24;
+const FAB_DIAMETER = 56;
 const TOAST_GAP = 16;
+
+const SWIPE_THRESHOLD = 96;
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
+function project(velocity: number, decelerationRate = 0.998): number {
+  'worklet';
+  return ((velocity / 1000) * decelerationRate) / (1 - decelerationRate);
+}
 
 export function Toaster() {
   const toasts = useToasts();
@@ -45,7 +72,12 @@ export function Toaster() {
       pointerEvents="box-none"
       className="absolute inset-x-0 items-center gap-2 px-screen-x"
       style={{
-        bottom: insets.bottom + TAB_BAR_HEIGHT + TOAST_GAP,
+        bottom:
+          insets.bottom +
+          TAB_BAR_HEIGHT +
+          FAB_BOTTOM_SPACING +
+          FAB_DIAMETER +
+          TOAST_GAP,
         zIndex: 9999,
         elevation: 9999,
       }}
@@ -58,6 +90,62 @@ export function Toaster() {
 }
 
 function ToastRow({ toast }: { toast: Toast }) {
+  const { width } = useWindowDimensions();
+  const x = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const dismissSwipedToast = useCallback(() => {
+    // Ignore a stale row if a caller replaced this toast id while it slid out.
+    defaultToastController.deferDismiss(toast, 0);
+  }, [toast]);
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-12, 12])
+        .failOffsetY([-8, 8])
+        .onStart(() => {
+          startX.set(x.get());
+        })
+        .onUpdate((event) => {
+          x.set(startX.get() + event.translationX);
+        })
+        .onEnd((event) => {
+          const projected = x.get() + project(event.velocityX);
+          if (Math.abs(projected) < SWIPE_THRESHOLD) {
+            x.set(
+              withSpring(0, {
+                duration: 300,
+                dampingRatio: 1,
+                velocity: event.velocityX,
+                reduceMotion: ReduceMotion.System,
+              }),
+            );
+            return;
+          }
+
+          const direction = projected < 0 ? -1 : 1;
+          x.set(
+            withTiming(
+              direction * width,
+              {
+                duration: 200,
+                easing: EASE_OUT,
+                reduceMotion: ReduceMotion.System,
+              },
+              (finished) => {
+                if (finished) scheduleOnRN(dismissSwipedToast);
+              },
+            ),
+          );
+        }),
+    [dismissSwipedToast, startX, width, x],
+  );
+  const swipeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.get() }],
+  }));
+
+  useEffect(() => {
+    x.set(0);
+  }, [toast, x]);
   useEffect(() => {
     AccessibilityInfo.announceForAccessibility([toast.message, toast.description].filter(Boolean).join('. '));
   }, [toast]);
@@ -108,60 +196,62 @@ function ToastRow({ toast }: { toast: Toast }) {
     defaultToastController.dismiss(toast.id);
   };
   return (
-    <Animated.View
-      entering={FadeIn.duration(200)}
-      exiting={FadeOut.duration(150)}
-      style={cardStyle}
-    >
-      <Text className="font-medium">{toast.message}</Text>
-      {toast.description ? (
-        toast.descriptionAction ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={toast.descriptionAction.accessibilityLabel}
-            className="min-h-12 justify-center"
-            onPress={() => dismissAfter(toast.descriptionAction)}
-          >
+    <GestureDetector gesture={pan}>
+      <Animated.View
+        entering={FadeIn.duration(200)}
+        exiting={FadeOut.duration(150)}
+        style={[cardStyle, swipeStyle]}
+      >
+        <Text className="font-medium">{toast.message}</Text>
+        {toast.description ? (
+          toast.descriptionAction ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={toast.descriptionAction.accessibilityLabel}
+              className="min-h-12 justify-center"
+              onPress={() => dismissAfter(toast.descriptionAction)}
+            >
+              <Text variant="caption">{toast.description}</Text>
+            </Pressable>
+          ) : (
             <Text variant="caption">{toast.description}</Text>
-          </Pressable>
-        ) : (
-          <Text variant="caption">{toast.description}</Text>
-        )
-      ) : null}
-      {toast.action || toast.secondaryAction || toast.link ? (
-        <View className="flex-row flex-wrap justify-end gap-1 pt-1">
-          {toast.action ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={toast.action.label}
-              className="min-h-12 min-w-12 items-center justify-center px-2"
-              onPress={() => dismissAfter(toast.action)}
-            >
-              <Text className="font-semibold text-accent">{toast.action.label}</Text>
-            </Pressable>
-          ) : null}
-          {toast.secondaryAction ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={toast.secondaryAction.label}
-              className="min-h-12 min-w-12 items-center justify-center px-2"
-              onPress={() => dismissAfter(toast.secondaryAction)}
-            >
-              <Text className="font-semibold text-accent">{toast.secondaryAction.label}</Text>
-            </Pressable>
-          ) : null}
-          {toast.link ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={toast.link.label}
-              className="min-h-12 min-w-12 items-center justify-center px-2"
-              onPress={() => dismissAfter(toast.link)}
-            >
-              <Text className="font-semibold text-accent">{toast.link.label}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-    </Animated.View>
+          )
+        ) : null}
+        {toast.action || toast.secondaryAction || toast.link ? (
+          <View className="flex-row flex-wrap justify-end gap-1 pt-1">
+            {toast.action ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={toast.action.label}
+                className="min-h-12 min-w-12 items-center justify-center px-2"
+                onPress={() => dismissAfter(toast.action)}
+              >
+                <Text className="font-semibold text-accent">{toast.action.label}</Text>
+              </Pressable>
+            ) : null}
+            {toast.secondaryAction ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={toast.secondaryAction.label}
+                className="min-h-12 min-w-12 items-center justify-center px-2"
+                onPress={() => dismissAfter(toast.secondaryAction)}
+              >
+                <Text className="font-semibold text-accent">{toast.secondaryAction.label}</Text>
+              </Pressable>
+            ) : null}
+            {toast.link ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={toast.link.label}
+                className="min-h-12 min-w-12 items-center justify-center px-2"
+                onPress={() => dismissAfter(toast.link)}
+              >
+                <Text className="font-semibold text-accent">{toast.link.label}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+      </Animated.View>
+    </GestureDetector>
   );
 }

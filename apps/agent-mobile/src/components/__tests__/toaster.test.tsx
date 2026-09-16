@@ -12,7 +12,11 @@ import { Toaster } from '../toaster';
 // app's other useSyncExternalStore stores (e.g. refine-session) behave the same
 // under jest — so these tests seed the controller BEFORE render.
 describe('Toaster', () => {
-  afterEach(() => { defaultToastController.dismiss(); jest.restoreAllMocks(); jest.useRealTimers(); });
+  afterEach(async () => {
+    await act(async () => defaultToastController.dismiss());
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
 
   it('honors the Android timeout and pauses while backgrounded', async () => {
     jest.useFakeTimers();
@@ -40,6 +44,31 @@ describe('Toaster', () => {
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
     await screen.unmount();
     Platform.OS = oldPlatform;
+  });
+
+  it('dismisses a toast after a committed horizontal swipe', async () => {
+    jest.useFakeTimers();
+    defaultToastController.show({ message: 'Completed', durationMs: Infinity });
+    (global as { __lastPanGesture?: unknown }).__lastPanGesture = undefined;
+    await render(<Toaster />);
+
+    const pan = (global as unknown as {
+      __lastPanGesture: {
+        __onStart: () => void;
+        __onUpdate: (event: { translationX: number }) => void;
+        __onEnd: (event: { velocityX: number }) => void;
+      };
+    }).__lastPanGesture;
+
+    expect(pan).toBeDefined();
+    await act(async () => {
+      pan.__onStart();
+      pan.__onUpdate({ translationX: 160 });
+      pan.__onEnd({ velocityX: 0 });
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
   it('renders a toast message, description and action', async () => {
