@@ -561,7 +561,7 @@ describe('HomeScreen', () => {
     await act(async () => snap[0].secondaryAction?.onPress());
     expect(getByPlaceholderText('What needs to happen?')).toBeTruthy();
     expect(getByText('Waiting on')).toBeTruthy();
-    expect(getByLabelText('Waiting on project Diploma')).toBeTruthy();
+    expect(getByLabelText('Project Diploma')).toBeTruthy();
     expect(
       getByLabelText('Add a waiting condition').props.accessibilityState.selected,
     ).toBe(true);

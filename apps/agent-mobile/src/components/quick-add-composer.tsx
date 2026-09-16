@@ -330,7 +330,9 @@ export function useQuickAdd({
   const selectedProject = projects.find((project) => project.id === addProjectId) ?? null;
   const submitLabel =
     mode === 'waiting'
-      ? 'Add waiting condition'
+      ? contextProject
+        ? `Add waiting condition to ${contextProject.title}`
+        : 'Add waiting condition'
       : mode === 'project'
         ? 'Add project'
         : fabLabel;
@@ -364,6 +366,7 @@ export function useQuickAdd({
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus={mode !== 'after'}
         inputRef={inputRef}
+        inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
         modeSelector={
           modes.length > 1 ? (
             <AddModeSelector
@@ -377,11 +380,11 @@ export function useQuickAdd({
           mode === 'waiting' && contextProject ? (
             <View className="px-screen-x pt-3">
               <Text variant="caption" className="font-semibold">
-                Waiting on
+                Project
               </Text>
               <View
                 accessible
-                accessibilityLabel={`Waiting on project ${contextProject.title}`}
+                accessibilityLabel={`Project ${contextProject.title}`}
                 className="min-h-12 flex-row items-center gap-3"
               >
                 <Text className="w-6 text-center text-[20px]">
@@ -391,6 +394,9 @@ export function useQuickAdd({
                   {contextProject.title}
                 </Text>
               </View>
+              <Text variant="caption" className="pt-3 font-semibold">
+                Waiting on
+              </Text>
             </View>
           ) : undefined
         }

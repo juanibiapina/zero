@@ -236,7 +236,7 @@ describe('UpcomingScreen', () => {
     await act(async () => toast?.secondaryAction?.onPress());
     expect(screen.getByPlaceholderText('What needs to happen?')).toBeTruthy();
     expect(screen.getByText('Waiting on')).toBeTruthy();
-    expect(screen.getByLabelText('Waiting on project Diploma')).toBeTruthy();
+    expect(screen.getByLabelText('Project Diploma')).toBeTruthy();
     expect(
       screen.getByLabelText('Add a waiting condition').props.accessibilityState
         .selected,

@@ -135,7 +135,7 @@ export function AddModeSelector({
 // hidden behind its window.
 export function TaskEditorSheet({
   open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
-  placeholder = 'Task', autoFocus = false, inputRef,
+  placeholder = 'Task', autoFocus = false, inputRef, inputAccessibilityLabel,
   leading, modeSelector, context, editorContent, trailing,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
 }: {
@@ -148,6 +148,7 @@ export function TaskEditorSheet({
   placeholder?: string;
   autoFocus?: boolean;
   inputRef?: Ref<{ focus: () => void }>;
+  inputAccessibilityLabel?: string;
   leading?: ReactNode;
   modeSelector?: ReactNode;
   context?: ReactNode;
@@ -218,7 +219,10 @@ export function TaskEditorSheet({
                   blurOnSubmit
                   multiline
                   placeholder={placeholder}
-                  accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
+                  accessibilityLabel={
+                    inputAccessibilityLabel ??
+                    (autoFocus ? 'New item text' : 'Task text')
+                  }
                   autoFocus={autoFocus}
                   style={{ padding: 0, maxHeight: 120 }}
                   variant="editor"
@@ -235,7 +239,10 @@ export function TaskEditorSheet({
                   blurOnSubmit
                   multiline
                   placeholder={placeholder}
-                  accessibilityLabel={autoFocus ? 'New item text' : 'Task text'}
+                  accessibilityLabel={
+                    inputAccessibilityLabel ??
+                    (autoFocus ? 'New item text' : 'Task text')
+                  }
                   autoFocus={autoFocus}
                   style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
                   variant="editor"

@@ -51,9 +51,9 @@ surface. A non-empty section gains a local `+` for another condition.
 
 Every mobile entry point opens the shared Project add drawer with **Waiting**
 selected. The drawer keeps Task, Waiting, After, and Project visible, identifies
-the destination under **Waiting on** with its icon and title, and asks **What
-needs to happen?** Its circular add action submits the condition. There is no
-standalone form or condition-kind selector.
+the destination under **Project** with its icon and title, and labels the **What
+needs to happen?** field **Waiting on**. Its circular add action submits the
+condition. There is no standalone form or condition-kind selector.
 
 Completing a Project Task offers **Waiting for…** in transient feedback. It opens
 the same drawer for that Task's Project without delaying or owning the

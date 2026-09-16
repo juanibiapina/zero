@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-16: Adding a Waiting condition now labels the current Project separately from what it is waiting on.
+
 - 2026-09-16: Projects keep manual Waiting and automatic After separate, while their screens now put status before description in a tighter workspace. Pressing + opens the familiar Task, Waiting, After, and Project selector directly; section + controls open it on the matching type.
 
 - 2026-09-16: Completing a Project task still saves immediately and offers Waiting for… beside Undo; that action now shows the destination Project and asks what needs to happen in the same add drawer. Completing a Project also offers Undo and restores the After relationships that completion resolved.

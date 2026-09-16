@@ -113,8 +113,9 @@ lifecycle-only.
 
 Task completion persists immediately. A Project Task's transient feedback names
 and links its Project and offers Undo plus **Waiting for…**, which opens the
-shared add drawer with Waiting selected, names the destination Project, and asks
-**What needs to happen?** Loose Tasks omit Project actions.
+shared add drawer with Waiting selected, labels the destination **Project**, and
+labels the **What needs to happen?** field **Waiting on**. Loose Tasks omit
+Project actions.
 
 Project completion also persists immediately and offers Undo. There are no
 notifications when an After relationship resolves.

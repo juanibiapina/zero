@@ -892,7 +892,11 @@ describe('ProjectDetailScreen', () => {
     await act(async () => snap[0].secondaryAction?.onPress());
     expect(getByPlaceholderText('What needs to happen?')).toBeTruthy();
     expect(getByText('Waiting on')).toBeTruthy();
-    expect(getByLabelText('Waiting on project Run a 5K')).toBeTruthy();
+    expect(getByLabelText('Project Run a 5K')).toBeTruthy();
+    expect(getByLabelText('Waiting on')).toBeTruthy();
+    expect(
+      getByLabelText('Add waiting condition to Run a 5K'),
+    ).toBeTruthy();
     expect(queryByText('What are you waiting for?')).toBeNull();
     await fireEvent.press(getByLabelText('Dismiss quick add'));
     await act(async () => {
@@ -925,7 +929,11 @@ describe('ProjectDetailScreen', () => {
       fireEvent.press(getByLabelText('Add a waiting condition'));
     });
     expect(getByText('Waiting on')).toBeTruthy();
-    expect(getByLabelText('Waiting on project Run a 5K')).toBeTruthy();
+    expect(getByLabelText('Project Run a 5K')).toBeTruthy();
+    expect(getByLabelText('Waiting on')).toBeTruthy();
+    expect(
+      getByLabelText('Add waiting condition to Run a 5K'),
+    ).toBeTruthy();
     const input = getByPlaceholderText('What needs to happen?');
     await act(async () => {
       fireEvent.changeText(input, 'the letter comes back');
