@@ -140,6 +140,42 @@ describe("parseSchedule", () => {
     });
   });
 
+  it("parses an ordinal weekday before 'of every month'", () => {
+    expect(
+      parseSchedule("First Tuesday of every month", context),
+    ).toMatchObject({
+      kind: "scheduled",
+      remainingText: "",
+      schedule: {
+        kind: "recurring",
+        recurrence: {
+          origin: "2026-10-06",
+          pattern: {
+            unit: "month",
+            interval: 1,
+            on: [{ kind: "weekday", ordinal: 1, weekday: "TU" }],
+          },
+        },
+      },
+      consumed: [{ text: "First Tuesday of every month" }],
+    });
+  });
+
+  it("uses an explicit weekday after a weekly cadence", () => {
+    expect(parseSchedule("Every week on Saturday", context)).toMatchObject({
+      kind: "scheduled",
+      remainingText: "",
+      schedule: {
+        kind: "recurring",
+        recurrence: {
+          origin: "2026-09-19",
+          pattern: { unit: "week", interval: 1, weekdays: ["SA"] },
+        },
+      },
+      consumed: [{ text: "Every week on Saturday" }],
+    });
+  });
+
   it("parses multiple weekdays and an inclusive end", () => {
     expect(
       parseSchedule(

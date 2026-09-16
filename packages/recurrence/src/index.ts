@@ -442,6 +442,20 @@ function parseRecurrence(
     });
   };
 
+  for (const match of text.matchAll(/\b(first|last|\d{1,2}(?:st|nd|rd|th))\s+(mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\s+of\s+every\s+(?:(\d+|one|two|three|four|other)\s+)?months?\b/gi)) {
+    const token = match[1].toLowerCase();
+    const ordinal = token === "last" ? "last" : token === "first" ? 1 : Number.parseInt(token, 10);
+    add(match, {
+      unit: "month",
+      interval: parseNumber(match[3]),
+      on: [{
+        kind: "weekday",
+        ordinal,
+        weekday: weekdayByName[match[2].toLowerCase()],
+      }],
+    });
+  }
+
   for (const match of text.matchAll(/\b(?:every|ev)(!?)\s+other\s+(mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/gi)) {
     const weekday = weekdayByName[match[2].toLowerCase()];
     add(
@@ -532,6 +546,17 @@ function parseRecurrence(
     }
   }
 
+  for (const match of text.matchAll(/\b(?:every|ev)(!?)\s+(?:(other|\d+|one|two|three|four)\s+)?weeks?\s+on\s+((?:mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)(?:\s*,\s*(?:mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?))*)\b/gi)) {
+    const weekdays = match[3]
+      .split(/\s*,\s*/)
+      .map((day) => weekdayByName[day.toLowerCase()]);
+    add(
+      match,
+      { unit: "week", interval: parseNumber(match[2]), weekdays },
+      match[1] ? "completed" : "scheduled",
+    );
+  }
+
   for (const match of text.matchAll(/\b(?:every|ev)(!?)\s+((?:mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)(?:\s*,\s*(?:mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?))*)\b/gi)) {
     const weekdays = match[2].split(/\s*,\s*/).map((day) => weekdayByName[day.toLowerCase()]);
     add(match, { unit: "week", interval: 1, weekdays }, match[1] ? "completed" : "scheduled");
@@ -596,7 +621,17 @@ function parseRecurrence(
     add(match, pattern, "completed");
   }
 
-  const selected = candidates.sort(
+  const maximal = candidates.filter(
+    (candidate) =>
+      !candidates.some(
+        (other) =>
+          other !== candidate &&
+          other.start <= candidate.start &&
+          other.end >= candidate.end &&
+          other.end - other.start > candidate.end - candidate.start,
+      ),
+  );
+  const selected = maximal.sort(
     (a, b) => b.start - a.start || b.end - b.start - (a.end - a.start),
   )[0];
   if (!selected) return null;

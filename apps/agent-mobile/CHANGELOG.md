@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-16: Weekly and monthly repeat phrases now keep their explicit weekday: “every week on Saturday” schedules Saturday, and “first Tuesday of every month” schedules the first Tuesday instead of today’s month day.
+
 - 2026-09-16: Type dates and repeats into a task, such as “tomorrow”, “every Monday”, or “after 3 days”. Repeating tasks advance in place with Undo; fixed schedules catch up missed occurrences instead of skipping them, while `every!` schedules from when you complete the task.
 
 - 2026-09-16: The clear-Home launcher checkmark is smaller and leaves more breathing room around itself.
