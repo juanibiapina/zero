@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-16: Type dates and repeats into a task, such as “tomorrow”, “every Monday”, or “after 3 days”. Repeating tasks advance in place with Undo; fixed schedules catch up missed occurrences instead of skipping them, while `every!` schedules from when you complete the task.
+
 - 2026-09-16: The clear-Home launcher checkmark is smaller and leaves more breathing room around itself.
 
 - 2026-09-16: New Android installs use the three-row task mark as the app icon while the launcher still mirrors Home after the app loads.

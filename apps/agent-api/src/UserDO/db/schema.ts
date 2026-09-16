@@ -208,6 +208,11 @@ export const tasks = table("tasks", {
   // task in Upcoming; a past/today day is "shown up". Postpone sets it; the
   // visibility split runs client-side against the user's local today.
   showUpDate: column.text(),
+  // Versioned canonical recurrence JSON, or NULL for an ordinary task.
+  recurrence: column.text(),
+  // Pattern date of the current recurring occurrence. A one-off postpone changes
+  // showUpDate only, so completion still advances from this cursor.
+  recurrenceDate: column.text(),
   createdAt: column.text().notNull(),
   completedAt: column.text(),
   // The Project this task belongs to, or NULL when the task is loose. See

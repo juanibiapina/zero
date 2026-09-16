@@ -28,6 +28,7 @@
     "@tanstack/react-db": "0.3.5",
     "@tanstack/react-query": "5.102.7",
     "@zero/agent-core": "workspace:*",
+    "@zeroapps/recurrence": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "frimousse": "^0.3.0",

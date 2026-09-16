@@ -23,10 +23,10 @@ Capture data was disposable and dropped; task data was preserved (migration
 
 ## What it is
 
-A single line of work: `text`, an optional `showUpDate`, a `completedAt` that
-flips when done, an optional `projectId` (loose when null), a manual-order
-`sortKey`, and a dormant `sourceCaptureId`. Minimal on purpose; no priority or
-subtasks. The show-up date is the **sole commitment gate** for a project task
+A single line of work: `text`, an optional `showUpDate`, an optional normalized
+`recurrence` plus its `recurrenceDate` cursor, a `completedAt` that flips when
+done, an optional `projectId` (loose when null), a manual-order `sortKey`, and a
+dormant `sourceCaptureId`. Minimal on purpose; no priority or subtasks. The show-up date is the **sole commitment gate** for a project task
 (the former take-on/park star was retired — see
 `docs/plans/todo-retire-take-on.md`).
 
@@ -40,8 +40,13 @@ subtasks. The show-up date is the **sole commitment gate** for a project task
 - **Show-up date** — `showUpDate`, the local `YYYY-MM-DD` a task should show up
   on, or `null` for a loose, always-relevant task. A future date parks the task
   in Upcoming; a past/today date is "shown up".
-- **Complete** — removes a task from the list (still stored). Column
-  `completedAt`, RPC `completeTask`, log `task_completed`; the inverse is
+- **Recurrence** — versioned normalized date-only schedule JSON. `every` advances
+  from the scheduled occurrence and catches up missed dates; `every!` advances
+  from the local completion day. `recurrenceDate` is the current occurrence on
+  the pattern, while `showUpDate` can differ after a one-off postpone.
+- **Complete** — removes an ordinary task from the list. Completing a recurring
+  task advances the same row and removes it only when its inclusive end is
+  exhausted. Ordinary completion uses column `completedAt`, RPC `completeTask`, log `task_completed`; the inverse is
   `reopen` (`reopenTask`), which backs the Undo snackbar.
 - **Edit** — change `text` in place. Store verb `editText`, RPC `editTask`, log
   `task_edited`.
@@ -88,6 +93,10 @@ subtasks. The show-up date is the **sole commitment gate** for a project task
 - `text` — the line of work.
 - `createdAt` — ISO timestamp.
 - `showUpDate` — nullable local `YYYY-MM-DD`; `null` = loose/always-relevant.
+- `recurrence` — nullable versioned normalized schedule JSON from
+  `@zeroapps/recurrence`.
+- `recurrenceDate` — nullable local date for the current pattern occurrence;
+  non-null with `recurrence`, unchanged by one-off postpone.
 - `completedAt` — nullable ISO timestamp; `null` = open.
 - `projectId` — nullable; the project this task belongs to, else loose
   (migration 0047).
@@ -105,9 +114,11 @@ serves the open-tasks query.
 
 - **Add** a task. A quick-add with no project mints a loose task (no day); a
   project-screen add mints a parked task under that project.
-- **Complete** a task: it leaves the list at once and a single bottom **Undo**
-  snackbar (shared `'undo'` toast id — only one on screen) reopens it. A project
-  task's snackbar also names the project and offers an Open deep-link.
+- **Complete** an ordinary task: it leaves the list at once and a single bottom
+  **Undo** snackbar reopens it. A recurring task instead advances the same row:
+  scheduled recurrence can remain overdue for catch-up, while `every!` advances
+  from the completion day. The row leaves only when the next date is future or
+  the series is exhausted. The same single Undo restores the prior occurrence.
 - **Home = open ∧ available**, where availability splits loose vs project on the
   date (the date is the sole commitment gate):
   - a **loose** task (projectId null) is available when shown-up: `showUpDate ==

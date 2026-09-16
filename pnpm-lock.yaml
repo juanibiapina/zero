@@ -47,6 +47,9 @@ importers:
       '@hono/zod-openapi':
         specifier: ^1.5.1
         version: 1.5.1(hono@4.12.33)(zod@4.4.3)
+      '@zeroapps/recurrence':
+        specifier: workspace:*
+        version: link:../../packages/recurrence
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
@@ -150,6 +153,9 @@ importers:
       '@zero/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
+      '@zeroapps/recurrence':
+        specifier: workspace:*
+        version: link:../../packages/recurrence
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -334,6 +340,9 @@ importers:
       '@zero/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
+      '@zeroapps/recurrence':
+        specifier: workspace:*
+        version: link:../../packages/recurrence
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -632,6 +641,9 @@ importers:
 
   packages/agent-core:
     dependencies:
+      '@zeroapps/recurrence':
+        specifier: workspace:*
+        version: link:../recurrence
       date-fns:
         specifier: ^4.1.0
         version: 4.4.0
@@ -792,6 +804,37 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@26.1.2)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/recurrence:
+    dependencies:
+      chrono-node:
+        specifier: ^2.10.1
+        version: 2.10.1
+      rrule-temporal:
+        specifier: ^2.2.5
+        version: 2.2.5
+      temporal-polyfill:
+        specifier: ^1.0.1
+        version: 1.0.5
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.3.0
+      '@zero/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@zero/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      eslint:
+        specifier: 10.8.0
+        version: 10.8.0(jiti@2.7.0)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@26.3.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.0(@types/node@26.3.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/typescript-config: {}
 
@@ -5579,6 +5622,10 @@ packages:
   chromium-edge-launcher@0.3.0:
     resolution: {integrity: sha512-p03azHlGjtyRvFEee3cyvtsRYdniSkwjkzmM/KmVnqT5d7QkkwpJBhis/zCLMYdQMVJ5tt140TBNqqrZPaWeFA==}
 
+  chrono-node@2.10.1:
+    resolution: {integrity: sha512-tPOsBzYVAK5zth+CiHCgp5NGeqRc4mMD8FPthQ5IxkgjPWWxIFdM5odnmfw//IRAzl6C++Xy8olQW7wn5qBR1g==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
   ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
 
@@ -9479,6 +9526,9 @@ packages:
   rpc-websockets@9.3.9:
     resolution: {integrity: sha512-2iQDaTB4g5fDB2ihrTFSJSibCEuxaRi1q7qTW7ZO9/M5/TC+ToHA4D9/ffNLEbAoHNNrcdeP05oATNk44SKZXA==}
 
+  rrule-temporal@2.2.5:
+    resolution: {integrity: sha512-jBa4T38+6LslTJv/calJiphIRrcU6vFV2Icx3XCe377uz79IT7Fr4h/chLWifYERvXjQkR/6BeQPKl89O1s5Vw==}
+
   rtl-detect@1.1.2:
     resolution: {integrity: sha512-PGMBq03+TTG/p/cRB7HCLKJ1MgDIi07+QU1faSjiYRfmY5UsAttV9Hs08jDAHVwcOwmVLcSJkpwyfXszVjWfIQ==}
 
@@ -9922,6 +9972,15 @@ packages:
   telegram@2.26.22:
     resolution: {integrity: sha512-EIj7Yrjiu0Yosa3FZ/7EyPg9s6UiTi/zDQrFmR/2Mg7pIUU+XjAit1n1u9OU9h2oRnRM5M+67/fxzQluZpaJJg==}
     deprecated: This package is archived and no longer maintained. Development continues in teleproto (https://npmjs.com/package/teleproto), a largely compatible, actively maintained fork. See the migration guide at https://docs.teleproto.dev/migrating-from-gramjs
+
+  temporal-polyfill@1.0.5:
+    resolution: {integrity: sha512-+H/mmY74i6wXCMcjIhGuSnODcyZnc4eois2myhOyX0UqRAKNXQY5m9iB1en5jQ/n4SXtjLXo1ElBI5bmn8tZwQ==}
+
+  temporal-spec@1.0.1:
+    resolution: {integrity: sha512-wxVoanmDeavXie1vu2JaQ3WIc3JZnWAOYFBsJyATaVsXsycKYUflGsyBmrRSnoCpZJpwPyr38VpgSUlQ8CbFxg==}
+
+  temporal-utils@1.0.3:
+    resolution: {integrity: sha512-9jbTSX3HvkOWvDpNpFzwX/d1mkCrgQgwLmVTOEiuocZGKHsrQJtttGZFmybJ2zYP5zCSZuU5ZyeS8+eOEPABiQ==}
 
   terminal-link@2.1.1:
     resolution: {integrity: sha512-un0FmiRUQNr5PJqy9kP7c40F5BOfpGlYTrxonDChEZB7pzZxRNp/bt+ymiy9/npwXya9KH99nJ/GXFIiUkYGFQ==}
@@ -16874,6 +16933,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  chrono-node@2.10.1: {}
+
   ci-info@2.0.0: {}
 
   ci-info@3.9.0: {}
@@ -22154,6 +22215,10 @@ snapshots:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
 
+  rrule-temporal@2.2.5:
+    dependencies:
+      temporal-spec: 1.0.1
+
   rtl-detect@1.1.2: {}
 
   safe-array-concat@1.1.4:
@@ -22729,6 +22794,15 @@ snapshots:
       utf-8-validate: 5.0.10
     transitivePeerDependencies:
       - supports-color
+
+  temporal-polyfill@1.0.5:
+    dependencies:
+      temporal-spec: 1.0.1
+      temporal-utils: 1.0.3
+
+  temporal-spec@1.0.1: {}
+
+  temporal-utils@1.0.3: {}
 
   terminal-link@2.1.1:
     dependencies:

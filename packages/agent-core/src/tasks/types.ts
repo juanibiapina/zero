@@ -1,3 +1,5 @@
+import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
+
 // A Task: one typed, clarified next-action with a day, the Today list's item.
 // Distinct from a Capture (the untyped Captures entry): a Task is completed (done),
 // a Capture is processed (clarified out). The single shared entity type for the
@@ -10,7 +12,11 @@ export type Task = {
   // the user's timezone. The shown-up split (showUpDate == null || <= today)
   // runs client-side, so the server never needs a timezone. A future day parks
   // the task in Upcoming.
-  showUpDate: string | null;
+  showUpDate: PlainDate | null;
+  // Canonical recurrence value and current pattern occurrence. A one-off
+  // postpone changes showUpDate but leaves recurrenceDate on the series.
+  recurrence?: Recurrence | null;
+  recurrenceDate?: PlainDate | null;
   createdAt: string;
   completedAt: string | null;
   // The Project this task belongs to, or null when the task is loose.

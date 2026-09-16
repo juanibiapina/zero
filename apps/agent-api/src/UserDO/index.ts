@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDb, type Database } from "do-orm";
 import { migrate } from "do-orm";
+import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
 import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
@@ -155,8 +156,16 @@ export class UserDO extends DurableObject<Env> {
     showUpDate: string | null = null,
     projectId: string | null = null,
     sourceCaptureId: string | null = null,
+    recurrence: Recurrence | null = null,
   ): Task {
-    return this.tasks.add(id, text, showUpDate, projectId, sourceCaptureId);
+    return this.tasks.add(
+      id,
+      text,
+      showUpDate,
+      projectId,
+      sourceCaptureId,
+      recurrence,
+    );
   }
 
   listTasks(): Task[] {
@@ -166,8 +175,36 @@ export class UserDO extends DurableObject<Env> {
     return this.tasks.list();
   }
 
-  completeTask(id: string): Task | null {
-    return this.tasks.complete(id);
+  completeTask(
+    id: string,
+    scheduledOn?: PlainDate,
+    completedOn?: PlainDate,
+  ): Task | null {
+    return scheduledOn && completedOn
+      ? this.tasks.completeOccurrence(id, scheduledOn, completedOn)
+      : this.tasks.complete(id);
+  }
+
+  completeTaskForever(id: string): Task | null {
+    return this.tasks.completeForever(id);
+  }
+
+  undoTaskOccurrence(
+    id: string,
+    expectedRecurrenceDate: PlainDate,
+    recurrenceDateBefore: PlainDate,
+    showUpDateBefore: PlainDate | null,
+  ): Task | null {
+    return this.tasks.undoOccurrence(
+      id,
+      expectedRecurrenceDate,
+      recurrenceDateBefore,
+      showUpDateBefore,
+    );
+  }
+
+  setTaskRecurrence(id: string, recurrence: Recurrence | null): Task | null {
+    return this.tasks.setRecurrence(id, recurrence);
   }
 
   reopenTask(id: string): Task | null {

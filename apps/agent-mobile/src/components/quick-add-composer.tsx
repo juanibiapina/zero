@@ -9,14 +9,16 @@ import {
   type TasksApi,
   type WaitsApi,
 } from '@zero/agent-core';
+import { parseSchedule, toText } from '@zeroapps/recurrence';
 import { router } from 'expo-router';
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { ProjectPickerSheet, ScheduleSheet } from '@/components/task-detail';
 import { AddModeSelector, TaskEditorSheet } from '@/components/task-editor-sheet';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Fab } from '@/components/ui/fab';
+import { Text } from '@/components/ui/text';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { useLocalDay } from '@/lib/local-day';
 import { type TokenGetter } from '@/lib/api';
@@ -88,6 +90,7 @@ export function useQuickAdd({
   onProjectCreated?: (id: string) => void;
 }): QuickAddController {
   const [text, setText] = useState('');
+  const [ignoredScheduleText, setIgnoredScheduleText] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
@@ -106,9 +109,29 @@ export function useQuickAdd({
   // The screen's home project, normalized (Home passes none).
   const contextProjectId = projectId ?? null;
   const today = useLocalDay();
+  const parsedSchedule = useMemo(
+    () =>
+      mode === 'task' && ignoredScheduleText !== text
+        ? parseSchedule(text, { today, weekStartsOn: 'MO' })
+        : { kind: 'none' as const },
+    [mode, text, today, ignoredScheduleText],
+  );
+  const parsedValue =
+    parsedSchedule.kind === 'scheduled' ? parsedSchedule.schedule : null;
+  const effectiveText =
+    parsedSchedule.kind === 'scheduled'
+      ? parsedSchedule.remainingText
+      : text.trim();
+  const effectiveRecurrence =
+    parsedValue?.kind === 'recurring' ? parsedValue.recurrence : null;
+  const effectiveDate =
+    parsedValue?.kind === 'once'
+      ? parsedValue.date
+      : effectiveRecurrence?.origin ?? addDate;
 
   const closeAdd = useCallback(() => {
     setText('');
+    setIgnoredScheduleText(null);
     setConfirmingDiscard(false);
     setAdding(false);
     setAddDate(null);
@@ -177,20 +200,34 @@ export function useQuickAdd({
     // toast so nothing vanishes silently; filing to this screen's own project
     // stays quiet (it lands in the Tasks section below).
     const effectiveProjectId = addProjectId;
-    const tx = tasksApi.add(trimmed, addDate, effectiveProjectId);
+    const taskText = effectiveText.trim();
+    if (!taskText) return;
+    const tx = tasksApi.add(
+      taskText,
+      effectiveDate,
+      effectiveProjectId,
+      null,
+      effectiveRecurrence,
+    );
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
     if (
-      (contextProjectId == null && addDate != null && addDate > today) ||
+      (contextProjectId == null && effectiveDate != null && effectiveDate > today) ||
       (effectiveProjectId != null && effectiveProjectId !== contextProjectId)
     ) {
-      showTaskDestination({ showUpDate: addDate, projectId: effectiveProjectId }, projects, 'created');
+      showTaskDestination(
+        { showUpDate: effectiveDate, projectId: effectiveProjectId },
+        projects,
+        'created',
+      );
     }
     closeAdd();
   }, [
     text,
     mode,
     projectId,
-    addDate,
+    effectiveDate,
+    effectiveRecurrence,
+    effectiveText,
     addProjectId,
     contextProjectId,
     today,
@@ -258,7 +295,10 @@ export function useQuickAdd({
         onClose={requestClose}
         dismissLabel="Dismiss quick add"
         draft={text}
-        onChangeDraft={setText}
+        onChangeDraft={(next) => {
+          setText(next);
+          if (next !== ignoredScheduleText) setIgnoredScheduleText(null);
+        }}
         onSubmit={onAdd}
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus
@@ -277,9 +317,22 @@ export function useQuickAdd({
         scheduleAction={
           taskActionsVisible
             ? {
-                label: addDate ? scheduleLabel(addDate, today) : 'No date',
-                active: addDate != null,
+                label: effectiveRecurrence
+                  ? toText(effectiveRecurrence)
+                  : effectiveDate
+                    ? scheduleLabel(effectiveDate, today)
+                    : 'No date',
+                active: effectiveDate != null,
                 onPress: () => setSchedulingAdd(true),
+                trailingAction:
+                  parsedSchedule.kind === 'scheduled'
+                    ? {
+                        icon: <Text className="text-[20px]">×</Text>,
+                        accessibilityLabel: 'Keep schedule words in task title',
+                        onPress: () => setIgnoredScheduleText(text),
+                        testID: 'quick-add-unrecognize-schedule',
+                      }
+                    : undefined,
               }
             : undefined
         }
@@ -315,6 +368,7 @@ export function useQuickAdd({
         open={schedulingAdd}
         showUpDate={addDate}
         onPick={(d) => {
+          if (parsedSchedule.kind === 'scheduled') setText(effectiveText);
           setAddDate(d);
           setSchedulingAdd(false);
         }}

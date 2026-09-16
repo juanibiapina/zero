@@ -11,6 +11,12 @@
 
 import { asc, desc, eq, isNull, type Database } from "do-orm";
 import { generateKeyBetween } from "fractional-indexing";
+import {
+  advance,
+  validateRecurrence,
+  type PlainDate,
+  type Recurrence,
+} from "@zeroapps/recurrence";
 
 import { tasks } from "../UserDO/db/schema";
 
@@ -21,7 +27,9 @@ export interface Task {
   // always-relevant task. Minted by the client, so it is the user's local day;
   // the DO has no timezone. The shown-up split (showUpDate == null || <= today)
   // runs client-side against the user's local today.
-  showUpDate: string | null;
+  showUpDate: PlainDate | null;
+  recurrence: Recurrence | null;
+  recurrenceDate: PlainDate | null;
   createdAt: string;
   completedAt: string | null;
   // The Project this task belongs to, or null when the task is loose.
@@ -35,11 +43,23 @@ export interface Task {
   sortKey: string | null;
 }
 
+function parseStoredRecurrence(value: string | null): Recurrence | null {
+  if (value == null) return null;
+  const parsed: unknown = JSON.parse(value);
+  const result = validateRecurrence(parsed);
+  if (!result.ok) {
+    throw new Error(`invalid stored recurrence: ${JSON.stringify(result.errors)}`);
+  }
+  return result.value;
+}
+
 // Project a stored row back to the client-facing Task shape.
 function toTask(row: {
   id: string;
   text: string;
   showUpDate: string | null;
+  recurrence: string | null;
+  recurrenceDate: string | null;
   createdAt: string;
   completedAt: string | null;
   projectId: string | null;
@@ -50,6 +70,8 @@ function toTask(row: {
     id: row.id,
     text: row.text,
     showUpDate: row.showUpDate,
+    recurrence: parseStoredRecurrence(row.recurrence),
+    recurrenceDate: row.recurrenceDate,
     createdAt: row.createdAt,
     completedAt: row.completedAt,
     projectId: row.projectId,
@@ -88,9 +110,10 @@ export class DbTaskStore {
   add(
     id: string,
     text: string,
-    showUpDate: string | null = null,
+    showUpDate: PlainDate | null = null,
     projectId: string | null = null,
     sourceCaptureId: string | null = null,
+    recurrence: Recurrence | null = null,
   ): Task {
     const existingById = this.db.get(tasks, { where: eq("id", id) });
     if (existingById) return toTask(existingById);
@@ -98,14 +121,19 @@ export class DbTaskStore {
     const task: Task = {
       id,
       text,
-      showUpDate,
+      showUpDate: recurrence?.origin ?? showUpDate,
+      recurrence,
+      recurrenceDate: recurrence?.origin ?? null,
       createdAt: new Date().toISOString(),
       completedAt: null,
       projectId,
       sourceCaptureId,
       sortKey: generateKeyBetween(max?.sortKey ?? null, null),
     };
-    this.db.insert(tasks, task);
+    this.db.insert(tasks, {
+      ...task,
+      recurrence: task.recurrence ? JSON.stringify(task.recurrence) : null,
+    });
     return task;
   }
 
@@ -134,11 +162,83 @@ export class DbTaskStore {
     return row ? toTask(row) : null;
   }
 
+  completeOccurrence(
+    id: string,
+    scheduledOn: PlainDate,
+    completedOn: PlainDate,
+  ): Task | null {
+    const stored = this.db.get(tasks, { where: eq("id", id) });
+    if (!stored) return null;
+    const task = toTask(stored);
+    if (!task.recurrence || !task.recurrenceDate) return this.complete(id);
+    if (task.completedAt != null || task.recurrenceDate !== scheduledOn) return task;
+
+    const result = advance(task.recurrence, { scheduledOn, completedOn });
+    if (result.kind === "finished") return this.complete(id);
+    this.db.update(
+      tasks,
+      {
+        recurrenceDate: result.scheduledOn,
+        showUpDate: result.scheduledOn,
+      },
+      { where: eq("id", id) },
+    );
+    const row = this.db.get(tasks, { where: eq("id", id) });
+    return row ? toTask(row) : null;
+  }
+
+  completeForever(id: string): Task | null {
+    return this.complete(id);
+  }
+
+  setRecurrence(id: string, recurrence: Recurrence | null): Task | null {
+    this.db.update(
+      tasks,
+      recurrence
+        ? {
+            recurrence: JSON.stringify(recurrence),
+            recurrenceDate: recurrence.origin,
+            showUpDate: recurrence.origin,
+          }
+        : { recurrence: null, recurrenceDate: null },
+      { where: eq("id", id) },
+    );
+    const row = this.db.get(tasks, { where: eq("id", id) });
+    return row ? toTask(row) : null;
+  }
+
   // The inverse of complete: clear completedAt so the task returns to the open
   // list. Backs the Home task-complete Undo. Idempotent on the id; returns the
   // updated row, or null when no row has that id.
   reopen(id: string): Task | null {
     this.db.update(tasks, { completedAt: null }, { where: eq("id", id) });
+    const row = this.db.get(tasks, { where: eq("id", id) });
+    return row ? toTask(row) : null;
+  }
+
+  undoOccurrence(
+    id: string,
+    expectedRecurrenceDate: PlainDate,
+    recurrenceDateBefore: PlainDate,
+    showUpDateBefore: PlainDate | null,
+  ): Task | null {
+    const stored = this.db.get(tasks, { where: eq("id", id) });
+    if (!stored) return null;
+    const task = toTask(stored);
+    if (!task.recurrence) return this.reopen(id);
+    const matchesExpected = task.recurrenceDate === expectedRecurrenceDate;
+    const alreadyRestored =
+      task.recurrenceDate === recurrenceDateBefore && task.completedAt == null;
+    if (!matchesExpected && !alreadyRestored) return task;
+    this.db.update(
+      tasks,
+      {
+        recurrenceDate: recurrenceDateBefore,
+        showUpDate: showUpDateBefore,
+        completedAt: null,
+      },
+      { where: eq("id", id) },
+    );
     const row = this.db.get(tasks, { where: eq("id", id) });
     return row ? toTask(row) : null;
   }

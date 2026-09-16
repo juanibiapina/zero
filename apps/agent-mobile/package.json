@@ -18,6 +18,7 @@
     "@tanstack/react-native-db-sqlite-persistence": "0.2.18",
     "@tanstack/react-query": "5.102.7",
     "@zero/agent-core": "workspace:*",
+    "@zeroapps/recurrence": "workspace:*",
     "clsx": "^2.1.1",
     "expo": "~57.0.16",
     "expo-auth-session": "~57.0.9",
@@ -81,10 +82,11 @@
       "<rootDir>/jest.setup.js"
     ],
     "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1"
+      "^@/(.*)$": "<rootDir>/src/$1",
+      "^chrono-node/en$": "<rootDir>/../../packages/recurrence/node_modules/chrono-node/dist/cjs/locales/en/index.js"
     },
     "transformIgnorePatterns": [
-      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|fractional-indexing))",
+      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|fractional-indexing|chrono-node|rrule-temporal|temporal-polyfill|temporal-spec|temporal-utils))",
       "/node_modules/react-native-reanimated/plugin/",
       "/node_modules/@react-native/babel-preset/"
     ],

@@ -66,12 +66,15 @@ function UpcomingReady({ api }: { api: TasksApi }) {
       // Same single bottom Undo snackbar as elsewhere; Undo reopens the task.
       undoableAction({
         message: "Completed",
-        act: () => api.complete(item.id),
-        undo: () => api.reopen(item),
+        act: () => api.complete(item.id, today),
+        undo: () =>
+          item.recurrence
+            ? api.undoOccurrence(item, today)
+            : api.reopen(item),
         onError: setError,
       });
     },
-    [api],
+    [api, today],
   );
 
   const onEdit = useCallback(

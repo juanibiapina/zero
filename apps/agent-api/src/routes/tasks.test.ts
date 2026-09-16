@@ -19,13 +19,16 @@ const fakeUserDO = (seed: Task[] = []) => {
       showUpDate: string | null = null,
       projectId: string | null = null,
       sourceCaptureId: string | null = null,
+      recurrence: Task["recurrence"] = null,
     ): Task {
       const existingById = tasks.find((t) => t.id === id);
       if (existingById) return existingById;
       const task: Task = {
         id,
         text,
-        showUpDate,
+        showUpDate: recurrence?.origin ?? showUpDate,
+        recurrence,
+        recurrenceDate: recurrence?.origin ?? null,
         createdAt: new Date(1700000000000 + ++n).toISOString(),
         completedAt: null,
         projectId,
@@ -106,6 +109,8 @@ const task = (over: Partial<Task> = {}): Task => ({
   id: "id-1",
   text: "buy milk",
   showUpDate: "2023-11-14",
+  recurrence: null,
+  recurrenceDate: null,
   createdAt: "2023-11-14T22:13:20.001Z",
   completedAt: null,
   projectId: null,
@@ -161,6 +166,34 @@ describe("POST /api/tasks", () => {
     expect(body.task.id).toBe(UUID_1);
     expect(body.task.showUpDate).toBe("2023-11-14");
     expect(userDO._tasks.map((t) => t.text)).toEqual(["call mom"]);
+  });
+
+  it("adds a recurring task from its canonical origin", async () => {
+    const userDO = fakeUserDO();
+    const app = buildApp(fakeEnv(userDO), "user_abc");
+    const recurrence = {
+      version: 1,
+      origin: "2026-10-01",
+      anchor: "scheduled",
+      weekStartsOn: "MO",
+      pattern: {
+        unit: "month",
+        interval: 1,
+        on: [{ kind: "day", day: 1 }],
+      },
+    };
+
+    const res = await app.request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: UUID_1, text: "Pay rent", recurrence }),
+    });
+
+    expect(res.status).toBe(201);
+    const body: { task: Task } = await res.json();
+    expect(body.task.recurrence).toEqual(recurrence);
+    expect(body.task.recurrenceDate).toBe("2026-10-01");
+    expect(body.task.showUpDate).toBe("2026-10-01");
   });
 
   it("dedupes a replayed POST that re-sends the same id", async () => {

@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { createLiveQueryCollection, isNull } from "@tanstack/db";
+import { advance } from "@zeroapps/recurrence";
 
 import {
   createInMemoryTasksApi,
@@ -19,14 +20,16 @@ function fakeRest(initial: Task[]): TasksRest {
       await sleep(5);
       return server.filter((t) => t.completedAt == null).map((t) => ({ ...t }));
     },
-    addTask: async ({ id, text, showUpDate, projectId }) => {
+    addTask: async ({ id, text, showUpDate, projectId, recurrence }) => {
       await sleep(5);
       const existing = server.find((t) => t.id === id);
       if (existing) return { ...existing };
       const task: Task = {
         id,
         text,
-        showUpDate,
+        showUpDate: recurrence?.origin ?? showUpDate,
+        recurrence: recurrence ?? null,
+        recurrenceDate: recurrence?.origin ?? null,
         createdAt: new Date().toISOString(),
         completedAt: null,
         projectId,
@@ -40,6 +43,39 @@ function fakeRest(initial: Task[]): TasksRest {
       const task = server.find((t) => t.id === id);
       if (!task) throw new Error(`no task ${id}`);
       task.completedAt = new Date().toISOString();
+      return { ...task };
+    },
+    completeTaskOccurrence: async (id, event) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task?.recurrence || !task.recurrenceDate) throw new Error(`no recurring task ${id}`);
+      if (task.recurrenceDate !== event.scheduledOn) return { ...task };
+      const result = advance(task.recurrence, event);
+      if (result.kind === "next") {
+        task.recurrenceDate = result.scheduledOn;
+        task.showUpDate = result.scheduledOn;
+      } else {
+        task.completedAt = new Date().toISOString();
+      }
+      return { ...task };
+    },
+    undoTaskOccurrence: async (id, event) => {
+      await sleep(5);
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      if (task.recurrenceDate === event.expectedRecurrenceDate) {
+        task.recurrenceDate = event.recurrenceDateBefore;
+        task.showUpDate = event.showUpDateBefore;
+        task.completedAt = null;
+      }
+      return { ...task };
+    },
+    setTaskRecurrence: async (id, recurrence) => {
+      const task = server.find((t) => t.id === id);
+      if (!task) throw new Error(`no task ${id}`);
+      task.recurrence = recurrence;
+      task.recurrenceDate = recurrence?.origin ?? null;
+      if (recurrence) task.showUpDate = recurrence.origin;
       return { ...task };
     },
     reopenTask: async (id) => {
@@ -169,6 +205,39 @@ describe("tasks collection", () => {
 
     expect(open.toArray.map((t: Task) => t.text)).toEqual(["beta"]);
     expectNoFlicker(snapshots, "alpha");
+  });
+
+  it("advances and undoes a recurring task in place", async () => {
+    const recurrence = {
+      version: 1 as const,
+      origin: "2026-09-01",
+      anchor: "scheduled" as const,
+      weekStartsOn: "MO" as const,
+      pattern: {
+        unit: "month" as const,
+        interval: 1,
+        on: [{ kind: "day" as const, day: 1 }],
+      },
+    };
+    const before = task("rent", {
+      text: "Pay rent",
+      showUpDate: "2026-09-01",
+      recurrence,
+      recurrenceDate: "2026-09-01",
+    });
+    const api = createInMemoryTasksApi({
+      queryClient: new QueryClient(),
+      rest: fakeRest([before]),
+    });
+    await api.collection.stateWhenReady();
+
+    await api.complete("rent", "2026-09-16").isPersisted.promise;
+    expect(api.collection.get("rent")?.recurrenceDate).toBe("2026-10-01");
+    expect(api.collection.get("rent")?.completedAt).toBeNull();
+
+    await api.undoOccurrence(before, "2026-09-16").isPersisted.promise;
+    expect(api.collection.get("rent")?.recurrenceDate).toBe("2026-09-01");
+    expect(api.collection.get("rent")?.showUpDate).toBe("2026-09-01");
   });
 
   it("reopening a completed task returns it to the open set", async () => {
@@ -343,12 +412,15 @@ describe("tasks durable names", () => {
     expect(spec.name).toBe("tasks");
     expect(Object.keys(spec.verbs).sort()).toEqual([
       "addTask",
+      "completeForever",
       "completeTask",
       "editTask",
       "moveToProject",
       "reopenTask",
       "reorderTask",
       "rescheduleTask",
+      "setRecurrence",
+      "undoOccurrence",
     ]);
   });
 });

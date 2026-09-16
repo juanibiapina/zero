@@ -18,6 +18,38 @@ const makeStoreWithDb = () => {
 };
 
 describe("DbTaskStore", () => {
+  it("advances one recurring occurrence exactly once", () => {
+    const store = makeStore();
+    const recurrence = {
+      version: 1 as const,
+      origin: "2026-09-01",
+      anchor: "scheduled" as const,
+      weekStartsOn: "MO" as const,
+      pattern: {
+        unit: "month" as const,
+        interval: 1,
+        on: [{ kind: "day" as const, day: 1 }],
+      },
+    };
+    store.add("rent", "Pay rent", null, null, null, recurrence);
+
+    const first = store.completeOccurrence(
+      "rent",
+      "2026-09-01",
+      "2026-09-16",
+    );
+    const replay = store.completeOccurrence(
+      "rent",
+      "2026-09-01",
+      "2026-09-16",
+    );
+
+    expect(first?.recurrenceDate).toBe("2026-10-01");
+    expect(first?.showUpDate).toBe("2026-10-01");
+    expect(first?.completedAt).toBeNull();
+    expect(replay).toEqual(first);
+  });
+
   it("stores an added task under the client id and returns it", () => {
     const store = makeStore();
 

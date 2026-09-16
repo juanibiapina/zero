@@ -13,6 +13,7 @@
     "src"
   ],
   "dependencies": {
+    "@zeroapps/recurrence": "workspace:*",
     "date-fns": "^4.1.0",
     "fractional-indexing": "^4.0.0"
   },

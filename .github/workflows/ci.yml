@@ -86,7 +86,7 @@ jobs:
           AFTER: ${{ github.sha }}
         run: |
           if git diff --quiet "$BEFORE" "$AFTER" -- \
-            apps/agent-mobile packages/agent-core \
+            apps/agent-mobile packages/agent-core packages/recurrence \
             pnpm-lock.yaml pnpm-workspace.yaml package.json patches; then
             echo "relevant=false" >> "$GITHUB_OUTPUT"
           else

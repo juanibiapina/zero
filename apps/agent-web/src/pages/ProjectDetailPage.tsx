@@ -625,6 +625,7 @@ function ProjectTasks({
       .orderBy(({ t }) => t.createdAt, "asc"),
   );
   const [text, setText] = useState("");
+  const today = localToday();
   const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
 
   const onAdd = useCallback(() => {
@@ -643,12 +644,15 @@ function ProjectTasks({
     (task: Task) => {
       undoableAction({
         message: "Completed",
-        act: () => api.complete(task.id),
-        undo: () => api.reopen(task),
+        act: () => api.complete(task.id, today),
+        undo: () =>
+          task.recurrence
+            ? api.undoOccurrence(task, today)
+            : api.reopen(task),
         onError,
       });
     },
-    [api, onError],
+    [api, onError, today],
   );
 
   const onSchedule = useCallback(

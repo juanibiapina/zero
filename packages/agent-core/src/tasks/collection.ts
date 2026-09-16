@@ -1,6 +1,11 @@
 import type { Collection, Transaction } from "@tanstack/db";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PersistedCollectionPersistence } from "@tanstack/db-sqlite-persistence-core";
+import {
+  advance,
+  type PlainDate,
+  type Recurrence,
+} from "@zeroapps/recurrence";
 
 import {
   createEntityApi,
@@ -14,6 +19,7 @@ import {
   type StartOfflineExecutor,
   type WarnFn,
 } from "../collection/base";
+import { localToday } from "./today";
 import type { Task } from "./types";
 
 // The Task data layer (Today list): the Task verbs (add, complete) over the
@@ -36,8 +42,22 @@ export type TasksRest = {
     showUpDate: string | null;
     projectId: string | null;
     sourceCaptureId: string | null;
+    recurrence?: Recurrence | null;
   }) => Promise<Task>;
   completeTask: (id: string) => Promise<Task>;
+  completeTaskOccurrence?: (
+    id: string,
+    event: { scheduledOn: PlainDate; completedOn: PlainDate },
+  ) => Promise<Task>;
+  undoTaskOccurrence?: (
+    id: string,
+    event: {
+      expectedRecurrenceDate: PlainDate;
+      recurrenceDateBefore: PlainDate;
+      showUpDateBefore: PlainDate | null;
+    },
+  ) => Promise<Task>;
+  setTaskRecurrence?: (id: string, recurrence: Recurrence | null) => Promise<Task>;
   // The inverse of complete: clear completedAt so the task returns to the open
   // list. Backs the Home task-complete Undo. Idempotent on the id.
   reopenTask: (id: string) => Promise<Task>;
@@ -67,8 +87,12 @@ export type TasksApi = {
     showUpDate?: string | null,
     projectId?: string | null,
     sourceCaptureId?: string | null,
+    recurrence?: Recurrence | null,
   ) => Transaction;
-  complete: (id: string) => Transaction;
+  complete: (id: string, completedOn?: PlainDate) => Transaction;
+  completeForever: (id: string) => Transaction;
+  undoOccurrence: (taskBefore: Task, completedOn: PlainDate) => Transaction;
+  setRecurrence: (id: string, recurrence: Recurrence | null) => Transaction;
   // Reverse a completion (Undo on the complete snackbar): the task returns to the
   // open list. Takes the whole task, not just its id, because completing it
   // reconciles the row out of the collection (the server list is open-only), so
@@ -111,10 +135,13 @@ export function tasksSpec(rest: TasksRest) {
       showUpDate: string | null;
       projectId: string | null;
       sourceCaptureId: string | null;
+      recurrence: Recurrence | null;
     }>({
-      row: ({ text, showUpDate, projectId, sourceCaptureId }) => ({
+      row: ({ text, showUpDate, projectId, sourceCaptureId, recurrence }) => ({
         text,
-        showUpDate,
+        showUpDate: recurrence?.origin ?? showUpDate,
+        recurrence,
+        recurrenceDate: recurrence?.origin ?? null,
         projectId,
         sourceCaptureId,
         completedAt: null,
@@ -131,6 +158,7 @@ export function tasksSpec(rest: TasksRest) {
           showUpDate: row.showUpDate,
           projectId: row.projectId,
           sourceCaptureId: row.sourceCaptureId ?? null,
+          recurrence: row.recurrence,
         }),
     }),
     reorderTask: v.update<{ id: string; sortKey: string }>({
@@ -143,6 +171,44 @@ export function tasksSpec(rest: TasksRest) {
       matches: ({ changes }) => "sortKey" in changes,
       persist: (id, { modified }) => rest.reorderTask(id, modified.sortKey!),
     }),
+    completeTask: v.update<{ id: string; completedOn: PlainDate }>({
+      id: ({ id }) => id,
+      draft:
+        ({ completedOn }) =>
+        (draft) => {
+          if (draft.recurrence && draft.recurrenceDate) {
+            const result = advance(draft.recurrence, {
+              scheduledOn: draft.recurrenceDate,
+              completedOn,
+            });
+            if (result.kind === "next") {
+              draft.recurrenceDate = result.scheduledOn;
+              draft.showUpDate = result.scheduledOn;
+              return;
+            }
+          }
+          draft.completedAt = new Date().toISOString();
+        },
+      matches: ({ changes, modified }) =>
+        "recurrenceDate" in changes || modified.completedAt != null,
+      persist: (id, { original }, args) => {
+        const completedOn = args?.completedOn ?? localToday();
+        return original?.recurrence && original.recurrenceDate
+          ? rest.completeTaskOccurrence!(id, {
+              scheduledOn: original.recurrenceDate,
+              completedOn,
+            })
+          : rest.completeTask(id);
+      },
+    }),
+    completeForever: v.update<{ id: string }>({
+      id: ({ id }) => id,
+      draft: () => (draft) => {
+        draft.completedAt = new Date().toISOString();
+      },
+      matches: ({ modified }) => modified.completedAt != null,
+      persist: (id) => rest.completeTask(id),
+    }),
     rescheduleTask: v.update<{ id: string; showUpDate: string | null }>({
       id: ({ id }) => id,
       draft:
@@ -153,14 +219,6 @@ export function tasksSpec(rest: TasksRest) {
       matches: ({ changes }) => "showUpDate" in changes,
       persist: (id, { modified }) =>
         rest.rescheduleTask(id, modified.showUpDate),
-    }),
-    completeTask: v.update<{ id: string }>({
-      id: ({ id }) => id,
-      draft: () => (draft) => {
-        draft.completedAt = new Date().toISOString();
-      },
-      matches: ({ modified }) => modified.completedAt != null,
-      persist: (id) => rest.completeTask(id),
     }),
     // A revive, not an update: completing the task reconciles it out of the
     // collection (the server list is open-only), so Undo must re-insert the row
@@ -173,6 +231,48 @@ export function tasksSpec(rest: TasksRest) {
         draft.completedAt = null;
       },
       persist: (id) => rest.reopenTask(id),
+    }),
+    undoOccurrence: v.revive<{ taskBefore: Task; completedOn: PlainDate }>({
+      id: ({ taskBefore }) => taskBefore.id,
+      row: ({ taskBefore }) => ({ ...taskBefore, completedAt: null }),
+      draft:
+        ({ taskBefore }) =>
+        (draft) => {
+          Object.assign(draft, taskBefore, { completedAt: null });
+        },
+      persist: (id, _mutation, args) => {
+        if (!args) throw new Error("recurring Undo is missing durable arguments");
+        const { taskBefore, completedOn } = args;
+        const expected = taskBefore.recurrence && taskBefore.recurrenceDate
+          ? advance(taskBefore.recurrence, {
+              scheduledOn: taskBefore.recurrenceDate,
+              completedOn,
+            })
+          : null;
+        return rest.undoTaskOccurrence!(id, {
+          expectedRecurrenceDate:
+            expected?.kind === "next"
+              ? expected.scheduledOn
+              : taskBefore.recurrenceDate!,
+          recurrenceDateBefore: taskBefore.recurrenceDate!,
+          showUpDateBefore: taskBefore.showUpDate,
+        });
+      },
+    }),
+    setRecurrence: v.update<{ id: string; recurrence: Recurrence | null }>({
+      id: ({ id }) => id,
+      draft:
+        ({ recurrence }) =>
+        (draft) => {
+          draft.recurrence = recurrence;
+          draft.recurrenceDate = recurrence?.origin ?? null;
+          if (recurrence) draft.showUpDate = recurrence.origin;
+        },
+      matches: ({ changes }) => "recurrence" in changes,
+      persist: (id, _mutation, args) => {
+        if (!args) throw new Error("recurrence edit is missing durable arguments");
+        return rest.setTaskRecurrence!(id, args.recurrence);
+      },
     }),
     // Move into a project (or back to loose). Matches on `"projectId" in changes`.
     moveToProject: v.update<{ id: string; projectId: string | null }>({
@@ -211,9 +311,27 @@ function toTasksApi(
 ): TasksApi {
   return {
     collection: api.collection,
-    add: (text, showUpDate = null, projectId = null, sourceCaptureId = null) =>
-      api.actions.addTask({ text, showUpDate, projectId, sourceCaptureId }),
-    complete: (id) => api.actions.completeTask({ id }),
+    add: (
+      text,
+      showUpDate = null,
+      projectId = null,
+      sourceCaptureId = null,
+      recurrence = null,
+    ) =>
+      api.actions.addTask({
+        text,
+        showUpDate,
+        projectId,
+        sourceCaptureId,
+        recurrence,
+      }),
+    complete: (id, completedOn = localToday()) =>
+      api.actions.completeTask({ id, completedOn }),
+    completeForever: (id) => api.actions.completeForever({ id }),
+    undoOccurrence: (taskBefore, completedOn) =>
+      api.actions.undoOccurrence({ taskBefore, completedOn }),
+    setRecurrence: (id, recurrence) =>
+      api.actions.setRecurrence({ id, recurrence }),
     reopen: (task) => api.actions.reopenTask(task),
     edit: (id, text) => api.actions.editTask({ id, text }),
     reschedule: (id, showUpDate) =>

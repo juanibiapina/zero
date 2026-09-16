@@ -204,12 +204,15 @@ function Home({
                 router.navigate(`/projects/${project.id}`, { withAnchor: true }),
             }
           : undefined,
-        act: () => api.complete(item.id),
-        undo: () => api.reopen(item),
+        act: () => api.complete(item.id, today),
+        undo: () =>
+          item.recurrence
+            ? api.undoOccurrence(item, today)
+            : api.reopen(item),
         onError: setWriteError,
       });
     },
-    [api, projects],
+    [api, projects, today],
   );
 
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);

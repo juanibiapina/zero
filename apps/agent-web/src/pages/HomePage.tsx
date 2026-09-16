@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import {
@@ -50,6 +50,7 @@ import {
   type AddMode,
   type HomeCallToAction,
 } from "@zero/agent-core";
+import { parseSchedule, toText } from "@zeroapps/recurrence";
 import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
 import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
 import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
@@ -106,6 +107,7 @@ function Home({
 }) {
   const [mode, setMode] = useState<AddMode>("task");
   const [text, setText] = useState("");
+  const [ignoredScheduleText, setIgnoredScheduleText] = useState<string | null>(null);
   // Create-time date and project for a task quick-add (the mini-composer). Both
   // default to "unset": null date + no project = a loose Home task. Reset after
   // each add. See docs/plans/todo-retire-take-on.md.
@@ -117,6 +119,26 @@ function Home({
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: projectsApi.collection }),
   );
+  const today = localToday();
+  const parsedSchedule = useMemo(
+    () =>
+      mode === "task" && ignoredScheduleText !== text
+        ? parseSchedule(text, { today, weekStartsOn: "MO" })
+        : { kind: "none" as const },
+    [mode, text, today, ignoredScheduleText],
+  );
+  const parsedValue =
+    parsedSchedule.kind === "scheduled" ? parsedSchedule.schedule : null;
+  const recurrence =
+    parsedValue?.kind === "recurring" ? parsedValue.recurrence : null;
+  const effectiveDate =
+    parsedValue?.kind === "once"
+      ? parsedValue.date
+      : recurrence?.origin ?? date;
+  const effectiveText =
+    parsedSchedule.kind === "scheduled"
+      ? parsedSchedule.remainingText
+      : text.trim();
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
@@ -143,6 +165,7 @@ function Home({
         },
       });
       setText("");
+      setIgnoredScheduleText(null);
       inputRef.current?.focus();
       return;
     }
@@ -150,9 +173,17 @@ function Home({
     // date = a loose Home task; a date makes it a Home/Upcoming task; a project
     // with no date files it groomed (off Home), explained by a toast so nothing
     // vanishes silently.
-    const tx = tasksApi.add(trimmed, date, projectId);
+    const taskText = effectiveText.trim();
+    if (!taskText) return;
+    const tx = tasksApi.add(
+      taskText,
+      effectiveDate,
+      projectId,
+      null,
+      recurrence,
+    );
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    if (projectId != null && date == null) {
+    if (projectId != null && effectiveDate == null) {
       const project = (projects ?? []).find((p) => p.id === projectId);
       toast("Filed to project", {
         description: project
@@ -161,10 +192,22 @@ function Home({
       });
     }
     setText("");
+    setIgnoredScheduleText(null);
     setDate(null);
     setProjectId(null);
     inputRef.current?.focus();
-  }, [tasksApi, projectsApi, mode, text, date, projectId, projects, navigate]);
+  }, [
+    tasksApi,
+    projectsApi,
+    mode,
+    text,
+    effectiveText,
+    effectiveDate,
+    recurrence,
+    projectId,
+    projects,
+    navigate,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -172,11 +215,19 @@ function Home({
         mode={mode}
         value={text}
         onModeChange={setMode}
-        onChange={setText}
+        onChange={(next) => {
+          setText(next);
+          if (next !== ignoredScheduleText) setIgnoredScheduleText(null);
+        }}
+        onUnrecognizeSchedule={() => setIgnoredScheduleText(text)}
         onSubmit={onAdd}
         inputRef={inputRef}
-        date={date}
-        onDateChange={setDate}
+        date={effectiveDate}
+        recurrenceText={recurrence ? toText(recurrence) : null}
+        onDateChange={(nextDate) => {
+          if (parsedSchedule.kind === "scheduled") setText(effectiveText);
+          setDate(nextDate);
+        }}
         projectId={projectId}
         onProjectChange={setProjectId}
         projects={projects ?? []}
@@ -252,12 +303,15 @@ function TaskList({
     (item: Task) => {
       undoableAction({
         message: "Completed",
-        act: () => api.complete(item.id),
-        undo: () => api.reopen(item),
+        act: () => api.complete(item.id, today),
+        undo: () =>
+          item.recurrence
+            ? api.undoOccurrence(item, today)
+            : api.reopen(item),
         onError,
       });
     },
-    [api, onError],
+    [api, onError, today],
   );
 
   // Postpone to tomorrow; the optimistic reschedule drops the row from Home at
@@ -305,6 +359,24 @@ function TaskList({
     },
     [api, selected, onError],
   );
+
+  const stopRecurrence = useCallback(() => {
+    if (!selected?.recurrence) return;
+    const tx = api.setRecurrence(selected.id, null);
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+  }, [api, selected, onError]);
+
+  const completeForever = useCallback(() => {
+    if (!selected?.recurrence) return;
+    const item = selected;
+    setSelectedId(null);
+    undoableAction({
+      message: "Completed forever",
+      act: () => api.completeForever(item.id),
+      undo: () => api.reopen(item),
+      onError,
+    });
+  }, [api, selected, onError]);
 
   // Move the selected task into a project (or back to loose with null). An
   // undated task filed into a project drops off Home's loose list (it becomes
@@ -432,6 +504,9 @@ function TaskList({
 
             <ScheduleField
               showUpDate={selected.showUpDate}
+              recurrence={selected.recurrence ?? null}
+              onStopRecurrence={stopRecurrence}
+              onCompleteForever={completeForever}
               onPick={onPickSchedule}
             />
 
@@ -454,9 +529,11 @@ function QuickAdd({
   value,
   onModeChange,
   onChange,
+  onUnrecognizeSchedule,
   onSubmit,
   inputRef,
   date,
+  recurrenceText,
   onDateChange,
   projectId,
   onProjectChange,
@@ -466,11 +543,13 @@ function QuickAdd({
   value: string;
   onModeChange: (m: AddMode) => void;
   onChange: (v: string) => void;
+  onUnrecognizeSchedule: () => void;
   onSubmit: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   // Create-time date + project for a task quick-add (the mini-composer). Shown
   // only in task mode.
   date: string | null;
+  recurrenceText: string | null;
   onDateChange: (date: string | null) => void;
   projectId: string | null;
   onProjectChange: (projectId: string | null) => void;
@@ -528,7 +607,12 @@ function QuickAdd({
       </form>
       {mode === "task" && (
         <div className="flex items-center gap-2">
-          <QuickAddDateChip date={date} onPick={onDateChange} />
+          <QuickAddDateChip
+            date={date}
+            recurrenceText={recurrenceText}
+            onUnrecognize={recurrenceText ? onUnrecognizeSchedule : undefined}
+            onPick={onDateChange}
+          />
           <QuickAddProjectChip
             projects={projects}
             projectId={projectId}
@@ -545,17 +629,22 @@ function QuickAdd({
 // commitment gate, so this is how a quick-add task lands on Home (or Upcoming).
 function QuickAddDateChip({
   date,
+  recurrenceText,
+  onUnrecognize,
   onPick,
 }: {
   date: string | null;
+  recurrenceText: string | null;
+  onUnrecognize?: () => void;
   onPick: (date: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const today = localToday();
   const scheduled = date != null;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <div className="flex items-center gap-1">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
         <button
           type="button"
           aria-label={scheduled ? `Date: ${date}` : "Add a date"}
@@ -567,7 +656,9 @@ function QuickAddDateChip({
           )}
         >
           <CalendarGlyph className="size-3.5" />
-          <span>{scheduled ? scheduleLabel(date, today) : "No date"}</span>
+          <span>
+            {recurrenceText ?? (scheduled ? scheduleLabel(date, today) : "No date")}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
@@ -580,7 +671,18 @@ function QuickAddDateChip({
           }}
         />
       </PopoverContent>
-    </Popover>
+      </Popover>
+      {onUnrecognize ? (
+        <button
+          type="button"
+          aria-label="Keep schedule words in task title"
+          className="rounded px-1 text-sm text-muted-foreground hover:bg-muted"
+          onClick={onUnrecognize}
+        >
+          ×
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -702,9 +804,15 @@ function CompleteCircle({
 // when unset) and opens the ScheduleMenu popover.
 function ScheduleField({
   showUpDate,
+  recurrence,
+  onStopRecurrence,
+  onCompleteForever,
   onPick,
 }: {
   showUpDate: string | null | undefined;
+  recurrence: NonNullable<Task["recurrence"]> | null;
+  onStopRecurrence: () => void;
+  onCompleteForever: () => void;
   onPick: (date: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -729,7 +837,7 @@ function ScheduleField({
               scheduled ? "font-medium text-primary" : "text-muted-foreground",
             )}
           >
-            {scheduleLabel(showUpDate, today)}
+            {recurrence ? toText(recurrence) : scheduleLabel(showUpDate, today)}
           </span>
         </button>
       </PopoverTrigger>
@@ -742,6 +850,30 @@ function ScheduleField({
             setOpen(false);
           }}
         />
+        {recurrence ? (
+          <button
+            type="button"
+            className="w-full border-t px-3 py-2 text-left text-sm text-destructive hover:bg-muted/50"
+            onClick={() => {
+              onStopRecurrence();
+              setOpen(false);
+            }}
+          >
+            Stop repeating
+          </button>
+        ) : null}
+        {recurrence ? (
+          <button
+            type="button"
+            className="w-full border-t px-3 py-2 text-left text-sm text-destructive hover:bg-muted/50"
+            onClick={() => {
+              onCompleteForever();
+              setOpen(false);
+            }}
+          >
+            Complete forever
+          </button>
+        ) : null}
       </PopoverContent>
     </Popover>
   );

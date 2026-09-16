@@ -4,12 +4,15 @@ import { defineWebEntityApi } from "./entity-api";
 import {
   addTask,
   completeTask,
+  completeTaskOccurrence,
   editTask,
   fetchTasks,
   reopenTask,
   reorderTask,
   rescheduleTask,
   setTaskProject,
+  setTaskRecurrence,
+  undoTaskOccurrence,
 } from "./tasks";
 
 export type { TasksApi };
@@ -22,6 +25,9 @@ export const getTasksApi = defineWebEntityApi((deps) =>
       fetchTasks,
       addTask,
       completeTask,
+      completeTaskOccurrence,
+      undoTaskOccurrence,
+      setTaskRecurrence,
       reopenTask,
       editTask,
       rescheduleTask,

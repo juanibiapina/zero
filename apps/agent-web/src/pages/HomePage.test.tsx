@@ -98,11 +98,13 @@ function fakeTasksRest(initial: Task[]): TasksRest {
   return {
     fetchTasks: async () =>
       server.filter((t) => t.completedAt == null).map((item) => ({ ...item })),
-    addTask: async ({ id, text, showUpDate, projectId }) => {
+    addTask: async ({ id, text, showUpDate, projectId, recurrence }) => {
       const row: Task = {
         id,
         text,
-        showUpDate,
+        showUpDate: recurrence?.origin ?? showUpDate,
+        recurrence: recurrence ?? null,
+        recurrenceDate: recurrence?.origin ?? null,
         createdAt: new Date().toISOString(),
         completedAt: null,
         projectId,
@@ -296,6 +298,26 @@ describe("HomePage", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: 'Edit "call the dentist"' }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("creates a recurring task from natural-language quick add", async () => {
+    setApi();
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: "Add a task" }),
+      { target: { value: "stand up every day" } },
+    );
+    expect(screen.getByText("every day")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: 'Edit "stand up"' }),
       ).toBeInTheDocument(),
     );
   });

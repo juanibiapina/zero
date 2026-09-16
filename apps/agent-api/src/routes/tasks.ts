@@ -1,5 +1,9 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
+import {
+  validateRecurrence,
+  type Recurrence,
+} from "@zeroapps/recurrence";
 
 import { log } from "../log";
 import type { Env } from "../types";
@@ -9,10 +13,18 @@ type Variables = {
   userId: string;
 };
 
+const PlainDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const RecurrenceInput = z.custom<Recurrence>(
+  (value) => validateRecurrence(value).ok,
+  "invalid recurrence",
+);
+
 const TaskSchema = z.object({
   id: z.string(),
   text: z.string(),
-  showUpDate: z.string().nullable(),
+  showUpDate: PlainDate.nullable(),
+  recurrence: RecurrenceInput.nullable(),
+  recurrenceDate: PlainDate.nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
   projectId: z.string().nullable(),
@@ -22,9 +34,6 @@ const TaskSchema = z.object({
   // gracefully instead of 500ing the whole list response.
   sortKey: z.string().nullable(),
 });
-
-// A local calendar day, YYYY-MM-DD. The client mints it in the user's timezone.
-const ShowUpDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const createTasksRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
@@ -68,7 +77,8 @@ export const createTasksRoutes = () => {
               text: z.string().min(1),
               // Optional: a loose quick-capture has no day (null/absent = always
               // relevant). A project-screen add or a dated quick-add sends one.
-              showUpDate: ShowUpDate.nullable().optional(),
+              showUpDate: PlainDate.nullable().optional(),
+              recurrence: RecurrenceInput.nullable().optional(),
               // Optional: the Project this task belongs to. Omitted/absent for a
               // loose task.
               projectId: z.string().uuid().nullable().optional(),
@@ -97,7 +107,7 @@ export const createTasksRoutes = () => {
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, text, showUpDate, projectId, sourceCaptureId } =
+    const { id, text, showUpDate, recurrence, projectId, sourceCaptureId } =
       c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
@@ -109,6 +119,7 @@ export const createTasksRoutes = () => {
       showUpDate ?? null,
       projectId ?? null,
       sourceCaptureId ?? null,
+      recurrence ?? null,
     );
     log("task_added", { clerk_user_id: userId });
     return c.json({ task }, 201);
@@ -132,7 +143,7 @@ export const createTasksRoutes = () => {
             // Idempotent on the id, so a replayed offline write is safe.
             schema: z.object({
               text: z.string().min(1).optional(),
-              showUpDate: ShowUpDate.nullable().optional(),
+              showUpDate: PlainDate.nullable().optional(),
               sortKey: z.string().min(1).optional(),
               // The Project to move the task into (uuid), or null to move it back
               // to loose. Present-not-value: null is a valid clear-to-loose.
@@ -274,6 +285,134 @@ export const createTasksRoutes = () => {
       return c.json({ error: "task not found" }, 404);
     }
     log("task_reopened", { clerk_user_id: userId });
+    return c.json({ task }, 200);
+  });
+
+  const recurrenceRoute = createRoute({
+    method: "put",
+    path: "/api/tasks/{id}/recurrence",
+    tags: ["Tasks"],
+    summary: "Replace or clear a task recurrence",
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({ recurrence: RecurrenceInput.nullable() }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: z.object({ task: TaskSchema }) } },
+        description: "The updated task",
+      },
+      404: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "No task with that id",
+      },
+    },
+  });
+
+  router.openapi(recurrenceRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const { recurrence } = c.req.valid("json");
+    const task = await getUserDO(c.env, userId).setTaskRecurrence(id, recurrence);
+    if (!task) return c.json({ error: "task not found" }, 404);
+    log("task_recurrence_changed", { clerk_user_id: userId });
+    return c.json({ task }, 200);
+  });
+
+  const completeOccurrenceRoute = createRoute({
+    method: "post",
+    path: "/api/tasks/{id}/complete-occurrence",
+    tags: ["Tasks"],
+    summary: "Complete one recurring occurrence",
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({ scheduledOn: PlainDate, completedOn: PlainDate }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: z.object({ task: TaskSchema }) } },
+        description: "The task advanced or completed at the recurrence end",
+      },
+      404: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "No task with that id",
+      },
+    },
+  });
+
+  router.openapi(completeOccurrenceRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const { scheduledOn, completedOn } = c.req.valid("json");
+    const task = await getUserDO(c.env, userId).completeTask(
+      id,
+      scheduledOn,
+      completedOn,
+    );
+    if (!task) return c.json({ error: "task not found" }, 404);
+    log("task_occurrence_completed", { clerk_user_id: userId });
+    return c.json({ task }, 200);
+  });
+
+  const undoOccurrenceRoute = createRoute({
+    method: "post",
+    path: "/api/tasks/{id}/undo-occurrence",
+    tags: ["Tasks"],
+    summary: "Undo the latest recurring occurrence completion",
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              expectedRecurrenceDate: PlainDate,
+              recurrenceDateBefore: PlainDate,
+              showUpDateBefore: PlainDate.nullable(),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: { "application/json": { schema: z.object({ task: TaskSchema }) } },
+        description: "The restored task",
+      },
+      404: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "No task with that id",
+      },
+    },
+  });
+
+  router.openapi(undoOccurrenceRoute, async (c) => {
+    const userId = c.get("userId");
+    const { id } = c.req.valid("param");
+    const {
+      expectedRecurrenceDate,
+      recurrenceDateBefore,
+      showUpDateBefore,
+    } = c.req.valid("json");
+    const task = await getUserDO(c.env, userId).undoTaskOccurrence(
+      id,
+      expectedRecurrenceDate,
+      recurrenceDateBefore,
+      showUpDateBefore,
+    );
+    if (!task) return c.json({ error: "task not found" }, 404);
+    log("task_occurrence_undone", { clerk_user_id: userId });
     return c.json({ task }, 200);
   });
 

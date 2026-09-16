@@ -9,6 +9,7 @@ import {
   type Task,
   type TasksApi,
 } from '@zero/agent-core';
+import { toText } from '@zeroapps/recurrence';
 import { Host, Icon } from '@expo/ui';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -219,6 +220,9 @@ function QuickRow({
 type ScheduleSheetProps = {
   open: boolean;
   showUpDate: string | null | undefined;
+  recurrenceLabel?: string;
+  onStopRecurrence?: () => void;
+  onCompleteForever?: () => void;
   onPick: (date: string | null) => void;
   onClose: () => void;
 };
@@ -227,7 +231,15 @@ export function ScheduleSheet(props: ScheduleSheetProps) {
   return props.open ? <OpenScheduleSheet {...props} /> : null;
 }
 
-function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetProps) {
+function OpenScheduleSheet({
+  open,
+  showUpDate,
+  recurrenceLabel,
+  onStopRecurrence,
+  onCompleteForever,
+  onPick,
+  onClose,
+}: ScheduleSheetProps) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const accent = useColor('--color-accent');
@@ -369,6 +381,24 @@ function OpenScheduleSheet({ open, showUpDate, onPick, onClose }: ScheduleSheetP
           ))}
         </View>
 
+        {recurrenceLabel && onStopRecurrence ? (
+          <View className="mt-2 border-t border-divider">
+            <QuickRow
+              icon="↻"
+              label={`Stop ${recurrenceLabel}`}
+              onPress={onStopRecurrence}
+              testID="schedule-stop-recurrence"
+            />
+            {onCompleteForever ? (
+              <QuickRow
+                icon="✓"
+                label="Complete forever"
+                onPress={onCompleteForever}
+                testID="schedule-complete-forever"
+              />
+            ) : null}
+          </View>
+        ) : null}
         <View className="mt-2 border-t border-divider">
           <QuickRow
             icon="⊘"
@@ -480,12 +510,15 @@ export function useTaskDetail({
       // time). Undo reopens the task.
       undoableAction({
         message: 'Completed',
-        act: () => api.complete(item.id),
-        undo: () => api.reopen(item),
+        act: () => api.complete(item.id, today),
+        undo: () =>
+          item.recurrence
+            ? api.undoOccurrence(item, today)
+            : api.reopen(item),
         onError,
       });
     },
-    [api, onError],
+    [api, onError, today],
   );
 
   const completeFromSheet = useCallback(() => {
@@ -508,6 +541,27 @@ export function useTaskDetail({
     },
     [api, selected, projects, onError],
   );
+
+  const stopRecurrence = useCallback(() => {
+    if (!selected?.recurrence) return;
+    onError(null);
+    const tx = api.setRecurrence(selected.id, null);
+    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
+    setScheduling(false);
+  }, [api, selected, onError]);
+
+  const completeForever = useCallback(() => {
+    if (!selected?.recurrence) return;
+    const item = selected;
+    setScheduling(false);
+    setSelectedId(null);
+    undoableAction({
+      message: 'Completed forever',
+      act: () => api.completeForever(item.id),
+      undo: () => api.reopen(item),
+      onError,
+    });
+  }, [api, selected, onError]);
 
   const onPickProject = useCallback(
     (projectId: string | null) => {
@@ -555,7 +609,11 @@ export function useTaskDetail({
         scheduleAction={
           selected
             ? {
-                label: selected.showUpDate ? scheduleLabel(selected.showUpDate, today) : 'No date',
+                label: selected.recurrence
+                  ? toText(selected.recurrence)
+                  : selected.showUpDate
+                    ? scheduleLabel(selected.showUpDate, today)
+                    : 'No date',
                 accessibilityLabel: 'Set schedule',
                 active: selected.showUpDate != null,
                 onPress: () => { commitDraft(); setScheduling(true); },
@@ -598,6 +656,9 @@ export function useTaskDetail({
         key={selected?.id ?? 'none'}
         open={scheduling && selected != null}
         showUpDate={selected?.showUpDate}
+        recurrenceLabel={selected?.recurrence ? toText(selected.recurrence) : undefined}
+        onStopRecurrence={selected?.recurrence ? stopRecurrence : undefined}
+        onCompleteForever={selected?.recurrence ? completeForever : undefined}
         onPick={onPickSchedule}
         onClose={() => setScheduling(false)}
       />

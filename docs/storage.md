@@ -85,14 +85,34 @@ reconciles with the server in the background.
   in scope) so it can **re-insert** the row when absent, and updates it in place
   when Undo is tapped before the eviction lands. It re-inserts with the row's own
   id preserved (never a minted one), so it is the same row the server has, and its
-  REST call is the idempotent `reopen`/`unprocess` endpoint. Routing: the durable
-  outbox routes by the verb's name, but the in-memory builder routes by operation
-  type, so a revive tags its optimistic op with `{ verb: name }` metadata and both
-  `onInsert`/`onUpdate` route on it. This is the mirror of the delete caveat
-  above: an update-by-id Undo passes every in-memory test (the fallback keeps the
-  completed row until a refetch) yet fails on the real persisted backend, so it is
-  verified on-device. (A future simplification: tag every op with its verb name
-  and delete the changed-field `matches` routing entirely.)
+  REST call is the idempotent `reopen`/`unprocess` endpoint. Every update/revive
+  tags its optimistic operation with `{ verb, args }`: the in-memory builder routes
+  by verb name, while the durable outbox keeps action arguments for replay. Legacy
+  queued updates without metadata still fall back to changed-field matching. This
+  is the mirror of the delete caveat above: an update-by-id Undo passes every
+  in-memory test yet fails on the real persisted backend, so it is verified
+  on-device.
+
+## Recurring Task transitions
+
+A recurring completion is an in-place state transition, not a completed-row
+removal. Task stores versioned `recurrence` JSON and a `recurrenceDate` cursor;
+`showUpDate` can differ after a one-off postpone. The optimistic complete verb
+calls `@zeroapps/recurrence.advance`, updates both dates when another occurrence
+exists, and sets `completedAt` only when the inclusive end is exhausted.
+
+Update/revive verbs persist their initiating arguments in TanStack mutation
+metadata. The durable outbox therefore retains the user's local `completedOn`
+date across restart. The server accepts the occurrence's prior
+`recurrenceDate` as `scheduledOn` and advances only when it still matches the
+stored cursor. A repeated or stale write returns current state without advancing
+again.
+
+Recurring Undo carries the full pre-completion Task snapshot. It conditionally
+restores that snapshot only while the server cursor still matches the expected
+post-completion cursor. The revive path covers an exhausted series whose row was
+reconciled out of the open working set; an in-place update covers an ordinary
+advance whose row remained open.
 
 ## The cache is disposable
 

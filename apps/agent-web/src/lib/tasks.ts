@@ -2,6 +2,7 @@
 // Bearer token is needed here (unlike the cross-origin mobile client).
 
 import type { Task } from "@zero/agent-core";
+import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
 
 export type { Task };
 
@@ -20,6 +21,7 @@ export async function addTask(task: {
   showUpDate: string | null;
   projectId: string | null;
   sourceCaptureId: string | null;
+  recurrence?: Recurrence | null;
 }): Promise<Task> {
   const res = await fetch("/api/tasks", {
     method: "POST",
@@ -40,6 +42,49 @@ export async function completeTask(id: string): Promise<Task> {
   }
   const body = (await res.json()) as { task: Task };
   return body.task;
+}
+
+export async function completeTaskOccurrence(
+  id: string,
+  event: { scheduledOn: PlainDate; completedOn: PlainDate },
+): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/complete-occurrence`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+  });
+  if (!res.ok) throw new Error(`complete occurrence failed: ${res.status}`);
+  return ((await res.json()) as { task: Task }).task;
+}
+
+export async function undoTaskOccurrence(
+  id: string,
+  event: {
+    expectedRecurrenceDate: PlainDate;
+    recurrenceDateBefore: PlainDate;
+    showUpDateBefore: PlainDate | null;
+  },
+): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/undo-occurrence`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+  });
+  if (!res.ok) throw new Error(`undo occurrence failed: ${res.status}`);
+  return ((await res.json()) as { task: Task }).task;
+}
+
+export async function setTaskRecurrence(
+  id: string,
+  recurrence: Recurrence | null,
+): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/recurrence`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recurrence }),
+  });
+  if (!res.ok) throw new Error(`set recurrence failed: ${res.status}`);
+  return ((await res.json()) as { task: Task }).task;
 }
 
 export async function reopenTask(id: string): Promise<Task> {

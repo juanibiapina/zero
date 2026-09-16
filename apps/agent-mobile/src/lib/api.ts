@@ -6,6 +6,7 @@ import type {
   WaitingCondition,
   WaitingConditionKind,
 } from '@zero/agent-core';
+import type { PlainDate, Recurrence } from '@zeroapps/recurrence';
 
 import { API_BASE_URL } from './env';
 
@@ -92,6 +93,7 @@ export async function addTask(
     showUpDate: string | null;
     projectId: string | null;
     sourceCaptureId: string | null;
+    recurrence?: Recurrence | null;
   },
   baseUrl: string = API_BASE_URL,
 ): Promise<Task> {
@@ -128,6 +130,70 @@ export async function completeTask(
   }
   const body = (await res.json()) as { task: Task };
   return body.task;
+}
+
+export async function completeTaskOccurrence(
+  getToken: TokenGetter,
+  id: string,
+  event: { scheduledOn: PlainDate; completedOn: PlainDate },
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}/complete-occurrence`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    },
+    baseUrl,
+  );
+  if (!res.ok) throw new Error(`complete occurrence failed: ${res.status}`);
+  return ((await res.json()) as { task: Task }).task;
+}
+
+export async function undoTaskOccurrence(
+  getToken: TokenGetter,
+  id: string,
+  event: {
+    expectedRecurrenceDate: PlainDate;
+    recurrenceDateBefore: PlainDate;
+    showUpDateBefore: PlainDate | null;
+  },
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}/undo-occurrence`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    },
+    baseUrl,
+  );
+  if (!res.ok) throw new Error(`undo occurrence failed: ${res.status}`);
+  return ((await res.json()) as { task: Task }).task;
+}
+
+export async function setTaskRecurrence(
+  getToken: TokenGetter,
+  id: string,
+  recurrence: Recurrence | null,
+  baseUrl: string = API_BASE_URL,
+): Promise<Task> {
+  const res = await apiFetch(
+    getToken,
+    `/api/tasks/${id}/recurrence`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recurrence }),
+    },
+    baseUrl,
+  );
+  if (!res.ok) throw new Error(`set recurrence failed: ${res.status}`);
+  return ((await res.json()) as { task: Task }).task;
 }
 
 export async function reopenTask(

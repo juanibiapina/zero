@@ -46,12 +46,11 @@ export type InsertVerb<Row extends EntityRow, Args> = {
 
 // A verb that updates a row in place by its stable id. `draft` mutates the
 // optimistic row; `persist` sends the change and returns the server's row.
-// `matches` is how the in-memory fallback routes a collection.update back to its
-// verb: one collection.update backs every update verb, so the verb is told
-// apart by the changed field set (`changes`, never `modified`: a rescheduled
-// row still carries its old text). Verbs are tried in declaration order and the
-// first match wins, so a catch-all edit verb goes last. The persisted path never
-// routes: the offline outbox keys each transaction by the verb's name.
+// New optimistic operations carry `{ verb, args }` metadata, so the in-memory
+// path and durable outbox retain the initiating command. `matches` is the legacy
+// fallback for queued/pre-metadata collection.update operations: verbs are tried
+// in declaration order against `changes`, so a catch-all edit verb stays last.
+// The persisted path otherwise routes by the outbox mutation function's name.
 export type UpdateVerb<Row extends EntityRow, Args> = {
   kind: "update";
   id: (args: Args) => string;
@@ -59,7 +58,8 @@ export type UpdateVerb<Row extends EntityRow, Args> = {
   matches: (mutation: { changes: Partial<Row>; modified: Row }) => boolean;
   persist: (
     id: string,
-    mutation: { changes: Partial<Row>; modified: Row },
+    mutation: { changes: Partial<Row>; modified: Row; original?: Row },
+    args: Args | undefined,
   ) => Promise<Row>;
   // Whether the persisted path re-pulls the list after this verb's REST call
   // (default true). Off for a verb that fires on every blur-commit.
@@ -96,7 +96,8 @@ export type ReviveVerb<Row extends EntityRow, Args> = {
   draft: (args: Args) => (draft: Row) => void;
   persist: (
     id: string,
-    mutation: { changes: Partial<Row>; modified: Row },
+    mutation: { changes: Partial<Row>; modified: Row; original?: Row },
+    args: Args | undefined,
   ) => Promise<Row>;
   refetchAfter?: boolean;
 };
@@ -261,10 +262,10 @@ function asDraft<Row extends EntityRow>(
 
 // The optimistic op for a revive, shared by both builders: update the row in
 // place when it is still present, else re-insert it (id preserved, so it is the
-// same row the server has). Both branches tag the op with `{ verb: name }` so the
-// in-memory builder can route it (the persisted builder routes by outbox name and
-// ignores the tag). `collection.insert` keys by `getKey = r.id`, so passing the
-// full row preserves the id — do NOT mint a new one here.
+// same row the server has). Both branches tag the op with `{ verb, args }`: the
+// in-memory builder routes by name and the durable outbox replays the initiating
+// arguments. `collection.insert` keys by `getKey = r.id`, so passing the full row
+// preserves the id — do NOT mint a new one here.
 function reviveAction<Row extends EntityRow>(
   collection: Collection<Row, string>,
   name: string,
@@ -272,7 +273,7 @@ function reviveAction<Row extends EntityRow>(
 ): (args: unknown) => Transaction {
   return (args) => {
     const id = verb.id(args);
-    const metadata = { verb: name };
+    const metadata = { verb: name, args };
     return collection.has(id)
       ? collection.update(id, { metadata }, asDraft(verb.draft(args)))
       : collection.insert(verb.row(args), { metadata });
@@ -310,12 +311,11 @@ function routeUpdate<Row extends EntityRow>(
   throw new Error(`${name}: no update verb matches ${Object.keys(mutation.changes).join(",")}`);
 }
 
-// A revive op tags its optimistic mutation with `{ verb: name }` so the
-// in-memory builder (which otherwise routes by operation type) can pick the
-// revive verb whether the op was an insert (row was evicted) or an update (row
-// still present). The persisted builder routes by the outbox mutationFn name and
-// ignores this. Only revive sets metadata today.
-type OpMetadata = { verb?: string };
+// Every new update/revive operation carries `{ verb, args }`. The in-memory
+// builder routes by the named verb; the durable builder routes by its mutationFn
+// and uses the retained args. Revive inserts also need the name because their
+// collection operation is an insert while their server command is an Undo.
+type OpMetadata = { verb?: string; args?: unknown };
 function reviveVerbFromMetadata<Row extends EntityRow>(
   verbs: LooseVerbs<Row>,
   metadata: unknown,
@@ -324,6 +324,18 @@ function reviveVerbFromMetadata<Row extends EntityRow>(
   if (!named) return undefined;
   const verb = verbs[named];
   return verb?.kind === "revive" ? verb : undefined;
+}
+
+function updateVerbFromMetadata<Row extends EntityRow>(
+  verbs: LooseVerbs<Row>,
+  metadata: unknown,
+): UpdateVerb<Row, unknown> | ReviveVerb<Row, unknown> | undefined {
+  const named = (metadata as OpMetadata | undefined)?.verb;
+  if (!named) return undefined;
+  const verb = verbs[named];
+  return verb?.kind === "update" || verb?.kind === "revive"
+    ? verb
+    : undefined;
 }
 
 // The Query Collection's direct-write utils, which are not on the base
@@ -393,10 +405,15 @@ export function createInMemoryEntityApi<
           // revive persist (reopen/unprocess), NOT the entity's add verb.
           const revive = reviveVerbFromMetadata(verbs, m.metadata);
           if (revive) {
-            const updated = await revive.persist(String(m.key), {
-              changes: m.changes,
-              modified: m.modified,
-            });
+            const updated = await revive.persist(
+              String(m.key),
+              {
+                changes: m.changes,
+                modified: m.modified,
+                original: "original" in m ? (m.original as Row) : undefined,
+              },
+              (m.metadata as OpMetadata).args,
+            );
             reconcile(
               collection,
               spec.leavesCollection?.(updated)
@@ -413,13 +430,21 @@ export function createInMemoryEntityApi<
       },
       onUpdate: async ({ transaction }) => {
         for (const m of transaction.mutations) {
-          const mutation = { changes: m.changes, modified: m.modified };
+          const mutation = {
+            changes: m.changes,
+            modified: m.modified,
+            original: m.original,
+          };
           // A revive whose row was still present updates in place; route by its
           // metadata. Everything else routes by the changed-field heuristic.
           const verb =
-            reviveVerbFromMetadata(verbs, m.metadata) ??
+            updateVerbFromMetadata(verbs, m.metadata) ??
             routeUpdate(spec.name, verbs, mutation);
-          const updated = await verb.persist(String(m.key), mutation);
+          const updated = await verb.persist(
+            String(m.key),
+            mutation,
+            (m.metadata as OpMetadata).args,
+          );
           if (spec.leavesCollection?.(updated)) {
             reconcile(collection, { remove: [updated.id] });
           } else {
@@ -450,7 +475,11 @@ export function createInMemoryEntityApi<
       actions[name] = (args) => collection.insert(mintRow<Row>(verb.row(args)));
     } else if (verb.kind === "update") {
       actions[name] = (args) =>
-        collection.update(verb.id(args), asDraft(verb.draft(args)));
+        collection.update(
+          verb.id(args),
+          { metadata: { verb: name, args } },
+          asDraft(verb.draft(args)),
+        );
     } else if (verb.kind === "revive") {
       actions[name] = reviveAction(collection, name, verb);
     } else {
@@ -628,10 +657,15 @@ export function createPersistedEntityApi<
           // A revive persists exactly like an update (reopen/unprocess by id),
           // whether the optimistic op was an insert (row was evicted) or an
           // update (row still present); reconcileOne re-adds the server's row.
-          const updated = await verb.persist(String(m.key), {
-            changes: m.changes as Partial<Row>,
-            modified: m.modified as Row,
-          });
+          const updated = await verb.persist(
+            String(m.key),
+            {
+              changes: m.changes as Partial<Row>,
+              modified: m.modified as Row,
+              original: m.original as Row,
+            },
+            (m.metadata as OpMetadata).args,
+          );
           reconcileOne(updated);
         } else {
           // Delete: issue the server delete, then remove the row from the synced
@@ -677,7 +711,11 @@ export function createPersistedEntityApi<
           }
         : verb.kind === "update"
           ? (args: unknown) => {
-              collection.update(verb.id(args), asDraft(verb.draft(args)));
+              collection.update(
+                verb.id(args),
+                { metadata: { verb: name, args } },
+                asDraft(verb.draft(args)),
+              );
             }
           : verb.kind === "revive"
             ? (() => {

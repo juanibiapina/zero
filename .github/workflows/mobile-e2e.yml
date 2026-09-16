@@ -56,7 +56,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: apps/agent-mobile/apk-out/app-release.apk
-          key: apk-${{ hashFiles('apps/agent-mobile/src/**', 'apps/agent-mobile/modules/**', 'apps/agent-mobile/plugins/**', 'apps/agent-mobile/app.json', 'apps/agent-mobile/app.config.js', 'apps/agent-mobile/package.json', 'pnpm-lock.yaml', '.github/workflows/mobile-e2e.yml') }}
+          key: apk-${{ hashFiles('apps/agent-mobile/src/**', 'apps/agent-mobile/modules/**', 'apps/agent-mobile/plugins/**', 'apps/agent-mobile/app.json', 'apps/agent-mobile/app.config.js', 'apps/agent-mobile/package.json', 'packages/agent-core/**', 'packages/recurrence/**', 'pnpm-lock.yaml', '.github/workflows/mobile-e2e.yml') }}
 
       - name: Install dependencies
         if: steps.apk-cache.outputs.cache-hit != 'true'
