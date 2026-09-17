@@ -2,7 +2,7 @@
 # NOT run by any workflow (ci/ and release/ are the automated folders). Run on
 # the attached Pixel with the dev client + Metro:
 #
-#   maestro test apps/agent-mobile/.maestro/dev/upcoming-detail.yaml
+#   maestro --no-ansi test apps/agent-mobile/.maestro/dev/upcoming-detail.yaml
 #
 # launchApp has no clearState, so it keeps the signed-in session. It creates its
 # OWN throwaway capture (never touches existing data), schedules it to tomorrow so

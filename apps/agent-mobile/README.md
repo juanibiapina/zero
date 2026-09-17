@@ -266,6 +266,13 @@ pnpm --filter @zero/agent-mobile typecheck
 pnpm --filter @zero/agent-mobile test
 ```
 
+Mobile Jest hides `console.*` output by default. Enable it for one diagnostic
+run without changing the shared configuration:
+
+```bash
+pnpm --filter @zero/agent-mobile exec jest --runInBand --silent=false <test>
+```
+
 ### Run checks on a starved box (the `mini` host)
 
 The `mini` dev host has 2 CPUs and 7.6 GB RAM. These checks are cheap in
@@ -393,9 +400,9 @@ auto-waits/retries, so it does not fight coordinate math, screen-doze, or dev
 overlays (a stray React Native LogBox banner silently ate `adb` taps on the FAB).
 
 ```bash
-maestro hierarchy                     # dump the current screen's element tree
-maestro test apps/agent-mobile/.maestro/<flow>.yaml   # run a saved flow
-maestro studio                        # interactive: inspect the live screen, author taps
+maestro --no-ansi hierarchy --compact                 # dump compact CSV for the current screen
+maestro --no-ansi test apps/agent-mobile/.maestro/<flow>.yaml   # run a saved flow
+maestro studio                                        # interactive: inspect the live screen, author taps
 ```
 
 A flow is declarative and element-based, e.g.:
@@ -446,7 +453,7 @@ and capture each appearance:
 
 ```bash
 adb shell cmd uimode night yes
-maestro test apps/agent-mobile/.maestro/dev/screens.yaml
+maestro --no-ansi test apps/agent-mobile/.maestro/dev/screens.yaml
 adb shell cmd uimode night no
 ```
 

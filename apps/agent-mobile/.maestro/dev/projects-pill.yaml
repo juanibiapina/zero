@@ -2,7 +2,7 @@
 # NOT run by any workflow (ci/ and release/ are the automated folders). Run on
 # the attached Pixel with the dev client + Metro:
 #
-#   maestro test apps/agent-mobile/.maestro/dev/projects-pill.yaml
+#   maestro --no-ansi test apps/agent-mobile/.maestro/dev/projects-pill.yaml
 #
 # launchApp has no clearState, so it keeps the signed-in session. Assumes the app
 # is signed in.

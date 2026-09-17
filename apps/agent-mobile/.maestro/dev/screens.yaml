@@ -2,7 +2,7 @@
 # release/ are the automated folders). Run it on the attached Pixel to capture
 # before/after screenshots of every screen state:
 #
-#   maestro test apps/agent-mobile/.maestro/dev/screens.yaml
+#   maestro --no-ansi test apps/agent-mobile/.maestro/dev/screens.yaml
 #
 # Screenshots land under ~/.maestro/tests/<timestamp>/. launchApp has no
 # clearState, so it keeps the signed-in session. Assumes the app is signed in

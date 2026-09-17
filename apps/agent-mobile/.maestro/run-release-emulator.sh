@@ -38,7 +38,7 @@ mkdir -p "${OUT}/maestro"
 CODE=0
 for attempt in 1 2; do
   adb reverse tcp:8787 tcp:8787 || true
-  maestro test apps/agent-mobile/.maestro/release \
+  maestro --no-ansi test apps/agent-mobile/.maestro/release \
     --format junit \
     --output "${OUT}/maestro/report.xml" \
     --debug-output "${OUT}/maestro"

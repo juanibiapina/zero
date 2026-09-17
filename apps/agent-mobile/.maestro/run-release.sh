@@ -78,7 +78,7 @@ LOGCAT_PID=$!
 trap 'kill "$LOGCAT_PID" >/dev/null 2>&1 || true; cleanup' EXIT
 
 mkdir -p "${OUT}/maestro"
-maestro test "${REPO_ROOT}/apps/agent-mobile/.maestro/release" \
+maestro --no-ansi test "${REPO_ROOT}/apps/agent-mobile/.maestro/release" \
   --format junit \
   --output "${OUT}/maestro/report.xml" \
   --debug-output "${OUT}/maestro"

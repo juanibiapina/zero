@@ -12,18 +12,32 @@
   // credential has to survive strict mode. These are passed through, not
   // hashed: they change nothing about a task's output.
   "globalPassThroughEnv": ["ZERO_API_KEY", "ZERO_API_URL"],
+  "futureFlags": { "errorsOnlyShowHash": true },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**"],
+      "outputLogs": "errors-only"
     },
-    "lint": { "outputs": [] },
-    "typecheck": { "dependsOn": ["^typecheck"] },
+    "lint": { "outputs": [], "outputLogs": "errors-only" },
+    "typecheck": { "dependsOn": ["^typecheck"], "outputLogs": "errors-only" },
     "dev": { "persistent": true, "cache": false },
-    "test": { "outputs": [] },
-    "deploy": { "dependsOn": ["build"], "cache": false },
-    "@zero/agent-api#deploy": { "dependsOn": ["@zero/agent-web#build"], "cache": false },
-    "@zero/dashboard-api#test": { "dependsOn": ["@zero/dashboard-web#build"], "outputs": [] },
-    "@zero/dashboard-api#deploy": { "dependsOn": ["@zero/dashboard-web#build"], "cache": false }
+    "test": { "outputs": [], "outputLogs": "errors-only" },
+    "deploy": { "dependsOn": ["build"], "cache": false, "outputLogs": "errors-only" },
+    "@zero/agent-api#deploy": {
+      "dependsOn": ["@zero/agent-web#build"],
+      "cache": false,
+      "outputLogs": "errors-only"
+    },
+    "@zero/dashboard-api#test": {
+      "dependsOn": ["@zero/dashboard-web#build"],
+      "outputs": [],
+      "outputLogs": "errors-only"
+    },
+    "@zero/dashboard-api#deploy": {
+      "dependsOn": ["@zero/dashboard-web#build"],
+      "cache": false,
+      "outputLogs": "errors-only"
+    }
   }
 }

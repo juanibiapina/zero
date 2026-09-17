@@ -43,7 +43,7 @@ mkdir -p "${OUT}/maestro"
 # app; retry the flow once before treating it as a real failure.
 CODE=0
 for attempt in 1 2; do
-  maestro test apps/agent-mobile/.maestro/ci \
+  maestro --no-ansi test apps/agent-mobile/.maestro/ci \
     --format junit \
     --output "${OUT}/maestro/report.xml" \
     --debug-output "${OUT}/maestro"
