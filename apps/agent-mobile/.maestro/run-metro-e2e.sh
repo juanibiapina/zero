@@ -3,10 +3,14 @@ set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MOBILE_DIR="${REPO_ROOT}/apps/agent-mobile"
+HERMETIC_FLOW_DIR="${MOBILE_DIR}/.maestro/hermetic"
 PACKAGE="dev.juanibiapina.zeroagent"
 METRO_PORT=8082
 WORKER_PORT=8787
 TASK_TEXT="E2E loose task"
+PROJECT_TITLE="E2E described project"
+PROJECT_DESCRIPTION="E2E durable project description"
+FLOW_COUNT="$(find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d '[:space:]')"
 IMAGE="node:22-slim"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
 ARTIFACT_DIR="${E2E_ARTIFACT_ROOT:-/tmp/zero-mobile-e2e}/${RUN_ID}"
@@ -169,7 +173,10 @@ cleanup() {
   fi
 
   if [[ "$SUCCESS" == "1" && "$code" == "0" ]]; then
-    printf 'PASS: 1 flow in %ss (Pixel 7, hermetic Metro)\n' "$(( $(date +%s) - STARTED_AT ))"
+    local flow_label="flows"
+    [[ "$FLOW_COUNT" == "1" ]] && flow_label="flow"
+    printf 'PASS: %s %s in %ss (Pixel 7, hermetic Metro)\n' \
+      "$FLOW_COUNT" "$flow_label" "$(( $(date +%s) - STARTED_AT ))"
     exit 0
   fi
 
@@ -255,9 +262,14 @@ if [[ "$worker_code" != "401" ]]; then
   echo "Worker readiness returned ${worker_code:-no response}" >> "$ARTIFACT_DIR/worker.log"
   exit 1
 fi
-empty_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user')"
-if ! jq -e '.tasks == []' <<< "$empty_response" >/dev/null; then
-  printf 'Expected an empty local task list; received %s\n' "$empty_response" >> "$ARTIFACT_DIR/worker.log"
+empty_tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user')"
+if ! jq -e '.tasks == []' <<< "$empty_tasks_response" >/dev/null; then
+  printf 'Expected an empty local task list; received %s\n' "$empty_tasks_response" >> "$ARTIFACT_DIR/worker.log"
+  exit 1
+fi
+empty_projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer e2e-test-user')"
+if ! jq -e '.projects == []' <<< "$empty_projects_response" >/dev/null; then
+  printf 'Expected an empty local Project list; received %s\n' "$empty_projects_response" >> "$ARTIFACT_DIR/worker.log"
   exit 1
 fi
 
@@ -315,7 +327,7 @@ fi
 STAGE="maestro flow"
 verbose "running Maestro flow"
 MAESTRO_COMMAND=(
-  maestro --no-ansi test "$MOBILE_DIR/.maestro/hermetic"
+  maestro --no-ansi test "$HERMETIC_FLOW_DIR"
   --format junit
   --output "$ARTIFACT_DIR/maestro/report.xml"
   --debug-output "$ARTIFACT_DIR/maestro"
@@ -336,16 +348,31 @@ if [[ "$maestro_code" -ne 0 ]]; then exit "$maestro_code"; fi
 capture_diagnostics
 
 STAGE="postcondition"
-response=""
+tasks_response=""
+projects_response=""
 for _ in $(seq 1 30); do
-  response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
-  if jq -e --arg text "$TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' <<< "$response" >/dev/null 2>&1; then
+  tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
+  projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
+  if jq -e --arg text "$TASK_TEXT" \
+      '.tasks | length == 1 and .[0].text == $text' \
+      <<< "$tasks_response" >/dev/null 2>&1 \
+    && jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
+      '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
+      <<< "$projects_response" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-printf '%s\n' "$response" > "$ARTIFACT_DIR/worker-postcondition.json"
-if ! jq -e --arg text "$TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' <<< "$response" >/dev/null; then
+printf '%s\n' "$tasks_response" > "$ARTIFACT_DIR/worker-tasks-postcondition.json"
+printf '%s\n' "$projects_response" > "$ARTIFACT_DIR/worker-projects-postcondition.json"
+if ! jq -e --arg text "$TASK_TEXT" \
+    '.tasks | length == 1 and .[0].text == $text' \
+    <<< "$tasks_response" >/dev/null; then
+  exit 1
+fi
+if ! jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
+    '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
+    <<< "$projects_response" >/dev/null; then
   exit 1
 fi
 

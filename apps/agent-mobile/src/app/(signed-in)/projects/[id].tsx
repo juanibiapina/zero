@@ -3,7 +3,7 @@ import { MenuView } from '@expo/ui/community/menu';
 import { useAuth } from '@clerk/expo';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   compareByOrder,
   isBasisStale,
@@ -27,7 +27,15 @@ import {
   type WaitingCondition,
   type WaitsApi,
 } from '@zero/agent-core';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   Alert,
   BackHandler,
@@ -112,6 +120,102 @@ function BackRow({ onBack }: { onBack: () => void }) {
   );
 }
 
+type CommitProjectEdit = (
+  fields: ProjectEditFields,
+) => ReturnType<ProjectsApi['edit']> | null;
+
+function normalizeDescription(value: string | null | undefined): string | null {
+  if (value == null || value.trim() === '') return null;
+  return value;
+}
+
+// Own the description draft at the workspace seam. `flush` is synchronous: it
+// queues the existing optimistic transaction and lets the user's action continue.
+function useProjectDescriptionDraft(
+  project: Project | null,
+  commitEdit: CommitProjectEdit,
+) {
+  const projectId = project?.id ?? null;
+  const initialValue = project?.description ?? '';
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const value =
+    projectId && Object.prototype.hasOwnProperty.call(drafts, projectId)
+      ? drafts[projectId]
+      : initialValue;
+  const queuedRef = useRef<{
+    projectId: string;
+    value: string | null;
+    revision: number;
+  } | null>(null);
+  const revisionRef = useRef(0);
+  const commitEditRef = useRef(commitEdit);
+  const latestRef = useRef<{
+    projectId: string;
+    value: string;
+    stored: string | null;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!project) return;
+    commitEditRef.current = commitEdit;
+    latestRef.current = {
+      projectId: project.id,
+      value,
+      stored: normalizeDescription(project.description),
+    };
+    if (queuedRef.current?.projectId !== project.id) queuedRef.current = null;
+  }, [commitEdit, project, value]);
+
+  const onChange = useCallback(
+    (next: string) => {
+      if (!projectId) return;
+      const latest = latestRef.current;
+      if (latest?.projectId === projectId) {
+        latestRef.current = { ...latest, value: next };
+      }
+      setDrafts((current) => ({ ...current, [projectId]: next }));
+    },
+    [projectId],
+  );
+
+  const flush = useCallback(() => {
+    const latest = latestRef.current;
+    if (!latest) return;
+    const next = normalizeDescription(latest.value);
+    const queued = queuedRef.current;
+    const baseline =
+      queued?.projectId === latest.projectId ? queued.value : latest.stored;
+    if (next === baseline) return;
+
+    const revision = revisionRef.current + 1;
+    revisionRef.current = revision;
+    queuedRef.current = {
+      projectId: latest.projectId,
+      value: next,
+      revision,
+    };
+    const tx = commitEditRef.current({ description: next });
+    if (!tx) {
+      queuedRef.current = null;
+      return;
+    }
+    void tx.isPersisted.promise.catch(() => {
+      const current = queuedRef.current;
+      if (
+        current?.projectId === latest.projectId &&
+        current.revision === revision
+      ) {
+        queuedRef.current = null;
+        if (latestRef.current?.projectId === latest.projectId) {
+          latestRef.current = { ...latestRef.current, stored: baseline };
+        }
+      }
+    });
+  }, []);
+
+  return { value, onChange, flush };
+}
+
 function ProjectDetail({
   api,
   tasksApi,
@@ -124,7 +228,6 @@ function ProjectDetail({
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { getToken } = useAuth();
-  const back = useCallback(() => router.back(), [router]);
   const [error, setError] = useState<string | null>(null);
 
   const { data: projects } = useLiveQuery((q) =>
@@ -144,13 +247,24 @@ function ProjectDetail({
 
   const commitEdit = useCallback(
     (fields: ProjectEditFields) => {
-      if (!project) return;
+      if (!project) return null;
       setError(null);
       const tx = api.edit(project.id, fields);
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
+      return tx;
     },
     [api, project],
   );
+  const {
+    value: descriptionValue,
+    onChange: changeDescription,
+    flush: flushDescription,
+  } = useProjectDescriptionDraft(project, commitEdit);
+  const back = useCallback(() => {
+    flushDescription();
+    router.back();
+  }, [flushDescription, router]);
+  useFocusEffect(useCallback(() => () => flushDescription(), [flushDescription]));
 
   const commitState = useCallback(
     (state: ProjectState) => {
@@ -259,12 +373,13 @@ function ProjectDetail({
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      flushDescription();
       if (detail.handleBack()) return true;
       if (add.handleBack()) return true;
       return false;
     });
     return () => sub.remove();
-  }, [detail, add]);
+  }, [detail, add, flushDescription]);
 
   // The header's derived status reads tasks and waits, so a pull re-pulls all
   // three lists this screen shows.
@@ -321,7 +436,11 @@ function ProjectDetail({
   }`;
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      testID="project-workspace"
+      className="flex-1 bg-background"
+      onTouchStart={flushDescription}
+    >
       <BackRow onBack={back} />
       <ReorderableTaskList
         api={tasksApi}
@@ -351,7 +470,13 @@ function ProjectDetail({
                   projectAfterRemovalImpact(project.id, conds, list),
                 )}
                 onEdit={commitEdit}
-                description={<ProjectDescription project={project} onEdit={commitEdit} />}
+                description={
+                  <ProjectDescription
+                    value={descriptionValue}
+                    onChange={changeDescription}
+                    onBlur={flushDescription}
+                  />
+                }
                 onState={(state) => {
                   if (state === 'done') {
                     completeProject();
@@ -889,29 +1014,22 @@ function ProjectWaits({
   );
 }
 
-// The project's description: its statement of intent, an always-visible editable
-// field beneath the status (above the work). Commits on blur; can be cleared to
-// null.
+// The project's description input is deliberately shallow: the workspace owns
+// its draft and decides when actions and lifecycle events flush it.
 function ProjectDescription({
-  project,
-  onEdit,
+  value,
+  onChange,
+  onBlur,
 }: {
-  project: Project;
-  onEdit: (fields: ProjectEditFields) => void;
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
 }) {
-  const [description, setDescription] = useState(project.description ?? '');
-
-  const commit = () => {
-    const next = description.trim() === '' ? null : description;
-    if ((next ?? null) === (project.description ?? null)) return;
-    onEdit({ description: next });
-  };
-
   return (
     <Input
-      value={description}
-      onChangeText={setDescription}
-      onBlur={commit}
+      value={value}
+      onChangeText={onChange}
+      onBlur={onBlur}
       multiline
       placeholder="What outcome are you after, and why does it matter?"
       accessibilityLabel="Project description"

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
@@ -8,7 +8,7 @@ import {
   waitFor,
   type RenderResult,
 } from '@testing-library/react-native';
-import { Alert, Pressable, Text as RNText, View } from 'react-native';
+import { Alert, BackHandler, Pressable, Text as RNText, View } from 'react-native';
 import {
   defaultToastController,
   localToday,
@@ -37,6 +37,19 @@ const pullToRefresh = (screen: RenderResult) => {
   scroll.props.refreshControl.props.onRefresh();
 };
 
+// A native touch reaches the workspace observer before the pressed control. RTL
+// does not bubble synthetic presses through host views, so screen-action tests
+// emit both observable events in their native order.
+const pressWorkspaceAction = async (
+  screen: RenderResult,
+  target: Parameters<typeof fireEvent.press>[0],
+) => {
+  await act(async () => {
+    fireEvent(screen.getByTestId('project-workspace'), 'touchStart');
+    fireEvent.press(target);
+  });
+};
+
 const mockGetToken = jest.fn<() => Promise<string | null>>();
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: mockGetToken }),
@@ -45,16 +58,41 @@ jest.mock('@clerk/expo', () => ({
 // Route params + navigation. The default renders project '1'; a test can
 // override the id before rendering.
 let mockCurrentId = '1';
+let mockFocusCleanup: (() => void) | null = null;
 const mockBack = jest.fn();
 const mockNavigate = jest.fn<(href: string, options?: unknown) => void>();
 const mockPush = jest.fn<(href: string) => void>();
+function mockUseFocusEffect(effect: () => void | (() => void)) {
+  // This adapter intentionally implements Expo Router's hook interface.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    const cleanup = effect();
+    mockFocusCleanup = typeof cleanup === 'function' ? cleanup : null;
+    return () => {
+      if (typeof cleanup === 'function') cleanup();
+      if (mockFocusCleanup === cleanup) mockFocusCleanup = null;
+    };
+  }, [effect]);
+}
 jest.mock('expo-router', () => ({
   router: {
     navigate: (href: string, options?: unknown) => mockNavigate(href, options),
   },
+  useFocusEffect: mockUseFocusEffect,
   useLocalSearchParams: () => ({ id: mockCurrentId }),
   useRouter: () => ({ back: mockBack, push: mockPush }),
 }));
+
+let mockHardwareBack: (() => boolean | null | undefined) | null = null;
+jest.spyOn(BackHandler, 'addEventListener').mockImplementation((_event, handler) => {
+  const trigger = () => handler({} as never);
+  mockHardwareBack = trigger;
+  return {
+    remove: () => {
+      if (mockHardwareBack === trigger) mockHardwareBack = null;
+    },
+  };
+});
 
 // Status uses @expo/ui rows in a native sheet and settings uses a native menu;
 // the screen body is plain RN. Substitute RN adapters so their wiring is
@@ -270,11 +308,12 @@ const project = (
   title: string,
   icon = '📁',
   state: ProjectState | 'next' = 'in-play',
+  description: string | null = null,
 ): Project => ({
   id,
   title,
   icon,
-  description: null,
+  description,
   state: state === 'next' ? 'in-play' : state,
   createdAt: '2023-01-01T00:00:00.000Z',
 });
@@ -321,6 +360,8 @@ const renderScreen = () => {
 describe('ProjectDetailScreen', () => {
   beforeEach(() => {
     mockCurrentId = '1';
+    mockFocusCleanup = null;
+    mockHardwareBack = null;
     (global as { __reorderableOnReorder?: unknown }).__reorderableOnReorder =
       undefined;
     (global as { __lastPanGesture?: unknown }).__lastPanGesture = undefined;
@@ -335,7 +376,11 @@ describe('ProjectDetailScreen', () => {
     mockDeleteProject.mockReset();
     mockDeleteProject.mockResolvedValue(undefined);
     mockSetProjectState.mockClear();
-    mockEditProject.mockClear();
+    mockEditProject.mockReset();
+    mockEditProject.mockImplementation(async (_token, id, fields) => ({
+      ...project(id, 'Run a 5K', '🏃'),
+      ...fields,
+    }));
     mockAddTask.mockReset();
     mockAddWaitingCondition.mockReset();
     mockDeleteWaitingCondition.mockReset();
@@ -364,6 +409,232 @@ describe('ProjectDetailScreen', () => {
     await waitFor(() =>
       expect(getByLabelText('Project title').props.value).toBe('Run a 5K'),
     );
+  });
+
+  it('saves a changed description on blur', async () => {
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+
+    await fireEvent.changeText(input, 'Finish a community race');
+    await fireEvent(input, 'blur');
+
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    expect(mockEditProject.mock.calls[0][2]).toEqual({
+      description: 'Finish a community race',
+    });
+  });
+
+  it('saves the description before Add opens and keeps it while adding a Task', async () => {
+    mockAddTask.mockImplementation(async (_token, input) => ({
+      ...taskRow(input.id, input.text),
+      projectId: input.projectId,
+      showUpDate: input.showUpDate,
+    }));
+    const screen = await renderScreen();
+    const description = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+    await fireEvent.changeText(description, 'Build enough endurance to finish');
+
+    await pressWorkspaceAction(screen, screen.getByLabelText('Add'));
+
+    expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    expect(mockEditProject.mock.calls[0][2]).toEqual({
+      description: 'Build enough endurance to finish',
+    });
+
+    const task = screen.getByPlaceholderText('Add a task');
+    await fireEvent.changeText(task, 'Run five kilometers');
+    await fireEvent(task, 'submitEditing');
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText('Project description').props.value).toBe(
+      'Build enough endurance to finish',
+    );
+    expect(mockEditProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the description before the visible Back action', async () => {
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+    await fireEvent.changeText(input, 'Cross the finish line');
+
+    await fireEvent.press(screen.getByLabelText('Back to projects'));
+
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    expect(mockEditProject.mock.calls[0][2]).toEqual({
+      description: 'Cross the finish line',
+    });
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockEditProject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockBack.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('saves the description on unhandled Android Back and leaves the pop to the navigator', async () => {
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+    await fireEvent.changeText(input, 'Cross the finish line');
+
+    let handled: boolean | null | undefined = true;
+    await act(async () => {
+      handled = mockHardwareBack?.();
+    });
+
+    expect(handled).toBe(false);
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    expect(mockEditProject.mock.calls[0][2]).toEqual({
+      description: 'Cross the finish line',
+    });
+  });
+
+  it.each([
+    { name: 'identity status', kind: 'status' as const },
+    { name: 'After relationship', kind: 'relationship' as const },
+    { name: 'Task detail', kind: 'task' as const },
+  ])('saves the description before the $name action', async ({ kind }) => {
+    if (kind === 'relationship') {
+      mockFetchProjects.mockResolvedValue([
+        project('1', 'Run a 5K', '🏃'),
+        project('2', 'Buy shoes', '👟'),
+      ]);
+      mockFetchWaits.mockResolvedValue([dependencyRow('a1', '1', '2')]);
+    }
+    if (kind === 'task') {
+      mockFetchTasks.mockResolvedValue([taskRow('t1', 'Train')]);
+    }
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+    await fireEvent.changeText(input, 'Be ready for race day');
+
+    const target =
+      kind === 'status'
+        ? screen.getByLabelText('Project status: Next')
+        : kind === 'relationship'
+          ? screen.getByLabelText('Open project Buy shoes')
+          : screen.getByLabelText('Edit "Train", scheduled Today');
+    await pressWorkspaceAction(screen, target);
+
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    expect(mockEditProject.mock.calls[0][2]).toEqual({
+      description: 'Be ready for race day',
+    });
+    if (kind === 'status') expect(screen.getByText('Project status')).toBeTruthy();
+    if (kind === 'relationship') {
+      expect(mockPush).toHaveBeenCalledWith('/projects/2');
+    }
+    if (kind === 'task') expect(screen.getByLabelText('Set project')).toBeTruthy();
+  });
+
+  it.each(['focus loss', 'unmount'] as const)(
+    'saves a dirty description on %s',
+    async (exit) => {
+      const screen = await renderScreen();
+      const input = await waitFor(() =>
+        screen.getByLabelText('Project description'),
+      );
+      await fireEvent.changeText(input, 'Keep moving forward');
+
+      await act(async () => {
+        if (exit === 'focus loss') mockFocusCleanup?.();
+        else screen.unmount();
+      });
+
+      await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+      expect(mockEditProject.mock.calls[0][2]).toEqual({
+        description: 'Keep moving forward',
+      });
+    },
+  );
+
+  it('queues one edit when touch, blur, Back, and focus cleanup overlap', async () => {
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+    await fireEvent.changeText(input, 'One durable description');
+
+    await act(async () => {
+      fireEvent(screen.getByTestId('project-workspace'), 'touchStart');
+      fireEvent(input, 'blur');
+      mockHardwareBack?.();
+      mockFocusCleanup?.();
+    });
+
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    expect(mockEditProject.mock.calls[0][2]).toEqual({
+      description: 'One durable description',
+    });
+  });
+
+  it('does not edit an unchanged description', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Run a 5K', '🏃', 'in-play', 'Finish the race'),
+    ]);
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+
+    await fireEvent(input, 'blur');
+    await pressWorkspaceAction(screen, screen.getByLabelText('Add'));
+
+    expect(mockEditProject).not.toHaveBeenCalled();
+  });
+
+  it('clears a stored description to null', async () => {
+    mockFetchProjects.mockResolvedValue([
+      project('1', 'Run a 5K', '🏃', 'in-play', 'Finish the race'),
+    ]);
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+
+    await fireEvent.changeText(input, '   ');
+    await fireEvent(input, 'blur');
+
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    expect(mockEditProject.mock.calls[0][2]).toEqual({ description: null });
+  });
+
+  it('keeps a failed description draft and retries it on a later flush', async () => {
+    mockEditProject
+      .mockRejectedValueOnce(new Error('offline write failed'))
+      .mockImplementationOnce(async (_token, id, fields) => ({
+        ...project(id, 'Run a 5K', '🏃'),
+        ...fields,
+      }));
+    const screen = await renderScreen();
+    const input = await waitFor(() =>
+      screen.getByLabelText('Project description'),
+    );
+    await fireEvent.changeText(input, 'A draft worth keeping');
+
+    await fireEvent(input, 'blur');
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByText('offline write failed')).toBeTruthy(),
+    );
+    expect(screen.getByLabelText('Project description').props.value).toBe(
+      'A draft worth keeping',
+    );
+
+    await fireEvent(input, 'blur');
+
+    await waitFor(() => expect(mockEditProject).toHaveBeenCalledTimes(2));
+    expect(mockEditProject.mock.calls[1][2]).toEqual({
+      description: 'A draft worth keeping',
+    });
   });
 
   it('hides the Tasks heading when the project has no open tasks', async () => {

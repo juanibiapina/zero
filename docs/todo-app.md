@@ -164,6 +164,24 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-17): **Save Project descriptions before
+workspace actions and exits.** The Project workspace now owns the description
+draft and queues its existing optimistic, offline-durable edit before root touch
+actions, visible or Android Back, route focus loss, unmount, and input blur.
+Blank text clears the description to `null`; unchanged and overlapping save
+signals do not add writes, while a failed write leaves the draft available for a
+later retry. Thirteen focused Project-screen cases cover Add plus Task creation,
+identity/relationship/Task actions, both Back paths, lifecycle cleanup,
+deduplication, no-op and blank edits, and failure retry. Mobile's 24 suites / 185
+tests, lint with 3 existing warnings, typecheck, and Android export passed. The
+whole-repo check reached the documented unrelated NixOS `workerd` `EPIPE` failure
+in dashboard Worker tests. The hermetic Pixel 7 run passed both behavior flows:
+it retained the existing loose Task and a newly created Project description
+through Back and reopening, then the local Worker returned exactly that Task and
+described Project. Production stores, launcher state, development-client
+identity, reverse ports, and harness processes remained isolated. Plan:
+`docs/plans/todo-project-description-save.md`.
+
 Implemented and Pixel-verified (2026-09-17): **Create Tasks from the mobile
 Projects list.** The Projects-list Add drawer now offers Project and Task modes,
 while keeping Project selected by default. Task mode reuses the global Task

@@ -108,6 +108,10 @@ Waiting and After are never Task-list footers and receive no Task gestures,
 reorder behavior, dividers, or row spacing. Empty relationship regions have no
 heading, prompt, input, helper copy, or local add control.
 
+On mobile, a dirty description queues an optimistic edit before another
+workspace action or navigation continues. Blank description text clears the
+stored value to `null`.
+
 The main Add control opens the shared drawer directly with Task selected and
 Task, Waiting, After, and Project selectors visible. Once a region exists, its
 local `+` opens that drawer with the matching selector active. After opens its

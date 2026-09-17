@@ -1,0 +1,28 @@
+# Hermetic E2E: a Project description survives immediate Back and reopening.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 45000
+- tapOn: "Projects"
+- extendedWaitUntil:
+    visible: "No projects yet. Name your first outcome."
+    timeout: 30000
+- tapOn: "Add"
+- tapOn: "Name an outcome"
+- inputText: "E2E described project"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "E2E described project"
+    timeout: 30000
+- tapOn: "Project description"
+- inputText: "E2E durable project description"
+- tapOn: "Back to projects"
+- extendedWaitUntil:
+    visible: "E2E described project"
+    timeout: 30000
+- tapOn: "E2E described project"
+- extendedWaitUntil:
+    visible: "E2E durable project description"
+    timeout: 30000

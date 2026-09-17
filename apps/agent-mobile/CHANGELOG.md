@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-17: Project descriptions now save before you add work, open another control, or leave the Project, so Back no longer loses what you wrote.
+
 - 2026-09-17: From Projects, the + button now lets you add either a Project or a Task, including the Task's date and Project choices.
 
 - 2026-09-16: Swipe a snackbar sideways to dismiss it. Snackbars now sit above the + button instead of covering it.

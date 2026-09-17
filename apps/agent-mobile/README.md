@@ -314,12 +314,14 @@ installs an APK.
 2. It starts a fresh local Worker in Podman on port 8787.
 3. It starts headless Metro on port 8082 with
    `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
-4. It runs `.maestro/hermetic/01-add-task.yaml` once.
-5. It requires `E2E loose task` in the UI before and after restart, then requires
-   exactly that Task through the Worker's authenticated HTTP interface.
-6. It verifies production file checksums, launcher alias state, and installed
+4. It runs the two behavior flows in `.maestro/hermetic/` once each.
+5. It requires `E2E loose task` in the UI before and after restart, proves a
+   Project description survives Back and reopening, then requires exactly that
+   Task and described Project through the Worker's authenticated HTTP interface.
+6. It saves both Worker responses with the run artifacts.
+7. It verifies production file checksums, launcher alias state, and installed
    package identity.
-7. It removes E2E files, reverse ports, containers, and child processes.
+8. It removes E2E files, reverse ports, containers, and child processes.
 
 The one hermetic toggle selects fake Clerk modules, the fixed
 `http://localhost:8787` origin, separate SQLite and AsyncStorage names, disabled
@@ -335,8 +337,9 @@ storage names, EAS Update, and launcher synchronization.
 | Timezone key | `zero.timezone.synced` | `zero.e2e.timezone.synced` |
 | Icon-suggestion key | `zero.icon-suggestions.v1` | `zero.e2e.icon-suggestions.v1` |
 
-A successful run prints one `PASS` line. A failed run prints the failed stage,
-the artifact directory, the JUnit summary, and a relevant log tail. The artifact
+A successful run prints one `PASS` line with a flow count derived from the
+hermetic YAML files. A failed run prints the failed stage, the artifact
+directory, the JUnit summary, and a relevant log tail. The artifact
 directory retains Metro, Worker, Maestro, logcat, screenshot, and UI hierarchy
 evidence. Set `E2E_VERBOSE=1` for a diagnostic rerun.
 
