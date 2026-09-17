@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Runs inside the android-emulator-runner for the hermetic RELEASE suite. The
-# fake-auth APK is already signed in; it talks to a local worker the CI job
-# started on the runner host (port 8787). `adb reverse` maps the device's
-# localhost:8787 to that host port, so the same http://localhost:8787 the device
-# harness uses works on the emulator too. Installs the APK, runs the release
-# flows, and always captures a screenshot + UI hierarchy so failures are
-# inspectable from CI artifacts.
+# Runs inside android-emulator-runner for the shared hermetic flow. The E2E APK
+# is already signed in and talks to the runner-local Worker on port 8787 through
+# adb reverse. This adapter installs that standalone CI artifact; the Pixel
+# runner instead keeps its development client and loads current JavaScript from
+# Metro. Both runners execute .maestro/hermetic.
 set -uo pipefail
 
 APK="${RUNNER_TEMP}/apk/app-release.apk"
@@ -38,7 +36,7 @@ mkdir -p "${OUT}/maestro"
 CODE=0
 for attempt in 1 2; do
   adb reverse tcp:8787 tcp:8787 || true
-  maestro --no-ansi test apps/agent-mobile/.maestro/release \
+  maestro --no-ansi test apps/agent-mobile/.maestro/hermetic \
     --format junit \
     --output "${OUT}/maestro/report.xml" \
     --debug-output "${OUT}/maestro"

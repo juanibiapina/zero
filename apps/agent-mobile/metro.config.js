@@ -5,19 +5,24 @@
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { withUniwindConfig } = require('uniwind/metro');
+const { resolveRuntimeProfile } = require('./runtime-profile');
 
 const config = getDefaultConfig(__dirname);
+const profile = resolveRuntimeProfile({
+  hermeticE2E: process.env.EXPO_PUBLIC_HERMETIC_E2E,
+  apiUrl: process.env.EXPO_PUBLIC_API_URL,
+});
 
-// Release E2E build only: swap the real Clerk modules for in-repo fakes so the
-// app is signed-in with a static token and never touches Google/Clerk. Gated by
-// EXPO_PUBLIC_E2E_FAKE_AUTH=1, so production/preview builds resolve Clerk as
-// normal and no screen imports change.
-if (process.env.EXPO_PUBLIC_E2E_FAKE_AUTH === '1') {
+if (profile.clerkModules === 'fake') {
   const fakeAuthAliases = {
     '@clerk/expo': path.resolve(__dirname, 'src/lib/fake-auth/clerk-expo.tsx'),
     '@clerk/expo/token-cache': path.resolve(
       __dirname,
       'src/lib/fake-auth/clerk-expo-token-cache.ts',
+    ),
+    '@clerk/expo/resource-cache': path.resolve(
+      __dirname,
+      'src/lib/fake-auth/clerk-expo-resource-cache.ts',
     ),
     '@clerk/expo/native': path.resolve(
       __dirname,

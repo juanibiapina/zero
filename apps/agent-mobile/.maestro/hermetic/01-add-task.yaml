@@ -1,0 +1,21 @@
+# Hermetic E2E: fake auth, a fresh local Worker, and isolated device storage.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Nothing on your plate yet"
+    timeout: 45000
+- assertVisible: "Home"
+- tapOn: "^Task$"
+- tapOn: "New item text"
+- inputText: "E2E loose task"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "E2E loose task"
+    timeout: 30000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "E2E loose task"
+    timeout: 45000
+- assertVisible: "Home"

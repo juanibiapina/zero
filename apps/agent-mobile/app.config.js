@@ -1,16 +1,21 @@
-// Dynamic config layered on app.json. The hermetic release E2E build adds the
-// cleartext plugin for its local worker and disables remote updates so it always
-// runs the embedded fake-auth bundle. Every other build returns app.json unchanged.
+const { resolveRuntimeProfile } = require('./runtime-profile');
+
 module.exports = ({ config }) => {
-  if (process.env.EXPO_PUBLIC_E2E_FAKE_AUTH !== '1') {
-    return config;
-  }
+  const profile = resolveRuntimeProfile({
+    hermeticE2E: process.env.EXPO_PUBLIC_HERMETIC_E2E,
+    apiUrl: process.env.EXPO_PUBLIC_API_URL,
+  });
+
+  if (!profile.hermetic) return config;
+
   return {
     ...config,
     updates: {
       ...config.updates,
-      enabled: false,
+      enabled: profile.native.updatesEnabled,
     },
-    plugins: [...(config.plugins ?? []), './plugins/with-cleartext.js'],
+    plugins: profile.native.cleartextEnabled
+      ? [...(config.plugins ?? []), './plugins/with-cleartext.js']
+      : config.plugins,
   };
 };

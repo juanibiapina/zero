@@ -6,6 +6,7 @@ import { ActivityIndicator, AppState, View } from 'react-native';
 import { HomeAppIconSync } from '../../components/home-app-icon-sync';
 import { syncHomeAppIcon } from '../../lib/home-app-icon';
 import { useColor } from '../../lib/theme';
+import { RUNTIME_PROFILE } from '../../lib/runtime-profile';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
 // Keep the server's stored timezone equal to this device's, silently. Built once
@@ -37,7 +38,13 @@ export default function SignedInLayout() {
 
   useTimezoneSync(isLoaded && isSignedIn);
   useEffect(() => {
-    if (isLoaded && !isSignedIn) void syncHomeAppIcon('Default');
+    if (
+      RUNTIME_PROFILE.launcherCountSyncEnabled &&
+      isLoaded &&
+      !isSignedIn
+    ) {
+      void syncHomeAppIcon('Default');
+    }
   }, [isLoaded, isSignedIn]);
 
   if (!isLoaded) {
@@ -60,7 +67,7 @@ export default function SignedInLayout() {
   // appear on device (pure-JS reload will not show it).
   return (
     <>
-      <HomeAppIconSync />
+      {RUNTIME_PROFILE.launcherCountSyncEnabled ? <HomeAppIconSync /> : null}
       <NativeTabs
         tintColor={accent}
         backgroundColor={surface}

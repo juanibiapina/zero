@@ -193,8 +193,9 @@ Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
 
 | Variable                            | Required | Default                          | Purpose                                             |
 | ----------------------------------- | -------- | -------------------------------- | --------------------------------------------------- |
-| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | yes      | —                                | Clerk publishable key (same value the web app uses) |
-| `EXPO_PUBLIC_API_URL`               | no       | `https://zero.juanibiapina.dev`  | Base URL for authenticated `/api/*` calls           |
+| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | yes      | —                               | Clerk publishable key (same value the web app uses) |
+| `EXPO_PUBLIC_API_URL`               | no       | `https://zero.juanibiapina.dev` | Base URL for normal authenticated `/api/*` calls    |
+| `EXPO_PUBLIC_HERMETIC_E2E`          | no       | —                               | Selects the complete local E2E runtime profile      |
 
 The Clerk **publishable** key is public by design (`pk_...`, already shipped in
 the web bundle). The `preview` profile reads it from the EAS `preview`
@@ -294,74 +295,67 @@ Before running checks on `mini`:
    --concurrency=1`. The defaults fan out one worker per core, and each React
    Native transform is memory-heavy.
 
-## End-to-end tests (emulator + Maestro)
+## End-to-end tests (Pixel + Maestro)
 
-Automated UI tests run a real APK on an Android emulator and drive it with
-[Maestro](https://maestro.mobile.dev). They live in `apps/agent-mobile/.maestro/` and
-run in CI via the **Mobile E2E** workflow (`.github/workflows/mobile-e2e.yml`),
-because the local dev box has no KVM to run an emulator.
+The default behavioral proof runs the current checkout on the attached Pixel 7:
 
-The workflow has two jobs:
+```bash
+pnpm --filter @zero/agent-mobile e2e:pixel
+```
 
-- **Build APK** — `expo prebuild` + `gradlew assembleRelease` (x86_64,
-  debug-signed), producing a self-contained APK (no Metro). The APK is cached by
-  a hash of the app sources, so flow/harness-only changes skip the ~24 min
-  rebuild and the run finishes in ~10 min.
-- **E2E** — boots an emulator, installs the APK, and runs `run-e2e.sh`, which
-  drives the `.maestro/ci/` Maestro flows and always uploads a **screenshot,
-  logcat, and UI hierarchy** as artifacts (so failures are inspectable without a
-  device).
+The Pixel must have the existing development client installed, be USB-connected,
+and appear as `model:Pixel_7` in `adb devices -l`. Rootless Podman and Maestro
+must be available. The command refuses a missing or non-debuggable app and never
+installs an APK.
 
-The flows are split into two folders that never mix in one run (a `clearState`
-flow would reset state mid-suite):
+`run-metro-e2e.sh` owns the full run:
 
-- `.maestro/ci/` — signed-out smoke against the **real Clerk** instance, run by
-  this workflow. `sign-in.yaml` boots to the sign-in screen (catches Clerk init
-  hangs / crashes); `probe.yaml` exercises the native OAuth redirect handling
-  without Google. The Google OAuth round-trip needs a real browser + account and
-  is not automated here.
-- `.maestro/release/` — the hermetic **signed-in** suite (fake auth + local
-  worker). See "Release E2E suite" below.
+1. It records checksums for the production collection and outbox files.
+2. It starts a fresh local Worker in Podman on port 8787.
+3. It starts headless Metro on port 8082 with
+   `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
+4. It runs `.maestro/hermetic/01-add-task.yaml` once.
+5. It requires `E2E loose task` in the UI before and after restart, then requires
+   exactly that Task through the Worker's authenticated HTTP interface.
+6. It verifies production file checksums, launcher alias state, and installed
+   package identity.
+7. It removes E2E files, reverse ports, containers, and child processes.
 
-Trigger it from the GitHub Actions tab (**Run workflow**). To debug a failure,
-download the `mobile-e2e-artifacts` and open `screen.png` / `ui.xml` / `logcat.txt`.
+The one hermetic toggle selects fake Clerk modules, the fixed
+`http://localhost:8787` origin, separate SQLite and AsyncStorage names, disabled
+launcher-count synchronization, disabled EAS Update, and E2E cleartext policy.
+It also aliases Clerk's token cache and resource cache to inert local fakes.
+Normal Metro startup restores real Clerk, normal URL selection, production
+storage names, EAS Update, and launcher synchronization.
 
-## Release E2E suite (hermetic: fake auth + local worker)
+| State | Normal | Hermetic E2E |
+| --- | --- | --- |
+| Collection database | `zero-app.sqlite` | `zero-app-e2e.sqlite` |
+| Offline outbox | `zero-app-outbox-v2.sqlite` | `zero-app-e2e-outbox-v2.sqlite` |
+| Timezone key | `zero.timezone.synced` | `zero.e2e.timezone.synced` |
+| Icon-suggestion key | `zero.icon-suggestions.v1` | `zero.e2e.icon-suggestions.v1` |
 
-The signed-in flows (capture, task, offline sync, cross-tab) can run in CI **and**
-on the Pixel because auth is mocked, so there is no Google OAuth wall. The stack
-is fully hermetic: no production data, no second Google account, deterministic.
+A successful run prints one `PASS` line. A failed run prints the failed stage,
+the artifact directory, the JUnit summary, and a relevant log tail. The artifact
+directory retains Metro, Worker, Maestro, logcat, screenshot, and UI hierarchy
+evidence. Set `E2E_VERBOSE=1` for a diagnostic rerun.
 
-How it works:
+For later behavior changes, keep pure state rules in Jest and add or update a
+behavior-named flow in `.maestro/hermetic/` when native rendering, persistence,
+gestures, routing, or screen composition matters. Use manual inspection only
+for visual, auditory, tactile, accessibility-judgment, or otherwise
+non-assertable acceptance criteria.
 
-- **Fake auth build.** A Metro resolver alias (in `metro.config.js`), gated by
-  `EXPO_PUBLIC_E2E_FAKE_AUTH=1`, swaps `@clerk/expo`, `@clerk/expo/token-cache`,
-  and `@clerk/expo/native` for tiny in-repo fakes (`src/lib/fake-auth/`). The app
-  is signed-in with a static token (`e2e-test-user`); no screen imports change,
-  and production/preview builds resolve Clerk as normal. Build it with the `e2e`
-  EAS profile (`EXPO_PUBLIC_E2E_FAKE_AUTH=1`, `EXPO_PUBLIC_API_URL=http://localhost:8787`).
-  This profile disables EAS Update, so the suite always runs its embedded bundle.
-- **Local worker.** `wrangler dev --config apps/agent-api/wrangler.e2e.jsonc`
-  runs the real worker with a throwaway local Durable Object (`--persist-to` a
-  temp dir, wiped per run). Under `ENVIRONMENT=test` the `/api/*` guard trusts
-  the bearer as the userId (no Clerk secret needed); that config drops the remote
-  `AI` binding so the stack needs no Cloudflare token. The app reaches it at
-  `http://localhost:8787` via `adb reverse tcp:8787 tcp:8787`.
-- **Flows.** `.maestro/release/`: `01-capture-inbox`, `02-task-today`,
-  `03-offline-sync`, `04-cross-tab`. They `launchApp` without `clearState` and
-  start from a wiped DO.
+Two manual emulator workflows remain separate:
 
-Run it in CI: the manual **Mobile Release E2E** workflow
-(`.github/workflows/mobile-release-e2e.yml`) builds the fake-auth APK, starts the
-worker on the runner, and runs `run-release-emulator.sh` on the emulator.
+- **Mobile E2E** runs `.maestro/ci/` against real Clerk to check signed-out
+  initialization and OAuth redirect handling. These flows clear app state.
+- **Mobile Release E2E** builds the standalone hermetic APK and runs the same
+  `.maestro/hermetic/` behavior through `run-release-emulator.sh` against a
+  runner-local Worker. It is optional and never runs on push or pull request.
 
-Run it on the Pixel from `mini`: `bash apps/agent-mobile/.maestro/run-release.sh`.
-NixOS cannot start `workerd` directly, so the worker runs in a rootless **podman**
-container (`node:22-slim`, `--network host`) that mounts the repo and serves
-`wrangler dev`. The script publishes 8787, `adb reverse`s it to the phone, runs
-the release flows, and captures a screenshot + UI hierarchy. The fake-auth e2e
-APK must already be installed on the Pixel (build it with
-`eas build -p android --profile e2e --local` then `adb install -r`).
+Both workflows upload screenshots, logcat, and UI hierarchies. The local dev box
+has no KVM, so emulator execution stays in GitHub Actions.
 
 ## Physical device testing (Pixel 7 on `mini`)
 
@@ -411,8 +405,8 @@ A flow is declarative and element-based, e.g.:
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp
-- assertVisible: "Captures"
-- takeScreenshot: captures     # RELATIVE name only; absolute paths are rejected
+- assertVisible: "Home"
+- takeScreenshot: home     # RELATIVE name only; absolute paths are rejected
 ```
 
 `takeScreenshot` writes under the run folder
@@ -426,10 +420,10 @@ proves the bug is gone. A description of what you saw is not the same as showing
 it; a screenshot is the proof the reviewer can check. Default to sending one for
 any user-visible change; skip it only when the change has no visible surface.
 
-**Caveat:** the CI flows use `launchApp: { clearState: true }`, which **signs the
-device out**. Run those only on this test device, and re-sign-in afterward to
-test signed-in screens (Captures). To test without disturbing the session, use a
-`launchApp` (no `clearState`) + `assertVisible` flow like the one above.
+Do not run `.maestro/ci/` on the Pixel: those flows clear app state and remove
+the real Clerk session. Use `e2e:pixel` for signed-in behavior. Use the manual
+Metro loop below only for visual or otherwise non-assertable inspection, and do
+not mutate existing production entities.
 
 ### Test unreleased local JS on the device (dev client + Metro over USB)
 

@@ -71,6 +71,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "e2e:pixel": "bash .maestro/run-metro-e2e.sh",
     "lint": "eslint .",
     "uniwind:types": "uniwind generate-artifacts --css ./global.css --dts ./src/uniwind-types.d.ts",
     "typecheck": "tsc --noEmit",

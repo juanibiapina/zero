@@ -12,9 +12,9 @@ env:
   # Clerk publishable key is public and still required at bundle time (the root
   # layout throws without it), even though the fake auth never uses it.
   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuemVyby5qdWFuaWJpYXBpbmEuZGV2JA
-  # Swap Clerk for the in-repo fake and point the app at the local worker.
-  EXPO_PUBLIC_E2E_FAKE_AUTH: '1'
-  EXPO_PUBLIC_API_URL: http://localhost:8787
+  # Select fake Clerk, fixed localhost networking, isolated storage, and E2E
+  # native policy together.
+  EXPO_PUBLIC_HERMETIC_E2E: '1'
   MAESTRO_CLI_NO_ANALYTICS: '1'
 
 jobs:
@@ -89,7 +89,7 @@ jobs:
           retention-days: 1
 
   e2e:
-    name: Release E2E (Android emulator)
+    name: Hermetic E2E (Android emulator)
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -159,7 +159,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run release suite on emulator
+      - name: Run hermetic suite on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34

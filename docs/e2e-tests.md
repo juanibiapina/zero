@@ -63,12 +63,16 @@ Unit tests inject failures at the `AgentModel` seam (`capturingModel` in `apps/a
 
 Only the e2e suite exercises the real OpenAI client, where a 429 is retried twice (`maxRetries: 2`) with backoff before it surfaces. That is why `packages/agent-e2e/src/rate-limit.test.ts` polls with a longer timeout.
 
-## Related: mobile release E2E
+## Related: mobile hermetic E2E
 
-The mobile app has its own hermetic signed-in E2E tier that reuses this same
-local-worker-with-mocks pattern, extended to the `/api/*` routes: a fake-auth
-app build talks to `wrangler dev --config apps/agent-api/wrangler.e2e.jsonc`,
-whose `ENVIRONMENT=test` guard trusts the bearer as the userId (no Clerk secret),
-storing in a throwaway local Durable Object. It drives real UI flows on an
-emulator (CI) and the Pixel 7 (on `mini`). See
-`apps/agent-mobile/README.md` ("Release E2E suite").
+The mobile app extends the same local-Worker pattern to signed-in `/api/*`
+behavior. `pnpm --filter @zero/agent-mobile e2e:pixel` loads the current checkout
+from Metro into the attached Pixel 7 development client. One hermetic profile
+selects fake Clerk auth, localhost networking, isolated device stores, and
+suppressed launcher side effects. `wrangler.e2e.jsonc` trusts the local bearer as
+the userId and writes to a fresh local Durable Object. The harness then asserts
+the result through both the mobile UI and the Worker's HTTP interface.
+
+The manual **Mobile Release E2E** workflow runs the same `.maestro/hermetic/`
+flow on an emulator with a standalone E2E APK. See
+`apps/agent-mobile/README.md` ("End-to-end tests").

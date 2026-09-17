@@ -4,7 +4,8 @@ import type {
   OnlineDetector,
   StorageAdapter,
 } from '@tanstack/offline-transactions';
-import { OFFLINE_OUTBOX_VERSION } from '@zero/agent-core';
+
+import { RUNTIME_PROFILE } from './runtime-profile';
 
 type ReactNativeSQLitePersistence =
   typeof import('@tanstack/react-native-db-sqlite-persistence')['createReactNativeSQLitePersistence'];
@@ -13,14 +14,14 @@ type AppPersistence = ReturnType<ReactNativeSQLitePersistence>;
 // One local database file for the whole app. TanStack DB derives a separate
 // table per collection from its collection id, so every entity lives in its own
 // table inside this single file — no per-entity file is needed.
-const DB_NAME = 'zero-app.sqlite';
+const DB_NAME = RUNTIME_PROFILE.persistence.databaseName;
 
 // One offline write outbox for the whole app, in its own file so a persistence
 // schema reset of the data file never wipes queued writes. Every collection's
 // executor shares this one store: the outbox namespaces entries by transaction
 // id (`tx:` keys) and each executor only replays the transactions it can
 // deserialize into its own collections, so one file serves all entities safely.
-const OUTBOX_DB_NAME = `zero-app-outbox-v${OFFLINE_OUTBOX_VERSION}.sqlite`;
+const OUTBOX_DB_NAME = RUNTIME_PROFILE.persistence.outboxDatabaseName;
 
 let persistencePromise: Promise<AppPersistence> | null = null;
 

@@ -963,9 +963,16 @@ Next:
 - later: agent `create_task` tool, recurring capture, recurring Tasks,
   structured waiting-condition kinds on mobile.
 
-Dev infra: a physical Pixel 7 is USB-attached to the dev box and driven with the
-Maestro CLI for on-device verification (see `apps/agent-mobile/README.md`). Rules
-that still bite: the first use of any native or `@expo/ui` component needs a fresh
-EAS dev build before it runs on device (pure-JS changes hot-reload); and this dev
-box has no workerd and no Android emulator, so verification is unit tests +
-`expo export` + the real phone.
+Dev infra: `pnpm --filter @zero/agent-mobile e2e:pixel` is the shipped default
+behavioral proof on the USB-attached Pixel 7. It loads the current checkout from
+Metro into the existing development client and runs Maestro against fake auth,
+a fresh local Worker, and isolated device storage. The first flow adds a loose
+Task and proves it through UI restart plus the Worker's HTTP interface. A later
+increment will inventory Home, Upcoming, Projects, project detail, scheduling,
+completion/Undo, offline replay, reordering, swipes, Waiting, After, recurrence,
+and navigation, then choose a small behavior-oriented flow set. See
+`apps/agent-mobile/README.md`.
+
+A native fingerprint change still needs a fresh development-client build before
+the Pixel run. Pure JavaScript loads through Metro. The dev box has no KVM, so
+the optional emulator adapters remain in manual GitHub Actions workflows.

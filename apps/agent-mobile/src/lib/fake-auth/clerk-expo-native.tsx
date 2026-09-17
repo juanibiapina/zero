@@ -1,4 +1,4 @@
-// Fake `@clerk/expo/native` for the release E2E build. The home screen renders
+// Fake `@clerk/expo/native` for the hermetic E2E profile. The home screen renders
 // UserButton in its header; a plain stub keeps the layout without pulling in the
 // real native Clerk component.
 import { View } from 'react-native';

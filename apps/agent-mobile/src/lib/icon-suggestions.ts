@@ -13,8 +13,9 @@ import type {
 } from '@zero/agent-core';
 
 import { fetchIconSuggestions, type TokenGetter } from './api';
+import { RUNTIME_PROFILE } from './runtime-profile';
 
-const STORAGE_KEY = 'zero.icon-suggestions.v1';
+const STORAGE_KEY = RUNTIME_PROFILE.persistence.iconSuggestionsKey;
 
 type Store = Record<string, CachedIconSuggestions>;
 
