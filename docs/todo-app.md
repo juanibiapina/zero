@@ -164,6 +164,14 @@ committed.
 
 ## Project tracking
 
+Implemented and Pixel-verified (2026-09-17): **Create Tasks from the mobile
+Projects list.** The Projects-list Add drawer now offers Project and Task modes,
+while keeping Project selected by default. Task mode reuses the global Task
+composer, including its date and Project rows; Waiting and After remain
+Project-workspace actions. A focused Pixel 7 check created a throwaway Project,
+created and filed a Task from the Projects list, confirmed it in the Project,
+and deleted the Project and its Task.
+
 Implemented (2026-09-16; Pixel workspace flow verified): **Project Waiting,
 After, and workspace redesign.** Manual Waiting is now Project-scoped prose that
 requires review; After is separate Project-completion sequencing that resolves
@@ -529,8 +537,9 @@ Creation opens the keyboard and confirms before discarding text; editing opens
 without the keyboard and saves on dismissal. `useQuickAdd` and `useTaskDetail`
 retain their separate write lifecycles. The Modal owns keyboard docking,
 replacing Home/project-screen bottom-gap measurement and the create
-keyboard-hide close listener. The Projects list keeps its existing project-only
-bar, but its input now uses the same editor typography as task creation. See
+keyboard-hide close listener. The Projects list kept its then-project-only bar,
+but its input adopted the same editor typography; the 2026-09-17 follow-up added
+Task as a second mode. See
 `docs/plans/todo-unify-task-editor-drawer.md` and
 `docs/plans/todo-task-drawer-editor-first-restyle.md`.
 
@@ -902,11 +911,11 @@ Shipped:
   (web + mobile) — is now one pure registry (`@zero/agent-core`
   `quick-add/modes.ts`) consumed by both surfaces; the quick-add bar renders
   whatever `modes` it is handed and derives the placeholder from the selected mode.
-  Follow-up: the **Projects list** + now also shows its single interactive
-  **Project** pill (`mode="project"`, `modes={['project']}`), so all three mobile
-  quick-add surfaces (Home, the project screen, the Projects list) render pills
-  from the one registry — the mobile pill affordance is fully unified. Web has no
-  pill concept (the web Projects page is a plain input), so it is unchanged.
+  Follow-up: the **Projects list** + first gained a single interactive
+  **Project** selector. On 2026-09-17 it gained Task as a second selector while
+  keeping Project selected by default. All three mobile create surfaces derive
+  their labels from the same registry. Web has no selector concept on its plain
+  Projects input, so it is unchanged.
 
 - **AI icon suggestions for a Project** (web + mobile shipped) — the
   **first AI integration of the todo app**. Creating a project fires a background

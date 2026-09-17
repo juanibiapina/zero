@@ -176,8 +176,9 @@ serves the open-tasks query.
   (`apps/agent-mobile`), and web `/captures` (Home, path unchanged) + `/upcoming`
   (`apps/agent-web`). Home and mobile project screens are reorderable. A Home row
   swipes right to Tomorrow; a project row swipes right to Today. Both tap the
-  circle to complete and the row to open the detail sheet. Quick-add adds a task
-  by default and can switch to a project.
+  circle to complete and the row to open the detail sheet. Home quick-add opens
+  on Task and can switch to Project; the mobile Projects-list Add drawer opens on
+  Project and can switch to Task.
 - **Storage** — the server domain store is `DbTaskStore` (`add` mints the trailing
   `sortKey`; `list` = every open task in manual order, no visibility filter — the
   client splits Home/Upcoming; `complete` / `reopen` / `editText` /

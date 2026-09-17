@@ -87,6 +87,11 @@ default. Backlog retains its existing large-section collapse policy. A row shows
 only its dominant status context; overridden After relationships remain visible
 inside the Project workspace.
 
+On mobile, the Projects-list Add control opens the shared global create drawer
+with Project selected and Task also available. Project creation still opens the
+new Project. Task creation stays on the list and can create a loose Task or use
+the existing date and Project rows before submission.
+
 ## Project workspace
 
 A Project opens its own screen. One scroll host may implement the screen, but the

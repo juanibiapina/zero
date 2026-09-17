@@ -1,20 +1,26 @@
-# Dev flow: verify the Projects list quick-add shows the single "Project" pill.
+# Dev flow: verify the Projects list add drawer offers Project and Task.
 # NOT run by any workflow (ci/ and release/ are the automated folders). Run on
 # the attached Pixel with the dev client + Metro:
 #
 #   maestro --no-ansi test apps/agent-mobile/.maestro/dev/projects-pill.yaml
 #
 # launchApp has no clearState, so it keeps the signed-in session. Assumes the app
-# is signed in.
+# is signed in and makes no data writes.
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp
+- extendedWaitUntil:
+    visible: 'Home'
+    timeout: 45000
 - tapOn: 'Projects'
 - extendedWaitUntil:
     visible: 'Projects'
     timeout: 45000
-# The collapsed FAB on the Projects list is labelled "New project".
-- tapOn: 'New project'
-# The open bar reveals the single Project mode pill (a11y "Add a project").
+- tapOn: 'Add'
 - assertVisible: 'Add a project'
-- takeScreenshot: 01-projects-pill
+- assertVisible: 'Add a task'
+- tapOn: 'Add a task'
+- assertVisible: 'No date'
+- assertVisible: 'No project'
+- takeScreenshot: 01-projects-add-modes
+- pressKey: back

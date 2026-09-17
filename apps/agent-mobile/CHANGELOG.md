@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-17: From Projects, the + button now lets you add either a Project or a Task, including the Task's date and Project choices.
+
 - 2026-09-16: Swipe a snackbar sideways to dismiss it. Snackbars now sit above the + button instead of covering it.
 
 - 2026-09-16: Adding a Waiting condition now labels the current Project separately from what it is waiting on.

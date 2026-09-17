@@ -8,7 +8,7 @@ import {
   type RenderResult,
 } from '@testing-library/react-native';
 
-import type { Project, ProjectState } from '@/lib/api';
+import type { Project, ProjectState, Task } from '@/lib/api';
 import type { WaitingCondition } from '@zero/agent-core';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
@@ -64,6 +64,19 @@ const mockFetchIconSuggestions =
     ) => Promise<string[]>
   >();
 const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
+const mockAddTask = jest.fn<
+  (
+    getToken: unknown,
+    task: {
+      id: string;
+      text: string;
+      showUpDate: string | null;
+      projectId: string | null;
+      sourceCaptureId: string | null;
+      recurrence?: Task['recurrence'];
+    },
+  ) => Promise<Task>
+>();
 jest.mock('@/lib/api', () => ({
   fetchProjects: () => mockFetchProjects(),
   addProject: (
@@ -84,7 +97,17 @@ jest.mock('@/lib/api', () => ({
   resolveWaitingCondition: () => Promise.reject(new Error('not used')),
   deleteWaitingCondition: () => Promise.resolve(),
   fetchTasks: () => Promise.resolve([]),
-  addTask: () => Promise.reject(new Error('not used')),
+  addTask: (
+    getToken: unknown,
+    task: {
+      id: string;
+      text: string;
+      showUpDate: string | null;
+      projectId: string | null;
+      sourceCaptureId: string | null;
+      recurrence?: Task['recurrence'];
+    },
+  ) => mockAddTask(getToken, task),
   completeTask: () => Promise.reject(new Error('not used')),
 }));
 
@@ -130,6 +153,7 @@ describe('ProjectsScreen (list)', () => {
     mockFetchIconSuggestions.mockResolvedValue(['🌟']);
     mockFetchWaits.mockReset();
     mockFetchWaits.mockResolvedValue([]);
+    mockAddTask.mockReset();
   });
 
   it('shows the fetched projects with their icons', async () => {
@@ -193,7 +217,7 @@ describe('ProjectsScreen (list)', () => {
     );
 
     await act(async () => {
-      fireEvent.press(getByLabelText('New project'));
+      fireEvent.press(getByLabelText('Add'));
     });
 
     const input = getByPlaceholderText('Name an outcome');
@@ -232,8 +256,8 @@ describe('ProjectsScreen (list)', () => {
   it('protects a project draft until discard is confirmed', async () => {
     mockGetToken.mockResolvedValue('tok');
     const screen = await renderScreen();
-    await waitFor(() => expect(screen.getByLabelText('New project')).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText('New project'));
+    await waitFor(() => expect(screen.getByLabelText('Add')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Add'));
     await fireEvent.changeText(screen.getByLabelText('New item text'), 'Keep this draft');
     await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
     expect(screen.getByText('Discard changes?')).toBeTruthy();
@@ -245,21 +269,44 @@ describe('ProjectsScreen (list)', () => {
     expect(mockAddProject).not.toHaveBeenCalled();
   });
 
-  it('opens focused Project creation without a redundant mode pill', async () => {
+  it('creates a loose task from the Projects add drawer', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchProjects.mockResolvedValue([]);
+    mockAddTask.mockImplementation(async (_getToken, input) => ({
+      id: input.id,
+      text: input.text,
+      showUpDate: input.showUpDate,
+      recurrence: input.recurrence ?? null,
+      recurrenceDate: null,
+      createdAt: '2023-01-01T00:00:00.000Z',
+      completedAt: null,
+      projectId: input.projectId,
+      sourceCaptureId: input.sourceCaptureId,
+      sortKey: 'a0',
+    }));
 
-    const { getByLabelText, queryByLabelText } = await renderScreen();
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByLabelText('Add'));
 
-    // The pill is absent while the bar is collapsed.
-    expect(queryByLabelText('Add a project')).toBeNull();
+    expect(screen.getByLabelText('Add a project').props.accessibilityState.selected).toBe(true);
+    await fireEvent.press(screen.getByLabelText('Add a task'));
+    expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
+    expect(screen.getByLabelText('No date')).toBeTruthy();
+    expect(screen.getByLabelText('No project')).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.press(getByLabelText('New project'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'Call the dentist');
+    await fireEvent(screen.getByPlaceholderText('Add a task'), 'submitEditing');
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    expect(mockAddTask.mock.calls[0][1]).toMatchObject({
+      text: 'Call the dentist',
+      showUpDate: null,
+      projectId: null,
+      sourceCaptureId: null,
+      recurrence: null,
     });
-
-    await waitFor(() => expect(getByLabelText('New item text')).toBeTruthy());
-    expect(queryByLabelText('Add a project')).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByPlaceholderText('Add a task')).toBeNull());
   });
 
   it('groups projects under a status section header', async () => {
