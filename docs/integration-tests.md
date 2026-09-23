@@ -13,7 +13,7 @@ asserts the bot replies with that nonce. Passing proves the whole live path:
 Telegram (user account)
   → POST /api/webhooks/telegram (secret-token auth)
     → KV (tg:* → clerk) → UserDO.enqueueTurn → alarm
-      → pi-ai adapter → Cloudflare AI Gateway (BYOK) → OpenAI (gpt-5.6-luna)
+      → pi-ai adapter → Cloudflare AI Gateway (BYOK) → OpenAI (gpt-6-luna)
         → reply persisted → grammY sendMessage
           → Telegram (back into the same topic)
 ```

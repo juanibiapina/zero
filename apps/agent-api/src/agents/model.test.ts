@@ -25,7 +25,7 @@ import type { Env } from "../types";
 
 const makeEnv = (over: Record<string, unknown> = {}): Env =>
   ({
-    MODEL_ID: "gpt-5.6-luna",
+    MODEL_ID: "gpt-6-luna",
     CLOUDFLARE_GATEWAY_ID: "zero",
     CLOUDFLARE_ACCOUNT_ID: "acct",
     CLOUDFLARE_API_KEY: "cf-key",
@@ -42,7 +42,7 @@ const request = (over: Partial<AgentModelRequest> = {}): AgentModelRequest => ({
 
 describe("providerFor", () => {
   it("routes by model id so MODEL_ID alone picks the provider", () => {
-    expect(providerFor("gpt-5.6-luna")).toBe("openai");
+    expect(providerFor("gpt-6-luna")).toBe("openai");
     expect(providerFor("gpt-5.6-terra")).toBe("openai");
     expect(providerFor("claude-sonnet-4.6")).toBe("anthropic");
   });
@@ -52,7 +52,7 @@ describe("resolveModelSpec", () => {
   it("returns the configured MODEL_ID at the default high effort", () => {
     expect(
       resolveModelSpec(makeEnv(), { agent: "interface", clerkUserId: "u" }),
-    ).toEqual({ modelId: "gpt-5.6-luna", effort: "high" });
+    ).toEqual({ modelId: "gpt-6-luna", effort: "high" });
   });
 
   it("runs the icon_suggest agent at low effort, leaving others at high", () => {
@@ -79,7 +79,7 @@ describe("resolveModelSpec", () => {
       expect(
         resolveModelSpec(makeEnv(), { agent: "interface", clerkUserId: "u" })
           .modelId,
-      ).toBe("gpt-5.6-luna");
+      ).toBe("gpt-6-luna");
     } finally {
       delete (AGENT_MODEL_OVERRIDES as Record<string, string>).learner;
     }
@@ -89,7 +89,7 @@ describe("resolveModelSpec", () => {
 describe("createModel", () => {
   it("builds a model tagged with the configured MODEL_ID", async () => {
     const model = await createModel(makeEnv(), "user_123");
-    expect(model).toMatchObject({ modelId: "gpt-5.6-luna" });
+    expect(model).toMatchObject({ modelId: "gpt-6-luna" });
   });
 
   // Rollback is a var flip, not a code change: the gateway catalog holds the
@@ -105,8 +105,85 @@ describe("createModel", () => {
 
   it("tags each agent independently off one factory", async () => {
     const makeModel = await createModelFactory(makeEnv(), "user_123");
-    expect(makeModel("interface")).toMatchObject({ modelId: "gpt-5.6-luna" });
-    expect(makeModel("learner")).toMatchObject({ modelId: "gpt-5.6-luna" });
+    expect(makeModel("interface")).toMatchObject({ modelId: "gpt-6-luna" });
+    expect(makeModel("learner")).toMatchObject({ modelId: "gpt-6-luna" });
+  });
+
+  it("sends GPT-6 Luna through Responses with the selected effort and priced usage", async () => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    let inputTokens = 10;
+    const event = (type: string, payload: Record<string, unknown>) =>
+      `event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (typeof input !== "string" || typeof init?.body !== "string") {
+        throw new Error("Expected a JSON request to the gateway");
+      }
+      calls.push({
+        url: input,
+        body: JSON.parse(init.body) as Record<string, unknown>,
+      });
+      const stream =
+        event("response.created", { response: { id: "resp_1" } }) +
+        event("response.output_item.done", {
+          output_index: 0,
+          item: {
+            id: "msg_1",
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            phase: "final_answer",
+            content: [{ type: "output_text", text: "ok", annotations: [] }],
+          },
+        }) +
+        event("response.completed", {
+          response: {
+            id: "resp_1",
+            status: "completed",
+            incomplete_details: null,
+            output: [],
+            usage: {
+              input_tokens: inputTokens,
+              output_tokens: 5,
+              input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+              output_tokens_details: { reasoning_tokens: 0 },
+              total_tokens: inputTokens + 5,
+            },
+          },
+        });
+      return new Response(stream, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+
+    const interfaceModel = await createModel(
+      makeEnv(), "user_123", "interface", fetchImpl,
+    );
+    const standard = await interfaceModel.generate(request());
+    expect(calls[0].url).toBe(
+      "https://gateway.ai.cloudflare.com/v1/acct/zero/openai/responses",
+    );
+    expect(calls[0].body).toMatchObject({
+      model: "gpt-6-luna",
+      reasoning: { effort: "high" },
+      prompt_cache_retention: "24h",
+      store: false,
+    });
+    expect(standard.usage.costUsd).toBeCloseTo(0.0000035, 10);
+
+    inputTokens = 272001;
+    const iconModel = await createModel(
+      makeEnv(), "user_123", "icon_suggest", fetchImpl,
+    );
+    const longContext = await iconModel.generate(request());
+    expect(calls[1].body).toMatchObject({
+      model: "gpt-6-luna",
+      reasoning: { effort: "low" },
+    });
+    expect(longContext.usage.costUsd).toBeCloseTo(
+      (272001 * 0.2 + 5 * 0.75) / 1_000_000,
+      10,
+    );
   });
 
   it("throws for a model id absent from the gateway catalog", async () => {

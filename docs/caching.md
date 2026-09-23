@@ -15,8 +15,8 @@ options and pi-ai (and the provider) do the rest:
 - **`cacheRetention: 'long'`** → OpenAI `prompt_cache_retention: "24h"` (and, on
   the Anthropic wire, `cache_control.ttl: "1h"`).
 
-`gpt-5.6-luna` uses **implicit** prompt caching: pi-ai does not send
-`prompt_cache_options: { mode: "explicit" }` (the catalog model has no
+`gpt-6-luna` uses **implicit** prompt caching: pi-ai does not send
+`prompt_cache_options: { mode: "explicit" }` (the model definition has no
 explicit-cache-mode support), and it places no per-block `cache_control`
 breakpoints. Zero no longer computes breakpoints at all — the old
 `agents/cache.ts` marking, the `agents/model-anthropic.ts` breakpoint trimming,

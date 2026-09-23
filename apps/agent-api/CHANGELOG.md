@@ -2,6 +2,7 @@
 
 User-facing changes to Zero, most recent first.
 
+- 2026-09-23: Zero now answers with GPT-6 Luna.
 - 2026-08-17: If you go quiet for about a week, Zero now checks in once — offering to pick up an unread email, a topic you were working on, or just to help.
 - 2026-08-14: When someone answers an email Zero sent for you, Zero tells you within the hour and picks up where the thread left off. Ask it to keep an eye on any other thread you're waiting on, and it watches that one too.
 - 2026-08-14: Zero now reliably replies after a new message even if a previous turn was interrupted mid-flight.

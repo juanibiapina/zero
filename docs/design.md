@@ -185,15 +185,15 @@ agents still use the single-`prompt` path.
 
 ### Reasoning effort
 
-Every agent runs `MODEL_ID` at the default `high` reasoning effort (resolved in
-`resolveModelSpec`, see [LLM path](#llm-path)), and persists the reasoning
-signature without the reasoning prose. That includes the background agents: the
+Agent calls use `MODEL_ID` at the default `high` reasoning effort (resolved in
+`resolveModelSpec`, see [LLM path](#llm-path)), except project icon suggestions
+at `low`. They persist reasoning signatures without the reasoning prose. The
+background agents also run at `high`: the
 learner and compaction decide what Zero remembers about a user, which is the
 judgement call whose mistakes last longest. Reasoning makes learner slices
 slower, which the slice contract already absorbs (bounded steps per alarm, wire
 log persisted as it goes, a slice lost to wall time retried from where it
-stopped). Effort is left at the API default `high`, which is where Zero has
-always run.
+stopped). Zero requests `high` explicitly; the OpenAI default is `medium`.
 
 ## LLM path
 
@@ -201,7 +201,7 @@ always run.
 id alone decides the provider.** The gateway stores the real provider key and the
 provider bills us directly; requests are authenticated with `cf-aig-authorization`
 and tagged per user with `cf-aig-metadata`. The model is `MODEL_ID`
-(`gpt-5.6-luna`, on the OpenAI Responses API). The model and its reasoning effort
+(`gpt-6-luna`, on the OpenAI Responses API). The model and its reasoning effort
 resolve together in one place (`resolveModelSpec`), on pi-ai's provider-neutral
 effort scale (default `high`). pi-ai's built-in `cloudflare-ai-gateway` provider
 owns the transport and routes by the model's own `api`, so `MODEL_ID` alone
@@ -427,7 +427,7 @@ See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 | API    | Hono + OpenAPIHono + Zod on Cloudflare Workers |
 | State  | UserDO (Durable Object with SQLite via [do-orm](https://github.com/juanibiapina/do-orm)) + Workers KV for identity lookups |
 | Agents | Zero-owned tool loop (`agents/run.ts`) over [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) behind the `AgentModel` seam (`agents/model-pi.ts`) |
-| LLM    | Cloudflare AI Gateway (BYOK) via pi-ai's built-in `cloudflare-ai-gateway` provider — `gpt-5.6-luna`; model + effort resolve together in `resolveModelSpec` |
+| LLM    | Cloudflare AI Gateway (BYOK) via pi-ai's built-in `cloudflare-ai-gateway` provider — `gpt-6-luna`; model + effort resolve together in `resolveModelSpec` |
 | Telegram | [grammY](https://grammy.dev) (`hono` adapter) |
 | Secrets | ZeroVault (`zero-api`, `zero-web`) — see [`secrets.md`](secrets.md) |
 

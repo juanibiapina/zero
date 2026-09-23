@@ -38,9 +38,8 @@ export const AGENT_MODEL_OVERRIDES: Partial<Record<AgentLabel, string>> = {};
 
 // Reasoning effort on pi-ai's provider-neutral scale. The adapter maps this to
 // each provider's own knob (OpenAI `reasoning.effort`, Anthropic thinking), so
-// effort is decided once here rather than per provider. `minimal` is unsupported
-// by some models (e.g. gpt-5.6-luna maps it to null) and is included only for
-// completeness of the scale.
+// effort is decided once here rather than per provider. `minimal` is included
+// for completeness of the scale; the selected agents use `low` or `high`.
 export type Effort = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 // The one thing model selection decides: which model, at what effort. Everything

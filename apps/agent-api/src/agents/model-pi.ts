@@ -54,6 +54,46 @@ import type { AgentLabel, Effort } from "./model";
 
 const PROVIDER_ID = "cloudflare-ai-gateway";
 
+// pi-ai accepts models outside its static catalog. Rates and limits:
+// https://developers.openai.com/api/docs/models/gpt-6-luna
+const GPT_6_LUNA: Model<"openai-responses"> = {
+  id: "gpt-6-luna",
+  name: "GPT-6 Luna",
+  api: "openai-responses",
+  provider: PROVIDER_ID,
+  baseUrl:
+    "https://gateway.ai.cloudflare.com/v1/{CLOUDFLARE_ACCOUNT_ID}/{CLOUDFLARE_GATEWAY_ID}/openai",
+  reasoning: true,
+  input: ["text", "image"],
+  cost: {
+    input: 0.1,
+    output: 0.5,
+    cacheRead: 0.01,
+    cacheWrite: 0.125,
+    tiers: [
+      {
+        inputTokensAbove: 272000,
+        input: 0.2,
+        output: 0.75,
+        cacheRead: 0.02,
+        cacheWrite: 0.25,
+      },
+    ],
+  },
+  contextWindow: 1050000,
+  maxTokens: 128000,
+  thinkingLevelMap: {
+    off: "none",
+    minimal: null,
+    low: "low",
+    medium: "medium",
+    high: "high",
+    xhigh: "xhigh",
+    max: "max",
+  },
+  compat: { supportsStrictMode: true, supportsOpenAIGrammarTools: true },
+};
+
 // Reasoning tokens are billed and counted as output, and at high effort they
 // dominate a hard turn, so this ceiling is well above a non-reasoning one.
 const MAX_OUTPUT_TOKENS = 32000;
@@ -422,7 +462,10 @@ export const toTokenUsage = (usage: Usage): TokenUsage => ({
 export const createPiModel = (options: PiAdapterOptions): AgentModel => {
   const { env, clerkUserId, agent, modelId, effort, metadata, fetchImpl } =
     options;
-  const base = models().getModel(PROVIDER_ID, modelId);
+  const base =
+    modelId === GPT_6_LUNA.id
+      ? GPT_6_LUNA
+      : models().getModel(PROVIDER_ID, modelId);
   if (!base) {
     throw new Error(`Unknown model in gateway catalog: ${modelId}`);
   }
