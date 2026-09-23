@@ -332,6 +332,30 @@ describe('HomeScreen', () => {
       unit: 'day',
       interval: 1,
     });
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+  });
+
+  it('creates a loose task for tomorrow without a toast', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockAddTask.mockImplementation(async (_g, task) =>
+      taskRow(task.id, task.text, { showUpDate: task.showUpDate }),
+    );
+
+    const screen = await renderScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Task'));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'buy milk tomorrow');
+    });
+    await act(async () => {
+      fireEvent(screen.getByPlaceholderText('Add a task'), 'submitEditing');
+    });
+
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    expect(mockAddTask.mock.calls[0][1].text).toBe('buy milk');
+    expect(mockAddTask.mock.calls[0][1].showUpDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
   it('falls back to the previous date when the active highlight is tapped', async () => {
@@ -425,6 +449,7 @@ describe('HomeScreen', () => {
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('p');
     expect(mockAddTask.mock.calls[0][1].showUpDate).toBeNull();
     expect(queryByText('write thesis')).toBeNull();
+    expect(defaultToastController.getSnapshot()[0]?.message).toBe('Filed to project');
   });
 
   it('creates a project from the Project quick-add mode, stays on Home, and toasts a link', async () => {
@@ -773,14 +798,33 @@ describe('HomeScreen', () => {
     expect(mockCompleteTask.mock.calls[0][1]).toBe('1');
   });
 
-  it('keeps Tomorrow as the Home row swipe action', async () => {
+  it('postpones a Home row to Tomorrow without a toast', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTasks.mockResolvedValue([taskRow('1', 'buy milk')]);
+    mockRescheduleTask.mockImplementation(async (_token, id, date) =>
+      taskRow(id, 'buy milk', { showUpDate: date }),
+    );
 
     const { getByText } = await renderScreen();
     await waitFor(() => expect(getByText('buy milk')).toBeTruthy());
-
     expect(getByText('Tomorrow')).toBeTruthy();
+
+    const pan = (global as unknown as {
+      __lastPanGesture: {
+        __onStart: () => void;
+        __onUpdate: (event: { translationX: number }) => void;
+        __onEnd: (event: { velocityX: number }) => void;
+      };
+    }).__lastPanGesture;
+    await act(async () => {
+      pan.__onStart();
+      pan.__onUpdate({ translationX: 160 });
+      pan.__onEnd({ velocityX: 0 });
+    });
+
+    await waitFor(() => expect(mockRescheduleTask).toHaveBeenCalledTimes(1));
+    expect(mockRescheduleTask.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
   it('schedules a task to tomorrow from the scheduler', async () => {
@@ -804,6 +848,7 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(mockRescheduleTask).toHaveBeenCalledTimes(1));
     expect(mockRescheduleTask.mock.calls[0][1]).toBe('1');
     expect(mockRescheduleTask.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
   it('reorders: onReorder mints an in-between key and calls reorderTask for the moved row', async () => {

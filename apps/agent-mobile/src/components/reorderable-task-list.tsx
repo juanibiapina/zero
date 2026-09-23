@@ -37,7 +37,6 @@ import { useResolveClassNames } from 'uniwind';
 import { CheckCircle } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useColor } from '@/lib/theme';
-import { showTaskDestination } from '@/lib/task-feedback';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const SWIPE_THRESHOLD = 140;
@@ -246,13 +245,6 @@ export function ReorderableTaskList({
       const targetDate =
         swipeAction === 'schedule-today' ? today : tomorrow(today);
       const transaction = api.reschedule(item.id, targetDate);
-      if (swipeAction === 'postpone-tomorrow') {
-        showTaskDestination(
-          { ...item, showUpDate: targetDate },
-          [],
-          'scheduled',
-        );
-      }
       transaction.isPersisted.promise.catch((error) =>
         onError(messageOf(error)),
       );

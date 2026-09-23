@@ -1,10 +1,10 @@
-import { localToday, scheduleLabel, toast, type Project } from '@zero/agent-core';
+import { localToday, toast, type Project } from '@zero/agent-core';
 import { router } from 'expo-router';
 
 export function showTaskDestination(
   task: { showUpDate: string | null; projectId: string | null },
   projects: Project[],
-  action: 'scheduled' | 'moved' | 'created',
+  action: 'moved' | 'created',
 ) {
   const today = localToday();
   const project = projects.find((p) => p.id === task.projectId);
@@ -12,9 +12,7 @@ export function showTaskDestination(
   const destination = future ? '/upcoming' : task.projectId ? `/projects/${task.projectId}` : '/';
   const message = action === 'moved'
     ? (task.projectId ? 'Moved to project' : 'Removed from project')
-    : task.showUpDate != null
-      ? `Scheduled for ${scheduleLabel(task.showUpDate, today)}`
-      : action === 'created' ? 'Filed to project' : 'Schedule cleared';
+    : 'Filed to project';
   toast(message, {
     id: 'task-destination',
     description: future ? 'Find it in Upcoming.' : project ? project.title : task.projectId ? 'Find it in its project.' : 'Find it on Home.',

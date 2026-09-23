@@ -8,8 +8,18 @@ appId: dev.juanibiapina.zeroagent
 - assertVisible: "Home"
 - tapOn: "^Task$"
 - tapOn: "New item text"
-- inputText: "E2E loose task"
+- inputText: "E2E loose task tomorrow"
 - pressKey: Enter
+- assertNotVisible: "Scheduled for Tomorrow"
+- tapOn: "Upcoming"
+- extendedWaitUntil:
+    visible: "E2E loose task"
+    timeout: 30000
+- tapOn: "E2E loose task"
+- tapOn: "Set schedule"
+- tapOn: "No date"
+- assertNotVisible: "Schedule cleared"
+- tapOn: "Home"
 - extendedWaitUntil:
     visible: "E2E loose task"
     timeout: 30000

@@ -249,7 +249,7 @@ A right swipe on a mobile project task now reveals Today, writes the reactive
 local day through the existing offline-durable reschedule path, springs the
 retained row back, and shows `Scheduled · Today`; an undated task thereby
 commits the project to Active and appears on Home when the project is available.
-Home keeps its separate swipe-to-Tomorrow exit and destination feedback. The
+Home keeps its separate swipe-to-Tomorrow exit without a success toast. The
 shared `ReorderableTaskList` interface now selects either complete semantic
 policy instead of exposing return/exit mechanics. Mobile's 22 suites / 152
 tests, lint, typecheck, and Android export passed with the existing 3 lint
@@ -850,8 +850,8 @@ kind, **`revive`**, that carries the full row and **re-inserts** it when absent
 all surfaces at once (Home + Upcoming + project screen for tasks; Home + Upcoming
 for captures). Verified on the Pixel 7 (reopen and unprocess both restore the row,
 `reopenTask`/`unprocessCapture` fire, no `CollectionOperationError`). Plan and
-design record: `docs/plans/todo-undo-restore-fix.md`, `docs/storage.md`. This is
-why every mobile change must be verified on the Pixel 7 (now a rule in `AGENTS.md`).
+design record: `docs/plans/todo-undo-restore-fix.md`, `docs/storage.md`.
+This failure shows why unit tests alone can miss device-specific behavior.
 
 Shipped (2026-09-16, device-verified on the Pixel 7): **mobile snackbars can be
 swiped away horizontally and sit above the plus FAB** (plan:

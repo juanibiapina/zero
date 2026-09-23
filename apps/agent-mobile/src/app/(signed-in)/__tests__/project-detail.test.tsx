@@ -1083,9 +1083,10 @@ describe('ProjectDetailScreen', () => {
     expect(mockAddTask.mock.calls[0][1].showUpDate).toMatch(
       /^\d{4}-\d{2}-\d{2}$/,
     );
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
-  it('lets the composer project row move a new task off this project', async () => {
+  it.each([false, true])('files a new task to another project (scheduled: %s)', async (scheduled) => {
     mockFetchProjects.mockResolvedValue([
       project('1', 'Run a 5K', '🏃'),
       project('2', 'Learn piano', '🎹'),
@@ -1119,6 +1120,10 @@ describe('ProjectDetailScreen', () => {
     await act(async () => {
       fireEvent.press(getByLabelText('Learn piano'));
     });
+    if (scheduled) {
+      await act(async () => fireEvent.press(getByLabelText('No date')));
+      await act(async () => fireEvent.press(getByLabelText('Tomorrow')));
+    }
 
     const input = getByPlaceholderText('Add a task');
     await act(async () => {
@@ -1131,6 +1136,17 @@ describe('ProjectDetailScreen', () => {
     await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
     // Filed to the picked project, not this screen's own.
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('2');
+    expect(mockAddTask.mock.calls[0][1].showUpDate).toBe(
+      scheduled ? tomorrow(localToday()) : null,
+    );
+    const [toast] = defaultToastController.getSnapshot();
+    expect(toast.message).toBe('Filed to project');
+    toast.action?.onPress();
+    if (scheduled) {
+      expect(mockNavigate).toHaveBeenCalledWith('/upcoming', undefined);
+    } else {
+      expect(mockNavigate).toHaveBeenCalledWith('/projects/2', { withAnchor: true });
+    }
   });
 
   it('completes a Project Task with Undo and Waiting actions', async () => {

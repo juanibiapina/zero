@@ -5,10 +5,10 @@ const mockNavigate = jest.fn();
 jest.mock('expo-router', () => ({ router: { navigate: (...args: unknown[]) => mockNavigate(...args) } }));
 afterEach(() => { defaultToastController.dismiss(); mockNavigate.mockReset(); });
 describe('task destination feedback', () => {
-  it('links a future task to Upcoming', () => {
-    showTaskDestination({ showUpDate: tomorrow(localToday()), projectId: 'p' }, [], 'scheduled');
+  it('links a future task filed to a project to Upcoming', () => {
+    showTaskDestination({ showUpDate: tomorrow(localToday()), projectId: 'p' }, [], 'created');
     const [toast] = defaultToastController.getSnapshot();
-    expect(toast.message).toBe('Scheduled for Tomorrow');
+    expect(toast.message).toBe('Filed to project');
     toast.action?.onPress();
     expect(mockNavigate).toHaveBeenCalledWith('/upcoming');
   });

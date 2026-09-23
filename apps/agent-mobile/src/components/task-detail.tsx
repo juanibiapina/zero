@@ -554,11 +554,10 @@ export function useTaskDetail({
         const tx = api.reschedule(selected.id, date);
         tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
         setSelectedId(null);
-        showTaskDestination({ ...selected, showUpDate: date }, projects, 'scheduled');
       }
       setScheduling(false);
     },
-    [api, selected, projects, onError],
+    [api, selected, onError],
   );
 
   const stopRecurrence = useCallback(() => {

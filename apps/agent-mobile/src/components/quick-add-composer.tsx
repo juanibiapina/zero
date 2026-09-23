@@ -249,10 +249,7 @@ export function useQuickAdd({
       effectiveRecurrence,
     );
     tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
-    if (
-      (contextProjectId == null && effectiveDate != null && effectiveDate > today) ||
-      (addProjectId != null && addProjectId !== contextProjectId)
-    ) {
+    if (addProjectId != null && addProjectId !== contextProjectId) {
       showTaskDestination(
         { showUpDate: effectiveDate, projectId: addProjectId },
         projects,
@@ -276,7 +273,6 @@ export function useQuickAdd({
     addProjectId,
     effectiveRecurrence,
     contextProjectId,
-    today,
     projects,
   ]);
 

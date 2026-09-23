@@ -312,12 +312,10 @@ describe('UpcomingScreen', () => {
     expect(screen.queryByLabelText('sheet')).toBeNull();
   });
 
-  it('reschedules an upcoming task from the scheduler', async () => {
+  it('clears an upcoming task schedule without a toast', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockFetchTasks.mockResolvedValue([task('2', 'ship the release', '2099-01-01')]);
-    mockRescheduleTask.mockResolvedValue(
-      task('2', 'ship the release', '2099-01-02'),
-    );
+    mockRescheduleTask.mockResolvedValue(task('2', 'ship the release', null));
 
     const { getByText, getByLabelText } = await renderScreen();
 
@@ -329,12 +327,13 @@ describe('UpcomingScreen', () => {
       fireEvent.press(getByLabelText('Set schedule'));
     });
     await act(async () => {
-      fireEvent.press(getByLabelText('Tomorrow'));
+      fireEvent.press(getByLabelText('No date'));
     });
 
     await waitFor(() => expect(mockRescheduleTask).toHaveBeenCalledTimes(1));
     expect(mockRescheduleTask.mock.calls[0][1]).toBe('2');
-    expect(mockRescheduleTask.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(mockRescheduleTask.mock.calls[0][2]).toBeNull();
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
   it('completes a task from the detail round check', async () => {

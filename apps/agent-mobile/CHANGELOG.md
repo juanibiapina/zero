@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-23: Adding a scheduled task, changing or clearing its date, and postponing it no longer show a snackbar; filing it to another Project still does.
+
 - 2026-09-17: Project descriptions now save before you add work, open another control, or leave the Project, so Back no longer loses what you wrote.
 
 - 2026-09-17: From Projects, the + button now lets you add either a Project or a Task, including the Task's date and Project choices.
