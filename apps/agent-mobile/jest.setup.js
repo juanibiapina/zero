@@ -109,8 +109,8 @@ jest.mock('react-native-worklets', () => ({
 
 // react-native-gesture-handler is a native module; mock the pieces the screen
 // uses (the row's Gesture.Pan + GestureDetector, and the root view) so the tree
-// renders without native bindings. GestureDetector/RootView return children
-// directly (no JSX) since a hoisted jest.mock factory can't safely hold JSX.
+// renders without native bindings. GestureDetector returns children directly;
+// RootView forwards props to a React Native View so root touches can be tested.
 // The latest Pan exposes its registered lifecycle callbacks so a screen test can
 // assert the swipe's write outcome; native recognition and arbitration remain
 // Pixel-only verification.
@@ -149,6 +149,8 @@ jest.mock('react-native-gesture-handler', () => {
     return gesture;
   };
   const Passthrough = ({ children }) => children ?? null;
+  const RootView = ({ children, ...props }) =>
+    require('react').createElement(require('react-native').View, props, children);
   return {
     __esModule: true,
     // Compose helpers return a gesture-like object; GestureDetector ignores it.
@@ -161,7 +163,7 @@ jest.mock('react-native-gesture-handler', () => {
       Exclusive: () => makeGesture(),
     },
     GestureDetector: Passthrough,
-    GestureHandlerRootView: Passthrough,
+    GestureHandlerRootView: RootView,
   };
 });
 

@@ -5,6 +5,9 @@ import { defaultToastController } from '@zero/agent-core';
 
 import { Toaster } from '../toaster';
 
+let mockPathname = '/';
+jest.mock('expo-router', () => ({ usePathname: () => mockPathname }));
+
 // The renderer adapter's job is to paint the controller's snapshot and wire the
 // action; the controller's reactivity is covered by its own agent-core tests and
 // by React's useSyncExternalStore (which re-renders on device). react-test-
@@ -16,31 +19,98 @@ describe('Toaster', () => {
     await act(async () => defaultToastController.dismiss());
     jest.restoreAllMocks();
     jest.useRealTimers();
+    mockPathname = '/';
   });
 
-  it('honors the Android timeout and pauses while backgrounded', async () => {
+  it('expires Undo after four seconds when Android recommends no extension', async () => {
+    jest.useFakeTimers();
+    const oldPlatform = Platform.OS;
+    Platform.OS = 'android';
+    jest.spyOn(AccessibilityInfo, 'getRecommendedTimeoutMillis').mockResolvedValue(4000);
+    defaultToastController.show({ message: 'Completed', action: { label: 'Undo', onPress: () => {} } });
+    const screen = await render(<Toaster />);
+    await act(async () => {});
+    expect(AccessibilityInfo.getRecommendedTimeoutMillis).toHaveBeenCalledWith(4000);
+    await act(async () => jest.advanceTimersByTime(3999));
+    expect(defaultToastController.getSnapshot()).toHaveLength(1);
+    await act(async () => jest.advanceTimersByTime(1));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+    await screen.unmount();
+    Platform.OS = oldPlatform;
+  });
+
+  it('honors a longer Android accessibility timeout', async () => {
     jest.useFakeTimers();
     const oldPlatform = Platform.OS;
     Platform.OS = 'android';
     jest.spyOn(AccessibilityInfo, 'getRecommendedTimeoutMillis').mockResolvedValue(12000);
+    defaultToastController.show({ message: 'Completed', action: { label: 'Undo', onPress: () => {} } });
+    const screen = await render(<Toaster />);
+    await act(async () => {});
+    await act(async () => jest.advanceTimersByTime(11999));
+    expect(defaultToastController.getSnapshot()).toHaveLength(1);
+    await act(async () => jest.advanceTimersByTime(1));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+    await screen.unmount();
+    Platform.OS = oldPlatform;
+  });
+
+  it.each(['inactive', 'background'] as const)('clears even a sticky toast on %s and does not restore it', async (state) => {
+    jest.useFakeTimers();
+    let change: (state: 'active' | 'background' | 'inactive') => void = () => {};
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      change = listener;
+      return { remove: () => {} };
+    });
+    defaultToastController.show({ message: 'Could not delete project', durationMs: Infinity });
+    const screen = await render(<Toaster />);
+    await act(async () => change(state));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+    await act(async () => {
+      change('active');
+      jest.advanceTimersByTime(60000);
+    });
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+    await screen.unmount();
+  });
+
+  it('keeps a toast on initial render but clears it when the route changes', async () => {
+    defaultToastController.show({ message: 'Completed', durationMs: Infinity });
+    const screen = await render(<Toaster />);
+    expect(defaultToastController.getSnapshot()).toHaveLength(1);
+    mockPathname = '/upcoming';
+    await screen.rerender(<Toaster />);
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+  });
+
+  it('does not show feedback raised while the app is backgrounded', async () => {
     let change: (state: 'active' | 'background') => void = () => {};
     jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
       change = listener;
       return { remove: () => {} };
     });
-    defaultToastController.show({ message: 'Completed', action: { label: 'Undo', onPress: () => {} } });
     const screen = await render(<Toaster />);
-    await act(async () => {});
-    expect(AccessibilityInfo.getRecommendedTimeoutMillis).toHaveBeenCalledWith(8000);
-    await act(async () => jest.advanceTimersByTime(5000));
-    expect(defaultToastController.getSnapshot()).toHaveLength(1);
     await act(async () => change('background'));
-    await act(async () => jest.advanceTimersByTime(60000));
-    expect(defaultToastController.getSnapshot()).toHaveLength(1);
+    await act(async () => defaultToastController.show({ message: 'Late result' }));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
     await act(async () => change('active'));
-    await act(async () => jest.advanceTimersByTime(6999));
-    expect(defaultToastController.getSnapshot()).toHaveLength(1);
-    await act(async () => jest.advanceTimersByTime(1));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+    await screen.unmount();
+  });
+
+  it('does not revive a dismissed toast after a slow Android recommendation', async () => {
+    jest.useFakeTimers();
+    const oldPlatform = Platform.OS;
+    Platform.OS = 'android';
+    let recommend: (ms: number) => void = () => {};
+    jest.spyOn(AccessibilityInfo, 'getRecommendedTimeoutMillis').mockImplementation(
+      () => new Promise<number>((resolve) => { recommend = resolve; }),
+    );
+    defaultToastController.show({ id: 'undo', message: 'Completed', action: { label: 'Undo', onPress: () => {} } });
+    const screen = await render(<Toaster />);
+    await act(async () => defaultToastController.dismiss());
+    await act(async () => recommend(12000));
+    await act(async () => jest.advanceTimersByTime(12000));
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
     await screen.unmount();
     Platform.OS = oldPlatform;

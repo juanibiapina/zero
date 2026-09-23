@@ -8,15 +8,18 @@ appId: dev.juanibiapina.zeroagent
 - assertVisible: "Home"
 - tapOn: "^Task$"
 - tapOn: "New item text"
-- inputText: "E2E loose task tomorrow"
-- pressKey: Enter
-- assertNotVisible: "Scheduled for Tomorrow"
+- inputText: "E2E loose task next week"
+- assertVisible: "E2E loose task next week"
+- tapOn:
+    id: "quick-add-submit"
+- assertNotVisible: "New item text"
 - tapOn: "Upcoming"
 - extendedWaitUntil:
     visible: "E2E loose task"
     timeout: 30000
 - tapOn: "E2E loose task"
-- tapOn: "Set schedule"
+- tapOn:
+    id: "task-schedule"
 - tapOn: "No date"
 - assertNotVisible: "Schedule cleared"
 - tapOn: "Home"
@@ -29,3 +32,52 @@ appId: dev.juanibiapina.zeroagent
     visible: "E2E loose task"
     timeout: 45000
 - assertVisible: "Home"
+
+# Completed throwaway tasks do not affect the runner's one-open-task postcondition.
+- tapOn: "^Task$"
+- tapOn: "New item text"
+- inputText: "E2E toast plus"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E toast plus"
+    timeout: 30000
+- tapOn: 'Complete "E2E toast plus"'
+- assertVisible: "Undo"
+- tapOn: "^Task$"
+- assertNotVisible: "Undo"
+- assertVisible: "New item text"
+- pressKey: Back
+- pressKey: Back
+- assertNotVisible: "New item text"
+
+- tapOn: "^Task$"
+- tapOn: "New item text"
+- inputText: "E2E toast tab"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E toast tab"
+    timeout: 30000
+- tapOn: 'Complete "E2E toast tab"'
+- assertVisible: "Undo"
+- tapOn: "Upcoming"
+- assertNotVisible: "Undo"
+- tapOn: "Home"
+
+- tapOn: "^Task$"
+- tapOn: "New item text"
+- inputText: "E2E toast background"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E toast background"
+    timeout: 30000
+- tapOn: 'Complete "E2E toast background"'
+- assertVisible: "Undo"
+- pressKey: Home
+- launchApp
+- extendedWaitUntil:
+    visible: "E2E loose task"
+    timeout: 45000
+- assertNotVisible: "Undo"

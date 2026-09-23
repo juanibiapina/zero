@@ -335,6 +335,22 @@ describe('HomeScreen', () => {
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
+  it('clears earlier Undo feedback when opening + and when adding a loose task', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockAddTask.mockImplementation(async (_g, task) => taskRow(task.id, task.text));
+    const screen = await renderScreen();
+    defaultToastController.show({ id: 'undo', message: 'Completed', durationMs: Infinity });
+
+    await act(async () => fireEvent.press(screen.getByLabelText('Task')));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+
+    defaultToastController.show({ id: 'undo', message: 'Completed', durationMs: Infinity });
+    await act(async () => fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'buy milk'));
+    await act(async () => fireEvent(screen.getByPlaceholderText('Add a task'), 'submitEditing'));
+    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+  });
+
   it('creates a loose task for tomorrow without a toast', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockAddTask.mockImplementation(async (_g, task) =>
@@ -440,6 +456,7 @@ describe('HomeScreen', () => {
     await act(async () => {
       fireEvent.changeText(input, 'write thesis');
     });
+    defaultToastController.show({ id: 'undo', message: 'Completed', durationMs: Infinity });
     await act(async () => {
       fireEvent(input, 'submitEditing');
     });
@@ -449,7 +466,7 @@ describe('HomeScreen', () => {
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('p');
     expect(mockAddTask.mock.calls[0][1].showUpDate).toBeNull();
     expect(queryByText('write thesis')).toBeNull();
-    expect(defaultToastController.getSnapshot()[0]?.message).toBe('Filed to project');
+    expect(defaultToastController.getSnapshot().map((toast) => toast.message)).toEqual(['Filed to project']);
   });
 
   it('creates a project from the Project quick-add mode, stays on Home, and toasts a link', async () => {

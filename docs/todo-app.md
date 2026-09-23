@@ -865,6 +865,15 @@ user-prepared “Delete this task” row showed Undo above the unobscured plus b
 a continuous horizontal swipe removed the snackbar, and the task stayed
 completed.
 
+Shipped (2026-09-23, device-verified on the Pixel 7): **mobile snackbars clear on activity**.
+A touch outside the snackbar, a route change, opening quick-add, submitting a task,
+or leaving the app dismisses earlier feedback. Tapping the snackbar still runs its
+actions. Action snackbars use the controller's four-second default instead of an
+eight-second minimum; longer Android accessibility recommendations still apply.
+Project-failure notices remain untimed until dismissal or activity. The existing
+hermetic add-task flow covers opening +, tab navigation, and background/reopen
+without adding a new flow. Plan: `docs/plans/mobile-toast-dismiss-on-activity.md`.
+
 Shipped (2026-09-10): **how long a project has been waiting**, on both surfaces
 (plan: `docs/plans/todo-project-waiting-time.md`). Each waiting project's row
 shows a muted trailing badge with the elapsed time since its oldest unresolved

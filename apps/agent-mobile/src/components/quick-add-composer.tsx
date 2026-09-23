@@ -1,6 +1,7 @@
 import {
   ADD_MODE_PLACEHOLDER,
   candidateAfterProjects,
+  defaultToastController,
   messageOf,
   scheduleLabel,
   toast,
@@ -170,6 +171,7 @@ export function useQuickAdd({
 
   const open = useCallback(
     (options?: { initialMode?: AddMode; projectId?: string }) => {
+      defaultToastController.dismiss();
       const initialMode =
         options?.initialMode && modes.includes(options.initialMode)
           ? options.initialMode
@@ -241,6 +243,7 @@ export function useQuickAdd({
 
     const taskText = effectiveText.trim();
     if (!taskText) return;
+    defaultToastController.dismiss();
     const tx = tasksApi.add(
       taskText,
       effectiveDate,
@@ -415,6 +418,7 @@ export function useQuickAdd({
           mode !== 'after' ? (
             <Fab
               label={submitLabel}
+              testID="quick-add-submit"
               size="sm"
               disabled={text.trim().length === 0}
               onPress={onAdd}

@@ -13,6 +13,8 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { defaultToastController } from '@zero/agent-core';
+
 import { Toaster } from '@/components/toaster';
 
 import { CLERK_PUBLISHABLE_KEY } from '@/lib/env';
@@ -37,7 +39,10 @@ export default function RootLayout() {
   const [queryClient] = useState(createQueryClient);
   useEffect(() => setupAppStateFocus(), []);
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
+    <GestureHandlerRootView
+      style={{ flex: 1, backgroundColor }}
+      onTouchStart={() => defaultToastController.dismiss()}
+    >
       <SafeAreaProvider>
         <StatusBar style="auto" />
         <ClerkProvider
