@@ -15,7 +15,7 @@ export function showTaskDestination(
     : 'Filed to project';
   toast(message, {
     id: 'task-destination',
-    description: future ? 'Find it in Upcoming.' : project ? project.title : task.projectId ? 'Find it in its project.' : 'Find it on Home.',
+    description: future ? 'Upcoming' : project ? `${project.icon} ${project.title}` : task.projectId ? undefined : 'Home',
     action: {
       label: 'View',
       onPress: () => task.projectId && !future

@@ -58,6 +58,7 @@
 
       /* Accent and status */
       --color-accent: #208aef;
+      --color-toast-action: #0967c4;
       --color-on-accent: #ffffff;
       --color-schedule-highlight: #b83a31;
       --color-on-schedule-highlight: #ffffff;
@@ -88,6 +89,7 @@
 
       /* Accent and status */
       --color-accent: #208aef;
+      --color-toast-action: #75baff;
       --color-on-accent: #ffffff;
       --color-schedule-highlight: #9f3f3a;
       --color-on-schedule-highlight: #ffffff;

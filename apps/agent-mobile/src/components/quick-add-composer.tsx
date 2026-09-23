@@ -1,6 +1,7 @@
 import {
   ADD_MODE_PLACEHOLDER,
   candidateAfterProjects,
+  DEFAULT_ICON,
   defaultToastController,
   messageOf,
   scheduleLabel,
@@ -230,7 +231,7 @@ export function useQuickAdd({
         return;
       }
       toast('Project created', {
-        description: trimmed,
+        description: `${DEFAULT_ICON} ${trimmed}`,
         action: {
           label: 'View',
           onPress: () =>

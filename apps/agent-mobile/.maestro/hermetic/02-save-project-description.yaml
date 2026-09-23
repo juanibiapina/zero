@@ -1,4 +1,4 @@
-# Hermetic E2E: a Project description survives immediate Back and reopening.
+# Hermetic E2E: Project description persists and Project completion feedback stays usable.
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp
@@ -26,3 +26,30 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "E2E durable project description"
     timeout: 30000
+
+# A completed Project task has one compact, icon-bearing snackbar.
+- tapOn: "Add"
+- tapOn: "Add a task"
+- inputText: "E2E snackbar project task"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E snackbar project task"
+    timeout: 30000
+- tapOn: 'Complete "E2E snackbar project task"'
+- assertVisible: "Undo"
+# The elevated overlay's uiautomator bounds miss its visual buttons; tap their
+# on-screen positions, as in the existing project-toast device flow.
+- tapOn:
+    point: "71%,75%"
+- extendedWaitUntil:
+    visible: "E2E snackbar project task"
+    timeout: 30000
+- tapOn: 'Complete "E2E snackbar project task"'
+- assertVisible: "Waiting…"
+- assertVisible: ".*📁 E2E described project.*"
+- takeScreenshot: compact-project-snackbar
+- tapOn:
+    point: "85%,75%"
+- assertVisible: "Waiting on"
+- tapOn: "Dismiss quick add"

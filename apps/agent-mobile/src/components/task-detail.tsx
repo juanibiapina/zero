@@ -525,7 +525,8 @@ export function useTaskDetail({
           : undefined,
         secondaryAction: project
           ? {
-              label: 'Waiting for…',
+              label: 'Waiting…',
+              accessibilityLabel: `Add waiting condition to ${project.title}`,
               onPress: () => onAddWaiting(project),
             }
           : undefined,

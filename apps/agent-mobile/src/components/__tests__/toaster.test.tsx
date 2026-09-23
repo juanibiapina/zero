@@ -141,19 +141,69 @@ describe('Toaster', () => {
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
-  it('renders a toast message, description and action', async () => {
+  it('renders the project icon and name inline with a View action', async () => {
     defaultToastController.show({
       message: 'Project created',
-      description: 'ship the app',
+      description: '📁 ship the app',
       action: { label: 'View', onPress: () => {} },
       durationMs: Infinity,
     });
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     const { getByText, getByLabelText } = await render(<Toaster />);
-    expect(announce).toHaveBeenCalledWith('Project created. ship the app');
+    expect(announce).toHaveBeenCalledWith('Project created. 📁 ship the app');
     expect(getByText('Project created')).toBeTruthy();
-    expect(getByText('ship the app')).toBeTruthy();
+    expect(getByText(' · 📁 ship the app')).toBeTruthy();
     expect(getByLabelText('View')).toBeTruthy();
+  });
+
+  it('keeps the project icon and both completion actions on the same row', async () => {
+    const openProject = jest.fn();
+    const addWaiting = jest.fn();
+    defaultToastController.show({
+      message: 'Completed',
+      description: '🎓 Diploma',
+      descriptionAction: { accessibilityLabel: 'Open project Diploma', onPress: openProject },
+      action: { label: 'Undo', onPress: () => {} },
+      secondaryAction: {
+        label: 'Waiting…',
+        accessibilityLabel: 'Add waiting condition to Diploma',
+        onPress: addWaiting,
+      },
+      durationMs: Infinity,
+    });
+    const screen = await render(<Toaster />);
+    expect(screen.getByText(' · 🎓 Diploma')).toBeTruthy();
+    expect(screen.getByLabelText('Undo')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Add waiting condition to Diploma'));
+    expect(addWaiting).toHaveBeenCalledTimes(1);
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+    expect(openProject).not.toHaveBeenCalled();
+  });
+
+  it('opens the icon-labelled project directly from the compact result', async () => {
+    const openProject = jest.fn();
+    defaultToastController.show({
+      message: 'Completed',
+      description: '🎓 Diploma',
+      descriptionAction: { accessibilityLabel: 'Open project Diploma', onPress: openProject },
+      durationMs: Infinity,
+    });
+    const { getByLabelText } = await render(<Toaster />);
+    fireEvent.press(getByLabelText('Open project Diploma'));
+    expect(openProject).toHaveBeenCalledTimes(1);
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
+  });
+
+  it('keeps a sticky failure readable and dismissible', async () => {
+    defaultToastController.show({
+      message: 'Project deleted · Pull to refresh',
+      durationMs: Infinity,
+      action: { label: 'Dismiss', onPress: () => {} },
+    });
+    const { getByText, getByLabelText } = await render(<Toaster />);
+    expect(getByText('Project deleted · Pull to refresh')).toBeTruthy();
+    fireEvent.press(getByLabelText('Dismiss'));
+    expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 
   it('renders both a link and an action, and the link fires and dismisses', async () => {

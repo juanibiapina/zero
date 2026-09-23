@@ -97,9 +97,9 @@ export default function ProjectDetailScreen() {
   );
 }
 
-function reportProjectFailure(message: string, description: string) {
+function reportProjectFailure(message: string) {
   toast(message, {
-    id: 'project-error', description, durationMs: Infinity,
+    id: 'project-error', durationMs: Infinity,
     action: { label: 'Dismiss', onPress: () => toast.dismiss('project-error') },
   });
 }
@@ -271,7 +271,7 @@ function ProjectDetail({
       if (!project) return;
       setError(null);
       const failed = (e: unknown) => state === 'done'
-        ? reportProjectFailure('Could not mark project done', `“${project.title}”: open Projects, refresh, and try again.`)
+        ? reportProjectFailure('Project not done · Retry')
         : setError(messageOf(e));
       try {
         const tx = api.setState(project.id, state);
@@ -279,10 +279,7 @@ function ProjectDetail({
           () => (state === 'done' ? waitsApi.refetch() : undefined),
           failed,
         ).catch(() =>
-          reportProjectFailure(
-            'Project done; After relationships could not refresh',
-            'Open Projects and pull to refresh when you are connected.',
-          ),
+          reportProjectFailure('Project done · Pull to refresh'),
         );
       } catch (e) { failed(e); }
     },
@@ -304,11 +301,7 @@ function ProjectDetail({
         void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
         return tx;
       },
-      onError: () =>
-        reportProjectFailure(
-          'Could not change project completion',
-          `“${project.title}”: open Projects, refresh, and try again.`,
-        ),
+      onError: () => reportProjectFailure('Project update failed · Retry'),
     });
   }, [api, project, waitsApi]);
 
@@ -321,9 +314,7 @@ function ProjectDetail({
     // conditions, so once it persists we re-pull those two collections to drop
     // any lingering orphan (a future-dated task of this project would otherwise
     // sit in Upcoming until the next refetch — Upcoming applies no project gate).
-    const failed = () => reportProjectFailure(
-      'Could not delete project', `“${project.title}”: open Projects, refresh, and try again.`,
-    );
+    const failed = () => reportProjectFailure('Delete failed · Retry');
     try {
       const tx = api.remove(project.id);
       void tx.isPersisted.promise.then(async () => {
@@ -331,7 +322,7 @@ function ProjectDetail({
           await Promise.all([tasksApi.refetch(), waitsApi.refetch()]);
           if (tasksApi.getLoadError() || waitsApi.getLoadError()) throw new Error('refresh');
         } catch {
-          reportProjectFailure('Project deleted; lists could not refresh', 'Pull to refresh when you are connected.');
+          reportProjectFailure('Project deleted · Pull to refresh');
         }
       }, failed);
     } catch { failed(); }

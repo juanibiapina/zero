@@ -976,7 +976,7 @@ describe('ProjectDetailScreen', () => {
     expect(toast).toBeDefined();
     if (!toast) throw new Error('Project-created toast is missing');
     expect(toast.message).toBe('Project created');
-    expect(toast.description).toBe('Run a half marathon');
+    expect(toast.description).toBe('📁 Run a half marathon');
     expect(toast.action?.label).toBe('View');
 
     await act(async () => {
@@ -1174,7 +1174,7 @@ describe('ProjectDetailScreen', () => {
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe('Completed');
     expect(snap[0].description).toBe('🏃 Run a 5K');
-    expect(snap[0].secondaryAction?.label).toBe('Waiting for…');
+    expect(snap[0].secondaryAction?.label).toBe('Waiting…');
     expect(snap[0].action?.label).toBe('Undo');
     await act(async () => snap[0].secondaryAction?.onPress());
     expect(getByPlaceholderText('What needs to happen?')).toBeTruthy();
@@ -1549,7 +1549,7 @@ describe('ProjectDetailScreen', () => {
     await screen.unmount();
     await act(async () => rejectDelete(new Error('terminal failure')));
     await waitFor(() => expect(defaultToastController.getSnapshot()).toEqual(expect.arrayContaining([
-      expect.objectContaining({ message: 'Could not delete project', durationMs: Infinity, description: expect.stringContaining('try again') }),
+      expect.objectContaining({ message: 'Delete failed · Retry', durationMs: Infinity, description: undefined }),
     ])));
   });
 

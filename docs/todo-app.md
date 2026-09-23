@@ -874,6 +874,12 @@ Project-failure notices remain untimed until dismissal or activity. The existing
 hermetic add-task flow covers opening +, tab navigation, and background/reopen
 without adding a new flow. Plan: `docs/plans/mobile-toast-dismiss-on-activity.md`.
 
+Shipped (2026-09-23): **mobile snackbars are compact, normally one row**. The
+result and optional project icon/name share a line with Undo, Waiting, or View.
+Project names still open their Project, and sticky errors show a short recovery
+cue with Dismiss. Large text can wrap without hiding actions. Web stays unchanged.
+Plan: `docs/plans/mobile-compact-snackbar.md`.
+
 Shipped (2026-09-10): **how long a project has been waiting**, on both surfaces
 (plan: `docs/plans/todo-project-waiting-time.md`). Each waiting project's row
 shows a muted trailing badge with the elapsed time since its oldest unresolved

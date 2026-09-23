@@ -11,7 +11,7 @@ import { safeRandomUUID } from "@tanstack/db";
 // A tappable action rendered alongside the message. `onPress` is the neutral
 // name: the web renderer wires it to a button click, the mobile renderer to a
 // Pressable press.
-export type ToastAction = { label: string; onPress: () => void };
+export type ToastAction = { label: string; accessibilityLabel?: string; onPress: () => void };
 export type ToastDescriptionAction = {
   accessibilityLabel: string;
   onPress: () => void;

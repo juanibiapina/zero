@@ -517,7 +517,7 @@ describe('HomeScreen', () => {
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].message).toBe('Project created');
-    expect(snap[0].description).toBe('ship the app');
+    expect(snap[0].description).toBe('📁 ship the app');
     expect(snap[0].action?.label).toBe('View');
     snap[0].action?.onPress();
     expect(mockNavigate).toHaveBeenCalledWith(`/projects/${minted.id}`, {
@@ -598,7 +598,8 @@ describe('HomeScreen', () => {
     const snap = defaultToastController.getSnapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0].description).toBe('🎓 Diploma');
-    expect(snap[0].secondaryAction?.label).toBe('Waiting for…');
+    expect(snap[0].secondaryAction?.label).toBe('Waiting…');
+    expect(snap[0].secondaryAction?.accessibilityLabel).toBe('Add waiting condition to Diploma');
     expect(snap[0].descriptionAction?.accessibilityLabel).toBe('Open project Diploma');
     await act(async () => snap[0].secondaryAction?.onPress());
     expect(getByPlaceholderText('What needs to happen?')).toBeTruthy();
