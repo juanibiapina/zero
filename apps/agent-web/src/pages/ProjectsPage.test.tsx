@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
@@ -176,6 +177,8 @@ function fakeRest(initial: Project[]): ProjectsRest {
   };
 }
 
+let reorderFailure: string | null = null;
+
 function fakeTasksRest(initial: Task[]): TasksRest {
   const server = initial.map((t) => ({ ...t }));
   return {
@@ -206,6 +209,7 @@ function fakeTasksRest(initial: Task[]): TasksRest {
       return { ...row };
     },
     reorderTask: async (id, sortKey) => {
+      if (reorderFailure) throw new Error(reorderFailure);
       const row = server.find((t) => t.id === id);
       if (!row) throw new Error(`no task ${id}`);
       row.sortKey = sortKey;
@@ -268,6 +272,7 @@ function setApi(
   tasks: Task[] = [],
   waits: WaitingCondition[] = [],
 ) {
+  reorderFailure = null;
   h.api = createInMemoryProjectsApi({
     queryClient: new QueryClient(),
     rest: fakeRest(initial),
@@ -310,12 +315,53 @@ async function openDetail(title: string) {
   await screen.findByRole("textbox", { name: "Project title" });
 }
 
+// jsdom has no layout; dnd-kit's real keyboard sensor needs measured row
+// positions to choose the next drop target.
+function measureTaskRows() {
+  return vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      if (
+        this.tagName === "LI" &&
+        this.closest('[aria-labelledby="project-tasks-heading"]')
+      ) {
+        const index = Array.from(this.parentElement?.children ?? []).indexOf(this);
+        return new DOMRect(0, index * 60, 300, 50);
+      }
+      return new DOMRect(0, 0, 0, 0);
+    });
+}
+
+async function moveWithKeyboard(
+  text: string,
+  direction: "ArrowUp" | "ArrowDown",
+  steps = 1,
+) {
+  const handle = screen.getByRole("button", { name: `Reorder "${text}"` });
+  handle.focus();
+  await act(async () => {
+    fireEvent.keyDown(handle, { key: " ", code: "Space" });
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  for (let i = 0; i < steps; i++) {
+    await act(async () => {
+      fireEvent.keyDown(document, { key: direction, code: direction });
+    });
+  }
+  await act(async () => {
+    fireEvent.keyDown(document, { key: " ", code: "Space" });
+  });
+}
+
 describe("ProjectsPage", () => {
   afterEach(() => {
     h.api = null;
     h.tasksApi = null;
     h.waitsApi = null;
     defaultToastController.dismiss();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -432,6 +478,130 @@ describe("ProjectsPage", () => {
         screen.getByRole("button", { name: 'Complete "buy running shoes"' }),
       ).toBeInTheDocument(),
     );
+  });
+
+  it("orders project tasks by their saved keys and moves one with the keyboard", async () => {
+    setApi(
+      [project("1", "Run a 5K"), project("2", "Read books")],
+      [
+        { ...task("a", "first", "1"), sortKey: "a1", createdAt: "2023-01-03T00:00:00.000Z", showUpDate: null },
+        { ...task("other", "not this project", "2"), sortKey: "a2" },
+        { ...task("b", "middle", "1"), sortKey: "a3", createdAt: "2023-01-01T00:00:00.000Z", showUpDate: "2099-12-31" },
+        { ...task("c", "last", "1"), sortKey: "a5", createdAt: "2023-01-02T00:00:00.000Z" },
+      ],
+    );
+    measureTaskRows();
+    const reorder = vi.spyOn(h.tasksApi!, "reorder");
+    renderApp(["/projects/1"]);
+    const region = await screen.findByRole("region", { name: "Tasks" });
+    const order = () =>
+      within(region).getAllByRole("button", { name: /^Complete / })
+        .map((button) => button.getAttribute("aria-label"));
+    expect(order()).toEqual([
+      'Complete "first"',
+      'Complete "middle"',
+      'Complete "last"',
+    ]);
+    expect(within(region).queryByText("not this project")).toBeNull();
+
+    await moveWithKeyboard("last", "ArrowUp");
+    await waitFor(() => expect(order()).toEqual([
+      'Complete "first"',
+      'Complete "last"',
+      'Complete "middle"',
+    ]));
+    expect(reorder).toHaveBeenCalledOnce();
+    expect(reorder.mock.calls[0]?.[0]).toBe("c");
+    const newKey = reorder.mock.calls[0]?.[1];
+    expect(newKey).toBeDefined();
+    expect(newKey > "a1" && newKey < "a3").toBe(true);
+
+    await act(async () => { await h.tasksApi!.refetch(); });
+    expect(order()).toEqual([
+      'Complete "first"',
+      'Complete "last"',
+      'Complete "middle"',
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "← Projects" }));
+    await openDetail("Run a 5K");
+    expect(order()).toEqual([
+      'Complete "first"',
+      'Complete "last"',
+      'Complete "middle"',
+    ]);
+  });
+
+  it("moves tasks to either end without writing on an unchanged drop", async () => {
+    setApi([project("1", "Run a 5K")], [
+      { ...task("a", "first", "1"), sortKey: "a1" },
+      { ...task("b", "middle", "1"), sortKey: "a3" },
+      { ...task("c", "last", "1"), sortKey: "a5" },
+    ]);
+    measureTaskRows();
+    const reorder = vi.spyOn(h.tasksApi!, "reorder");
+    renderApp(["/projects/1"]);
+    const region = await screen.findByRole("region", { name: "Tasks" });
+    const order = () => within(region).getAllByRole("button", { name: /^Complete / })
+      .map((button) => button.getAttribute("aria-label"));
+
+    await moveWithKeyboard("last", "ArrowUp", 2);
+    await waitFor(() => expect(order()[0]).toBe('Complete "last"'));
+    expect(reorder.mock.calls[0]?.[1] < "a1").toBe(true);
+
+    await moveWithKeyboard("last", "ArrowDown", 2);
+    await waitFor(() => expect(order()[2]).toBe('Complete "last"'));
+    expect(reorder.mock.calls[1]?.[1] > "a3").toBe(true);
+
+    await moveWithKeyboard("last", "ArrowDown");
+    expect(order()).toEqual([
+      'Complete "first"', 'Complete "middle"', 'Complete "last"',
+    ]);
+    expect(reorder).toHaveBeenCalledTimes(2);
+  });
+
+  it("moves a project task using its pointer drag handle", async () => {
+    setApi([project("1", "Run a 5K")], [
+      { ...task("a", "first", "1"), sortKey: "a1" },
+      { ...task("b", "second", "1"), sortKey: "a3" },
+      { ...task("c", "third", "1"), sortKey: "a5" },
+    ]);
+    measureTaskRows();
+    renderApp(["/projects/1"]);
+    const region = await screen.findByRole("region", { name: "Tasks" });
+    const handle = within(region).getByRole("button", { name: 'Reorder "third"' });
+    await act(async () => {
+      fireEvent.pointerDown(handle, { pointerId: 1, clientX: 20, clientY: 130, button: 0, isPrimary: true });
+    });
+    await act(async () => {
+      fireEvent.pointerMove(document, { pointerId: 1, clientX: 20, clientY: 10, isPrimary: true });
+    });
+    await act(async () => {
+      fireEvent.pointerUp(document, { pointerId: 1, clientX: 20, clientY: 10, isPrimary: true });
+    });
+    await waitFor(() => expect(
+      within(region).getAllByRole("button", { name: /^Complete / })
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(['Complete "third"', 'Complete "first"', 'Complete "second"']));
+  });
+
+  it("shows a failed reorder and keeps the date control usable", async () => {
+    setApi([project("1", "Run a 5K")], [
+      { ...task("a", "first", "1"), sortKey: "a1", showUpDate: null },
+      { ...task("b", "second", "1"), sortKey: "a3", showUpDate: null },
+    ]);
+    measureTaskRows();
+    reorderFailure = "Connection failed";
+    renderApp(["/projects/1"]);
+    await screen.findByRole("button", { name: 'Reorder "second"' });
+    await moveWithKeyboard("second", "ArrowUp");
+    expect(await screen.findByText("Connection failed")).toBeInTheDocument();
+
+    const first = screen.getByRole("button", { name: 'Complete "first"' }).closest("li")!;
+    fireEvent.click(within(first).getByRole("button", { name: "Add a date" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Today/ }));
+    });
+    expect(within(first).getByRole("button", { name: /^Reschedule / })).toBeInTheDocument();
   });
 
   it("completes a task from the detail screen and offers Undo that reopens it", async () => {

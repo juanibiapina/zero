@@ -102,7 +102,7 @@ visual hierarchy has sibling regions:
 3. editable description;
 4. manual Waiting conditions, when present;
 5. After relationships, when present;
-6. Tasks, when present.
+6. Tasks, when present (ordering and gestures: `docs/entities/task.md`).
 
 Waiting and After are never Task-list footers and receive no Task gestures,
 reorder behavior, dividers, or row spacing. Empty relationship regions have no

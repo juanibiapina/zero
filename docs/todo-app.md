@@ -164,6 +164,13 @@ committed.
 
 ## Project tracking
 
+Implemented (2026-09-24): **Reorder tasks on a web project page.** The project's
+Tasks region now follows the saved manual order and has a handle for pointer and
+keyboard moves. A move writes only the task's existing global order key and
+persists through refresh or navigation; completion and date chips remain separate
+actions. See `docs/entities/task.md` for ordering and
+`docs/plans/todo-web-project-task-reorder.md` for the implementation plan.
+
 Implemented and Pixel-verified (2026-09-17): **Save Project descriptions before
 workspace actions and exits.** The Project workspace now owns the description
 draft and queues its existing optimistic, offline-durable edit before root touch

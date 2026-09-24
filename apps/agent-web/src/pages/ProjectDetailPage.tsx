@@ -2,6 +2,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
@@ -18,8 +35,10 @@ import {
   isBasisStale,
   localToday,
   candidateAfterProjects,
+  compareByOrder,
   isProjectAfter,
   messageOf,
+  orderKeyBetween,
   projectAfters,
   projectAfterRemovalImpact,
   projectAfterRemovalWarning,
@@ -653,8 +672,8 @@ function TaskDateChip({
 // to Home by giving it a date with the date chip (or clear the date to keep
 // grooming it here), add a new one (undated by default — grooming is
 // collect-then-schedule, so a project-screen task is not surfaced on Home until
-// it has an arrived date). Reads the shared tasks collection filtered to this
-// project.
+// it has an arrived date). Reads this project's open tasks in the shared manual
+// order; the handle moves a task within this filtered list.
 function ProjectTasks({
   api,
   projectId,
@@ -667,14 +686,31 @@ function ProjectTasks({
   onError: (message: string) => void;
 }) {
   const { data: tasks } = useLiveQuery((q) =>
-    q
-      .from({ t: api.collection })
-      .where(({ t }) => isNull(t.completedAt))
-      .orderBy(({ t }) => t.createdAt, "asc"),
+    q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
   const [text, setText] = useState("");
   const [adding, setAdding] = useState(false);
-  const list = (tasks ?? []).filter((t: Task) => t.projectId === projectId);
+  const list = (tasks ?? [])
+    .filter((t: Task) => t.projectId === projectId)
+    .sort(compareByOrder);
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = list.findIndex((task) => task.id === active.id);
+    const newIndex = list.findIndex((task) => task.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const moved = arrayMove(list, oldIndex, newIndex);
+    const position = moved.findIndex((task) => task.id === active.id);
+    const prev = moved[position - 1]?.sortKey ?? null;
+    const next = moved[position + 1]?.sortKey ?? null;
+    const tx = api.reorder(String(active.id), orderKeyBetween(prev, next));
+    tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
+  };
 
   const onAdd = useCallback(() => {
     const trimmed = text.trim();
@@ -698,9 +734,14 @@ function ProjectTasks({
   if (list.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-2">
+    <section className="flex flex-col gap-2" aria-labelledby="project-tasks-heading">
       <div className="flex min-h-12 items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-muted-foreground">Tasks</h2>
+        <h2
+          id="project-tasks-heading"
+          className="text-sm font-semibold text-muted-foreground"
+        >
+          Tasks
+        </h2>
         <Popover open={adding} onOpenChange={setAdding}>
           <PopoverTrigger asChild>
             <Button variant="ghost" size="sm" aria-label="Add task">+</Button>
@@ -724,27 +765,92 @@ function ProjectTasks({
           </PopoverContent>
         </Popover>
       </div>
-      <ul className="flex flex-col gap-2">
-        {list.map((task) => (
-          <li
-            key={task.id}
-            className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
-          >
-            <button
-              type="button"
-              aria-label={`Complete "${task.text}"`}
-              className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
-              onClick={() => onComplete(task)}
-            />
-            <span className="flex-1 text-sm">{task.text}</span>
-            <TaskDateChip
-              showUpDate={task.showUpDate}
-              onPick={(date) => onSchedule(task, date)}
-            />
-          </li>
-        ))}
-      </ul>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onDragEnd}
+      >
+        <SortableContext
+          items={list.map((task) => task.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <ul className="flex flex-col gap-2">
+            {list.map((task) => (
+              <ProjectTaskRow
+                key={task.id}
+                task={task}
+                onComplete={() => onComplete(task)}
+                onSchedule={(date) => onSchedule(task, date)}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
     </section>
+  );
+}
+
+function ProjectTaskRow({
+  task,
+  onComplete,
+  onSchedule,
+}: {
+  task: Task;
+  onComplete: () => void;
+  onSchedule: (date: string | null) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : undefined,
+    boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.15)" : undefined,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={dragStyle}
+      className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"
+    >
+      <button
+        type="button"
+        aria-label={`Reorder "${task.text}"`}
+        className="shrink-0 cursor-grab touch-none rounded-md px-1 text-muted-foreground/40 transition-colors hover:text-muted-foreground focus-visible:text-muted-foreground active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <circle cx="5" cy="4" r="1.4" />
+          <circle cx="11" cy="4" r="1.4" />
+          <circle cx="5" cy="8" r="1.4" />
+          <circle cx="11" cy="8" r="1.4" />
+          <circle cx="5" cy="12" r="1.4" />
+          <circle cx="11" cy="12" r="1.4" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        aria-label={`Complete "${task.text}"`}
+        className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
+        onClick={onComplete}
+      />
+      <span className="min-w-0 flex-1 text-sm">{task.text}</span>
+      <TaskDateChip showUpDate={task.showUpDate} onPick={onSchedule} />
+    </li>
   );
 }
 
