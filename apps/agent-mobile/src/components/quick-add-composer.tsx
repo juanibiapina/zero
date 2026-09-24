@@ -1,6 +1,5 @@
 import {
   ADD_MODE_PLACEHOLDER,
-  candidateAfterProjects,
   DEFAULT_ICON,
   defaultToastController,
   messageOf,
@@ -10,6 +9,7 @@ import {
   type Project,
   type ProjectsApi,
   type TasksApi,
+  type Task,
   type WaitingCondition,
   type WaitsApi,
 } from '@zero/agent-core';
@@ -37,7 +37,6 @@ export type QuickAddScope =
   | {
       kind: 'project';
       project: Project | null;
-      conditions: WaitingCondition[];
       waitsApi: WaitsApi;
     };
 
@@ -57,6 +56,8 @@ export function useQuickAdd({
   tasksApi,
   projectsApi,
   projects,
+  openTasks,
+  conditions,
   modes,
   scope,
   getToken,
@@ -69,6 +70,8 @@ export function useQuickAdd({
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
   projects: Project[];
+  openTasks: Task[];
+  conditions: WaitingCondition[];
   modes: AddMode[];
   scope: QuickAddScope;
   getToken: TokenGetter;
@@ -126,18 +129,6 @@ export function useQuickAdd({
     parsedValue?.kind === 'once'
       ? parsedValue.date
       : effectiveRecurrence?.origin ?? addDate;
-  const afterCandidates = useMemo(
-    () =>
-      scope.kind === 'project' && contextProject
-        ? candidateAfterProjects(
-            contextProject.id,
-            projects,
-            scope.conditions,
-          )
-        : [],
-    [scope, contextProject, projects],
-  );
-
   const setText = useCallback(
     (next: string) => {
       setDrafts((current) => ({ ...current, [mode]: next }));
@@ -502,6 +493,8 @@ export function useQuickAdd({
         title="Project"
         open={pickingProject}
         projects={projects}
+        openTasks={openTasks}
+        conditions={conditions}
         selectedProjectId={addProjectId}
         onPick={(id) => {
           setAddProjectId(id);
@@ -513,7 +506,10 @@ export function useQuickAdd({
       <ProjectPickerSheet
         open={pickingAfter}
         title="After project"
-        projects={afterCandidates}
+        projects={projects}
+        openTasks={openTasks}
+        conditions={conditions}
+        afterSourceProjectId={contextProject?.id ?? null}
         selectedProjectId={null}
         showNoProject={false}
         emptyCopy="No available projects"

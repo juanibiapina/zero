@@ -87,6 +87,13 @@ default. Backlog retains its existing large-section collapse policy. A row shows
 only its dominant status context; overridden After relationships remain visible
 inside the Project workspace.
 
+Project selectors on web and mobile use the same section order and within-section
+ordering as this list. After starts collapsed; Backlog collapses when it has more
+than five eligible Projects. Filtering reveals matches inside collapsed sections,
+and clearing the filter restores the previous fold. Task assignment keeps a
+separate No project choice; After selection shows only eligible targets while
+calculating their status against the full Project and attention snapshot.
+
 On mobile, the Projects-list Add control opens the shared global create drawer
 with Project selected and Task also available. Project creation still opens the
 new Project. Task creation stays on the list and can create a loose Task or use

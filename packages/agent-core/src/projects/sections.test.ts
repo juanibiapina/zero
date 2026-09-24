@@ -1,111 +1,90 @@
 import { describe, expect, it } from "vitest";
+import type { Task } from "../tasks/types";
+import type { WaitingCondition } from "../waits/types";
+import { projectStatusSections } from "./sections";
+import type { Project, ProjectState } from "./types";
 
-import type { Project, ProjectDisplayStatus, ProjectState } from "./types";
-import { projectsByStatus } from "./sections";
-
-const project = (
-  id: string,
-  state: ProjectState = "in-play",
-  createdAt = "2023-01-01T00:00:00.000Z",
-): Project => ({
-  id,
-  title: id,
-  icon: "📁",
-  description: null,
-  state,
-  createdAt,
+const today = "2026-09-24";
+const project = (id: string, state: ProjectState = "in-play", createdAt = "2023-01-01"): Project => ({
+  id, title: id, icon: "📁", description: null, state, createdAt,
 });
+const task = (projectId: string, showUpDate: string): Task => ({
+  id: `${projectId}-task`, text: "Work", projectId, showUpDate,
+  createdAt: "2023-01-01", completedAt: null, sortKey: null,
+});
+const wait = (projectId: string, createdAt: string): WaitingCondition => ({
+  id: `${projectId}-wait`, projectId, kind: "free-text", text: "Reply",
+  refId: null, targetStatus: null, createdAt, resolvedAt: null,
+});
+const after = (projectId: string, refId: string, createdAt = "2023-01-01"): WaitingCondition => ({
+  id: `${projectId}-after`, projectId, kind: "project-status", text: null,
+  refId, targetStatus: "done", createdAt, resolvedAt: null,
+});
+const sections = (projects: Project[], tasks: Task[] = [], conditions: WaitingCondition[] = []) =>
+  projectStatusSections({ projects, tasks, conditions, today });
 
-const statusMapper = (statuses: Record<string, ProjectDisplayStatus>) =>
-  (p: Project): ProjectDisplayStatus => statuses[p.id];
-
-describe("projectsByStatus", () => {
-  it("returns an empty array", () => {
-    expect(projectsByStatus([], () => "next")).toEqual([]);
+describe("projectStatusSections", () => {
+  it("omits empty sections and Done projects", () => {
+    expect(sections([])).toEqual([]);
+    expect(sections([project("next"), project("done", "done")]).map((s) => s.status)).toEqual(["next"]);
   });
 
-  it("groups calculated statuses in fixed order", () => {
-    const list = [
-      project("b", "backlog"),
-      project("a"),
-      project("w"),
-      project("after"),
-      project("n"),
-    ];
-    const sections = projectsByStatus(
-      list,
-      statusMapper({
-        b: "backlog",
-        a: "active",
-        w: "waiting",
-        after: "after",
-        n: "next",
-      }),
-    );
-    expect(sections.map((s) => s.status)).toEqual([
-      "active",
-      "next",
-      "waiting",
-      "after",
-      "backlog",
+  it("orders Active, Next, Waiting, After, Backlog and uses the full attention snapshot", () => {
+    const projects = [project("backlog", "backlog"), project("next"), project("after"),
+      project("target"), project("waiting"), project("active"), project("done", "done")];
+    const grouped = sections(projects, [task("active", today), task("waiting", "2026-09-26")],
+      [after("after", "target")]);
+    expect(grouped.map((section) => section.status)).toEqual(["active", "next", "waiting", "after", "backlog"]);
+    expect(grouped.flatMap((section) => section.projects.map((p) => p.id))).not.toContain("done");
+    expect(grouped.find((section) => section.status === "after")?.collapsed).toBe(true);
+  });
+
+  it("sorts sections oldest-first, manual waits before date waits, and After by relationship age", () => {
+    const projects = [project("new"), project("dated"), project("old"),
+      project("after-new"), project("target"), project("after-old")];
+    const grouped = sections(projects, [task("dated", "2026-09-26")], [
+      wait("new", "2026-09-20"), wait("old", "2026-09-01"),
+      after("after-new", "target", "2026-09-20"), after("after-old", "target", "2026-09-01"),
     ]);
+    expect(grouped.find((s) => s.status === "waiting")?.projects.map((p) => p.id)).toEqual(["old", "new", "dated"]);
+    expect(grouped.find((s) => s.status === "after")?.projects.map((p) => p.id)).toEqual(["after-old", "after-new"]);
+    expect(sections([project("late", "in-play", "2023-02-01"), project("early")])[0].projects.map((p) => p.id))
+      .toEqual(["early", "late"]);
   });
 
-  it("omits empty sections", () => {
-    const sections = projectsByStatus(
-      [project("a"), project("n")],
-      statusMapper({ a: "active", n: "next" }),
-    );
-    expect(sections.map((s) => s.status)).toEqual(["active", "next"]);
+  it("uses mobile's reactive fold defaults until the user toggles a section", () => {
+    const five = Array.from({ length: 5 }, (_, i) => project(`backlog ${i}`, "backlog"));
+    const six = [...five, project("backlog 5", "backlog")];
+    expect(sections(five)[0].collapsed).toBe(false);
+    expect(sections(six)[0].collapsed).toBe(true);
+    expect(projectStatusSections({ projects: six, tasks: [], conditions: [], today,
+      collapseOverride: { backlog: false } })[0].collapsed).toBe(false);
   });
 
-  it("orders a section oldest-first", () => {
-    const list = [
-      project("late", "in-play", "2023-03-01T00:00:00.000Z"),
-      project("early", "in-play", "2023-01-01T00:00:00.000Z"),
-      project("mid", "in-play", "2023-02-01T00:00:00.000Z"),
-    ];
-    const sections = projectsByStatus(
-      list,
-      statusMapper({ late: "active", early: "active", mid: "active" }),
-    );
-    expect(sections[0].projects.map((p) => p.id)).toEqual([
-      "early",
-      "mid",
-      "late",
-    ]);
+  it("reveals folded matches during search without changing the manual fold", () => {
+    const projects = Array.from({ length: 6 }, (_, i) => project(`backlog ${i}`, "backlog"));
+    const options = { projects, tasks: [], conditions: [], today, collapseOverride: { backlog: true } };
+    const filtered = projectStatusSections({ ...options, filter: " BACKLOG 5 " });
+    expect(filtered.map((s) => [s.status, s.count, s.collapsed, s.projects[0].id]))
+      .toEqual([["backlog", 1, false, "backlog 5"]]);
+    expect(projectStatusSections(options)[0].collapsed).toBe(true);
+    expect(projectStatusSections({ ...options, filter: "missing" })).toEqual([]);
   });
 
-  it("uses a supplied section sort key", () => {
-    const since: Record<string, string> = {
-      w1: "2023-05-01T00:00:00.000Z",
-      w2: "2023-06-01T00:00:00.000Z",
-    };
-    const list = [
-      project("w2", "in-play", "2023-02-01T00:00:00.000Z"),
-      project("w1", "in-play", "2023-03-01T00:00:00.000Z"),
-      project("late", "in-play", "2023-03-01T00:00:00.000Z"),
-      project("early", "in-play", "2023-01-01T00:00:00.000Z"),
-    ];
-    const sections = projectsByStatus(
-      list,
-      statusMapper({ w1: "waiting", w2: "waiting", late: "active", early: "active" }),
-      (p) => since[p.id] ?? p.createdAt,
-    );
-    expect(
-      sections.find((s) => s.status === "waiting")!.projects.map((p) => p.id),
-    ).toEqual(["w1", "w2"]);
-    expect(
-      sections.find((s) => s.status === "active")!.projects.map((p) => p.id),
-    ).toEqual(["early", "late"]);
-  });
-
-  it("never emits Done", () => {
-    const sections = projectsByStatus(
-      [project("a"), project("d", "done")],
-      statusMapper({ a: "active", d: "done" }),
-    );
-    expect(sections.map((s) => s.status)).toEqual(["active"]);
-    expect(sections.flatMap((s) => s.projects.map((p) => p.id))).toEqual(["a"]);
+  it("limits After targets but derives their status against every Project", () => {
+    const projects = [project("source"), project("target"), project("after"),
+      project("backlog", "backlog"), project("done", "done")];
+    const conditions = [after("source", "target"), after("after", "source")];
+    const choice = (tasks: Task[]) => projectStatusSections({ projects, tasks, conditions, today,
+      afterSourceProjectId: "source" });
+    expect(choice([]).flatMap((s) => s.projects.map((p) => p.id))).toEqual(["backlog"]);
+    // A different source can choose the After Project. Its status depends on
+    // the source relationship, which points outside the eligible target set.
+    const other = projectStatusSections({ projects, tasks: [], conditions, today,
+      afterSourceProjectId: "backlog" });
+    expect(other.find((s) => s.status === "after")?.projects.map((p) => p.id)).toEqual(["source", "after"]);
+    expect(projectStatusSections({ projects, tasks: [task("after", today)], conditions, today,
+      afterSourceProjectId: "backlog" }).find((s) => s.status === "active")?.projects.map((p) => p.id))
+      .toEqual(["after"]);
   });
 });

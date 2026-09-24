@@ -62,8 +62,7 @@ export {
   type ProjectEditFields,
 } from "./projects/collection";
 export {
-  projectsByStatus,
-  PROJECT_SECTION_ORDER,
+  projectStatusSections,
   type ProjectSection,
 } from "./projects/sections";
 export {
@@ -73,7 +72,6 @@ export {
   waitingUntil,
 } from "./projects/derive";
 export {
-  candidateAfterProjects,
   isManualWaitingCondition,
   isProjectAfter,
   projectAfters,

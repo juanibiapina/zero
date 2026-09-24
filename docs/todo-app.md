@@ -989,6 +989,12 @@ so the rows render correctly. UI/navigation only — no data model, API, store, 
 derivation change. Web has a `ProjectsPage` route test; the mobile project screen
 was later device-exercised in the Undo-restore fix (2026-09-09).
 
+Shipped (2026-09-24): **Status-grouped Project selectors** (plan:
+`docs/plans/todo-project-selectors-status-sections.md`). Web and mobile Task
+assignment and After-target selection now share the Projects list's calculated
+ordering and folding policy, with search reaching folded matches. The full open
+Task and Project attention snapshots drive each selector; no stored state changed.
+
 In flight (details in `docs/plans/`):
 
 - `todo-capture-animations.md` — quick-add morph + done fade-out. **Done fade-out

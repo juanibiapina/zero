@@ -1,0 +1,55 @@
+# Hermetic E2E: own Project and Task fixtures; no dependency on other flows.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 45000
+- tapOn: "Projects"
+- extendedWaitUntil:
+    visible: "Projects"
+    timeout: 30000
+- tapOn: "Add"
+- tapOn: "Name an outcome"
+- inputText: "E2E selector project"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "E2E selector project"
+    timeout: 30000
+- tapOn: "Project status: Next"
+- tapOn: "Move to backlog"
+- assertVisible: "Project status: Backlog"
+- tapOn: "Back to projects"
+- tapOn: "Home"
+- tapOn: "^Task$"
+- tapOn: "New item text"
+- inputText: "E2E selector task"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E selector task"
+    timeout: 30000
+- tapOn: "E2E selector task"
+- tapOn:
+    id: "task-project"
+- assertVisible: "Backlog, 1"
+- tapOn: "Filter projects"
+- inputText: "selector"
+- assertVisible: "E2E selector project"
+- tapOn: "E2E selector project"
+- tapOn: "Projects"
+- tapOn: "E2E selector project"
+- assertVisible: "E2E selector task"
+- tapOn: "E2E selector task"
+- tapOn:
+    id: "task-project"
+- tapOn: "No project"
+# Complete the temporary Project and Task; neither remains in the working lists.
+- tapOn: "Project status: Backlog"
+- tapOn: "Mark done"
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible: "E2E selector task"
+    timeout: 30000
+- tapOn: 'Complete "E2E selector task"'
+- assertNotVisible: "E2E selector task"

@@ -1,0 +1,45 @@
+# Status-grouped Project selectors
+
+## Goal
+
+Every list used to choose a Project in the todo app should put relevant Projects first, under the same calculated status sections as the Projects page. This applies to web and mobile Task assignment (creation and editing) and to Project After-target selection. The sections are Active, Next, Waiting, After, Backlog, in that order; Done is absent. Empty sections are omitted. After starts folded; Backlog starts folded only when it has more than five eligible Projects, matching the Projects page. Users can expand either section and select any eligible Project. Search must still find Projects inside folded sections.
+
+## Initial state and decisions
+
+- `docs/entities/project.md` defines persisted state versus calculated display status, their precedence, and the Projects page's section/collapse policy. Do not sort by persisted `state`, title, or recent use instead of calculated status.
+- `packages/agent-core/src/projects/derive.ts`, `status-context.ts`, `sections.ts`, and `display.ts` own status derivation, waiting/after ordering, section order, labels, and `BACKLOG_COLLAPSE_THRESHOLD` (= 5). `projectStatusSections` combines this policy for both Projects pages and selectors. It keeps oldest waits first and the existing After context order; no database or REST change is needed.
+- Mobile has one `ProjectPickerSheet` in `apps/agent-mobile/src/components/task-detail.tsx`, used by Task detail, `useQuickAdd`'s Task Project row, and the After-target picker. It currently filters a flat `FlatList` by title and pins `No project` above it. `useProjectAdd` wraps `useQuickAdd`. Home, Upcoming, Projects, and Project detail already subscribe to open Tasks, Projects, and conditions; pass the full snapshot through these controllers. The Task detail hook's visible Task list is **not** sufficient to derive every Project's status (Home/Upcoming/project detail hide Tasks outside their screen).
+- Web has flat Project menus in `apps/agent-web/src/pages/HomePage.tsx` (`QuickAddProjectChip`, `ProjectField`) and two filtered After-target lists in `ProjectDetailPage.tsx` (`ProjectAddMenu`, `ProjectRelations`). `Home` subscribes to Projects; `TaskList` separately subscribes to open Tasks and conditions. Make those inputs available to the selectors without coupling them to the Home-visible Task list. Project detail already has the complete inputs.
+- An After picker passes its source Project id to `projectStatusSections`. It excludes the source, Done, existing direct targets, and cycle-causing targets while deriving status and sort keys against **all** Projects, open Tasks, and conditions. Excluded Projects are not selectable.
+- Keep the existing mobile keyboard-docked, virtualized picker and web popover/sheet shells. `@expo/ui` grouped `List` is not virtualized and would be a poor replacement for an unbounded Project picker. Keep `No project` pinned above the normal Task assignment sections; never offer it in After selection. Preserve selected-row indication, touch/keyboard selection, filter, empty states, dismiss/back behavior, and existing writes.
+
+## Implementation steps
+
+1. **One shared calculation produces Project sections.** In `@zero/agent-core`, compose status, context sort keys, After eligibility, filtering, and fold defaults into `projectStatusSections`, a pure interface taking the full Project/Task/condition/day snapshot and an optional After source id. Both Projects pages and all selectors consume it, so ordering cannot drift. Keep eligibility internal; do not add a data-access seam or persist derived status. Test mixed statuses, waiting order, After context, Done exclusion, eligible-only After targets, and changes in Tasks or conditions.
+2. **Mobile selectors show collapsible sections.** Supply the full open-Task and condition snapshots to `useTaskDetail`, `useQuickAdd`, and its `useProjectAdd` wrapper from the four screens. Extend `ProjectPickerSheet` to receive the snapshot, complete Project set, and After source id. Replace the flat Project rows with section-aware virtualized rendering (`SectionList` or an equivalent flattened `FlatList` with headers). Each nonempty header shows label, count, expanded state, and a tappable accessible control. Use the page's After and Backlog defaults; keep `No project` pinned. When a nonempty filter is active, show matching rows even in normally folded sections; clear the filter and restore the prior folding state on the same opening, and reset the filter/folding on reopening. Preserve the bounded keyboard-docked layout and existing row test IDs/selection labels where possible.
+3. **Web selectors use the same list behavior.** Add a reusable Project-option list rendering module under `apps/agent-web/src/components/` for the two Home popovers and two After pickers. Let each caller keep its existing trigger, close-on-pick, and write behavior; give every selector a title filter. Make the Home create picker subscribe to complete open Tasks and conditions (or lift existing Home subscriptions) and pass the full snapshot; Task detail and Project detail already have it. Render accessible collapsible section buttons and counts, with the same default folds and search behavior as mobile; retain `No project` only for Task assignment. A filtered After list must search its candidates and reveal matches under folded sections. Avoid four copies of the collapse policy and section markup.
+4. **The feature is documented and proven on both surfaces.** Update the selector behavior in `docs/entities/project.md` (the behavioral source of truth) and add a short completed-work note in `docs/todo-app.md` without copying the full specification. Add user-facing, dated bullets to `apps/agent-mobile/CHANGELOG.md` and `apps/agent-web/CHANGELOG.md` in the same change; load the `changelog` skill before editing either. No agent/Telegram changelog entry is appropriate.
+
+## Verification
+
+- Core tests assert ordering Active → Next → Waiting → After → Backlog, no Done, waiting/After tie behavior, and status recomputation from dated Tasks, manual Waiting, and After relationships. Test candidate grouping against the full Project set.
+- Extend `apps/agent-mobile/src/components/__tests__/task-pickers.test.tsx`: header counts and accessible expanded state, Backlog at five versus six, After default fold, expand/select, `No project`, title filter revealing folded matches, reset on clear/reopen, empty results, and After eligibility. Add one screen-level test proving a Project outside the current Home/Upcoming Task slice is classified from the full open-Task snapshot.
+- Extend `apps/agent-web/src/pages/HomePage.test.tsx` and `ProjectsPage.test.tsx` or add focused `ProjectDetailPage` tests: both Home selectors and both After entry points show sections, apply candidate restrictions, reveal folded matches, and keep the existing selection/write result. Prefer assertions through rendered controls rather than implementation details.
+- Add a behavior-named flow in `apps/agent-mobile/.maestro/hermetic/` that creates a Project and Task, searches the folded Backlog, assigns the Task, moves it back to loose, and completes its temporary fixtures. Keep it independent of flow order and the production collection untouched. Run `pnpm --filter @zero/agent-mobile e2e:pixel` when the connected Pixel harness is available. This is native screen composition/persisted assignment, so the device flow is warranted.
+- Run `gob run bin/ci` per repository instructions. On this host, whole-repo checks may fail to boot host `workerd`; stop Metro/local Gradle before checks and then run the touched packages' tests, lint, and typecheck serially (`@zero/agent-core`, `@zero/agent-mobile`, `@zero/agent-web`). If the Pixel harness is unavailable, report that device proof is pending rather than claiming it passed.
+
+## Out of scope
+
+No new Project ranking algorithm, manual reorder, status persistence, Done selection, or change to After eligibility. Do not turn Project-page navigation or Project creation itself into a picker.
+
+## Skills to use during implementation
+
+- `vocabulary` and `deep-modules` — keep the shared status/grouping interface deep and the platform rendering local.
+- `documentation` — maintain one behavioral source of truth and a concise progress note.
+- `testing` — test observable picker and grouping behavior through their public interfaces.
+- `expo-overview`, `expo-ui`, `expo-native-ui` — preserve the Expo SDK 57 app's keyboard/sheet and virtualized-list constraints.
+- `changelog` — load before the two user-facing changelog edits.
+
+## Acceptance criteria
+
+All four web selector lists and all three mobile picker entry points display the same status order and within-section order as their Projects pages. Backlog folds when its eligible count exceeds five; After folds by default; a filtered match remains reachable. Selecting a Project or `No project` produces the same write as before, and After cannot select an ineligible target. The new tests and the applicable checks pass, with device proof recorded when available.

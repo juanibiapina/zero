@@ -6,12 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import {
-  BACKLOG_COLLAPSE_THRESHOLD,
   LOADING_TEXT_DELAY_MS,
   localToday,
   messageOf,
-  projectDisplayStatus,
-  projectsByStatus,
+  projectStatusSections,
   listView,
   PROJECT_DISPLAY_STATUS_LABELS,
   projectStatusContext,
@@ -88,6 +86,7 @@ function ProjectsReady({
 
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   const refetchAll = useCallback(async () => {
@@ -122,17 +121,8 @@ function ProjectsReady({
   const today = localToday();
   const sections = useMemo(
     () =>
-      projectsByStatus(
-        list,
-        (p) => projectDisplayStatus(p, tasks, today, conds, list),
-        // The Waiting section orders by the shared badge's sort key (condition
-        // waits longest-first, then date waits soonest-first); others fall back
-        // to createdAt.
-        (p) =>
-          projectStatusContext(p, tasks, conds, list, today)?.sortKey ??
-          p.createdAt,
-      ),
-    [list, tasks, conds, today],
+      projectStatusSections({ projects: list, tasks, conditions: conds, today, collapseOverride }),
+    [list, tasks, conds, today, collapseOverride],
   );
   // A project's waiting badge text, non-null only for waiting projects:
   // "for <elapsed>" for a condition wait, "until <day>" for a date wait.
@@ -195,6 +185,8 @@ function ProjectsReady({
               key={section.status}
               status={section.status}
               projects={section.projects}
+              collapsed={section.collapsed}
+              onToggle={() => setCollapseOverride((prev) => ({ ...prev, [section.status]: !section.collapsed }))}
               labelOf={labelOf}
               onOpen={(p) => void navigate(`/projects/${p.id}`)}
             />
@@ -205,29 +197,28 @@ function ProjectsReady({
   );
 }
 
-// One collapsible status section: a header with a count and a chevron, and the
-// rows beneath it when expanded. Backlog starts collapsed when large; the other
-// working statuses start open. Collapse is local UI state (not persisted).
+// Each section renders the shared fold decision; the page owns the user's
+// temporary override so a new count can still change the default.
 function ProjectSectionView({
   status,
   projects,
+  collapsed,
+  onToggle,
   labelOf,
   onOpen,
 }: {
   status: ProjectDisplayStatus;
   projects: Project[];
+  collapsed: boolean;
+  onToggle: () => void;
   labelOf: (p: Project) => string | null;
   onOpen: (p: Project) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(
-    status === "after" ||
-      (status === "backlog" && projects.length > BACKLOG_COLLAPSE_THRESHOLD),
-  );
   return (
     <section className="space-y-3">
       <button
         type="button"
-        onClick={() => setCollapsed((c) => !c)}
+        onClick={onToggle}
         aria-expanded={!collapsed}
         className="flex w-full items-center gap-2 text-sm font-semibold text-muted-foreground"
       >

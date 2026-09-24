@@ -28,13 +28,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ErrorText } from "@/components/ConnectionStatus";
+import { ProjectOptionList } from "@/components/ProjectOptionList";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
 import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
 import { EmojiPicker } from "frimousse";
 import {
   isBasisStale,
   localToday,
-  candidateAfterProjects,
   compareByOrder,
   isProjectAfter,
   messageOf,
@@ -260,6 +260,8 @@ function ProjectDetailReady({
         project={project}
         projects={list}
         conditions={conds}
+        tasks={tasks}
+        today={today}
         tasksApi={tasksApi}
         projectsApi={api}
         waitsApi={waitsApi}
@@ -270,6 +272,8 @@ function ProjectDetailReady({
         project={project}
         waitsApi={waitsApi}
         projects={list}
+        tasks={tasks}
+        today={today}
         onError={setError}
       />
 
@@ -860,6 +864,8 @@ function ProjectAddMenu({
   project,
   projects,
   conditions,
+  tasks,
+  today,
   tasksApi,
   projectsApi,
   waitsApi,
@@ -868,6 +874,8 @@ function ProjectAddMenu({
   project: Project;
   projects: Project[];
   conditions: WaitingCondition[];
+  tasks: Task[];
+  today: string;
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
@@ -877,14 +885,6 @@ function ProjectAddMenu({
   const [menuOpen, setMenuOpen] = useState(false);
   const [flow, setFlow] = useState<ProjectAddFlow | null>(null);
   const [text, setText] = useState("");
-  const [filter, setFilter] = useState("");
-  const candidates = candidateAfterProjects(project.id, projects, conditions);
-  const needle = filter.trim().toLowerCase();
-  const filteredCandidates = needle
-    ? candidates.filter((candidate) =>
-        candidate.title.toLowerCase().includes(needle),
-      )
-    : candidates;
   const open = (next: ProjectAddFlow) => {
     setMenuOpen(false);
     setFlow(next);
@@ -892,7 +892,6 @@ function ProjectAddMenu({
   const close = () => {
     setFlow(null);
     setText("");
-    setFilter("");
   };
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
@@ -951,35 +950,13 @@ function ProjectAddMenu({
       <Sheet open={flow != null} onClose={close} title={title}>
         {flow === "after" ? (
           <div className="flex flex-col gap-3">
-            <Input
-              value={filter}
-              autoFocus
-              aria-label="Filter After projects"
-              placeholder="Filter projects"
-              onChange={(event) => setFilter(event.target.value)}
-            />
-            <div className="max-h-72 overflow-y-auto">
-              {filteredCandidates.length === 0 ? (
-                <p className="px-2 py-3 text-sm text-muted-foreground">
-                  {needle ? "No matching projects" : "No available projects"}
-                </p>
-              ) : (
-                filteredCandidates.map((candidate) => (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left hover:bg-accent"
-                    onClick={() => {
-                      write(waitsApi.addAfter(project.id, candidate.id));
-                      close();
-                    }}
-                  >
-                    <span aria-hidden>{candidate.icon}</span>
-                    <span className="min-w-0 flex-1 truncate">{candidate.title}</span>
-                  </button>
-                ))
-              )}
-            </div>
+            <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions}
+              today={today} afterSourceProjectId={project.id} emptyCopy="No available projects"
+              onPick={(candidateId) => {
+                if (!candidateId) return;
+                write(waitsApi.addAfter(project.id, candidateId));
+                close();
+              }} />
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -1012,11 +989,15 @@ function ProjectRelations({
   project,
   waitsApi,
   projects,
+  tasks,
+  today,
   onError,
 }: {
   project: Project;
   waitsApi: WaitsApi;
   projects: Project[];
+  tasks: Task[];
+  today: string;
   onError: (message: string) => void;
 }) {
   const navigate = useNavigate();
@@ -1029,17 +1010,9 @@ function ProjectRelations({
     (condition: WaitingCondition) =>
       condition.projectId === project.id && !isProjectAfter(condition),
   );
-  const candidates = candidateAfterProjects(project.id, projects, conditions);
   const [waitingOpen, setWaitingOpen] = useState(false);
   const [afterOpen, setAfterOpen] = useState(false);
   const [text, setText] = useState("");
-  const [filter, setFilter] = useState("");
-  const needle = filter.trim().toLowerCase();
-  const filteredCandidates = needle
-    ? candidates.filter((candidate) =>
-        candidate.title.toLowerCase().includes(needle),
-      )
-    : candidates;
 
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }): void => {
     tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
@@ -1053,7 +1026,6 @@ function ProjectRelations({
   };
   const addAfter = (afterProjectId: string) => {
     write(waitsApi.addAfter(project.id, afterProjectId));
-    setFilter("");
     setAfterOpen(false);
   };
 
@@ -1139,32 +1111,9 @@ function ProjectRelations({
               </PopoverTrigger>
               <PopoverContent align="end" className="flex w-80 flex-col gap-2">
                 <h3 className="font-semibold">After project</h3>
-                <Input
-                  value={filter}
-                  aria-label="Filter After projects"
-                  placeholder="Filter projects"
-                  autoFocus
-                  onChange={(event) => setFilter(event.target.value)}
-                />
-                <div className="max-h-64 overflow-y-auto">
-                  {filteredCandidates.length === 0 ? (
-                    <p className="px-2 py-3 text-sm text-muted-foreground">
-                      {needle ? "No matching projects" : "No available projects"}
-                    </p>
-                  ) : (
-                    filteredCandidates.map((candidate) => (
-                      <button
-                        key={candidate.id}
-                        type="button"
-                        className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left hover:bg-accent"
-                        onClick={() => addAfter(candidate.id)}
-                      >
-                        <span aria-hidden>{candidate.icon}</span>
-                        <span className="min-w-0 flex-1 truncate">{candidate.title}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
+                <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions}
+                  today={today} afterSourceProjectId={project.id} emptyCopy="No available projects"
+                  onPick={(candidateId) => { if (candidateId) addAfter(candidateId); }} />
               </PopoverContent>
             </Popover>
           </div>

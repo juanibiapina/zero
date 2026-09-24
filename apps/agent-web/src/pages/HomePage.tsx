@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { ScheduleHighlightInput } from "@/components/ScheduleHighlightInput";
+import { ProjectOptionList } from "@/components/ProjectOptionList";
 import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
 import { Link, useNavigate } from "react-router";
 import {
@@ -51,6 +52,8 @@ import {
   undoableAction,
   type AddMode,
   type HomeCallToAction,
+  type Project,
+  type WaitingCondition,
 } from "@zero/agent-core";
 import {
   parseSchedule,
@@ -127,6 +130,12 @@ function Home({
   const navigate = useNavigate();
   const { data: projects } = useLiveQuery((q) =>
     q.from({ p: projectsApi.collection }),
+  );
+  const { data: openTasks } = useLiveQuery((q) =>
+    q.from({ t: tasksApi.collection }).where(({ t }) => isNull(t.completedAt)),
+  );
+  const { data: conditions } = useLiveQuery((q) =>
+    q.from({ w: waitsApi.collection }),
   );
   const today = localToday();
   const parsedSchedule = useMemo(
@@ -262,6 +271,9 @@ function Home({
         projectId={projectId}
         onProjectChange={setProjectId}
         projects={projects ?? []}
+        tasks={openTasks ?? []}
+        conditions={conditions ?? []}
+        today={today}
       />
       {error && <ErrorText>{error}</ErrorText>}
       <TaskList
@@ -545,6 +557,9 @@ function TaskList({
 
             <ProjectField
               projects={projects ?? []}
+              tasks={tasks ?? []}
+              conditions={conditions ?? []}
+              today={today}
               selectedProjectId={selected.projectId}
               onPick={onPickProject}
             />
@@ -571,6 +586,9 @@ function QuickAdd({
   projectId,
   onProjectChange,
   projects,
+  tasks,
+  conditions,
+  today,
 }: {
   mode: AddMode;
   value: string;
@@ -587,7 +605,10 @@ function QuickAdd({
   onDateChange: (date: string | null) => void;
   projectId: string | null;
   onProjectChange: (projectId: string | null) => void;
-  projects: { id: string; title: string; icon: string }[];
+  projects: Project[];
+  tasks: Task[];
+  conditions: WaitingCondition[];
+  today: string;
 }) {
   return (
     <div className="space-y-2">
@@ -655,6 +676,9 @@ function QuickAdd({
           />
           <QuickAddProjectChip
             projects={projects}
+            tasks={tasks}
+            conditions={conditions}
+            today={today}
             projectId={projectId}
             onPick={onProjectChange}
           />
@@ -732,10 +756,16 @@ function QuickAddDateChip({
 // caller raises a "Filed to <project>" toast).
 function QuickAddProjectChip({
   projects,
+  tasks,
+  conditions,
+  today,
   projectId,
   onPick,
 }: {
-  projects: { id: string; title: string; icon: string }[];
+  projects: Project[];
+  tasks: Task[];
+  conditions: WaitingCondition[];
+  today: string;
   projectId: string | null;
   onPick: (projectId: string | null) => void;
 }) {
@@ -765,32 +795,8 @@ function QuickAddProjectChip({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-1">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/60"
-          onClick={() => pick(null)}
-        >
-          <span aria-hidden className="w-5 text-center">
-            ⊘
-          </span>
-          No project
-        </button>
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={cn(
-              "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/60",
-              p.id === projectId && "font-medium text-primary",
-            )}
-            onClick={() => pick(p.id)}
-          >
-            <span aria-hidden className="w-5 text-center text-base leading-none">
-              {p.icon}
-            </span>
-            {p.title}
-          </button>
-        ))}
+        <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions}
+          today={today} selectedProjectId={projectId} showNoProject onPick={pick} />
       </PopoverContent>
     </Popover>
   );
@@ -924,10 +930,16 @@ function ScheduleField({
 // "No project" row (move back to loose). Mirrors ScheduleField.
 function ProjectField({
   projects,
+  tasks,
+  conditions,
+  today,
   selectedProjectId,
   onPick,
 }: {
-  projects: { id: string; title: string; icon: string }[];
+  projects: Project[];
+  tasks: Task[];
+  conditions: WaitingCondition[];
+  today: string;
   selectedProjectId: string | null;
   onPick: (projectId: string | null) => void;
 }) {
@@ -958,32 +970,8 @@ function ProjectField({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-1">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted/60"
-          onClick={() => pick(null)}
-        >
-          <span aria-hidden className="w-5 text-center">
-            ⊘
-          </span>
-          No project
-        </button>
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={cn(
-              "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/60",
-              p.id === selectedProjectId && "font-medium text-primary",
-            )}
-            onClick={() => pick(p.id)}
-          >
-            <span aria-hidden className="w-5 text-center text-base leading-none">
-              {p.icon}
-            </span>
-            {p.title}
-          </button>
-        ))}
+        <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions}
+          today={today} selectedProjectId={selectedProjectId} showNoProject onPick={pick} />
       </PopoverContent>
     </Popover>
   );

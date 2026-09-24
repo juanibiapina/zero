@@ -469,6 +469,24 @@ describe('HomeScreen', () => {
     expect(defaultToastController.getSnapshot().map((toast) => toast.message)).toEqual(['Filed to project']);
   });
 
+  it('shows Waiting in the Project picker for work outside the Home Task list', async () => {
+    mockGetToken.mockResolvedValue('tok');
+    mockFetchProjects.mockResolvedValue([
+      { id: 'p', title: 'Future project', icon: '📁', description: null,
+        state: 'in-play', createdAt: '2023-01-01T00:00:00.000Z' },
+    ]);
+    mockFetchTasks.mockResolvedValue([
+      taskRow('future', 'future task', { projectId: 'p', showUpDate: '2099-01-01' }),
+    ]);
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByText('Plan your day')).toBeTruthy());
+    await act(async () => { fireEvent.press(screen.getByLabelText('Task')); });
+    await act(async () => { fireEvent.press(screen.getByLabelText('No project')); });
+    expect(screen.getByLabelText('Waiting, 1')).toBeTruthy();
+    expect(screen.getByLabelText('Future project')).toBeTruthy();
+    expect(screen.queryByText('future task')).toBeNull();
+  });
+
   it('creates a project from the Project quick-add mode, stays on Home, and toasts a link', async () => {
     mockGetToken.mockResolvedValue('tok');
     mockAddProject.mockImplementation(async (_g, project) => ({

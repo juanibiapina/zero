@@ -3,8 +3,8 @@ import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useRouter } from 'expo-router';
 import {
-  BACKLOG_COLLAPSE_THRESHOLD, LOADING_TEXT_DELAY_MS,
-  projectDisplayStatus, projectsByStatus, listView,
+  LOADING_TEXT_DELAY_MS,
+  projectStatusSections, listView,
   PROJECT_DISPLAY_STATUS_LABELS, projectStatusContext,
   type Project, type ProjectsApi, type ProjectDisplayStatus, type TasksApi,
   type WaitsApi,
@@ -104,20 +104,16 @@ function Projects({ api, tasksApi, waitsApi }: {
   const error = writeError ?? (list.length === 0 ? loadError : null);
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
   const today = useLocalDay();
-  const grouped = useMemo(() => projectsByStatus(
-    list,
-    (p) => projectDisplayStatus(p, tasks, today, conds, list),
-    (p) => projectStatusContext(p, tasks, conds, list, today)?.sortKey ?? p.createdAt,
-  ), [list, tasks, conds, today]);
+  const grouped = useMemo(() => projectStatusSections({
+    projects: list, tasks, conditions: conds, today, collapseOverride,
+  }), [list, tasks, conds, today, collapseOverride]);
   const labelOf = useCallback((p: Project) => projectStatusContext(p, tasks, conds, list, today)?.rowLabel ?? null, [tasks, conds, list, today]);
-  const sections = useMemo(() => grouped.map((s) => {
-    const count = s.projects.length;
-    const collapsed = collapseOverride[s.status] ?? (s.status === 'after' || (s.status === 'backlog' && count > BACKLOG_COLLAPSE_THRESHOLD));
-    return { status: s.status, count, data: collapsed ? [] : s.projects, collapsed };
-  }), [grouped, collapseOverride]);
+  const sections = useMemo(() => grouped.map((s) => ({
+    status: s.status, count: s.count, data: s.collapsed ? [] : s.projects, collapsed: s.collapsed,
+  })), [grouped]);
   const onProjectCreated = useCallback((id: string) => router.push(`/projects/${id}`), [router]);
   const add = useQuickAdd({
-    tasksApi, projectsApi: api, projects: list, modes: ['project', 'task'],
+    tasksApi, projectsApi: api, projects: list, openTasks: tasks, conditions: conds, modes: ['project', 'task'],
     scope: { kind: 'global' }, getToken, onError: setWriteError,
     fabLabel: 'Add', onProjectCreated,
   });

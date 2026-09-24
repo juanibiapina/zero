@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createInMemoryProjectsApi,
@@ -19,6 +19,7 @@ import {
 } from "@zero/agent-core";
 
 import { HomePage } from "./HomePage";
+import { ProjectDetailPage } from "./ProjectDetailPage";
 
 // Give the real page fresh in-memory collections per test. The array-backed
 // REST boundary keeps each interaction deterministic without OPFS or network.
@@ -394,6 +395,41 @@ describe("HomePage", () => {
     ).toBeNull();
   });
 
+  it("searches both Task-assignment Project menus", async () => {
+    setApi([taskRow('1', 'Loose task')], [
+      ...Array.from({ length: 6 }, (_, i) => projectRow(`b${i}`, { title: `Backlog ${i}`, state: 'backlog' })),
+    ]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to a project' }));
+    expect(screen.getByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter projects' }),
+      { target: { value: 'backlog 5' } });
+    expect(screen.getByRole('button', { name: 'Backlog 5' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to a project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit "Loose task"' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    expect(screen.getByRole('textbox', { name: 'Filter projects' })).toHaveValue('');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter projects' }),
+      { target: { value: 'backlog 5' } });
+    expect(screen.getByRole('button', { name: 'Backlog 5' })).toBeInTheDocument();
+  });
+
+  it("groups both Project selectors using future work outside Home", async () => {
+    setApi([
+      taskRow('1', 'Loose task'),
+      taskRow('2', 'Future work', { projectId: 'p', showUpDate: '2099-01-01' }),
+    ], [projectRow('p', { title: 'Future project' }), projectRow('n', { title: 'Next project' })]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to a project' }));
+    expect(screen.getByRole('button', { name: 'Waiting, 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next, 1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to a project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit "Loose task"' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+    expect(screen.getByRole('button', { name: 'Waiting, 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Future project' })).toBeInTheDocument();
+  });
+
   it("creates a project from the Project mode, stays on Home, and toasts a link to it", async () => {
     setApi();
     let path = "";
@@ -551,6 +587,30 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(rescheduled.length).toBe(1));
     expect(rescheduled[0].id).toBe("1");
+  });
+
+  it("groups eligible After targets in both Project detail selectors", async () => {
+    setApi([], [projectRow('source'), projectRow('target'),
+      ...Array.from({ length: 6 }, (_, i) => projectRow(`backlog ${i}`, { state: 'backlog' }))], [
+      { id: 'link', projectId: 'source', kind: 'project-status', text: null,
+        refId: 'target', targetStatus: 'done', createdAt: '2023-01-01', resolvedAt: null },
+    ]);
+    render(<MemoryRouter initialEntries={['/projects/source']}>
+      <Routes><Route path="/projects/:id" element={<ProjectDetailPage />} /></Routes>
+    </MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'After project' }));
+    expect(await screen.findByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter After projects' }),
+      { target: { value: 'backlog 5' } });
+    expect(screen.getByRole('button', { name: 'backlog 5' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'target' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add After project' }));
+    expect(screen.getByRole('button', { name: 'Backlog, 6' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter After projects' }),
+      { target: { value: 'backlog 5' } });
+    expect(screen.getByRole('button', { name: 'backlog 5' })).toBeInTheDocument();
   });
 
   it("moves a loose task into a project from the detail sheet", async () => {

@@ -3,6 +3,7 @@ import {
   type Project,
   type ProjectsApi,
   type TasksApi,
+  type Task,
   type WaitingCondition,
   type WaitsApi,
 } from '@zero/agent-core';
@@ -37,6 +38,7 @@ export function useProjectAdd({
   project,
   projects,
   conditions,
+  openTasks,
   tasksApi,
   projectsApi,
   waitsApi,
@@ -47,6 +49,7 @@ export function useProjectAdd({
   project: Project | null;
   projects: Project[];
   conditions: WaitingCondition[];
+  openTasks: Task[];
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
@@ -68,11 +71,12 @@ export function useProjectAdd({
     tasksApi,
     projectsApi,
     projects,
+    openTasks,
+    conditions,
     modes: PROJECT_ADD_MODES,
     scope: {
       kind: 'project',
       project: activeProject,
-      conditions,
       waitsApi,
     },
     getToken,

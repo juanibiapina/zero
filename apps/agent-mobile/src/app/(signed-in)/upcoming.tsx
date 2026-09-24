@@ -115,6 +115,7 @@ function Upcoming({
     project: null,
     projects: projects ?? [],
     conditions: conditions ?? [],
+    openTasks: tasks ?? [],
     tasksApi: api,
     projectsApi,
     waitsApi,
@@ -129,6 +130,8 @@ function Upcoming({
     api,
     list,
     projects: projects ?? [],
+    openTasks: tasks ?? [],
+    conditions: conditions ?? [],
     onAddWaiting: (project) => projectAdd.openFor(project, 'waiting'),
     onError: setWriteError,
   });

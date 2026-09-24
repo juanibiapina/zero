@@ -1,4 +1,6 @@
 import {
+  PROJECT_DISPLAY_STATUS_LABELS,
+  projectStatusSections,
   messageOf,
   monthMatrix,
   scheduleLabel,
@@ -8,12 +10,14 @@ import {
   type Project,
   type Task,
   type TasksApi,
+  type WaitingCondition,
+  type ProjectDisplayStatus,
 } from '@zero/agent-core';
 import { toText } from '@zeroapps/recurrence';
 import { Host, Icon } from '@expo/ui';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { FlatList, Keyboard, Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Keyboard, Modal, Pressable, ScrollView, SectionList, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
@@ -37,6 +41,9 @@ type ProjectPickerSheetProps = {
   open: boolean;
   title?: string;
   projects: Project[];
+  openTasks: Task[];
+  conditions: WaitingCondition[];
+  afterSourceProjectId?: string | null;
   selectedProjectId: string | null;
   showNoProject?: boolean;
   emptyCopy?: string;
@@ -51,6 +58,9 @@ export function ProjectPickerSheet(props: ProjectPickerSheetProps) {
 function OpenProjectPickerSheet({
   open,
   projects,
+  openTasks,
+  conditions,
+  afterSourceProjectId,
   selectedProjectId,
   onPick,
   onClose,
@@ -61,6 +71,7 @@ function OpenProjectPickerSheet({
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const [filter, setFilter] = useState('');
+  const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', (event) =>
@@ -74,16 +85,14 @@ function OpenProjectPickerSheet({
       hide.remove();
     };
   }, []);
-  const needle = filter.trim().toLowerCase();
-  const filteredProjects = useMemo(
-    () =>
-      needle
-        ? projects.filter((project) =>
-            project.title.toLowerCase().includes(needle),
-          )
-        : projects,
-    [needle, projects],
-  );
+  const needle = filter.trim();
+  const today = useLocalDay();
+  const grouped = useMemo(() => projectStatusSections({
+    projects, tasks: openTasks, conditions, today, filter, collapseOverride, afterSourceProjectId,
+  }), [projects, openTasks, conditions, today, filter, collapseOverride, afterSourceProjectId]);
+  const sections = useMemo(() => grouped.map((section) => ({
+    ...section, data: section.collapsed ? [] : section.projects,
+  })), [grouped]);
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable
@@ -133,12 +142,14 @@ function OpenProjectPickerSheet({
           />
         ) : null}
 
-        <FlatList
+        <SectionList
           style={{ flexShrink: 1 }}
           className="border-t border-divider"
-          data={filteredProjects}
+          sections={sections}
+          initialNumToRender={20}
           keyExtractor={(p) => p.id}
           keyboardShouldPersistTaps="handled"
+          stickySectionHeadersEnabled={false}
           ListEmptyComponent={
             needle || emptyCopy ? (
               <Text className="px-screen-x py-4 text-foreground-secondary">
@@ -146,15 +157,27 @@ function OpenProjectPickerSheet({
               </Text>
             ) : null
           }
+          renderSectionHeader={({ section }) => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${PROJECT_DISPLAY_STATUS_LABELS[section.status]}, ${section.count}`}
+              accessibilityState={{ expanded: !section.collapsed, disabled: Boolean(needle) }}
+              disabled={Boolean(needle)}
+              onPress={() => setCollapseOverride((prev) => ({ ...prev, [section.status]: !section.collapsed }))}
+              className="min-h-12 flex-row items-center gap-2 bg-background px-screen-x"
+            >
+              <Text variant="section">{section.collapsed ? '▸' : '▾'} {PROJECT_DISPLAY_STATUS_LABELS[section.status]}</Text>
+              <Text variant="caption">· {section.count}</Text>
+            </Pressable>
+          )}
           renderItem={({ item: p }) => (
             <Pressable
-              key={p.id}
               accessibilityRole="button"
               accessibilityLabel={p.title}
               accessibilityState={{ selected: p.id === selectedProjectId }}
               testID={`project-${p.id}`}
               onPress={() => onPick(p.id)}
-              className="flex-row items-center gap-3 px-screen-x py-3"
+              className="min-h-12 flex-row items-center gap-3 px-screen-x py-3"
             >
               <Text className="w-6 text-center text-[18px]">{p.icon}</Text>
               <Text
@@ -444,6 +467,8 @@ export function useTaskDetail({
   api,
   list,
   projects,
+  openTasks,
+  conditions,
   currentProjectId,
   onAddWaiting,
   onError,
@@ -452,6 +477,8 @@ export function useTaskDetail({
   list: Task[];
   // The user's projects, for the move-to-project picker and the row's label.
   projects: Project[];
+  openTasks: Task[];
+  conditions: WaitingCondition[];
   // The project route already open behind this editor, when there is one.
   currentProjectId?: string | null;
   // Project-task completion delegates contextual Waiting creation to the one
@@ -685,6 +712,8 @@ export function useTaskDetail({
       <ProjectPickerSheet
         open={picking && selected != null}
         projects={projects}
+        openTasks={openTasks}
+        conditions={conditions}
         selectedProjectId={selected?.projectId ?? null}
         onPick={onPickProject}
         onClose={() => setPicking(false)}
