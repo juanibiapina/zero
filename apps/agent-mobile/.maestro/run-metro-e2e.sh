@@ -314,12 +314,12 @@ STAGE="launch readiness"
 for _ in $(seq 1 90); do
   timeout 10 maestro --no-ansi hierarchy --compact \
     > "$ARTIFACT_DIR/launch-hierarchy.txt" 2>&1 || true
-  if grep -Eq 'text=Upcoming|accessibilityText=Upcoming' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
+  if grep -Eq 'text=Browse|accessibilityText=Browse' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
     break
   fi
   sleep 2
 done
-if ! grep -Eq 'text=Upcoming|accessibilityText=Upcoming' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
+if ! grep -Eq 'text=Browse|accessibilityText=Browse' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
   echo 'The development client did not load the app bundle' >> "$ARTIFACT_DIR/metro.log"
   exit 1
 fi

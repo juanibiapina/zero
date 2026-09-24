@@ -20,9 +20,11 @@ appId: dev.juanibiapina.zeroagent
 - inputText: 'Screenshot sweep row'
 - takeScreenshot: 03-captures-quickadd-text
 - hideKeyboard
-# Upcoming tab.
+# Upcoming in the Browse tab.
+- tapOn: 'Browse'
+- takeScreenshot: 04-browse
 - tapOn: 'Upcoming'
-- takeScreenshot: 04-upcoming
+- takeScreenshot: 05-upcoming
 # Projects tab: list, then a detail sheet.
 - tapOn: 'Projects'
-- takeScreenshot: 05-projects
+- takeScreenshot: 06-projects

@@ -172,7 +172,7 @@ serves the open-tasks query.
 
 ## Interactions (per system)
 
-- **UI** — mobile Home + Upcoming tabs and project screens
+- **UI** — mobile Home and Projects tabs, with Upcoming under Browse
   (`apps/agent-mobile`), and web `/captures` (Home, path unchanged) + `/upcoming`
   (`apps/agent-web`). Home and project screens are reorderable on both surfaces:
   web uses a drag handle (also keyboard-operable), mobile uses long-press drag.

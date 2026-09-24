@@ -13,6 +13,7 @@ appId: dev.juanibiapina.zeroagent
 - tapOn:
     id: "quick-add-submit"
 - assertNotVisible: "New item text"
+- tapOn: "Browse"
 - tapOn: "Upcoming"
 - extendedWaitUntil:
     visible: "E2E loose task"
@@ -61,6 +62,7 @@ appId: dev.juanibiapina.zeroagent
     timeout: 30000
 - tapOn: 'Complete "E2E toast tab"'
 - assertVisible: "Undo"
+- tapOn: "Browse"
 - tapOn: "Upcoming"
 - assertNotVisible: "Undo"
 - tapOn: "Home"

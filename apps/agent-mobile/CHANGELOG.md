@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-24: Upcoming now opens from Browse on the right side of the tab bar. Home and Projects stay one tap away.
+
 - 2026-09-24: When assigning a Task or choosing an After Project, Projects appear under Active, Next, Waiting, After, and Backlog. After and large Backlogs start folded; filtering still finds Projects inside them.
 
 - 2026-09-23: Snackbars are shorter and usually one line. Project feedback keeps its icon, and Undo, Waiting, and View remain available without the extra copy.

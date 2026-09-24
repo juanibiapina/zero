@@ -164,6 +164,8 @@ committed.
 
 ## Project tracking
 
+Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.
+
 Implemented (2026-09-24): **Reorder tasks on a web project page.** The project's
 Tasks region now follows the saved manual order and has a handle for pointer and
 keyboard moves. A move writes only the task's existing global order key and

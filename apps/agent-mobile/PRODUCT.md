@@ -32,8 +32,8 @@ surface are considered rather than inherited from a generic data model.
 ## Operating Context
 
 - Home is the flat list of available Tasks.
-- Upcoming holds future-dated Tasks.
-- Projects is grouped by calculated Project status.
+- Browse is the rightmost tab; its Upcoming destination holds future-dated Tasks.
+- Projects remains a direct tab grouped by calculated Project status.
 - A Project screen is the durable place to groom Tasks and manage why the
   Project is Waiting or After something.
 - A Project screen is a Project workspace: identity, dominant status,

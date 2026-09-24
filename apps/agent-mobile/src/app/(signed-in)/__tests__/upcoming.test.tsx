@@ -19,7 +19,7 @@ import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
 
-import UpcomingScreen from '../upcoming';
+import UpcomingScreen from '../browse/upcoming';
 
 // Trigger pull-to-refresh: the scroll host carries the RefreshControl element on
 // its `refreshControl` prop, so invoke that control's onRefresh the way a real

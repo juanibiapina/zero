@@ -11,7 +11,7 @@ describe('task destination feedback', () => {
     expect(toast.message).toBe('Filed to project');
     expect(toast.description).toBe('Upcoming');
     toast.action?.onPress();
-    expect(mockNavigate).toHaveBeenCalledWith('/upcoming');
+    expect(mockNavigate).toHaveBeenCalledWith('/browse/upcoming', { withAnchor: true });
   });
   it('links an undated project task to its project, not Home', () => {
     showTaskDestination({ showUpDate: null, projectId: 'p' }, [{

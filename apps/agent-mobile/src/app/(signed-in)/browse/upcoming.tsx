@@ -1,4 +1,5 @@
 import { useAuth } from '@clerk/expo';
+import { router } from 'expo-router';
 import { isNull } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import {
@@ -11,7 +12,7 @@ import {
   type WaitsApi,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BackHandler, RefreshControl, SectionList, View } from 'react-native';
+import { BackHandler, Pressable, RefreshControl, SectionList, View } from 'react-native';
 
 import { useProjectAdd } from '@/components/project-add';
 import { ScreenHeader } from '@/components/screen-header';
@@ -68,6 +69,14 @@ export default function UpcomingScreen() {
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Upcoming" />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back to Browse"
+        onPress={() => router.back()}
+        className="min-h-12 justify-center px-screen-x"
+      >
+        <Text className="text-accent">‹ Browse</Text>
+      </Pressable>
       {tasksApi && projectsApi && waitsApi ? (
         <Upcoming api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} />
       ) : (

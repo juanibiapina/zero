@@ -1,0 +1,17 @@
+# Hermetic navigation proof; no task fixtures or production state needed.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- tapOn: "Browse"
+- assertVisible: "Upcoming"
+- takeScreenshot: browse-menu
+- tapOn: "Upcoming"
+- assertVisible: "Nothing scheduled ahead."
+- pressKey: Back
+- assertNotVisible: "Nothing scheduled ahead."
+- assertVisible: "Upcoming"
+- tapOn: "Upcoming"
+- tapOn: "Back to Browse"
+- assertNotVisible: "Nothing scheduled ahead."
+- assertVisible: "Upcoming"
+- tapOn: "Home"

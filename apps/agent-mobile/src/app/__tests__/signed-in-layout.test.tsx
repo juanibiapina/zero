@@ -83,12 +83,12 @@ describe('SignedInLayout', () => {
     expect(getByText('redirect:/sign-in')).toBeTruthy();
   });
 
-  it('renders the tab bar with both sections when signed in', async () => {
+  it('shows Home, Projects, and Browse in that order without an Upcoming tab', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
-    const { getByText } = await render(<SignedInLayout />);
+    const { getByText, queryByText, toJSON } = await render(<SignedInLayout />);
     expect(getByText(/^tabs/)).toBeTruthy();
-    expect(getByText('Home')).toBeTruthy();
-    expect(getByText('Upcoming')).toBeTruthy();
+    expect(JSON.stringify(toJSON())).toMatch(/Home.*Projects.*Browse/);
+    expect(queryByText('Upcoming')).toBeNull();
   });
 
   it('does not sync timezone while signed out', async () => {

@@ -1143,7 +1143,7 @@ describe('ProjectDetailScreen', () => {
     expect(toast.message).toBe('Filed to project');
     toast.action?.onPress();
     if (scheduled) {
-      expect(mockNavigate).toHaveBeenCalledWith('/upcoming', undefined);
+      expect(mockNavigate).toHaveBeenCalledWith('/browse/upcoming', { withAnchor: true });
     } else {
       expect(mockNavigate).toHaveBeenCalledWith('/projects/2', { withAnchor: true });
     }

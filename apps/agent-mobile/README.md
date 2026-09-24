@@ -73,7 +73,8 @@ it to styles through a Metro transform (no Babel preset).
 - **Components**: shared UI lives in `src/components/ui/` (`Text`, `Input`, `Fab`,
   `CheckCircle`, `ListRow`, `ConfirmDialog`, `Sheet`) plus `ScreenHeader`,
   composed with the `cn()` helper in `src/lib/cn.ts` (clsx + tailwind-merge).
-  `ListRow`/`CheckCircle` are the flat list-row shape shared by the three tabs.
+  `ListRow`/`CheckCircle` are the flat list-row shape used by Home, Projects,
+  and Upcoming (now reached through the rightmost Browse tab).
 - **System appearance is automatic.** `userInterfaceStyle` is `automatic` in
   `app.json`; Uniwind's light/dark variants update content, tabs, string color
   props, status icons, and native chrome together. This configuration is native:

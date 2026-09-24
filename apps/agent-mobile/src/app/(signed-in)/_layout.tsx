@@ -59,12 +59,9 @@ export default function SignedInLayout() {
     return <Redirect href="/sign-in" />;
   }
 
-  // Three sections: Home (the single task list), Upcoming (future-dated tasks,
-  // grouped by day), and Projects (outcome-oriented containers). Each
-  // tab is a screen file whose name matches its Trigger `name`, so a new tab is a
-  // new file plus one more Trigger. NativeTabs
-  // is a native navigator, so its first use needs a fresh EAS dev build to
-  // appear on device (pure-JS reload will not show it).
+  // Home and Projects remain direct destinations. Browse is a stack for
+  // secondary destinations, starting with Upcoming. Each trigger matches its
+  // route name; Browse owns its own index and pushed screens.
   return (
     <>
       {RUNTIME_PROFILE.launcherCountSyncEnabled ? <HomeAppIconSync /> : null}
@@ -77,13 +74,13 @@ export default function SignedInLayout() {
           <NativeTabs.Trigger.Icon sf="tray.full" md="inbox" />
           <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="upcoming">
-          <NativeTabs.Trigger.Icon sf="calendar" md="calendar_month" />
-          <NativeTabs.Trigger.Label>Upcoming</NativeTabs.Trigger.Label>
-        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="projects">
           <NativeTabs.Trigger.Icon sf="folder" md="folder" />
           <NativeTabs.Trigger.Label>Projects</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="browse">
+          <NativeTabs.Trigger.Icon sf="line.3.horizontal" md="menu" />
+          <NativeTabs.Trigger.Label>Browse</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       </NativeTabs>
     </>

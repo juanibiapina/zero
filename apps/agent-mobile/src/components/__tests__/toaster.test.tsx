@@ -78,7 +78,7 @@ describe('Toaster', () => {
     defaultToastController.show({ message: 'Completed', durationMs: Infinity });
     const screen = await render(<Toaster />);
     expect(defaultToastController.getSnapshot()).toHaveLength(1);
-    mockPathname = '/upcoming';
+    mockPathname = '/browse';
     await screen.rerender(<Toaster />);
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });

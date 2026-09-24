@@ -29,7 +29,8 @@ appId: dev.juanibiapina.zeroagent
 - assertVisible: 'Set schedule'
 - tapOn: 'Set schedule'
 - tapOn: 'Tomorrow'
-# It drops off Home (now future-dated) and the sheet closes. Go to Upcoming.
+# It drops off Home (now future-dated) and the sheet closes. Go through Browse.
+- tapOn: 'Browse'
 - tapOn: 'Upcoming'
 - extendedWaitUntil:
     visible: 'ZZZ maestro upcoming editor'
