@@ -10,12 +10,13 @@ type FocusableInput = Pick<TextInput, 'blur' | 'focus'>;
 // focus occurs after the surface is mounted and presented.
 export function refocusAfterPresentation(
   input: FocusableInput | null,
+  settleMs = PRESENTATION_SETTLE_MS,
 ): () => void {
   let focusTimer: ReturnType<typeof setTimeout> | null = null;
   const blurTimer = setTimeout(() => {
     input?.blur();
     focusTimer = setTimeout(() => input?.focus(), REFOCUS_GAP_MS);
-  }, PRESENTATION_SETTLE_MS);
+  }, settleMs);
   return () => {
     clearTimeout(blurTimer);
     if (focusTimer) clearTimeout(focusTimer);

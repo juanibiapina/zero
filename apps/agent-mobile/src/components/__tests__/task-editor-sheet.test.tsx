@@ -62,7 +62,7 @@ describe('TaskEditorSheet', () => {
     expect(jump).toHaveBeenCalledTimes(1);
   });
 
-  it('offers unset metadata rows and autofocuses only when requested', async () => {
+  it('offers unset metadata rows without focusing before the create drawer is presented', async () => {
     const view = await render(
       <TaskEditorSheet {...base} autoFocus
         scheduleAction={{ label: 'No date', active: false, onPress: jest.fn() }}
@@ -71,7 +71,7 @@ describe('TaskEditorSheet', () => {
     );
     expect(view.getByLabelText('No project')).toBeTruthy();
     expect(view.getByLabelText('No date')).toBeTruthy();
-    expect(view.getByDisplayValue('Write proposal').props.autoFocus).toBe(true);
+    expect(view.getByDisplayValue('Write proposal').props.autoFocus).toBe(false);
   });
 
   it('highlights parser-consumed schedule text in a quick-add draft', async () => {

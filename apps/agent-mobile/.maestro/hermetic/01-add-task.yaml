@@ -7,7 +7,7 @@ appId: dev.juanibiapina.zeroagent
     timeout: 45000
 - assertVisible: "Home"
 - tapOn: "^Task$"
-- tapOn: "New item text"
+- assertVisible: "New item text"
 - inputText: "E2E loose task next week"
 - assertVisible: "E2E loose task next week"
 - tapOn:

@@ -29,7 +29,7 @@ appId: dev.juanibiapina.zeroagent
 
 # A completed Project task has one compact, icon-bearing snackbar.
 - tapOn: "Add"
-- tapOn: "Add a task"
+- assertVisible: "New item text"
 - inputText: "E2E snackbar project task"
 - tapOn:
     id: "quick-add-submit"

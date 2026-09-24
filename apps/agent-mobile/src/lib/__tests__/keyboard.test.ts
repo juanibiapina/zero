@@ -28,6 +28,17 @@ describe('refocusAfterPresentation', () => {
     cancel();
   });
 
+  it('recovers a failed focus without a second presentation wait', () => {
+    const input = { blur: jest.fn(), focus: jest.fn() };
+
+    const cancel = refocusAfterPresentation(input, 0);
+    jest.advanceTimersByTime(0);
+    expect(input.blur).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(50);
+    expect(input.focus).toHaveBeenCalledTimes(1);
+    cancel();
+  });
+
   it('cancels focus when the surface closes first', () => {
     const input = { blur: jest.fn(), focus: jest.fn() };
 

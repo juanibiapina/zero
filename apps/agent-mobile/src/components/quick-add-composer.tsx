@@ -92,6 +92,7 @@ export function useQuickAdd({
     ranges: TextRange[];
   } | null>(null);
   const [adding, setAdding] = useState(false);
+  const [keyboardOnOpen, setKeyboardOnOpen] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [addDate, setAddDate] = useState<string | null>(null);
@@ -169,6 +170,7 @@ export function useQuickAdd({
           ? options.initialMode
           : (modes[0] ?? 'task');
       setMode(initialMode);
+      setKeyboardOnOpen(initialMode !== 'after');
       setAddProjectId(options?.projectId ?? contextProjectId);
       setAdding(true);
       setPickingAfter(initialMode === 'after');
@@ -356,6 +358,7 @@ export function useQuickAdd({
         onSubmit={onAdd}
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus={mode !== 'after'}
+        keyboardOnOpen={keyboardOnOpen}
         inputRef={inputRef}
         inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
         modeSelector={
