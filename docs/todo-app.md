@@ -562,9 +562,10 @@ row, and full-width date/project rows replace the temporary round pills; create
 modes are direct text tabs. The selected project supplies its own icon once.
 Creation opens the keyboard and confirms before discarding text; editing opens
 without the keyboard and saves on dismissal. `useQuickAdd` and `useTaskDetail`
-retain their separate write lifecycles. The Modal owns keyboard docking,
-replacing Home/project-screen bottom-gap measurement and the create
-keyboard-hide close listener. The Projects list kept its then-project-only bar,
+retain their separate write lifecycles. Editing keeps the Modal. On
+2026-09-24 creation moved into the screen window so native input focus can
+start the keyboard immediately; `KeyboardStickyView` docks the drawer using
+the measured gap below the screen. The Projects list kept its then-project-only bar,
 but its input adopted the same editor typography; the 2026-09-17 follow-up added
 Task as a second mode. See
 `docs/plans/todo-unify-task-editor-drawer.md` and

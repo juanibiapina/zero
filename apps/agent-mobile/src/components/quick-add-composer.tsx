@@ -20,7 +20,7 @@ import {
 } from '@zeroapps/recurrence';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Keyboard, Pressable, View } from 'react-native';
 
 import { ProjectPickerSheet, ScheduleSheet } from '@/components/task-detail';
 import { AddModeSelector, TaskEditorSheet } from '@/components/task-editor-sheet';
@@ -92,7 +92,6 @@ export function useQuickAdd({
     ranges: TextRange[];
   } | null>(null);
   const [adding, setAdding] = useState(false);
-  const [keyboardOnOpen, setKeyboardOnOpen] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [addDate, setAddDate] = useState<string | null>(null);
@@ -149,6 +148,7 @@ export function useQuickAdd({
   };
 
   const closeAdd = useCallback(() => {
+    Keyboard.dismiss();
     setDrafts({ task: '', waiting: '', after: '', project: '' });
     setIgnoredSchedule(null);
     setConfirmingDiscard(false);
@@ -170,7 +170,6 @@ export function useQuickAdd({
           ? options.initialMode
           : (modes[0] ?? 'task');
       setMode(initialMode);
-      setKeyboardOnOpen(initialMode !== 'after');
       setAddProjectId(options?.projectId ?? contextProjectId);
       setAdding(true);
       setPickingAfter(initialMode === 'after');
@@ -358,7 +357,7 @@ export function useQuickAdd({
         onSubmit={onAdd}
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus={mode !== 'after'}
-        keyboardOnOpen={keyboardOnOpen}
+        inline
         inputRef={inputRef}
         inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
         modeSelector={

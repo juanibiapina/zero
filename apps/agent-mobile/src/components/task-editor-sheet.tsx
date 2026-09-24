@@ -11,13 +11,13 @@ import {
 } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardEvents, KeyboardStickyView } from 'react-native-keyboard-controller';
+import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { ScheduleHighlightInput } from '@/components/schedule-highlight-input';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
-import { refocusAfterPresentation } from '@/lib/keyboard';
 
 type EditorAction = {
   label: string;
@@ -129,15 +129,27 @@ export function AddModeSelector({
   );
 }
 
-// Create and edit share the Modal, keyboard docking, title and metadata rows.
-// The visual hierarchy follows the former edit drawer: grip, identity, then
-// full-width actions. Their controllers own persistence. Overlays live inside
-// the Modal because an in-tree discard dialog rendered outside it would be
-// hidden behind its window. Create opens without a native slide so the existing
-// keyboard-sticky surface moves with the keyboard; edit retains the slide.
+// The sticky drawer can lead the IME by a frame; extend its surface over the exposed scrim.
+function KeyboardGapFill({ height }: { height: number }) {
+  const { progress } = useReanimatedKeyboardAnimation();
+  const visibility = useAnimatedStyle(() => ({ opacity: progress.get() > 0 ? 1 : 0 }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', left: 0, right: 0, bottom: -height, height }, visibility]}
+    >
+      <View className="flex-1 bg-surface" />
+    </Animated.View>
+  );
+}
+
+// Create and edit share the title, metadata rows, and keyboard docking.
+// Creation stays in the screen window so its input can open the keyboard on
+// mount. Editing keeps the native Modal and its slide. The discard overlay
+// stays in the same window as its drawer.
 export function TaskEditorSheet({
   open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
-  placeholder = 'Task', autoFocus = false, keyboardOnOpen = false, inputRef, inputAccessibilityLabel,
+  placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
   leading, modeSelector, context, editorContent, trailing,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
 }: {
@@ -149,7 +161,7 @@ export function TaskEditorSheet({
   onSubmit: () => void;
   placeholder?: string;
   autoFocus?: boolean;
-  keyboardOnOpen?: boolean;
+  inline?: boolean;
   inputRef?: Ref<{ focus: () => void }>;
   inputAccessibilityLabel?: string;
   leading?: ReactNode;
@@ -166,65 +178,42 @@ export function TaskEditorSheet({
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [bottomGap, setBottomGap] = useState(0);
+  const screen = useRef<View>(null);
   const field = useRef<TextInput>(null);
-  const presented = useRef(false);
   const previousAutoFocus = useRef(autoFocus);
-  const keyboardStarted = useRef(false);
-  const cancelRefocus = useRef<() => void>(() => {});
   useEffect(() => {
-    const starting = KeyboardEvents.addListener('keyboardWillShow', () => {
-      keyboardStarted.current = true;
-      cancelRefocus.current();
-    });
-    const show = Keyboard.addListener('keyboardDidShow', (event) => {
-      keyboardStarted.current = true;
-      cancelRefocus.current();
-      setKeyboardHeight(event.endCoordinates.height);
-    });
+    if (inline && open && autoFocus && !previousAutoFocus.current) field.current?.focus();
+    previousAutoFocus.current = autoFocus;
+  }, [inline, open, autoFocus]);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (event) =>
+      setKeyboardHeight(event.endCoordinates.height),
+    );
     const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
-    return () => { starting.remove(); show.remove(); hide.remove(); };
+    return () => { show.remove(); hide.remove(); };
   }, []);
   useImperativeHandle(inputRef, () => ({ focus: () => field.current?.focus() }), []);
-  const focusForCreate = useCallback(() => {
-    cancelRefocus.current();
-    keyboardStarted.current = Keyboard.isVisible();
-    field.current?.focus();
-    // Android may focus a field without showing its IME in a new Modal window.
-    // Only recover if neither keyboard controller nor RN saw it start opening.
-    const retry = setTimeout(() => {
-      if (!keyboardStarted.current && !Keyboard.isVisible()) {
-        cancelRefocus.current = refocusAfterPresentation(field.current, 0);
-      }
-    }, 220);
-    cancelRefocus.current = () => clearTimeout(retry);
-  }, []);
-  useEffect(() => {
-    if (!open) {
-      presented.current = false;
-      cancelRefocus.current();
-    } else if (presented.current && autoFocus && !previousAutoFocus.current) {
-      focusForCreate();
-    } else if (!autoFocus) {
-      cancelRefocus.current();
-    }
-    previousAutoFocus.current = autoFocus;
-  }, [open, autoFocus, focusForCreate]);
-  useEffect(() => () => cancelRefocus.current(), []);
-  return (
-    <Modal visible={open} transparent animationType={keyboardOnOpen ? 'none' : 'slide'} onRequestClose={onClose}
-      onShow={() => {
-        presented.current = true;
-        previousAutoFocus.current = autoFocus;
-        if (autoFocus) focusForCreate();
-      }}
-    >
+  const measureBottomGap = useCallback(() => {
+    if (!inline || open) return;
+    screen.current?.measureInWindow((_x, y, _width, screenHeight) => {
+      setBottomGap(Math.max(0, height - y - screenHeight));
+    });
+  }, [height, inline, open]);
+  const content = (
+    <>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={dismissLabel}
         className="flex-1 bg-scrim"
         onPress={onClose}
       />
-      <KeyboardStickyView style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
+      <KeyboardStickyView
+        offset={{ opened: inline ? bottomGap : 0 }}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+      >
+        {/* 32 dp covers the ~27 dp lead observed on the Pixel 7. */}
+        {inline ? <KeyboardGapFill height={bottomGap + insets.bottom + 32} /> : null}
         <View
           accessibilityLabel="sheet"
           style={{ paddingBottom: insets.bottom + 8 }}
@@ -257,7 +246,7 @@ export function TaskEditorSheet({
                     inputAccessibilityLabel ??
                     (autoFocus ? 'New item text' : 'Task text')
                   }
-                  autoFocus={false}
+                  autoFocus={inline && autoFocus}
                   style={{ padding: 0, maxHeight: 120 }}
                   variant="editor"
                   className="flex-1"
@@ -277,7 +266,7 @@ export function TaskEditorSheet({
                     inputAccessibilityLabel ??
                     (autoFocus ? 'New item text' : 'Task text')
                   }
-                  autoFocus={false}
+                  autoFocus={inline && autoFocus}
                   style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
                   variant="editor"
                   className="flex-1"
@@ -302,6 +291,23 @@ export function TaskEditorSheet({
         </View>
       </KeyboardStickyView>
       {overlay}
-    </Modal>
+    </>
+  );
+  if (!inline) {
+    return (
+      <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+        {content}
+      </Modal>
+    );
+  }
+  return (
+    <View
+      ref={screen}
+      onLayout={measureBottomGap}
+      pointerEvents="box-none"
+      className="absolute inset-0"
+    >
+      {open ? content : null}
+    </View>
   );
 }

@@ -4,7 +4,7 @@
 
 Pressing the + button on the mobile todo app should reveal the create drawer and bring up the keyboard as one perceived action. The drawer should stay attached to the keyboard throughout its motion, without a separate full-screen slide followed by keyboard entry. Prefer a reliable, quiet transition over a literal Todoist-style button-to-drawer morph.
 
-## Current behavior and constraints
+## Behavior and constraints before the first change
 
 - `apps/agent-mobile` uses Expo SDK 57, React Native 0.86, Reanimated 4, and `react-native-keyboard-controller`; its root already mounts `KeyboardProvider`. No new dependency or native build should be necessary for the first approach.
 - `useQuickAdd` in `src/components/quick-add-composer.tsx` owns drafts, submit, discard confirmation, pickers, and Back behavior across Home and Projects. It renders a `Fab` and the shared `TaskEditorSheet`. `useProjectAdd` also invokes this drawer on project screens. `TaskEditorSheet` is shared with task editing, where the keyboard deliberately stays closed on open.
@@ -18,6 +18,12 @@ Pressing the + button on the mobile todo app should reveal the create drawer and
 2. **Start keyboard opening at presentation, not after a settled slide.** Focus the field as soon as the Modal can own it (`onShow`), with one focus request per opening. Avoid combining TextInput `autoFocus` with a routine blur/refocus that flaps the IME. Preserve the Android recovery path only if immediate focus fails to show the keyboard, and cancel any pending retry when the drawer closes or changes to a no-input mode. Keep edit mode unfocused, focus when switching from After into a text-entry mode, and preserve focus restoration after canceling discard. If Android still cannot show the keyboard promptly and reliably from this Modal, stop and use an in-tree keyboard-sticky create surface rather than shipping a timer-dependent sequential entrance; keep the same `useQuickAdd` interface and write logic.
 3. **Prove behavior without changing task semantics.** Extend `task-editor-sheet` and, if changed, `lib/keyboard` tests for create/edit/no-input presentation, one initial focus, and cancellation of a delayed recovery focus. Add or update a behavior-named flow under `.maestro/hermetic/` that opens the + drawer, finds the input with the keyboard present, adds a task, reopens it, and dismisses it with Back. Preserve the existing submit, discard-confirm, picker, and project-screen flows.
 4. **Document the user-visible fix in the same change.** Add one user-facing bullet at the top of `apps/agent-mobile/CHANGELOG.md` using the date of implementation; do not add it to the agent changelog. Update `docs/todo-app.md` only if its recorded drawer/presentation decision changes. Do not duplicate implementation details in the README unless its UI-stack explanation becomes false.
+
+## Follow-up check (2026-09-24)
+
+The initial no-slide Modal still paused before `onShow` could focus its input. The create drawer now renders inside the screen window with a mounting `autoFocus` input; editing retains its Modal. `KeyboardStickyView` follows the keyboard and compensates for the screen's measured bottom gap. Closing create explicitly dismisses the keyboard so a project title does not regain focus. The old focus-retry helper is gone.
+
+On a Pixel 7 development client, existing hermetic `01-add-task` and `02-save-project-description` flows pass with this change. The second flow initially exposed an undismissed keyboard after project-screen submission; explicit dismissal fixed it. A 15 fps recording of Home showed keyboard entry within two frames (at most roughly 130 ms) of the first drawer frame, not after a completed drawer slide. The first recording showed an 80 px scrim-colored strip between drawer and keyboard in one frame. A follow-up Pixel recording with a surface-colored underlap showed the drawer reaching the keyboard without that grey strip in the sampled opening frames; `01-add-task` still passed. The underlap follows keyboard progress and is invisible while the keyboard is closed. These development-client recordings cannot establish release-build smoothness. No new Maestro flow or full-suite debug run was added.
 
 ## Out of scope
 
