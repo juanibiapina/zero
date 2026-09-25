@@ -169,7 +169,9 @@ and linked-Task writes plus manual Waiting/After relationships. A real-Worker
 proof retains late offline Tasks and Waiting rows for recovery after Project
 deletion, excludes raw cycles, and settles/restores Afters on Done/reopen. Task
 completion, ordering, and recurrence cursor retries also work through fixture
-REST/Worker sync. The phone still supports loose Tasks only in this fixture. The complete model, phone
+REST/Worker sync. The fixture phone now uses one account-scoped SQLite replica
+across Home, Projects, and Browse; a Pixel flow created a linked Task offline,
+reopened it after force-stop, and verified it through Worker REST after reconnect. The complete model, phone
 recovery view, offline restart, and one-account migration remain gated by
 [the replica plan](plans/todo-local-replica-sync.md); real accounts still use
 `UserDO`.

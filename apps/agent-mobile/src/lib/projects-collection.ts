@@ -14,6 +14,7 @@ import {
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
 import { RUNTIME_PROFILE } from './runtime-profile';
+import { useTaskDOFixtureContext } from './taskdo-fixture-context';
 
 // The mobile Project data layer: the shared factory bound to the Clerk token,
 // as one app-lifetime singleton read by the Projects screen. The mechanics
@@ -40,5 +41,5 @@ export const setProjectsTokenGetter = projects.setTokenGetter;
 export const resetProjectsApiForTest = projects.resetForTest;
 export const useProjectsApi: () => ProjectsApi | null =
   RUNTIME_PROFILE.hermetic && process.env.EXPO_PUBLIC_TASKDO_PROOF === '1'
-    ? () => null
+    ? () => useTaskDOFixtureContext()?.projectsApi ?? null
     : projects.useApi;

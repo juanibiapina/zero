@@ -315,7 +315,7 @@ installs an APK.
 2. It starts a fresh local Worker in Podman on port 8787.
 3. It starts headless Metro on port 8082 with
    `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
-4. It runs the three behavior flows in `.maestro/hermetic/` once each; the
+4. It runs the four non-fixture behavior flows in `.maestro/hermetic/` once each; the
    selector flow creates and completes its own throwaway Project and Task.
 5. It requires `E2E loose task` in the UI before and after restart, proves a
    Project description survives Back and reopening, checks Backlog assignment
@@ -332,6 +332,15 @@ launcher-count synchronization, disabled EAS Update, and E2E cleartext policy.
 It also aliases Clerk's token cache and resource cache to inert local fakes.
 Normal Metro startup restores real Clerk, normal URL selection, production
 storage names, EAS Update, and launcher synchronization.
+
+To test the **fixture-only** TinyBase path, run
+`E2E_TASKDO_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel`. The three
+fixture flows prove loose-Task offline restart and REST sync, then Project and
+linked-Task offline restart and Worker REST sync. All signed-in fixture todo
+screens use one `taskdo-fixture-taskdo-proof-mobile.sqlite` file under Expo's
+`files/SQLite/`; the harness cleans only that fixture file, not the production
+collection or outbox. Home lists raw conflicts for recovery but does not yet
+repair them. Normal accounts still use `UserDO` and the old mobile path.
 
 | State | Normal | Hermetic E2E |
 | --- | --- | --- |

@@ -19,9 +19,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 
-import { useTaskDOFixtureTasks } from '@/lib/taskdo-tasks-api';
-import { useTaskDOFixtureRelations } from '@/lib/taskdo-fixture-relations';
-import { RUNTIME_PROFILE } from '@/lib/runtime-profile';
+import { useTaskDOFixtureContext } from '@/lib/taskdo-fixture-context';
 import { useProjectAdd } from '@/components/project-add';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
@@ -73,46 +71,29 @@ function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
 // capture inbox after the single-list merge. The quick-add defaults to a task
 // and can switch to a project.
 export default function HomeScreen() {
-  if (RUNTIME_PROFILE.hermetic && process.env.EXPO_PUBLIC_TASKDO_PROOF === '1') {
-    return <FixtureHomeScreen />;
-  }
-  return <LegacyHomeScreen />;
+  return <SignedInHomeScreen />;
 }
 
-function FixtureHomeScreen() {
-  const { userId } = useAuth();
-  return <FixtureHomeForAccount key={userId ?? 'signed-out'} />;
-}
-
-function FixtureHomeForAccount() {
-  const { api, error, connected } = useTaskDOFixtureTasks();
-  const { projectsApi, waitsApi } = useTaskDOFixtureRelations();
-  return (
-    <View className="flex-1 bg-background">
-      <ScreenHeader title="Home" />
-      {error ? <Text variant="error" className="px-screen-x">{error}</Text> : null}
-      {api && projectsApi && waitsApi ? (
-        <>
-          <Text variant="subtitle" className="px-screen-x">
-            {connected ? 'Synced' : 'Offline · saved on this device'}
-          </Text>
-          <Home api={api} projectsApi={projectsApi} waitsApi={waitsApi} fixture />
-        </>
-      ) : <View className="flex-1" />}
-    </View>
-  );
-}
-
-function LegacyHomeScreen() {
+function SignedInHomeScreen() {
   const tasksApi = useTasksApi();
   const projectsApi = useProjectsApi();
   const waitsApi = useWaitsApi();
+  const fixture = useTaskDOFixtureContext();
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Home" />
+      {fixture ? <Text variant="subtitle" className="px-screen-x">
+        {fixture.connected ? 'Synced' : 'Offline · saved on this device'}
+      </Text> : null}
+      {fixture?.error ? <Text variant="error" className="px-screen-x">{fixture.error}</Text> : null}
+      {fixture?.recoveries.map((entry) => (
+        <Text key={`${entry.table}-${entry.id}-${entry.reason}`} variant="error" className="px-screen-x">
+          Recover {entry.table}: {entry.text} — {entry.reason} ({entry.id})
+        </Text>
+      ))}
       {tasksApi && projectsApi && waitsApi ? (
-        <Home api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} />
+        <Home api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} fixture={!!fixture} />
       ) : (
         <View className="flex-1" />
       )}
@@ -216,7 +197,7 @@ function Home({
     projects: projects ?? [],
     openTasks: tasks ?? [],
     conditions: conditions ?? [],
-    modes: fixture ? ['task'] : ['task', 'project'],
+    modes: ['task', 'project'],
     scope: { kind: 'global' },
     getToken,
     onError: setWriteError,

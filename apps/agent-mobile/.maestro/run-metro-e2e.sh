@@ -75,7 +75,7 @@ launcher_alias_state() {
 
 delete_e2e_stores() {
   local command
-  command='cd databases 2>/dev/null || exit 0; rm -f zero-app-e2e.sqlite* zero-app-e2e-outbox-v2.sqlite* taskdo-fixture-taskdo-proof-mobile.sqlite*'
+  command='rm -f databases/zero-app-e2e.sqlite* databases/zero-app-e2e-outbox-v2.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
   adb_device shell "run-as $PACKAGE sh -c '$command'" >/dev/null 2>&1 || true
 }
 
@@ -377,20 +377,33 @@ if [[ "$TASKDO_PROOF" == "1" ]]; then
   maestro --no-ansi test "$HERMETIC_FLOW_DIR/06-taskdo-loose-task-rest-sync.yaml" \
     --format junit --output "$ARTIFACT_DIR/maestro/rest-report.xml" \
     --debug-output "$ARTIFACT_DIR/maestro/rest" >> "$ARTIFACT_DIR/maestro.log" 2>&1
+  STAGE="TaskDO linked offline restart"
+  adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null
+  maestro --no-ansi test "$HERMETIC_FLOW_DIR/07-taskdo-project-offline-restart.yaml" \
+    --format junit --output "$ARTIFACT_DIR/maestro/project-report.xml" \
+    --debug-output "$ARTIFACT_DIR/maestro/project" >> "$ARTIFACT_DIR/maestro.log" 2>&1
+  adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
 fi
 
 capture_diagnostics
 
 STAGE="postcondition"
 if [[ "$TASKDO_PROOF" == "1" ]]; then
-  fixture_tasks=""
-  for _ in $(seq 1 30); do
+  fixture_tasks=""; fixture_projects=""
+  for _ in $(seq 1 45); do
     fixture_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
-    if jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on web"' <<< "$fixture_tasks" >/dev/null 2>&1; then break; fi
+    fixture_projects="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
+    project_id="$(jq -r '.projects[] | select(.title == "TaskDO offline Project") | .id' <<< "$fixture_projects" 2>/dev/null || true)"
+    if [[ -n "$project_id" ]] && jq -e --arg project "$project_id" \
+      '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
+      <<< "$fixture_tasks" >/dev/null 2>&1; then break; fi
     sleep 1
   done
   printf '%s\n' "$fixture_tasks" > "$ARTIFACT_DIR/worker-tasks-postcondition.json"
-  jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on web"' <<< "$fixture_tasks" >/dev/null
+  printf '%s\n' "$fixture_projects" > "$ARTIFACT_DIR/worker-projects-postcondition.json"
+  jq -e --arg project "$project_id" \
+    '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
+    <<< "$fixture_tasks" >/dev/null
   normal_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user')"
   jq -e '.tasks == []' <<< "$normal_tasks" >/dev/null
 else

@@ -1,16 +1,15 @@
 import { AppState } from 'react-native';
-import { createMergeableStore } from 'tinybase';
+import { createMergeableStore, type MergeableStore } from 'tinybase';
 import { createWsSynchronizer } from 'tinybase/synchronizers/synchronizer-ws-client';
 
 import { API_BASE_URL } from './env';
 import type { TokenGetter } from './api';
-
-export type LooseTask = { id: string; text: string; createdAt: string; showUpDate: string | null };
+import { projectFixture, type FixtureSnapshot } from './taskdo-projection';
 
 export async function openTaskDOReplica(
   accountId: string,
   getToken: TokenGetter,
-  onTasks: (tasks: LooseTask[]) => void,
+  onSnapshot: (snapshot: FixtureSnapshot) => void,
   onConnection: (connected: boolean) => void,
 ) {
   // No shared filename and no anonymous replica: switching accounts cannot
@@ -24,15 +23,8 @@ export async function openTaskDOReplica(
   const store = createMergeableStore();
   const persister = createExpoSqlitePersister(store, db, 'taskdo_local');
   await persister.startAutoPersisting();
-  const snapshot = () => {
-    const rows = store.getTable('tasks');
-    onTasks(Object.entries(rows).flatMap(([id, row]) =>
-      typeof row.text === 'string' && typeof row.createdAt === 'string' && !row.completedAt
-        ? [{ id, text: row.text, createdAt: row.createdAt, showUpDate: typeof row.showUpDate === 'string' ? row.showUpDate : null }]
-        : [],
-    ).sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
-  };
-  const listenerId = store.addTableListener('tasks', snapshot);
+  const snapshot = () => onSnapshot(projectFixture(store));
+  const listeners = ['tasks', 'projects', 'conditions'].map((table) => store.addTableListener(table, snapshot));
   snapshot();
 
   let stopped = false;
@@ -95,17 +87,9 @@ export async function openTaskDOReplica(
   void connect();
 
   return {
-    async add(id: string, text: string, createdAt: string, showUpDate: string | null) {
-      store.setRow('tasks', id, {
-        text,
-        createdAt,
-        ...(showUpDate ? { showUpDate } : {}),
-      });
-      await persister.save();
-    },
-    async edit(id: string, text: string) {
-      if (!store.hasRow('tasks', id)) throw new Error('Task not found');
-      store.setCell('tasks', id, 'text', text);
+    async write(mutate: (mutableStore: MergeableStore) => void) {
+      if (stopped) throw new Error('Local account is closed');
+      store.transaction(() => mutate(store));
       await persister.save();
     },
     async close() {
@@ -114,7 +98,7 @@ export async function openTaskDOReplica(
       if (retry) clearTimeout(retry);
       socket?.close();
       await sync?.destroy();
-      store.delListener(listenerId);
+      for (const listenerId of listeners) store.delListener(listenerId);
       await persister.destroy();
       await db.closeAsync();
     },

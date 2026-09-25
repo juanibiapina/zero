@@ -1,0 +1,41 @@
+# Hermetic fixture: the Project and its child live in the same offline SQLite replica.
+appId: dev.juanibiapina.zeroagent
+tags:
+  - taskdo-proof
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Offline · saved on this device"
+    timeout: 45000
+- tapOn: "Projects"
+- extendedWaitUntil:
+    visible: "No projects yet. Name your first outcome."
+    timeout: 30000
+- tapOn: "Add"
+- tapOn: "Name an outcome"
+- inputText: "TaskDO offline Project"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "TaskDO offline Project"
+    timeout: 30000
+- tapOn: "Add"
+- assertVisible: "New item text"
+- inputText: "TaskDO linked work"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "TaskDO linked work"
+    timeout: 30000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Projects"
+    timeout: 45000
+- tapOn: "Projects"
+- extendedWaitUntil:
+    visible: "TaskDO offline Project"
+    timeout: 45000
+- tapOn: "TaskDO offline Project"
+- extendedWaitUntil:
+    visible: "TaskDO linked work"
+    timeout: 30000

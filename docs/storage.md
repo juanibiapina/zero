@@ -15,9 +15,10 @@ In `ENVIRONMENT=test`, accounts named `taskdo-proof-*` use a separate per-accoun
 `TaskDO`, resolved by `TASK_DO.idFromName(clerkUserId)`. Its TinyBase mergeable
 store persists to the Durable Object's SQLite storage; the signed-in mobile Home
 fixture persists a separate account-named Expo SQLite replica and synchronizes it
-through an authenticated WebSocket. The phone still supports **loose Task create
-and text edit only**. Fixture REST can also create/list/delete Projects and create
-linked Tasks; Project deletion tombstones the Project and removes its known Tasks.
+through an authenticated WebSocket. All signed-in fixture todo screens now read
+one derived view over that same file; Task, Project, and Waiting/After writes
+persist there before sync. Fixture REST uses typed writes to the same TaskDO.
+Project deletion tombstones the Project and removes its known children.
 Fixture REST now also edits Projects and creates/resolves/deletes manual Waiting
 and After rows. Done/reopen settles/restores Afters. A late offline child or
 arbitrary missing-Project reference remains in the raw replica but appears as
@@ -27,11 +28,12 @@ and appear in the same recovery report instead of in the accepted open list.
 Fixture REST also handles Task dates, ordering, completion/Undo, and recurrence
 with retry-safe occurrence cursors. Invalid synced recurrence stays in the raw
 replica, appears in the recovery report, and blocks occurrence completion. The
-phone does not yet display these recovery reasons or offer full Project and
-Waiting actions. A real-Worker restart/fresh-WebSocket proof retains terminal,
+fixture Home lists recovery IDs, work text, and reasons but does not yet offer
+repair actions. A real-Worker restart/fresh-WebSocket proof retains terminal,
 recurring, resolved, and recoverable rows. Direct TinyBase sync still accepts
-arbitrary cells; the complete phone relationship model is unproved. Normal accounts, web, and all other mobile views still use the
-storage path below. This fixture is not a handoff or migration. The fixture
+arbitrary cells; the complete phone relationship model is not yet verified.
+Normal accounts and web still use the storage path below. This fixture is not
+a handoff or migration. The fixture
 retains a deletion marker after erasing data to reject stale replicas on
 reconnect; real-account erasure and re-enrollment are still unproved.
 

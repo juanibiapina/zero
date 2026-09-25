@@ -16,6 +16,7 @@ import {
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
 import { RUNTIME_PROFILE } from './runtime-profile';
+import { useTaskDOFixtureContext } from './taskdo-fixture-context';
 
 // The mobile Task data layer: the shared factory bound to the Clerk token, as
 // one app-lifetime singleton read by Home and Upcoming. After the single-list
@@ -50,5 +51,5 @@ export const setTasksTokenGetter = tasks.setTokenGetter;
 export const resetTasksApiForTest = tasks.resetForTest;
 export const useTasksApi: () => TasksApi | null =
   RUNTIME_PROFILE.hermetic && process.env.EXPO_PUBLIC_TASKDO_PROOF === '1'
-    ? () => null
+    ? () => useTaskDOFixtureContext()?.api ?? null
     : tasks.useApi;
