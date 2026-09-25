@@ -71,8 +71,9 @@ try {
   assert.equal(isolated.store.getCell('tasks', id, 'text'), undefined);
   const edited = await req(user, `/api/tasks/${id}`, 'PATCH', { text: 'from REST' });
   assert.equal(edited.status, 200, JSON.stringify(edited.data));
-  await until(() => a!.store.getCell('tasks', id, 'text') === 'from REST', 'REST -> mobile');
-  await until(() => b!.store.getCell('tasks', id, 'text') === 'from REST', 'REST -> second client');
+  await until(() => Object.values(a!.store.getTable('task-edits')).some((row) => row.text === 'from REST'), 'REST edit -> mobile');
+  await until(() => Object.values(b!.store.getTable('task-edits')).some((row) => row.text === 'from REST'), 'REST edit -> second client');
+  assert.equal(a.store.getCell('tasks', id, 'text'), 'created offline', 'Task creation cell remains immutable');
   const retryId = crypto.randomUUID();
   const first = await req(user, '/api/tasks', 'POST', { id: retryId, text: 'idempotent REST' });
   assert.equal(first.status, 201, JSON.stringify(first.data));
@@ -203,7 +204,8 @@ try {
   assert.deepEqual((await req(user, '/api/tasks')).data.tasks, [], 'deleted Tasks must not return');
   const stale = await device(user, join(tmp, 'b.db'));
   try {
-    assert.equal(stale.store.getCell('tasks', id, 'text'), 'from REST');
+    assert.equal(stale.store.getCell('tasks', id, 'text'), 'created offline');
+    assert.equal(Object.values(stale.store.getTable('task-edits')).some((row) => row.text === 'from REST'), true);
     await assert.rejects(stale.connect(), /410/);
   } finally { await stale.close(); }
   assert.deepEqual((await req(user, '/api/tasks')).data.tasks, [], 'reconnecting stale client cannot restore Tasks');

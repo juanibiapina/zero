@@ -47,6 +47,23 @@ describe('fixture local todo projection', () => {
     });
   });
 
+  it('keeps both offline text edits as raw rows and shows the losing edit', () => {
+    const a = createMergeableStore();
+    a.setRow('tasks', 'task', { text: 'Original', createdAt });
+    const b = createMergeableStore().merge(a);
+    a.setRow('task-edits', 'a', { taskId: 'task', baseRevision: 'original', text: 'A version' });
+    b.setRow('task-edits', 'b', { taskId: 'task', baseRevision: 'original', text: 'B version' });
+    a.merge(b);
+    b.merge(a);
+    expect(projectFixture(a)).toEqual(projectFixture(b));
+    expect(projectFixture(a).tasks[0]?.text).toBe('B version');
+    expect(projectFixture(a).recoveries).toContainEqual({
+      table: 'tasks', id: 'task', text: 'A version', reason: 'Edit a: Concurrent edit',
+    });
+    expect(a.getCell('task-edits', 'a', 'text')).toBe('A version');
+    expect(a.getCell('task-edits', 'b', 'text')).toBe('B version');
+  });
+
   it('retains invalid recurrence intent while showing the Task and a recovery reason', () => {
     const store = createMergeableStore();
     store.setRow('tasks', 'invalid', { text: 'Work', createdAt, recurrence: '{broken' });
