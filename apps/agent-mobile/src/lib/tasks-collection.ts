@@ -15,7 +15,6 @@ import {
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
-import { RUNTIME_PROFILE } from './runtime-profile';
 import { useTaskDOFixtureContext } from './taskdo-fixture-context';
 
 // The mobile Task data layer: the shared factory bound to the Clerk token, as
@@ -49,7 +48,10 @@ const tasks = defineMobileEntityApi<TasksApi, TasksRest>({
 export const getMobileTasksApi = tasks.get;
 export const setTasksTokenGetter = tasks.setTokenGetter;
 export const resetTasksApiForTest = tasks.resetForTest;
-export const useTasksApi: () => TasksApi | null =
-  RUNTIME_PROFILE.hermetic && process.env.EXPO_PUBLIC_TASKDO_PROOF === '1'
-    ? () => useTaskDOFixtureContext()?.api ?? null
-    : tasks.useApi;
+export const useTasksApi = (): TasksApi | null => {
+  const taskDO = useTaskDOFixtureContext();
+  // Keep the REST-backed collection alive after the authority switch so any
+  // durable pre-switch outbox entries replay through the now-TaskDO routes.
+  const legacy = tasks.useApi();
+  return taskDO?.api ?? legacy;
+};

@@ -5,11 +5,12 @@ How the todo app persists its entities, across both layers. Entity docs
 storage mechanics — they do not re-explain how data is saved. This file is the
 source of truth for that.
 
-There are two layers: the **server** (authoritative) and the **client** (an
-offline cache). The server owns the data; the client cache is disposable and
-re-syncs from the server whenever it is missing or reset.
+There are two layers: the **server** (authoritative) and the **client**. Current
+real accounts use a disposable TanStack client cache. The prepared TaskDO path
+uses a complete TinyBase client replica whose acknowledged local writes persist
+offline and merge with the server replica.
 
-## Hermetic TaskDO fixture (not live account storage)
+## TaskDO local-replica path (not active for real accounts)
 
 In `ENVIRONMENT=test`, accounts named `taskdo-proof-*` use a separate per-account
 `TaskDO`, resolved by `TASK_DO.idFromName(clerkUserId)`. Its TinyBase mergeable
@@ -17,7 +18,7 @@ store persists to the Durable Object's SQLite storage; the signed-in mobile Home
 fixture persists a separate account-named Expo SQLite replica and synchronizes it
 through an authenticated WebSocket. All signed-in fixture todo screens now read
 one derived view over that same file; Task, Project, and Waiting/After writes
-persist there before sync. Fixture REST uses typed writes to the same TaskDO.
+persist there before sync. REST uses typed writes to the same TaskDO.
 Project deletion tombstones the Project and removes its known children.
 Fixture REST now also edits Projects and creates/resolves/deletes manual Waiting
 and After rows. Done/reopen settles/restores Afters. A late offline child or
@@ -28,21 +29,26 @@ and appear in the same recovery report instead of in the accepted open list.
 Fixture REST also handles Task dates, ordering, completion/Undo, and recurrence
 with retry-safe occurrence cursors. Invalid synced recurrence stays in the raw
 replica, appears in the recovery report, and blocks occurrence completion. The
-fixture Home lists recovery IDs, work text, and reasons but does not yet offer
-repair actions. A real-Worker restart/fresh-WebSocket proof retains terminal,
+Home lists recovery IDs, work text, reasons, and safe repair actions. A
+real-Worker restart/fresh-WebSocket proof retains terminal,
 recurring, resolved, and recoverable rows. Concurrent same-field edits use
 TinyBase last-writer-wins by decision; a losing value is not retained. Direct
-TinyBase sync still accepts arbitrary cells; the complete phone relationship
-model is not yet verified.
-Normal accounts and web still use the storage path below. This fixture is not
-a handoff or migration. The fixture
-retains a deletion marker after erasing data to reject stale replicas on
-reconnect; real-account erasure and re-enrollment are still unproved.
+TinyBase sync still accepts arbitrary cells, so invalid relationships remain raw
+and are excluded from accepted views until repaired.
+Normal accounts and web still use the storage path below. The prepared
+one-account migration freezes `UserDO`, copies every open and terminal row,
+compares every field, activates `TaskDO`, and then changes a durable authority
+marker. No real account has been switched. Old REST clients keep their existing
+URLs after a switch, so their durable queued actions replay into `TaskDO`.
+TaskDO retains a deletion marker after erasing data to reject stale replicas on
+reconnect.
 
 ## Server layer (authoritative)
 
-- Every entity lives in the **per-user `UserDO`** (Durable Object) SQLite
-  database. One `UserDO` per user isolates each user's data.
+- Every live account currently stores todo entities in the **per-user `UserDO`**
+  SQLite database. The prepared authority marker can route one explicitly
+  switched account's todo entities to its per-account `TaskDO`; no account has
+  been switched yet.
 - Access goes through **do-orm** plus **one per-entity domain store** (e.g.
   `DbCaptureStore`) that exposes that entity's DOMAIN methods (`add`, `list`,
   `process`, …). Domain methods keep the storage seam narrow and the intent

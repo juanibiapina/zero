@@ -4,7 +4,12 @@ import { createWsSynchronizer } from 'tinybase/synchronizers/synchronizer-ws-cli
 
 import { API_BASE_URL } from './env';
 import type { TokenGetter } from './api';
-import { projectFixture, type FixtureSnapshot } from './taskdo-projection';
+import {
+  projectFixture,
+  repairFixtureRecovery,
+  type FixtureSnapshot,
+  type Recovery,
+} from './taskdo-projection';
 
 export async function openTaskDOReplica(
   accountId: string,
@@ -91,6 +96,12 @@ export async function openTaskDOReplica(
       if (stopped) throw new Error('Local account is closed');
       store.transaction(() => mutate(store));
       await persister.save();
+    },
+    async repair(recovery: Recovery) {
+      if (stopped) throw new Error('Local account is closed');
+      let changed = false;
+      store.transaction(() => { changed = repairFixtureRecovery(store, recovery); });
+      if (changed) await persister.save();
     },
     async close() {
       stopped = true;

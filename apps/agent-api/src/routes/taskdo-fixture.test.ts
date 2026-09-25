@@ -112,6 +112,7 @@ const build = (environment: string, userId: string) => {
     },
   };
   const userDO = {
+    getTodoAuthority: () => ({ authority: "legacy" as const, generation: null }),
     listTasks: () => { calls.push("user:list"); return []; },
     addTask: () => { calls.push("user:add"); return null; },
   };
@@ -193,10 +194,10 @@ describe("TaskDO fixture routes", () => {
     ]);
   });
 
-  it("rejects unsupported fixture mutations before they can reach UserDO", async () => {
+  it("does not expose unsupported fixture mutations", async () => {
     const app = build("test", "taskdo-proof-a");
-    expect((await app.request(`/api/tasks/${TASK_ID}`, "DELETE")).status).toBe(409);
-    expect((await app.request(`/api/tasks/${TASK_ID}/unknown`, "POST")).status).toBe(409);
+    expect((await app.request(`/api/tasks/${TASK_ID}`, "DELETE")).status).toBe(404);
+    expect((await app.request(`/api/tasks/${TASK_ID}/unknown`, "POST")).status).toBe(404);
     expect(await (await app.request("/api/waits")).json()).toEqual({ conditions: [] });
     expect(await (await app.request("/api/task-recoveries")).json()).toEqual({ tasks: [], projects: [], conditions: [] });
     expect(app.calls).toEqual([]);

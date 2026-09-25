@@ -129,6 +129,12 @@ export class DbWaitingConditionStore {
       .map(toCondition);
   }
 
+  listAll(): WaitingCondition[] {
+    return this.db
+      .all(waitingConditions, { orderBy: asc("createdAt") })
+      .map(toCondition);
+  }
+
   listOpenAfters(): ProjectAfter[] {
     return this.listOpen().filter(isProjectAfter);
   }

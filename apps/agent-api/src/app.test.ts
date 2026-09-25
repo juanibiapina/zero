@@ -9,6 +9,7 @@ import { createApp } from "./app";
 const fakeEnv = (environment: string | undefined): { env: Env; seen: () => string | null } => {
   let lastName: string | null = null;
   const stub = {
+    getTodoAuthority: () => ({ authority: "legacy" as const, generation: null }),
     listTasks: () => [
       {
         id: "id-1",

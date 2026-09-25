@@ -8,7 +8,7 @@ import {
 import { log } from "../log";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
-import { getTaskDO, isTaskDOFixture } from "../TaskDO/stub";
+import { getTaskDO, usesTaskDO } from "../TaskDO/stub";
 
 type Variables = {
   userId: string;
@@ -38,16 +38,6 @@ const TaskSchema = z.object({
 
 export const createTasksRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
-  router.use("/api/tasks/*", async (c, next) => {
-    if (isTaskDOFixture(c.env, c.get("userId")) &&
-      !(c.req.path === "/api/tasks" && ["GET", "POST"].includes(c.req.method)) &&
-      !(c.req.method === "PATCH" && /^\/api\/tasks\/[^/]+$/.test(c.req.path)) &&
-      !(c.req.method === "POST" && /^\/api\/tasks\/[^/]+\/(complete|reopen|complete-occurrence|undo-occurrence)$/.test(c.req.path)) &&
-      !(c.req.method === "PUT" && /^\/api\/tasks\/[^/]+\/recurrence$/.test(c.req.path))) {
-      return c.json({ error: "not supported for TaskDO fixture" }, 409);
-    }
-    await next();
-  });
 
   const listRoute = createRoute({
     method: "get",
@@ -69,7 +59,7 @@ export const createTasksRoutes = () => {
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const tasks = isTaskDOFixture(c.env, userId)
+    const tasks = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).listTasks()
       : await getUserDO(c.env, userId).listTasks();
     return c.json({ tasks }, 200);
@@ -128,7 +118,7 @@ export const createTasksRoutes = () => {
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
-    if (isTaskDOFixture(c.env, userId)) {
+    if (await usesTaskDO(c.env, userId)) {
       const task = await getTaskDO(c.env, userId).addTask(
         id, text, showUpDate ?? null, projectId ?? null, sourceCaptureId ?? null, recurrence ?? null,
       );
@@ -218,7 +208,7 @@ export const createTasksRoutes = () => {
       return c.json({ error: "no fields to update" }, 400);
     }
 
-    if (isTaskDOFixture(c.env, userId)) {
+    if (await usesTaskDO(c.env, userId)) {
       const task = await getTaskDO(c.env, userId).patchTask(id, body);
       if (task === "missing-project") return c.json({ error: "project not found" }, 409);
       if (!task) return c.json({ error: "task not found" }, 404);
@@ -273,7 +263,7 @@ export const createTasksRoutes = () => {
   router.openapi(completeRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const task = isTaskDOFixture(c.env, userId)
+    const task = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).completeTask(id)
       : await getUserDO(c.env, userId).completeTask(id);
     if (!task) {
@@ -313,7 +303,7 @@ export const createTasksRoutes = () => {
   router.openapi(reopenRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const task = isTaskDOFixture(c.env, userId)
+    const task = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).reopenTask(id)
       : await getUserDO(c.env, userId).reopenTask(id);
     if (!task) {
@@ -354,7 +344,7 @@ export const createTasksRoutes = () => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
     const { recurrence } = c.req.valid("json");
-    const task = isTaskDOFixture(c.env, userId)
+    const task = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).setTaskRecurrence(id, recurrence)
       : await getUserDO(c.env, userId).setTaskRecurrence(id, recurrence);
     if (!task) return c.json({ error: "task not found" }, 404);
@@ -397,7 +387,7 @@ export const createTasksRoutes = () => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
     const { scheduledOn, completedOn } = c.req.valid("json");
-    const task = isTaskDOFixture(c.env, userId)
+    const task = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).completeTaskOccurrence(id, scheduledOn, completedOn)
       : await getUserDO(c.env, userId).completeTask(id, scheduledOn, completedOn);
     if (task === "invalid-recurrence") return c.json({ error: "invalid stored recurrence" }, 409);
@@ -449,7 +439,7 @@ export const createTasksRoutes = () => {
       recurrenceDateBefore,
       showUpDateBefore,
     } = c.req.valid("json");
-    const task = isTaskDOFixture(c.env, userId)
+    const task = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).undoTaskOccurrence(
         id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore,
       )

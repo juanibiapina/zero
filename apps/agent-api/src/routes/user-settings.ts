@@ -23,7 +23,7 @@ import { getLearningDO } from "../LearningDO/stub";
 import { getScheduleDO } from "../ScheduleDO/stub";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
-import { getTaskDO, isTaskDOFixture } from "../TaskDO/stub";
+import { getTaskDO, isTaskDOFixture, usesTaskDO } from "../TaskDO/stub";
 import { isValidTimezone } from "../timezone";
 
 type Variables = {
@@ -157,6 +157,7 @@ export const createUserSettingsRoutes = () => {
     const clerkUserId = c.get("userId");
     const userDO = getUserDO(c.env, clerkUserId);
     const telegramId = await userDO.getTelegramId();
+    const taskDOActive = await usesTaskDO(c.env, clerkUserId);
 
     await purgeUserData({
       telegramId,
@@ -164,7 +165,9 @@ export const createUserSettingsRoutes = () => {
       purgeSchedules: () => getScheduleDO(c.env, clerkUserId).purge(),
       purgeLearning: () => getLearningDO(c.env, clerkUserId).purge(),
       purgeUser: () => userDO.deleteAllData(clerkUserId),
-      purgeTasks: () => getTaskDO(c.env, clerkUserId).purge(isTaskDOFixture(c.env, clerkUserId)),
+      purgeTasks: () => getTaskDO(c.env, clerkUserId).purge(
+        isTaskDOFixture(c.env, clerkUserId) || taskDOActive,
+      ),
       resetTasks: () => getTaskDO(c.env, clerkUserId).reset(),
       resetUser: () => userDO.reset(),
     });

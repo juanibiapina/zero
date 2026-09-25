@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MergeableStore } from 'tinybase';
 
 import { openTaskDOReplica } from './taskdo-replica';
-import { projectFixture, type FixtureSnapshot } from './taskdo-projection';
+import { projectFixture, type FixtureSnapshot, type Recovery } from './taskdo-projection';
 
 type Replica = Awaited<ReturnType<typeof openTaskDOReplica>>;
 type FixtureApis = { api: TasksApi; projectsApi: ProjectsApi; waitsApi: WaitsApi };
@@ -46,7 +46,8 @@ function transitionProject(store: MergeableStore, id: string, state: Project['st
 
 export function useTaskDOFixtureTasks(): {
   api: TasksApi | null; projectsApi: ProjectsApi | null; waitsApi: WaitsApi | null;
-  error: string | null; connected: boolean; recoveries: FixtureSnapshot['recoveries']; ready: boolean;
+  error: string | null; connected: boolean; recoveries: FixtureSnapshot['recoveries'];
+  repair: (recovery: Recovery) => Promise<void>; ready: boolean;
 } {
   const { userId, getToken } = useAuth();
   const queryClient = useQueryClient();
@@ -297,10 +298,6 @@ export function useTaskDOFixtureTasks(): {
     let cancelled = false;
     let opened: Replica | undefined;
     if (!userId) return;
-    if (!userId.startsWith('taskdo-proof-')) {
-      queueMicrotask(() => { if (!cancelled) setError('This test-only replica requires a fixture account'); });
-      return;
-    }
     void openTaskDOReplica(userId, currentToken, (snapshot) => {
       if (cancelled) return;
       snapshotRef.current = snapshot;
@@ -325,6 +322,11 @@ export function useTaskDOFixtureTasks(): {
   }, [userId, currentToken, queryClient, keys]);
 
   const apis = projection && projection.userId === userId && readyUserId === userId ? projection.apis : null;
+  const repair = useCallback(async (recovery: Recovery) => {
+    const replica = replicaRef.current;
+    if (!replica) throw new Error('Local todo data is not ready');
+    await replica.repair(recovery);
+  }, []);
   return { api: apis?.api ?? null, projectsApi: apis?.projectsApi ?? null,
-    waitsApi: apis?.waitsApi ?? null, ready: !!apis, error, connected, recoveries };
+    waitsApi: apis?.waitsApi ?? null, ready: !!apis, error, connected, recoveries, repair };
 }

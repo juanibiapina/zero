@@ -339,8 +339,10 @@ fixture flows prove loose-Task offline restart and REST sync, then Project and
 linked-Task offline restart and Worker REST sync. All signed-in fixture todo
 screens use one `taskdo-fixture-taskdo-proof-mobile.sqlite` file under Expo's
 `files/SQLite/`; the harness cleans only that fixture file, not the production
-collection or outbox. Home lists raw conflicts for recovery but does not yet
-repair them. Normal accounts still use `UserDO` and the old mobile path.
+collection or outbox. Home lists raw conflicts and offers safe local repairs for
+missing Project links, invalid recurrence, and invalid After relationships. The
+app now has a server-selected TaskDO path for an explicitly switched account,
+but normal accounts still use `UserDO`; none has been switched.
 
 | State | Normal | Hermetic E2E |
 | --- | --- | --- |

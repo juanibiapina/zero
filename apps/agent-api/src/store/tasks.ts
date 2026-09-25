@@ -151,6 +151,10 @@ export class DbTaskStore {
       .sort(byOrder);
   }
 
+  listAll(): Task[] {
+    return this.db.all(tasks).map(toTask).sort(byOrder);
+  }
+
   // Returns the updated row, or null when no row has that id.
   complete(id: string): Task | null {
     this.db.update(

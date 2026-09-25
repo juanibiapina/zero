@@ -5,7 +5,7 @@ import { log } from "../log";
 import type { ProjectAfterConflict } from "../store/project-afters";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
-import { getTaskDO, isTaskDOFixture } from "../TaskDO/stub";
+import { getTaskDO, usesTaskDO } from "../TaskDO/stub";
 
 type Variables = {
   userId: string;
@@ -58,7 +58,7 @@ export const createWaitsRoutes = () => {
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const conditions = isTaskDOFixture(c.env, userId)
+    const conditions = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).listWaitingConditions()
       : await getUserDO(c.env, userId).listWaitingConditions();
     return c.json({ conditions }, 200);
@@ -113,7 +113,7 @@ export const createWaitsRoutes = () => {
     const userId = c.get("userId");
     const { id, projectId, kind, text, refId, targetStatus } =
       c.req.valid("json");
-    const fixture = isTaskDOFixture(c.env, userId);
+    const fixture = await usesTaskDO(c.env, userId);
     if (kind === "project-status") {
       if (
         targetStatus !== "done" ||
@@ -175,7 +175,7 @@ export const createWaitsRoutes = () => {
   router.openapi(resolveRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const condition = isTaskDOFixture(c.env, userId)
+    const condition = await usesTaskDO(c.env, userId)
       ? await getTaskDO(c.env, userId).resolveWaitingCondition(id)
       : await getUserDO(c.env, userId).resolveWaitingCondition(id);
     if (!condition) return c.json({ error: "condition not found" }, 404);
@@ -199,7 +199,7 @@ export const createWaitsRoutes = () => {
   router.openapi(deleteRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    if (isTaskDOFixture(c.env, userId)) await getTaskDO(c.env, userId).deleteWaitingCondition(id);
+    if (await usesTaskDO(c.env, userId)) await getTaskDO(c.env, userId).deleteWaitingCondition(id);
     else await getUserDO(c.env, userId).deleteWaitingCondition(id);
     log("waiting_condition_deleted", { clerk_user_id: userId });
     return c.body(null, 204);

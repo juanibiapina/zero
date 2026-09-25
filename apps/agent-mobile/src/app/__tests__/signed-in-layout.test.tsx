@@ -20,6 +20,10 @@ jest.mock('../../lib/timezone-sync', () => ({
   createMobileTimezoneSync: (getToken: unknown) => mockCreateSync(getToken),
 }));
 
+jest.mock('../../lib/api', () => ({
+  fetchTodoAuthority: async () => 'legacy',
+}));
+
 jest.mock('../../components/home-app-icon-sync', () => ({
   HomeAppIconSync: () => null,
 }));
@@ -84,7 +88,12 @@ describe('SignedInLayout', () => {
   });
 
   it('shows Home, Projects, and Browse in that order without an Upcoming tab', async () => {
-    mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
+    mockUseAuth.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      userId: 'user-test',
+      getToken: async () => null,
+    });
     const { getByText, queryByText, toJSON } = await render(<SignedInLayout />);
     expect(getByText(/^tabs/)).toBeTruthy();
     expect(JSON.stringify(toJSON())).toMatch(/Home.*Projects.*Browse/);
@@ -105,7 +114,12 @@ describe('SignedInLayout', () => {
   });
 
   it('reconciles on cold start and on foreground when signed in', async () => {
-    mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: true });
+    mockUseAuth.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      userId: 'user-test',
+      getToken: async () => null,
+    });
     const spy = jest.spyOn(AppState, 'addEventListener');
     await render(<SignedInLayout />);
 

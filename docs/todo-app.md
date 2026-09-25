@@ -164,17 +164,16 @@ committed.
 
 ## Project tracking
 
-In progress (fixture only): The `TaskDO` test-account backend handles Project
-and linked-Task writes plus manual Waiting/After relationships. A real-Worker
-proof retains late offline Tasks and Waiting rows for recovery after Project
-deletion, excludes raw cycles, and settles/restores Afters on Done/reopen. Task
-completion, ordering, and recurrence cursor retries also work through fixture
-REST/Worker sync. The fixture phone now uses one account-scoped SQLite replica
-across Home, Projects, and Browse; a Pixel flow created a linked Task offline,
-reopened it after force-stop, and verified it through Worker REST after reconnect. The complete model, phone
-recovery view, offline restart, and one-account migration remain gated by
-[the replica plan](plans/todo-local-replica-sync.md); real accounts still use
-`UserDO`.
+In progress (not deployed): `TaskDO` now has the complete todo model, typed REST
+writes, account-scoped phone persistence, visible recovery and repair, and a
+durable one-account prepare/switch/abort path. The import preserves open and
+terminal Tasks, Projects, Waiting conditions, and After relationships and
+compares every field before activation. Old mobile collections stay alive behind
+the TinyBase UI so durable REST outbox entries drain into the switched `TaskDO`.
+The compact evidence now passes: the Pixel persistence/sync flow, the existing
+two-client/REST convergence proof, and a disposable preserving switch with
+interrupted-switch retry. See [the replica plan](plans/todo-local-replica-sync.md).
+Real accounts still use `UserDO`; no deployment or migration is authorized.
 
 Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.
 

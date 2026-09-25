@@ -111,6 +111,10 @@ export class DbProjectStore {
       .map(toProject);
   }
 
+  listAll(): Project[] {
+    return this.db.all(projects, { orderBy: asc("createdAt") }).map(toProject);
+  }
+
   // Persist one of the three lifecycle states. Returns the updated row, or null
   // when no row has that id.
   setState(id: string, state: ProjectState): Project | null {

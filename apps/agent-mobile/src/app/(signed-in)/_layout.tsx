@@ -7,7 +7,7 @@ import { HomeAppIconSync } from '../../components/home-app-icon-sync';
 import { syncHomeAppIcon } from '../../lib/home-app-icon';
 import { useColor } from '../../lib/theme';
 import { RUNTIME_PROFILE } from '../../lib/runtime-profile';
-import { TaskDOFixtureProvider } from '../../lib/taskdo-fixture-context';
+import { TodoDataProvider } from '../../lib/taskdo-fixture-context';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
 // Keep the server's stored timezone equal to this device's, silently. Built once
@@ -86,9 +86,7 @@ export default function SignedInLayout() {
   return (
     <>
       {RUNTIME_PROFILE.launcherCountSyncEnabled ? <HomeAppIconSync /> : null}
-      {RUNTIME_PROFILE.hermetic && process.env.EXPO_PUBLIC_TASKDO_PROOF === '1'
-        ? <TaskDOFixtureProvider>{tabs}</TaskDOFixtureProvider>
-        : tabs}
+      <TodoDataProvider>{tabs}</TodoDataProvider>
     </>
   );
 }

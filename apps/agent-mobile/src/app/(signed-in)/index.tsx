@@ -79,6 +79,7 @@ function SignedInHomeScreen() {
   const projectsApi = useProjectsApi();
   const waitsApi = useWaitsApi();
   const fixture = useTaskDOFixtureContext();
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
 
   return (
     <View className="flex-1 bg-background">
@@ -87,10 +88,27 @@ function SignedInHomeScreen() {
         {fixture.connected ? 'Synced' : 'Offline · saved on this device'}
       </Text> : null}
       {fixture?.error ? <Text variant="error" className="px-screen-x">{fixture.error}</Text> : null}
+      {recoveryError ? <Text variant="error" className="px-screen-x">{recoveryError}</Text> : null}
       {fixture?.recoveries.map((entry) => (
-        <Text key={`${entry.table}-${entry.id}-${entry.reason}`} variant="error" className="px-screen-x">
-          Recover {entry.table}: {entry.text} — {entry.reason} ({entry.id})
-        </Text>
+        <View key={`${entry.table}-${entry.id}-${entry.reason}`} className="gap-2 px-screen-x py-1">
+          <Text variant="error">
+            Recover {entry.table}: {entry.text} — {entry.reason} ({entry.id})
+          </Text>
+          {entry.repair ? (
+            <Host matchContents>
+              <Button
+                label={entry.repair === 'make-task-loose' ? 'Keep task loose'
+                  : entry.repair === 'clear-task-recurrence' ? 'Stop invalid recurrence'
+                    : 'Remove invalid After'}
+                variant="outlined"
+                onPress={() => {
+                  setRecoveryError(null);
+                  void fixture.repair(entry).catch((error: unknown) => setRecoveryError(String(error)));
+                }}
+              />
+            </Host>
+          ) : null}
+        </View>
       ))}
       {tasksApi && projectsApi && waitsApi ? (
         <Home api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} fixture={!!fixture} />

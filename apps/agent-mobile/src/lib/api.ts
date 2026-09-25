@@ -23,6 +23,19 @@ export type {
 // shape of `getToken` from `@clerk/expo`'s `useAuth()`.
 export type TokenGetter = () => Promise<string | null>;
 
+export async function fetchTodoAuthority(getToken: TokenGetter): Promise<'legacy' | 'frozen' | 'switched'> {
+  const token = await getToken();
+  const response = await fetch(`${API_BASE_URL}/api/todo-authority`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`todo authority failed: ${response.status}`);
+  const body = await response.json() as { authority?: unknown };
+  if (body.authority !== 'legacy' && body.authority !== 'frozen' && body.authority !== 'switched') {
+    throw new Error('todo authority response was invalid');
+  }
+  return body.authority;
+}
+
 // Cross-origin: attaches the Clerk session token as a Bearer header.
 export async function apiFetch(
   getToken: TokenGetter,

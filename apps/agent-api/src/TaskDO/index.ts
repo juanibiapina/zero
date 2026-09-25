@@ -10,6 +10,15 @@ import type { AddProjectAfterResult } from "../store/project-afters";
 import type { WaitingCondition } from "../store/waiting-conditions";
 import type { Env } from "../types";
 import { projectConditions, reaches } from "./conditions";
+import {
+  todoSnapshotCounts,
+  type TodoSnapshot,
+  type TodoSnapshotCounts,
+} from "../todo-authority";
+
+const TODO_IMPORT_GENERATION_KEY = "todoImportGeneration";
+const TODO_IMPORT_READY_KEY = "todoImportReady";
+const TODO_IMPORT_ACTIVE_KEY = "todoImportActive";
 
 function parseRecurrence(raw: unknown): Recurrence | null {
   if (typeof raw !== "string") return null;
@@ -21,8 +30,8 @@ function parseRecurrence(raw: unknown): Recurrence | null {
   }
 }
 
-// The per-account todo authority. Only fresh hermetic fixture accounts can
-// connect during this slice; the real accounts continue to use UserDO.
+// The per-account todo authority. A UserDO marker decides when an ordinary
+// account is routed here; hermetic fixture accounts use it directly.
 export class TaskDO extends WsServerDurableObject<Env> {
   private tasksStore!: MergeableStore;
   private persister!: ReturnType<typeof createDurableObjectSqlStoragePersister>;
@@ -36,6 +45,149 @@ export class TaskDO extends WsServerDurableObject<Env> {
       { mode: "fragmented", storagePrefix: "taskdo_" },
     );
     return this.persister;
+  }
+
+  async importTodos(snapshot: TodoSnapshot): Promise<TodoSnapshotCounts> {
+    if (await this.isErased()) throw new Error("Account erased");
+    const [generation, ready, active] = await Promise.all([
+      this.ctx.storage.get<string>(TODO_IMPORT_GENERATION_KEY),
+      this.ctx.storage.get<boolean>(TODO_IMPORT_READY_KEY),
+      this.ctx.storage.get<boolean>(TODO_IMPORT_ACTIVE_KEY),
+    ]);
+    if (active) throw new Error("Todo authority is already active");
+    if (generation && generation !== snapshot.generation) {
+      throw new Error("A different todo import already exists");
+    }
+    if (ready) return this.completeCounts();
+
+    const projectIds = new Set(snapshot.projects.map((project) => project.id));
+    for (const task of snapshot.tasks) {
+      if (task.projectId && !projectIds.has(task.projectId)) {
+        throw new Error(`Task ${task.id} references a missing Project`);
+      }
+    }
+    for (const condition of snapshot.conditions) {
+      if (!projectIds.has(condition.projectId)) {
+        throw new Error(`Condition ${condition.id} references a missing source Project`);
+      }
+      if (condition.kind === "project-status" && !projectIds.has(condition.refId)) {
+        throw new Error(`Condition ${condition.id} references a missing target Project`);
+      }
+    }
+
+    const cells = (values: Record<string, string | null>) =>
+      Object.fromEntries(Object.entries(values).filter(([, value]) => value !== null)) as Record<string, string>;
+    const projectState = new Map(snapshot.projects.map((project) => [project.id, project.state]));
+    this.tasksStore.setTables({
+      tasks: Object.fromEntries(snapshot.tasks.map((task) => [task.id, cells({
+        text: task.text,
+        showUpDate: task.showUpDate,
+        recurrence: task.recurrence ? JSON.stringify(task.recurrence) : null,
+        recurrenceDate: task.recurrenceDate,
+        createdAt: task.createdAt,
+        completedAt: task.completedAt,
+        projectId: task.projectId,
+        sourceCaptureId: task.sourceCaptureId,
+        sortKey: task.sortKey,
+      })])),
+      projects: Object.fromEntries(snapshot.projects.map((project) => [project.id, cells({
+        title: project.title,
+        icon: project.icon,
+        description: project.description,
+        state: project.state,
+        createdAt: project.createdAt,
+        sourceCaptureId: project.sourceCaptureId,
+      })])),
+      conditions: Object.fromEntries(snapshot.conditions.map((condition) => [condition.id, {
+        ...cells({
+          projectId: condition.projectId,
+          kind: condition.kind,
+          text: condition.text,
+          refId: condition.refId,
+          targetStatus: condition.targetStatus,
+          resolvedAt: condition.resolvedAt,
+          createdAt: condition.createdAt,
+        }),
+        ...(condition.kind === "project-status" && condition.resolvedAt &&
+          projectState.get(condition.refId) === "done" ? { settledByTarget: true } : {}),
+      }])),
+    });
+    await this.persister.save();
+    await this.ctx.storage.put({
+      [TODO_IMPORT_GENERATION_KEY]: snapshot.generation,
+      [TODO_IMPORT_READY_KEY]: true,
+    });
+    const counts = this.completeCounts();
+    const expected = todoSnapshotCounts(snapshot);
+    if (JSON.stringify(counts) !== JSON.stringify(expected)) {
+      throw new Error("Imported todo counts do not match the frozen source");
+    }
+    return counts;
+  }
+
+  private completeCounts(): TodoSnapshotCounts {
+    return {
+      tasks: Object.keys(this.tasksStore.getTable("tasks")).length,
+      projects: Object.keys(this.tasksStore.getTable("projects")).length,
+      conditions: Object.keys(this.tasksStore.getTable("conditions")).length,
+    };
+  }
+
+  async snapshotImportedTodos(generation: string): Promise<TodoSnapshot> {
+    const status = await this.getTodoImportStatus();
+    if (status.generation !== generation || !status.ready) {
+      throw new Error("Todo import is not ready");
+    }
+    return {
+      generation,
+      tasks: Object.keys(this.tasksStore.getTable("tasks"))
+        .map((id) => this.task(id))
+        .filter((task): task is Task => task !== null),
+      projects: Object.keys(this.tasksStore.getTable("projects"))
+        .map((id) => this.project(id))
+        .filter((project): project is Project => project !== null),
+      conditions: Object.keys(this.tasksStore.getTable("conditions"))
+        .map((id) => this.condition(id))
+        .filter((condition): condition is WaitingCondition => condition !== null),
+    };
+  }
+
+  async getTodoImportStatus(): Promise<{
+    generation: string | null;
+    ready: boolean;
+    active: boolean;
+    counts: TodoSnapshotCounts;
+  }> {
+    const [generation, ready, active] = await Promise.all([
+      this.ctx.storage.get<string>(TODO_IMPORT_GENERATION_KEY),
+      this.ctx.storage.get<boolean>(TODO_IMPORT_READY_KEY),
+      this.ctx.storage.get<boolean>(TODO_IMPORT_ACTIVE_KEY),
+    ]);
+    return { generation: generation ?? null, ready: ready === true,
+      active: active === true, counts: this.completeCounts() };
+  }
+
+  async activateTodoImport(generation: string): Promise<void> {
+    const status = await this.getTodoImportStatus();
+    if (status.generation !== generation || !status.ready) {
+      throw new Error("Todo import is not ready");
+    }
+    await this.ctx.storage.put(TODO_IMPORT_ACTIVE_KEY, true);
+  }
+
+  async discardTodoImport(generation: string): Promise<void> {
+    const status = await this.getTodoImportStatus();
+    if (status.active) throw new Error("Active todo data cannot be discarded");
+    if (status.generation && status.generation !== generation) {
+      throw new Error("A different todo import exists");
+    }
+    this.tasksStore.delTables();
+    await this.persister.save();
+    await this.ctx.storage.delete([
+      TODO_IMPORT_GENERATION_KEY,
+      TODO_IMPORT_READY_KEY,
+      TODO_IMPORT_ACTIVE_KEY,
+    ]);
   }
 
   isErased(): Promise<boolean> {
@@ -75,7 +227,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async addProject(id: string, title: string, opts: ProjectDefaults = {}): Promise<Project | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Account erased");
     if (this.tasksStore.hasRow("projects", id)) return this.project(id);
     this.tasksStore.setRow("projects", id, {
       title,

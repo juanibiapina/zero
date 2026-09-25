@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import { createMergeableStore } from 'tinybase';
 
-import { projectFixture } from '../taskdo-projection';
+import { projectFixture, repairFixtureRecovery } from '../taskdo-projection';
 
 const createdAt = '2026-09-25T12:00:00.000Z';
 const project = (title: string) => ({ title, createdAt, state: 'in-play', icon: '📁' });
@@ -19,6 +19,7 @@ describe('fixture local todo projection', () => {
     expect(projectFixture(server).tasks).toMatchObject([{ id: 'late', text: 'Do not lose', projectId: null }]);
     expect(projectFixture(server).recoveries).toContainEqual({
       table: 'tasks', id: 'late', text: 'Do not lose', reason: 'Deleted Project',
+      repair: 'make-task-loose',
     });
     expect(server.getCell('tasks', 'late', 'projectId')).toBe('p');
   });
@@ -41,6 +42,7 @@ describe('fixture local todo projection', () => {
     expect(projectFixture(a).conditions.map((row) => row.id)).toEqual(['a']);
     expect(projectFixture(a).recoveries).toContainEqual({
       table: 'conditions', id: 'b', text: 'b', reason: 'Cyclic After relationship',
+      repair: 'remove-after',
     });
     expect(projectFixture(a).recoveries).toContainEqual({
       table: 'projects', id: 'bad', text: 'Needs repair', reason: 'Invalid Project',
@@ -54,7 +56,25 @@ describe('fixture local todo projection', () => {
     expect(snapshot.tasks).toMatchObject([{ id: 'invalid', recurrence: null }]);
     expect(snapshot.recoveries).toContainEqual({
       table: 'tasks', id: 'invalid', text: 'Work', reason: 'Invalid recurrence',
+      repair: 'clear-task-recurrence',
     });
     expect(store.getCell('tasks', 'invalid', 'recurrence')).toBe('{broken');
+  });
+
+  it('repairs only the still-matching recovery without dropping the Task row', () => {
+    const store = createMergeableStore();
+    store.setRow('projects', 'deleted', { ...project('Old'), deletedAt: createdAt });
+    store.setRow('tasks', 'late', {
+      text: 'Keep this', createdAt, projectId: 'deleted', recurrence: '{broken', recurrenceDate: '2026-10-01',
+    });
+    const [relationship, recurrence] = projectFixture(store).recoveries;
+    expect(repairFixtureRecovery(store, relationship)).toBe(true);
+    expect(store.getRow('tasks', 'late')).toMatchObject({ text: 'Keep this', recurrence: '{broken' });
+    expect(store.hasCell('tasks', 'late', 'projectId')).toBe(false);
+    expect(repairFixtureRecovery(store, relationship)).toBe(false);
+    expect(repairFixtureRecovery(store, recurrence)).toBe(true);
+    expect(store.getRow('tasks', 'late')).toMatchObject({ text: 'Keep this' });
+    expect(store.hasCell('tasks', 'late', 'recurrence')).toBe(false);
+    expect(store.hasCell('tasks', 'late', 'recurrenceDate')).toBe(false);
   });
 });

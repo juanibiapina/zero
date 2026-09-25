@@ -8,7 +8,6 @@ import {
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
-import { RUNTIME_PROFILE } from './runtime-profile';
 import { useTaskDOFixtureContext } from './taskdo-fixture-context';
 
 // The mobile waiting-condition data layer: the shared factory bound to the Clerk
@@ -31,7 +30,8 @@ const waits = defineMobileEntityApi<WaitsApi, WaitsRest>({
 export const getMobileWaitsApi = waits.get;
 export const setWaitsTokenGetter = waits.setTokenGetter;
 export const resetWaitsApiForTest = waits.resetForTest;
-export const useWaitsApi: () => WaitsApi | null =
-  RUNTIME_PROFILE.hermetic && process.env.EXPO_PUBLIC_TASKDO_PROOF === '1'
-    ? () => useTaskDOFixtureContext()?.waitsApi ?? null
-    : waits.useApi;
+export const useWaitsApi = (): WaitsApi | null => {
+  const taskDO = useTaskDOFixtureContext();
+  const legacy = waits.useApi();
+  return taskDO?.waitsApi ?? legacy;
+};
