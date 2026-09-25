@@ -3,8 +3,11 @@ import { createDurableObjectSqlStoragePersister } from "tinybase/persisters/pers
 import { WsServerDurableObject } from "tinybase/synchronizers/synchronizer-ws-server-durable-object";
 
 import type { Task } from "../store/tasks";
-import type { Project, ProjectDefaults } from "../store/projects";
+import type { Project, ProjectDefaults, ProjectState } from "../store/projects";
+import type { AddProjectAfterResult } from "../store/project-afters";
+import type { WaitingCondition } from "../store/waiting-conditions";
 import type { Env } from "../types";
+import { projectConditions, reaches } from "./conditions";
 
 // The per-account todo authority. Only fresh hermetic fixture accounts can
 // connect during this slice; the real accounts continue to use UserDO.
@@ -67,9 +70,51 @@ export class TaskDO extends WsServerDurableObject<Env> {
     return this.project(id);
   }
 
+  async editProject(id: string, fields: { title?: string; icon?: string; description?: string | null }): Promise<Project | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (!this.project(id)) return null;
+    this.tasksStore.transaction(() => {
+      if (fields.title !== undefined) this.tasksStore.setCell("projects", id, "title", fields.title);
+      if (fields.icon !== undefined) this.tasksStore.setCell("projects", id, "icon", fields.icon);
+      if (fields.description !== undefined) {
+        if (fields.description === null) this.tasksStore.delCell("projects", id, "description");
+        else this.tasksStore.setCell("projects", id, "description", fields.description);
+      }
+    });
+    await this.persister.save();
+    return this.project(id);
+  }
+
+  async setProjectState(id: string, state: ProjectState): Promise<Project | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const before = this.project(id);
+    if (!before) return null;
+    if (before.state === state) return before;
+    const now = new Date().toISOString();
+    this.tasksStore.transaction(() => {
+      this.tasksStore.setCell("projects", id, "state", state);
+      if (before.state === "done" || state === "done") {
+        for (const [conditionId, row] of Object.entries(this.tasksStore.getTable("conditions"))) {
+          if (row.kind !== "project-status" || row.refId !== id) continue;
+          if (state === "done" && !row.resolvedAt) {
+            this.tasksStore.setCell("conditions", conditionId, "resolvedAt", now);
+            this.tasksStore.setCell("conditions", conditionId, "settledByTarget", true);
+          } else if (before.state === "done" && state !== "done" && row.settledByTarget === true) {
+            this.tasksStore.delCell("conditions", conditionId, "resolvedAt");
+            this.tasksStore.delCell("conditions", conditionId, "settledByTarget");
+          }
+        }
+      }
+    });
+    await this.persister.save();
+    return this.project(id);
+  }
+
   async deleteProject(id: string): Promise<{ tasks: number; conditions: number; afters: number }> {
     if (await this.isErased()) throw new Error("Fixture account erased");
     let tasks = 0;
+    let conditions = 0;
+    let afters = 0;
     this.tasksStore.transaction(() => {
       if (!this.project(id)) return;
       this.tasksStore.setCell("projects", id, "deletedAt", new Date().toISOString());
@@ -79,9 +124,93 @@ export class TaskDO extends WsServerDurableObject<Env> {
           tasks++;
         }
       }
+      for (const [conditionId, row] of Object.entries(this.tasksStore.getTable("conditions"))) {
+        if (row.projectId === id || row.refId === id) {
+          this.tasksStore.delRow("conditions", conditionId);
+          if (row.kind === "project-status") afters++;
+          else conditions++;
+        }
+      }
     });
     await this.persister.save();
-    return { tasks, conditions: 0, afters: 0 };
+    return { tasks, conditions, afters };
+  }
+
+  private condition(id: string): WaitingCondition | null {
+    if (!this.tasksStore.hasRow("conditions", id)) return null;
+    const row = this.tasksStore.getRow("conditions", id);
+    if (typeof row.projectId !== "string" || typeof row.createdAt !== "string") return null;
+    const resolvedAt = typeof row.resolvedAt === "string" ? row.resolvedAt : null;
+    if (row.kind === "free-text" && typeof row.text === "string") {
+      return { id, projectId: row.projectId, kind: "free-text", text: row.text,
+        refId: null, targetStatus: null, resolvedAt, createdAt: row.createdAt };
+    }
+    if (row.kind === "project-status" && typeof row.refId === "string" && row.targetStatus === "done") {
+      return { id, projectId: row.projectId, kind: "project-status", text: null,
+        refId: row.refId, targetStatus: "done", resolvedAt, createdAt: row.createdAt };
+    }
+    return null;
+  }
+
+  listWaitingConditions(): WaitingCondition[] {
+    if (this.purging) return [];
+    return projectConditions(this.tasksStore, (id) => this.project(id)).open;
+  }
+
+  listConditionRecoveries() {
+    if (this.purging) return [];
+    return projectConditions(this.tasksStore, (id) => this.project(id)).recoveries;
+  }
+
+  async addWaitingCondition(id: string, projectId: string, text: string): Promise<WaitingCondition | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const existing = this.condition(id);
+    if (existing) return existing;
+    if (this.tasksStore.hasRow("conditions", id) || !this.project(projectId)) return null;
+    this.tasksStore.setRow("conditions", id, { projectId, kind: "free-text", text, createdAt: new Date().toISOString() });
+    await this.persister.save();
+    return this.condition(id);
+  }
+
+  async addProjectAfter(id: string, projectId: string, refId: string): Promise<AddProjectAfterResult> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const existing = this.condition(id);
+    if (existing?.kind === "project-status" && existing.projectId === projectId && existing.refId === refId) {
+      return { relationship: existing };
+    }
+    if (this.tasksStore.hasRow("conditions", id)) return { conflict: "id-conflict" };
+    const source = this.project(projectId);
+    if (!source) return { conflict: "missing-source" };
+    const target = this.project(refId);
+    if (!target) return { conflict: "missing-target" };
+    if (target.state === "done") return { conflict: "target-done" };
+    if (projectId === refId) return { conflict: "self" };
+    const afters = this.listWaitingConditions().filter((condition) => condition.kind === "project-status");
+    if (afters.some((after) => after.projectId === projectId && after.refId === refId)) {
+      return { conflict: "duplicate" };
+    }
+    if (reaches(refId, projectId, afters)) return { conflict: "cycle" };
+    this.tasksStore.setRow("conditions", id, {
+      projectId, kind: "project-status", refId, targetStatus: "done", createdAt: new Date().toISOString(),
+    });
+    await this.persister.save();
+    return { relationship: this.condition(id)! as Extract<WaitingCondition, { kind: "project-status" }> };
+  }
+
+  async resolveWaitingCondition(id: string): Promise<WaitingCondition | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const existing = this.condition(id);
+    if (!existing || existing.kind !== "free-text" || existing.resolvedAt) return existing;
+    this.tasksStore.setCell("conditions", id, "resolvedAt", new Date().toISOString());
+    await this.persister.save();
+    return this.condition(id);
+  }
+
+  async deleteWaitingCondition(id: string): Promise<void> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (!this.tasksStore.hasRow("conditions", id)) return;
+    this.tasksStore.delRow("conditions", id);
+    await this.persister.save();
   }
 
   private task(id: string): Task | null {

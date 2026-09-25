@@ -18,12 +18,15 @@ fixture persists a separate account-named Expo SQLite replica and synchronizes i
 through an authenticated WebSocket. The phone still supports **loose Task create
 and text edit only**. Fixture REST can also create/list/delete Projects and create
 linked Tasks; Project deletion tombstones the Project and removes its known Tasks.
-A late offline child or arbitrary missing-Project reference remains in the raw
-replica but appears as loose work in Task REST, with the original relationship
-listed at `/api/task-recoveries`. The phone does not yet display this recovery
-reason or offer full Project actions. Unsupported REST writes fail closed; direct
-TinyBase sync still accepts arbitrary cells and the full relationship/recurrence
-model is unproved. Normal accounts, web, and all other mobile views still use the
+Fixture REST now also edits Projects and creates/resolves/deletes manual Waiting
+and After rows. Done/reopen settles/restores Afters. A late offline child or
+arbitrary missing-Project reference remains in the raw replica but appears as
+loose work in Task REST, with the original relationship listed at
+`/api/task-recoveries`. Invalid or cyclic raw After rows remain in the replica
+and appear in the same recovery report instead of in the accepted open list.
+The phone does not yet display these recovery reasons or offer full Project
+and Waiting actions. Direct TinyBase sync still accepts arbitrary cells;
+recurrence, Worker restart, and the complete relationship model are unproved. Normal accounts, web, and all other mobile views still use the
 storage path below. This fixture is not a handoff or migration. The fixture
 retains a deletion marker after erasing data to reject stale replicas on
 reconnect; real-account erasure and re-enrollment are still unproved.

@@ -5,7 +5,7 @@ import { log } from "../log";
 import type { ProjectAfterConflict } from "../store/project-afters";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
-import { isTaskDOFixture } from "../TaskDO/stub";
+import { getTaskDO, isTaskDOFixture } from "../TaskDO/stub";
 
 type Variables = {
   userId: string;
@@ -39,21 +39,6 @@ const WaitingConditionSchema = z.object({
 // projects (the client filters by project). See docs/entities/waiting-condition.md.
 export const createWaitsRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
-  router.use("/api/waits", async (c, next) => {
-    if (isTaskDOFixture(c.env, c.get("userId"))) {
-      return c.req.method === "GET"
-        ? c.json({ conditions: [] }, 200)
-        : c.json({ error: "Waiting is not supported for this fixture" }, 409);
-    }
-    await next();
-  });
-  router.use("/api/waits/*", async (c, next) => {
-    if (isTaskDOFixture(c.env, c.get("userId"))) {
-      return c.json({ error: "Waiting is not supported for this fixture" }, 409);
-    }
-    await next();
-  });
-
   const listRoute = createRoute({
     method: "get",
     path: "/api/waits",
@@ -73,8 +58,9 @@ export const createWaitsRoutes = () => {
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const userDO = getUserDO(c.env, userId);
-    const conditions = await userDO.listWaitingConditions();
+    const conditions = isTaskDOFixture(c.env, userId)
+      ? await getTaskDO(c.env, userId).listWaitingConditions()
+      : await getUserDO(c.env, userId).listWaitingConditions();
     return c.json({ conditions }, 200);
   });
 
@@ -127,7 +113,7 @@ export const createWaitsRoutes = () => {
     const userId = c.get("userId");
     const { id, projectId, kind, text, refId, targetStatus } =
       c.req.valid("json");
-    const userDO = getUserDO(c.env, userId);
+    const fixture = isTaskDOFixture(c.env, userId);
     if (kind === "project-status") {
       if (
         targetStatus !== "done" ||
@@ -137,7 +123,9 @@ export const createWaitsRoutes = () => {
       ) {
         return c.json({ error: "invalid After relationship" }, 400);
       }
-      const result = await userDO.addProjectAfter(id, projectId, refId);
+      const result = fixture
+        ? await getTaskDO(c.env, userId).addProjectAfter(id, projectId, refId)
+        : await getUserDO(c.env, userId).addProjectAfter(id, projectId, refId);
       if ("conflict" in result) {
         return c.json({ error: afterConflictMessage[result.conflict] }, 409);
       }
@@ -152,11 +140,10 @@ export const createWaitsRoutes = () => {
     if (!waitingText || refId != null || targetStatus != null) {
       return c.json({ error: "invalid waiting condition" }, 400);
     }
-    const condition = await userDO.addWaitingCondition(
-      id,
-      projectId,
-      waitingText,
-    );
+    const condition = fixture
+      ? await getTaskDO(c.env, userId).addWaitingCondition(id, projectId, waitingText)
+      : await getUserDO(c.env, userId).addWaitingCondition(id, projectId, waitingText);
+    if (!condition) return c.json({ error: "project not found or condition id is in use" }, 409);
     log("waiting_condition_added", { clerk_user_id: userId });
     return c.json({ condition }, 201);
   });
@@ -188,8 +175,9 @@ export const createWaitsRoutes = () => {
   router.openapi(resolveRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const userDO = getUserDO(c.env, userId);
-    const condition = await userDO.resolveWaitingCondition(id);
+    const condition = isTaskDOFixture(c.env, userId)
+      ? await getTaskDO(c.env, userId).resolveWaitingCondition(id)
+      : await getUserDO(c.env, userId).resolveWaitingCondition(id);
     if (!condition) return c.json({ error: "condition not found" }, 404);
     log("waiting_condition_resolved", { clerk_user_id: userId });
     return c.json({ condition }, 200);
@@ -211,8 +199,8 @@ export const createWaitsRoutes = () => {
   router.openapi(deleteRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const userDO = getUserDO(c.env, userId);
-    await userDO.deleteWaitingCondition(id);
+    if (isTaskDOFixture(c.env, userId)) await getTaskDO(c.env, userId).deleteWaitingCondition(id);
+    else await getUserDO(c.env, userId).deleteWaitingCondition(id);
     log("waiting_condition_deleted", { clerk_user_id: userId });
     return c.body(null, 204);
   });

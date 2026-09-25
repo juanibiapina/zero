@@ -2,6 +2,7 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 
 import { log } from "../log";
+import type { Project } from "../store/projects";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
 import { getTaskDO, isTaskDOFixture } from "../TaskDO/stub";
@@ -51,7 +52,7 @@ export const createProjectsRoutes = (
   });
   router.use("/api/projects/*", async (c, next) => {
     if (isTaskDOFixture(c.env, c.get("userId")) && c.req.path !== "/api/projects" &&
-      !(c.req.method === "DELETE" && /^\/api\/projects\/[^/]+$/.test(c.req.path))) {
+      !(["DELETE", "PATCH"].includes(c.req.method) && /^\/api\/projects\/[^/]+$/.test(c.req.path))) {
       return c.json({ error: "not supported for TaskDO fixture" }, 409);
     }
     await next();
@@ -253,17 +254,21 @@ export const createProjectsRoutes = (
     if (!hasEdit && state === undefined) {
       return c.json({ error: "no fields to update" }, 400);
     }
-    const userDO = getUserDO(c.env, userId);
-    let project: Awaited<ReturnType<typeof userDO.editProject>> = null;
+    const fixture = isTaskDOFixture(c.env, userId);
+    let project: Project | null = null;
     if (hasEdit) {
-      project = await userDO.editProject(id, editFields);
+      project = fixture
+        ? await getTaskDO(c.env, userId).editProject(id, editFields)
+        : await getUserDO(c.env, userId).editProject(id, editFields);
       if (!project) {
         return c.json({ error: "project not found" }, 404);
       }
       log("project_edited", { clerk_user_id: userId });
     }
     if (state !== undefined) {
-      project = await userDO.setProjectState(id, state);
+      project = fixture
+        ? await getTaskDO(c.env, userId).setProjectState(id, state)
+        : await getUserDO(c.env, userId).setProjectState(id, state);
       if (!project) {
         return c.json({ error: "project not found" }, 404);
       }

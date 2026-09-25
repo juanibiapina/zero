@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Task } from "../store/tasks";
 import type { Project } from "../store/projects";
+import type { WaitingCondition } from "../store/waiting-conditions";
 import type { Env } from "../types";
 import { createTasksRoutes } from "./tasks";
 import { createProjectsRoutes } from "./projects";
@@ -15,10 +16,29 @@ const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 const build = (environment: string, userId: string) => {
   const tasks = new Map<string, Task>();
   const projects = new Map<string, Project>();
+  const conditions = new Map<string, WaitingCondition>();
   const calls: string[] = [];
   const taskDO = {
     isErased: () => false,
     listRecoveries: () => [],
+    listConditionRecoveries: () => [],
+    listWaitingConditions: () => [...conditions.values()].filter((condition) => !condition.resolvedAt),
+    addWaitingCondition: (id: string, projectId: string, text: string) => {
+      calls.push("taskdo:wait-add");
+      if (!projects.has(projectId)) return null;
+      const condition: WaitingCondition = { id, projectId, kind: "free-text", text,
+        refId: null, targetStatus: null, resolvedAt: null, createdAt: "2026-09-25T00:00:00.000Z" };
+      conditions.set(id, condition);
+      return condition;
+    },
+    resolveWaitingCondition: (id: string) => {
+      calls.push("taskdo:wait-resolve");
+      const condition = conditions.get(id);
+      if (!condition) return null;
+      condition.resolvedAt = "2026-09-25T00:00:01.000Z";
+      return condition;
+    },
+    deleteWaitingCondition: (id: string) => { calls.push("taskdo:wait-delete"); conditions.delete(id); },
     listTasks: () => [...tasks.values()],
     addTask: (id: string, text: string, showUpDate: string | null, projectId: string | null = null) => {
       calls.push("taskdo:add");
@@ -50,6 +70,20 @@ const build = (environment: string, userId: string) => {
         createdAt: "2026-09-25T00:00:00.000Z", sourceCaptureId: null,
       };
       projects.set(id, project);
+      return project;
+    },
+    editProject: (id: string, fields: Partial<Project>) => {
+      calls.push("taskdo:project-edit");
+      const project = projects.get(id);
+      if (!project) return null;
+      Object.assign(project, fields);
+      return project;
+    },
+    setProjectState: (id: string, state: Project["state"]) => {
+      calls.push("taskdo:project-state");
+      const project = projects.get(id);
+      if (!project) return null;
+      project.state = state;
       return project;
     },
     deleteProject: (id: string) => {
@@ -116,13 +150,30 @@ describe("TaskDO fixture routes", () => {
     ]);
   });
 
+  it("edits a Project and resolves its Waiting condition without UserDO", async () => {
+    const app = build("test", "taskdo-proof-a");
+    expect((await app.request("/api/projects", "POST", { id: PROJECT_ID, title: "Project" })).status).toBe(201);
+    expect((await app.request(`/api/projects/${PROJECT_ID}`, "PATCH", { title: "Edited", state: "backlog" })).status).toBe(200);
+    const added = await app.request("/api/waits", "POST", {
+      id: TASK_ID, projectId: PROJECT_ID, kind: "free-text", text: "Await reply",
+    });
+    expect(added.status).toBe(201);
+    expect(await (await app.request("/api/waits")).json()).toMatchObject({ conditions: [{ text: "Await reply" }] });
+    expect((await app.request(`/api/waits/${TASK_ID}/resolve`, "POST")).status).toBe(200);
+    expect(await (await app.request("/api/waits")).json()).toEqual({ conditions: [] });
+    expect((await app.request(`/api/waits/${TASK_ID}`, "DELETE")).status).toBe(204);
+    expect(app.calls).toEqual([
+      "taskdo:project-add", "taskdo:project-edit", "taskdo:project-state",
+      "taskdo:wait-add", "taskdo:wait-resolve", "taskdo:wait-delete",
+    ]);
+  });
+
   it("rejects unsupported fixture mutations before they can reach UserDO", async () => {
     const app = build("test", "taskdo-proof-a");
     expect((await app.request(`/api/tasks/${TASK_ID}/complete`, "POST")).status).toBe(409);
-    expect((await app.request(`/api/projects/${PROJECT_ID}`, "PATCH", { state: "done" })).status).toBe(409);
-    expect((await app.request("/api/waits", "POST", { id: TASK_ID, projectId: PROJECT_ID, kind: "free-text", text: "No" })).status).toBe(409);
+    expect((await app.request(`/api/tasks/${TASK_ID}/recurrence`, "PUT", { recurrence: null })).status).toBe(409);
     expect(await (await app.request("/api/waits")).json()).toEqual({ conditions: [] });
-    expect(await (await app.request("/api/task-recoveries")).json()).toEqual({ tasks: [] });
+    expect(await (await app.request("/api/task-recoveries")).json()).toEqual({ tasks: [], conditions: [] });
     expect(app.calls).toEqual([]);
   });
 

@@ -88,6 +88,36 @@ try {
   const linked = await req(user, '/api/tasks', 'POST', { id: linkedId, text: 'Project Task', projectId });
   assert.equal(linked.status, 201, JSON.stringify(linked.data));
   await until(() => b!.store.getCell('tasks', linkedId, 'projectId') === projectId, 'linked Task sync');
+  const targetId = crypto.randomUUID();
+  assert.equal((await req(user, '/api/projects', 'POST', { id: targetId, title: 'Target Project' })).status, 201);
+  const waitingId = crypto.randomUUID();
+  assert.equal((await req(user, '/api/waits', 'POST', {
+    id: waitingId, projectId, kind: 'free-text', text: 'Wait for answer',
+  })).status, 201);
+  assert.equal((await req(user, `/api/waits/${waitingId}/resolve`, 'POST')).data.condition.resolvedAt !== null, true);
+  assert.equal((await req(user, '/api/waits')).data.conditions.some((condition: any) => condition.id === waitingId), false);
+  const afterId = '11111111-1111-4111-8111-111111111111';
+  const cycleId = '22222222-2222-4222-8222-222222222222';
+  assert.equal((await req(user, '/api/waits', 'POST', {
+    id: afterId, projectId, kind: 'project-status', refId: targetId, targetStatus: 'done',
+  })).status, 201);
+  await until(() => b!.store.getCell('conditions', afterId, 'refId') === targetId, 'After sync');
+  assert.equal((await req(user, '/api/waits', 'POST', {
+    id: cycleId, projectId: targetId, kind: 'project-status', refId: projectId, targetStatus: 'done',
+  })).status, 409);
+  b.store.setRow('conditions', cycleId, {
+    projectId: targetId, kind: 'project-status', refId: projectId,
+    targetStatus: 'done', createdAt: new Date().toISOString(),
+  });
+  await until(async () => (await req(user, '/api/task-recoveries')).data.conditions?.some(
+    (condition: any) => condition.conditionId === cycleId && condition.reason === 'cycle'), 'raw cycle recovery');
+  assert.equal((await req(user, '/api/waits')).data.conditions.some((condition: any) => condition.id === cycleId), false);
+  assert.equal((await req(user, `/api/projects/${targetId}`, 'PATCH', { state: 'done' })).status, 200);
+  await until(() => b!.store.getCell('conditions', afterId, 'resolvedAt') !== undefined, 'Done settles After');
+  assert.equal((await req(user, '/api/waits')).data.conditions.some((condition: any) => condition.id === afterId), false);
+  assert.equal((await req(user, `/api/projects/${targetId}`, 'PATCH', { state: 'in-play' })).status, 200);
+  await until(() => b!.store.getCell('conditions', afterId, 'resolvedAt') === undefined, 'reopen restores After');
+  assert.equal((await req(user, '/api/waits')).data.conditions.some((condition: any) => condition.id === afterId), true);
   assert.equal((await req(user, `/api/tasks/${id}/complete`, 'POST')).status, 409);
   await a.close(); a = undefined;
   a = await device(user, join(tmp, 'a.db'));
@@ -96,8 +126,14 @@ try {
   await until(() => !b!.store.hasRow('tasks', linkedId), 'Project delete cascades linked Task');
   const lateId = crypto.randomUUID();
   a.store.setRow('tasks', lateId, { text: 'offline after deletion', createdAt: new Date().toISOString(), projectId });
+  const lateConditionId = crypto.randomUUID();
+  a.store.setRow('conditions', lateConditionId, {
+    projectId, kind: 'free-text', text: 'offline waiting', createdAt: new Date().toISOString(),
+  });
   await a.connect();
   await until(async () => (await req(user, '/api/task-recoveries')).data.tasks?.some((item: any) => item.taskId === lateId), 'late Task recovery');
+  await until(async () => (await req(user, '/api/task-recoveries')).data.conditions?.some(
+    (item: any) => item.conditionId === lateConditionId), 'late Waiting recovery');
   const missingId = crypto.randomUUID();
   const missingProjectId = crypto.randomUUID();
   b.store.setRow('tasks', missingId, {
@@ -111,6 +147,10 @@ try {
   ].sort((x, y) => x.taskId.localeCompare(y.taskId)));
   assert.equal((await req(user, '/api/tasks')).data.tasks?.find((task: any) => task.id === lateId)?.projectId, null);
   assert.equal((await req(user, '/api/tasks')).data.tasks?.find((task: any) => task.id === missingId)?.projectId, null);
+  assert.deepEqual(recoveries.data.conditions, [{
+    conditionId: lateConditionId, projectId, refId: null, reason: 'missing-source',
+  }]);
+  assert.equal(a.store.getCell('conditions', lateConditionId, 'text'), 'offline waiting');
   assert.equal(a.store.getCell('tasks', lateId, 'projectId'), projectId, 'offline intent retained');
   assert.equal((await req(user, `/api/projects/${projectId}`, 'DELETE')).status, 204);
   assert.equal((await req(user, '/api/tasks')).data.tasks?.some((task: any) => task.id === lateId), true,
@@ -127,7 +167,7 @@ try {
     await assert.rejects(stale.connect(), /410/);
   } finally { await stale.close(); }
   assert.deepEqual((await req(user, '/api/tasks')).data.tasks, [], 'reconnecting stale client cannot restore Tasks');
-  console.log('PASS: TaskDO REST, WebSocket sync, Project tombstone/late-child recovery, SQLite restart, account isolation, and deletion lock');
+  console.log('PASS: TaskDO REST/WebSocket sync, Waiting/After cycle and Done/reopen, late-child recovery, SQLite client restart, isolation, erasure');
 } finally {
   await a?.close(); await b?.close(); await isolated?.close();
   rmSync(tmp, { recursive: true, force: true });
