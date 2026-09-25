@@ -21,6 +21,7 @@ const build = (environment: string, userId: string) => {
   const taskDO = {
     isErased: () => false,
     listRecoveries: () => [],
+    listProjectRecoveries: () => [],
     listConditionRecoveries: () => [],
     listWaitingConditions: () => [...conditions.values()].filter((condition) => !condition.resolvedAt),
     addWaitingCondition: (id: string, projectId: string, text: string) => {
@@ -53,11 +54,25 @@ const build = (environment: string, userId: string) => {
       tasks.set(id, task);
       return task;
     },
-    editTask: (id: string, text: string) => {
+    patchTask: (id: string, fields: Partial<Task>) => {
       calls.push("taskdo:edit");
       const task = tasks.get(id);
       if (!task) return null;
-      task.text = text;
+      Object.assign(task, fields);
+      return task;
+    },
+    completeTask: (id: string) => {
+      calls.push("taskdo:complete");
+      const task = tasks.get(id);
+      if (!task) return null;
+      task.completedAt = "2026-09-25T00:00:01.000Z";
+      return task;
+    },
+    reopenTask: (id: string) => {
+      calls.push("taskdo:reopen");
+      const task = tasks.get(id);
+      if (!task) return null;
+      task.completedAt = null;
       return task;
     },
     listProjects: () => { calls.push("taskdo:projects"); return [...projects.values()]; },
@@ -135,6 +150,16 @@ describe("TaskDO fixture routes", () => {
     expect(app.calls).toEqual(["taskdo:add", "taskdo:edit"]);
   });
 
+  it("completes, reopens, and reorders a Task in TaskDO", async () => {
+    const app = build("test", "taskdo-proof-a");
+    expect((await app.request("/api/tasks", "POST", { id: TASK_ID, text: "Work" })).status).toBe(201);
+    expect((await app.request(`/api/tasks/${TASK_ID}`, "PATCH", { sortKey: "a1", showUpDate: "2026-09-26" })).status).toBe(200);
+    expect((await app.request(`/api/tasks/${TASK_ID}/complete`, "POST")).status).toBe(200);
+    expect((await app.request(`/api/tasks/${TASK_ID}/reopen`, "POST")).status).toBe(200);
+    expect(await (await app.request("/api/tasks")).json()).toMatchObject({ tasks: [{ sortKey: "a1", completedAt: null }] });
+    expect(app.calls).toEqual(["taskdo:add", "taskdo:edit", "taskdo:complete", "taskdo:reopen"]);
+  });
+
   it("creates a linked Task through TaskDO and deletes it with its Project", async () => {
     const app = build("test", "taskdo-proof-a");
     expect((await app.request("/api/tasks", "POST", { id: TASK_ID, text: "linked", projectId: PROJECT_ID })).status).toBe(409);
@@ -170,10 +195,10 @@ describe("TaskDO fixture routes", () => {
 
   it("rejects unsupported fixture mutations before they can reach UserDO", async () => {
     const app = build("test", "taskdo-proof-a");
-    expect((await app.request(`/api/tasks/${TASK_ID}/complete`, "POST")).status).toBe(409);
-    expect((await app.request(`/api/tasks/${TASK_ID}/recurrence`, "PUT", { recurrence: null })).status).toBe(409);
+    expect((await app.request(`/api/tasks/${TASK_ID}`, "DELETE")).status).toBe(409);
+    expect((await app.request(`/api/tasks/${TASK_ID}/unknown`, "POST")).status).toBe(409);
     expect(await (await app.request("/api/waits")).json()).toEqual({ conditions: [] });
-    expect(await (await app.request("/api/task-recoveries")).json()).toEqual({ tasks: [], conditions: [] });
+    expect(await (await app.request("/api/task-recoveries")).json()).toEqual({ tasks: [], projects: [], conditions: [] });
     expect(app.calls).toEqual([]);
   });
 

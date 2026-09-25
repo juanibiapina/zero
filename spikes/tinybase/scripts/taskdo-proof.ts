@@ -118,7 +118,31 @@ try {
   assert.equal((await req(user, `/api/projects/${targetId}`, 'PATCH', { state: 'in-play' })).status, 200);
   await until(() => b!.store.getCell('conditions', afterId, 'resolvedAt') === undefined, 'reopen restores After');
   assert.equal((await req(user, '/api/waits')).data.conditions.some((condition: any) => condition.id === afterId), true);
-  assert.equal((await req(user, `/api/tasks/${id}/complete`, 'POST')).status, 409);
+  const patched = await req(user, `/api/tasks/${id}`, 'PATCH', { sortKey: 'a1', showUpDate: '2026-10-02' });
+  assert.equal(patched.status, 200);
+  assert.equal(patched.data.task.sortKey, 'a1');
+  assert.equal((await req(user, `/api/tasks/${id}/complete`, 'POST')).status, 200);
+  assert.equal((await req(user, '/api/tasks')).data.tasks.some((task: any) => task.id === id), false);
+  assert.equal((await req(user, `/api/tasks/${id}/reopen`, 'POST')).status, 200);
+  const recurrence = {
+    version: 1, origin: '2026-10-01', anchor: 'scheduled', weekStartsOn: 'MO',
+    pattern: { unit: 'month', interval: 1, on: [{ kind: 'day', day: 1 }] },
+  };
+  const recurringId = crypto.randomUUID();
+  const recurring = await req(user, '/api/tasks', 'POST', { id: recurringId, text: 'Pay rent', recurrence });
+  assert.equal(recurring.status, 201, JSON.stringify(recurring.data));
+  assert.deepEqual(recurring.data.task.recurrence, recurrence);
+  const completeOccurrence = () => req(user, `/api/tasks/${recurringId}/complete-occurrence`, 'POST', {
+    scheduledOn: '2026-10-01', completedOn: '2026-10-02',
+  });
+  assert.equal((await completeOccurrence()).data.task.recurrenceDate, '2026-11-01');
+  assert.equal((await completeOccurrence()).data.task.recurrenceDate, '2026-11-01', 'retry does not advance twice');
+  const undoOccurrence = () => req(user, `/api/tasks/${recurringId}/undo-occurrence`, 'POST', {
+    expectedRecurrenceDate: '2026-11-01', recurrenceDateBefore: '2026-10-01', showUpDateBefore: '2026-10-01',
+  });
+  assert.equal((await undoOccurrence()).data.task.recurrenceDate, '2026-10-01');
+  assert.equal((await undoOccurrence()).data.task.recurrenceDate, '2026-10-01', 'retry stays restored');
+  await until(() => b!.store.getCell('tasks', recurringId, 'recurrenceDate') === '2026-10-01', 'recurrence sync');
   await a.close(); a = undefined;
   a = await device(user, join(tmp, 'a.db'));
   assert.equal(a.store.getCell('projects', projectId, 'title'), 'Proof Project');
@@ -155,6 +179,22 @@ try {
   assert.equal((await req(user, `/api/projects/${projectId}`, 'DELETE')).status, 204);
   assert.equal((await req(user, '/api/tasks')).data.tasks?.some((task: any) => task.id === lateId), true,
     'retrying Project delete cannot erase the recovered late Task');
+  const corruptId = crypto.randomUUID();
+  b.store.setRow('tasks', corruptId, {
+    text: 'keep this work', createdAt: new Date().toISOString(), recurrence: '{invalid',
+  });
+  await until(async () => (await req(user, '/api/task-recoveries')).data.tasks?.some(
+    (item: any) => item.taskId === corruptId && item.reason === 'invalid-recurrence'), 'invalid recurrence recovery');
+  assert.equal((await req(user, '/api/tasks')).data.tasks?.some((task: any) => task.id === corruptId), true);
+  assert.equal((await req(user, `/api/tasks/${corruptId}/complete-occurrence`, 'POST', {
+    scheduledOn: '2026-10-01', completedOn: '2026-10-02',
+  })).status, 409);
+  assert.equal(b.store.getCell('tasks', corruptId, 'recurrence'), '{invalid');
+  const malformedProjectId = crypto.randomUUID();
+  b.store.setRow('projects', malformedProjectId, { title: 'keep malformed project' });
+  await until(async () => (await req(user, '/api/task-recoveries')).data.projects?.some(
+    (item: any) => item.projectId === malformedProjectId), 'malformed Project recovery');
+  assert.equal(b.store.getCell('projects', malformedProjectId, 'title'), 'keep malformed project');
   assert.equal((await fetch(`${base}/api/task-sync`, { headers: { Authorization: 'Bearer e2e-test-user' } })).status, 404);
   await a.close(); a = undefined;
   const erased = await req(user, '/api/user-data', 'DELETE');

@@ -24,9 +24,13 @@ arbitrary missing-Project reference remains in the raw replica but appears as
 loose work in Task REST, with the original relationship listed at
 `/api/task-recoveries`. Invalid or cyclic raw After rows remain in the replica
 and appear in the same recovery report instead of in the accepted open list.
-The phone does not yet display these recovery reasons or offer full Project
-and Waiting actions. Direct TinyBase sync still accepts arbitrary cells;
-recurrence, Worker restart, and the complete relationship model are unproved. Normal accounts, web, and all other mobile views still use the
+Fixture REST also handles Task dates, ordering, completion/Undo, and recurrence
+with retry-safe occurrence cursors. Invalid synced recurrence stays in the raw
+replica, appears in the recovery report, and blocks occurrence completion. The
+phone does not yet display these recovery reasons or offer full Project and
+Waiting actions. A real-Worker restart/fresh-WebSocket proof retains terminal,
+recurring, resolved, and recoverable rows. Direct TinyBase sync still accepts
+arbitrary cells; the complete phone relationship model is unproved. Normal accounts, web, and all other mobile views still use the
 storage path below. This fixture is not a handoff or migration. The fixture
 retains a deletion marker after erasing data to reject stale replicas on
 reconnect; real-account erasure and re-enrollment are still unproved.

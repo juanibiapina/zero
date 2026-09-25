@@ -137,7 +137,7 @@ export const createProjectsRoutes = (
     const project = isTaskDOFixture(c.env, userId)
       ? await getTaskDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId })
       : await getUserDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId });
-    if (!project) return c.json({ error: "project was deleted" }, 409);
+    if (!project) return c.json({ error: "project id is in use or was deleted" }, 409);
     log("project_added", { clerk_user_id: userId });
     return c.json({ project }, 201);
   });

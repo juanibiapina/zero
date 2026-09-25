@@ -1,6 +1,8 @@
 import { createMergeableStore, type MergeableStore } from "tinybase";
 import { createDurableObjectSqlStoragePersister } from "tinybase/persisters/persister-durable-object-sql-storage";
 import { WsServerDurableObject } from "tinybase/synchronizers/synchronizer-ws-server-durable-object";
+import { advance, validateRecurrence, type Recurrence } from "@zeroapps/recurrence";
+import { generateKeyBetween } from "fractional-indexing";
 
 import type { Task } from "../store/tasks";
 import type { Project, ProjectDefaults, ProjectState } from "../store/projects";
@@ -8,6 +10,16 @@ import type { AddProjectAfterResult } from "../store/project-afters";
 import type { WaitingCondition } from "../store/waiting-conditions";
 import type { Env } from "../types";
 import { projectConditions, reaches } from "./conditions";
+
+function parseRecurrence(raw: unknown): Recurrence | null {
+  if (typeof raw !== "string") return null;
+  try {
+    const result = validateRecurrence(JSON.parse(raw));
+    return result.ok ? result.value : null;
+  } catch {
+    return null;
+  }
+}
 
 // The per-account todo authority. Only fresh hermetic fixture accounts can
 // connect during this slice; the real accounts continue to use UserDO.
@@ -53,6 +65,13 @@ export class TaskDO extends WsServerDurableObject<Env> {
       .map((id) => this.project(id))
       .filter((project): project is Project => project !== null && project.state !== "done")
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  listProjectRecoveries(): Array<{ projectId: string; reason: "invalid-project" }> {
+    if (this.purging) return [];
+    return Object.entries(this.tasksStore.getTable("projects"))
+      .filter(([id, row]) => !row.deletedAt && !this.project(id))
+      .map(([projectId]) => ({ projectId, reason: "invalid-project" }));
   }
 
   async addProject(id: string, title: string, opts: ProjectDefaults = {}): Promise<Project | null> {
@@ -223,10 +242,10 @@ export class TaskDO extends WsServerDurableObject<Env> {
       createdAt: row.createdAt,
       showUpDate: typeof row.showUpDate === "string" ? row.showUpDate : null,
       completedAt: typeof row.completedAt === "string" ? row.completedAt : null,
-      recurrence: null,
-      recurrenceDate: null,
+      recurrence: parseRecurrence(row.recurrence),
+      recurrenceDate: typeof row.recurrenceDate === "string" ? row.recurrenceDate : null,
       projectId: typeof row.projectId === "string" && this.project(row.projectId) ? row.projectId : null,
-      sourceCaptureId: null,
+      sourceCaptureId: typeof row.sourceCaptureId === "string" ? row.sourceCaptureId : null,
       sortKey: typeof row.sortKey === "string" ? row.sortKey : null,
     };
   }
@@ -236,31 +255,56 @@ export class TaskDO extends WsServerDurableObject<Env> {
     return Object.keys(this.tasksStore.getTable("tasks"))
       .map((id) => this.task(id))
       .filter((task): task is Task => task !== null && task.completedAt === null)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      .sort((a, b) => {
+        if (a.sortKey == null || b.sortKey == null) {
+          if (a.sortKey == null && b.sortKey == null) return a.createdAt.localeCompare(b.createdAt);
+          return a.sortKey == null ? 1 : -1;
+        }
+        return (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0) || a.createdAt.localeCompare(b.createdAt);
+      });
   }
 
-  listRecoveries(): Array<{ taskId: string; projectId: string; reason: "missing-project" | "deleted-project" }> {
+  listRecoveries(): Array<{ taskId: string; projectId: string | null;
+    reason: "missing-project" | "deleted-project" | "invalid-task" | "invalid-recurrence" }> {
     if (this.purging) return [];
     return Object.entries(this.tasksStore.getTable("tasks")).flatMap(([taskId, row]) => {
-      if (typeof row.projectId !== "string" || this.project(row.projectId)) return [];
-      const rawProject = this.tasksStore.getRow("projects", row.projectId);
-      return [{
-        taskId,
-        projectId: row.projectId,
-        reason: rawProject.deletedAt ? "deleted-project" as const : "missing-project" as const,
-      }];
+      const projectId = typeof row.projectId === "string" ? row.projectId : null;
+      const issues: ReturnType<TaskDO["listRecoveries"]> = [];
+      if (typeof row.text !== "string" || typeof row.createdAt !== "string") {
+        issues.push({ taskId, projectId, reason: "invalid-task" });
+      }
+      if (row.recurrence !== undefined && !parseRecurrence(row.recurrence)) {
+        issues.push({ taskId, projectId, reason: "invalid-recurrence" });
+      }
+      if (projectId && !this.project(projectId)) {
+        const rawProject = this.tasksStore.getRow("projects", projectId);
+        issues.push({ taskId, projectId, reason: rawProject.deletedAt ? "deleted-project" : "missing-project" });
+      }
+      return issues;
     });
   }
 
-  async addTask(id: string, text: string, showUpDate: string | null, projectId: string | null = null): Promise<Task | null> {
+  async addTask(id: string, text: string, showUpDate: string | null, projectId: string | null = null,
+    sourceCaptureId: string | null = null, recurrence: Recurrence | null = null): Promise<Task | null> {
     if (await this.isErased()) throw new Error("Fixture account erased");
     const existing = this.task(id);
     if (existing) return existing;
-    if (projectId !== null && !this.project(projectId)) return null;
+    if (this.tasksStore.hasRow("tasks", id) || (projectId !== null && !this.project(projectId))) return null;
+    const keys = Object.values(this.tasksStore.getTable("tasks"))
+      .flatMap((row) => typeof row.sortKey === "string" ? [row.sortKey] : [])
+      .sort().reverse();
+    let sortKey = generateKeyBetween(null, null);
+    for (const key of keys) {
+      try { sortKey = generateKeyBetween(key, null); break; }
+      catch { /* A raw synced key can be malformed; preserve it for recovery. */ }
+    }
     this.tasksStore.setRow("tasks", id, {
       text,
       createdAt: new Date().toISOString(),
-      ...(showUpDate ? { showUpDate } : {}),
+      sortKey,
+      ...(recurrence?.origin || showUpDate ? { showUpDate: recurrence?.origin ?? showUpDate! } : {}),
+      ...(recurrence ? { recurrence: JSON.stringify(recurrence), recurrenceDate: recurrence.origin } : {}),
+      ...(sourceCaptureId ? { sourceCaptureId } : {}),
       ...(projectId ? { projectId } : {}),
     });
     await this.persister.save();
@@ -271,6 +315,93 @@ export class TaskDO extends WsServerDurableObject<Env> {
     if (await this.isErased()) throw new Error("Fixture account erased");
     if (!this.task(id)) return null;
     this.tasksStore.setCell("tasks", id, "text", text);
+    await this.persister.save();
+    return this.task(id);
+  }
+
+  async patchTask(id: string, fields: { text?: string; showUpDate?: string | null;
+    sortKey?: string; projectId?: string | null }): Promise<Task | "missing-project" | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (!this.task(id)) return null;
+    if (fields.projectId && !this.project(fields.projectId)) return "missing-project";
+    this.tasksStore.transaction(() => {
+      for (const [key, value] of Object.entries(fields)) {
+        if (value === null) this.tasksStore.delCell("tasks", id, key);
+        else this.tasksStore.setCell("tasks", id, key, value);
+      }
+    });
+    await this.persister.save();
+    return this.task(id);
+  }
+
+  async completeTask(id: string): Promise<Task | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const task = this.task(id);
+    if (!task || task.completedAt) return task;
+    this.tasksStore.setCell("tasks", id, "completedAt", new Date().toISOString());
+    await this.persister.save();
+    return this.task(id);
+  }
+
+  async reopenTask(id: string): Promise<Task | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const task = this.task(id);
+    if (!task || !task.completedAt) return task;
+    this.tasksStore.delCell("tasks", id, "completedAt");
+    await this.persister.save();
+    return this.task(id);
+  }
+
+  async setTaskRecurrence(id: string, recurrence: Recurrence | null): Promise<Task | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (!this.task(id)) return null;
+    this.tasksStore.transaction(() => {
+      if (recurrence) {
+        this.tasksStore.setCell("tasks", id, "recurrence", JSON.stringify(recurrence));
+        this.tasksStore.setCell("tasks", id, "recurrenceDate", recurrence.origin);
+        this.tasksStore.setCell("tasks", id, "showUpDate", recurrence.origin);
+      } else {
+        this.tasksStore.delCell("tasks", id, "recurrence");
+        this.tasksStore.delCell("tasks", id, "recurrenceDate");
+      }
+    });
+    await this.persister.save();
+    return this.task(id);
+  }
+
+  async completeTaskOccurrence(id: string, scheduledOn: string, completedOn: string): Promise<Task | "invalid-recurrence" | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const task = this.task(id);
+    if (!task) return null;
+    if (this.tasksStore.hasCell("tasks", id, "recurrence") && !task.recurrence) return "invalid-recurrence";
+    if (!task.recurrence || !task.recurrenceDate) return this.completeTask(id);
+    if (task.completedAt || task.recurrenceDate !== scheduledOn) return task;
+    const result = advance(task.recurrence, { scheduledOn, completedOn });
+    if (result.kind === "finished") return this.completeTask(id);
+    this.tasksStore.transaction(() => {
+      this.tasksStore.setCell("tasks", id, "recurrenceDate", result.scheduledOn);
+      this.tasksStore.setCell("tasks", id, "showUpDate", result.scheduledOn);
+    });
+    await this.persister.save();
+    return this.task(id);
+  }
+
+  async undoTaskOccurrence(id: string, expectedRecurrenceDate: string,
+    recurrenceDateBefore: string, showUpDateBefore: string | null): Promise<Task | "invalid-recurrence" | null> {
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    const task = this.task(id);
+    if (!task) return null;
+    if (this.tasksStore.hasCell("tasks", id, "recurrence") && !task.recurrence) return "invalid-recurrence";
+    if (!task.recurrence) return this.reopenTask(id);
+    const matchesExpected = task.recurrenceDate === expectedRecurrenceDate;
+    const alreadyRestored = task.recurrenceDate === recurrenceDateBefore && !task.completedAt;
+    if (!matchesExpected && !alreadyRestored) return task;
+    this.tasksStore.transaction(() => {
+      this.tasksStore.setCell("tasks", id, "recurrenceDate", recurrenceDateBefore);
+      if (showUpDateBefore === null) this.tasksStore.delCell("tasks", id, "showUpDate");
+      else this.tasksStore.setCell("tasks", id, "showUpDate", showUpDateBefore);
+      this.tasksStore.delCell("tasks", id, "completedAt");
+    });
     await this.persister.save();
     return this.task(id);
   }

@@ -10,7 +10,11 @@ export const createTaskSyncRoutes = () => {
     if (!isTaskDOFixture(c.env, userId)) return c.text("Not found", 404);
     const taskDO = getTaskDO(c.env, userId);
     if (await taskDO.isErased()) return c.text("Account erased", 410);
-    return c.json({ tasks: await taskDO.listRecoveries(), conditions: await taskDO.listConditionRecoveries() });
+    return c.json({
+      tasks: await taskDO.listRecoveries(),
+      projects: await taskDO.listProjectRecoveries(),
+      conditions: await taskDO.listConditionRecoveries(),
+    });
   });
   router.get("/api/task-sync", async (c) => {
     const userId = c.get("userId");
