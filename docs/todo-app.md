@@ -130,7 +130,7 @@ committed.
   timeline); user answers yes / no / ask-for-changes in an AI session.
 - **Session** — AI session with tools to work with every entity. UI tracks all
   accessed/saved entities; jump to the note/person/etc. Tools have visuals shown
-  in the session trace; following a link is a trackable tool.
+  in the session trace; following a link is a trackable tool. The [TaskDO plan](plans/todo-local-replica-task-do-slice1.md#future-online-agent-sessions) records how online sessions will access todo data.
 - **Deliveries**, **Newsletter**, **Invoice**, **Bill**, **Trip**, **Album**
   (Google Photos), **Google Wallet** (service; auto-use for movie tickets),
   **Movie ticket** — candidate entities.

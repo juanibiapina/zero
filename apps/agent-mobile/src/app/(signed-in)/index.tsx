@@ -19,6 +19,9 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 
+import { useTaskDOFixtureTasks } from '@/lib/taskdo-tasks-api';
+import { useTaskDOFixtureRelations } from '@/lib/taskdo-fixture-relations';
+import { RUNTIME_PROFILE } from '@/lib/runtime-profile';
 import { useProjectAdd } from '@/components/project-add';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
@@ -70,6 +73,37 @@ function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
 // capture inbox after the single-list merge. The quick-add defaults to a task
 // and can switch to a project.
 export default function HomeScreen() {
+  if (RUNTIME_PROFILE.hermetic && process.env.EXPO_PUBLIC_TASKDO_PROOF === '1') {
+    return <FixtureHomeScreen />;
+  }
+  return <LegacyHomeScreen />;
+}
+
+function FixtureHomeScreen() {
+  const { userId } = useAuth();
+  return <FixtureHomeForAccount key={userId ?? 'signed-out'} />;
+}
+
+function FixtureHomeForAccount() {
+  const { api, error, connected } = useTaskDOFixtureTasks();
+  const { projectsApi, waitsApi } = useTaskDOFixtureRelations();
+  return (
+    <View className="flex-1 bg-background">
+      <ScreenHeader title="Home" />
+      {error ? <Text variant="error" className="px-screen-x">{error}</Text> : null}
+      {api && projectsApi && waitsApi ? (
+        <>
+          <Text variant="subtitle" className="px-screen-x">
+            {connected ? 'Synced' : 'Offline · saved on this device'}
+          </Text>
+          <Home api={api} projectsApi={projectsApi} waitsApi={waitsApi} fixture />
+        </>
+      ) : <View className="flex-1" />}
+    </View>
+  );
+}
+
+function LegacyHomeScreen() {
   const tasksApi = useTasksApi();
   const projectsApi = useProjectsApi();
   const waitsApi = useWaitsApi();
@@ -90,10 +124,12 @@ function Home({
   api,
   projectsApi,
   waitsApi,
+  fixture = false,
 }: {
   api: TasksApi;
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
+  fixture?: boolean;
 }) {
   const { getToken } = useAuth();
   const { data: tasks, isLoading } = useLiveQuery((q) =>
@@ -161,6 +197,7 @@ function Home({
     conditions: conditions ?? [],
     onAddWaiting: (project) => projectAdd.openFor(project, 'waiting'),
     onError: setWriteError,
+    waitForPersist: fixture,
   });
 
   // A project task's icon (defaulting to the neutral one); a loose task has none.
@@ -179,11 +216,12 @@ function Home({
     projects: projects ?? [],
     openTasks: tasks ?? [],
     conditions: conditions ?? [],
-    modes: ['task', 'project'],
+    modes: fixture ? ['task'] : ['task', 'project'],
     scope: { kind: 'global' },
     getToken,
     onError: setWriteError,
     fabLabel: 'Task',
+    waitForPersist: fixture,
   });
 
   useEffect(() => {

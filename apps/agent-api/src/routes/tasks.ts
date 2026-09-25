@@ -8,6 +8,7 @@ import {
 import { log } from "../log";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
+import { getTaskDO, isTaskDOFixture } from "../TaskDO/stub";
 
 type Variables = {
   userId: string;
@@ -37,6 +38,14 @@ const TaskSchema = z.object({
 
 export const createTasksRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+  router.use("/api/tasks/*", async (c, next) => {
+    if (isTaskDOFixture(c.env, c.get("userId")) &&
+      !(c.req.path === "/api/tasks" && ["GET", "POST"].includes(c.req.method)) &&
+      !(c.req.method === "PATCH" && /^\/api\/tasks\/[^/]+$/.test(c.req.path))) {
+      return c.json({ error: "not supported for TaskDO fixture" }, 409);
+    }
+    await next();
+  });
 
   const listRoute = createRoute({
     method: "get",
@@ -58,8 +67,9 @@ export const createTasksRoutes = () => {
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const userDO = getUserDO(c.env, userId);
-    const tasks = await userDO.listTasks();
+    const tasks = isTaskDOFixture(c.env, userId)
+      ? await getTaskDO(c.env, userId).listTasks()
+      : await getUserDO(c.env, userId).listTasks();
     return c.json({ tasks }, 200);
   });
 
@@ -112,6 +122,13 @@ export const createTasksRoutes = () => {
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
+    if (isTaskDOFixture(c.env, userId)) {
+      if (projectId != null || sourceCaptureId != null || recurrence != null) {
+        return c.json({ error: "only loose Tasks are supported for this fixture" }, 400);
+      }
+      const task = await getTaskDO(c.env, userId).addTask(id, text, showUpDate ?? null);
+      return c.json({ task }, 201);
+    }
     const userDO = getUserDO(c.env, userId);
     const task = await userDO.addTask(
       id,
@@ -191,6 +208,14 @@ export const createTasksRoutes = () => {
       return c.json({ error: "no fields to update" }, 400);
     }
 
+    if (isTaskDOFixture(c.env, userId)) {
+      if (!hasText || hasShowUpDate || hasSortKey || hasProjectId) {
+        return c.json({ error: "only text edits are supported for this fixture" }, 400);
+      }
+      const task = await getTaskDO(c.env, userId).editTask(id, body.text!);
+      if (!task) return c.json({ error: "task not found" }, 404);
+      return c.json({ task }, 200);
+    }
     const userDO = getUserDO(c.env, userId);
     let task: Awaited<ReturnType<typeof userDO.rescheduleTask>> = null;
     if (hasSortKey && body.sortKey !== undefined) {

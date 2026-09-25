@@ -1,0 +1,13 @@
+{
+  "name": "zero-tinybase-proof",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "PROOF_STORES", "class_name": "ProofStoreDO" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ProofStoreDO"] }
+  ]
+}

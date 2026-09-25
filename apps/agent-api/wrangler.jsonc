@@ -98,6 +98,10 @@
       {
         "name": "TELEGRAM_ACCOUNT_DO",
         "class_name": "TelegramAccountDO"
+      },
+      {
+        "name": "TASK_DO",
+        "class_name": "TaskDO"
       }
     ]
   },
@@ -133,6 +137,10 @@
     {
       "tag": "v8",
       "new_sqlite_classes": ["TelegramAccountDO"]
+    },
+    {
+      "tag": "v9",
+      "new_sqlite_classes": ["TaskDO"]
     }
   ]
 }

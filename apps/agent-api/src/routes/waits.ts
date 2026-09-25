@@ -5,6 +5,7 @@ import { log } from "../log";
 import type { ProjectAfterConflict } from "../store/project-afters";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
+import { isTaskDOFixture } from "../TaskDO/stub";
 
 type Variables = {
   userId: string;
@@ -38,6 +39,20 @@ const WaitingConditionSchema = z.object({
 // projects (the client filters by project). See docs/entities/waiting-condition.md.
 export const createWaitsRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+  router.use("/api/waits", async (c, next) => {
+    if (isTaskDOFixture(c.env, c.get("userId"))) {
+      return c.req.method === "GET"
+        ? c.json({ conditions: [] }, 200)
+        : c.json({ error: "Waiting is not supported for this fixture" }, 409);
+    }
+    await next();
+  });
+  router.use("/api/waits/*", async (c, next) => {
+    if (isTaskDOFixture(c.env, c.get("userId"))) {
+      return c.json({ error: "Waiting is not supported for this fixture" }, 409);
+    }
+    await next();
+  });
 
   const listRoute = createRoute({
     method: "get",

@@ -66,6 +66,7 @@ export function useQuickAdd({
   onProjectCreated,
   onClosed,
   showFab = true,
+  waitForPersist = false,
 }: {
   tasksApi: TasksApi;
   projectsApi: ProjectsApi;
@@ -80,6 +81,7 @@ export function useQuickAdd({
   onProjectCreated?: (id: string) => void;
   onClosed?: () => void;
   showFab?: boolean;
+  waitForPersist?: boolean;
 }): QuickAddController {
   const [drafts, setDrafts] = useState<Record<AddMode, string>>({
     task: '',
@@ -244,6 +246,10 @@ export function useQuickAdd({
       null,
       effectiveRecurrence,
     );
+    if (waitForPersist) {
+      void tx.isPersisted.promise.then(() => closeAdd(), (error) => onError(messageOf(error)));
+      return;
+    }
     tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
     if (addProjectId != null && addProjectId !== contextProjectId) {
       showTaskDestination(
@@ -270,6 +276,7 @@ export function useQuickAdd({
     effectiveRecurrence,
     contextProjectId,
     projects,
+    waitForPersist,
   ]);
 
   const requestClose = useCallback(() => {

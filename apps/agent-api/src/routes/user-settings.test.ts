@@ -54,6 +54,18 @@ const fakeJobNamespace = () => {
   return { namespace, calls };
 };
 
+const fakeTaskNamespace = () => {
+  const calls: string[] = [];
+  const namespace = {
+    idFromName: (name: string) => name,
+    get: (name: string) => ({
+      purge: async () => { calls.push(name); },
+      reset: () => { throw new Error("task data deleted"); },
+    }),
+  };
+  return { namespace, calls };
+};
+
 const createFakeUserDO = (
   initial?: string,
 ): UserDOStub & { _telegramId: string | null; _onboardingSeen: boolean; _googleOnboardingStatus: string | null; _createdAt: string | null; _timezone: string | null; _country: string | null; _deleted: string[] } => {
@@ -147,6 +159,7 @@ const fakeEnv = (
     schedules: fakeJobNamespace(),
     learning: fakeJobNamespace(),
   },
+  tasks: ReturnType<typeof fakeTaskNamespace> = fakeTaskNamespace(),
 ) => {
   return {
     KV: kv,
@@ -159,6 +172,7 @@ const fakeEnv = (
     TELEGRAM_ACCOUNT_DO: accounts.namespace,
     SCHEDULE_DO: jobs.schedules.namespace,
     LEARNING_DO: jobs.learning.namespace,
+    TASK_DO: tasks.namespace,
   } as unknown as Env;
 };
 
@@ -318,7 +332,8 @@ describe("DELETE /api/user-data", () => {
     const userDO = createFakeUserDO("12345");
     const accounts = fakeAccountNamespace({ "12345": "user_abc" });
     const jobs = { schedules: fakeJobNamespace(), learning: fakeJobNamespace() };
-    const app = buildApp(fakeEnv(kv, userDO, undefined, accounts, jobs), "user_abc");
+    const tasks = fakeTaskNamespace();
+    const app = buildApp(fakeEnv(kv, userDO, undefined, accounts, jobs, tasks), "user_abc");
 
     const res = await app.request("/api/user-data", deleteRequest);
 
@@ -330,6 +345,7 @@ describe("DELETE /api/user-data", () => {
     expect(accounts.state.get("12345")).toBeUndefined();
     expect(jobs.schedules.calls).toEqual(["user_abc", "user_abc"]);
     expect(jobs.learning.calls).toEqual(["user_abc", "user_abc"]);
+    expect(tasks.calls).toEqual(["user_abc"]);
   });
 
   it("erases a user who never linked Telegram", async () => {

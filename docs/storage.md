@@ -9,6 +9,21 @@ There are two layers: the **server** (authoritative) and the **client** (an
 offline cache). The server owns the data; the client cache is disposable and
 re-syncs from the server whenever it is missing or reset.
 
+## Hermetic loose-Task fixture (not live account storage)
+
+In `ENVIRONMENT=test`, accounts named `taskdo-proof-*` use a separate per-account
+`TaskDO`, resolved by `TASK_DO.idFromName(clerkUserId)`. Its TinyBase mergeable
+store persists to the Durable Object's SQLite storage; the signed-in mobile Home
+fixture persists a separate account-named Expo SQLite replica and synchronizes it
+through an authenticated WebSocket. Loose Task create and text edit are supported
+through both this replica and the existing Task REST routes. Unsupported REST
+writes fail closed; direct TinyBase sync does not yet enforce relationships or
+reject unsupported cells. Normal accounts, web, and all other mobile views
+still use the storage path below. This fixture is not a handoff, complete
+model, or migration. The fixture retains one deletion marker after erasing
+Tasks to reject stale replicas on reconnect; a real-account erasure and
+re-enrollment design is still required before cutover.
+
 ## Server layer (authoritative)
 
 - Every entity lives in the **per-user `UserDO`** (Durable Object) SQLite

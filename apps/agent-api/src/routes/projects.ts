@@ -4,6 +4,7 @@ import { z } from "zod";
 import { log } from "../log";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
+import { isTaskDOFixture } from "../TaskDO/stub";
 import { createModel } from "../agents/model";
 import { suggestProjectIcons } from "../agents/icon-suggest";
 
@@ -42,6 +43,20 @@ export const createProjectsRoutes = (
 ) => {
   const suggestIcons = deps.suggestIcons ?? defaultSuggestIcons;
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
+  router.use("/api/projects", async (c, next) => {
+    if (isTaskDOFixture(c.env, c.get("userId"))) {
+      return c.req.method === "GET"
+        ? c.json({ projects: [] }, 200)
+        : c.json({ error: "Projects are not supported for this fixture" }, 409);
+    }
+    await next();
+  });
+  router.use("/api/projects/*", async (c, next) => {
+    if (isTaskDOFixture(c.env, c.get("userId"))) {
+      return c.json({ error: "Projects are not supported for this fixture" }, 409);
+    }
+    await next();
+  });
 
   const listRoute = createRoute({
     method: "get",

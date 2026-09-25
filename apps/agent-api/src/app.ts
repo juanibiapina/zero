@@ -16,6 +16,7 @@ import { createAdminRoutes } from "./routes/admin";
 import { createTasksRoutes } from "./routes/tasks";
 import { createProjectsRoutes } from "./routes/projects";
 import { createWaitsRoutes } from "./routes/waits";
+import { createTaskSyncRoutes } from "./routes/task-sync";
 
 type Variables = {
   userId: string;
@@ -83,6 +84,7 @@ export const createApp = () => {
   app.route("/", createUserSettingsRoutes());
   app.route("/", createOnboardingRoutes());
   app.route("/", createAdminRoutes());
+  app.route("/", createTaskSyncRoutes());
   app.route("/", createTasksRoutes());
   app.route("/", createProjectsRoutes());
   app.route("/", createWaitsRoutes());
