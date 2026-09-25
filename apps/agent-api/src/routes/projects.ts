@@ -4,7 +4,7 @@ import { z } from "zod";
 import { log } from "../log";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
-import { isTaskDOFixture } from "../TaskDO/stub";
+import { getTaskDO, isTaskDOFixture } from "../TaskDO/stub";
 import { createModel } from "../agents/model";
 import { suggestProjectIcons } from "../agents/icon-suggest";
 
@@ -44,16 +44,15 @@ export const createProjectsRoutes = (
   const suggestIcons = deps.suggestIcons ?? defaultSuggestIcons;
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
   router.use("/api/projects", async (c, next) => {
-    if (isTaskDOFixture(c.env, c.get("userId"))) {
-      return c.req.method === "GET"
-        ? c.json({ projects: [] }, 200)
-        : c.json({ error: "Projects are not supported for this fixture" }, 409);
+    if (isTaskDOFixture(c.env, c.get("userId")) && !["GET", "POST"].includes(c.req.method)) {
+      return c.json({ error: "not supported for TaskDO fixture" }, 409);
     }
     await next();
   });
   router.use("/api/projects/*", async (c, next) => {
-    if (isTaskDOFixture(c.env, c.get("userId"))) {
-      return c.json({ error: "Projects are not supported for this fixture" }, 409);
+    if (isTaskDOFixture(c.env, c.get("userId")) && c.req.path !== "/api/projects" &&
+      !(c.req.method === "DELETE" && /^\/api\/projects\/[^/]+$/.test(c.req.path))) {
+      return c.json({ error: "not supported for TaskDO fixture" }, 409);
     }
     await next();
   });
@@ -77,8 +76,9 @@ export const createProjectsRoutes = (
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const userDO = getUserDO(c.env, userId);
-    const projects = await userDO.listProjects();
+    const projects = isTaskDOFixture(c.env, userId)
+      ? await getTaskDO(c.env, userId).listProjects()
+      : await getUserDO(c.env, userId).listProjects();
     return c.json({ projects }, 200);
   });
 
@@ -119,6 +119,10 @@ export const createProjectsRoutes = (
         },
         description: "Empty title, non-UUID id, or an unknown state",
       },
+      409: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "The Project id was deleted",
+      },
     },
   });
 
@@ -129,13 +133,10 @@ export const createProjectsRoutes = (
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
-    const userDO = getUserDO(c.env, userId);
-    const project = await userDO.addProject(id, title, {
-      icon,
-      description,
-      state,
-      sourceCaptureId,
-    });
+    const project = isTaskDOFixture(c.env, userId)
+      ? await getTaskDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId })
+      : await getUserDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId });
+    if (!project) return c.json({ error: "project was deleted" }, 409);
     log("project_added", { clerk_user_id: userId });
     return c.json({ project }, 201);
   });
@@ -300,8 +301,9 @@ export const createProjectsRoutes = (
   router.openapi(deleteRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const userDO = getUserDO(c.env, userId);
-    const { tasks, conditions, afters } = await userDO.deleteProject(id);
+    const { tasks, conditions, afters } = isTaskDOFixture(c.env, userId)
+      ? await getTaskDO(c.env, userId).deleteProject(id)
+      : await getUserDO(c.env, userId).deleteProject(id);
     log("project_deleted", {
       clerk_user_id: userId,
       tasks,

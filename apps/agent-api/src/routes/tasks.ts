@@ -112,6 +112,10 @@ export const createTasksRoutes = () => {
         },
         description: "Empty text, non-UUID id, or malformed showUpDate",
       },
+      409: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "The referenced Project is missing or deleted",
+      },
     },
   });
 
@@ -123,10 +127,11 @@ export const createTasksRoutes = () => {
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
     if (isTaskDOFixture(c.env, userId)) {
-      if (projectId != null || sourceCaptureId != null || recurrence != null) {
-        return c.json({ error: "only loose Tasks are supported for this fixture" }, 400);
+      if (sourceCaptureId != null || recurrence != null) {
+        return c.json({ error: "recurrence and capture provenance are not supported for this fixture" }, 400);
       }
-      const task = await getTaskDO(c.env, userId).addTask(id, text, showUpDate ?? null);
+      const task = await getTaskDO(c.env, userId).addTask(id, text, showUpDate ?? null, projectId ?? null);
+      if (!task) return c.json({ error: "project not found" }, 409);
       return c.json({ task }, 201);
     }
     const userDO = getUserDO(c.env, userId);

@@ -25,7 +25,7 @@ const req = async (account: string, path: string, method = 'GET', body?: object)
     headers: { Authorization: `Bearer ${account}`, 'Content-Type': 'application/json' },
     body: body && JSON.stringify(body),
   });
-  return { status: res.status, data: await res.json() as Record<string, any> };
+  return { status: res.status, data: res.status === 204 ? {} : await res.json() as Record<string, any> };
 };
 async function device(account: string, file: string) {
   const db = new DatabaseSync(file);
@@ -79,10 +79,42 @@ try {
   const retry = await req(user, '/api/tasks', 'POST', { id: retryId, text: 'idempotent REST' });
   assert.equal(retry.data.task.id, first.data.task.id);
   await until(() => b!.store.getCell('tasks', retryId, 'text') === 'idempotent REST', 'REST -> second client');
-  assert.equal((await req(user, '/api/tasks', 'POST', { id: crypto.randomUUID(), text: 'invalid', projectId: crypto.randomUUID() })).status, 400);
+  assert.equal((await req(user, '/api/tasks', 'POST', { id: crypto.randomUUID(), text: 'invalid', projectId: crypto.randomUUID() })).status, 409);
   assert.deepEqual((await req(user, '/api/projects')).data.projects, []);
-  assert.equal((await req(user, '/api/projects', 'POST', { id: crypto.randomUUID(), title: 'unsupported' })).status, 409);
+  const projectId = crypto.randomUUID();
+  const createdProject = await req(user, '/api/projects', 'POST', { id: projectId, title: 'Proof Project' });
+  assert.equal(createdProject.status, 201, JSON.stringify(createdProject.data));
+  const linkedId = crypto.randomUUID();
+  const linked = await req(user, '/api/tasks', 'POST', { id: linkedId, text: 'Project Task', projectId });
+  assert.equal(linked.status, 201, JSON.stringify(linked.data));
+  await until(() => b!.store.getCell('tasks', linkedId, 'projectId') === projectId, 'linked Task sync');
   assert.equal((await req(user, `/api/tasks/${id}/complete`, 'POST')).status, 409);
+  await a.close(); a = undefined;
+  a = await device(user, join(tmp, 'a.db'));
+  assert.equal(a.store.getCell('projects', projectId, 'title'), 'Proof Project');
+  assert.equal((await req(user, `/api/projects/${projectId}`, 'DELETE')).status, 204);
+  await until(() => !b!.store.hasRow('tasks', linkedId), 'Project delete cascades linked Task');
+  const lateId = crypto.randomUUID();
+  a.store.setRow('tasks', lateId, { text: 'offline after deletion', createdAt: new Date().toISOString(), projectId });
+  await a.connect();
+  await until(async () => (await req(user, '/api/task-recoveries')).data.tasks?.some((item: any) => item.taskId === lateId), 'late Task recovery');
+  const missingId = crypto.randomUUID();
+  const missingProjectId = crypto.randomUUID();
+  b.store.setRow('tasks', missingId, {
+    text: 'recover malformed link', createdAt: new Date().toISOString(), projectId: missingProjectId,
+  });
+  await until(async () => (await req(user, '/api/task-recoveries')).data.tasks?.length === 2, 'missing Project recovery');
+  const recoveries = await req(user, '/api/task-recoveries');
+  assert.deepEqual(recoveries.data.tasks.sort((x: any, y: any) => x.taskId.localeCompare(y.taskId)), [
+    { taskId: lateId, projectId, reason: 'deleted-project' },
+    { taskId: missingId, projectId: missingProjectId, reason: 'missing-project' },
+  ].sort((x, y) => x.taskId.localeCompare(y.taskId)));
+  assert.equal((await req(user, '/api/tasks')).data.tasks?.find((task: any) => task.id === lateId)?.projectId, null);
+  assert.equal((await req(user, '/api/tasks')).data.tasks?.find((task: any) => task.id === missingId)?.projectId, null);
+  assert.equal(a.store.getCell('tasks', lateId, 'projectId'), projectId, 'offline intent retained');
+  assert.equal((await req(user, `/api/projects/${projectId}`, 'DELETE')).status, 204);
+  assert.equal((await req(user, '/api/tasks')).data.tasks?.some((task: any) => task.id === lateId), true,
+    'retrying Project delete cannot erase the recovered late Task');
   assert.equal((await fetch(`${base}/api/task-sync`, { headers: { Authorization: 'Bearer e2e-test-user' } })).status, 404);
   await a.close(); a = undefined;
   const erased = await req(user, '/api/user-data', 'DELETE');
@@ -95,7 +127,7 @@ try {
     await assert.rejects(stale.connect(), /410/);
   } finally { await stale.close(); }
   assert.deepEqual((await req(user, '/api/tasks')).data.tasks, [], 'reconnecting stale client cannot restore Tasks');
-  console.log('PASS: TaskDO REST, TinyBase WebSocket sync, SQLite restart, account isolation, fixture gates, and deletion lock');
+  console.log('PASS: TaskDO REST, WebSocket sync, Project tombstone/late-child recovery, SQLite restart, account isolation, and deletion lock');
 } finally {
   await a?.close(); await b?.close(); await isolated?.close();
   rmSync(tmp, { recursive: true, force: true });

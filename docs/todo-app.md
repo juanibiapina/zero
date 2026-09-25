@@ -164,6 +164,14 @@ committed.
 
 ## Project tracking
 
+In progress (fixture only): The `TaskDO` test-account backend now handles Project
+creation/deletion and linked Tasks. A real-Worker proof retains late offline
+children as loose work with a recovery report after Project deletion. The phone
+still supports loose Tasks only in this fixture. The complete model, phone
+recovery view, offline restart, and one-account migration remain gated by
+[the replica plan](plans/todo-local-replica-sync.md); real accounts still use
+`UserDO`.
+
 Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.
 
 Implemented (2026-09-24): **Reorder tasks on a web project page.** The project's

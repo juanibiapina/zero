@@ -9,20 +9,24 @@ There are two layers: the **server** (authoritative) and the **client** (an
 offline cache). The server owns the data; the client cache is disposable and
 re-syncs from the server whenever it is missing or reset.
 
-## Hermetic loose-Task fixture (not live account storage)
+## Hermetic TaskDO fixture (not live account storage)
 
 In `ENVIRONMENT=test`, accounts named `taskdo-proof-*` use a separate per-account
 `TaskDO`, resolved by `TASK_DO.idFromName(clerkUserId)`. Its TinyBase mergeable
 store persists to the Durable Object's SQLite storage; the signed-in mobile Home
 fixture persists a separate account-named Expo SQLite replica and synchronizes it
-through an authenticated WebSocket. Loose Task create and text edit are supported
-through both this replica and the existing Task REST routes. Unsupported REST
-writes fail closed; direct TinyBase sync does not yet enforce relationships or
-reject unsupported cells. Normal accounts, web, and all other mobile views
-still use the storage path below. This fixture is not a handoff, complete
-model, or migration. The fixture retains one deletion marker after erasing
-Tasks to reject stale replicas on reconnect; a real-account erasure and
-re-enrollment design is still required before cutover.
+through an authenticated WebSocket. The phone still supports **loose Task create
+and text edit only**. Fixture REST can also create/list/delete Projects and create
+linked Tasks; Project deletion tombstones the Project and removes its known Tasks.
+A late offline child or arbitrary missing-Project reference remains in the raw
+replica but appears as loose work in Task REST, with the original relationship
+listed at `/api/task-recoveries`. The phone does not yet display this recovery
+reason or offer full Project actions. Unsupported REST writes fail closed; direct
+TinyBase sync still accepts arbitrary cells and the full relationship/recurrence
+model is unproved. Normal accounts, web, and all other mobile views still use the
+storage path below. This fixture is not a handoff or migration. The fixture
+retains a deletion marker after erasing data to reject stale replicas on
+reconnect; real-account erasure and re-enrollment are still unproved.
 
 ## Server layer (authoritative)
 

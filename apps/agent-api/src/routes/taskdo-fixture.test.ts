@@ -2,27 +2,33 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 
 import type { Task } from "../store/tasks";
+import type { Project } from "../store/projects";
 import type { Env } from "../types";
 import { createTasksRoutes } from "./tasks";
 import { createProjectsRoutes } from "./projects";
 import { createWaitsRoutes } from "./waits";
+import { createTaskSyncRoutes } from "./task-sync";
 
 const TASK_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 
 const build = (environment: string, userId: string) => {
   const tasks = new Map<string, Task>();
+  const projects = new Map<string, Project>();
   const calls: string[] = [];
   const taskDO = {
+    isErased: () => false,
+    listRecoveries: () => [],
     listTasks: () => [...tasks.values()],
-    addTask: (id: string, text: string, showUpDate: string | null) => {
+    addTask: (id: string, text: string, showUpDate: string | null, projectId: string | null = null) => {
       calls.push("taskdo:add");
       const existing = tasks.get(id);
       if (existing) return existing;
+      if (projectId && !projects.has(projectId)) return null;
       const task: Task = {
         id, text, showUpDate, createdAt: "2026-09-25T00:00:00.000Z",
         completedAt: null, recurrence: null, recurrenceDate: null,
-        projectId: null, sourceCaptureId: null, sortKey: null,
+        projectId, sourceCaptureId: null, sortKey: null,
       };
       tasks.set(id, task);
       return task;
@@ -33,6 +39,27 @@ const build = (environment: string, userId: string) => {
       if (!task) return null;
       task.text = text;
       return task;
+    },
+    listProjects: () => { calls.push("taskdo:projects"); return [...projects.values()]; },
+    addProject: (id: string, title: string) => {
+      calls.push("taskdo:project-add");
+      const existing = projects.get(id);
+      if (existing) return existing;
+      const project: Project = {
+        id, title, icon: "📁", description: null, state: "in-play",
+        createdAt: "2026-09-25T00:00:00.000Z", sourceCaptureId: null,
+      };
+      projects.set(id, project);
+      return project;
+    },
+    deleteProject: (id: string) => {
+      calls.push("taskdo:project-delete");
+      projects.delete(id);
+      let count = 0;
+      for (const task of tasks.values()) {
+        if (task.projectId === id) { tasks.delete(task.id); count++; }
+      }
+      return { tasks: count, conditions: 0, afters: 0 };
     },
   };
   const userDO = {
@@ -49,6 +76,7 @@ const build = (environment: string, userId: string) => {
   app.route("/", createTasksRoutes());
   app.route("/", createProjectsRoutes());
   app.route("/", createWaitsRoutes());
+  app.route("/", createTaskSyncRoutes());
   return {
     calls,
     request: (path: string, method = "GET", body?: object) => app.fetch(new Request(`http://localhost${path}`, {
@@ -73,20 +101,35 @@ describe("TaskDO fixture routes", () => {
     expect(app.calls).toEqual(["taskdo:add", "taskdo:edit"]);
   });
 
-  it("rejects every linked or unsupported write before touching UserDO", async () => {
+  it("creates a linked Task through TaskDO and deletes it with its Project", async () => {
     const app = build("test", "taskdo-proof-a");
-    expect((await app.request("/api/tasks", "POST", { id: TASK_ID, text: "linked", projectId: PROJECT_ID })).status).toBe(400);
+    expect((await app.request("/api/tasks", "POST", { id: TASK_ID, text: "linked", projectId: PROJECT_ID })).status).toBe(409);
+    expect((await app.request("/api/projects", "POST", { id: PROJECT_ID, title: "Project" })).status).toBe(201);
+    expect((await app.request("/api/tasks", "POST", { id: TASK_ID, text: "linked", projectId: PROJECT_ID })).status).toBe(201);
+    expect(await (await app.request("/api/projects")).json()).toMatchObject({ projects: [{ id: PROJECT_ID }] });
+    expect(await (await app.request("/api/tasks")).json()).toMatchObject({ tasks: [{ projectId: PROJECT_ID }] });
+    expect((await app.request(`/api/projects/${PROJECT_ID}`, "DELETE")).status).toBe(204);
+    expect(await (await app.request("/api/tasks")).json()).toEqual({ tasks: [] });
+    expect(app.calls).toEqual([
+      "taskdo:add", "taskdo:project-add", "taskdo:add", "taskdo:projects",
+      "taskdo:project-delete",
+    ]);
+  });
+
+  it("rejects unsupported fixture mutations before they can reach UserDO", async () => {
+    const app = build("test", "taskdo-proof-a");
     expect((await app.request(`/api/tasks/${TASK_ID}/complete`, "POST")).status).toBe(409);
-    expect((await app.request("/api/projects", "POST", { id: PROJECT_ID, title: "No" })).status).toBe(409);
+    expect((await app.request(`/api/projects/${PROJECT_ID}`, "PATCH", { state: "done" })).status).toBe(409);
     expect((await app.request("/api/waits", "POST", { id: TASK_ID, projectId: PROJECT_ID, kind: "free-text", text: "No" })).status).toBe(409);
-    expect(await (await app.request("/api/projects")).json()).toEqual({ projects: [] });
     expect(await (await app.request("/api/waits")).json()).toEqual({ conditions: [] });
+    expect(await (await app.request("/api/task-recoveries")).json()).toEqual({ tasks: [] });
     expect(app.calls).toEqual([]);
   });
 
   it("does not use TaskDO outside the test environment", async () => {
     const app = build("production", "taskdo-proof-a");
     expect((await app.request("/api/tasks")).status).toBe(200);
+    expect((await app.request("/api/task-recoveries")).status).toBe(404);
     expect(app.calls).toEqual(["user:list"]);
   });
 });
