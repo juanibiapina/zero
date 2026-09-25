@@ -24,7 +24,7 @@ export async function openTaskDOReplica(
   const persister = createExpoSqlitePersister(store, db, 'taskdo_local');
   await persister.startAutoPersisting();
   const snapshot = () => onSnapshot(projectFixture(store));
-  const listeners = ['tasks', 'task-edits', 'projects', 'conditions'].map((table) => store.addTableListener(table, snapshot));
+  const listeners = ['tasks', 'projects', 'conditions'].map((table) => store.addTableListener(table, snapshot));
   snapshot();
 
   let stopped = false;

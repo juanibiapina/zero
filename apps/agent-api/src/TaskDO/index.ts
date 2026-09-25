@@ -10,7 +10,6 @@ import type { AddProjectAfterResult } from "../store/project-afters";
 import type { WaitingCondition } from "../store/waiting-conditions";
 import type { Env } from "../types";
 import { projectConditions, reaches } from "./conditions";
-import { projectTaskText } from "./text-revisions";
 
 function parseRecurrence(raw: unknown): Recurrence | null {
   if (typeof raw !== "string") return null;
@@ -141,9 +140,6 @@ export class TaskDO extends WsServerDurableObject<Env> {
       for (const [taskId, row] of Object.entries(this.tasksStore.getTable("tasks"))) {
         if (row.projectId === id) {
           this.tasksStore.delRow("tasks", taskId);
-          for (const [editId, edit] of Object.entries(this.tasksStore.getTable("task-edits"))) {
-            if (edit.taskId === taskId) this.tasksStore.delRow("task-edits", editId);
-          }
           tasks++;
         }
       }
@@ -242,7 +238,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
     if (typeof row.text !== "string" || typeof row.createdAt !== "string") return null;
     return {
       id,
-      text: projectTaskText(this.tasksStore, id, row.text).text,
+      text: row.text,
       createdAt: row.createdAt,
       showUpDate: typeof row.showUpDate === "string" ? row.showUpDate : null,
       completedAt: typeof row.completedAt === "string" ? row.completedAt : null,
@@ -269,10 +265,9 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   listRecoveries(): Array<{ taskId: string; projectId: string | null;
-    reason: "missing-project" | "deleted-project" | "invalid-task" | "invalid-recurrence" |
-      "concurrent-edit" | "orphaned-edit"; editId?: string; text?: string }> {
+    reason: "missing-project" | "deleted-project" | "invalid-task" | "invalid-recurrence" }> {
     if (this.purging) return [];
-    const recoveries = Object.entries(this.tasksStore.getTable("tasks")).flatMap(([taskId, row]) => {
+    return Object.entries(this.tasksStore.getTable("tasks")).flatMap(([taskId, row]) => {
       const projectId = typeof row.projectId === "string" ? row.projectId : null;
       const issues: ReturnType<TaskDO["listRecoveries"]> = [];
       if (typeof row.text !== "string" || typeof row.createdAt !== "string") {
@@ -285,20 +280,8 @@ export class TaskDO extends WsServerDurableObject<Env> {
         const rawProject = this.tasksStore.getRow("projects", projectId);
         issues.push({ taskId, projectId, reason: rawProject.deletedAt ? "deleted-project" : "missing-project" });
       }
-      if (typeof row.text === "string") {
-        for (const edit of projectTaskText(this.tasksStore, taskId, row.text).conflicts) {
-          issues.push({ taskId, projectId, reason: edit.reason, editId: edit.editId, text: edit.text });
-        }
-      }
       return issues;
     });
-    for (const [editId, row] of Object.entries(this.tasksStore.getTable("task-edits"))) {
-      const taskId = typeof row.taskId === "string" ? row.taskId : "";
-      if (!taskId || this.tasksStore.hasRow("tasks", taskId)) continue;
-      recoveries.push({ taskId, projectId: null, reason: "orphaned-edit", editId,
-        text: typeof row.text === "string" ? row.text : editId });
-    }
-    return recoveries;
   }
 
   async addTask(id: string, text: string, showUpDate: string | null, projectId: string | null = null,
@@ -329,8 +312,11 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async editTask(id: string, text: string): Promise<Task | null> {
-    const result = await this.patchTask(id, { text });
-    return result === "missing-project" ? null : result;
+    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (!this.task(id)) return null;
+    this.tasksStore.setCell("tasks", id, "text", text);
+    await this.persister.save();
+    return this.task(id);
   }
 
   async patchTask(id: string, fields: { text?: string; showUpDate?: string | null;
@@ -340,12 +326,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
     if (fields.projectId && !this.project(fields.projectId)) return "missing-project";
     this.tasksStore.transaction(() => {
       for (const [key, value] of Object.entries(fields)) {
-        if (key === "text") {
-          const current = projectTaskText(this.tasksStore, id, this.tasksStore.getCell("tasks", id, "text") as string);
-          if (current.text !== value) this.tasksStore.setRow("task-edits", crypto.randomUUID(), {
-            taskId: id, baseRevision: current.revision, text: value!,
-          });
-        } else if (value === null) this.tasksStore.delCell("tasks", id, key);
+        if (value === null) this.tasksStore.delCell("tasks", id, key);
         else this.tasksStore.setCell("tasks", id, key, value);
       }
     });

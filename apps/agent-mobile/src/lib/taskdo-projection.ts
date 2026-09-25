@@ -5,29 +5,6 @@ import type { MergeableStore } from 'tinybase';
 export type Recovery = { table: 'tasks' | 'projects' | 'conditions'; id: string; text: string; reason: string };
 export type FixtureSnapshot = { tasks: Task[]; projects: Project[]; conditions: ProjectAttention[]; recoveries: Recovery[] };
 
-export function projectText(store: MergeableStore, taskId: string, original: string) {
-  const all = Object.entries(store.getTable('task-edits')).filter(([, row]) => row.taskId === taskId);
-  const edits = all.filter(([, row]) => typeof row.baseRevision === 'string' && typeof row.text === 'string');
-  let revision = 'original';
-  let text = original;
-  const path = new Set<string>();
-  while (true) {
-    const children = edits.filter(([, row]) => row.baseRevision === revision)
-      .sort(([a], [b]) => a.localeCompare(b));
-    const next = children.at(-1);
-    if (!next || path.has(next[0])) break;
-    path.add(next[0]);
-    revision = next[0];
-    text = next[1].text as string;
-  }
-  const allIds = new Set(edits.map(([id]) => id));
-  return { text, revision, conflicts: all.filter(([id]) => !path.has(id)).map(([id, row]) => ({
-    table: 'tasks' as const, id: taskId, text: typeof row.text === 'string' ? row.text : id,
-    reason: `Edit ${id}: ${row.baseRevision === 'original' || allIds.has(String(row.baseRevision))
-      ? 'Concurrent edit' : 'Orphaned edit'}`,
-  })) };
-}
-
 export function projectFixture(store: MergeableStore): FixtureSnapshot {
   const recoveries: Recovery[] = [];
   const projectsById = new Map<string, Project>();
@@ -54,8 +31,6 @@ export function projectFixture(store: MergeableStore): FixtureSnapshot {
       recoveries.push({ table: 'tasks', id, text: typeof row.text === 'string' ? row.text : id, reason: 'Invalid Task' });
       continue;
     }
-    const acceptedText = projectText(store, id, row.text);
-    recoveries.push(...acceptedText.conflicts);
     let recurrence: Task['recurrence'] = null;
     if (row.recurrence !== undefined) {
       try {
@@ -64,18 +39,12 @@ export function projectFixture(store: MergeableStore): FixtureSnapshot {
       } catch { /* Recovery report below retains the raw value. */ }
       if (!recurrence) recoveries.push({ table: 'tasks', id, text: row.text, reason: 'Invalid recurrence' });
     }
-    if (!row.completedAt) tasks.push({ id, text: acceptedText.text, createdAt: row.createdAt,
+    if (!row.completedAt) tasks.push({ id, text: row.text, createdAt: row.createdAt,
       completedAt: null, showUpDate: typeof row.showUpDate === 'string' ? row.showUpDate : null,
       recurrence, recurrenceDate: typeof row.recurrenceDate === 'string' ? row.recurrenceDate : null,
       projectId: rawProjectId && projectsById.has(rawProjectId) ? rawProjectId : null,
       sourceCaptureId: typeof row.sourceCaptureId === 'string' ? row.sourceCaptureId : null,
       sortKey: typeof row.sortKey === 'string' ? row.sortKey : null });
-  }
-  for (const [id, row] of Object.entries(store.getTable('task-edits'))) {
-    if (typeof row.taskId === 'string' && !store.hasRow('tasks', row.taskId)) {
-      recoveries.push({ table: 'tasks', id: row.taskId,
-        text: typeof row.text === 'string' ? row.text : id, reason: `Orphaned edit ${id}` });
-    }
   }
   const conditions: ProjectAttention[] = [];
   const edges: { source: string; target: string }[] = [];

@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MergeableStore } from 'tinybase';
 
 import { openTaskDOReplica } from './taskdo-replica';
-import { projectFixture, projectText, type FixtureSnapshot } from './taskdo-projection';
+import { projectFixture, type FixtureSnapshot } from './taskdo-projection';
 
 type Replica = Awaited<ReturnType<typeof openTaskDOReplica>>;
 type FixtureApis = { api: TasksApi; projectsApi: ProjectsApi; waitsApi: WaitsApi };
@@ -115,16 +115,8 @@ export function useTaskDOFixtureTasks(): {
               projectFixture(store).recoveries.some((issue) => issue.table === 'tasks' && issue.id === id &&
                 issue.reason === 'Invalid recurrence')) throw new Error('Recover the invalid recurrence before completing this Task');
             if ('projectId' in mutation.changes) requireProject(store, mutation.modified.projectId);
-            if ('text' in mutation.changes) {
-              const original = store.getCell('tasks', id, 'text');
-              if (typeof original !== 'string') throw new Error('Task text needs recovery');
-              const base = projectText(store, id, original);
-              if (base.text !== mutation.modified.text) store.setRow('task-edits', safeRandomUUID(), {
-                taskId: id, baseRevision: base.revision, text: mutation.modified.text,
-              });
-            }
             for (const key of Object.keys(mutation.changes) as (keyof Task)[]) {
-              if (key === 'id' || key === 'createdAt' || key === 'text') continue;
+              if (key === 'id' || key === 'createdAt') continue;
               const value = mutation.modified[key];
               if (key === 'recurrence') put(store, 'tasks', id, key, value ? JSON.stringify(value) : null);
               else put(store, 'tasks', id, key, value as string | null | undefined);
@@ -173,12 +165,7 @@ export function useTaskDOFixtureTasks(): {
           requireProject(store, id);
           put(store, 'projects', id, 'deletedAt', new Date().toISOString());
           for (const [taskId, row] of Object.entries(store.getTable('tasks'))) {
-            if (row.projectId === id) {
-              store.delRow('tasks', taskId);
-              for (const [editId, edit] of Object.entries(store.getTable('task-edits'))) {
-                if (edit.taskId === taskId) store.delRow('task-edits', editId);
-              }
-            }
+            if (row.projectId === id) store.delRow('tasks', taskId);
           }
           for (const [conditionId, row] of Object.entries(store.getTable('conditions'))) {
             if (row.projectId === id || row.refId === id) store.delRow('conditions', conditionId);

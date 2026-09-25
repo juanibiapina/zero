@@ -30,12 +30,10 @@ with retry-safe occurrence cursors. Invalid synced recurrence stays in the raw
 replica, appears in the recovery report, and blocks occurrence completion. The
 fixture Home lists recovery IDs, work text, and reasons but does not yet offer
 repair actions. A real-Worker restart/fresh-WebSocket proof retains terminal,
-recurring, resolved, and recoverable rows. Direct TinyBase sync still accepts
-arbitrary cells. Official fixture Task text edits now append unique revision
-rows; a real-Worker two-client proof retained both conflicting offline edits
-and listed the losing text for recovery. Other same-cell edits remain last-writer-
-wins and can lose offline intent. The complete phone relationship model is not
-yet verified.
+recurring, resolved, and recoverable rows. Concurrent same-field edits use
+TinyBase last-writer-wins by decision; a losing value is not retained. Direct
+TinyBase sync still accepts arbitrary cells; the complete phone relationship
+model is not yet verified.
 Normal accounts and web still use the storage path below. This fixture is not
 a handoff or migration. The fixture
 retains a deletion marker after erasing data to reject stale replicas on
