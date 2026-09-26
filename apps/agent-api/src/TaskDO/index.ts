@@ -15,7 +15,7 @@ import {
   type TodoSnapshot,
   type TodoSnapshotCounts,
 } from "../todo-authority";
-import { todoSnapshotTables } from "./import";
+import { snapshotImportedTask, todoSnapshotTables } from "./import";
 
 const TODO_IMPORT_GENERATION_KEY = "todoImportGeneration";
 const TODO_IMPORT_READY_KEY = "todoImportReady";
@@ -91,7 +91,10 @@ export class TaskDO extends WsServerDurableObject<Env> {
     return {
       generation,
       tasks: Object.keys(this.tasksStore.getTable("tasks"))
-        .map((id) => this.task(id))
+        .map((id) => snapshotImportedTask(
+          this.task(id),
+          this.tasksStore.getRow("tasks", id),
+        ))
         .filter((task): task is Task => task !== null),
       projects: Object.keys(this.tasksStore.getTable("projects"))
         .map((id) => this.project(id))

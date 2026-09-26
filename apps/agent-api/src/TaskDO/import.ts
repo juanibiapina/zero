@@ -1,5 +1,6 @@
 import type { Tables } from "tinybase";
 
+import type { Task } from "../store/tasks";
 import type { TodoSnapshot } from "../todo-authority";
 
 // Imports are deliberately lossless. Referentially invalid rows are retained
@@ -43,5 +44,16 @@ export function todoSnapshotTables(snapshot: TodoSnapshot): Tables {
       ...(condition.kind === "project-status" && condition.resolvedAt &&
         projectState.get(condition.refId) === "done" ? { settledByTarget: true } : {}),
     }])),
+  };
+}
+
+export function snapshotImportedTask(task: Task | null, row: Tables[string][string]): Task | null {
+  if (!task) return null;
+  return {
+    ...task,
+    // The accepted projection treats a dangling Project as loose so the Task
+    // remains visible. Migration verification must compare the retained raw
+    // relationship instead.
+    projectId: typeof row.projectId === "string" ? row.projectId : null,
   };
 }
