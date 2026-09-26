@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import {
@@ -7,16 +7,15 @@ import {
   messageOf,
   upcomingSections,
   type ProjectsApi,
+  type Task,
+  type TasksApi,
   type WaitsApi,
 } from "@zero/agent-core";
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
-import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
-import { getProjectsApi } from "@/lib/projects-collection";
-import { getWaitsApi } from "@/lib/waits-collection";
+import { useTodoData } from "@/lib/todo-data";
 import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
 import { useForegroundRefetch } from "@/lib/screen-hooks";
-import { type Task } from "@/lib/tasks";
 
 // Upcoming lists tasks scheduled for a future day, grouped into day sections.
 // The complement of Home: what has shown up stays there, what is still ahead
@@ -36,23 +35,7 @@ export function UpcomingPage() {
 }
 
 function UpcomingPanel() {
-  const [api, setApi] = useState<TasksApi | null>(null);
-  const [projectsApi, setProjectsApi] = useState<ProjectsApi | null>(null);
-  const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
-  useEffect(() => {
-    let live = true;
-    void Promise.all([getTasksApi(), getProjectsApi(), getWaitsApi()]).then(
-      ([tasks, projects, waits]) => {
-        if (!live) return;
-        setApi(tasks);
-        setProjectsApi(projects);
-        setWaitsApi(waits);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, []);
+  const { api, projectsApi, waitsApi } = useTodoData();
   return api && projectsApi && waitsApi ? (
     <UpcomingReady api={api} projectsApi={projectsApi} waitsApi={waitsApi} />
   ) : (

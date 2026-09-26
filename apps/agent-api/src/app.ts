@@ -58,10 +58,15 @@ export const createApp = () => {
   app.use("/api/*", async (c, next) => {
     if (c.env.ENVIRONMENT === "test") {
       const bearer = c.req.header("Authorization")?.replace(/^Bearer\s+/i, "");
-      if (!bearer) {
+      const cookieUser = c.req.header("Cookie")
+        ?.split(";")
+        .map((part) => part.trim().split("="))
+        .find(([name]) => name === "zero_test_user")?.[1];
+      const userId = bearer ?? cookieUser;
+      if (!userId) {
         return c.json({ error: "Unauthorized" }, 401);
       }
-      c.set("userId", bearer);
+      c.set("userId", decodeURIComponent(userId));
       return next();
     }
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Hono context type mismatch with Clerk's expected Context type

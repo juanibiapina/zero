@@ -50,38 +50,28 @@ import {
   undoableAction,
   type ProjectDisplayStatus,
   type ProjectEditFields,
+  type Project,
+  type ProjectsApi,
   type ProjectState,
+  type Task,
+  type TasksApi,
+  type WaitsApi,
   type WaitingCondition,
 } from "@zero/agent-core";
 import {
   requestIconSuggestions,
   useIconSuggestions,
 } from "@/lib/icon-suggestions";
-import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
-import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
-import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
+import { useTodoData } from "@/lib/todo-data";
 import { useForegroundRefetch } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
-import { type Project } from "@/lib/projects";
-import { type Task } from "@/lib/tasks";
 
 // A project opens its OWN screen (route /projects/:id), not a bottom sheet: it
 // is a place you work, not a transient sheet. Identity, description, dominant
 // status, manual Waiting, After relationships, and Tasks are sibling regions in
 // that order. See docs/plans/todo-project-waiting-after.md.
 export function ProjectDetailPage() {
-  const [api, setApi] = useState<ProjectsApi | null>(null);
-  const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
-  const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
-  useEffect(() => {
-    let live = true;
-    void getProjectsApi().then((a) => live && setApi(a));
-    void getTasksApi().then((a) => live && setTasksApi(a));
-    void getWaitsApi().then((a) => live && setWaitsApi(a));
-    return () => {
-      live = false;
-    };
-  }, []);
+  const { projectsApi: api, api: tasksApi, waitsApi } = useTodoData();
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">

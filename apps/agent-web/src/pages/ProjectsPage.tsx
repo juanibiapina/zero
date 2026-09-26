@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
@@ -13,15 +13,16 @@ import {
   listView,
   PROJECT_DISPLAY_STATUS_LABELS,
   projectStatusContext,
+  type Project,
+  type ProjectsApi,
   type ProjectDisplayStatus,
+  type TasksApi,
+  type WaitsApi,
 } from "@zero/agent-core";
-import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
-import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
-import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
+import { useTodoData } from "@/lib/todo-data";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
 import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
-import { type Project } from "@/lib/projects";
 
 // Projects is a status-grouped list of outcome-oriented containers. The add
 // field creates a Project by name; tapping a row navigates to that project's own
@@ -43,18 +44,7 @@ export function ProjectsPage() {
 }
 
 function ProjectsPanel() {
-  const [api, setApi] = useState<ProjectsApi | null>(null);
-  const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
-  const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
-  useEffect(() => {
-    let live = true;
-    void getProjectsApi().then((a) => live && setApi(a));
-    void getTasksApi().then((a) => live && setTasksApi(a));
-    void getWaitsApi().then((a) => live && setWaitsApi(a));
-    return () => {
-      live = false;
-    };
-  }, []);
+  const { projectsApi: api, api: tasksApi, waitsApi } = useTodoData();
   return api && tasksApi && waitsApi ? (
     <ProjectsReady api={api} tasksApi={tasksApi} waitsApi={waitsApi} />
   ) : (

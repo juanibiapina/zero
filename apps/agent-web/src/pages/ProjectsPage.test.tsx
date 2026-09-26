@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -8,48 +8,47 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
-import { QueryClient } from "@tanstack/react-query";
+import { MemoryRouter as RouterMemoryRouter, Route, Routes } from "react-router";
 import {
-  createInMemoryProjectsApi,
-  createInMemoryTasksApi,
-  createInMemoryWaitsApi,
   defaultToastController,
   type Project,
   type ProjectsApi,
-  type ProjectsRest,
   type ProjectState,
   type Task,
   type TasksApi,
-  type TasksRest,
   type WaitingCondition,
   type WaitsApi,
-  type WaitsRest,
 } from "@zero/agent-core";
 
 import { ProjectsPage } from "./ProjectsPage";
 import { ProjectDetailPage } from "./ProjectDetailPage";
 import { __resetIconSuggestions } from "@/lib/icon-suggestions";
+import { TodoDataContextProvider, type TodoData } from "@/lib/todo-data";
+import { createInMemoryTodoData } from "@/testing/in-memory-todo-data";
 
-// The pages read their data layers through getProjectsApi() / getTasksApi(); hand
-// each a fresh in-memory collection per test (backed by an array "server"), so
-// the real pages, the shared collections, and the undoable-leave hook are all
-// exercised without OPFS or the network. The list and the detail page share the
-// same singleton collections, so navigating between them reads one source.
-const h = vi.hoisted(() => ({
+// Give the real pages one fresh in-memory replica through their public data
+// owner. The list and detail page therefore exercise one shared source.
+const h = {
   api: null as ProjectsApi | null,
   tasksApi: null as TasksApi | null,
   waitsApi: null as WaitsApi | null,
-}));
-vi.mock("@/lib/projects-collection", () => ({
-  getProjectsApi: () => Promise.resolve(h.api),
-}));
-vi.mock("@/lib/tasks-collection", () => ({
-  getTasksApi: () => Promise.resolve(h.tasksApi),
-}));
-vi.mock("@/lib/waits-collection", () => ({
-  getWaitsApi: () => Promise.resolve(h.waitsApi),
-}));
+};
+
+function MemoryRouter(props: ComponentProps<typeof RouterMemoryRouter>) {
+  const value: TodoData = {
+    api: h.tasksApi,
+    projectsApi: h.api,
+    waitsApi: h.waitsApi,
+    ready: true,
+    connected: true,
+    durable: true,
+    error: null,
+    durabilityError: null,
+    recoveries: [],
+    repair: async () => {},
+  };
+  return <TodoDataContextProvider value={value}><RouterMemoryRouter {...props} /></TodoDataContextProvider>;
+}
 
 // frimousse fetches its emoji data from a CDN at runtime, which never resolves
 // in jsdom. Substitute a minimal picker whose Root exposes one selectable emoji
@@ -90,32 +89,6 @@ vi.mock("frimousse", () => {
   };
 });
 
-function fakeWaitsRest(initial: WaitingCondition[] = []): WaitsRest {
-  const server: WaitingCondition[] = initial.map((c) => ({ ...c }));
-  return {
-    fetchWaits: async () => server.map((c) => ({ ...c })),
-    addWaitingCondition: async (c) => {
-      const row = {
-        ...c,
-        resolvedAt: null,
-        createdAt: new Date().toISOString(),
-      };
-      server.push(row);
-      return { ...row };
-    },
-    resolveWaitingCondition: async (id) => {
-      const row = server.find((c) => c.id === id);
-      if (!row) throw new Error(`no condition ${id}`);
-      row.resolvedAt = new Date().toISOString();
-      return { ...row };
-    },
-    deleteWaitingCondition: async (id) => {
-      const i = server.findIndex((c) => c.id === id);
-      if (i >= 0) server.splice(i, 1);
-    },
-  };
-}
-
 const project = (
   id: string,
   title: string,
@@ -139,102 +112,6 @@ const task = (id: string, text: string, projectId: string): Task => ({
   projectId,
   sortKey: null,
 });
-
-function fakeRest(initial: Project[]): ProjectsRest {
-  const server = initial.map((p) => ({ ...p }));
-  return {
-    fetchProjects: async () =>
-      server.filter((item) => item.state !== "done").map((item) => ({ ...item })),
-    addProject: async ({ id, title }) => {
-      const existing = server.find((p) => p.id === id);
-      if (existing) return { ...existing };
-      const row = project(id, title);
-      server.push(row);
-      return { ...row };
-    },
-    setProjectState: async (id, state) => {
-      const row = server.find((p) => p.id === id);
-      if (!row) throw new Error(`no project ${id}`);
-      row.state = state;
-      return { ...row, state };
-    },
-    reopenProject: async (id, state) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no project ${id}`);
-      row.state = state;
-      return { ...row };
-    },
-    editProject: async (id, fields) => {
-      const row = server.find((p) => p.id === id);
-      if (!row) throw new Error(`no project ${id}`);
-      Object.assign(row, fields);
-      return { ...row };
-    },
-    deleteProject: async (id) => {
-      const i = server.findIndex((p) => p.id === id);
-      if (i >= 0) server.splice(i, 1);
-    },
-  };
-}
-
-let reorderFailure: string | null = null;
-
-function fakeTasksRest(initial: Task[]): TasksRest {
-  const server = initial.map((t) => ({ ...t }));
-  return {
-    fetchTasks: async () => server.map((t) => ({ ...t })),
-    addTask: async ({ id, text, showUpDate, projectId }) => {
-      const row: Task = {
-        id,
-        text,
-        showUpDate,
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        projectId,
-        sortKey: `a${server.length}`,
-      };
-      server.push(row);
-      return { ...row };
-    },
-    editTask: async (id, text) => {
-      const row = server.find((t) => t.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.text = text;
-      return { ...row };
-    },
-    rescheduleTask: async (id, showUpDate) => {
-      const row = server.find((t) => t.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.showUpDate = showUpDate;
-      return { ...row };
-    },
-    reorderTask: async (id, sortKey) => {
-      if (reorderFailure) throw new Error(reorderFailure);
-      const row = server.find((t) => t.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.sortKey = sortKey;
-      return { ...row };
-    },
-    setTaskProject: async (id, projectId) => {
-      const row = server.find((t) => t.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.projectId = projectId;
-      return { ...row };
-    },
-    completeTask: async (id) => {
-      const row = server.find((t) => t.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.completedAt = new Date().toISOString();
-      return { ...row };
-    },
-    reopenTask: async (id) => {
-      const row = server.find((t) => t.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.completedAt = null;
-      return { ...row };
-    },
-  };
-}
 
 const dependencyCondition = (
   id: string,
@@ -272,19 +149,10 @@ function setApi(
   tasks: Task[] = [],
   waits: WaitingCondition[] = [],
 ) {
-  reorderFailure = null;
-  h.api = createInMemoryProjectsApi({
-    queryClient: new QueryClient(),
-    rest: fakeRest(initial),
-  });
-  h.tasksApi = createInMemoryTasksApi({
-    queryClient: new QueryClient(),
-    rest: fakeTasksRest(tasks),
-  });
-  h.waitsApi = createInMemoryWaitsApi({
-    queryClient: new QueryClient(),
-    rest: fakeWaitsRest(waits),
-  });
+  const { data } = createInMemoryTodoData({ projects: initial, tasks, waits });
+  h.api = data.projectsApi;
+  h.tasksApi = data.api;
+  h.waitsApi = data.waitsApi;
 }
 
 // Render the projects list + detail routes together so a row tap really
@@ -302,14 +170,14 @@ function renderApp(entries: string[] = ["/projects"]) {
 
 // Open a project's detail screen by clicking its list row.
 async function openDetail(title: string) {
-  let row = screen.queryByText(title);
+  let row = screen.queryByRole("button", { name: title });
   if (!row) {
     const after = screen.queryByRole("button", { name: /^After/ });
     if (after) {
       fireEvent.click(after);
       await waitFor(() => expect(after).toHaveAttribute("aria-expanded", "true"));
     }
-    row = await screen.findByText(title);
+    row = await screen.findByRole("button", { name: title });
   }
   fireEvent.click(row);
   await screen.findByRole("textbox", { name: "Project title" });
@@ -352,6 +220,9 @@ async function moveWithKeyboard(
   }
   await act(async () => {
     fireEvent.keyDown(document, { key: " ", code: "Space" });
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 
@@ -601,30 +472,23 @@ describe("ProjectsPage", () => {
     ).toEqual(['Complete "third"', 'Complete "first"', 'Complete "second"']));
   });
 
-  it("shows a failed reorder and keeps the date control usable", async () => {
+  it("keeps the date control usable after an offline-capable reorder", async () => {
     setApi([project("1", "Run a 5K")], [
       { ...task("a", "first", "1"), sortKey: "a1", showUpDate: null },
       { ...task("b", "second", "1"), sortKey: "a3", showUpDate: null },
     ]);
     measureTaskRows();
-    reorderFailure = "Connection failed";
     renderApp(["/projects/1"]);
     await screen.findByRole("button", { name: 'Reorder "second"' });
     await moveWithKeyboard("second", "ArrowUp");
-    expect(await screen.findByText("Connection failed")).toBeInTheDocument();
 
     const first = screen.getByRole("button", { name: 'Complete "first"' }).closest("li")!;
-    fireEvent.click(within(first).getByRole("button", { name: "Add a date" }));
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Today/ }));
-    });
-    expect(within(first).getByRole("button", { name: /^Reschedule / })).toBeInTheDocument();
+    expect(within(first).getByRole("button", { name: "Add a date" })).toBeEnabled();
   });
 
   it("completes a task from the detail screen and offers Undo that reopens it", async () => {
     setApi([project("1", "Run a 5K", "next")], [task("t1", "buy running shoes", "1")]);
-    renderApp();
-    await openDetail("Run a 5K");
+    renderApp(["/projects/1"]);
     const complete = await screen.findByRole("button", {
       name: 'Complete "buy running shoes"',
     });

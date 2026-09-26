@@ -52,6 +52,17 @@ describe("api auth guard", () => {
     expect(body.tasks[0]?.text).toBe("e2e-test-user");
   });
 
+  it("trusts a same-origin browser cookie under ENVIRONMENT=test", async () => {
+    const { env } = fakeEnv("test");
+    const response = await request(env, {
+      headers: { Cookie: "zero_test_user=user_browser" },
+    });
+
+    expect(response.status).toBe(200);
+    const body: { tasks: { text: string }[] } = await response.json();
+    expect(body.tasks[0]?.text).toBe("user_browser");
+  });
+
   it("401s under ENVIRONMENT=test with no bearer", async () => {
     const { env } = fakeEnv("test");
     const res = await request(env);

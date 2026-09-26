@@ -9,7 +9,6 @@ import type {
   CachedIconSuggestions,
   IconSuggestionBasis,
 } from "@zero/agent-core";
-import { fetchIconSuggestions } from "./projects";
 
 const STORAGE_KEY = "zero.icon-suggestions.v1";
 
@@ -27,6 +26,16 @@ const load = (): Store => {
 let cache: Store = load();
 const subscribers = new Set<() => void>();
 const inFlight = new Set<string>();
+
+async function fetchIconSuggestions(input: IconSuggestionBasis): Promise<string[]> {
+  const res = await fetch("/api/projects/icon-suggestions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`POST /api/projects/icon-suggestions failed: ${res.status}`);
+  return ((await res.json()) as { icons: string[] }).icons;
+}
 
 const persist = () => {
   try {
