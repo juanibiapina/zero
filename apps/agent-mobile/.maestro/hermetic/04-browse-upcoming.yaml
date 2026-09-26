@@ -2,6 +2,9 @@
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp
+- extendedWaitUntil:
+    visible: "Browse"
+    timeout: 45000
 - tapOn: "Browse"
 - assertVisible: "Upcoming"
 - takeScreenshot: browse-menu

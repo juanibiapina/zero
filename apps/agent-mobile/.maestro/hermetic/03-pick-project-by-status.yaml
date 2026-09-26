@@ -5,6 +5,9 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "Home"
     timeout: 45000
+- extendedWaitUntil:
+    visible: "Projects"
+    timeout: 45000
 - tapOn: "Projects"
 - extendedWaitUntil:
     visible: "Projects"
