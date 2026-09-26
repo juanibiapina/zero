@@ -15,6 +15,7 @@ import {
   type TodoSnapshot,
   type TodoSnapshotCounts,
 } from "../todo-authority";
+import { todoSnapshotTables } from "./import";
 
 const TODO_IMPORT_GENERATION_KEY = "todoImportGeneration";
 const TODO_IMPORT_READY_KEY = "todoImportReady";
@@ -60,58 +61,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
     }
     if (ready) return this.completeCounts();
 
-    const projectIds = new Set(snapshot.projects.map((project) => project.id));
-    for (const task of snapshot.tasks) {
-      if (task.projectId && !projectIds.has(task.projectId)) {
-        throw new Error(`Task ${task.id} references a missing Project`);
-      }
-    }
-    for (const condition of snapshot.conditions) {
-      if (!projectIds.has(condition.projectId)) {
-        throw new Error(`Condition ${condition.id} references a missing source Project`);
-      }
-      if (condition.kind === "project-status" && !projectIds.has(condition.refId)) {
-        throw new Error(`Condition ${condition.id} references a missing target Project`);
-      }
-    }
-
-    const cells = (values: Record<string, string | null>) =>
-      Object.fromEntries(Object.entries(values).filter(([, value]) => value !== null)) as Record<string, string>;
-    const projectState = new Map(snapshot.projects.map((project) => [project.id, project.state]));
-    this.tasksStore.setTables({
-      tasks: Object.fromEntries(snapshot.tasks.map((task) => [task.id, cells({
-        text: task.text,
-        showUpDate: task.showUpDate,
-        recurrence: task.recurrence ? JSON.stringify(task.recurrence) : null,
-        recurrenceDate: task.recurrenceDate,
-        createdAt: task.createdAt,
-        completedAt: task.completedAt,
-        projectId: task.projectId,
-        sourceCaptureId: task.sourceCaptureId,
-        sortKey: task.sortKey,
-      })])),
-      projects: Object.fromEntries(snapshot.projects.map((project) => [project.id, cells({
-        title: project.title,
-        icon: project.icon,
-        description: project.description,
-        state: project.state,
-        createdAt: project.createdAt,
-        sourceCaptureId: project.sourceCaptureId,
-      })])),
-      conditions: Object.fromEntries(snapshot.conditions.map((condition) => [condition.id, {
-        ...cells({
-          projectId: condition.projectId,
-          kind: condition.kind,
-          text: condition.text,
-          refId: condition.refId,
-          targetStatus: condition.targetStatus,
-          resolvedAt: condition.resolvedAt,
-          createdAt: condition.createdAt,
-        }),
-        ...(condition.kind === "project-status" && condition.resolvedAt &&
-          projectState.get(condition.refId) === "done" ? { settledByTarget: true } : {}),
-      }])),
-    });
+    this.tasksStore.setTables(todoSnapshotTables(snapshot));
     await this.persister.save();
     await this.ctx.storage.put({
       [TODO_IMPORT_GENERATION_KEY]: snapshot.generation,
