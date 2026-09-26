@@ -138,9 +138,8 @@ notifications when an After relationship resolves.
 
 ## Storage and REST interfaces
 
-`DbProjectStore` owns Project-table verbs. `UserDO` coordinates Project state
-with the Project-attention store in one SQLite transaction for completion, Undo,
-and deletion.
+`TaskDO` owns Project rows and coordinates Project state with Task and
+Waiting/After rows for completion, Undo, and deletion.
 
 Per-user Project routes remain:
 
@@ -150,9 +149,9 @@ Per-user Project routes remain:
 - `DELETE /api/projects/{id}`;
 - `POST /api/projects/icon-suggestions`.
 
-The Project collection exposes `add`, `setState`, `reopen`, `edit`, `remove`, and
-`refetch`. `reopen` is a revive verb because Done Projects leave the working
-collection before Undo can run.
+The shared replica exposes `add`, `setState`, `reopen`, `edit`, `remove`, and
+`refetch` through `ProjectsApi`. It retains terminal rows so Undo can reopen a
+Done Project.
 
 ## Related entities
 

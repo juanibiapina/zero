@@ -2,6 +2,8 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-26: Tasks and Projects now stay available offline, update live across devices and browser tabs, and recover automatically after reconnecting.
+
 - 2026-09-24: When assigning a Task or choosing an After Project, Projects appear under Active, Next, Waiting, After, and Backlog. After and large Backlogs start folded; every Project picker now has a title filter that finds Projects inside them.
 
 - 2026-09-24: Drag tasks by their handles to reorder them on a project's page. Keyboard reordering works too, and the order stays after you leave or refresh.

@@ -50,19 +50,12 @@ of allowed interactions vs blacklist of forbidden ones.
 The thing to watch is duplicated CRUD boilerplate across future stores, not
 specificity; do-orm + a Rule-of-Three base covers it when the time comes.
 
-**Rule-of-Three status (2026-09-04, extracted):** Task (#2) and Project (#3) were
-built as deliberate structural siblings of Capture at every layer, and with three
-in hand the client plumbing was extracted (plan:
-`docs/plans/todo-rule-of-three-extraction.md`). What moved: the offline
-collection factory (`packages/agent-core/src/collection/base.ts`: in-memory
-fallback, persisted local-first sync, reconcile-after-write, outbox wiring,
-client-minted id/createdAt), the list-region view rule (`listView`), and the
-per-surface wiring (`apps/agent-mobile/src/lib/entity-api.ts`,
-`apps/agent-web/src/lib/entity-api.ts`). Each entity's collection file is now a
-verb table over that factory. What stayed per entity on purpose: the domain
-verbs and their optimistic drafts, the REST contracts, and the server stores
-(do-orm is already the generic layer; the leftover overlap is two 3-line idioms).
-See `docs/storage.md`.
+**Client data status (2026-09-26):** Task, Project, Waiting, and After use one
+shared TaskDO replica in `@zero/agent-core`. It owns projection, recovery,
+mutations, and the `TasksApi`, `ProjectsApi`, and `WaitsApi` screen interfaces.
+Mobile and web provide thin persistence, authentication, socket, and lifecycle
+adapters. The former generic REST collection factory has been retired. See
+`docs/storage.md`.
 
 **Collapse to one list (decided 2026-08-31; merged 2026-09-12):** the
 Capture/Task split proved premature — the user works in one list the way they do
@@ -171,7 +164,10 @@ was verified after cutover; the other accounts had no todo rows to import and
 start with empty TaskDOs. `UserDO` continues to own agent conversations and
 other non-todo state. Its old todo tables remain untouched as inert recovery
 data. Updated mobile clients open TinyBase directly without starting the retired
-REST-backed todo collections. See
+REST-backed todo collections. Web now uses the same shared replica with
+account-scoped IndexedDB persistence, live TaskDO synchronization, multi-tab
+merge coordination, and visible recovery. Public todo REST routes remain for
+older installed clients and other callers. See
 [the replica plan](plans/todo-local-replica-sync.md).
 
 Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.
@@ -697,7 +693,7 @@ over it (plan: `docs/plans/todo-task-entity.md`). Built as a sibling of the
 Capture stack, web first, then mobile: a `tasks` table + `/api/tasks` in the
 per-user UserDO (add is exactly-once on the client-minted id; complete flips
 `completedAt`; list returns open tasks); a shared `@zero/agent-core` Task type,
-`createTasksApi` collection (local-first, offline outbox), and `dueToday` /
+the original REST-backed Task collection, and `dueToday` /
 `localToday` helpers; and a **Captures | Today** segmented control on
 both web (`/captures`) and mobile home. The active segment is the entry target: the
 quick-add mints a Capture on Captures and a Task dated today on Today; the circle
@@ -731,13 +727,13 @@ Shipped (2026-09-04): **Project**, entity #3 and the first container — slice A
 source of truth: `docs/entities/project.md`). Built as a third full sibling of
 Capture/Task, web first then mobile: a `projects` table + `/api/projects` in the
 per-user UserDO (`add` is exactly-once on the client-minted id; `list` is
-oldest-first), a shared `@zero/agent-core` `Project` type, `createProjectsApi`
-collection (local-first, offline outbox), and the shared `listView` count-gate;
+oldest-first), a shared `@zero/agent-core` `Project` type, the original
+REST-backed Project collection, and the shared `listView` count-gate;
 a name-only create with outcome-naming helper text over a flat list on web
 (`/projects`, a `SideNav` entry) and mobile (a `NativeTabs` Projects tab). First on-device run of the new native tab needs a fresh EAS dev build.
 
 Shipped (slice A2, plan `todo-project-entity-a2.md`): the five-status model.
-`DbProjectStore.setStatus` + `PATCH /api/projects/{id}` (list now scoped to the
+The original Project store plus `PATCH /api/projects/{id}` (list scoped to the
 non-`done` working set), a pure `projectsByStatus` grouping helper, and
 `api.setStatus` in the collection (offline-replaying). On both surfaces the list
 is grouped into collapsible Active / Next / Waiting / Backlog sections (counts,
@@ -748,7 +744,7 @@ mobile on the universal `@expo/ui` `BottomSheet` — shared with the Captures
 detail sheet.
 
 Shipped (slice A3, plan `todo-project-entity-a3.md`): enrichment in the detail
-sheet. `DbProjectStore.edit` + a widened `PATCH /api/projects/{id}` carrying
+sheet. A widened `PATCH /api/projects/{id}` carries
 title/icon/description alongside status, and `api.edit` in the collection
 (offline-replaying; `setStatus` and `edit` share one update, disambiguated by the
 changed field set). The sheet gained an emoji icon picker, an editable
@@ -765,11 +761,9 @@ plumbing (never the domain verbs) followed as its own change.
 
 Shipped (post-A3): **delete a Project**, distinct from `done`. A destructive
 Delete button in the detail sheet drops the row behind the same ~5s Undo as
-`done`, then hard-removes it server-side (`DbProjectStore.delete` +
-`DELETE /api/projects/{id}`, 204 and idempotent so an offline replay is safe).
-Offline-safe on web and mobile. This added the shared collection factory's first
-`delete` verb kind (`packages/agent-core/src/collection/base.ts`), so every
-future entity gets optimistic delete + offline outbox for free.
+`done`, then removes it through `DELETE /api/projects/{id}`. The operation is
+offline-safe on web and mobile. TaskDO now applies the deletion cascade through
+the shared replica rules.
 
 Tightening (2026-09-04, internal, no user-facing change; plan
 `docs/plans/todo-tightening.md`): the six list screens (Captures / Projects /
