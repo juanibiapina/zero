@@ -1,14 +1,6 @@
 // @zero/agent-core — shared, platform-agnostic app code.
 
-// The shared collection plumbing every entity is built on: the offline
-// collection factory's injected types and the list-region view rule.
-export {
-  reconcileWrites,
-  type EntityApiDeps,
-  type StartOfflineExecutor,
-  type WarnFn,
-  type Write,
-} from "./collection/base";
+// Shared list-region behavior and the screen-facing collection interfaces.
 export { listView, LOADING_TEXT_DELAY_MS, type ListView } from "./collection/view";
 
 // The error-to-message helper shared by every list screen.
@@ -16,14 +8,7 @@ export { messageOf } from "./errors";
 
 // The Task data layer (the single list) shared by web + mobile.
 export type { Task } from "./tasks/types";
-export {
-  TASKS_QUERY_KEY,
-  createTasksApi,
-  createInMemoryTasksApi,
-  createPersistedTasksApi,
-  type TasksApi,
-  type TasksRest,
-} from "./tasks/collection";
+export type { TasksApi } from "./tasks/collection";
 export { localToday } from "./tasks/today";
 export { homeTasks } from "./tasks/home";
 export {
@@ -52,15 +37,7 @@ export type {
   ProjectState,
   ProjectDisplayStatus,
 } from "./projects/types";
-export {
-  PROJECTS_QUERY_KEY,
-  createProjectsApi,
-  createInMemoryProjectsApi,
-  createPersistedProjectsApi,
-  type ProjectsApi,
-  type ProjectsRest,
-  type ProjectEditFields,
-} from "./projects/collection";
+export type { ProjectsApi, ProjectEditFields } from "./projects/collection";
 export {
   projectStatusSections,
   type ProjectSection,
@@ -105,15 +82,7 @@ export type {
   ProjectAttention,
   WaitingCondition,
 } from "./waits/types";
-export {
-  WAITS_QUERY_KEY,
-  createWaitsApi,
-  createInMemoryWaitsApi,
-  createPersistedWaitsApi,
-  type WaitsApi,
-  type WaitsRest,
-  type AddProjectAttention,
-} from "./waits/collection";
+export type { WaitsApi, AddProjectAttention } from "./waits/collection";
 export {
   ALL_PROJECT_DISPLAY_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
@@ -121,10 +90,27 @@ export {
   PROJECT_DISPLAY_STATUS_LABELS,
   taskIcon,
 } from "./projects/display";
+// The TaskDO local replica shared by the web and mobile platform adapters.
 export {
-  ENTITY_CACHE_VERSION,
-  OFFLINE_OUTBOX_VERSION,
-} from "./collection/version";
+  createTaskdoReplica,
+  projectTodoData,
+  repairTodoRecovery,
+  type CreateTaskdoReplicaOptions,
+  type TaskdoReplica,
+  type TodoApis,
+  type TodoRecovery,
+  type TodoRecoveryRepair,
+  type TodoSnapshot,
+} from "./taskdo/replica";
+export {
+  TodoModel,
+  type ProjectDefaults,
+  type ProjectInput,
+  type TaskInput,
+  type TodoModelResult,
+  type TodoProjection,
+} from "./taskdo/model";
+export type { ProjectAfterConflict, StoredProject, StoredTask, TodoIssue } from "./taskdo/types";
 
 // The add-mode registry: what the quick-add box can create, shared web + mobile.
 export {

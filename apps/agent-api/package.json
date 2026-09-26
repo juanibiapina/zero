@@ -17,6 +17,7 @@
     "@clerk/hono": "^0.1.59",
     "@earendil-works/pi-ai": "0.84.3",
     "@hono/zod-openapi": "^1.5.1",
+    "@zero/agent-core": "workspace:*",
     "@zeroapps/recurrence": "workspace:*",
     "aws4fetch": "^1.0.20",
     "croner": "^10.0.1",

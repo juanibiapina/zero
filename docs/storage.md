@@ -8,25 +8,30 @@ source of truth for that.
 There are two layers: the **server** (authoritative) and the **client**. `TaskDO`
 is the only server authority for todo data. Updated mobile clients use a complete
 TinyBase replica whose acknowledged local writes persist offline and merge with
-the server replica. Web retains its TanStack cache and outbox. Older installed
-mobile builds can still use the code bundled into those builds, but their REST
-requests reach the same `TaskDO`.
+the server replica. Web uses the same shared replica implementation with browser
+persistence and lifecycle adapters. Older installed clients can still use the
+code bundled into those builds, but their REST requests reach the same `TaskDO`.
 
 ## TaskDO local-replica path
 
 Every signed-in account uses a separate `TaskDO`, resolved by
 `TASK_DO.idFromName(clerkUserId)`. Its TinyBase mergeable store persists to the
-Durable Object's SQLite storage. The in-process `TaskDomain` owns row decoding,
-todo mutations, recurrence, ordering, cascades, conflict checks, and recovery
-projections over that store. `TaskDO` retains the Durable Object lifecycle:
-SQLite persistence, WebSocket synchronization, socket shutdown, and account
-purge/erasure protection. Updated mobile clients persist a separate
-account-named Expo SQLite replica and synchronize it through an authenticated
-WebSocket. Their todo screens read one derived view over that same file; Task,
-Project, and Waiting/After writes persist there before sync. REST uses typed
-writes to the same TaskDO. Current mobile code does not open the retired
-`zero-app.sqlite` or offline-outbox databases; upgrades leave any legacy files
-on the device untouched.
+Durable Object's SQLite storage. The platform-neutral `TodoModel` in
+`@zero/agent-core` operates directly on any TinyBase mergeable store. It owns
+row decoding, accepted projections, todo mutations, recurrence, ordering,
+cascades, conflict checks, and recovery classification and repair. The
+in-process `TaskDomain` is the TaskDO adapter: it rejects erased-account writes,
+saves successful typed mutations, and maps canonical conflicts and issues to
+the established RPC and REST values. `TaskDO` retains the Durable Object
+lifecycle: SQL persistence, WebSocket synchronization, socket shutdown, and
+account purge/erasure protection. Mobile persists an account-named Expo SQLite
+replica; web persists an account-named IndexedDB replica. Both synchronize
+through the same authenticated WebSocket. The shared replica adapter builds the
+existing `TasksApi`, `ProjectsApi`, and `WaitsApi` interfaces with TanStack
+transactions, publishes query projections, maps client-facing errors and
+recovery actions, and waits for local persistence before reporting a
+transaction persisted. Current clients do not open retired todo caches or
+outboxes, and upgrades leave those legacy files and browser databases untouched.
 Project deletion tombstones the Project and removes its known children.
 REST also edits Projects and creates/resolves/deletes manual Waiting and After
 rows. Done/reopen settles/restores Afters. A late offline child or
@@ -60,88 +65,57 @@ data on reconnect.
 - One table per entity (e.g. `captures`). The table shape lives in the entity's
   own doc.
 
-## Web client layer (offline cache)
+## Client replicas
 
-The web client keeps a durable local copy so the UI paints instantly offline and
-reconciles with the server in the background.
+The canonical `@zero/agent-core` model owns projection, recovery, and mutation
+rules. The shared replica is a TanStack adapter that constructs the three
+screen-facing interfaces and presents canonical recovery issues as existing
+user-facing text and repair actions. Platform adapters own persistence,
+authentication, WebSocket construction, and lifecycle events.
 
-- Each entity is a **TanStack DB collection**, built from the one shared factory
-  in `@zero/agent-core` (`src/collection/base.ts`). An entity describes itself
-  with a spec — its name, how to fetch its working set, and a **verb table**
-  (an insert verb, update verbs each with its optimistic draft, and an optional
-  delete verb — each with its REST call) — and the factory supplies everything
-  below: reads persist to a local
-  SQLite database for offline use; writes go through an **offline outbox** that
-  retries on reconnect. Every persisted collection uses the shared
-  `ENTITY_CACHE_VERSION` from `src/collection/version.ts`; bumping it resets all
-  synchronized entity snapshots and refills them from the server. Verb names are
-  the outbox's mutationFn names and remain durable until the separate outbox
-  epoch is intentionally bumped.
-- **One local database file for the web app: `zero-app.sqlite`.** TanStack DB
-  derives a separate table per collection from its collection id (recorded in a
-  `collection_registry` table), so every entity gets its own table inside the one
-  file without sharing a table. There is no per-entity database file.
-- The web app opens the OPFS database handle **once** and builds the persistence
-  object **once**, sharing that single object across
-  every collection. One persistence object means one driver with one transaction
-  queue, so concurrent transactions from different collections never interleave
-  into a nested `BEGIN IMMEDIATE`. Building a persistence object per collection —
-  even over the same handle — would create a second queue over the one connection
-  and corrupt transactions.
-- **Offline write outbox.** Web uses a versioned IndexedDB adapter whose name
-  reads `<N>` from the shared `OFFLINE_OUTBOX_VERSION`. The outbox version is
-  separate from `ENTITY_CACHE_VERSION` because it contains unsent user writes,
-  not cached server rows; a normal cache reset must not discard it.
-- **Reads are local-first.** A collection is ready from its cached snapshot
-  immediately: a custom sync calls `markReady()` as soon as the local hydrate
-  finishes, then fetches the server in the background and reconciles the result
-  into the synced base (a pure diff: update present, insert new, delete removed).
-  A refetch also fires on `visibilitychange` so a
-  returning user sees fresh rows without a cold start. The default persisted
-  wrapper instead defers `markReady()` until the network resolves, which would
-  hide the cached snapshot behind the network round-trip.
-- If durable persistence cannot start (for example, private browsing or an older
-  browser), the collection falls back to an in-memory Query Collection.
-- **A delete reconciles the row out of the synced base**, not just the optimistic
-  overlay. The overlay is released when the delete transaction confirms, and the
-  base still holds the row (optimistic mutations never touch the base), so a
-  delete that only issues the server call makes the row reappear until the next
-  fetch. The durable path's delete mutationFn therefore removes the row from the
-  base after the REST call; the in-memory fallback does not hit this, so a delete
-  bug can pass every in-memory test and only show on a real backend.
-- **A row can leave the working set and come back — that needs a `revive` verb,
-  not an update.** The server returns only the open working set (tasks with
-  `completedAt IS NULL`, captures with `processedAt IS NULL`), so completing a
-  task or processing a capture makes the row leave: the trailing refetch
-  reconciles it out of the collection. The Undo on the complete/process snackbar
-  must bring it back, but an **update-by-id cannot** — by the time Undo runs the
-  row is gone and `collection.update` throws "key not found". So `reopen` /
-  `unprocess` are a fourth verb kind, **`revive`**: the inverse of a write that
-  leaves the working set. A revive carries the **full row** (the snackbar has it
-  in scope) so it can **re-insert** the row when absent, and updates it in place
-  when Undo is tapped before the eviction lands. It re-inserts with the row's own
-  id preserved (never a minted one), so it is the same row the server has, and its
-  REST call is the idempotent `reopen`/`unprocess` endpoint. Every update/revive
-  tags its optimistic operation with `{ verb, args }`: the in-memory builder routes
-  by verb name, while the durable outbox keeps action arguments for replay. Legacy
-  queued updates without metadata still fall back to changed-field matching. This
-  is the mirror of the delete caveat above: an update-by-id Undo passes every
-  in-memory test yet fails on the real persisted backend.
+- **Mobile:** one Expo SQLite file per Clerk account, named
+  `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection.
+- **Web:** one TinyBase IndexedDB database per Clerk account, named
+  `zero-taskdo-replica-<account-id>`. The adapter loads it before exposing the
+  todo owner, then opens same-origin `/api/task-sync`; Clerk authenticates the
+  WebSocket upgrade from the existing session cookie. No token is placed in the
+  URL. Reconnect uses bounded exponential backoff and retries immediately when
+  the browser comes online or the document becomes visible.
+- **Local-first:** screens render the persisted replica without waiting for the
+  network. A disconnected WebSocket is ordinary offline operation. Mutations
+  update the local mergeable store and retain TinyBase merge metadata, including
+  terminal rows needed for Undo and recurrence.
+- **Multi-tab:** an account-specific Web Lock serializes each persistence
+  operation. Before saving, a tab loads persisted mergeable content into a
+  temporary store and merges it into its live store; it never replaces live
+  content with a stale snapshot. After saving, it notifies sibling tabs through
+  an account-specific BroadcastChannel. Visible tabs also refresh every ten
+  seconds as a safety net and refresh immediately when they become visible;
+  hidden tabs do not poll. This preserves concurrent offline changes and merge
+  metadata while allowing every tab to receive current rows promptly.
+- **Fallback:** if IndexedDB or Web Locks are unavailable, web uses an in-memory
+  replica that still synchronizes online and reports that offline durability is
+  unavailable.
+- **Account lifecycle:** web closes the synchronizer and persister before it
+  exposes another account. Database names include the Clerk account ID, so one
+  account cannot hydrate another account's rows.
+
+The retired web OPFS database and IndexedDB outbox are not opened, migrated,
+replayed, or deleted. They remain inert in existing browser profiles.
 
 ## Recurring Task transitions
 
 A recurring completion is an in-place state transition, not a completed-row
 removal. Task stores versioned `recurrence` JSON and a `recurrenceDate` cursor;
-`showUpDate` can differ after a one-off postpone. The optimistic complete verb
-calls `@zeroapps/recurrence.advance`, updates both dates when another occurrence
+`showUpDate` can differ after a one-off postpone. The canonical model calls
+`@zeroapps/recurrence.advance`, updates both dates when another occurrence
 exists, and sets `completedAt` only when the inclusive end is exhausted.
 
-On web, update/revive verbs persist their initiating arguments in TanStack mutation
-metadata. The durable outbox therefore retains the user's local `completedOn`
-date across restart. The server accepts the occurrence's prior
-`recurrenceDate` as `scheduledOn` and advances only when it still matches the
-stored cursor. A repeated or stale write returns current state without advancing
-again.
+The canonical model plans and applies completion locally with the user's
+`completedOn` date, and the complete TinyBase metadata survives restart. The
+same model accepts an occurrence's prior `recurrenceDate` as `scheduledOn` for a
+typed TaskDO write and advances only when it still matches the stored cursor. A
+repeated or stale write returns current state without advancing again.
 
 Recurring Undo carries the full pre-completion Task snapshot. It conditionally
 restores that snapshot only while the server cursor still matches the expected
@@ -149,20 +123,10 @@ post-completion cursor. The revive path covers an exhausted series whose row was
 reconciled out of the open working set; an in-place update covers an ordinary
 advance whose row remained open.
 
-## The cache is disposable
+## Replica durability
 
-Losing the web app's synchronized entity snapshots costs one server re-sync.
-Bump `ENTITY_CACHE_VERSION` once to invalidate every web collection; each normal
-fetch then rebuilds its local table. Do not add per-entity versions or cache-shape
-migrations. Mobile's account-scoped TinyBase replica is durable user state, not
-this disposable cache.
-
-The web outbox is different: it can contain writes that reached no server. A cache
-version bump leaves it intact. Bump `OFFLINE_OUTBOX_VERSION` only when a breaking
-mutation change makes queued writes unreadable and product policy explicitly
-accepts discarding them. The Project state refactor moved both versions to 2.
-The Waiting/After change moves only `ENTITY_CACHE_VERSION` to 3: it clears cached
-Task relationships and Blocked presentation, while the existing durable
-`addWaitingCondition` payload remains readable for queued manual Waiting and
-Project-completion writes. Queued Task or arbitrary-status relationship writes
-are acknowledged locally as removed legacy operations and never recreated.
+The account-scoped TinyBase replica is durable local user state, not a
+disposable cache. It retains complete merge metadata so offline changes can
+converge after restart. Recovery projection excludes invalid synchronized rows
+from accepted views while retaining their raw intent until the user chooses a
+safe repair.

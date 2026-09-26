@@ -65,7 +65,6 @@ Per-user REST routes remain `/api/waits` for list, add, resolve, and delete. The
 request schema accepts only manual free text or the separate exact After storage
 variant; no generic kind can be created.
 
-Mobile exposes purpose-specific `addWaiting`, `resolveWaiting`, and `remove`
-operations over its account-scoped TinyBase replica. Web exposes the same verbs
-through its shared collection, with local-first reads and a durable offline
-outbox.
+Mobile and web expose purpose-specific `addWaiting`, `resolveWaiting`, and
+`remove` operations through the same shared replica. Both read local-first and
+synchronize the mutation through TaskDO.

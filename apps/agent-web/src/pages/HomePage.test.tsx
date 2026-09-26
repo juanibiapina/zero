@@ -1,84 +1,44 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import type { ComponentProps } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { QueryClient } from "@tanstack/react-query";
+import { MemoryRouter as RouterMemoryRouter, Route, Routes, useLocation } from "react-router";
 import {
-  createInMemoryProjectsApi,
-  createInMemoryTasksApi,
-  createInMemoryWaitsApi,
   type Project,
   type ProjectsApi,
-  type ProjectsRest,
   type Task,
   type TasksApi,
-  type TasksRest,
   type WaitingCondition,
   type WaitsApi,
-  type WaitsRest,
   defaultToastController,
 } from "@zero/agent-core";
 
 import { HomePage } from "./HomePage";
 import { ProjectDetailPage } from "./ProjectDetailPage";
+import { TodoDataContextProvider, type TodoData } from "@/lib/todo-data";
+import { createInMemoryTodoData } from "@/testing/in-memory-todo-data";
 
-// Give the real page fresh in-memory collections per test. The array-backed
-// REST boundary keeps each interaction deterministic without OPFS or network.
-const h = vi.hoisted(() => ({
+// Give the real page a fresh in-memory replica through its public data owner.
+const h = {
   tasksApi: null as TasksApi | null,
   projectsApi: null as ProjectsApi | null,
   waitsApi: null as WaitsApi | null,
-}));
-vi.mock("@/lib/tasks-collection", () => ({
-  getTasksApi: () => Promise.resolve(h.tasksApi),
-}));
-vi.mock("@/lib/projects-collection", () => ({
-  getProjectsApi: () => Promise.resolve(h.projectsApi),
-}));
-vi.mock("@/lib/waits-collection", () => ({
-  getWaitsApi: () => Promise.resolve(h.waitsApi),
-}));
-
-const emptyWaitsRest: WaitsRest = {
-  fetchWaits: async () => [],
-  addWaitingCondition: async (c) => ({
-    ...c,
-    resolvedAt: null,
-    createdAt: new Date().toISOString(),
-  }),
-  resolveWaitingCondition: async (id) => {
-    throw new Error(`no condition ${id}`);
-  },
-  deleteWaitingCondition: async () => {},
 };
 
-function fakeWaitsRest(initial: WaitingCondition[]): WaitsRest {
-  return {
-    ...emptyWaitsRest,
-    fetchWaits: async () => initial.map((condition) => ({ ...condition })),
+function MemoryRouter(props: ComponentProps<typeof RouterMemoryRouter>) {
+  const value: TodoData = {
+    api: h.tasksApi,
+    projectsApi: h.projectsApi,
+    waitsApi: h.waitsApi,
+    ready: true,
+    connected: true,
+    durable: true,
+    error: null,
+    durabilityError: null,
+    recoveries: [],
+    repair: async () => {},
   };
+  return <TodoDataContextProvider value={value}><RouterMemoryRouter {...props} /></TodoDataContextProvider>;
 }
-
-const emptyProjectsRest: ProjectsRest = {
-  fetchProjects: async () => [],
-  addProject: async ({ id, title }) => ({
-    id,
-    title,
-    icon: "📁",
-    description: null,
-    state: "in-play",
-    createdAt: new Date().toISOString(),
-  }),
-  setProjectState: async (id) => {
-    throw new Error(`no project ${id}`);
-  },
-  reopenProject: async (id) => {
-    throw new Error(`no project ${id}`);
-  },
-  editProject: async (id) => {
-    throw new Error(`no project ${id}`);
-  },
-  deleteProject: async () => {},
-};
 
 // A loose task with no show-up date (always shown up on Home).
 const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
@@ -97,75 +57,6 @@ const rescheduled: { id: string; showUpDate: string | null }[] = [];
 // Records move-to-project calls so tests can assert the project-picker wiring.
 const moved: { id: string; projectId: string | null }[] = [];
 
-function fakeTasksRest(initial: Task[]): TasksRest {
-  const server = initial.map((item) => ({ ...item }));
-  return {
-    fetchTasks: async () =>
-      server.filter((t) => t.completedAt == null).map((item) => ({ ...item })),
-    addTask: async ({ id, text, showUpDate, projectId, recurrence }) => {
-      const row: Task = {
-        id,
-        text,
-        showUpDate: recurrence?.origin ?? showUpDate,
-        recurrence: recurrence ?? null,
-        recurrenceDate: recurrence?.origin ?? null,
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        projectId,
-        sortKey: `a${server.length}`,
-      };
-      server.push(row);
-      return { ...row };
-    },
-    completeTask: async (id) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.completedAt = new Date().toISOString();
-      return { ...row };
-    },
-    reopenTask: async (id) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.completedAt = null;
-      return { ...row };
-    },
-    editTask: async (id, text) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.text = text;
-      return { ...row };
-    },
-    rescheduleTask: async (id, showUpDate) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.showUpDate = showUpDate;
-      rescheduled.push({ id, showUpDate });
-      return { ...row };
-    },
-    reorderTask: async (id, sortKey) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.sortKey = sortKey;
-      return { ...row };
-    },
-    setTaskProject: async (id, projectId) => {
-      const row = server.find((item) => item.id === id);
-      if (!row) throw new Error(`no task ${id}`);
-      row.projectId = projectId;
-      moved.push({ id, projectId });
-      return { ...row };
-    },
-  };
-}
-
-function fakeProjectsRest(initial: Project[]): ProjectsRest {
-  const server = initial.map((item) => ({ ...item }));
-  return {
-    ...emptyProjectsRest,
-    fetchProjects: async () => server.map((item) => ({ ...item })),
-  };
-}
-
 const projectRow = (id: string, over: Partial<Project> = {}): Project => ({
   id,
   title: over.title ?? id,
@@ -182,18 +73,20 @@ function setApi(
 ) {
   rescheduled.length = 0;
   moved.length = 0;
-  h.tasksApi = createInMemoryTasksApi({
-    queryClient: new QueryClient(),
-    rest: fakeTasksRest(tasks),
-  });
-  h.projectsApi = createInMemoryProjectsApi({
-    queryClient: new QueryClient(),
-    rest: fakeProjectsRest(projects),
-  });
-  h.waitsApi = createInMemoryWaitsApi({
-    queryClient: new QueryClient(),
-    rest: fakeWaitsRest(waits),
-  });
+  const { data } = createInMemoryTodoData({ tasks, projects, waits });
+  h.tasksApi = data.api;
+  h.projectsApi = data.projectsApi;
+  h.waitsApi = data.waitsApi;
+  const reschedule = h.tasksApi!.reschedule;
+  h.tasksApi!.reschedule = (id, showUpDate) => {
+    rescheduled.push({ id, showUpDate });
+    return reschedule(id, showUpDate);
+  };
+  const moveToProject = h.tasksApi!.moveToProject;
+  h.tasksApi!.moveToProject = (id, projectId) => {
+    moved.push({ id, projectId });
+    return moveToProject(id, projectId);
+  };
 }
 
 describe("HomePage", () => {
@@ -432,10 +325,8 @@ describe("HomePage", () => {
 
   it("creates a project from the Project mode, stays on Home, and toasts a link to it", async () => {
     setApi();
-    let path = "";
     function Probe() {
-      path = useLocation().pathname;
-      return null;
+      return <output aria-label="Current path">{useLocation().pathname}</output>;
     }
     render(
       <MemoryRouter initialEntries={["/"]}>
@@ -456,7 +347,7 @@ describe("HomePage", () => {
     await waitFor(() =>
       expect(defaultToastController.getSnapshot()).toHaveLength(1),
     );
-    expect(path).toBe("/");
+    expect(screen.getByRole("status", { name: "Current path" })).toHaveTextContent("/");
     const [t] = defaultToastController.getSnapshot();
     expect(t.message).toBe("Project created");
     expect(t.description).toBe("ship the app");
@@ -465,7 +356,8 @@ describe("HomePage", () => {
     await act(async () => {
       t.action?.onPress();
     });
-    await waitFor(() => expect(path).toMatch(/^\/projects\/.+/));
+    await waitFor(() => expect(screen.getByRole("status", { name: "Current path" }))
+      .toHaveTextContent(/^\/projects\/.+/));
   });
 
   it("completes a task, leaves it at once, and offers Undo that reopens it", async () => {

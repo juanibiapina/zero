@@ -1,20 +1,20 @@
 import { AppState } from 'react-native';
-import { createMergeableStore, type MergeableStore } from 'tinybase';
+import { createMergeableStore } from 'tinybase';
 import { createWsSynchronizer } from 'tinybase/synchronizers/synchronizer-ws-client';
+import type { QueryClient } from '@tanstack/react-query';
+import {
+  createTaskdoReplica,
+  type TaskdoReplica,
+} from '@zero/agent-core';
 
 import { API_BASE_URL } from './env';
 import type { TokenGetter } from './api';
-import {
-  projectTodoData,
-  repairTodoRecovery,
-  type TodoSnapshot,
-  type Recovery,
-} from './taskdo-projection';
 
 export async function openTaskDOReplica(
   accountId: string,
   getToken: TokenGetter,
-  onSnapshot: (snapshot: TodoSnapshot) => void,
+  queryClient: QueryClient,
+  onSnapshot: Parameters<TaskdoReplica['subscribe']>[0],
   onConnection: (connected: boolean) => void,
 ) {
   // No shared filename and no anonymous replica: switching accounts cannot
@@ -30,9 +30,13 @@ export async function openTaskDOReplica(
   const store = createMergeableStore();
   const persister = createExpoSqlitePersister(store, db, 'taskdo_local');
   await persister.startAutoPersisting();
-  const snapshot = () => onSnapshot(projectTodoData(store));
-  const listeners = ['tasks', 'projects', 'conditions'].map((table) => store.addTableListener(table, snapshot));
-  snapshot();
+  const replica = await createTaskdoReplica({
+    store,
+    queryClient,
+    queryKeyScope: [accountId],
+    save: () => persister.save(),
+  });
+  const unsubscribe = replica.subscribe(onSnapshot);
 
   let stopped = false;
   let connecting = false;
@@ -94,24 +98,15 @@ export async function openTaskDOReplica(
   void connect();
 
   return {
-    async write(mutate: (mutableStore: MergeableStore) => void) {
-      if (stopped) throw new Error('Local account is closed');
-      store.transaction(() => mutate(store));
-      await persister.save();
-    },
-    async repair(recovery: Recovery) {
-      if (stopped) throw new Error('Local account is closed');
-      let changed = false;
-      store.transaction(() => { changed = repairTodoRecovery(store, recovery); });
-      if (changed) await persister.save();
-    },
+    ...replica,
     async close() {
       stopped = true;
       foreground.remove();
       if (retry) clearTimeout(retry);
       socket?.close();
       await sync?.destroy();
-      for (const listenerId of listeners) store.delListener(listenerId);
+      unsubscribe();
+      await replica.close();
       await persister.destroy();
       await db.closeAsync();
     },

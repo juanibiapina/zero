@@ -13,32 +13,28 @@
     "src"
   ],
   "dependencies": {
+    "@tanstack/db": "0.8.5",
+    "@tanstack/query-db-collection": "1.2.10",
     "@zeroapps/recurrence": "workspace:*",
     "date-fns": "^4.1.0",
     "fractional-indexing": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "5.102.7",
+    "tinybase": "10.0.1"
   },
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
-  "peerDependencies": {
-    "@tanstack/db": "0.8.5",
-    "@tanstack/db-sqlite-persistence-core": "0.2.18",
-    "@tanstack/offline-transactions": "1.0.51",
-    "@tanstack/query-db-collection": "1.2.10",
-    "@tanstack/react-query": "5.102.7"
-  },
   "devDependencies": {
-    "@tanstack/db": "0.8.5",
-    "@tanstack/db-sqlite-persistence-core": "0.2.18",
-    "@tanstack/offline-transactions": "1.0.51",
-    "@tanstack/query-db-collection": "1.2.10",
     "@tanstack/react-query": "5.102.7",
     "@types/node": "^26.1.2",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.8.0",
+    "tinybase": "10.0.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.10"
   }

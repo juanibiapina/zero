@@ -82,6 +82,8 @@
     ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1",
+      "^react$": "<rootDir>/node_modules/react",
+      "^react/(.*)$": "<rootDir>/node_modules/react/$1",
       "^chrono-node/en$": "<rootDir>/../../packages/recurrence/node_modules/chrono-node/dist/cjs/locales/en/index.js"
     },
     "transformIgnorePatterns": [

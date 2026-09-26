@@ -20,6 +20,7 @@ import { Loading } from "@/components/Loading";
 import { DevToolbar } from "@/components/DevToolbar";
 import { SideNav } from "@/components/SideNav";
 import { createWebTimezoneSync } from "./lib/timezone-sync";
+import { TodoDataProvider } from "./lib/todo-data";
 import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HomePage } from "./pages/HomePage";
@@ -52,9 +53,10 @@ function AuthGate() {
   if (!isSignedIn) return <CenteredPage><SignIn /></CenteredPage>;
 
   return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route index element={<HomeRoute />} />
+    <TodoDataProvider>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route index element={<HomeRoute />} />
         {/* Home: the single task list. The path stays /captures (unchanged
             through the single-list merge) so bookmarks and the nav keep working;
             the screen is the one task list now. */}
@@ -68,9 +70,10 @@ function AuthGate() {
         <Route path="onboarding" element={<OnboardingRoute />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/users/:userId" element={<UserDetailPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </TodoDataProvider>
   );
 }
 

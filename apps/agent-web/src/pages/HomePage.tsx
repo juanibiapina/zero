@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
 import {
@@ -53,6 +53,10 @@ import {
   type AddMode,
   type HomeCallToAction,
   type Project,
+  type ProjectsApi,
+  type Task,
+  type TasksApi,
+  type WaitsApi,
   type WaitingCondition,
 } from "@zero/agent-core";
 import {
@@ -60,12 +64,9 @@ import {
   toText,
   type TextRange,
 } from "@zeroapps/recurrence";
-import { getTasksApi, type TasksApi } from "@/lib/tasks-collection";
-import { getProjectsApi, type ProjectsApi } from "@/lib/projects-collection";
-import { getWaitsApi, type WaitsApi } from "@/lib/waits-collection";
+import { useTodoData } from "@/lib/todo-data";
 import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
-import { type Task } from "@/lib/tasks";
 
 // Home is one screen: a single reorderable list of tasks — the loose ones you
 // dropped in and the project tasks you have taken on (availability-gated by
@@ -73,18 +74,7 @@ import { type Task } from "@/lib/tasks";
 // the quick-add defaults to a task and can switch to a project. See
 // docs/plans/todo-single-list-1-merge.md.
 export function HomePage() {
-  const [tasksApi, setTasksApi] = useState<TasksApi | null>(null);
-  const [projectsApi, setProjectsApi] = useState<ProjectsApi | null>(null);
-  const [waitsApi, setWaitsApi] = useState<WaitsApi | null>(null);
-  useEffect(() => {
-    let live = true;
-    void getTasksApi().then((a) => live && setTasksApi(a));
-    void getProjectsApi().then((a) => live && setProjectsApi(a));
-    void getWaitsApi().then((a) => live && setWaitsApi(a));
-    return () => {
-      live = false;
-    };
-  }, []);
+  const { api: tasksApi, projectsApi, waitsApi } = useTodoData();
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">

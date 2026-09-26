@@ -509,8 +509,8 @@ export function useTaskDetail({
     setSelectedId(item.id);
   }, []);
 
-  // Queue the title before opening another control. Waiting for the server here
-  // would block offline use; the outbox preserves write order for this task.
+  // Persist the title locally before opening another control. Waiting for the
+  // server here would block offline use; replica sync preserves the write.
   const commitDraft = useCallback((): Task | null => {
     if (!selected) return null;
     const trimmed = draft.trim();
