@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TodoSnapshot } from "../todo-authority";
-import { todoSnapshotTables } from "./import";
+import { snapshotImportedTask, todoSnapshotTables } from "./import";
 
 describe("todoSnapshotTables", () => {
   it("preserves missing Project references for visible recovery", () => {
@@ -39,5 +39,7 @@ describe("todoSnapshotTables", () => {
       projectId: "missing-source",
       refId: "missing-target",
     });
+    expect(snapshotImportedTask(snapshot.tasks[0], tables.tasks["task-1"]))
+      .toEqual(snapshot.tasks[0]);
   });
 });
