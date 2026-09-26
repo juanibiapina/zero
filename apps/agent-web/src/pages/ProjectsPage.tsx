@@ -107,7 +107,7 @@ function ProjectsReady({ replica }: { replica: TaskdoReplica }) {
       projectStatusContext(p, tasks, conds, list, today)?.rowLabel ?? null,
     [tasks, conds, list, today],
   );
-  const view = listView({ count: list.length, isLoading, loadError: null });
+  const view = listView({ count: list.length, isLoading });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   return (

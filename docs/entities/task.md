@@ -207,7 +207,7 @@ serves the open-tasks query.
   `@zero/agent-core`), so the DO needs no timezone.
 - **Shared view rule.** The list region gates on the row count, not `isLoading`,
   via the shared `listView` helper, so a hydrated local snapshot paints before the
-  network sync marks the collection ready.
+  live query settles.
 
 ## Next
 

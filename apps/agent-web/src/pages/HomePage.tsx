@@ -425,7 +425,7 @@ function TaskList({
   const iconOf = (projectId: string): string =>
     (projects ?? []).find((p) => p.id === projectId)?.icon ?? DEFAULT_ICON;
 
-  const view = listView({ count: list.length, isLoading, loadError: null });
+  const view = listView({ count: list.length, isLoading });
   const showLoadingText = useDelayed(view === "loading", LOADING_TEXT_DELAY_MS);
 
   // When the list is empty, replace it with the state-driven call to action

@@ -56,8 +56,8 @@ incoming row before returning. Completing the final referenced Project lets the
 source recalculate to Active, Waiting, or Next.
 
 Undoing that completion atomically reopens the Project and clears `resolvedAt`
-on the relationships resolved by its completion. The client refetches the open
-relationship collection after both transitions.
+on the relationships resolved by its completion. The replica publishes the
+atomic Project-and-relationship update after both transitions.
 
 Deleting a referenced Project removes incoming rows and warns which source
 Projects may move to another section. Deleting a source removes its outgoing

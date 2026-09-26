@@ -85,7 +85,6 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
-  const loadError = null;
   const [writeError, setWriteError] = useState<string | null>(null);
   const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
   const accent = useColor('--color-accent');
@@ -93,8 +92,7 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
   const onToggle = useCallback((status: ProjectDisplayStatus, current: boolean) => {
     setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
   }, []);
-  const view = listView({ count: list.length, isLoading, loadError });
-  const error = writeError ?? (list.length === 0 ? loadError : null);
+  const view = listView({ count: list.length, isLoading });
   const showLoadingText = useDelayed(view === 'loading', LOADING_TEXT_DELAY_MS);
   const today = useLocalDay();
   const grouped = useMemo(() => projectStatusSections({
@@ -117,7 +115,7 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
   const onOpen = useCallback((p: Project) => router.push(`/projects/${p.id}`), [router]);
   return (
     <>
-      {error ? <Text variant="error" className="px-screen-x">{error}</Text> : null}
+      {writeError ? <Text variant="error" className="px-screen-x">{writeError}</Text> : null}
       {view === 'loading' ? (
         showLoadingText ? <Text variant="subtitle" className="px-screen-x">Loading your projects…</Text> : <View className="flex-1" />
       ) : view === 'empty' ? (

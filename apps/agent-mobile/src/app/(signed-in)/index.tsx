@@ -145,12 +145,10 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   // reads empty then, which would look like "create").
   const hydrating = isLoading || projectsLoading;
 
-  const loadError = null;
   const [writeError, setWriteError] = useState<string | null>(null);
 
   const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
-  const view = listView({ count: list.length, isLoading, loadError });
-  const error = writeError ?? (list.length === 0 ? loadError : null);
+  const view = listView({ count: list.length, isLoading });
 
   const projectAdd = useProjectAdd({
     project: null,
@@ -222,9 +220,9 @@ function Home({ replica }: { replica: TaskdoReplica }) {
 
   return (
     <>
-      {error ? (
+      {writeError ? (
         <Text variant="error" className="px-screen-x">
-          {error}
+          {writeError}
         </Text>
       ) : null}
 
@@ -249,7 +247,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
           presentationOf={presentationOf}
           swipeAction="postpone-tomorrow"
           empty={
-            view === 'empty' && cta && !loadError ? (
+            view === 'empty' && cta ? (
               hydrating ? (
                 <View className="flex-1" />
               ) : (
