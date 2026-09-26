@@ -1,28 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDb, type Database } from "do-orm";
 import { migrate } from "do-orm";
-import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
 import { migrations } from "./db/migrations";
 import { sendChatAction } from "../telegram/chat-action";
 import { sendMessage } from "../telegram/send-message";
 import { DbStore } from "../store/db";
-import { DbTaskStore, type Task } from "../store/tasks";
-import {
-  DbProjectStore,
-  type Project,
-  type ProjectDefaults,
-  type ProjectEdit,
-  type ProjectState,
-} from "../store/projects";
-import {
-  DbWaitingConditionStore,
-  type WaitingCondition,
-} from "../store/waiting-conditions";
-import {
-  addProjectAfter as coordinateProjectAfter,
-  setProjectState as coordinateProjectState,
-  type AddProjectAfterResult,
-} from "../store/project-afters";
 import {
   SystemTopicStore,
   systemTopicsFingerprint,
@@ -83,15 +65,12 @@ import { nextRun } from "../schedules/recurrence";
 import type { Env } from "../types";
 import { USER_TOPIC, USER_TOPIC_DESCRIPTION } from "../user-topic";
 import { log } from "../log";
-import type { TodoAuthority, TodoSnapshot } from "../todo-authority";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
 const TYPING_INTERVAL_MS = 4000;
 
 // Marks the one-time link reconciliation that follows migration 0022.
 const LINKS_REBUILT_KEY = "topicLinksRebuiltV22";
-const TODO_AUTHORITY_KEY = "todoAuthority";
-const TODO_IMPORT_GENERATION_KEY = "todoImportGeneration";
 
 // Turn a versioned topic write into data that survives an RPC hop.
 const toWriteResult = (apply: () => number): TopicWriteResult => {
@@ -112,11 +91,6 @@ export class UserDO extends DurableObject<Env> {
   private store: Store;
   // File bytes in R2. Metadata rows live in this user's SQLite store.
   private fileBlobs: FileBlobStore;
-  private tasks: DbTaskStore;
-  private projects: DbProjectStore;
-  private waitingConditions: DbWaitingConditionStore;
-  private todoAuthority: TodoAuthority = "legacy";
-  private todoImportGeneration: string | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -124,14 +98,9 @@ export class UserDO extends DurableObject<Env> {
     const dbStore = new DbStore(this.db);
     this.store = new SystemTopicStore(dbStore);
     this.fileBlobs = createR2FileBlobs(env.FILES);
-    this.tasks = new DbTaskStore(this.db);
-    this.projects = new DbProjectStore(this.db);
-    this.waitingConditions = new DbWaitingConditionStore(this.db);
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
-      this.todoAuthority = (await ctx.storage.get<TodoAuthority>(TODO_AUTHORITY_KEY)) ?? "legacy";
-      this.todoImportGeneration = (await ctx.storage.get<string>(TODO_IMPORT_GENERATION_KEY)) ?? null;
       // Migration 0022 folded legacy topic summaries into bodies, so link rows
       // derived from those bodies can be missing a [[Name]] the folded text
       // introduced. SQL cannot parse the tokens; re-derive them once here.
@@ -143,255 +112,7 @@ export class UserDO extends DurableObject<Env> {
       // their text must still invalidate persisted reads of them. This bumps
       // the knowledge version once per content change, never per boot.
       dbStore.syncSystemTopicsFingerprint(systemTopicsFingerprint());
-      // Ordering convergence for the tasks sortKey column (migration 0051). A
-      // null sortKey sorts LAST, and `add` mints a real trailing key for every
-      // new task — so without this the first task added after 0051 would sort
-      // ABOVE all the still-null preserved rows, flipping every older task to the
-      // bottom of the list. Backfilling once (in createdAt order) gives the
-      // preserved rows keys so their order holds and new adds append below them.
-      // Idempotent: a no-op once every row has a key. Runs in code because valid
-      // fractional keys cannot be minted in SQL.
-      this.tasks.backfillSortKeys();
     });
-  }
-
-  private assertLegacyTodoWrite(): void {
-    if (this.todoAuthority !== "legacy") {
-      throw new Error(`Todo writes are ${this.todoAuthority}`);
-    }
-  }
-
-  getTodoAuthority(): { authority: TodoAuthority; generation: string | null } {
-    return { authority: this.todoAuthority, generation: this.todoImportGeneration };
-  }
-
-  async freezeTodos(generation: string): Promise<TodoSnapshot> {
-    if (this.todoAuthority === "switched") throw new Error("Todo authority already switched");
-    if (this.todoAuthority === "frozen" && this.todoImportGeneration !== generation) {
-      throw new Error("A different todo import is already frozen");
-    }
-    this.todoAuthority = "frozen";
-    this.todoImportGeneration = generation;
-    await this.ctx.storage.put({
-      [TODO_AUTHORITY_KEY]: this.todoAuthority,
-      [TODO_IMPORT_GENERATION_KEY]: generation,
-    });
-    return {
-      generation,
-      tasks: this.tasks.listAll(),
-      projects: this.projects.listAll(),
-      conditions: this.waitingConditions.listAll(),
-    };
-  }
-
-  snapshotFrozenTodos(generation: string): TodoSnapshot {
-    if (this.todoAuthority !== "frozen" || this.todoImportGeneration !== generation) {
-      throw new Error("Todo source is not frozen for this import");
-    }
-    return {
-      generation,
-      tasks: this.tasks.listAll(),
-      projects: this.projects.listAll(),
-      conditions: this.waitingConditions.listAll(),
-    };
-  }
-
-  async unfreezeTodos(generation: string): Promise<void> {
-    if (this.todoAuthority !== "frozen" || this.todoImportGeneration !== generation) {
-      throw new Error("Todo source is not frozen for this import");
-    }
-    this.todoAuthority = "legacy";
-    this.todoImportGeneration = null;
-    await this.ctx.storage.delete([TODO_AUTHORITY_KEY, TODO_IMPORT_GENERATION_KEY]);
-  }
-
-  async switchTodos(generation: string): Promise<void> {
-    if (this.todoAuthority === "switched" && this.todoImportGeneration === generation) return;
-    if (this.todoAuthority !== "frozen" || this.todoImportGeneration !== generation) {
-      throw new Error("Todo source is not frozen for this import");
-    }
-    this.todoAuthority = "switched";
-    await this.ctx.storage.put(TODO_AUTHORITY_KEY, this.todoAuthority);
-  }
-
-  addTask(
-    id: string,
-    text: string,
-    showUpDate: string | null = null,
-    projectId: string | null = null,
-    sourceCaptureId: string | null = null,
-    recurrence: Recurrence | null = null,
-  ): Task {
-    this.assertLegacyTodoWrite();
-    return this.tasks.add(
-      id,
-      text,
-      showUpDate,
-      projectId,
-      sourceCaptureId,
-      recurrence,
-    );
-  }
-
-  listTasks(): Task[] {
-    // Return every open task; the client splits them into Home (shown up) and
-    // Upcoming (future-dated) against its own local day, so the server holds no
-    // visibility filter here.
-    return this.tasks.list();
-  }
-
-  completeTask(
-    id: string,
-    scheduledOn?: PlainDate,
-    completedOn?: PlainDate,
-  ): Task | null {
-    this.assertLegacyTodoWrite();
-    return scheduledOn && completedOn
-      ? this.tasks.completeOccurrence(id, scheduledOn, completedOn)
-      : this.tasks.complete(id);
-  }
-
-  completeTaskForever(id: string): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.completeForever(id);
-  }
-
-  undoTaskOccurrence(
-    id: string,
-    expectedRecurrenceDate: PlainDate,
-    recurrenceDateBefore: PlainDate,
-    showUpDateBefore: PlainDate | null,
-  ): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.undoOccurrence(
-      id,
-      expectedRecurrenceDate,
-      recurrenceDateBefore,
-      showUpDateBefore,
-    );
-  }
-
-  setTaskRecurrence(id: string, recurrence: Recurrence | null): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.setRecurrence(id, recurrence);
-  }
-
-  reopenTask(id: string): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.reopen(id);
-  }
-
-  editTask(id: string, text: string): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.editText(id, text);
-  }
-
-  rescheduleTask(id: string, showUpDate: string | null): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.reschedule(id, showUpDate);
-  }
-
-  reorderTask(id: string, sortKey: string): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.reorder(id, sortKey);
-  }
-
-  setTaskProject(id: string, projectId: string | null): Task | null {
-    this.assertLegacyTodoWrite();
-    return this.tasks.setProject(id, projectId);
-  }
-
-  addProject(id: string, title: string, opts?: ProjectDefaults): Project {
-    this.assertLegacyTodoWrite();
-    return this.projects.add(id, title, opts);
-  }
-
-  listProjects(): Project[] {
-    return this.projects.list();
-  }
-
-  setProjectState(id: string, state: ProjectState): Project | null {
-    this.assertLegacyTodoWrite();
-    return this.db.transaction(
-      () =>
-        coordinateProjectState(
-          this.projects,
-          this.waitingConditions,
-          id,
-          state,
-        ).project,
-    );
-  }
-
-  editProject(id: string, fields: ProjectEdit): Project | null {
-    this.assertLegacyTodoWrite();
-    return this.projects.edit(id, fields);
-  }
-
-  // Delete a Project and atomically cascade its Tasks, manual Waiting rows,
-  // outgoing After rows, and incoming After rows. The cascade lives here in the
-  // composition root, not in DbProjectStore, because deletion must pass over
-  // every entity that references the Project
-  // (docs/todo-app.md), or those rows orphan (an orphaned task is a ghost: hidden
-  // from Home because its project is gone, yet still an open row). Idempotent on
-  // the id: a replayed offline delete finds nothing and every cascade no-ops.
-  // Returns the cascade counts for the route's log line.
-  deleteProject(id: string): {
-    existed: boolean;
-    tasks: number;
-    conditions: number;
-    afters: number;
-  } {
-    this.assertLegacyTodoWrite();
-    return this.db.transaction(() => {
-      const existed = this.projects.delete(id);
-      const tasks = this.tasks.deleteByProject(id);
-      const conditions = this.waitingConditions.deleteByProject(id);
-      const afters = this.waitingConditions.deleteByReferencedProject(id);
-      return { existed, tasks, conditions, afters };
-    });
-  }
-
-  // --- Manual Waiting and Project After relationships ---
-
-  addWaitingCondition(
-    id: string,
-    projectId: string,
-    text: string,
-  ): WaitingCondition {
-    this.assertLegacyTodoWrite();
-    return this.waitingConditions.addWaiting(id, projectId, text);
-  }
-
-  addProjectAfter(
-    id: string,
-    projectId: string,
-    afterProjectId: string,
-  ): AddProjectAfterResult {
-    this.assertLegacyTodoWrite();
-    return this.db.transaction(() =>
-      coordinateProjectAfter(
-        this.projects,
-        this.waitingConditions,
-        id,
-        projectId,
-        afterProjectId,
-      ),
-    );
-  }
-
-  listWaitingConditions(): WaitingCondition[] {
-    return this.waitingConditions.listOpen();
-  }
-
-  resolveWaitingCondition(id: string): WaitingCondition | null {
-    this.assertLegacyTodoWrite();
-    return this.waitingConditions.resolveWaiting(id);
-  }
-
-  deleteWaitingCondition(id: string): boolean {
-    this.assertLegacyTodoWrite();
-    return this.waitingConditions.delete(id);
   }
 
   // --- Conversations and messages ---

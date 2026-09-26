@@ -2,8 +2,8 @@
 
 ## Decision
 
-Use TinyBase as the complete signed-in todo store. After an explicit one-account
-switch, one `TaskDO` owns Tasks, Projects, manual Waiting conditions, and After
+Use TinyBase as the complete signed-in todo store. One `TaskDO` per account owns
+Tasks, Projects, manual Waiting conditions, and After
 relationships. The phone keeps an account-scoped Expo SQLite TinyBase replica
 and synchronizes it over an authenticated WebSocket. Web and old clients keep
 using the existing REST contracts, which route to the same `TaskDO`.
@@ -12,10 +12,14 @@ TinyBase last-writer-wins is accepted when disconnected clients change the same
 cell without seeing each other's edit. It is not permission to lose a row, an
 invalid relationship, a terminal record, or a queued action.
 
-Real accounts still use `UserDO`. This plan and its implementation do not
-authorize a deploy, freeze, or account switch.
+**Completed 2026-09-26:** the migrated account was verified in production, and
+the user confirmed that all other accounts had no todo data to import. `TaskDO`
+is now the unconditional todo authority for every account. The migration marker,
+operator endpoint, and legacy todo RPC surface were removed. `UserDO` remains
+the authority for agent conversations and other non-todo state; its old todo
+tables were not deleted.
 
-## Implemented shape
+## Cutover implementation (historical)
 
 - `UserDO` stores a durable `legacy` / `frozen` / `switched` authority marker.
   Every legacy todo mutation checks that marker inside the Durable Object, so a
@@ -100,4 +104,4 @@ decision.
   The route test also interrupts the switch after destination activation and
   proves that retry rolls forward.
 
-No production Worker, real account, or production phone file was changed.
+This evidence preceded the later authorized production switch described above.

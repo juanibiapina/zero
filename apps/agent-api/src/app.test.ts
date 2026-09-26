@@ -3,13 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { Env } from "./types";
 import { createApp } from "./app";
 
-// A fake USER_DO that records the name it was addressed by (the userId) and
+// A fake TASK_DO that records the name it was addressed by (the userId) and
 // returns it back through listTasks, so a test can prove which userId the guard
 // set. The rest of the surface is unused by the /api/tasks list route.
 const fakeEnv = (environment: string | undefined): { env: Env; seen: () => string | null } => {
   let lastName: string | null = null;
   const stub = {
-    getTodoAuthority: () => ({ authority: "legacy" as const, generation: null }),
     listTasks: () => [
       {
         id: "id-1",
@@ -26,7 +25,7 @@ const fakeEnv = (environment: string | undefined): { env: Env; seen: () => strin
     // the non-test path; an invalid token then simply yields no auth (401).
     CLERK_SECRET_KEY: "sk_test_Zm9vYmFyYmF6cXV4",
     CLERK_PUBLISHABLE_KEY: "pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk",
-    USER_DO: {
+    TASK_DO: {
       idFromName: (name: string) => {
         lastName = name;
         return { toString: () => name };

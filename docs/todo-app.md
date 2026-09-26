@@ -164,16 +164,15 @@ committed.
 
 ## Project tracking
 
-In progress (not deployed): `TaskDO` now has the complete todo model, typed REST
-writes, account-scoped phone persistence, visible recovery and repair, and a
-durable one-account prepare/switch/abort path. The import preserves open and
-terminal Tasks, Projects, Waiting conditions, and After relationships and
-compares every field before activation. Old mobile collections stay alive behind
-the TinyBase UI so durable REST outbox entries drain into the switched `TaskDO`.
-The compact evidence now passes: the Pixel persistence/sync flow, the existing
-two-client/REST convergence proof, and a disposable preserving switch with
-interrupted-switch retry. See [the replica plan](plans/todo-local-replica-sync.md).
-Real accounts still use `UserDO`; no deployment or migration is authorized.
+Implemented (2026-09-26): `TaskDO` is the only todo authority for every signed-in
+account. It owns the complete todo model, typed REST writes, account-scoped phone
+persistence, and visible recovery and repair. The migrated production account
+was verified after cutover; the other accounts had no todo rows to import and
+start with empty TaskDOs. `UserDO` continues to own agent conversations and
+other non-todo state. Its old todo tables remain untouched as inert recovery
+data. Old mobile collections stay alive behind the TinyBase UI for now so any
+durable REST outbox entries can drain into `TaskDO`. See
+[the replica plan](plans/todo-local-replica-sync.md).
 
 Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.
 

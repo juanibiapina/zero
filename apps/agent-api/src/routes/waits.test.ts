@@ -56,7 +56,7 @@ function fakeUserDO(
 
 function buildApp(userDO: ReturnType<typeof fakeUserDO>) {
   const env = {
-    USER_DO: {
+    TASK_DO: {
       idFromName: () => ({ toString: () => "fake-id" }),
       get: () => userDO,
     },

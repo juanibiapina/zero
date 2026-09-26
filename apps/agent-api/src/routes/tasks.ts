@@ -7,8 +7,7 @@ import {
 
 import { log } from "../log";
 import type { Env } from "../types";
-import { getUserDO } from "../UserDO/stub";
-import { getTaskDO, usesTaskDO } from "../TaskDO/stub";
+import { getTaskDO } from "../TaskDO/stub";
 
 type Variables = {
   userId: string;
@@ -59,9 +58,7 @@ export const createTasksRoutes = () => {
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const tasks = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).listTasks()
-      : await getUserDO(c.env, userId).listTasks();
+    const tasks = await getTaskDO(c.env, userId).listTasks();
     return c.json({ tasks }, 200);
   });
 
@@ -118,22 +115,10 @@ export const createTasksRoutes = () => {
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
-    if (await usesTaskDO(c.env, userId)) {
-      const task = await getTaskDO(c.env, userId).addTask(
-        id, text, showUpDate ?? null, projectId ?? null, sourceCaptureId ?? null, recurrence ?? null,
-      );
-      if (!task) return c.json({ error: "task id is in use or project not found" }, 409);
-      return c.json({ task }, 201);
-    }
-    const userDO = getUserDO(c.env, userId);
-    const task = await userDO.addTask(
-      id,
-      text,
-      showUpDate ?? null,
-      projectId ?? null,
-      sourceCaptureId ?? null,
-      recurrence ?? null,
+    const task = await getTaskDO(c.env, userId).addTask(
+      id, text, showUpDate ?? null, projectId ?? null, sourceCaptureId ?? null, recurrence ?? null,
     );
+    if (!task) return c.json({ error: "task id is in use or project not found" }, 409);
     log("task_added", { clerk_user_id: userId });
     return c.json({ task }, 201);
   });
@@ -208,31 +193,13 @@ export const createTasksRoutes = () => {
       return c.json({ error: "no fields to update" }, 400);
     }
 
-    if (await usesTaskDO(c.env, userId)) {
-      const task = await getTaskDO(c.env, userId).patchTask(id, body);
-      if (task === "missing-project") return c.json({ error: "project not found" }, 409);
-      if (!task) return c.json({ error: "task not found" }, 404);
-      return c.json({ task }, 200);
-    }
-    const userDO = getUserDO(c.env, userId);
-    let task: Awaited<ReturnType<typeof userDO.rescheduleTask>> = null;
-    if (hasSortKey && body.sortKey !== undefined) {
-      task = await userDO.reorderTask(id, body.sortKey);
-      if (task) log("task_reordered", { clerk_user_id: userId });
-    }
-    if (hasShowUpDate) {
-      task = await userDO.rescheduleTask(id, body.showUpDate ?? null);
-      if (task) log("task_rescheduled", { clerk_user_id: userId });
-    }
-    if (hasText && body.text !== undefined) {
-      task = await userDO.editTask(id, body.text);
-      if (task) log("task_edited", { clerk_user_id: userId });
-    }
-    if (hasProjectId) {
-      task = await userDO.setTaskProject(id, body.projectId ?? null);
-      if (task) log("task_moved", { clerk_user_id: userId });
-    }
+    const task = await getTaskDO(c.env, userId).patchTask(id, body);
+    if (task === "missing-project") return c.json({ error: "project not found" }, 409);
     if (!task) return c.json({ error: "task not found" }, 404);
+    if (hasSortKey) log("task_reordered", { clerk_user_id: userId });
+    if (hasShowUpDate) log("task_rescheduled", { clerk_user_id: userId });
+    if (hasText) log("task_edited", { clerk_user_id: userId });
+    if (hasProjectId) log("task_moved", { clerk_user_id: userId });
     return c.json({ task }, 200);
   });
 
@@ -263,9 +230,7 @@ export const createTasksRoutes = () => {
   router.openapi(completeRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const task = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).completeTask(id)
-      : await getUserDO(c.env, userId).completeTask(id);
+    const task = await getTaskDO(c.env, userId).completeTask(id);
     if (!task) {
       return c.json({ error: "task not found" }, 404);
     }
@@ -303,9 +268,7 @@ export const createTasksRoutes = () => {
   router.openapi(reopenRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const task = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).reopenTask(id)
-      : await getUserDO(c.env, userId).reopenTask(id);
+    const task = await getTaskDO(c.env, userId).reopenTask(id);
     if (!task) {
       return c.json({ error: "task not found" }, 404);
     }
@@ -344,9 +307,7 @@ export const createTasksRoutes = () => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
     const { recurrence } = c.req.valid("json");
-    const task = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).setTaskRecurrence(id, recurrence)
-      : await getUserDO(c.env, userId).setTaskRecurrence(id, recurrence);
+    const task = await getTaskDO(c.env, userId).setTaskRecurrence(id, recurrence);
     if (!task) return c.json({ error: "task not found" }, 404);
     log("task_recurrence_changed", { clerk_user_id: userId });
     return c.json({ task }, 200);
@@ -387,9 +348,7 @@ export const createTasksRoutes = () => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
     const { scheduledOn, completedOn } = c.req.valid("json");
-    const task = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).completeTaskOccurrence(id, scheduledOn, completedOn)
-      : await getUserDO(c.env, userId).completeTask(id, scheduledOn, completedOn);
+    const task = await getTaskDO(c.env, userId).completeTaskOccurrence(id, scheduledOn, completedOn);
     if (task === "invalid-recurrence") return c.json({ error: "invalid stored recurrence" }, 409);
     if (!task) return c.json({ error: "task not found" }, 404);
     log("task_occurrence_completed", { clerk_user_id: userId });
@@ -439,13 +398,9 @@ export const createTasksRoutes = () => {
       recurrenceDateBefore,
       showUpDateBefore,
     } = c.req.valid("json");
-    const task = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).undoTaskOccurrence(
-        id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore,
-      )
-      : await getUserDO(c.env, userId).undoTaskOccurrence(
-        id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore,
-      );
+    const task = await getTaskDO(c.env, userId).undoTaskOccurrence(
+      id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore,
+    );
     if (task === "invalid-recurrence") return c.json({ error: "invalid stored recurrence" }, 409);
     if (!task) return c.json({ error: "task not found" }, 404);
     log("task_occurrence_undone", { clerk_user_id: userId });

@@ -4,8 +4,7 @@ import { z } from "zod";
 import { log } from "../log";
 import type { Project } from "../store/projects";
 import type { Env } from "../types";
-import { getUserDO } from "../UserDO/stub";
-import { getTaskDO, usesTaskDO } from "../TaskDO/stub";
+import { getTaskDO } from "../TaskDO/stub";
 import { createModel } from "../agents/model";
 import { suggestProjectIcons } from "../agents/icon-suggest";
 
@@ -64,9 +63,7 @@ export const createProjectsRoutes = (
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const projects = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).listProjects()
-      : await getUserDO(c.env, userId).listProjects();
+    const projects = await getTaskDO(c.env, userId).listProjects();
     return c.json({ projects }, 200);
   });
 
@@ -121,9 +118,9 @@ export const createProjectsRoutes = (
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
-    const project = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId })
-      : await getUserDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId });
+    const project = await getTaskDO(c.env, userId).addProject(
+      id, title, { icon, description, state, sourceCaptureId },
+    );
     if (!project) return c.json({ error: "project id is in use or was deleted" }, 409);
     log("project_added", { clerk_user_id: userId });
     return c.json({ project }, 201);
@@ -241,21 +238,16 @@ export const createProjectsRoutes = (
     if (!hasEdit && state === undefined) {
       return c.json({ error: "no fields to update" }, 400);
     }
-    const fixture = await usesTaskDO(c.env, userId);
     let project: Project | null = null;
     if (hasEdit) {
-      project = fixture
-        ? await getTaskDO(c.env, userId).editProject(id, editFields)
-        : await getUserDO(c.env, userId).editProject(id, editFields);
+      project = await getTaskDO(c.env, userId).editProject(id, editFields);
       if (!project) {
         return c.json({ error: "project not found" }, 404);
       }
       log("project_edited", { clerk_user_id: userId });
     }
     if (state !== undefined) {
-      project = fixture
-        ? await getTaskDO(c.env, userId).setProjectState(id, state)
-        : await getUserDO(c.env, userId).setProjectState(id, state);
+      project = await getTaskDO(c.env, userId).setProjectState(id, state);
       if (!project) {
         return c.json({ error: "project not found" }, 404);
       }
@@ -286,16 +278,14 @@ export const createProjectsRoutes = (
 
   // DELETE hard-removes the project (distinct from PATCH state 'done', which
   // keeps the row out of the working list) and cascades to its tasks and waiting
-  // conditions (UserDO.deleteProject). Idempotent on the id: a missing row still
+  // conditions. Idempotent on the id: a missing row still
   // returns 204, so a replayed offline delete (a retry after a lost ACK) never
   // makes the client's outbox throw and retry forever. Unlike the PATCH route
   // there is no 404. The cascade counts ride the log so a delete is observable.
   router.openapi(deleteRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const { tasks, conditions, afters } = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).deleteProject(id)
-      : await getUserDO(c.env, userId).deleteProject(id);
+    const { tasks, conditions, afters } = await getTaskDO(c.env, userId).deleteProject(id);
     log("project_deleted", {
       clerk_user_id: userId,
       tasks,

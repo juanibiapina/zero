@@ -10,16 +10,6 @@ import type { AddProjectAfterResult } from "../store/project-afters";
 import type { WaitingCondition } from "../store/waiting-conditions";
 import type { Env } from "../types";
 import { projectConditions, reaches } from "./conditions";
-import {
-  todoSnapshotCounts,
-  type TodoSnapshot,
-  type TodoSnapshotCounts,
-} from "../todo-authority";
-import { snapshotImportedTask, todoSnapshotTables } from "./import";
-
-const TODO_IMPORT_GENERATION_KEY = "todoImportGeneration";
-const TODO_IMPORT_READY_KEY = "todoImportReady";
-const TODO_IMPORT_ACTIVE_KEY = "todoImportActive";
 
 function parseRecurrence(raw: unknown): Recurrence | null {
   if (typeof raw !== "string") return null;
@@ -31,8 +21,7 @@ function parseRecurrence(raw: unknown): Recurrence | null {
   }
 }
 
-// The per-account todo authority. A UserDO marker decides when an ordinary
-// account is routed here; hermetic fixture accounts use it directly.
+// The per-account todo authority shared by REST and synchronized local replicas.
 export class TaskDO extends WsServerDurableObject<Env> {
   private tasksStore!: MergeableStore;
   private persister!: ReturnType<typeof createDurableObjectSqlStoragePersister>;
@@ -46,101 +35,6 @@ export class TaskDO extends WsServerDurableObject<Env> {
       { mode: "fragmented", storagePrefix: "taskdo_" },
     );
     return this.persister;
-  }
-
-  async importTodos(snapshot: TodoSnapshot): Promise<TodoSnapshotCounts> {
-    if (await this.isErased()) throw new Error("Account erased");
-    const [generation, ready, active] = await Promise.all([
-      this.ctx.storage.get<string>(TODO_IMPORT_GENERATION_KEY),
-      this.ctx.storage.get<boolean>(TODO_IMPORT_READY_KEY),
-      this.ctx.storage.get<boolean>(TODO_IMPORT_ACTIVE_KEY),
-    ]);
-    if (active) throw new Error("Todo authority is already active");
-    if (generation && generation !== snapshot.generation) {
-      throw new Error("A different todo import already exists");
-    }
-    if (ready) return this.completeCounts();
-
-    this.tasksStore.setTables(todoSnapshotTables(snapshot));
-    await this.persister.save();
-    await this.ctx.storage.put({
-      [TODO_IMPORT_GENERATION_KEY]: snapshot.generation,
-      [TODO_IMPORT_READY_KEY]: true,
-    });
-    const counts = this.completeCounts();
-    const expected = todoSnapshotCounts(snapshot);
-    if (JSON.stringify(counts) !== JSON.stringify(expected)) {
-      throw new Error("Imported todo counts do not match the frozen source");
-    }
-    return counts;
-  }
-
-  private completeCounts(): TodoSnapshotCounts {
-    return {
-      tasks: Object.keys(this.tasksStore.getTable("tasks")).length,
-      projects: Object.keys(this.tasksStore.getTable("projects")).length,
-      conditions: Object.keys(this.tasksStore.getTable("conditions")).length,
-    };
-  }
-
-  async snapshotImportedTodos(generation: string): Promise<TodoSnapshot> {
-    const status = await this.getTodoImportStatus();
-    if (status.generation !== generation || !status.ready) {
-      throw new Error("Todo import is not ready");
-    }
-    return {
-      generation,
-      tasks: Object.keys(this.tasksStore.getTable("tasks"))
-        .map((id) => snapshotImportedTask(
-          this.task(id),
-          this.tasksStore.getRow("tasks", id),
-        ))
-        .filter((task): task is Task => task !== null),
-      projects: Object.keys(this.tasksStore.getTable("projects"))
-        .map((id) => this.project(id))
-        .filter((project): project is Project => project !== null),
-      conditions: Object.keys(this.tasksStore.getTable("conditions"))
-        .map((id) => this.condition(id))
-        .filter((condition): condition is WaitingCondition => condition !== null),
-    };
-  }
-
-  async getTodoImportStatus(): Promise<{
-    generation: string | null;
-    ready: boolean;
-    active: boolean;
-    counts: TodoSnapshotCounts;
-  }> {
-    const [generation, ready, active] = await Promise.all([
-      this.ctx.storage.get<string>(TODO_IMPORT_GENERATION_KEY),
-      this.ctx.storage.get<boolean>(TODO_IMPORT_READY_KEY),
-      this.ctx.storage.get<boolean>(TODO_IMPORT_ACTIVE_KEY),
-    ]);
-    return { generation: generation ?? null, ready: ready === true,
-      active: active === true, counts: this.completeCounts() };
-  }
-
-  async activateTodoImport(generation: string): Promise<void> {
-    const status = await this.getTodoImportStatus();
-    if (status.generation !== generation || !status.ready) {
-      throw new Error("Todo import is not ready");
-    }
-    await this.ctx.storage.put(TODO_IMPORT_ACTIVE_KEY, true);
-  }
-
-  async discardTodoImport(generation: string): Promise<void> {
-    const status = await this.getTodoImportStatus();
-    if (status.active) throw new Error("Active todo data cannot be discarded");
-    if (status.generation && status.generation !== generation) {
-      throw new Error("A different todo import exists");
-    }
-    this.tasksStore.delTables();
-    await this.persister.save();
-    await this.ctx.storage.delete([
-      TODO_IMPORT_GENERATION_KEY,
-      TODO_IMPORT_READY_KEY,
-      TODO_IMPORT_ACTIVE_KEY,
-    ]);
   }
 
   isErased(): Promise<boolean> {
@@ -513,15 +407,14 @@ export class TaskDO extends WsServerDurableObject<Env> {
 
   // The TinyBase synchronizer has live listeners. Stop them and close sockets
   // before deleting SQLite, or a late auto-save can recreate deleted rows.
-  async purge(lockFixture = false): Promise<void> {
+  async purge(): Promise<void> {
     this.purging = true;
     try {
       for (const socket of this.ctx.getWebSockets()) socket.close(1000, "Account erased");
       await this.persister.destroy();
       await this.ctx.storage.deleteAll();
-      // Ordinary accounts have no TaskDO client yet. The fixture must keep
-      // this one bit or an offline client could repopulate deleted Tasks.
-      if (lockFixture) await this.ctx.storage.put("fixtureDeleted", true);
+      // Keep one bit so an offline client cannot repopulate an erased account.
+      await this.ctx.storage.put("fixtureDeleted", true);
     } catch (error) {
       this.purging = false;
       throw error;

@@ -73,7 +73,7 @@ const fakeUserDO = (seed: Project[] = []) => {
 
 const fakeEnv = (userDO: ReturnType<typeof fakeUserDO>) =>
   ({
-    USER_DO: {
+    TASK_DO: {
       idFromName: (_name: string) => ({ toString: () => "fake-id" }),
       get: () => userDO,
     },

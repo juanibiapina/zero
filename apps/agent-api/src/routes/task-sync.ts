@@ -1,22 +1,15 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 
-import { getTaskDO, isTaskDOFixture, usesTaskDO } from "../TaskDO/stub";
-import { getUserDO } from "../UserDO/stub";
+import { getTaskDO } from "../TaskDO/stub";
 import type { Env } from "../types";
 
 export const createTaskSyncRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
-  router.get("/api/todo-authority", async (c) => {
-    const userId = c.get("userId");
-    if (isTaskDOFixture(c.env, userId)) {
-      return c.json({ authority: "switched" as const });
-    }
-    const { authority } = await getUserDO(c.env, userId).getTodoAuthority();
-    return c.json({ authority });
-  });
+  // Compatibility for installed clients that still ask before opening their
+  // replica. TaskDO is now the only todo authority.
+  router.get("/api/todo-authority", (c) => c.json({ authority: "switched" as const }));
   router.get("/api/task-recoveries", async (c) => {
     const userId = c.get("userId");
-    if (!(await usesTaskDO(c.env, userId))) return c.text("Not found", 404);
     const taskDO = getTaskDO(c.env, userId);
     if (await taskDO.isErased()) return c.text("Account erased", 410);
     return c.json({
@@ -27,7 +20,6 @@ export const createTaskSyncRoutes = () => {
   });
   router.get("/api/task-sync", async (c) => {
     const userId = c.get("userId");
-    if (!(await usesTaskDO(c.env, userId))) return c.text("Not found", 404);
     const taskDO = getTaskDO(c.env, userId);
     if (await taskDO.isErased()) return c.text("Account erased", 410);
     if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {

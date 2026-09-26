@@ -111,15 +111,9 @@ const build = (environment: string, userId: string) => {
       return { tasks: count, conditions: 0, afters: 0 };
     },
   };
-  const userDO = {
-    getTodoAuthority: () => ({ authority: "legacy" as const, generation: null }),
-    listTasks: () => { calls.push("user:list"); return []; },
-    addTask: () => { calls.push("user:add"); return null; },
-  };
   const env = {
     ENVIRONMENT: environment,
     TASK_DO: { idFromName: (id: string) => id, get: () => taskDO },
-    USER_DO: { idFromName: (id: string) => id, get: () => userDO },
   } as unknown as Env;
   const app = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
   app.use("/api/*", async (c, next) => { c.set("userId", userId); await next(); });
@@ -137,7 +131,15 @@ const build = (environment: string, userId: string) => {
   };
 };
 
-describe("TaskDO fixture routes", () => {
+describe("TaskDO routes", () => {
+  it("reports the universal authority to installed clients", async () => {
+    const app = build("production", "ordinary-user");
+
+    expect(await (await app.request("/api/todo-authority")).json()).toEqual({
+      authority: "switched",
+    });
+  });
+
   it("reads, creates, and edits a loose Task without consulting UserDO", async () => {
     const app = build("test", "taskdo-proof-a");
     expect(await (await app.request("/api/tasks")).json()).toEqual({ tasks: [] });
@@ -203,10 +205,10 @@ describe("TaskDO fixture routes", () => {
     expect(app.calls).toEqual([]);
   });
 
-  it("does not use TaskDO outside the test environment", async () => {
-    const app = build("production", "taskdo-proof-a");
+  it("uses TaskDO for ordinary production accounts", async () => {
+    const app = build("production", "ordinary-user");
     expect((await app.request("/api/tasks")).status).toBe(200);
-    expect((await app.request("/api/task-recoveries")).status).toBe(404);
-    expect(app.calls).toEqual(["user:list"]);
+    expect((await app.request("/api/task-recoveries")).status).toBe(200);
+    expect(app.calls).toEqual([]);
   });
 });

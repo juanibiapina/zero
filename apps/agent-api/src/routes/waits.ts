@@ -4,8 +4,7 @@ import { z } from "zod";
 import { log } from "../log";
 import type { ProjectAfterConflict } from "../store/project-afters";
 import type { Env } from "../types";
-import { getUserDO } from "../UserDO/stub";
-import { getTaskDO, usesTaskDO } from "../TaskDO/stub";
+import { getTaskDO } from "../TaskDO/stub";
 
 type Variables = {
   userId: string;
@@ -58,9 +57,7 @@ export const createWaitsRoutes = () => {
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const conditions = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).listWaitingConditions()
-      : await getUserDO(c.env, userId).listWaitingConditions();
+    const conditions = await getTaskDO(c.env, userId).listWaitingConditions();
     return c.json({ conditions }, 200);
   });
 
@@ -113,7 +110,6 @@ export const createWaitsRoutes = () => {
     const userId = c.get("userId");
     const { id, projectId, kind, text, refId, targetStatus } =
       c.req.valid("json");
-    const fixture = await usesTaskDO(c.env, userId);
     if (kind === "project-status") {
       if (
         targetStatus !== "done" ||
@@ -123,9 +119,7 @@ export const createWaitsRoutes = () => {
       ) {
         return c.json({ error: "invalid After relationship" }, 400);
       }
-      const result = fixture
-        ? await getTaskDO(c.env, userId).addProjectAfter(id, projectId, refId)
-        : await getUserDO(c.env, userId).addProjectAfter(id, projectId, refId);
+      const result = await getTaskDO(c.env, userId).addProjectAfter(id, projectId, refId);
       if ("conflict" in result) {
         return c.json({ error: afterConflictMessage[result.conflict] }, 409);
       }
@@ -140,9 +134,7 @@ export const createWaitsRoutes = () => {
     if (!waitingText || refId != null || targetStatus != null) {
       return c.json({ error: "invalid waiting condition" }, 400);
     }
-    const condition = fixture
-      ? await getTaskDO(c.env, userId).addWaitingCondition(id, projectId, waitingText)
-      : await getUserDO(c.env, userId).addWaitingCondition(id, projectId, waitingText);
+    const condition = await getTaskDO(c.env, userId).addWaitingCondition(id, projectId, waitingText);
     if (!condition) return c.json({ error: "project not found or condition id is in use" }, 409);
     log("waiting_condition_added", { clerk_user_id: userId });
     return c.json({ condition }, 201);
@@ -175,9 +167,7 @@ export const createWaitsRoutes = () => {
   router.openapi(resolveRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const condition = await usesTaskDO(c.env, userId)
-      ? await getTaskDO(c.env, userId).resolveWaitingCondition(id)
-      : await getUserDO(c.env, userId).resolveWaitingCondition(id);
+    const condition = await getTaskDO(c.env, userId).resolveWaitingCondition(id);
     if (!condition) return c.json({ error: "condition not found" }, 404);
     log("waiting_condition_resolved", { clerk_user_id: userId });
     return c.json({ condition }, 200);
@@ -199,8 +189,7 @@ export const createWaitsRoutes = () => {
   router.openapi(deleteRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    if (await usesTaskDO(c.env, userId)) await getTaskDO(c.env, userId).deleteWaitingCondition(id);
-    else await getUserDO(c.env, userId).deleteWaitingCondition(id);
+    await getTaskDO(c.env, userId).deleteWaitingCondition(id);
     log("waiting_condition_deleted", { clerk_user_id: userId });
     return c.body(null, 204);
   });

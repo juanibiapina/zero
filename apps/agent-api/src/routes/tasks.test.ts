@@ -8,7 +8,7 @@ import { createTasksRoutes } from "./tasks";
 // A well-formed UUID the client mints; the route body requires uuid shape.
 const UUID_1 = "11111111-1111-4111-8111-111111111111";
 
-// A stand-in UserDO exposing just the task RPC surface, backed by an array.
+// A stand-in TaskDO exposing just the task RPC surface, backed by an array.
 const fakeUserDO = (seed: Task[] = []) => {
   const tasks = [...seed];
   let n = seed.length;
@@ -53,28 +53,10 @@ const fakeUserDO = (seed: Task[] = []) => {
       task.completedAt = null;
       return task;
     },
-    editTask(id: string, text: string): Task | null {
+    patchTask(id: string, fields: Partial<Task>): Task | null {
       const task = tasks.find((t) => t.id === id);
       if (!task) return null;
-      task.text = text;
-      return task;
-    },
-    rescheduleTask(id: string, showUpDate: string | null): Task | null {
-      const task = tasks.find((t) => t.id === id);
-      if (!task) return null;
-      task.showUpDate = showUpDate;
-      return task;
-    },
-    reorderTask(id: string, sortKey: string): Task | null {
-      const task = tasks.find((t) => t.id === id);
-      if (!task) return null;
-      task.sortKey = sortKey;
-      return task;
-    },
-    setTaskProject(id: string, projectId: string | null): Task | null {
-      const task = tasks.find((t) => t.id === id);
-      if (!task) return null;
-      task.projectId = projectId;
+      Object.assign(task, fields);
       return task;
     },
     _tasks: tasks,
@@ -83,7 +65,7 @@ const fakeUserDO = (seed: Task[] = []) => {
 
 const fakeEnv = (userDO: ReturnType<typeof fakeUserDO>) =>
   ({
-    USER_DO: {
+    TASK_DO: {
       idFromName: (_name: string) => ({ toString: () => "fake-id" }),
       get: () => userDO,
     },

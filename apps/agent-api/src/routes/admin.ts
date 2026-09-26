@@ -12,8 +12,6 @@ import type { Env } from "../types";
 import { getGithubInstallationStatus } from "../github-token";
 import { listClerkUsers, getClerkUser } from "../admin-users";
 import { getUserDO } from "../UserDO/stub";
-import { getTaskDO } from "../TaskDO/stub";
-import { canonicalTodoSnapshot } from "../todo-authority";
 import { fmtErr, log, logError } from "../log";
 import {
   AiUsageRangeSchema,
@@ -216,69 +214,6 @@ export const createAdminRoutes = () => {
       onboardingSeen: settings.onboardingSeen,
       braveKeyPaid: settings.braveKeyPaid,
     }, 200);
-  });
-
-  const TodoMigrationRequestSchema = z.discriminatedUnion("action", [
-    z.object({ action: z.literal("prepare"), generation: z.string().min(1).max(100) }),
-    z.object({ action: z.literal("switch"), generation: z.string().min(1).max(100) }),
-    z.object({ action: z.literal("abort"), generation: z.string().min(1).max(100) }),
-  ]);
-  const TodoMigrationStatusSchema = z.object({
-    authority: z.enum(["legacy", "frozen", "switched"]),
-    generation: z.string().nullable(),
-    destination: z.object({
-      generation: z.string().nullable(),
-      ready: z.boolean(),
-      active: z.boolean(),
-      counts: z.object({ tasks: z.number(), projects: z.number(), conditions: z.number() }),
-    }),
-  });
-  const todoMigrationRoute = createRoute({
-    method: "post",
-    path: "/api/admin/users/{userId}/todo-migration",
-    tags: ["Admin"],
-    summary: "Prepare, switch, or abort one user's todo authority migration",
-    request: {
-      params: z.object({ userId: z.string().min(1) }),
-      body: { content: { "application/json": { schema: TodoMigrationRequestSchema } } },
-    },
-    responses: {
-      200: { content: { "application/json": { schema: TodoMigrationStatusSchema } }, description: "Migration state" },
-      409: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "Migration cannot proceed" },
-    },
-  });
-  router.openapi(todoMigrationRoute, async (c) => {
-    const { userId } = c.req.valid("param");
-    const request = c.req.valid("json");
-    const userDO = getUserDO(c.env, userId);
-    const taskDO = getTaskDO(c.env, userId);
-    try {
-      if (request.action === "prepare") {
-        const snapshot = await userDO.freezeTodos(request.generation);
-        await taskDO.importTodos(snapshot);
-        const imported = await taskDO.snapshotImportedTodos(request.generation);
-        if (canonicalTodoSnapshot(imported) !== canonicalTodoSnapshot(snapshot)) {
-          throw new Error("Imported todo data does not match the frozen source");
-        }
-      } else if (request.action === "switch") {
-        const destination = await taskDO.getTodoImportStatus();
-        if (destination.generation !== request.generation || !destination.ready) {
-          throw new Error("Todo import is not ready");
-        }
-        await taskDO.activateTodoImport(request.generation);
-        await userDO.switchTodos(request.generation);
-      } else {
-        await taskDO.discardTodoImport(request.generation);
-        await userDO.unfreezeTodos(request.generation);
-      }
-      const [source, destination] = await Promise.all([
-        userDO.getTodoAuthority(),
-        taskDO.getTodoImportStatus(),
-      ]);
-      return c.json({ ...source, destination }, 200);
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 409);
-    }
   });
 
   const ErrorSchema = z.object({ error: z.string() });
