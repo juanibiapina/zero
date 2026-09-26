@@ -19,7 +19,9 @@ fi
 IMAGE="node:22-slim"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
 ARTIFACT_DIR="${E2E_ARTIFACT_ROOT:-/tmp/zero-mobile-e2e}/${RUN_ID}"
-PERSIST_DIR="$(mktemp -d -t zero-mobile-e2e-worker.XXXXXX)"
+PERSIST_ROOT="$(mktemp -d -t zero-mobile-e2e-worker.XXXXXX)"
+PERSIST_DIR="$PERSIST_ROOT/initial"
+mkdir -p "$PERSIST_DIR"
 CONTAINER="zero-mobile-e2e-${RUN_ID,,}"
 CONTAINER="${CONTAINER//[^a-z0-9_.-]/-}"
 STAGE="preflight"
@@ -144,7 +146,7 @@ cleanup() {
   podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
   [[ -n "$METRO_PID" ]] && wait "$METRO_PID" >/dev/null 2>&1 || true
   [[ -n "$WORKER_PID" ]] && wait "$WORKER_PID" >/dev/null 2>&1 || true
-  rm -rf "$PERSIST_DIR"
+  rm -rf "$PERSIST_ROOT"
 
   if [[ "$SUCCESS" == "1" ]]; then
     for _ in $(seq 1 20); do
@@ -330,45 +332,133 @@ if ! grep -Eq 'text=Browse|accessibilityText=Browse' "$ARTIFACT_DIR/launch-hiera
   exit 1
 fi
 
-STAGE="maestro flow"
-verbose "running Maestro flow"
-MAESTRO_COMMAND=(
-  maestro --no-ansi test "$HERMETIC_FLOW_DIR"
-  --format junit
-  --output "$ARTIFACT_DIR/maestro/report.xml"
-  --debug-output "$ARTIFACT_DIR/maestro"
-)
 if [[ "$TASKDO_PROOF" == "1" ]]; then
-  MAESTRO_COMMAND[3]="$HERMETIC_FLOW_DIR/05-taskdo-loose-task-offline.yaml"
+  STAGE="maestro TaskDO flow"
   adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null
-else
-  MAESTRO_COMMAND+=(--exclude-tags taskdo-proof)
-fi
-if [[ "${E2E_VERBOSE:-0}" == "1" ]]; then
   set +e
-  "${MAESTRO_COMMAND[@]}" 2>&1 | tee "$ARTIFACT_DIR/maestro.log"
+  maestro --no-ansi test "$HERMETIC_FLOW_DIR/05-taskdo-loose-task-offline.yaml" \
+    --format junit --output "$ARTIFACT_DIR/maestro/report.xml" \
+    --debug-output "$ARTIFACT_DIR/maestro" 2>&1 | tee "$ARTIFACT_DIR/maestro.log"
   maestro_code=${PIPESTATUS[0]}
   set -e
 else
-  set +e
-  "${MAESTRO_COMMAND[@]}" > "$ARTIFACT_DIR/maestro.log" 2>&1
-  maestro_code=$?
-  set -e
+  mapfile -t BEHAVIOR_FLOWS < <(
+    find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' | sort
+  )
+  for index in "${!BEHAVIOR_FLOWS[@]}"; do
+    flow="${BEHAVIOR_FLOWS[$index]}"
+    flow_name="$(basename "$flow" .yaml)"
+    if [[ "$index" -gt 0 ]]; then
+      STAGE="worker reset before $flow_name"
+      adb_device shell am force-stop "$PACKAGE" >/dev/null
+      delete_e2e_stores
+      kill "$WORKER_PID" >/dev/null 2>&1 || true
+      wait "$WORKER_PID" >/dev/null 2>&1 || true
+      podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
+      PERSIST_DIR="$PERSIST_ROOT/$flow_name"
+      mkdir -p "$PERSIST_DIR"
+      podman run --rm --name "$CONTAINER" \
+        --network host \
+        -v "$REPO_ROOT":/repo \
+        -v zero-release-node-modules:/repo/node_modules \
+        -v zero-release-pnpm-store:/pnpm-store \
+        -v "$PERSIST_DIR":/persist \
+        -w /repo/apps/agent-api \
+        "$IMAGE" \
+        bash -lc '
+          set -e
+          corepack enable
+          exec pnpm exec wrangler dev --config wrangler.e2e.jsonc \
+            --persist-to /persist --ip 0.0.0.0 --port 8787
+        ' >> "$ARTIFACT_DIR/worker.log" 2>&1 &
+      WORKER_PID=$!
+      worker_code=""
+      for _ in $(seq 1 120); do
+        worker_code="$(curl -sS -o /dev/null -w '%{http_code}' "http://localhost:$WORKER_PORT/api/tasks" 2>/dev/null || true)"
+        [[ "$worker_code" == "401" ]] && break
+        if ! kill -0 "$WORKER_PID" 2>/dev/null; then break; fi
+        sleep 2
+      done
+      [[ "$worker_code" == "401" ]]
+    fi
+
+    STAGE="maestro $flow_name"
+    verbose "running $flow_name"
+    set +e
+    if [[ "${E2E_VERBOSE:-0}" == "1" ]]; then
+      maestro --no-ansi test "$flow" --format junit \
+        --output "$ARTIFACT_DIR/maestro/$flow_name.xml" \
+        --debug-output "$ARTIFACT_DIR/maestro/$flow_name" 2>&1 | tee -a "$ARTIFACT_DIR/maestro.log"
+      maestro_code=${PIPESTATUS[0]}
+    else
+      maestro --no-ansi test "$flow" --format junit \
+        --output "$ARTIFACT_DIR/maestro/$flow_name.xml" \
+        --debug-output "$ARTIFACT_DIR/maestro/$flow_name" >> "$ARTIFACT_DIR/maestro.log" 2>&1
+      maestro_code=$?
+    fi
+    set -e
+    [[ "$maestro_code" -eq 0 ]]
+
+    STAGE="postcondition $flow_name"
+    tasks_response=""
+    projects_response=""
+    for _ in $(seq 1 30); do
+      tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
+      projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
+      case "$flow_name" in
+        01-add-task)
+          jq -e --arg text "$TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
+            <<< "$tasks_response" >/dev/null 2>&1 \
+            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 && break
+          ;;
+        02-save-project-description)
+          jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
+            '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
+            <<< "$projects_response" >/dev/null 2>&1 \
+            && jq -e '.tasks == []' <<< "$tasks_response" >/dev/null 2>&1 && break
+          ;;
+        *)
+          jq -e '.tasks == []' <<< "$tasks_response" >/dev/null 2>&1 \
+            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 && break
+          ;;
+      esac
+      sleep 1
+    done
+    printf '%s\n' "$tasks_response" > "$ARTIFACT_DIR/$flow_name-tasks.json"
+    printf '%s\n' "$projects_response" > "$ARTIFACT_DIR/$flow_name-projects.json"
+    case "$flow_name" in
+      01-add-task)
+        jq -e --arg text "$TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
+          <<< "$tasks_response" >/dev/null
+        jq -e '.projects == []' <<< "$projects_response" >/dev/null
+        ;;
+      02-save-project-description)
+        jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
+          '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
+          <<< "$projects_response" >/dev/null
+        jq -e '.tasks == []' <<< "$tasks_response" >/dev/null
+        ;;
+      *)
+        jq -e '.tasks == []' <<< "$tasks_response" >/dev/null
+        jq -e '.projects == []' <<< "$projects_response" >/dev/null
+        ;;
+    esac
+  done
 fi
 if [[ "$maestro_code" -ne 0 ]]; then exit "$maestro_code"; fi
 
 if [[ "$TASKDO_PROOF" == "1" ]]; then
   STAGE="TaskDO reconnect"
   adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
-  fixture_tasks=""
+  taskdo_tasks=""
   for _ in $(seq 1 45); do
-    fixture_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
-    if jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$fixture_tasks" >/dev/null 2>&1; then break; fi
+    taskdo_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
+    if jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$taskdo_tasks" >/dev/null 2>&1; then break; fi
     sleep 1
   done
-  printf '%s\n' "$fixture_tasks" > "$ARTIFACT_DIR/worker-tasks-offline-postcondition.json"
-  jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$fixture_tasks" >/dev/null
-  task_id="$(jq -r '.tasks[0].id' <<< "$fixture_tasks")"
+  printf '%s\n' "$taskdo_tasks" > "$ARTIFACT_DIR/worker-tasks-offline-postcondition.json"
+  jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$taskdo_tasks" >/dev/null
+  task_id="$(jq -r '.tasks[0].id' <<< "$taskdo_tasks")"
   edited="$(curl -fsS -X PATCH "http://localhost:$WORKER_PORT/api/tasks/$task_id" \
     -H 'Authorization: Bearer taskdo-proof-mobile' -H 'Content-Type: application/json' \
     -d '{"text":"TaskDO edited on web"}')"
@@ -389,51 +479,23 @@ capture_diagnostics
 
 STAGE="postcondition"
 if [[ "$TASKDO_PROOF" == "1" ]]; then
-  fixture_tasks=""; fixture_projects=""
+  taskdo_tasks=""; taskdo_projects=""
   for _ in $(seq 1 45); do
-    fixture_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
-    fixture_projects="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
-    project_id="$(jq -r '.projects[] | select(.title == "TaskDO offline Project") | .id' <<< "$fixture_projects" 2>/dev/null || true)"
+    taskdo_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
+    taskdo_projects="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
+    project_id="$(jq -r '.projects[] | select(.title == "TaskDO offline Project") | .id' <<< "$taskdo_projects" 2>/dev/null || true)"
     if [[ -n "$project_id" ]] && jq -e --arg project "$project_id" \
       '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
-      <<< "$fixture_tasks" >/dev/null 2>&1; then break; fi
+      <<< "$taskdo_tasks" >/dev/null 2>&1; then break; fi
     sleep 1
   done
-  printf '%s\n' "$fixture_tasks" > "$ARTIFACT_DIR/worker-tasks-postcondition.json"
-  printf '%s\n' "$fixture_projects" > "$ARTIFACT_DIR/worker-projects-postcondition.json"
+  printf '%s\n' "$taskdo_tasks" > "$ARTIFACT_DIR/worker-tasks-postcondition.json"
+  printf '%s\n' "$taskdo_projects" > "$ARTIFACT_DIR/worker-projects-postcondition.json"
   jq -e --arg project "$project_id" \
     '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
-    <<< "$fixture_tasks" >/dev/null
+    <<< "$taskdo_tasks" >/dev/null
   normal_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user')"
   jq -e '.tasks == []' <<< "$normal_tasks" >/dev/null
-else
-tasks_response=""
-projects_response=""
-for _ in $(seq 1 30); do
-  tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
-  projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
-  if jq -e --arg text "$TASK_TEXT" \
-      '.tasks | length == 1 and .[0].text == $text' \
-      <<< "$tasks_response" >/dev/null 2>&1 \
-    && jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
-      '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
-      <<< "$projects_response" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-printf '%s\n' "$tasks_response" > "$ARTIFACT_DIR/worker-tasks-postcondition.json"
-printf '%s\n' "$projects_response" > "$ARTIFACT_DIR/worker-projects-postcondition.json"
-if ! jq -e --arg text "$TASK_TEXT" \
-    '.tasks | length == 1 and .[0].text == $text' \
-    <<< "$tasks_response" >/dev/null; then
-  exit 1
-fi
-if ! jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
-    '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
-    <<< "$projects_response" >/dev/null; then
-  exit 1
-fi
 fi
 
 STAGE="storage isolation"

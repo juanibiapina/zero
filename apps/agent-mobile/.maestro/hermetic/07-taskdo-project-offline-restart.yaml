@@ -1,4 +1,4 @@
-# Hermetic fixture: the Project and its child live in the same offline SQLite replica.
+# Hermetic proof: the Project and its child live in the same offline SQLite replica.
 appId: dev.juanibiapina.zeroagent
 tags:
   - taskdo-proof

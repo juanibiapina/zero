@@ -1,4 +1,4 @@
-# Hermetic navigation proof; no task fixtures or production state needed.
+# Hermetic navigation proof; starts with empty isolated Worker and phone state.
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp

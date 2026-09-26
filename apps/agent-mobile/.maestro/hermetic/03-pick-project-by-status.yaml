@@ -1,4 +1,4 @@
-# Hermetic E2E: own Project and Task fixtures; no dependency on other flows.
+# Hermetic E2E: creates its own Project and Task in isolated Worker and phone state.
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp

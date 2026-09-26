@@ -315,13 +315,14 @@ installs an APK.
 2. It starts a fresh local Worker in Podman on port 8787.
 3. It starts headless Metro on port 8082 with
    `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
-4. It runs the four non-fixture behavior flows in `.maestro/hermetic/` once each; the
-   selector flow creates and completes its own throwaway Project and Task.
-5. It requires `E2E loose task` in the UI before and after restart, proves a
-   Project description survives Back and reopening, checks Backlog assignment
-   and moving the Task back to loose, then requires exactly that Task and
-   described Project through the Worker's authenticated HTTP interface.
-6. It saves both Worker responses with the run artifacts.
+4. It runs the four ordinary behavior flows in `.maestro/hermetic/` sequentially.
+   Before each flow after the first, it starts a Worker with a new temporary
+   persistence directory and removes only the E2E account's phone replica.
+5. Each flow verifies its own authenticated Worker postcondition before that
+   reset: the loose Task, the described Project, or an empty working set after
+   the throwaway selector entities are completed. The navigation flow also
+   starts and finishes with empty todo state.
+6. It saves each flow's Task and Project responses with the run artifacts.
 7. It verifies production file checksums, launcher alias state, and installed
    package identity.
 8. It removes E2E files, reverse ports, containers, and child processes.
