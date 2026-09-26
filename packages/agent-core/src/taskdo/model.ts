@@ -72,14 +72,6 @@ function put(store: MergeableStore, table: string, id: string, key: string, valu
   else store.setCell(table, id, key, value);
 }
 
-function compareTasks(a: StoredTask, b: StoredTask): number {
-  if (a.sortKey == null || b.sortKey == null) {
-    if (a.sortKey == null && b.sortKey == null) return a.createdAt.localeCompare(b.createdAt);
-    return a.sortKey == null ? 1 : -1;
-  }
-  return (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0) || a.createdAt.localeCompare(b.createdAt);
-}
-
 export class TodoModel {
   readonly store: MergeableStore;
   private readonly now: () => Date;
@@ -87,6 +79,21 @@ export class TodoModel {
   constructor({ store, now = () => new Date() }: TodoModelOptions) {
     this.store = store;
     this.now = now;
+  }
+
+  static orderKeyBetween(before: string | null, after: string | null): string {
+    return generateKeyBetween(before, after);
+  }
+
+  static compareTasks(
+    a: { sortKey: string | null; createdAt: string },
+    b: { sortKey: string | null; createdAt: string },
+  ): number {
+    if (a.sortKey == null || b.sortKey == null) {
+      if (a.sortKey == null && b.sortKey == null) return a.createdAt.localeCompare(b.createdAt);
+      return a.sortKey == null ? 1 : -1;
+    }
+    return (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0) || a.createdAt.localeCompare(b.createdAt);
   }
 
   private timestamp(): string {
@@ -228,7 +235,7 @@ export class TodoModel {
     }
     tasks.sort(options.taskOrder === "created"
       ? (a, b) => a.createdAt.localeCompare(b.createdAt)
-      : compareTasks);
+      : (a, b) => TodoModel.compareTasks(a, b));
     projects.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const conditions = this.classifyConditions();
     return {
@@ -373,9 +380,9 @@ export class TodoModel {
     if (input.projectId && !this.getProject(input.projectId)) return conflict("missing-project");
     const keys = Object.values(this.store.getTable("tasks"))
       .flatMap((row) => typeof row.sortKey === "string" ? [row.sortKey] : []).sort().reverse();
-    let sortKey = generateKeyBetween(null, null);
+    let sortKey = TodoModel.orderKeyBetween(null, null);
     for (const key of keys) {
-      try { sortKey = generateKeyBetween(key, null); break; } catch { /* Keep malformed synchronized keys raw. */ }
+      try { sortKey = TodoModel.orderKeyBetween(key, null); break; } catch { /* Keep malformed synchronized keys raw. */ }
     }
     const recurrenceDate = input.recurrenceDate ?? input.recurrence?.origin ?? null;
     const showUpDate = input.recurrence?.origin ?? input.showUpDate ?? null;
