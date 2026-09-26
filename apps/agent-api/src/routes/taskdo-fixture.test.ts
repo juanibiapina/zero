@@ -132,14 +132,6 @@ const build = (environment: string, userId: string) => {
 };
 
 describe("TaskDO routes", () => {
-  it("reports the universal authority to installed clients", async () => {
-    const app = build("production", "ordinary-user");
-
-    expect(await (await app.request("/api/todo-authority")).json()).toEqual({
-      authority: "switched",
-    });
-  });
-
   it("reads, creates, and edits a loose Task without consulting UserDO", async () => {
     const app = build("test", "taskdo-proof-a");
     expect(await (await app.request("/api/tasks")).json()).toEqual({ tasks: [] });

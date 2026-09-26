@@ -653,6 +653,26 @@ describe('ProjectDetailScreen', () => {
     expect(queryByText('Waiting on')).toBeNull();
   });
 
+  it('hides a waiting condition as soon as it is resolved', async () => {
+    mockFetchWaits.mockResolvedValue([
+      {
+        id: 'w1',
+        projectId: '1',
+        kind: 'free-text',
+        text: 'the letter comes back',
+        refId: null,
+        targetStatus: null,
+        resolvedAt: '2026-09-26T12:00:00.000Z',
+        createdAt: '2026-09-25T12:00:00.000Z',
+      },
+    ]);
+
+    const screen = await renderScreen();
+    await waitFor(() => expect(screen.getByLabelText('Project title')).toBeTruthy());
+    expect(screen.queryByText('the letter comes back')).toBeNull();
+    expect(screen.queryByText('Waiting on')).toBeNull();
+  });
+
   it('explains a task-derived wait in the status and on its source task', async () => {
     const nextDay = tomorrow(localToday());
     mockFetchTasks.mockResolvedValue([

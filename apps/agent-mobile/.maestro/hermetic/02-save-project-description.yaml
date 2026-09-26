@@ -52,4 +52,14 @@ appId: dev.juanibiapina.zeroagent
 - tapOn:
     point: "85%,75%"
 - assertVisible: "Waiting on"
-- tapOn: "Dismiss quick add"
+- tapOn: "What needs to happen?"
+- inputText: "E2E waiting item"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E waiting item"
+    timeout: 30000
+- tapOn: "Resolve condition: E2E waiting item"
+- extendedWaitUntil:
+    notVisible: "E2E waiting item"
+    timeout: 30000

@@ -19,5 +19,6 @@ export { LearningDO } from "./LearningDO/index";
 // One instance per Telegram account, keyed by the Telegram user id: the
 // authoritative record of which Zero user that account belongs to.
 export { TelegramAccountDO } from "./TelegramAccountDO/index";
-// Future todo authority; the sync path is fixture-only until domain integrity passes.
+// One instance per signed-in account; the sole todo authority shared by REST
+// writers and synchronized local replicas.
 export { TaskDO } from "./TaskDO/index";

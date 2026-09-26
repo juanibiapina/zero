@@ -5,9 +5,6 @@ import type { Env } from "../types";
 
 export const createTaskSyncRoutes = () => {
   const router = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
-  // Compatibility for installed clients that still ask before opening their
-  // replica. TaskDO is now the only todo authority.
-  router.get("/api/todo-authority", (c) => c.json({ authority: "switched" as const }));
   router.get("/api/task-recoveries", async (c) => {
     const userId = c.get("userId");
     const taskDO = getTaskDO(c.env, userId);

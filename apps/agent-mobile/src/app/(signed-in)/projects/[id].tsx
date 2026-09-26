@@ -921,7 +921,9 @@ function ProjectWaits({
   const afters = projectAfters(project.id, allConditions ?? [], projects);
   const list = (allConditions ?? []).filter(
     (condition: WaitingCondition) =>
-      condition.projectId === project.id && !isProjectAfter(condition),
+      condition.projectId === project.id &&
+      condition.resolvedAt == null &&
+      !isProjectAfter(condition),
   );
   const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
     tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
