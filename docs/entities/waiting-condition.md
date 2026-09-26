@@ -65,6 +65,7 @@ Per-user REST routes remain `/api/waits` for list, add, resolve, and delete. The
 request schema accepts only manual free text or the separate exact After storage
 variant; no generic kind can be created.
 
-The shared collection exposes purpose-specific `addWaiting`, `resolveWaiting`,
-and `remove` verbs. Reads are local-first and writes use the existing durable
-offline outbox.
+Mobile exposes purpose-specific `addWaiting`, `resolveWaiting`, and `remove`
+operations over its account-scoped TinyBase replica. Web exposes the same verbs
+through its shared collection, with local-first reads and a durable offline
+outbox.

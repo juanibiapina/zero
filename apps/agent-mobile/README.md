@@ -311,7 +311,7 @@ installs an APK.
 
 `run-metro-e2e.sh` owns the full run:
 
-1. It records checksums for the production collection and outbox files.
+1. It records checksums for every production-account TaskDO replica file.
 2. It starts a fresh local Worker in Podman on port 8787.
 3. It starts headless Metro on port 8082 with
    `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
@@ -328,8 +328,9 @@ installs an APK.
 8. It removes E2E files, reverse ports, containers, and child processes.
 
 The one hermetic toggle selects fake Clerk modules, the fixed
-`http://localhost:8787` origin, separate SQLite and AsyncStorage names, disabled
-launcher-count synchronization, disabled EAS Update, and E2E cleartext policy.
+`http://localhost:8787` origin, a separate account-scoped TaskDO replica and
+AsyncStorage keys, disabled launcher-count synchronization, disabled EAS Update,
+and E2E cleartext policy.
 It also aliases Clerk's token cache and resource cache to inert local fakes.
 Normal Metro startup restores real Clerk, normal URL selection, production
 storage names, EAS Update, and launcher synchronization.
@@ -543,8 +544,8 @@ Notes on local builds:
   Android credentials"), so the local APK installs over the existing app with no
   uninstall. It runs the same prebuild + gradle steps as the cloud, just on this
   box in the Nix shell.
-- The first build is slow (gradle ~20 min: it compiles op-sqlite, reanimated,
-  worklets and expo-modules-core native for all four ABIs). Later builds reuse
+- The first build is slow (gradle ~20 min: it compiles reanimated, worklets,
+  expo-sqlite, and expo-modules-core native for all four ABIs). Later builds reuse
   the gradle/pnpm caches.
 - The SDK/NDK download on the first `nix develop` is multi-GB and cached in the
   Nix store afterwards.

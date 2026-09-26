@@ -200,11 +200,9 @@ serves the open-tasks query.
     `projectId` accepts a uuid or `null` (clear to loose).
   - Logs `task_added` / `task_completed` / `task_reopened` / `task_edited` /
     `task_rescheduled` / `task_reordered` / `task_moved`.
-- **Data layer** — a TanStack DB collection (`createTasksApi` in
-  `@zero/agent-core`); the update verbs are told apart by their changed field set
-  (sortKey → reorder, showUpDate → reschedule, completedAt → complete, projectId →
-  move-to-project, else → edit), and reopen is a `revive` verb (re-inserts an
-  evicted row). See `docs/storage.md`.
+- **Data layer** — mobile reads and writes its account-scoped TinyBase replica
+  through `TasksApi`; web uses the TanStack DB `createTasksApi` collection in
+  `@zero/agent-core`. See `docs/storage.md`.
 - **Timezone lives on the client.** The server returns every open task; the
   client splits Home/Upcoming against its own local today (`localToday` in
   `@zero/agent-core`), so the DO needs no timezone.
