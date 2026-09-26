@@ -103,6 +103,12 @@ export {
   type TodoWaits,
 } from "./taskdo/replica";
 export {
+  createTaskdoSyncLifecycle,
+  type CreateTaskdoSyncLifecycleOptions,
+  type TaskdoSyncLifecycle,
+  type TaskdoSynchronizer,
+} from "./taskdo/sync";
+export {
   createInMemoryTaskdoReplica,
   type InMemoryTodoSeed,
 } from "./taskdo/in-memory";
