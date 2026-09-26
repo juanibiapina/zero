@@ -16,7 +16,11 @@ requests reach the same `TaskDO`.
 
 Every signed-in account uses a separate `TaskDO`, resolved by
 `TASK_DO.idFromName(clerkUserId)`. Its TinyBase mergeable store persists to the
-Durable Object's SQLite storage. Updated mobile clients persist a separate
+Durable Object's SQLite storage. The in-process `TaskDomain` owns row decoding,
+todo mutations, recurrence, ordering, cascades, conflict checks, and recovery
+projections over that store. `TaskDO` retains the Durable Object lifecycle:
+SQLite persistence, WebSocket synchronization, socket shutdown, and account
+purge/erasure protection. Updated mobile clients persist a separate
 account-named Expo SQLite replica and synchronize it through an authenticated
 WebSocket. Their todo screens read one derived view over that same file; Task,
 Project, and Waiting/After writes persist there before sync. REST uses typed
