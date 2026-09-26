@@ -14,6 +14,8 @@ const deps = (overrides: Partial<PurgeDeps> = {}): PurgeDeps & { calls: string[]
     purgeSchedules: record("schedules"),
     purgeLearning: record("learning"),
     purgeUser: record("user"),
+    purgeTasks: record("tasks"),
+    resetTasks: record("resetTasks"),
     resetUser: record("reset"),
     ...overrides,
   };
@@ -47,6 +49,8 @@ describe("purgeUserData", () => {
       "user",
       "schedules",
       "learning",
+      "tasks",
+      "resetTasks",
       "reset",
     ]);
   });
@@ -64,6 +68,8 @@ describe("purgeUserData", () => {
       "user",
       "schedules",
       "learning",
+      "tasks",
+      "resetTasks",
       "reset",
     ]);
   });
@@ -76,6 +82,12 @@ describe("purgeUserData", () => {
     });
 
     await expect(purgeUserData(d)).rejects.toThrow("storage unavailable");
+  });
+
+  it("reports failure when TaskDO storage could not be erased", async () => {
+    const d = deps({ purgeTasks: async () => { throw new Error("task storage unavailable"); } });
+    await expect(purgeUserData(d)).rejects.toThrow("task storage unavailable");
+    expect(d.calls).not.toContain("reset");
   });
 
   it("succeeds even though resetting the object always rejects", async () => {

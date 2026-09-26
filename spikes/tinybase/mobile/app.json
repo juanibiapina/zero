@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "TinyBase Proof",
+    "slug": "tinybase-proof",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "newArchEnabled": true,
+    "android": { "package": "dev.zeroapps.tinybaseproof" },
+    "plugins": ["expo-sqlite"]
+  }
+}

@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-26: Your complete todo list—including Projects, Waiting, After relationships, and repeats—can now stay on the phone for offline use and sync with the web.
+
 - 2026-09-24: Pressing + opens the keyboard with the add drawer, without a pause or a gap between them.
 
 - 2026-09-24: Pressing + opens the add drawer with the keyboard instead of showing a separate drawer slide first.

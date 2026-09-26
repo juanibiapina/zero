@@ -83,12 +83,15 @@ import { nextRun } from "../schedules/recurrence";
 import type { Env } from "../types";
 import { USER_TOPIC, USER_TOPIC_DESCRIPTION } from "../user-topic";
 import { log } from "../log";
+import type { TodoAuthority, TodoSnapshot } from "../todo-authority";
 
 // How often the typing loop re-sends the Telegram "typing" action. Telegram's action expires after ~5s.
 const TYPING_INTERVAL_MS = 4000;
 
 // Marks the one-time link reconciliation that follows migration 0022.
 const LINKS_REBUILT_KEY = "topicLinksRebuiltV22";
+const TODO_AUTHORITY_KEY = "todoAuthority";
+const TODO_IMPORT_GENERATION_KEY = "todoImportGeneration";
 
 // Turn a versioned topic write into data that survives an RPC hop.
 const toWriteResult = (apply: () => number): TopicWriteResult => {
@@ -112,6 +115,8 @@ export class UserDO extends DurableObject<Env> {
   private tasks: DbTaskStore;
   private projects: DbProjectStore;
   private waitingConditions: DbWaitingConditionStore;
+  private todoAuthority: TodoAuthority = "legacy";
+  private todoImportGeneration: string | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -125,6 +130,8 @@ export class UserDO extends DurableObject<Env> {
 
     void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage, migrations);
+      this.todoAuthority = (await ctx.storage.get<TodoAuthority>(TODO_AUTHORITY_KEY)) ?? "legacy";
+      this.todoImportGeneration = (await ctx.storage.get<string>(TODO_IMPORT_GENERATION_KEY)) ?? null;
       // Migration 0022 folded legacy topic summaries into bodies, so link rows
       // derived from those bodies can be missing a [[Name]] the folded text
       // introduced. SQL cannot parse the tokens; re-derive them once here.
@@ -148,6 +155,65 @@ export class UserDO extends DurableObject<Env> {
     });
   }
 
+  private assertLegacyTodoWrite(): void {
+    if (this.todoAuthority !== "legacy") {
+      throw new Error(`Todo writes are ${this.todoAuthority}`);
+    }
+  }
+
+  getTodoAuthority(): { authority: TodoAuthority; generation: string | null } {
+    return { authority: this.todoAuthority, generation: this.todoImportGeneration };
+  }
+
+  async freezeTodos(generation: string): Promise<TodoSnapshot> {
+    if (this.todoAuthority === "switched") throw new Error("Todo authority already switched");
+    if (this.todoAuthority === "frozen" && this.todoImportGeneration !== generation) {
+      throw new Error("A different todo import is already frozen");
+    }
+    this.todoAuthority = "frozen";
+    this.todoImportGeneration = generation;
+    await this.ctx.storage.put({
+      [TODO_AUTHORITY_KEY]: this.todoAuthority,
+      [TODO_IMPORT_GENERATION_KEY]: generation,
+    });
+    return {
+      generation,
+      tasks: this.tasks.listAll(),
+      projects: this.projects.listAll(),
+      conditions: this.waitingConditions.listAll(),
+    };
+  }
+
+  snapshotFrozenTodos(generation: string): TodoSnapshot {
+    if (this.todoAuthority !== "frozen" || this.todoImportGeneration !== generation) {
+      throw new Error("Todo source is not frozen for this import");
+    }
+    return {
+      generation,
+      tasks: this.tasks.listAll(),
+      projects: this.projects.listAll(),
+      conditions: this.waitingConditions.listAll(),
+    };
+  }
+
+  async unfreezeTodos(generation: string): Promise<void> {
+    if (this.todoAuthority !== "frozen" || this.todoImportGeneration !== generation) {
+      throw new Error("Todo source is not frozen for this import");
+    }
+    this.todoAuthority = "legacy";
+    this.todoImportGeneration = null;
+    await this.ctx.storage.delete([TODO_AUTHORITY_KEY, TODO_IMPORT_GENERATION_KEY]);
+  }
+
+  async switchTodos(generation: string): Promise<void> {
+    if (this.todoAuthority === "switched" && this.todoImportGeneration === generation) return;
+    if (this.todoAuthority !== "frozen" || this.todoImportGeneration !== generation) {
+      throw new Error("Todo source is not frozen for this import");
+    }
+    this.todoAuthority = "switched";
+    await this.ctx.storage.put(TODO_AUTHORITY_KEY, this.todoAuthority);
+  }
+
   addTask(
     id: string,
     text: string,
@@ -156,6 +222,7 @@ export class UserDO extends DurableObject<Env> {
     sourceCaptureId: string | null = null,
     recurrence: Recurrence | null = null,
   ): Task {
+    this.assertLegacyTodoWrite();
     return this.tasks.add(
       id,
       text,
@@ -178,12 +245,14 @@ export class UserDO extends DurableObject<Env> {
     scheduledOn?: PlainDate,
     completedOn?: PlainDate,
   ): Task | null {
+    this.assertLegacyTodoWrite();
     return scheduledOn && completedOn
       ? this.tasks.completeOccurrence(id, scheduledOn, completedOn)
       : this.tasks.complete(id);
   }
 
   completeTaskForever(id: string): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.completeForever(id);
   }
 
@@ -193,6 +262,7 @@ export class UserDO extends DurableObject<Env> {
     recurrenceDateBefore: PlainDate,
     showUpDateBefore: PlainDate | null,
   ): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.undoOccurrence(
       id,
       expectedRecurrenceDate,
@@ -202,30 +272,37 @@ export class UserDO extends DurableObject<Env> {
   }
 
   setTaskRecurrence(id: string, recurrence: Recurrence | null): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.setRecurrence(id, recurrence);
   }
 
   reopenTask(id: string): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.reopen(id);
   }
 
   editTask(id: string, text: string): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.editText(id, text);
   }
 
   rescheduleTask(id: string, showUpDate: string | null): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.reschedule(id, showUpDate);
   }
 
   reorderTask(id: string, sortKey: string): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.reorder(id, sortKey);
   }
 
   setTaskProject(id: string, projectId: string | null): Task | null {
+    this.assertLegacyTodoWrite();
     return this.tasks.setProject(id, projectId);
   }
 
   addProject(id: string, title: string, opts?: ProjectDefaults): Project {
+    this.assertLegacyTodoWrite();
     return this.projects.add(id, title, opts);
   }
 
@@ -234,6 +311,7 @@ export class UserDO extends DurableObject<Env> {
   }
 
   setProjectState(id: string, state: ProjectState): Project | null {
+    this.assertLegacyTodoWrite();
     return this.db.transaction(
       () =>
         coordinateProjectState(
@@ -246,6 +324,7 @@ export class UserDO extends DurableObject<Env> {
   }
 
   editProject(id: string, fields: ProjectEdit): Project | null {
+    this.assertLegacyTodoWrite();
     return this.projects.edit(id, fields);
   }
 
@@ -263,6 +342,7 @@ export class UserDO extends DurableObject<Env> {
     conditions: number;
     afters: number;
   } {
+    this.assertLegacyTodoWrite();
     return this.db.transaction(() => {
       const existed = this.projects.delete(id);
       const tasks = this.tasks.deleteByProject(id);
@@ -279,6 +359,7 @@ export class UserDO extends DurableObject<Env> {
     projectId: string,
     text: string,
   ): WaitingCondition {
+    this.assertLegacyTodoWrite();
     return this.waitingConditions.addWaiting(id, projectId, text);
   }
 
@@ -287,6 +368,7 @@ export class UserDO extends DurableObject<Env> {
     projectId: string,
     afterProjectId: string,
   ): AddProjectAfterResult {
+    this.assertLegacyTodoWrite();
     return this.db.transaction(() =>
       coordinateProjectAfter(
         this.projects,
@@ -303,10 +385,12 @@ export class UserDO extends DurableObject<Env> {
   }
 
   resolveWaitingCondition(id: string): WaitingCondition | null {
+    this.assertLegacyTodoWrite();
     return this.waitingConditions.resolveWaiting(id);
   }
 
   deleteWaitingCondition(id: string): boolean {
+    this.assertLegacyTodoWrite();
     return this.waitingConditions.delete(id);
   }
 

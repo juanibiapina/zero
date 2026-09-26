@@ -28,6 +28,8 @@ export interface PurgeDeps {
   purgeSchedules: () => Promise<void>;
   purgeLearning: () => Promise<void>;
   purgeUser: () => Promise<void>;
+  purgeTasks: () => Promise<void>;
+  resetTasks: () => Promise<void>;
   // ctx.abort() on UserDO. ALWAYS rejects on this side: the error it raises "is
   // not able to be caught within the application code", so the RPC connection
   // dies instead of returning. That rejection means it worked.
@@ -44,7 +46,13 @@ export const purgeUserData = async (deps: PurgeDeps): Promise<void> => {
 
   await deps.purgeSchedules();
   await deps.purgeLearning();
+  await deps.purgeTasks();
 
+  try {
+    await deps.resetTasks();
+  } catch {
+    // TaskDO aborts after its storage is empty, like UserDO.
+  }
   try {
     await deps.resetUser();
   } catch {

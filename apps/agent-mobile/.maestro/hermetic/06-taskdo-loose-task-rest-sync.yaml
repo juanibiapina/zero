@@ -1,0 +1,13 @@
+appId: dev.juanibiapina.zeroagent
+tags:
+  - taskdo-proof
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "TaskDO edited on web"
+    timeout: 45000
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "TaskDO edited on web"
+    timeout: 45000

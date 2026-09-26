@@ -130,7 +130,7 @@ committed.
   timeline); user answers yes / no / ask-for-changes in an AI session.
 - **Session** — AI session with tools to work with every entity. UI tracks all
   accessed/saved entities; jump to the note/person/etc. Tools have visuals shown
-  in the session trace; following a link is a trackable tool.
+  in the session trace; following a link is a trackable tool. The [TaskDO plan](plans/todo-local-replica-task-do-slice1.md#future-online-agent-sessions) records how online sessions will access todo data.
 - **Deliveries**, **Newsletter**, **Invoice**, **Bill**, **Trip**, **Album**
   (Google Photos), **Google Wallet** (service; auto-use for movie tickets),
   **Movie ticket** — candidate entities.
@@ -163,6 +163,17 @@ committed.
 ---
 
 ## Project tracking
+
+In progress (not deployed): `TaskDO` now has the complete todo model, typed REST
+writes, account-scoped phone persistence, visible recovery and repair, and a
+durable one-account prepare/switch/abort path. The import preserves open and
+terminal Tasks, Projects, Waiting conditions, and After relationships and
+compares every field before activation. Old mobile collections stay alive behind
+the TinyBase UI so durable REST outbox entries drain into the switched `TaskDO`.
+The compact evidence now passes: the Pixel persistence/sync flow, the existing
+two-client/REST convergence proof, and a disposable preserving switch with
+interrupted-switch retry. See [the replica plan](plans/todo-local-replica-sync.md).
+Real accounts still use `UserDO`; no deployment or migration is authorized.
 
 Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.
 

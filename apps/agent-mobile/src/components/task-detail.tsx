@@ -472,6 +472,7 @@ export function useTaskDetail({
   currentProjectId,
   onAddWaiting,
   onError,
+  waitForPersist = false,
 }: {
   api: TasksApi;
   list: Task[];
@@ -486,6 +487,7 @@ export function useTaskDetail({
   onAddWaiting: (project: Project) => void;
   // Each screen passes its own write-error setter (clears on null).
   onError: (message: string | null) => void;
+  waitForPersist?: boolean;
 }): TaskDetail {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -521,10 +523,21 @@ export function useTaskDetail({
 
   const commitAndClose = useCallback(() => {
     if (closingDetailRef.current) return;
+    const trimmed = draft.trim();
+    if (waitForPersist && selected && trimmed && trimmed !== selected.text) {
+      closingDetailRef.current = true;
+      onError(null);
+      const tx = api.edit(selected.id, trimmed);
+      void tx.isPersisted.promise.then(
+        () => setSelectedId(null),
+        (error) => { closingDetailRef.current = false; onError(messageOf(error)); },
+      );
+      return;
+    }
     commitDraft();
     closingDetailRef.current = true;
     setSelectedId(null);
-  }, [commitDraft]);
+  }, [api, commitDraft, draft, onError, selected, waitForPersist]);
 
   const openSelectedProject = useCallback(() => {
     if (!selectedProject) return;

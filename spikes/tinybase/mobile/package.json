@@ -1,0 +1,15 @@
+{
+  "name": "@zero/tinybase-proof-mobile",
+  "private": true,
+  "version": "0.0.0",
+  "main": "index.tsx",
+  "scripts": { "start": "expo start --go --localhost --port 8093" },
+  "dependencies": {
+    "expo": "~57.0.16",
+    "expo-sqlite": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "tinybase": "10.0.1"
+  },
+  "devDependencies": { "babel-preset-expo": "~57.0.5", "typescript": "~6.0.3", "@types/react": "~19.2.18" }
+}

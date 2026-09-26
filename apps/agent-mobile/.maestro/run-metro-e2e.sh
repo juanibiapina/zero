@@ -10,7 +10,12 @@ WORKER_PORT=8787
 TASK_TEXT="E2E loose task"
 PROJECT_TITLE="E2E described project"
 PROJECT_DESCRIPTION="E2E durable project description"
-FLOW_COUNT="$(find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d '[:space:]')"
+TASKDO_PROOF="${E2E_TASKDO_PROOF:-0}"
+if [[ "$TASKDO_PROOF" == "1" ]]; then
+  FLOW_COUNT=2
+else
+  FLOW_COUNT="$(find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' | wc -l | tr -d '[:space:]')"
+fi
 IMAGE="node:22-slim"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
 ARTIFACT_DIR="${E2E_ARTIFACT_ROOT:-/tmp/zero-mobile-e2e}/${RUN_ID}"
@@ -70,7 +75,7 @@ launcher_alias_state() {
 
 delete_e2e_stores() {
   local command
-  command='cd databases 2>/dev/null || exit 0; rm -f zero-app-e2e.sqlite* zero-app-e2e-outbox-v2.sqlite*'
+  command='rm -f databases/zero-app-e2e.sqlite* databases/zero-app-e2e-outbox-v2.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
   adb_device shell "run-as $PACKAGE sh -c '$command'" >/dev/null 2>&1 || true
 }
 
@@ -278,6 +283,7 @@ verbose "starting hermetic Metro"
 CLERK_KEY="$(node -p "require('${MOBILE_DIR}/eas.json').build.development.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY")"
 env -u EXPO_PUBLIC_API_URL \
   EXPO_PUBLIC_HERMETIC_E2E=1 \
+  EXPO_PUBLIC_TASKDO_PROOF="$TASKDO_PROOF" \
   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
   EXPO_UNSTABLE_HEADLESS=1 \
   setsid bash -c '
@@ -332,6 +338,12 @@ MAESTRO_COMMAND=(
   --output "$ARTIFACT_DIR/maestro/report.xml"
   --debug-output "$ARTIFACT_DIR/maestro"
 )
+if [[ "$TASKDO_PROOF" == "1" ]]; then
+  MAESTRO_COMMAND[3]="$HERMETIC_FLOW_DIR/05-taskdo-loose-task-offline.yaml"
+  adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null
+else
+  MAESTRO_COMMAND+=(--exclude-tags taskdo-proof)
+fi
 if [[ "${E2E_VERBOSE:-0}" == "1" ]]; then
   set +e
   "${MAESTRO_COMMAND[@]}" 2>&1 | tee "$ARTIFACT_DIR/maestro.log"
@@ -345,9 +357,56 @@ else
 fi
 if [[ "$maestro_code" -ne 0 ]]; then exit "$maestro_code"; fi
 
+if [[ "$TASKDO_PROOF" == "1" ]]; then
+  STAGE="TaskDO reconnect"
+  adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
+  fixture_tasks=""
+  for _ in $(seq 1 45); do
+    fixture_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
+    if jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$fixture_tasks" >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  printf '%s\n' "$fixture_tasks" > "$ARTIFACT_DIR/worker-tasks-offline-postcondition.json"
+  jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$fixture_tasks" >/dev/null
+  task_id="$(jq -r '.tasks[0].id' <<< "$fixture_tasks")"
+  edited="$(curl -fsS -X PATCH "http://localhost:$WORKER_PORT/api/tasks/$task_id" \
+    -H 'Authorization: Bearer taskdo-proof-mobile' -H 'Content-Type: application/json' \
+    -d '{"text":"TaskDO edited on web"}')"
+  jq -e '.task.text == "TaskDO edited on web"' <<< "$edited" >/dev/null
+  STAGE="maestro REST-to-phone flow"
+  maestro --no-ansi test "$HERMETIC_FLOW_DIR/06-taskdo-loose-task-rest-sync.yaml" \
+    --format junit --output "$ARTIFACT_DIR/maestro/rest-report.xml" \
+    --debug-output "$ARTIFACT_DIR/maestro/rest" >> "$ARTIFACT_DIR/maestro.log" 2>&1
+  STAGE="TaskDO linked offline restart"
+  adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null
+  maestro --no-ansi test "$HERMETIC_FLOW_DIR/07-taskdo-project-offline-restart.yaml" \
+    --format junit --output "$ARTIFACT_DIR/maestro/project-report.xml" \
+    --debug-output "$ARTIFACT_DIR/maestro/project" >> "$ARTIFACT_DIR/maestro.log" 2>&1
+  adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
+fi
+
 capture_diagnostics
 
 STAGE="postcondition"
+if [[ "$TASKDO_PROOF" == "1" ]]; then
+  fixture_tasks=""; fixture_projects=""
+  for _ in $(seq 1 45); do
+    fixture_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
+    fixture_projects="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
+    project_id="$(jq -r '.projects[] | select(.title == "TaskDO offline Project") | .id' <<< "$fixture_projects" 2>/dev/null || true)"
+    if [[ -n "$project_id" ]] && jq -e --arg project "$project_id" \
+      '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
+      <<< "$fixture_tasks" >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  printf '%s\n' "$fixture_tasks" > "$ARTIFACT_DIR/worker-tasks-postcondition.json"
+  printf '%s\n' "$fixture_projects" > "$ARTIFACT_DIR/worker-projects-postcondition.json"
+  jq -e --arg project "$project_id" \
+    '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
+    <<< "$fixture_tasks" >/dev/null
+  normal_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user')"
+  jq -e '.tasks == []' <<< "$normal_tasks" >/dev/null
+else
 tasks_response=""
 projects_response=""
 for _ in $(seq 1 30); do
@@ -374,6 +433,7 @@ if ! jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION"
     '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
     <<< "$projects_response" >/dev/null; then
   exit 1
+fi
 fi
 
 STAGE="storage isolation"

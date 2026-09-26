@@ -2,8 +2,10 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 
 import { log } from "../log";
+import type { Project } from "../store/projects";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
+import { getTaskDO, usesTaskDO } from "../TaskDO/stub";
 import { createModel } from "../agents/model";
 import { suggestProjectIcons } from "../agents/icon-suggest";
 
@@ -62,8 +64,9 @@ export const createProjectsRoutes = (
 
   router.openapi(listRoute, async (c) => {
     const userId = c.get("userId");
-    const userDO = getUserDO(c.env, userId);
-    const projects = await userDO.listProjects();
+    const projects = await usesTaskDO(c.env, userId)
+      ? await getTaskDO(c.env, userId).listProjects()
+      : await getUserDO(c.env, userId).listProjects();
     return c.json({ projects }, 200);
   });
 
@@ -104,6 +107,10 @@ export const createProjectsRoutes = (
         },
         description: "Empty title, non-UUID id, or an unknown state",
       },
+      409: {
+        content: { "application/json": { schema: z.object({ error: z.string() }) } },
+        description: "The Project id was deleted",
+      },
     },
   });
 
@@ -114,13 +121,10 @@ export const createProjectsRoutes = (
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
-    const userDO = getUserDO(c.env, userId);
-    const project = await userDO.addProject(id, title, {
-      icon,
-      description,
-      state,
-      sourceCaptureId,
-    });
+    const project = await usesTaskDO(c.env, userId)
+      ? await getTaskDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId })
+      : await getUserDO(c.env, userId).addProject(id, title, { icon, description, state, sourceCaptureId });
+    if (!project) return c.json({ error: "project id is in use or was deleted" }, 409);
     log("project_added", { clerk_user_id: userId });
     return c.json({ project }, 201);
   });
@@ -237,17 +241,21 @@ export const createProjectsRoutes = (
     if (!hasEdit && state === undefined) {
       return c.json({ error: "no fields to update" }, 400);
     }
-    const userDO = getUserDO(c.env, userId);
-    let project: Awaited<ReturnType<typeof userDO.editProject>> = null;
+    const fixture = await usesTaskDO(c.env, userId);
+    let project: Project | null = null;
     if (hasEdit) {
-      project = await userDO.editProject(id, editFields);
+      project = fixture
+        ? await getTaskDO(c.env, userId).editProject(id, editFields)
+        : await getUserDO(c.env, userId).editProject(id, editFields);
       if (!project) {
         return c.json({ error: "project not found" }, 404);
       }
       log("project_edited", { clerk_user_id: userId });
     }
     if (state !== undefined) {
-      project = await userDO.setProjectState(id, state);
+      project = fixture
+        ? await getTaskDO(c.env, userId).setProjectState(id, state)
+        : await getUserDO(c.env, userId).setProjectState(id, state);
       if (!project) {
         return c.json({ error: "project not found" }, 404);
       }
@@ -285,8 +293,9 @@ export const createProjectsRoutes = (
   router.openapi(deleteRoute, async (c) => {
     const userId = c.get("userId");
     const { id } = c.req.valid("param");
-    const userDO = getUserDO(c.env, userId);
-    const { tasks, conditions, afters } = await userDO.deleteProject(id);
+    const { tasks, conditions, afters } = await usesTaskDO(c.env, userId)
+      ? await getTaskDO(c.env, userId).deleteProject(id)
+      : await getUserDO(c.env, userId).deleteProject(id);
     log("project_deleted", {
       clerk_user_id: userId,
       tasks,

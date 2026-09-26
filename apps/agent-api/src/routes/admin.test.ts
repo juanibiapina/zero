@@ -28,8 +28,12 @@ vi.mock("../admin-ai-usage", async (importOriginal) => {
   };
 });
 
-const { getUserDO } = vi.hoisted(() => ({ getUserDO: vi.fn() }));
+const { getUserDO, getTaskDO } = vi.hoisted(() => ({
+  getUserDO: vi.fn(),
+  getTaskDO: vi.fn(),
+}));
 vi.mock("../UserDO/stub", () => ({ getUserDO }));
+vi.mock("../TaskDO/stub", () => ({ getTaskDO }));
 
 const fakeEnv = (adminUserId: string): Env =>
   ({
@@ -65,6 +69,80 @@ describe("admin gate", () => {
     const app = buildApp(fakeEnv("admin_123"), "admin_123");
     const res = await app.request("/api/admin/users");
     expect(res.status).toBe(200);
+  });
+});
+
+describe("POST /api/admin/users/{userId}/todo-migration", () => {
+  const path = "/api/admin/users/user_a/todo-migration";
+  const post = (action: "prepare" | "switch" | "abort") => ({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, generation: "generation-1" }),
+  });
+  const snapshot = {
+    generation: "generation-1",
+    tasks: [{
+      id: "task-1", text: "Preserve me", showUpDate: null, recurrence: null,
+      recurrenceDate: null, createdAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-02T00:00:00.000Z", projectId: null,
+      sourceCaptureId: null, sortKey: "a0",
+    }],
+    projects: [],
+    conditions: [],
+  };
+  const destination = {
+    generation: "generation-1",
+    ready: true,
+    active: false,
+    counts: { tasks: 1, projects: 0, conditions: 0 },
+  };
+
+  it("prepares only when every imported field matches the frozen source", async () => {
+    const userDO = {
+      freezeTodos: vi.fn(async () => snapshot),
+      getTodoAuthority: vi.fn(async () => ({ authority: "frozen", generation: "generation-1" })),
+    };
+    const taskDO = {
+      importTodos: vi.fn(async () => destination.counts),
+      snapshotImportedTodos: vi.fn(async () => snapshot),
+      getTodoImportStatus: vi.fn(async () => destination),
+    };
+    getUserDO.mockReturnValue(userDO);
+    getTaskDO.mockReturnValue(taskDO);
+
+    const res = await buildApp(fakeEnv("admin_1"), "admin_1").request(path, post("prepare"));
+
+    expect(res.status).toBe(200);
+    expect(userDO.freezeTodos).toHaveBeenCalledWith("generation-1");
+    expect(taskDO.importTodos).toHaveBeenCalledWith(snapshot);
+    expect(taskDO.snapshotImportedTodos).toHaveBeenCalledWith("generation-1");
+  });
+
+  it("retries forward after interruption between activation and routing", async () => {
+    const activateTodoImport = vi.fn(async () => {});
+    const switchTodos = vi.fn()
+      .mockRejectedValueOnce(new Error("interrupted"))
+      .mockResolvedValueOnce(undefined);
+    getUserDO.mockReturnValue({
+      switchTodos,
+      getTodoAuthority: async () => ({ authority: "switched", generation: "generation-1" }),
+    });
+    getTaskDO.mockReturnValue({
+      activateTodoImport,
+      getTodoImportStatus: vi.fn()
+        .mockResolvedValueOnce(destination)
+        .mockResolvedValueOnce({ ...destination, active: true })
+        .mockResolvedValueOnce({ ...destination, active: true }),
+    });
+
+    const app = buildApp(fakeEnv("admin_1"), "admin_1");
+    const interrupted = await app.request(path, post("switch"));
+    const retried = await app.request(path, post("switch"));
+
+    expect(interrupted.status).toBe(409);
+    expect(retried.status).toBe(200);
+    expect(activateTodoImport.mock.invocationCallOrder[0])
+      .toBeLessThan(switchTodos.mock.invocationCallOrder[0]);
   });
 });
 

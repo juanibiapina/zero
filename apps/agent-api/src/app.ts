@@ -16,6 +16,7 @@ import { createAdminRoutes } from "./routes/admin";
 import { createTasksRoutes } from "./routes/tasks";
 import { createProjectsRoutes } from "./routes/projects";
 import { createWaitsRoutes } from "./routes/waits";
+import { createTaskSyncRoutes } from "./routes/task-sync";
 
 type Variables = {
   userId: string;
@@ -28,6 +29,9 @@ export const createApp = () => {
   // webhook path swallows its own failures (returning 200), so this only fires
   // for genuinely unexpected throws in the HTTP handlers.
   app.onError((err, c) => {
+    if (err instanceof Error && /^Todo writes are (frozen|switched)$/.test(err.message)) {
+      return c.json({ error: "Todo storage changed; retry this write" }, 409);
+    }
     logError("http_error", { error: fmtErr(err), path: c.req.path });
     try {
       c.executionCtx.waitUntil(
@@ -83,6 +87,7 @@ export const createApp = () => {
   app.route("/", createUserSettingsRoutes());
   app.route("/", createOnboardingRoutes());
   app.route("/", createAdminRoutes());
+  app.route("/", createTaskSyncRoutes());
   app.route("/", createTasksRoutes());
   app.route("/", createProjectsRoutes());
   app.route("/", createWaitsRoutes());

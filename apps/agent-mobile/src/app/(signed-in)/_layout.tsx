@@ -7,6 +7,7 @@ import { HomeAppIconSync } from '../../components/home-app-icon-sync';
 import { syncHomeAppIcon } from '../../lib/home-app-icon';
 import { useColor } from '../../lib/theme';
 import { RUNTIME_PROFILE } from '../../lib/runtime-profile';
+import { TodoDataProvider } from '../../lib/taskdo-fixture-context';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
 // Keep the server's stored timezone equal to this device's, silently. Built once
@@ -62,9 +63,7 @@ export default function SignedInLayout() {
   // Home and Projects remain direct destinations. Browse is a stack for
   // secondary destinations, starting with Upcoming. Each trigger matches its
   // route name; Browse owns its own index and pushed screens.
-  return (
-    <>
-      {RUNTIME_PROFILE.launcherCountSyncEnabled ? <HomeAppIconSync /> : null}
+  const tabs = (
       <NativeTabs
         tintColor={accent}
         backgroundColor={surface}
@@ -83,6 +82,11 @@ export default function SignedInLayout() {
           <NativeTabs.Trigger.Label>Browse</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       </NativeTabs>
+  );
+  return (
+    <>
+      {RUNTIME_PROFILE.launcherCountSyncEnabled ? <HomeAppIconSync /> : null}
+      <TodoDataProvider>{tabs}</TodoDataProvider>
     </>
   );
 }

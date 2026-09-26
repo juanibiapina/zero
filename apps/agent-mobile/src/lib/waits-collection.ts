@@ -8,6 +8,7 @@ import {
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
+import { useTaskDOFixtureContext } from './taskdo-fixture-context';
 
 // The mobile waiting-condition data layer: the shared factory bound to the Clerk
 // token. Mechanics (singleton, token ref, offline SQLite + outbox, jest
@@ -29,4 +30,8 @@ const waits = defineMobileEntityApi<WaitsApi, WaitsRest>({
 export const getMobileWaitsApi = waits.get;
 export const setWaitsTokenGetter = waits.setTokenGetter;
 export const resetWaitsApiForTest = waits.resetForTest;
-export const useWaitsApi = waits.useApi;
+export const useWaitsApi = (): WaitsApi | null => {
+  const taskDO = useTaskDOFixtureContext();
+  const legacy = waits.useApi();
+  return taskDO?.waitsApi ?? legacy;
+};
