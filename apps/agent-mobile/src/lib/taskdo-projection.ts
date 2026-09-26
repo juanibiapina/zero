@@ -13,10 +13,10 @@ export type Recovery = {
   reason: string;
   repair?: RecoveryRepair;
 };
-export type FixtureSnapshot = { tasks: Task[]; projects: Project[]; conditions: ProjectAttention[]; recoveries: Recovery[] };
+export type TodoSnapshot = { tasks: Task[]; projects: Project[]; conditions: ProjectAttention[]; recoveries: Recovery[] };
 
-export function repairFixtureRecovery(store: MergeableStore, recovery: Recovery): boolean {
-  const current = projectFixture(store).recoveries.some((issue) =>
+export function repairTodoRecovery(store: MergeableStore, recovery: Recovery): boolean {
+  const current = projectTodoData(store).recoveries.some((issue) =>
     issue.table === recovery.table && issue.id === recovery.id &&
     issue.reason === recovery.reason && issue.repair === recovery.repair);
   if (!current || !recovery.repair) return false;
@@ -31,7 +31,7 @@ export function repairFixtureRecovery(store: MergeableStore, recovery: Recovery)
   return true;
 }
 
-export function projectFixture(store: MergeableStore): FixtureSnapshot {
+export function projectTodoData(store: MergeableStore): TodoSnapshot {
   const recoveries: Recovery[] = [];
   const projectsById = new Map<string, Project>();
   for (const [id, row] of Object.entries(store.getTable('projects'))) {

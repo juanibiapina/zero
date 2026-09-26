@@ -13,12 +13,9 @@ import {
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
-import { useTaskDOFixtureContext } from './taskdo-fixture-context';
 
-// The mobile Project data layer: the shared factory bound to the Clerk token,
-// as one app-lifetime singleton read by the Projects screen. The mechanics
-// (singleton, token ref, offline SQLite + outbox, jest fallback) are in
-// ./entity-api.
+// REST-backed test adapter for screen tests. Production screens use the
+// TinyBase APIs exposed by todo-data-context.
 function makeRest(getToken: TokenGetter): ProjectsRest {
   return {
     fetchProjects: () => fetchProjects(getToken),
@@ -35,11 +32,5 @@ const projects = defineMobileEntityApi<ProjectsApi, ProjectsRest>({
   makeRest,
 });
 
-export const getMobileProjectsApi = projects.get;
-export const setProjectsTokenGetter = projects.setTokenGetter;
 export const resetProjectsApiForTest = projects.resetForTest;
-export const useProjectsApi = (): ProjectsApi | null => {
-  const taskDO = useTaskDOFixtureContext();
-  const legacy = projects.useApi();
-  return taskDO?.projectsApi ?? legacy;
-};
+export const useRestProjectsApiForTest = projects.useApi;

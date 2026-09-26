@@ -20,6 +20,7 @@ import type { Project, ProjectState, Task, WaitingCondition } from '@/lib/api';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
+import { TodoDataTestProvider } from '@/testing/todo-data-test-provider';
 import { __resetIconSuggestions } from '@/lib/icon-suggestions';
 
 import ProjectDetailScreen from '../projects/[id]';
@@ -352,7 +353,9 @@ const renderScreen = () => {
   });
   return render(
     <QueryClientProvider client={client}>
-      <ProjectDetailScreen />
+      <TodoDataTestProvider>
+        <ProjectDetailScreen />
+      </TodoDataTestProvider>
     </QueryClientProvider>,
   );
 };

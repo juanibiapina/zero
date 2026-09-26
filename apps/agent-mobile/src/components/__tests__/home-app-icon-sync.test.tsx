@@ -7,6 +7,7 @@ import type { Project, Task, WaitingCondition } from '@zero/agent-core';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
+import { TodoDataTestProvider } from '@/testing/todo-data-test-provider';
 
 import { HomeAppIconSync } from '../home-app-icon-sync';
 
@@ -63,7 +64,9 @@ function renderSync() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <HomeAppIconSync />
+      <TodoDataTestProvider>
+        <HomeAppIconSync />
+      </TodoDataTestProvider>
     </QueryClientProvider>,
   );
 }

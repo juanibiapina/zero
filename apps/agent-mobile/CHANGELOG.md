@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-26: Filing a new Task into a Project from Home confirms where it went after the Task is safely saved.
+
 - 2026-09-26: Tasks and Waiting relationships that point to a missing Project are preserved during account migration and shown for repair instead of being dropped.
 
 - 2026-09-26: Your complete todo list—including Projects, Waiting, After relationships, and repeats—can now stay on the phone for offline use and sync with the web.

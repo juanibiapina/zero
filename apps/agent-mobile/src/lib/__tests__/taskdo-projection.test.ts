@@ -1,12 +1,12 @@
 import { describe, expect, it } from '@jest/globals';
 import { createMergeableStore } from 'tinybase';
 
-import { projectFixture, repairFixtureRecovery } from '../taskdo-projection';
+import { projectTodoData, repairTodoRecovery } from '../taskdo-projection';
 
 const createdAt = '2026-09-25T12:00:00.000Z';
 const project = (title: string) => ({ title, createdAt, state: 'in-play', icon: '📁' });
 
-describe('fixture local todo projection', () => {
+describe('local todo projection', () => {
   it('keeps a late offline child visible and labels its deleted Project link', () => {
     const server = createMergeableStore();
     server.setRow('projects', 'p', project('Project'));
@@ -15,9 +15,9 @@ describe('fixture local todo projection', () => {
     offline.setRow('tasks', 'late', { text: 'Do not lose', createdAt, projectId: 'p' });
     server.merge(offline);
     offline.merge(server);
-    expect(projectFixture(server)).toEqual(projectFixture(offline));
-    expect(projectFixture(server).tasks).toMatchObject([{ id: 'late', text: 'Do not lose', projectId: null }]);
-    expect(projectFixture(server).recoveries).toContainEqual({
+    expect(projectTodoData(server)).toEqual(projectTodoData(offline));
+    expect(projectTodoData(server).tasks).toMatchObject([{ id: 'late', text: 'Do not lose', projectId: null }]);
+    expect(projectTodoData(server).recoveries).toContainEqual({
       table: 'tasks', id: 'late', text: 'Do not lose', reason: 'Deleted Project',
       repair: 'make-task-loose',
     });
@@ -38,13 +38,13 @@ describe('fixture local todo projection', () => {
     b.setRow('projects', 'bad', { title: 'Needs repair' });
     a.merge(b);
     b.merge(a);
-    expect(projectFixture(a)).toEqual(projectFixture(b));
-    expect(projectFixture(a).conditions.map((row) => row.id)).toEqual(['a']);
-    expect(projectFixture(a).recoveries).toContainEqual({
+    expect(projectTodoData(a)).toEqual(projectTodoData(b));
+    expect(projectTodoData(a).conditions.map((row) => row.id)).toEqual(['a']);
+    expect(projectTodoData(a).recoveries).toContainEqual({
       table: 'conditions', id: 'b', text: 'b', reason: 'Cyclic After relationship',
       repair: 'remove-after',
     });
-    expect(projectFixture(a).recoveries).toContainEqual({
+    expect(projectTodoData(a).recoveries).toContainEqual({
       table: 'projects', id: 'bad', text: 'Needs repair', reason: 'Invalid Project',
     });
   });
@@ -52,7 +52,7 @@ describe('fixture local todo projection', () => {
   it('retains invalid recurrence intent while showing the Task and a recovery reason', () => {
     const store = createMergeableStore();
     store.setRow('tasks', 'invalid', { text: 'Work', createdAt, recurrence: '{broken' });
-    const snapshot = projectFixture(store);
+    const snapshot = projectTodoData(store);
     expect(snapshot.tasks).toMatchObject([{ id: 'invalid', recurrence: null }]);
     expect(snapshot.recoveries).toContainEqual({
       table: 'tasks', id: 'invalid', text: 'Work', reason: 'Invalid recurrence',
@@ -67,12 +67,12 @@ describe('fixture local todo projection', () => {
     store.setRow('tasks', 'late', {
       text: 'Keep this', createdAt, projectId: 'deleted', recurrence: '{broken', recurrenceDate: '2026-10-01',
     });
-    const [relationship, recurrence] = projectFixture(store).recoveries;
-    expect(repairFixtureRecovery(store, relationship)).toBe(true);
+    const [relationship, recurrence] = projectTodoData(store).recoveries;
+    expect(repairTodoRecovery(store, relationship)).toBe(true);
     expect(store.getRow('tasks', 'late')).toMatchObject({ text: 'Keep this', recurrence: '{broken' });
     expect(store.hasCell('tasks', 'late', 'projectId')).toBe(false);
-    expect(repairFixtureRecovery(store, relationship)).toBe(false);
-    expect(repairFixtureRecovery(store, recurrence)).toBe(true);
+    expect(repairTodoRecovery(store, relationship)).toBe(false);
+    expect(repairTodoRecovery(store, recurrence)).toBe(true);
     expect(store.getRow('tasks', 'late')).toMatchObject({ text: 'Keep this' });
     expect(store.hasCell('tasks', 'late', 'recurrence')).toBe(false);
     expect(store.hasCell('tasks', 'late', 'recurrenceDate')).toBe(false);

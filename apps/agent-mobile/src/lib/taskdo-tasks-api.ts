@@ -9,14 +9,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MergeableStore } from 'tinybase';
 
 import { openTaskDOReplica } from './taskdo-replica';
-import { projectFixture, type FixtureSnapshot, type Recovery } from './taskdo-projection';
+import { projectTodoData, type TodoSnapshot, type Recovery } from './taskdo-projection';
 
 type Replica = Awaited<ReturnType<typeof openTaskDOReplica>>;
-type FixtureApis = { api: TasksApi; projectsApi: ProjectsApi; waitsApi: WaitsApi };
+type TodoApis = { api: TasksApi; projectsApi: ProjectsApi; waitsApi: WaitsApi };
 const noError = () => null;
 const noErrorSubscription = () => () => {};
 const noRefetch = async () => {};
-const empty: FixtureSnapshot = { tasks: [], projects: [], conditions: [], recoveries: [] };
+const empty: TodoSnapshot = { tasks: [], projects: [], conditions: [], recoveries: [] };
 
 function put(store: MergeableStore, table: string, id: string, key: string, value: string | boolean | null | undefined) {
   if (value == null) store.delCell(table, id, key);
@@ -44,9 +44,9 @@ function transitionProject(store: MergeableStore, id: string, state: Project['st
   }
 }
 
-export function useTaskDOFixtureTasks(): {
+export function useTodoData(): {
   api: TasksApi | null; projectsApi: ProjectsApi | null; waitsApi: WaitsApi | null;
-  error: string | null; connected: boolean; recoveries: FixtureSnapshot['recoveries'];
+  error: string | null; connected: boolean; recoveries: TodoSnapshot['recoveries'];
   repair: (recovery: Recovery) => Promise<void>; ready: boolean;
 } {
   const { userId, getToken } = useAuth();
@@ -55,16 +55,16 @@ export function useTaskDOFixtureTasks(): {
   useEffect(() => { tokenRef.current = getToken; }, [getToken]);
   const currentToken = useCallback(() => tokenRef.current(), []);
   const replicaRef = useRef<Replica | null>(null);
-  const snapshotRef = useRef<FixtureSnapshot>(empty);
+  const snapshotRef = useRef<TodoSnapshot>(empty);
   const [readyUserId, setReadyUserId] = useState<string | null>(null);
-  const [projection, setProjection] = useState<{ userId: string | null; apis: FixtureApis } | null>(null);
+  const [projection, setProjection] = useState<{ userId: string | null; apis: TodoApis } | null>(null);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recoveries, setRecoveries] = useState<FixtureSnapshot['recoveries']>([]);
+  const [recoveries, setRecoveries] = useState<TodoSnapshot['recoveries']>([]);
   const keys = useMemo(() => ({
-    tasks: ['taskdo-fixture-tasks', userId],
-    projects: ['taskdo-fixture-projects', userId],
-    conditions: ['taskdo-fixture-waits', userId],
+    tasks: ['todo-tasks', userId],
+    projects: ['todo-projects', userId],
+    conditions: ['todo-waits', userId],
   }), [userId]);
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export function useTaskDOFixtureTasks(): {
             const id = mutation.modified.id;
             if (!store.hasRow('tasks', id)) throw new Error('Task not found');
             if (('completedAt' in mutation.changes || 'recurrenceDate' in mutation.changes) &&
-              projectFixture(store).recoveries.some((issue) => issue.table === 'tasks' && issue.id === id &&
+              projectTodoData(store).recoveries.some((issue) => issue.table === 'tasks' && issue.id === id &&
                 issue.reason === 'Invalid recurrence')) throw new Error('Recover the invalid recurrence before completing this Task');
             if ('projectId' in mutation.changes) requireProject(store, mutation.modified.projectId);
             for (const key of Object.keys(mutation.changes) as (keyof Task)[]) {
@@ -188,7 +188,7 @@ export function useTaskDOFixtureTasks(): {
             requireProject(store, condition.refId);
             if (condition.projectId === condition.refId) throw new Error('A Project cannot be after itself');
             if (store.getCell('projects', condition.refId, 'state') === 'done') throw new Error('Target Project is Done');
-            const openAfters = projectFixture(store).conditions.filter((row) => row.kind === 'project-status');
+            const openAfters = projectTodoData(store).conditions.filter((row) => row.kind === 'project-status');
             if (openAfters.some((edge) => edge.projectId === condition.projectId && edge.refId === condition.refId)) {
               throw new Error('After relationship already exists');
             }
@@ -225,7 +225,7 @@ export function useTaskDOFixtureTasks(): {
         return { refetch: false };
       },
     }));
-    const apis: FixtureApis = {
+    const apis: TodoApis = {
       api: {
         collection: tasks,
         add: (text, showUpDate = null, projectId = null, sourceCaptureId = null, recurrence = null) =>

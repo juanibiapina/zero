@@ -12,8 +12,7 @@ import {
   syncHomeAppIcon,
 } from '@/lib/home-app-icon';
 import { useLocalDay } from '@/lib/local-day';
-import { useProjectsApi } from '@/lib/projects-collection';
-import { useTasksApi } from '@/lib/tasks-collection';
+import { useProjectsApi, useTasksApi } from '@/lib/todo-api-hooks';
 
 // Keep Android's launcher icon equal to the list Home actually shows. This
 // module owns collection hydration, Home's shared visibility rule, icon

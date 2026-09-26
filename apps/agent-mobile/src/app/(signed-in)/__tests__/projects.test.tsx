@@ -14,6 +14,7 @@ import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
 import { __resetIconSuggestions } from '@/lib/icon-suggestions';
+import { TodoDataTestProvider } from '@/testing/todo-data-test-provider';
 
 import ProjectsScreen from '../projects';
 
@@ -134,7 +135,9 @@ const renderScreen = () => {
   });
   return render(
     <QueryClientProvider client={client}>
-      <ProjectsScreen />
+      <TodoDataTestProvider>
+        <ProjectsScreen />
+      </TodoDataTestProvider>
     </QueryClientProvider>,
   );
 };

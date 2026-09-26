@@ -53,7 +53,7 @@ data on reconnect.
 - One table per entity (e.g. `captures`). The table shape lives in the entity's
   own doc.
 
-## Client layer (offline cache)
+## Web and older mobile client layer (offline cache)
 
 The client keeps a durable local copy so the UI paints instantly offline and
 reconciles with the server in the background.

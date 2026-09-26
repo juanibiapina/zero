@@ -18,6 +18,7 @@ import type { Task } from '@/lib/api';
 import { resetTasksApiForTest } from '@/lib/tasks-collection';
 import { resetProjectsApiForTest } from '@/lib/projects-collection';
 import { resetWaitsApiForTest } from '@/lib/waits-collection';
+import { TodoDataTestProvider } from '@/testing/todo-data-test-provider';
 
 import HomeScreen from '../index';
 
@@ -152,7 +153,9 @@ const renderScreen = () => {
   });
   return render(
     <QueryClientProvider client={client}>
-      <HomeScreen />
+      <TodoDataTestProvider>
+        <HomeScreen />
+      </TodoDataTestProvider>
     </QueryClientProvider>,
   );
 };
@@ -466,7 +469,9 @@ describe('HomeScreen', () => {
     expect(mockAddTask.mock.calls[0][1].projectId).toBe('p');
     expect(mockAddTask.mock.calls[0][1].showUpDate).toBeNull();
     expect(queryByText('write thesis')).toBeNull();
-    expect(defaultToastController.getSnapshot().map((toast) => toast.message)).toEqual(['Filed to project']);
+    await waitFor(() => expect(
+      defaultToastController.getSnapshot().map((toast) => toast.message),
+    ).toEqual(['Filed to project']));
   });
 
   it('shows Waiting in the Project picker for work outside the Home Task list', async () => {

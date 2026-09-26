@@ -20,8 +20,8 @@ jest.mock('../../lib/timezone-sync', () => ({
   createMobileTimezoneSync: (getToken: unknown) => mockCreateSync(getToken),
 }));
 
-jest.mock('../../lib/api', () => ({
-  fetchTodoAuthority: async () => 'legacy',
+jest.mock('../../lib/todo-data-context', () => ({
+  TodoDataProvider: ({ children }: { children: unknown }) => children,
 }));
 
 jest.mock('../../components/home-app-icon-sync', () => ({

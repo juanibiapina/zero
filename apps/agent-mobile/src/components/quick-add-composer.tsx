@@ -247,7 +247,16 @@ export function useQuickAdd({
       effectiveRecurrence,
     );
     if (waitForPersist) {
-      void tx.isPersisted.promise.then(() => closeAdd(), (error) => onError(messageOf(error)));
+      void tx.isPersisted.promise.then(() => {
+        if (addProjectId != null && addProjectId !== contextProjectId) {
+          showTaskDestination(
+            { showUpDate: effectiveDate, projectId: addProjectId },
+            projects,
+            'created',
+          );
+        }
+        closeAdd();
+      }, (error) => onError(messageOf(error)));
       return;
     }
     tx.isPersisted.promise.catch((error) => onError(messageOf(error)));

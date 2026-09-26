@@ -333,21 +333,19 @@ It also aliases Clerk's token cache and resource cache to inert local fakes.
 Normal Metro startup restores real Clerk, normal URL selection, production
 storage names, EAS Update, and launcher synchronization.
 
-To test the **fixture-only** TinyBase path, run
+To run the extended TinyBase persistence proof, use
 `E2E_TASKDO_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel`. The three
-fixture flows prove loose-Task offline restart and REST sync, then Project and
-linked-Task offline restart and Worker REST sync. All signed-in fixture todo
-screens use one `taskdo-fixture-taskdo-proof-mobile.sqlite` file under Expo's
-`files/SQLite/`; the harness cleans only that fixture file, not the production
-collection or outbox. Home lists raw conflicts and offers safe local repairs for
-missing Project links, invalid recurrence, and invalid After relationships. The
-app now has a server-selected TaskDO path for an explicitly switched account,
-but normal accounts still use `UserDO`; none has been switched.
+additional flows prove loose-Task offline restart and REST sync, then Project
+and linked-Task offline restart and Worker REST sync. Every signed-in account
+uses one account-scoped TinyBase SQLite file under Expo's `files/SQLite/`.
+The historical filename prefix remains `taskdo-fixture-` so an installed app
+continues opening the already-migrated file. The harness cleans only its test
+account's file. Home lists raw conflicts and offers safe local repairs for
+missing Project links, invalid recurrence, and invalid After relationships.
 
 | State | Normal | Hermetic E2E |
 | --- | --- | --- |
-| Collection database | `zero-app.sqlite` | `zero-app-e2e.sqlite` |
-| Offline outbox | `zero-app-outbox-v2.sqlite` | `zero-app-e2e-outbox-v2.sqlite` |
+| Todo replica | `taskdo-fixture-<account-id>.sqlite` | `taskdo-fixture-taskdo-proof-mobile.sqlite` |
 | Timezone key | `zero.timezone.synced` | `zero.e2e.timezone.synced` |
 | Icon-suggestion key | `zero.icon-suggestions.v1` | `zero.e2e.icon-suggestions.v1` |
 

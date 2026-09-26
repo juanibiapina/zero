@@ -20,9 +20,7 @@ import { useTaskDetail } from '@/components/task-detail';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
-import { useProjectsApi } from '@/lib/projects-collection';
-import { useTasksApi } from '@/lib/tasks-collection';
-import { useWaitsApi } from '@/lib/waits-collection';
+import { useProjectsApi, useTasksApi, useWaitsApi } from '@/lib/todo-api-hooks';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 

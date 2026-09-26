@@ -170,8 +170,8 @@ persistence, and visible recovery and repair. The migrated production account
 was verified after cutover; the other accounts had no todo rows to import and
 start with empty TaskDOs. `UserDO` continues to own agent conversations and
 other non-todo state. Its old todo tables remain untouched as inert recovery
-data. Old mobile collections stay alive behind the TinyBase UI for now so any
-durable REST outbox entries can drain into `TaskDO`. See
+data. Updated mobile clients open TinyBase directly without starting the retired
+REST-backed todo collections. See
 [the replica plan](plans/todo-local-replica-sync.md).
 
 Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.

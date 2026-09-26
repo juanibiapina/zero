@@ -19,7 +19,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, View } from 'react-native';
 
-import { useTaskDOFixtureContext } from '@/lib/taskdo-fixture-context';
+import { useTodoDataContext } from '@/lib/todo-data-context';
 import { useProjectAdd } from '@/components/project-add';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
@@ -27,9 +27,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { useTaskDetail } from '@/components/task-detail';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
-import { useTasksApi } from '@/lib/tasks-collection';
-import { useProjectsApi } from '@/lib/projects-collection';
-import { useWaitsApi } from '@/lib/waits-collection';
+import { useProjectsApi, useTasksApi, useWaitsApi } from '@/lib/todo-api-hooks';
 import {
   useDelayed,
   useForegroundRefetch,
@@ -78,18 +76,18 @@ function SignedInHomeScreen() {
   const tasksApi = useTasksApi();
   const projectsApi = useProjectsApi();
   const waitsApi = useWaitsApi();
-  const fixture = useTaskDOFixtureContext();
+  const todoData = useTodoDataContext();
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
 
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Home" />
-      {fixture ? <Text variant="subtitle" className="px-screen-x">
-        {fixture.connected ? 'Synced' : 'Offline · saved on this device'}
+      {todoData ? <Text variant="subtitle" className="px-screen-x">
+        {todoData.connected ? 'Synced' : 'Offline · saved on this device'}
       </Text> : null}
-      {fixture?.error ? <Text variant="error" className="px-screen-x">{fixture.error}</Text> : null}
+      {todoData?.error ? <Text variant="error" className="px-screen-x">{todoData.error}</Text> : null}
       {recoveryError ? <Text variant="error" className="px-screen-x">{recoveryError}</Text> : null}
-      {fixture?.recoveries.map((entry) => (
+      {todoData?.recoveries.map((entry) => (
         <View key={`${entry.table}-${entry.id}-${entry.reason}`} className="gap-2 px-screen-x py-1">
           <Text variant="error">
             Recover {entry.table}: {entry.text} — {entry.reason} ({entry.id})
@@ -103,7 +101,7 @@ function SignedInHomeScreen() {
                 variant="outlined"
                 onPress={() => {
                   setRecoveryError(null);
-                  void fixture.repair(entry).catch((error: unknown) => setRecoveryError(String(error)));
+                  void todoData.repair(entry).catch((error: unknown) => setRecoveryError(String(error)));
                 }}
               />
             </Host>
@@ -111,7 +109,7 @@ function SignedInHomeScreen() {
         </View>
       ))}
       {tasksApi && projectsApi && waitsApi ? (
-        <Home api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} fixture={!!fixture} />
+        <Home api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} />
       ) : (
         <View className="flex-1" />
       )}
@@ -123,12 +121,10 @@ function Home({
   api,
   projectsApi,
   waitsApi,
-  fixture = false,
 }: {
   api: TasksApi;
   projectsApi: ProjectsApi;
   waitsApi: WaitsApi;
-  fixture?: boolean;
 }) {
   const { getToken } = useAuth();
   const { data: tasks, isLoading } = useLiveQuery((q) =>
@@ -196,7 +192,7 @@ function Home({
     conditions: conditions ?? [],
     onAddWaiting: (project) => projectAdd.openFor(project, 'waiting'),
     onError: setWriteError,
-    waitForPersist: fixture,
+    waitForPersist: true,
   });
 
   // A project task's icon (defaulting to the neutral one); a loose task has none.
@@ -220,7 +216,7 @@ function Home({
     getToken,
     onError: setWriteError,
     fabLabel: 'Task',
-    waitForPersist: fixture,
+    waitForPersist: true,
   });
 
   useEffect(() => {

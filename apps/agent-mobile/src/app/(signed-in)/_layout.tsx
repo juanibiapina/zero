@@ -7,7 +7,7 @@ import { HomeAppIconSync } from '../../components/home-app-icon-sync';
 import { syncHomeAppIcon } from '../../lib/home-app-icon';
 import { useColor } from '../../lib/theme';
 import { RUNTIME_PROFILE } from '../../lib/runtime-profile';
-import { TodoDataProvider } from '../../lib/taskdo-fixture-context';
+import { TodoDataProvider } from '../../lib/todo-data-context';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
 // Keep the server's stored timezone equal to this device's, silently. Built once

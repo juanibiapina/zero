@@ -8,9 +8,7 @@ import { getAppOutbox, getAppPersistence } from './db';
 
 type EntityCollectionApi = { collection: { cleanup: () => Promise<void> } };
 
-// One mobile entity data layer: a singleton over the shared factory, bound to
-// the current Clerk token. Every entity (Captures, Tasks, Projects) gets the
-// same mechanics from here:
+// Test-only REST collection harness bound to the current Clerk token.
 //
 // - **Singleton, never cleaned up.** Building a second collection over the same
 //   op-sqlite table would run two sync loops on one table and corrupt writes, so
@@ -36,7 +34,6 @@ export function defineMobileEntityApi<Api extends EntityCollectionApi, Rest>(opt
 }): {
   // The singleton, built on first call.
   get: (queryClient: QueryClient) => Promise<Api>;
-  setTokenGetter: (getToken: TokenGetter) => void;
   // Drop the singleton so the next `get` builds a fresh collection. For tests
   // only: the module-level singleton otherwise leaks rows across renders.
   resetForTest: () => void;
@@ -98,9 +95,6 @@ export function defineMobileEntityApi<Api extends EntityCollectionApi, Rest>(opt
 
   return {
     get,
-    setTokenGetter: (getToken) => {
-      tokenGetter = getToken;
-    },
     resetForTest: () => {
       const pending = apiPromise;
       apiPromise = null;

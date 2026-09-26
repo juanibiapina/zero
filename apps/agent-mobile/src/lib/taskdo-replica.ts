@@ -5,16 +5,16 @@ import { createWsSynchronizer } from 'tinybase/synchronizers/synchronizer-ws-cli
 import { API_BASE_URL } from './env';
 import type { TokenGetter } from './api';
 import {
-  projectFixture,
-  repairFixtureRecovery,
-  type FixtureSnapshot,
+  projectTodoData,
+  repairTodoRecovery,
+  type TodoSnapshot,
   type Recovery,
 } from './taskdo-projection';
 
 export async function openTaskDOReplica(
   accountId: string,
   getToken: TokenGetter,
-  onSnapshot: (snapshot: FixtureSnapshot) => void,
+  onSnapshot: (snapshot: TodoSnapshot) => void,
   onConnection: (connected: boolean) => void,
 ) {
   // No shared filename and no anonymous replica: switching accounts cannot
@@ -24,11 +24,13 @@ export async function openTaskDOReplica(
     import('expo-sqlite'),
     import('tinybase/persisters/persister-expo-sqlite'),
   ]);
+  // Keep the historical prefix: changing it would strand the migrated on-device
+  // replica in a different file.
   const db = await openDatabaseAsync(`taskdo-fixture-${accountId}.sqlite`);
   const store = createMergeableStore();
   const persister = createExpoSqlitePersister(store, db, 'taskdo_local');
   await persister.startAutoPersisting();
-  const snapshot = () => onSnapshot(projectFixture(store));
+  const snapshot = () => onSnapshot(projectTodoData(store));
   const listeners = ['tasks', 'projects', 'conditions'].map((table) => store.addTableListener(table, snapshot));
   snapshot();
 
@@ -100,7 +102,7 @@ export async function openTaskDOReplica(
     async repair(recovery: Recovery) {
       if (stopped) throw new Error('Local account is closed');
       let changed = false;
-      store.transaction(() => { changed = repairFixtureRecovery(store, recovery); });
+      store.transaction(() => { changed = repairTodoRecovery(store, recovery); });
       if (changed) await persister.save();
     },
     async close() {

@@ -8,11 +8,9 @@ import {
   type TokenGetter,
 } from './api';
 import { defineMobileEntityApi } from './entity-api';
-import { useTaskDOFixtureContext } from './taskdo-fixture-context';
 
-// The mobile waiting-condition data layer: the shared factory bound to the Clerk
-// token. Mechanics (singleton, token ref, offline SQLite + outbox, jest
-// fallback) are in ./entity-api.
+// REST-backed test adapter for screen tests. Production screens use the
+// TinyBase APIs exposed by todo-data-context.
 function makeRest(getToken: TokenGetter): WaitsRest {
   return {
     fetchWaits: () => fetchWaits(getToken),
@@ -27,11 +25,5 @@ const waits = defineMobileEntityApi<WaitsApi, WaitsRest>({
   makeRest,
 });
 
-export const getMobileWaitsApi = waits.get;
-export const setWaitsTokenGetter = waits.setTokenGetter;
 export const resetWaitsApiForTest = waits.resetForTest;
-export const useWaitsApi = (): WaitsApi | null => {
-  const taskDO = useTaskDOFixtureContext();
-  const legacy = waits.useApi();
-  return taskDO?.waitsApi ?? legacy;
-};
+export const useRestWaitsApiForTest = waits.useApi;
