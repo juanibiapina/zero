@@ -4,7 +4,7 @@
 
 Prove the **real mobile-to-server-to-web path** for a fresh, isolated test account: create a loose Task on the phone while offline, force-stop and reopen the app, reconnect, and read or edit that Task through the existing web REST route. A web REST write must also appear on the phone. Use a new `TaskDO` in the existing `zero-api` Worker and TinyBase persistence in the **actual mobile app**, not just the standalone spike. Gate the entire path to fixture accounts under `ENVIRONMENT=test`; ordinary production accounts keep their current `UserDO` and mobile cache/outbox path.
 
-This is vertical because one Task has one durable write path across a screen, mobile SQLite, TinyBase sync, Cloudflare SQLite, and the web-facing REST route. It is deliberately **only a loose Task** (`projectId: null`, no recurrence). The [isolated proof](../../spikes/tinybase/README.md) found that direct sync can create a Task referring to a missing Project; do not expose Project relationships until that invariant has a tested solution.
+This is vertical because one Task has one durable write path across a screen, mobile SQLite, TinyBase sync, Cloudflare SQLite, and the web-facing REST route. It is deliberately **only a loose Task** (`projectId: null`, no recurrence). The [archived isolated proof](https://github.com/juanibiapina/zero/blob/a7c78c39e8b82e1340bfc6956940a9d9fdc167d3/spikes/tinybase/README.md) found that direct sync can create a Task referring to a missing Project; do not expose Project relationships until that invariant has a tested solution.
 
 ## Where data lives
 
