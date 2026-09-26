@@ -1,12 +1,12 @@
 import { QueryClient } from "@tanstack/react-query";
 import {
   createTaskdoReplica,
+  createTaskdoSyncLifecycle,
   type TaskdoReplica,
   type TodoSnapshot,
 } from "@zero/agent-core";
 import { createMergeableStore } from "tinybase";
 import type { IndexedDbPersister } from "tinybase/persisters/persister-indexed-db";
-import { createWsSynchronizer } from "tinybase/synchronizers/synchronizer-ws-client";
 
 export const TASKDO_BROWSER_DB_PREFIX = "zero-taskdo-replica-";
 const PERSISTENCE_SAFETY_REFRESH_MS = 10_000;
@@ -197,68 +197,15 @@ export async function openBrowserTaskdoReplica(
     startPersistenceSafetyRefresh();
   }
 
-  let connectionAttempt: Promise<void> | undefined;
-  let socket: WebSocket | undefined;
-  let synchronizer: Awaited<ReturnType<typeof createWsSynchronizer>> | undefined;
-  let retry: ReturnType<typeof setTimeout> | undefined;
-  let retryDelay = 1_000;
-  const scheduleReconnect = () => {
-    if (stopped || retry) return;
-    retry = setTimeout(() => {
-      retry = undefined;
-      void connect();
-    }, retryDelay);
-    retryDelay = Math.min(retryDelay * 2, 30_000);
-  };
-  const connect = async () => {
-    if (stopped || socket?.readyState === WebSocket.OPEN || !navigator.onLine) return;
-    if (connectionAttempt) return connectionAttempt;
-    connectionAttempt = (async () => {
-      const live = new WebSocket(taskSyncUrl());
-      socket = live;
-      live.addEventListener("close", () => {
-        if (socket !== live) return;
-        socket = undefined;
-        onConnection(false);
-        void synchronizer?.destroy().catch(() => {});
-        synchronizer = undefined;
-        scheduleReconnect();
-      });
-      try {
-        await new Promise<void>((resolve, reject) => {
-          live.addEventListener("open", () => resolve(), { once: true });
-          live.addEventListener("error", () => reject(new Error("Sync unavailable")), { once: true });
-        });
-        if (stopped) {
-          live.close();
-          return;
-        }
-        synchronizer = await createWsSynchronizer(store, live);
-        await synchronizer.startSync();
-        if (stopped || socket !== live) return;
-        retryDelay = 1_000;
-        onConnection(true);
-      } catch {
-        live.close();
-        if (socket === live) socket = undefined;
-        onConnection(false);
-        scheduleReconnect();
-      }
-    })();
-    try {
-      await connectionAttempt;
-    } finally {
-      connectionAttempt = undefined;
-    }
-  };
-  const reconnectNow = async () => {
-    if (retry) clearTimeout(retry);
-    retry = undefined;
-    await connect();
-  };
+  const sync = createTaskdoSyncLifecycle({
+    store,
+    canConnect: () => navigator.onLine,
+    onConnection,
+    openSocket: () => new WebSocket(taskSyncUrl()),
+  });
   const onVisible = () => {
     if (document.visibilityState === "visible") {
-      void reconnectNow();
+      void sync.reconnect();
       refreshPersisted();
       startPersistenceSafetyRefresh();
     } else {
@@ -268,18 +215,12 @@ export async function openBrowserTaskdoReplica(
   refreshReplica = async () => {
     refreshPersisted();
     await pendingSave;
-    if (synchronizer && socket?.readyState === WebSocket.OPEN) {
-      await synchronizer.load();
-      await synchronizer.save();
-      return;
-    }
-    await reconnectNow();
-    if (!synchronizer || socket?.readyState !== WebSocket.OPEN) throw new Error("Sync unavailable");
+    await sync.refresh();
   };
-  const onOnline = () => { void reconnectNow(); };
+  const onOnline = () => { void sync.reconnect(); };
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisible);
-  void connect();
+  sync.start();
 
   return {
     ...replica,
@@ -290,11 +231,9 @@ export async function openBrowserTaskdoReplica(
       stopped = true;
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
-      if (retry) clearTimeout(retry);
       stopPersistenceSafetyRefresh();
       persistenceChannel?.close();
-      socket?.close();
-      await synchronizer?.destroy();
+      await sync.stop();
       unsubscribe();
       for (const listenerId of persistenceListeners) store.delListener(listenerId);
       await pendingSave.catch(() => {});

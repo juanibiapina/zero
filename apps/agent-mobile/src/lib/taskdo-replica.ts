@@ -1,9 +1,9 @@
 import { AppState } from 'react-native';
 import { createMergeableStore } from 'tinybase';
-import { createWsSynchronizer } from 'tinybase/synchronizers/synchronizer-ws-client';
 import type { QueryClient } from '@tanstack/react-query';
 import {
   createTaskdoReplica,
+  createTaskdoSyncLifecycle,
   type TaskdoReplica,
 } from '@zero/agent-core';
 
@@ -40,89 +40,30 @@ export async function openTaskDOReplica(
   });
   const unsubscribe = replica.subscribe(onSnapshot);
 
-  let stopped = false;
-  let connectionAttempt: Promise<void> | undefined;
-  let socket: WebSocket | undefined;
-  let sync: Awaited<ReturnType<typeof createWsSynchronizer>> | undefined;
-  let retry: ReturnType<typeof setTimeout> | undefined;
-  let delay = 1000;
-  const schedule = () => {
-    if (stopped || retry) return;
-    retry = setTimeout(() => { retry = undefined; void connect(); }, delay);
-    delay = Math.min(delay * 2, 30_000);
-  };
-  const connect = async () => {
-    if (stopped || socket?.readyState === WebSocket.OPEN) return;
-    if (connectionAttempt) return connectionAttempt;
-    connectionAttempt = (async () => {
-      try {
-        const token = await getToken();
-        if (!token) throw new Error('Signed out');
-        const url = `${API_BASE_URL.replace(/^http/, 'ws')}/api/task-sync`;
-        // React Native WebSocket's third argument supports authentication headers.
-        const live = new (WebSocket as unknown as new (
-          url: string, protocols: string[], options: { headers: Record<string, string> },
-        ) => WebSocket)(url, [], { headers: { Authorization: `Bearer ${token}` } });
-        socket = live;
-        live.addEventListener('close', () => {
-          if (socket !== live) return;
-          socket = undefined;
-          onConnection(false);
-          void sync?.destroy().catch(() => {});
-          sync = undefined;
-          schedule();
-        });
-        await new Promise<void>((resolve, reject) => {
-          live.addEventListener('open', () => resolve(), { once: true });
-          live.addEventListener('error', () => reject(new Error('Sync unavailable')), { once: true });
-        });
-        if (stopped) { live.close(); return; }
-        sync = await createWsSynchronizer(store, live);
-        await sync.startSync();
-        if (stopped || socket !== live) return;
-        delay = 1000;
-        onConnection(true);
-      } catch {
-        socket?.close();
-        socket = undefined;
-        onConnection(false);
-        schedule();
-      }
-    })();
-    try {
-      await connectionAttempt;
-    } finally {
-      connectionAttempt = undefined;
-    }
-  };
-  const foreground = AppState.addEventListener('change', (state) => {
-    if (state === 'active') {
-      if (retry) clearTimeout(retry);
-      retry = undefined;
-      void connect();
-    }
+  const sync = createTaskdoSyncLifecycle({
+    store,
+    onConnection,
+    openSocket: async () => {
+      const token = await getToken();
+      if (!token) throw new Error('Signed out');
+      const url = `${API_BASE_URL.replace(/^http/, 'ws')}/api/task-sync`;
+      // React Native WebSocket's third argument supports authentication headers.
+      return new (WebSocket as unknown as new (
+        url: string, protocols: string[], options: { headers: Record<string, string> },
+      ) => WebSocket)(url, [], { headers: { Authorization: `Bearer ${token}` } });
+    },
   });
-  refreshReplica = async () => {
-    if (sync && socket?.readyState === WebSocket.OPEN) {
-      await sync.load();
-      await sync.save();
-      return;
-    }
-    if (retry) clearTimeout(retry);
-    retry = undefined;
-    await connect();
-    if (!sync || socket?.readyState !== WebSocket.OPEN) throw new Error('Sync unavailable');
-  };
-  void connect();
+  const foreground = AppState.addEventListener('change', (state) => {
+    if (state === 'active') void sync.reconnect();
+  });
+  refreshReplica = () => sync.refresh();
+  sync.start();
 
   return {
     ...replica,
     async close() {
-      stopped = true;
       foreground.remove();
-      if (retry) clearTimeout(retry);
-      socket?.close();
-      await sync?.destroy();
+      await sync.stop();
       unsubscribe();
       await replica.close();
       await persister.destroy();
