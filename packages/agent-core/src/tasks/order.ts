@@ -1,8 +1,8 @@
 // The manual-order sort key for the task list: a fractional index. To move a row
 // between two neighbors, mint one key strictly between their keys — an O(1)
 // write that touches only the moved row, never a renumber. The library is
-// hidden behind this one tested seam so both UIs (and the server, via its own
-// duplicated comparator) share a single dependency surface.
+// hidden behind this one tested seam for derived client lists. The canonical
+// TinyBase model owns persisted Task projection order.
 //
 // Ported from the former captures/order.ts in the single-list merge; the Task
 // list is now the sole consumer.

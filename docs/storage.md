@@ -16,18 +16,22 @@ code bundled into those builds, but their REST requests reach the same `TaskDO`.
 
 Every signed-in account uses a separate `TaskDO`, resolved by
 `TASK_DO.idFromName(clerkUserId)`. Its TinyBase mergeable store persists to the
-Durable Object's SQLite storage. The in-process `TaskDomain` owns row decoding,
-todo mutations, recurrence, ordering, cascades, conflict checks, and recovery
-projections over that store. `TaskDO` retains the Durable Object lifecycle:
-SQLite persistence, WebSocket synchronization, socket shutdown, and account
-purge/erasure protection. Mobile persists an account-named Expo SQLite replica;
-web persists an account-named IndexedDB replica. Both synchronize through the
-same authenticated WebSocket and expose `TasksApi`, `ProjectsApi`, and
-`WaitsApi` from the shared `@zero/agent-core` replica. Their screens read one
-derived view over the local store; Task, Project, and Waiting/After writes
-persist locally before sync. REST uses typed writes to the same TaskDO. Current
-clients do not open retired todo caches or outboxes, and upgrades leave those
-legacy files and browser databases untouched.
+Durable Object's SQLite storage. The platform-neutral `TodoModel` in
+`@zero/agent-core` operates directly on any TinyBase mergeable store. It owns
+row decoding, accepted projections, todo mutations, recurrence, ordering,
+cascades, conflict checks, and recovery classification and repair. The
+in-process `TaskDomain` is the TaskDO adapter: it rejects erased-account writes,
+saves successful typed mutations, and maps canonical conflicts and issues to
+the established RPC and REST values. `TaskDO` retains the Durable Object
+lifecycle: SQL persistence, WebSocket synchronization, socket shutdown, and
+account purge/erasure protection. Mobile persists an account-named Expo SQLite
+replica; web persists an account-named IndexedDB replica. Both synchronize
+through the same authenticated WebSocket. The shared replica adapter builds the
+existing `TasksApi`, `ProjectsApi`, and `WaitsApi` interfaces with TanStack
+transactions, publishes query projections, maps client-facing errors and
+recovery actions, and waits for local persistence before reporting a
+transaction persisted. Current clients do not open retired todo caches or
+outboxes, and upgrades leave those legacy files and browser databases untouched.
 Project deletion tombstones the Project and removes its known children.
 REST also edits Projects and creates/resolves/deletes manual Waiting and After
 rows. Done/reopen settles/restores Afters. A late offline child or
@@ -63,9 +67,11 @@ data on reconnect.
 
 ## Client replicas
 
-The shared `@zero/agent-core` replica owns projection, recovery, mutation rules,
-and construction of the three screen-facing APIs. Platform adapters own only
-persistence, authentication, WebSocket construction, and lifecycle events.
+The canonical `@zero/agent-core` model owns projection, recovery, and mutation
+rules. The shared replica is a TanStack adapter that constructs the three
+screen-facing interfaces and presents canonical recovery issues as existing
+user-facing text and repair actions. Platform adapters own persistence,
+authentication, WebSocket construction, and lifecycle events.
 
 - **Mobile:** one Expo SQLite file per Clerk account, named
   `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection.
@@ -101,15 +107,15 @@ replayed, or deleted. They remain inert in existing browser profiles.
 
 A recurring completion is an in-place state transition, not a completed-row
 removal. Task stores versioned `recurrence` JSON and a `recurrenceDate` cursor;
-`showUpDate` can differ after a one-off postpone. The optimistic complete verb
-calls `@zeroapps/recurrence.advance`, updates both dates when another occurrence
+`showUpDate` can differ after a one-off postpone. The canonical model calls
+`@zeroapps/recurrence.advance`, updates both dates when another occurrence
 exists, and sets `completedAt` only when the inclusive end is exhausted.
 
-The shared replica applies completion locally with the user's `completedOn`
-date, and the complete TinyBase metadata survives restart. TaskDO accepts the occurrence's prior
-`recurrenceDate` as `scheduledOn` and advances only when it still matches the
-stored cursor. A repeated or stale write returns current state without advancing
-again.
+The canonical model plans and applies completion locally with the user's
+`completedOn` date, and the complete TinyBase metadata survives restart. The
+same model accepts an occurrence's prior `recurrenceDate` as `scheduledOn` for a
+typed TaskDO write and advances only when it still matches the stored cursor. A
+repeated or stale write returns current state without advancing again.
 
 Recurring Undo carries the full pre-completion Task snapshot. It conditionally
 restores that snapshot only while the server cursor still matches the expected

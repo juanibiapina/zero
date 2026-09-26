@@ -6,6 +6,9 @@ declare global {
     taskdoProof: {
       ready: Promise<void>;
       add: (text: string) => Promise<string[]>;
+      injectInvalidRecurrence: (id: string, text: string) => Promise<void>;
+      recoveries: () => Array<{ id: string; reason: string; repair?: string }>;
+      repair: (index: number) => Promise<boolean>;
       close: () => Promise<void>;
       tasks: () => string[];
       state: () => { connected: boolean; durable: boolean; durabilityError: string | null };
@@ -62,6 +65,24 @@ window.taskdoProof = {
     const transaction = replica!.api.add(text);
     await transaction.isPersisted.promise;
     return replica!.snapshot().tasks.map((task) => task.text).sort();
+  },
+  async injectInvalidRecurrence(id, text) {
+    await ready;
+    replica!.store.setRow("tasks", id, {
+      text,
+      createdAt: new Date().toISOString(),
+      recurrence: "{broken",
+    });
+  },
+  recoveries: () => replica?.snapshot().recoveries.map(({ id, reason, repair }) => ({
+    id,
+    reason,
+    ...(repair ? { repair } : {}),
+  })) ?? [],
+  async repair(index) {
+    await ready;
+    const recovery = replica!.snapshot().recoveries[index];
+    return recovery ? replica!.repair(recovery) : false;
   },
   async close() {
     await ready;

@@ -50,12 +50,14 @@ of allowed interactions vs blacklist of forbidden ones.
 The thing to watch is duplicated CRUD boilerplate across future stores, not
 specificity; do-orm + a Rule-of-Three base covers it when the time comes.
 
-**Client data status (2026-09-26):** Task, Project, Waiting, and After use one
-shared TaskDO replica in `@zero/agent-core`. It owns projection, recovery,
-mutations, and the `TasksApi`, `ProjectsApi`, and `WaitsApi` screen interfaces.
-Mobile and web provide thin persistence, authentication, socket, and lifecycle
-adapters. The former generic REST collection factory has been retired. See
-`docs/storage.md`.
+**Todo model status (2026-09-26):** Task, Project, Waiting, and After use one
+platform-neutral TinyBase model in `@zero/agent-core`. TaskDO, web, and mobile
+all call it for row decoding, accepted projections, mutations, recurrence,
+ordering, relationships, and recovery. TaskDO retains erasure, durable saves,
+WebSocket lifecycle, and RPC result mapping. The shared client replica retains
+TanStack transactions and the `TasksApi`, `ProjectsApi`, and `WaitsApi` screen
+interfaces. Mobile and web provide persistence, authentication, socket, and
+account-lifecycle adapters. See `docs/storage.md`.
 
 **Collapse to one list (decided 2026-08-31; merged 2026-09-12):** the
 Capture/Task split proved premature — the user works in one list the way they do
@@ -158,9 +160,10 @@ committed.
 ## Project tracking
 
 Implemented (2026-09-26): `TaskDO` is the only todo authority for every signed-in
-account. It owns the complete todo model, typed REST writes, account-scoped phone
-persistence, and visible recovery and repair. The migrated production account
-was verified after cutover; the other accounts had no todo rows to import and
+account. A canonical TinyBase model shared by TaskDO, web, and mobile owns todo
+behavior; TaskDO exposes typed REST writes, while client adapters provide
+account-scoped persistence and visible recovery and repair. The migrated
+production account was verified after cutover; the other accounts had no todo rows to import and
 start with empty TaskDOs. `UserDO` continues to own agent conversations and
 other non-todo state. Its old todo tables remain untouched as inert recovery
 data. Updated mobile clients open TinyBase directly without starting the retired
@@ -762,8 +765,8 @@ plumbing (never the domain verbs) followed as its own change.
 Shipped (post-A3): **delete a Project**, distinct from `done`. A destructive
 Delete button in the detail sheet drops the row behind the same ~5s Undo as
 `done`, then removes it through `DELETE /api/projects/{id}`. The operation is
-offline-safe on web and mobile. TaskDO now applies the deletion cascade through
-the shared replica rules.
+offline-safe on web and mobile. The canonical TinyBase model applies the same
+deletion cascade for TaskDO, web, and mobile.
 
 Tightening (2026-09-04, internal, no user-facing change; plan
 `docs/plans/todo-tightening.md`): the six list screens (Captures / Projects /

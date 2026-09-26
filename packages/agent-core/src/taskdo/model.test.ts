@@ -137,4 +137,69 @@ describe("canonical TinyBase todo model", () => {
       recurrenceDate: daily.origin, showUpDate: daily.origin,
     });
   });
+
+  it("keeps create idempotent while explicit restore revives terminal rows", () => {
+    const { model } = setup();
+    model.createTask({ id: "task", text: "Task" });
+    model.completeTask("task");
+    expect(model.createTask({ id: "task", text: "Replacement" })).toMatchObject({
+      ok: true, changed: false, value: { text: "Task", completedAt: NOW },
+    });
+    expect(model.restoreTask({ ...model.getTask("task")!, completedAt: null })).toMatchObject({
+      ok: true, changed: true, value: { text: "Task", completedAt: null },
+    });
+
+    model.createProject({ id: "project", title: "Project" });
+    model.setProjectState("project", "done");
+    expect(model.restoreProject({ ...model.getProject("project")!, state: "in-play" })).toMatchObject({
+      ok: true, changed: true, value: { state: "in-play" },
+    });
+  });
+
+  it("projects only open Tasks, Projects, Waiting conditions, and Afters", () => {
+    const { model } = setup();
+    addProjects(model, "a", "b");
+    model.createTask({ id: "open", text: "Open" });
+    model.createTask({ id: "done", text: "Done" });
+    model.completeTask("done");
+    model.createWaiting("open-wait", "a", "Open");
+    model.createWaiting("done-wait", "a", "Done");
+    model.resolveWaiting("done-wait");
+    model.createAfter("after", "a", "b");
+    model.setProjectState("b", "done");
+    model.setProjectState("a", "done");
+
+    expect(model.project()).toMatchObject({
+      tasks: [{ id: "open" }],
+      projects: [],
+      conditions: [{ id: "open-wait" }],
+    });
+  });
+
+  it("finishes inclusive recurrence and repairs invalid recurrence without dropping the Task", () => {
+    const { model, store } = setup();
+    model.createTask({ id: "finite", text: "Finite", recurrence: { ...daily, until: daily.origin } });
+    expect(model.completeOccurrence("finite", daily.origin, daily.origin)).toMatchObject({
+      ok: true, value: { completedAt: NOW },
+    });
+    store.setRow("tasks", "broken", { text: "Keep", createdAt: NOW, recurrence: "{broken", recurrenceDate: daily.origin });
+    const issue = model.project().issues.find((candidate) => candidate.table === "tasks" && candidate.id === "broken")!;
+    expect(model.repair(issue)).toBe(true);
+    expect(store.getRow("tasks", "broken")).toEqual({ text: "Keep", createdAt: NOW });
+  });
+
+  it("classifies malformed entities independently while retaining valid rows", () => {
+    const { model, store } = setup();
+    store.setRow("projects", "bad-project", { title: "Bad" });
+    store.setRow("tasks", "bad-task", { projectId: "bad-project", recurrence: "{}" });
+    store.setRow("tasks", "valid", { text: "Valid", createdAt: NOW });
+
+    expect(model.project().tasks.map((task) => task.id)).toEqual(["valid"]);
+    expect(model.project().issues).toEqual([
+      { table: "projects", id: "bad-project", reason: "invalid-project" },
+      { table: "tasks", id: "bad-task", projectId: "bad-project", reason: "invalid-task" },
+      { table: "tasks", id: "bad-task", projectId: "bad-project", reason: "invalid-recurrence" },
+      { table: "tasks", id: "bad-task", projectId: "bad-project", reason: "missing-project" },
+    ]);
+  });
 });
