@@ -353,6 +353,12 @@ export class TodoModel {
     return success(this.getCondition(id)!, true);
   }
 
+  setConditionResolvedAt(id: string, resolvedAt: string | null): TodoModelResult<ProjectAttention, "missing-condition"> {
+    if (!this.getCondition(id)) return conflict("missing-condition");
+    put(this.store, "conditions", id, "resolvedAt", resolvedAt);
+    return success(this.getCondition(id)!, true);
+  }
+
   deleteCondition(id: string): TodoModelResult<void> {
     if (!this.store.hasRow("conditions", id)) return success(undefined, false);
     this.store.delRow("conditions", id);
@@ -447,6 +453,20 @@ export class TodoModel {
       if (recurrence) this.store.setCell("tasks", id, "showUpDate", recurrence.origin);
     });
     return success(this.getTask(id)!, true);
+  }
+
+  planTaskCompletion(task: Task, completedOn: string): Partial<Task> {
+    if (task.recurrence && task.recurrenceDate) {
+      const next = advance(task.recurrence, { scheduledOn: task.recurrenceDate, completedOn });
+      if (next.kind === "next") return { recurrenceDate: next.scheduledOn, showUpDate: next.scheduledOn };
+    }
+    return { completedAt: this.timestamp() };
+  }
+
+  planTaskRecurrence(recurrence: Recurrence | null): Partial<Task> {
+    return recurrence
+      ? { recurrence, recurrenceDate: recurrence.origin, showUpDate: recurrence.origin }
+      : { recurrence: null, recurrenceDate: null };
   }
 
   completeOccurrence(id: string, scheduledOn: string, completedOn: string): TodoModelResult<StoredTask, "missing-task" | "invalid-recurrence"> {

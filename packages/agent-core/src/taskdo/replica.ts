@@ -1,17 +1,17 @@
 import { createCollection, safeRandomUUID } from "@tanstack/db";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import type { QueryClient } from "@tanstack/react-query";
-import { advance, validateRecurrence, type PlainDate, type Recurrence } from "@zeroapps/recurrence";
+import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
 import type { MergeableStore } from "tinybase";
 
-import { orderKeyBetween } from "../tasks/order";
+import type { ProjectsApi, ProjectEditFields } from "../projects/collection";
+import type { Project } from "../projects/types";
+import type { TasksApi } from "../tasks/collection";
 import { localToday } from "../tasks/today";
 import type { Task } from "../tasks/types";
-import type { Project } from "../projects/types";
-import type { ProjectAttention } from "../waits/types";
-import type { ProjectsApi, ProjectEditFields } from "../projects/collection";
-import type { TasksApi } from "../tasks/collection";
 import type { WaitsApi } from "../waits/collection";
+import type { ProjectAttention } from "../waits/types";
+import { TodoModel, type TodoIssue } from "./model";
 
 export type TodoRecoveryRepair =
   | "make-task-loose"
@@ -60,206 +60,80 @@ export type CreateTaskdoReplicaOptions = Clock & {
   save?: () => Promise<unknown>;
 };
 
-const put = (
-  store: MergeableStore,
-  table: string,
-  id: string,
-  key: string,
-  value: string | boolean | null | undefined,
-) => {
-  if (value == null) store.delCell(table, id, key);
-  else store.setCell(table, id, key, value);
-};
-
-const requireProject = (store: MergeableStore, id: string | null): void => {
-  if (id && (!store.hasRow("projects", id) || store.getCell("projects", id, "deletedAt"))) {
-    throw new Error("Project was deleted or is not on this device");
+function recoveryFor(store: MergeableStore, issue: TodoIssue): TodoRecovery {
+  const row = store.getRow(issue.table, issue.id);
+  const text = typeof row.text === "string"
+    ? row.text
+    : issue.table === "projects" && typeof row.title === "string" ? row.title : issue.id;
+  if (issue.table === "projects") return { table: "projects", id: issue.id, text, reason: "Invalid Project" };
+  if (issue.table === "tasks") {
+    const detail = {
+      "invalid-task": { reason: "Invalid Task" },
+      "invalid-recurrence": { reason: "Invalid recurrence", repair: "clear-task-recurrence" as const },
+      "missing-project": { reason: "Missing Project", repair: "make-task-loose" as const },
+      "deleted-project": { reason: "Deleted Project", repair: "make-task-loose" as const },
+    }[issue.reason];
+    return { table: "tasks", id: issue.id, text, ...detail };
   }
-};
-
-function transitionProject(
-  store: MergeableStore,
-  id: string,
-  state: Project["state"],
-  now: () => Date,
-) {
-  const previous = store.getCell("projects", id, "state");
-  if (previous === state) return;
-  put(store, "projects", id, "state", state);
-  if (previous !== "done" && state !== "done") return;
-  for (const [conditionId, row] of Object.entries(store.getTable("conditions"))) {
-    if (row.kind !== "project-status" || row.refId !== id) continue;
-    if (state === "done" && !row.resolvedAt) {
-      put(store, "conditions", conditionId, "resolvedAt", now().toISOString());
-      put(store, "conditions", conditionId, "settledByTarget", true);
-    } else if (previous === "done" && state !== "done" && row.settledByTarget === true) {
-      put(store, "conditions", conditionId, "resolvedAt", null);
-      put(store, "conditions", conditionId, "settledByTarget", null);
-    }
-  }
-}
-
-export function repairTodoRecovery(store: MergeableStore, recovery: TodoRecovery): boolean {
-  const current = projectTodoData(store).recoveries.some((issue) =>
-    issue.table === recovery.table && issue.id === recovery.id &&
-    issue.reason === recovery.reason && issue.repair === recovery.repair);
-  if (!current || !recovery.repair) return false;
-  if (recovery.repair === "make-task-loose") {
-    store.delCell("tasks", recovery.id, "projectId");
-  } else if (recovery.repair === "clear-task-recurrence") {
-    store.delCell("tasks", recovery.id, "recurrence");
-    store.delCell("tasks", recovery.id, "recurrenceDate");
-  } else {
-    store.delRow("conditions", recovery.id);
-  }
-  return true;
+  const detail = {
+    "invalid-condition": { reason: "Invalid condition" },
+    "invalid-waiting": { reason: "Invalid Waiting condition" },
+    "invalid-after": { reason: "Invalid After relationship" },
+    "missing-source": { reason: "Missing source Project" },
+    "missing-target": { reason: "Missing target Project", repair: "remove-after" as const },
+    "target-done": { reason: "Target Project is Done", repair: "remove-after" as const },
+    self: { reason: "Self After relationship", repair: "remove-after" as const },
+    duplicate: { reason: "Duplicate After relationship", repair: "remove-after" as const },
+    cycle: { reason: "Cyclic After relationship", repair: "remove-after" as const },
+  }[issue.reason];
+  return { table: "conditions", id: issue.id, text, ...detail };
 }
 
 export function projectTodoData(store: MergeableStore): TodoSnapshot {
-  const recoveries: TodoRecovery[] = [];
-  const projectsById = new Map<string, Project>();
-  for (const [id, row] of Object.entries(store.getTable("projects"))) {
-    if (row.deletedAt) continue;
-    if (typeof row.title !== "string" || typeof row.createdAt !== "string" ||
-      (row.state !== "in-play" && row.state !== "backlog" && row.state !== "done")) {
-      recoveries.push({ table: "projects", id, text: typeof row.title === "string" ? row.title : id, reason: "Invalid Project" });
-      continue;
-    }
-    projectsById.set(id, {
-      id,
-      title: row.title,
-      createdAt: row.createdAt,
-      icon: typeof row.icon === "string" ? row.icon : "📁",
-      description: typeof row.description === "string" ? row.description : null,
-      state: row.state,
-      sourceCaptureId: typeof row.sourceCaptureId === "string" ? row.sourceCaptureId : null,
-    });
-  }
-
-  const tasks: Task[] = [];
-  for (const [id, row] of Object.entries(store.getTable("tasks"))) {
-    const rawProjectId = typeof row.projectId === "string" ? row.projectId : null;
-    if (rawProjectId && !projectsById.has(rawProjectId)) {
-      recoveries.push({
-        table: "tasks",
-        id,
-        text: typeof row.text === "string" ? row.text : id,
-        reason: store.getCell("projects", rawProjectId, "deletedAt") ? "Deleted Project" : "Missing Project",
-        repair: "make-task-loose",
-      });
-    }
-    if (typeof row.text !== "string" || typeof row.createdAt !== "string") {
-      recoveries.push({ table: "tasks", id, text: typeof row.text === "string" ? row.text : id, reason: "Invalid Task" });
-      continue;
-    }
-    let recurrence: Task["recurrence"] = null;
-    if (row.recurrence !== undefined) {
-      try {
-        const result = typeof row.recurrence === "string"
-          ? validateRecurrence(JSON.parse(row.recurrence))
-          : { ok: false as const };
-        if (result.ok) recurrence = result.value;
-      } catch {
-        // The recovery retains the raw value until the user chooses a repair.
-      }
-      if (!recurrence) recoveries.push({
-        table: "tasks", id, text: row.text, reason: "Invalid recurrence", repair: "clear-task-recurrence",
-      });
-    }
-    if (!row.completedAt) tasks.push({
-      id,
-      text: row.text,
-      createdAt: row.createdAt,
-      completedAt: null,
-      showUpDate: typeof row.showUpDate === "string" ? row.showUpDate : null,
-      recurrence,
-      recurrenceDate: typeof row.recurrenceDate === "string" ? row.recurrenceDate : null,
-      projectId: rawProjectId && projectsById.has(rawProjectId) ? rawProjectId : null,
-      sourceCaptureId: typeof row.sourceCaptureId === "string" ? row.sourceCaptureId : null,
-      sortKey: typeof row.sortKey === "string" ? row.sortKey : null,
-    });
-  }
-
-  const conditions: ProjectAttention[] = [];
-  const edges: { source: string; target: string }[] = [];
-  const reaches = (source: string, destination: string): boolean => {
-    const pending = [source];
-    const seen = new Set<string>();
-    while (pending.length) {
-      const current = pending.pop()!;
-      if (current === destination) return true;
-      if (seen.has(current)) continue;
-      seen.add(current);
-      pending.push(...edges.filter((edge) => edge.source === current).map((edge) => edge.target));
-    }
-    return false;
-  };
-  for (const [id, row] of Object.entries(store.getTable("conditions")).sort(([a], [b]) => a.localeCompare(b))) {
-    const source = typeof row.projectId === "string" ? row.projectId : null;
-    const target = typeof row.refId === "string" ? row.refId : null;
-    const text = typeof row.text === "string" ? row.text : id;
-    const conflict = (reason: string, repair?: TodoRecoveryRepair) =>
-      recoveries.push({ table: "conditions", id, text, reason, ...(repair ? { repair } : {}) });
-    if (!source || typeof row.createdAt !== "string" ||
-      (row.resolvedAt !== undefined && typeof row.resolvedAt !== "string")) {
-      conflict("Invalid condition");
-      continue;
-    }
-    if (!projectsById.has(source)) {
-      conflict("Missing source Project");
-      continue;
-    }
-    if (row.kind === "free-text") {
-      if (typeof row.text !== "string" || !row.text.trim() || target || row.targetStatus) {
-        conflict("Invalid Waiting condition");
-      } else if (!row.resolvedAt) {
-        conditions.push({
-          id, projectId: source, kind: "free-text", text: row.text, refId: null,
-          targetStatus: null, resolvedAt: null, createdAt: row.createdAt,
-        });
-      }
-      continue;
-    }
-    if (row.kind !== "project-status" || !target || row.targetStatus !== "done" || row.text) {
-      conflict("Invalid After relationship");
-      continue;
-    }
-    const targetProject = projectsById.get(target);
-    if (!targetProject) {
-      conflict("Missing target Project", "remove-after");
-      continue;
-    }
-    if (source === target) {
-      conflict("Self After relationship", "remove-after");
-      continue;
-    }
-    if (row.resolvedAt) continue;
-    if (targetProject.state === "done") {
-      conflict("Target Project is Done", "remove-after");
-      continue;
-    }
-    if (edges.some((edge) => edge.source === source && edge.target === target)) {
-      conflict("Duplicate After relationship", "remove-after");
-      continue;
-    }
-    if (reaches(target, source)) {
-      conflict("Cyclic After relationship", "remove-after");
-      continue;
-    }
-    edges.push({ source, target });
-    conditions.push({
-      id, projectId: source, kind: "project-status", text: null, refId: target,
-      targetStatus: "done", resolvedAt: null, createdAt: row.createdAt,
-    });
-  }
-
-  tasks.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const projection = new TodoModel({ store }).project({ taskOrder: "created" });
   return {
-    tasks,
-    projects: [...projectsById.values()].filter((project) => project.state !== "done"),
-    conditions: conditions.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
-    recoveries,
+    tasks: projection.tasks,
+    projects: projection.projects,
+    conditions: projection.conditions,
+    recoveries: projection.issues.map((issue) => recoveryFor(store, issue)),
   };
+}
+
+export function repairTodoRecovery(store: MergeableStore, recovery: TodoRecovery): boolean {
+  const model = new TodoModel({ store });
+  const issue = model.project().issues.find((candidate) => {
+    const current = recoveryFor(store, candidate);
+    return current.table === recovery.table && current.id === recovery.id &&
+      current.reason === recovery.reason && current.repair === recovery.repair;
+  });
+  return issue ? model.repair(issue) : false;
+}
+
+function taskError(conflict: string): never {
+  if (conflict === "missing-project") throw new Error("Project was deleted or is not on this device");
+  if (conflict === "invalid-recurrence") throw new Error("Recover the invalid recurrence before completing this Task");
+  if (conflict === "missing-task") throw new Error("Task not found");
+  throw new Error("Task id already exists");
+}
+
+function projectError(conflict: string): never {
+  if (conflict === "id-conflict") throw new Error("Project id already exists");
+  throw new Error("Project was deleted or is not on this device");
+}
+
+function conditionError(conflict: string): never {
+  const message: Record<string, string> = {
+    "id-conflict": "Condition id already exists",
+    "missing-project": "Project was deleted or is not on this device",
+    "missing-source": "Project was deleted or is not on this device",
+    "missing-target": "Project was deleted or is not on this device",
+    "target-done": "Target Project is Done",
+    self: "A Project cannot be after itself",
+    duplicate: "After relationship already exists",
+    cycle: "After relationship would create a cycle",
+    "missing-condition": "Condition not found",
+  };
+  throw new Error(message[conflict] ?? conflict);
 }
 
 export function createTaskdoReplica({
@@ -271,6 +145,7 @@ export function createTaskdoReplica({
   today = localToday,
   randomId = safeRandomUUID,
 }: CreateTaskdoReplicaOptions): TaskdoReplica {
+  const model = new TodoModel({ store, now });
   const keys = {
     tasks: ["taskdo", ...queryKeyScope, "tasks"],
     projects: ["taskdo", ...queryKeyScope, "projects"],
@@ -287,11 +162,10 @@ export function createTaskdoReplica({
     for (const listener of listeners) listener(snapshot);
   };
   publish();
-  const storeListeners = ["tasks", "projects", "conditions"].map((table) =>
-    store.addTableListener(table, publish));
-  const write = async (mutate: (mutableStore: MergeableStore) => void) => {
+  const storeListeners = ["tasks", "projects", "conditions"].map((table) => store.addTableListener(table, publish));
+  const write = async (mutate: () => void) => {
     if (closed) throw new Error("Local account is closed");
-    store.transaction(() => mutate(store));
+    store.transaction(mutate);
     await save();
   };
 
@@ -301,60 +175,21 @@ export function createTaskdoReplica({
     queryFn: async () => snapshot.tasks,
     getKey: (task: Task) => task.id,
     onInsert: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) {
+      for (const mutation of transaction.mutations) await write(() => {
         const task = mutation.modified;
-        await write((mutableStore) => {
-          requireProject(mutableStore, task.projectId);
-          if (mutableStore.hasRow("tasks", task.id)) {
-            if (!mutableStore.getCell("tasks", task.id, "completedAt")) throw new Error("Task id already exists");
-            mutableStore.delCell("tasks", task.id, "completedAt");
-            if (task.recurrenceDate) put(mutableStore, "tasks", task.id, "recurrenceDate", task.recurrenceDate);
-            put(mutableStore, "tasks", task.id, "showUpDate", task.showUpDate);
-            return;
-          }
-          const existingKeys = Object.values(mutableStore.getTable("tasks"))
-            .flatMap((row) => typeof row.sortKey === "string" ? [row.sortKey] : [])
-            .sort()
-            .reverse();
-          let sortKey = orderKeyBetween(null, null);
-          for (const key of existingKeys) {
-            try {
-              sortKey = orderKeyBetween(key, null);
-              break;
-            } catch {
-              // Invalid synchronized keys stay available for explicit recovery.
-            }
-          }
-          mutableStore.setRow("tasks", task.id, {
-            text: task.text,
-            createdAt: task.createdAt,
-            sortKey: task.sortKey ?? sortKey,
-            ...(task.showUpDate ? { showUpDate: task.showUpDate } : {}),
-            ...(task.projectId ? { projectId: task.projectId } : {}),
-            ...(task.sourceCaptureId ? { sourceCaptureId: task.sourceCaptureId } : {}),
-            ...(task.recurrence ? { recurrence: JSON.stringify(task.recurrence) } : {}),
-            ...(task.recurrenceDate ? { recurrenceDate: task.recurrenceDate } : {}),
-          });
-        });
-      }
+        const result = store.hasRow("tasks", task.id) ? model.restoreTask(task) : model.createTask(task);
+        if (!result.ok) taskError(result.conflict);
+      });
       return { refetch: false };
     },
     onUpdate: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) await write((mutableStore) => {
-        const id = mutation.modified.id;
-        if (!mutableStore.hasRow("tasks", id)) throw new Error("Task not found");
-        if (("completedAt" in mutation.changes || "recurrenceDate" in mutation.changes) &&
-          projectTodoData(mutableStore).recoveries.some((issue) => issue.table === "tasks" && issue.id === id &&
-            issue.reason === "Invalid recurrence")) {
-          throw new Error("Recover the invalid recurrence before completing this Task");
-        }
-        if ("projectId" in mutation.changes) requireProject(mutableStore, mutation.modified.projectId);
+      for (const mutation of transaction.mutations) await write(() => {
+        const fields: Partial<Omit<Task, "id" | "createdAt">> = {};
         for (const key of Object.keys(mutation.changes) as (keyof Task)[]) {
-          if (key === "id" || key === "createdAt") continue;
-          const value = mutation.modified[key];
-          if (key === "recurrence") put(mutableStore, "tasks", id, key, value ? JSON.stringify(value) : null);
-          else put(mutableStore, "tasks", id, key, value as string | null | undefined);
+          if (key !== "id" && key !== "createdAt") Object.assign(fields, { [key]: mutation.modified[key] });
         }
+        const result = model.updateTask(mutation.modified.id, fields);
+        if (!result.ok) taskError(result.conflict);
       });
       return { refetch: false };
     },
@@ -366,48 +201,37 @@ export function createTaskdoReplica({
     queryFn: async () => snapshot.projects,
     getKey: (project: Project) => project.id,
     onInsert: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) await write((mutableStore) => {
+      for (const mutation of transaction.mutations) await write(() => {
         const project = mutation.modified;
-        if (mutableStore.hasRow("projects", project.id)) {
-          requireProject(mutableStore, project.id);
-          if (mutableStore.getCell("projects", project.id, "state") !== "done") throw new Error("Project id already exists");
-          transitionProject(mutableStore, project.id, project.state, now);
-          return;
-        }
-        mutableStore.setRow("projects", project.id, {
-          title: project.title,
-          icon: project.icon,
-          state: project.state,
-          createdAt: project.createdAt,
-          ...(project.description ? { description: project.description } : {}),
-          ...(project.sourceCaptureId ? { sourceCaptureId: project.sourceCaptureId } : {}),
-        });
+        const result = store.hasRow("projects", project.id)
+          ? model.restoreProject(project)
+          : model.createProject(project);
+        if (!result.ok) projectError(result.conflict);
       });
       return { refetch: false };
     },
     onUpdate: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) await write((mutableStore) => {
-        const id = mutation.modified.id;
-        requireProject(mutableStore, id);
-        for (const key of Object.keys(mutation.changes) as (keyof Project)[]) {
-          if (key === "id" || key === "createdAt" || key === "state") continue;
-          put(mutableStore, "projects", id, key, mutation.modified[key]);
+      for (const mutation of transaction.mutations) await write(() => {
+        const { id } = mutation.modified;
+        const fields: ProjectEditFields = {};
+        if ("title" in mutation.changes) fields.title = mutation.modified.title;
+        if ("icon" in mutation.changes) fields.icon = mutation.modified.icon;
+        if ("description" in mutation.changes) fields.description = mutation.modified.description;
+        if (Object.keys(fields).length) {
+          const result = model.editProject(id, fields);
+          if (!result.ok) projectError(result.conflict);
         }
-        if ("state" in mutation.changes) transitionProject(mutableStore, id, mutation.modified.state, now);
+        if ("state" in mutation.changes) {
+          const result = model.setProjectState(id, mutation.modified.state);
+          if (!result.ok) projectError(result.conflict);
+        }
       });
       return { refetch: false };
     },
     onDelete: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) await write((mutableStore) => {
-        const id = mutation.original.id;
-        requireProject(mutableStore, id);
-        put(mutableStore, "projects", id, "deletedAt", now().toISOString());
-        for (const [taskId, row] of Object.entries(mutableStore.getTable("tasks"))) {
-          if (row.projectId === id) mutableStore.delRow("tasks", taskId);
-        }
-        for (const [conditionId, row] of Object.entries(mutableStore.getTable("conditions"))) {
-          if (row.projectId === id || row.refId === id) mutableStore.delRow("conditions", conditionId);
-        }
+      for (const mutation of transaction.mutations) await write(() => {
+        if (!model.getProject(mutation.original.id)) projectError("missing-project");
+        model.deleteProject(mutation.original.id);
       });
       return { refetch: false };
     },
@@ -419,50 +243,24 @@ export function createTaskdoReplica({
     queryFn: async () => snapshot.conditions,
     getKey: (condition: ProjectAttention) => condition.id,
     onInsert: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) await write((mutableStore) => {
+      for (const mutation of transaction.mutations) await write(() => {
         const condition = mutation.modified;
-        requireProject(mutableStore, condition.projectId);
-        if (mutableStore.hasRow("conditions", condition.id)) throw new Error("Condition id already exists");
-        if (condition.kind === "project-status") {
-          requireProject(mutableStore, condition.refId);
-          if (condition.projectId === condition.refId) throw new Error("A Project cannot be after itself");
-          if (mutableStore.getCell("projects", condition.refId, "state") === "done") throw new Error("Target Project is Done");
-          const openAfters = projectTodoData(mutableStore).conditions.filter((row) => row.kind === "project-status");
-          if (openAfters.some((edge) => edge.projectId === condition.projectId && edge.refId === condition.refId)) {
-            throw new Error("After relationship already exists");
-          }
-          const pending = [condition.refId];
-          const seen = new Set<string>();
-          while (pending.length) {
-            const id = pending.pop()!;
-            if (id === condition.projectId) throw new Error("After relationship would create a cycle");
-            if (seen.has(id)) continue;
-            seen.add(id);
-            pending.push(...openAfters.filter((edge) => edge.projectId === id).map((edge) => edge.refId));
-          }
-        }
-        mutableStore.setRow("conditions", condition.id, {
-          projectId: condition.projectId,
-          kind: condition.kind,
-          createdAt: condition.createdAt,
-          ...(condition.kind === "free-text"
-            ? { text: condition.text }
-            : { refId: condition.refId, targetStatus: "done" }),
-        });
+        const result = condition.kind === "free-text"
+          ? model.createWaiting(condition.id, condition.projectId, condition.text, condition.createdAt)
+          : model.createAfter(condition.id, condition.projectId, condition.refId, condition.createdAt);
+        if (!result.ok) conditionError(result.conflict);
       });
       return { refetch: false };
     },
     onUpdate: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) await write((mutableStore) => {
-        if (!mutableStore.hasRow("conditions", mutation.modified.id)) throw new Error("Condition not found");
-        put(mutableStore, "conditions", mutation.modified.id, "resolvedAt", mutation.modified.resolvedAt);
+      for (const mutation of transaction.mutations) await write(() => {
+        const result = model.setConditionResolvedAt(mutation.modified.id, mutation.modified.resolvedAt);
+        if (!result.ok) conditionError(result.conflict);
       });
       return { refetch: false };
     },
     onDelete: async ({ transaction }) => {
-      for (const mutation of transaction.mutations) await write((mutableStore) => {
-        mutableStore.delRow("conditions", mutation.original.id);
-      });
+      for (const mutation of transaction.mutations) await write(() => { model.deleteCondition(mutation.original.id); });
       return { refetch: false };
     },
   }));
@@ -479,24 +277,16 @@ export function createTaskdoReplica({
     }),
     edit: (id, text) => tasks.update(id, (draft) => { draft.text = text; }),
     complete: (id, completedOn = today()) => tasks.update(id, (draft) => {
-      if (draft.recurrence && draft.recurrenceDate) {
-        const next = advance(draft.recurrence, { scheduledOn: draft.recurrenceDate, completedOn });
-        if (next.kind === "next") {
-          draft.recurrenceDate = next.scheduledOn;
-          draft.showUpDate = next.scheduledOn;
-          return;
-        }
-      }
-      draft.completedAt = now().toISOString();
+      Object.assign(draft, model.planTaskCompletion(draft, completedOn));
     }),
-    completeForever: (id) => tasks.update(id, (draft) => { draft.completedAt = now().toISOString(); }),
+    completeForever: (id) => tasks.update(id, (draft) => {
+      draft.completedAt = model.planTaskCompletion({ ...draft, recurrence: null }, today()).completedAt!;
+    }),
     undoOccurrence: (before) => tasks.get(before.id)
       ? tasks.update(before.id, (draft) => { Object.assign(draft, before, { completedAt: null }); })
       : tasks.insert({ ...before, completedAt: null }),
     setRecurrence: (id, recurrence: Recurrence | null) => tasks.update(id, (draft) => {
-      draft.recurrence = recurrence;
-      draft.recurrenceDate = recurrence?.origin ?? null;
-      if (recurrence) draft.showUpDate = recurrence.origin;
+      Object.assign(draft, model.planTaskRecurrence(recurrence));
     }),
     reopen: (task) => tasks.get(task.id)
       ? tasks.update(task.id, (draft) => { draft.completedAt = null; })
@@ -557,9 +347,7 @@ export function createTaskdoReplica({
     },
     async repair(recovery) {
       let changed = false;
-      await write((mutableStore) => {
-        changed = repairTodoRecovery(mutableStore, recovery);
-      });
+      await write(() => { changed = repairTodoRecovery(store, recovery); });
       return changed;
     },
     async close() {
