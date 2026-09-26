@@ -9,6 +9,7 @@ import type { IndexedDbPersister } from "tinybase/persisters/persister-indexed-d
 import { createWsSynchronizer } from "tinybase/synchronizers/synchronizer-ws-client";
 
 export const TASKDO_BROWSER_DB_PREFIX = "zero-taskdo-replica-";
+const PERSISTENCE_SAFETY_REFRESH_MS = 10_000;
 
 export type BrowserTaskdoReplica = TaskdoReplica & {
   durable: boolean;
@@ -52,8 +53,10 @@ export async function openBrowserTaskdoReplica(
   let persister: IndexedDbPersister | undefined;
   let persistenceListeners: string[] = [];
   let pendingSave: Promise<unknown> = Promise.resolve();
-  let persistencePoll: ReturnType<typeof setInterval> | undefined;
+  let persistenceSafetyRefresh: ReturnType<typeof setInterval> | undefined;
+  let persistenceChannel: BroadcastChannel | undefined;
   let stopped = false;
+  let mergingPersisted = false;
   let mergePersisted: (() => Promise<void>) | undefined;
 
   const markPersistenceFailure = (error: unknown) => {
@@ -65,6 +68,15 @@ export async function openBrowserTaskdoReplica(
   const withPersistenceLock = async <T,>(action: () => Promise<T>): Promise<T> => {
     if (!navigator.locks) throw new Error("Web Locks are unavailable");
     return navigator.locks.request(lockName, action);
+  };
+
+  const notifyPersistencePeers = () => {
+    try {
+      persistenceChannel?.postMessage("persisted");
+    } catch {
+      persistenceChannel?.close();
+      persistenceChannel = undefined;
+    }
   };
 
   try {
@@ -87,8 +99,10 @@ export async function openBrowserTaskdoReplica(
       try {
         await loader.load();
         if (loadError) throw loadError instanceof Error ? loadError : new Error(errorMessage(loadError));
+        mergingPersisted = true;
         store.merge(persistedStore);
       } finally {
+        mergingPersisted = false;
         await loader.destroy();
       }
     };
@@ -128,8 +142,26 @@ export async function openBrowserTaskdoReplica(
       if (!activePersister || !mergePersisted) return;
       await mergePersisted();
       await activePersister.save();
+      notifyPersistencePeers();
     })).catch(markPersistenceFailure);
     await pendingSave;
+  };
+
+  const refreshPersisted = () => {
+    const loadAndMerge = mergePersisted;
+    if (!loadAndMerge || stopped) return;
+    pendingSave = pendingSave
+      .then(() => withPersistenceLock(loadAndMerge))
+      .catch(markPersistenceFailure);
+  };
+  const stopPersistenceSafetyRefresh = () => {
+    if (!persistenceSafetyRefresh) return;
+    clearInterval(persistenceSafetyRefresh);
+    persistenceSafetyRefresh = undefined;
+  };
+  const startPersistenceSafetyRefresh = () => {
+    if (!persister || persistenceSafetyRefresh || document.visibilityState !== "visible") return;
+    persistenceSafetyRefresh = setInterval(refreshPersisted, PERSISTENCE_SAFETY_REFRESH_MS);
   };
 
   const replica = createTaskdoReplica({
@@ -142,7 +174,7 @@ export async function openBrowserTaskdoReplica(
   if (persister) {
     let queued = false;
     const schedulePersist = () => {
-      if (queued || stopped) return;
+      if (queued || stopped || mergingPersisted) return;
       queued = true;
       queueMicrotask(() => {
         queued = false;
@@ -151,13 +183,16 @@ export async function openBrowserTaskdoReplica(
     };
     persistenceListeners = ["tasks", "projects", "conditions"].map((table) =>
       store.addTableListener(table, schedulePersist));
-    persistencePoll = setInterval(() => {
-      const loadAndMerge = mergePersisted;
-      if (!loadAndMerge || stopped) return;
-      pendingSave = pendingSave
-        .then(() => withPersistenceLock(loadAndMerge))
-        .catch(markPersistenceFailure);
-    }, 250);
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        persistenceChannel = new BroadcastChannel(`${dbName}-changes`);
+        persistenceChannel.addEventListener("message", refreshPersisted);
+      } catch {
+        // The visible-tab safety refresh still provides convergence where a
+        // browser or privacy mode exposes but does not permit BroadcastChannel.
+      }
+    }
+    startPersistenceSafetyRefresh();
   }
 
   let connecting = false;
@@ -215,7 +250,13 @@ export async function openBrowserTaskdoReplica(
     void connect();
   };
   const onVisible = () => {
-    if (document.visibilityState === "visible") reconnectNow();
+    if (document.visibilityState === "visible") {
+      reconnectNow();
+      refreshPersisted();
+      startPersistenceSafetyRefresh();
+    } else {
+      stopPersistenceSafetyRefresh();
+    }
   };
   window.addEventListener("online", reconnectNow);
   document.addEventListener("visibilitychange", onVisible);
@@ -231,7 +272,8 @@ export async function openBrowserTaskdoReplica(
       window.removeEventListener("online", reconnectNow);
       document.removeEventListener("visibilitychange", onVisible);
       if (retry) clearTimeout(retry);
-      if (persistencePoll) clearInterval(persistencePoll);
+      stopPersistenceSafetyRefresh();
+      persistenceChannel?.close();
       socket?.close();
       await synchronizer?.destroy();
       unsubscribe();

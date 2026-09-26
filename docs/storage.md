@@ -79,12 +79,14 @@ persistence, authentication, WebSocket construction, and lifecycle events.
   network. A disconnected WebSocket is ordinary offline operation. Mutations
   update the local mergeable store and retain TinyBase merge metadata, including
   terminal rows needed for Undo and recurrence.
-- **Multi-tab:** every browser tab polls the same account database. An
-  account-specific Web Lock serializes each operation. Before saving, a tab
-  loads persisted mergeable content into a temporary store and merges it into
-  its live store; it never replaces live content with a stale snapshot. This
-  preserves concurrent offline changes and merge metadata while allowing every
-  tab to receive current rows.
+- **Multi-tab:** an account-specific Web Lock serializes each persistence
+  operation. Before saving, a tab loads persisted mergeable content into a
+  temporary store and merges it into its live store; it never replaces live
+  content with a stale snapshot. After saving, it notifies sibling tabs through
+  an account-specific BroadcastChannel. Visible tabs also refresh every ten
+  seconds as a safety net and refresh immediately when they become visible;
+  hidden tabs do not poll. This preserves concurrent offline changes and merge
+  metadata while allowing every tab to receive current rows promptly.
 - **Fallback:** if IndexedDB or Web Locks are unavailable, web uses an in-memory
   replica that still synchronizes online and reports that offline durability is
   unavailable.
