@@ -56,7 +56,7 @@ adb_device() {
 
 production_checksums() {
   local command
-  command='cd databases 2>/dev/null || exit 0; for f in zero-app.sqlite* zero-app-outbox-v2.sqlite*; do if [ -f "$f" ]; then sha256sum "$f"; fi; done'
+  command='cd files/SQLite 2>/dev/null || exit 0; for f in taskdo-fixture-*.sqlite*; do [ -f "$f" ] || continue; case "$f" in taskdo-fixture-e2e-test-user.sqlite*|taskdo-fixture-taskdo-proof-mobile.sqlite*) continue;; esac; sha256sum "$f"; done'
   adb_device shell "run-as $PACKAGE sh -c '$command'" 2>/dev/null | tr -d '\r' | sort
 }
 
@@ -77,7 +77,7 @@ launcher_alias_state() {
 
 delete_e2e_stores() {
   local command
-  command='rm -f databases/zero-app-e2e.sqlite* databases/zero-app-e2e-outbox-v2.sqlite* files/SQLite/taskdo-fixture-e2e-test-user.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
+  command='rm -f files/SQLite/taskdo-fixture-e2e-test-user.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
   adb_device shell "run-as $PACKAGE sh -c '$command'" >/dev/null 2>&1 || true
 }
 
