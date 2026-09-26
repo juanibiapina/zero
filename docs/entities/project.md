@@ -149,9 +149,10 @@ Per-user Project routes remain:
 - `DELETE /api/projects/{id}`;
 - `POST /api/projects/icon-suggestions`.
 
-The shared replica exposes `add`, `setState`, `reopen`, `edit`, `remove`, and
-`refetch` through `ProjectsApi`. It retains terminal rows so Undo can reopen a
-Done Project.
+The shared account replica's `projects` group exposes `add`, `setState`,
+`reopen`, `edit`, and `remove`. It retains terminal rows so Undo can reopen a
+Done Project. Synchronization refresh belongs to the account replica rather
+than an individual entity collection.
 
 ## Related entities
 

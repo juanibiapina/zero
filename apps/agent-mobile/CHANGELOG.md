@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-27: Pulling down to refresh now reconnects and synchronizes your todo list before the spinner stops.
+
 - 2026-09-26: Resolving a Waiting item removes it from the Project immediately without requiring an app restart.
 
 - 2026-09-26: Filing a new Task into a Project from Home confirms where it went after the Task is safely saved.

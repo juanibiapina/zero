@@ -54,10 +54,11 @@ specificity; do-orm + a Rule-of-Three base covers it when the time comes.
 platform-neutral TinyBase model in `@zero/agent-core`. TaskDO, web, and mobile
 all call it for row decoding, accepted projections, mutations, recurrence,
 ordering, relationships, and recovery. TaskDO retains erasure, durable saves,
-WebSocket lifecycle, and RPC result mapping. The shared client replica retains
-TanStack transactions and the `TasksApi`, `ProjectsApi`, and `WaitsApi` screen
-interfaces. Mobile and web provide persistence, authentication, socket, and
-account-lifecycle adapters. See `docs/storage.md`.
+WebSocket lifecycle, and RPC result mapping. The shared client module exposes
+one account replica with TanStack-backed `tasks`, `projects`, and `waits`
+operation groups plus one synchronization refresh. Mobile and web provide
+persistence, authentication, socket, and account-lifecycle adapters. See
+`docs/storage.md`.
 
 **Collapse to one list (decided 2026-08-31; merged 2026-09-12):** the
 Capture/Task split proved premature — the user works in one list the way they do

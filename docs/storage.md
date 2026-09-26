@@ -26,11 +26,11 @@ the established RPC and REST values. `TaskDO` retains the Durable Object
 lifecycle: SQL persistence, WebSocket synchronization, socket shutdown, and
 account purge/erasure protection. Mobile persists an account-named Expo SQLite
 replica; web persists an account-named IndexedDB replica. Both synchronize
-through the same authenticated WebSocket. The shared replica adapter builds the
-existing `TasksApi`, `ProjectsApi`, and `WaitsApi` interfaces with TanStack
-transactions, publishes query projections, maps client-facing errors and
-recovery actions, and waits for local persistence before reporting a
-transaction persisted. Current clients do not open retired todo caches or
+through the same authenticated WebSocket. The shared replica adapter exposes
+one account replica with `tasks`, `projects`, and `waits` operation groups. It
+builds their TanStack collections, publishes query projections, maps
+client-facing errors and recovery actions, and waits for local persistence
+before reporting a transaction persisted. Current clients do not open retired todo caches or
 outboxes, and upgrades leave those legacy files and browser databases untouched.
 Project deletion tombstones the Project and removes its known children.
 REST also edits Projects and creates/resolves/deletes manual Waiting and After
@@ -68,13 +68,14 @@ data on reconnect.
 ## Client replicas
 
 The canonical `@zero/agent-core` model owns projection, recovery, and mutation
-rules. The shared replica is a TanStack adapter that constructs the three
-screen-facing interfaces and presents canonical recovery issues as existing
-user-facing text and repair actions. Platform adapters own persistence,
-authentication, WebSocket construction, and lifecycle events.
+rules. The shared replica is a TanStack adapter with one screen-facing
+interface. Its three entity collections share one store, transaction model,
+recovery channel, and replica-level refresh operation. Platform adapters own
+persistence, authentication, WebSocket construction, and lifecycle events.
 
 - **Mobile:** one Expo SQLite file per Clerk account, named
-  `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection.
+  `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection;
+  pull-to-refresh requests a TinyBase synchronization round or reconnects first.
 - **Web:** one TinyBase IndexedDB database per Clerk account, named
   `zero-taskdo-replica-<account-id>`. The adapter loads it before exposing the
   todo owner, then opens same-origin `/api/task-sync`; Clerk authenticates the

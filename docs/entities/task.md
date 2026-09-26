@@ -200,9 +200,8 @@ serves the open-tasks query.
     `projectId` accepts a uuid or `null` (clear to loose).
   - Logs `task_added` / `task_completed` / `task_reopened` / `task_edited` /
     `task_rescheduled` / `task_reordered` / `task_moved`.
-- **Data layer** — mobile and web read and write account-scoped TinyBase replicas
-  through the same `TasksApi` implementation in `@zero/agent-core`. See
-  `docs/storage.md`.
+- **Data layer** — mobile and web read and write the `tasks` group of the same
+  account-scoped TinyBase replica in `@zero/agent-core`. See `docs/storage.md`.
 - **Timezone lives on the client.** The server returns every open task; the
   client splits Home/Upcoming against its own local today (`localToday` in
   `@zero/agent-core`), so the DO needs no timezone.
