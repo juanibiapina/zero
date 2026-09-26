@@ -43,6 +43,7 @@ export async function openBrowserTaskdoReplica(
   { queryClient, onSnapshot, onConnection, onDurability }: OpenBrowserTaskdoReplicaOptions,
 ): Promise<BrowserTaskdoReplica> {
   if (!/^[a-zA-Z0-9_-]+$/.test(accountId)) throw new Error("Invalid account identity");
+  const replicaQueryClient = queryClient ?? new QueryClient();
   const store = createMergeableStore();
   const dbName = `${TASKDO_BROWSER_DB_PREFIX}${accountId}`;
   const lockName = `${dbName}-persistence`;
@@ -133,7 +134,7 @@ export async function openBrowserTaskdoReplica(
 
   const replica = createTaskdoReplica({
     store,
-    queryClient,
+    queryClient: replicaQueryClient,
     queryKeyScope: [accountId],
     save: persist,
   });
