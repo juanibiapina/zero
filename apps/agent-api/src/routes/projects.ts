@@ -2,7 +2,7 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 
 import { log } from "../log";
-import type { Project } from "../store/projects";
+import type { Project } from "../TaskDO/domain";
 import type { Env } from "../types";
 import { getTaskDO } from "../TaskDO/stub";
 import { createModel } from "../agents/model";
