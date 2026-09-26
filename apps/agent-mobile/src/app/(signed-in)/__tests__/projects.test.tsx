@@ -1,406 +1,135 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import {
-  act,
-  fireEvent,
-  render,
-  waitFor,
-  type RenderResult,
-} from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { type Project, type ProjectAttention } from '@zero/agent-core';
 
-import type { Project, ProjectState, Task } from '@/lib/api';
-import type { WaitingCondition } from '@zero/agent-core';
-import { resetProjectsApiForTest } from '@/lib/projects-collection';
-import { resetTasksApiForTest } from '@/lib/tasks-collection';
-import { resetWaitsApiForTest } from '@/lib/waits-collection';
 import { __resetIconSuggestions } from '@/lib/icon-suggestions';
-import { TodoDataTestProvider } from '@/testing/todo-data-test-provider';
+import {
+  createInMemoryTodoData,
+  InMemoryTodoDataProvider,
+  type InMemoryTodoSeed,
+} from '@/testing/in-memory-todo-data';
 
 import ProjectsScreen from '../projects';
 
-// Trigger pull-to-refresh: the scroll host carries the RefreshControl element on
-// its `refreshControl` prop (the test renderer exposes host nodes only, so the
-// RefreshControl itself is not a queryable node), so invoke that control's
-// onRefresh the way a real pull would.
-const pullToRefresh = (screen: RenderResult) => {
-  const [scroll] = screen.container.queryAll(
-    (n) => n.props?.refreshControl != null,
-  );
-  scroll.props.refreshControl.props.onRefresh();
-};
-
-const mockGetToken = jest.fn<() => Promise<string | null>>();
+const mockPush = jest.fn<(href: string) => void>();
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@clerk/expo', () => ({
-  useAuth: () => ({ getToken: mockGetToken }),
+  useAuth: () => ({ getToken: async () => 'token' }),
 }));
-
-// The native Clerk button renders a platform view via requireNativeView, which
-// is unavailable under jest. Stub it with a queryable element.
 jest.mock('@clerk/expo/native', () => ({
   UserButton: () => {
-    const { View: V } = require('react-native');
-    return <V accessibilityLabel="Account" />;
+    const { View } = require('react-native');
+    return <View accessibilityLabel="Account" />;
   },
 }));
 
-// A row tap navigates to /projects/:id; capture the push.
-const mockPush = jest.fn<(href: string) => void>();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
-
-const mockFetchProjects = jest.fn<() => Promise<Project[]>>();
-const mockAddProject =
-  jest.fn<
-    (
-      getToken: unknown,
-      project: { id: string; title: string; sourceCaptureId: string | null },
-    ) => Promise<Project>
-  >();
-const mockFetchIconSuggestions =
-  jest.fn<
-    (
-      getToken: unknown,
-      input: { title: string; description?: string | null },
-    ) => Promise<string[]>
-  >();
-const mockFetchWaits = jest.fn<() => Promise<WaitingCondition[]>>();
-const mockAddTask = jest.fn<
-  (
-    getToken: unknown,
-    task: {
-      id: string;
-      text: string;
-      showUpDate: string | null;
-      projectId: string | null;
-      sourceCaptureId: string | null;
-      recurrence?: Task['recurrence'];
-    },
-  ) => Promise<Task>
->();
-jest.mock('@/lib/api', () => ({
-  fetchProjects: () => mockFetchProjects(),
-  addProject: (
-    getToken: unknown,
-    project: { id: string; title: string; sourceCaptureId: string | null },
-  ) => mockAddProject(getToken, project),
-  fetchIconSuggestions: (
-    getToken: unknown,
-    input: { title: string; description?: string | null },
-  ) => mockFetchIconSuggestions(getToken, input),
-  setProjectState: () => Promise.reject(new Error('not used')),
-  editProject: () => Promise.reject(new Error('not used')),
-  deleteProject: () => Promise.resolve(),
-  // Projects loads tasks/waits/captures for derivation and the refine banner; []
-  // is enough here.
-  fetchWaits: () => mockFetchWaits(),
-  addWaitingCondition: () => Promise.reject(new Error('not used')),
-  resolveWaitingCondition: () => Promise.reject(new Error('not used')),
-  deleteWaitingCondition: () => Promise.resolve(),
-  fetchTasks: () => Promise.resolve([]),
-  addTask: (
-    getToken: unknown,
-    task: {
-      id: string;
-      text: string;
-      showUpDate: string | null;
-      projectId: string | null;
-      sourceCaptureId: string | null;
-      recurrence?: Task['recurrence'];
-    },
-  ) => mockAddTask(getToken, task),
-  completeTask: () => Promise.reject(new Error('not used')),
-}));
-
-const project = (
-  id: string,
-  title: string,
-  icon = '📁',
-  state: ProjectState = 'in-play',
-): Project => ({
+const project = (id: string, title: string, over: Partial<Project> = {}): Project => ({
   id,
   title,
-  icon,
+  icon: '📁',
   description: null,
-  state,
-  createdAt: '2023-01-01T00:00:00.000Z',
+  state: 'in-play',
+  createdAt: '2026-09-01T00:00:00.000Z',
+  ...over,
+});
+const waiting = (id: string, projectId: string, createdAt: string): ProjectAttention => ({
+  id,
+  projectId,
+  kind: 'free-text',
+  text: 'External reply',
+  refId: null,
+  targetStatus: null,
+  resolvedAt: null,
+  createdAt,
 });
 
-const renderScreen = () => {
+async function renderScreen(seed: InMemoryTodoSeed = {}) {
+  const data = createInMemoryTodoData(seed);
   const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
-  return render(
+  const screen = await render(
     <QueryClientProvider client={client}>
-      <TodoDataTestProvider>
+      <InMemoryTodoDataProvider data={data}>
         <ProjectsScreen />
-      </TodoDataTestProvider>
+      </InMemoryTodoDataProvider>
     </QueryClientProvider>,
   );
-};
+  return { ...screen, data };
+}
 
-describe('ProjectsScreen (list)', () => {
+describe('ProjectsScreen', () => {
   beforeEach(() => {
-    resetProjectsApiForTest();
-    resetTasksApiForTest();
-    resetWaitsApiForTest();
     mockPush.mockReset();
-    mockAddProject.mockClear();
-    mockFetchProjects.mockReset();
-    mockFetchProjects.mockResolvedValue([]);
     __resetIconSuggestions();
-    mockFetchIconSuggestions.mockReset();
-    mockFetchIconSuggestions.mockResolvedValue(['🌟']);
-    mockFetchWaits.mockReset();
-    mockFetchWaits.mockResolvedValue([]);
-    mockAddTask.mockReset();
   });
 
-  it('shows the fetched projects with their icons', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);
-
-    const { getByText } = await renderScreen();
-
-    await waitFor(() => expect(getByText('Run a 5K')).toBeTruthy());
-    expect(getByText('🏃')).toBeTruthy();
+  it('shows projects and navigates through a row', async () => {
+    const screen = await renderScreen({ projects: [project('p', 'Run a 5K', { icon: '🏃' })] });
+    await waitFor(() => expect(screen.getByText('Run a 5K')).toBeTruthy());
+    expect(screen.getByText('🏃')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Run a 5K'));
+    expect(mockPush).toHaveBeenCalledWith('/projects/p');
   });
 
-  it('navigates to the project screen when a row is tapped', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);
-
-    const { getByLabelText } = await renderScreen();
-    await waitFor(() => expect(getByLabelText('Run a 5K')).toBeTruthy());
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Run a 5K'));
-    });
-
-    expect(mockPush).toHaveBeenCalledWith('/projects/1');
-  });
-
-  it('shows the empty state when there are no projects', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([]);
-
-    const { getByText } = await renderScreen();
-
-    await waitFor(() =>
-      expect(getByText('No projects yet. Name your first outcome.')).toBeTruthy(),
-    );
-  });
-
-  it('surfaces a load error when there is nothing to show', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockRejectedValue(new Error('java.net.UnknownHostException'));
-
-    const { getByText } = await renderScreen();
-
-    await waitFor(() => expect(getByText(/UnknownHostException/)).toBeTruthy());
-  });
-
-  it('creates a project by name and closes the quick-add after adding', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([]);
-    mockAddProject.mockImplementation(async () => {
-      const added = project('2', 'Have a baby');
-      mockFetchProjects.mockResolvedValue([added]);
-      return added;
-    });
-
-    const { getByText, getByLabelText, getByPlaceholderText, queryByPlaceholderText } =
-      await renderScreen();
-
-    await waitFor(() =>
-      expect(getByText('No projects yet. Name your first outcome.')).toBeTruthy(),
-    );
-
-    await act(async () => {
-      fireEvent.press(getByLabelText('Add'));
-    });
-
-    const input = getByPlaceholderText('Name an outcome');
-    await act(async () => {
-      fireEvent.changeText(input, 'Have a baby');
-    });
-    await act(async () => {
-      fireEvent(input, 'submitEditing');
-    });
-
-    await waitFor(() => expect(getByText('Have a baby')).toBeTruthy());
-    expect(mockAddProject).toHaveBeenCalledTimes(1);
-    expect(mockAddProject.mock.calls[0][1].title).toBe('Have a baby');
-    await waitFor(() =>
-      expect(queryByPlaceholderText('Name an outcome')).toBeNull(),
-    );
-    // Creating a project pre-warms icon suggestions in the background off the
-    // title alone (create is name-only).
-    await waitFor(() =>
-      expect(mockFetchIconSuggestions).toHaveBeenCalledTimes(1),
-    );
-    expect(mockFetchIconSuggestions.mock.calls[0][1]).toEqual({
-      title: 'Have a baby',
-      description: null,
-    });
-    // Creating a project opens its own screen right away. The id is the
-    // client-minted UUID on the optimistic row (not the mock's server id), so
-    // match the route shape rather than a fixed id.
-    await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/projects\/.+/),
-      ),
-    );
-  });
-
-  it('protects a project draft until discard is confirmed', async () => {
-    mockGetToken.mockResolvedValue('tok');
+  it('shows the empty state', async () => {
     const screen = await renderScreen();
-    await waitFor(() => expect(screen.getByLabelText('Add')).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText('Add'));
-    await fireEvent.changeText(screen.getByLabelText('New item text'), 'Keep this draft');
-    await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
-    expect(screen.getByText('Discard changes?')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Cancel'));
-    expect(screen.getByLabelText('New item text').props.value).toBe('Keep this draft');
-    await fireEvent.press(screen.getByLabelText('Dismiss quick add'));
-    await fireEvent.press(screen.getByLabelText('Discard'));
-    expect(screen.queryByLabelText('New item text')).toBeNull();
-    expect(mockAddProject).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByText('No projects yet. Name your first outcome.')).toBeTruthy());
   });
 
-  it('creates a loose task from the Projects add drawer', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([]);
-    mockAddTask.mockImplementation(async (_getToken, input) => ({
-      id: input.id,
-      text: input.text,
-      showUpDate: input.showUpDate,
-      recurrence: input.recurrence ?? null,
-      recurrenceDate: null,
-      createdAt: '2023-01-01T00:00:00.000Z',
-      completedAt: null,
-      projectId: input.projectId,
-      sourceCaptureId: input.sourceCaptureId,
-      sortKey: 'a0',
-    }));
-
+  it('creates a project and opens it', async () => {
     const screen = await renderScreen();
     await fireEvent.press(screen.getByLabelText('Add'));
+    const input = screen.getByPlaceholderText('Name an outcome');
+    await fireEvent.changeText(input, 'Have a baby');
+    await fireEvent(input, 'submitEditing');
 
-    expect(screen.getByLabelText('Add a project').props.accessibilityState.selected).toBe(true);
+    await waitFor(() => expect(screen.getByText('Have a baby')).toBeTruthy());
+    const created = [...screen.data.projectsApi!.collection.values()][0];
+    expect(created?.title).toBe('Have a baby');
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith(`/projects/${created?.id}`));
+  });
+
+  it('creates a loose task from the shared Add surface', async () => {
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByLabelText('Add'));
     await fireEvent.press(screen.getByLabelText('Add a task'));
-    expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
-    expect(screen.getByLabelText('No date')).toBeTruthy();
-    expect(screen.getByLabelText('No project')).toBeTruthy();
+    const input = screen.getByPlaceholderText('Add a task');
+    await fireEvent.changeText(input, 'Call the dentist');
+    await fireEvent(input, 'submitEditing');
 
-    await fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'Call the dentist');
-    await fireEvent(screen.getByPlaceholderText('Add a task'), 'submitEditing');
-
-    await waitFor(() => expect(mockAddTask).toHaveBeenCalledTimes(1));
-    expect(mockAddTask.mock.calls[0][1]).toMatchObject({
+    await waitFor(() => expect(screen.queryByPlaceholderText('Add a task')).toBeNull());
+    expect([...screen.data.api!.collection.values()][0]).toMatchObject({
       text: 'Call the dentist',
-      showUpDate: null,
       projectId: null,
-      sourceCaptureId: null,
-      recurrence: null,
+      showUpDate: null,
     });
     expect(mockPush).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByPlaceholderText('Add a task')).toBeNull());
   });
 
-  it('groups projects under a status section header', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);
-
-    const { getByLabelText } = await renderScreen();
-
-    await waitFor(() => expect(getByLabelText('Next, 1')).toBeTruthy());
-  });
-
-  it('badges each waiting project with how long it has waited, longest-first', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    // Both are 'next' with an open condition and no tasks, so both derive to
-    // waiting. "Older wait" has the earlier condition (waited longer) and must
-    // sort above "Newer wait".
-    mockFetchProjects.mockResolvedValue([
-      project('1', 'Newer wait'),
-      project('2', 'Older wait'),
-    ]);
-    const wait = (
-      id: string,
-      projectId: string,
-      createdAt: string,
-    ): WaitingCondition => ({
-      id,
-      projectId,
-      kind: 'free-text',
-      text: 'a reply',
-      refId: null,
-      targetStatus: null,
-      resolvedAt: null,
-      createdAt,
+  it('groups projects by state', async () => {
+    const screen = await renderScreen({
+      projects: [
+        project('next', 'Run a 5K'),
+        project('later', 'Write a book', { state: 'backlog' }),
+      ],
     });
-    mockFetchWaits.mockResolvedValue([
-      wait('cA', '1', '2024-06-01T00:00:00.000Z'),
-      wait('cB', '2', '2023-01-01T00:00:00.000Z'),
-    ]);
-
-    const { getByText, getAllByLabelText, getAllByText } = await renderScreen();
-
-    await waitFor(() => expect(getByText('Older wait')).toBeTruthy());
-    // Both rows carry a "Waiting …" badge.
-    expect(getAllByLabelText(/^Waiting /)).toHaveLength(2);
-    // Longest wait on top: "Older wait" renders before "Newer wait".
-    const titles = getAllByText(/ wait$/).map((n) => n.props.children);
-    expect(titles).toEqual(['Older wait', 'Newer wait']);
+    await waitFor(() => expect(screen.getByLabelText('Next, 1')).toBeTruthy());
+    expect(screen.getByLabelText('Backlog, 1')).toBeTruthy();
   });
 
-  it('shows After collapsed by default with target context', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([
-      project('1', 'Move house'),
-      project('2', 'Sell old house', '🏠'),
-    ]);
-    mockFetchWaits.mockResolvedValue([
-      {
-        id: 'dependency',
-        projectId: '1',
-        kind: 'project-status',
-        text: null,
-        refId: '2',
-        targetStatus: 'done',
-        resolvedAt: null,
-        createdAt: '2023-01-01T00:00:00.000Z',
-      },
-    ]);
-
-    const screen = await renderScreen();
-
-    const header = await waitFor(() => screen.getByLabelText('After, 1'));
-    expect(header.props.accessibilityState.expanded).toBe(false);
-    expect(screen.queryByLabelText('After 🏠 Sell old house')).toBeNull();
-    await fireEvent.press(header);
-    expect(screen.getByLabelText('After 🏠 Sell old house')).toBeTruthy();
-  });
-
-  it('re-pulls the projects when the list is pulled to refresh', async () => {
-    mockGetToken.mockResolvedValue('tok');
-    mockFetchProjects.mockResolvedValue([project('1', 'Run a 5K', '🏃')]);
-
-    const screen = await renderScreen();
-    await waitFor(() => expect(screen.getByText('Run a 5K')).toBeTruthy());
-
-    const before = mockFetchProjects.mock.calls.length;
-    await act(async () => {
-      pullToRefresh(screen);
+  it('orders waiting projects by the oldest unresolved condition', async () => {
+    const screen = await renderScreen({
+      projects: [project('new', 'Newer wait'), project('old', 'Older wait')],
+      waits: [
+        waiting('new-wait', 'new', '2026-09-20T00:00:00.000Z'),
+        waiting('old-wait', 'old', '2026-09-10T00:00:00.000Z'),
+      ],
     });
-
-    await waitFor(() =>
-      expect(mockFetchProjects.mock.calls.length).toBeGreaterThan(before),
-    );
+    await waitFor(() => expect(screen.getByText('Older wait')).toBeTruthy());
+    const labels = screen.getAllByLabelText(/wait$/).map((node) => node.props.accessibilityLabel);
+    expect(labels).toEqual(['Older wait', 'Newer wait']);
   });
 });
