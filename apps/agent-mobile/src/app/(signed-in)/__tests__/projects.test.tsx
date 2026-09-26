@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { View } from 'react-native';
 import { type Project, type ProjectAttention } from '@zero/agent-core';
 
 import { __resetIconSuggestions } from '@/lib/icon-suggestions';
@@ -17,11 +18,9 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: async () => 'token' }),
 }));
+const mockUserButton = () => <View accessibilityLabel="Account" />;
 jest.mock('@clerk/expo/native', () => ({
-  UserButton: () => {
-    const { View } = require('react-native');
-    return <View accessibilityLabel="Account" />;
-  },
+  UserButton: () => mockUserButton(),
 }));
 
 const project = (id: string, title: string, over: Partial<Project> = {}): Project => ({

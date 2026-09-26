@@ -2,10 +2,8 @@ import { safeRandomUUID } from '@tanstack/db';
 import { advance, type Recurrence } from '@zeroapps/recurrence';
 import {
   localToday,
-  orderKeyBetween,
   type Project,
   type ProjectsApi,
-  type Task,
   type TasksApi,
   type WaitsApi,
 } from '@zero/agent-core';
