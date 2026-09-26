@@ -75,7 +75,7 @@ launcher_alias_state() {
 
 delete_e2e_stores() {
   local command
-  command='rm -f databases/zero-app-e2e.sqlite* databases/zero-app-e2e-outbox-v2.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
+  command='rm -f databases/zero-app-e2e.sqlite* databases/zero-app-e2e-outbox-v2.sqlite* files/SQLite/taskdo-fixture-e2e-test-user.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
   adb_device shell "run-as $PACKAGE sh -c '$command'" >/dev/null 2>&1 || true
 }
 
