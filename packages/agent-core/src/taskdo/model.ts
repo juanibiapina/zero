@@ -8,6 +8,8 @@ import type {
   ProjectAfterConflict,
   ProjectAttention,
   ProjectState,
+  StoredProject,
+  StoredTask,
   Task,
   TodoIssue,
 } from "./types";
@@ -17,8 +19,8 @@ export type TodoModelResult<T, Conflict extends string = never> =
   | { ok: false; conflict: Conflict };
 
 export type TodoProjection = {
-  tasks: Task[];
-  projects: Project[];
+  tasks: StoredTask[];
+  projects: StoredProject[];
   conditions: ProjectAttention[];
   issues: TodoIssue[];
 };
@@ -70,7 +72,7 @@ function put(store: MergeableStore, table: string, id: string, key: string, valu
   else store.setCell(table, id, key, value);
 }
 
-function compareTasks(a: Task, b: Task): number {
+function compareTasks(a: StoredTask, b: StoredTask): number {
   if (a.sortKey == null || b.sortKey == null) {
     if (a.sortKey == null && b.sortKey == null) return a.createdAt.localeCompare(b.createdAt);
     return a.sortKey == null ? 1 : -1;
@@ -91,7 +93,7 @@ export class TodoModel {
     return this.now().toISOString();
   }
 
-  getProject(id: string): Project | null {
+  getProject(id: string): StoredProject | null {
     if (!this.store.hasRow("projects", id)) return null;
     const row = this.store.getRow("projects", id);
     if (row.deletedAt || typeof row.title !== "string" || typeof row.createdAt !== "string") return null;
@@ -107,7 +109,7 @@ export class TodoModel {
     };
   }
 
-  getTask(id: string): Task | null {
+  getTask(id: string): StoredTask | null {
     if (!this.store.hasRow("tasks", id)) return null;
     const row = this.store.getRow("tasks", id);
     if (typeof row.text !== "string" || typeof row.createdAt !== "string") return null;
@@ -201,14 +203,14 @@ export class TodoModel {
 
   project(options: { taskOrder?: "manual" | "created" } = {}): TodoProjection {
     const issues: TodoIssue[] = [];
-    const projects: Project[] = [];
+    const projects: StoredProject[] = [];
     for (const [id, row] of Object.entries(this.store.getTable("projects"))) {
       if (row.deletedAt) continue;
       const project = this.getProject(id);
       if (project) projects.push(project);
       else issues.push({ table: "projects", id, reason: "invalid-project" });
     }
-    const tasks: Task[] = [];
+    const tasks: StoredTask[] = [];
     for (const [id, row] of Object.entries(this.store.getTable("tasks"))) {
       const projectId = typeof row.projectId === "string" ? row.projectId : null;
       if (typeof row.text !== "string" || typeof row.createdAt !== "string") {
@@ -237,7 +239,7 @@ export class TodoModel {
     };
   }
 
-  createProject(input: ProjectInput): TodoModelResult<Project, "id-conflict"> {
+  createProject(input: ProjectInput): TodoModelResult<StoredProject, "id-conflict"> {
     if (this.store.hasRow("projects", input.id)) {
       const existing = this.getProject(input.id);
       return existing ? success(existing, false) : conflict("id-conflict");
@@ -253,7 +255,7 @@ export class TodoModel {
     return success(this.getProject(input.id)!, true);
   }
 
-  restoreProject(project: Project): TodoModelResult<Project, "missing-project" | "id-conflict"> {
+  restoreProject(project: Project): TodoModelResult<StoredProject, "missing-project" | "id-conflict"> {
     if (!this.store.hasRow("projects", project.id)) return this.createProject(project);
     const existing = this.getProject(project.id);
     if (!existing) return conflict("missing-project");
@@ -261,7 +263,7 @@ export class TodoModel {
     return this.setProjectState(project.id, project.state);
   }
 
-  editProject(id: string, fields: { title?: string; icon?: string; description?: string | null }): TodoModelResult<Project, "missing-project"> {
+  editProject(id: string, fields: { title?: string; icon?: string; description?: string | null }): TodoModelResult<StoredProject, "missing-project"> {
     if (!this.getProject(id)) return conflict("missing-project");
     this.store.transaction(() => {
       if (fields.title !== undefined) this.store.setCell("projects", id, "title", fields.title);
@@ -271,7 +273,7 @@ export class TodoModel {
     return success(this.getProject(id)!, true);
   }
 
-  setProjectState(id: string, state: ProjectState): TodoModelResult<Project, "missing-project"> {
+  setProjectState(id: string, state: ProjectState): TodoModelResult<StoredProject, "missing-project"> {
     const before = this.getProject(id);
     if (!before) return conflict("missing-project");
     if (before.state === state) return success(before, false);
@@ -357,7 +359,7 @@ export class TodoModel {
     return success(undefined, true);
   }
 
-  createTask(input: TaskInput): TodoModelResult<Task, "id-conflict" | "missing-project"> {
+  createTask(input: TaskInput): TodoModelResult<StoredTask, "id-conflict" | "missing-project"> {
     if (this.store.hasRow("tasks", input.id)) {
       const existing = this.getTask(input.id);
       return existing ? success(existing, false) : conflict("id-conflict");
@@ -385,7 +387,7 @@ export class TodoModel {
     return success(this.getTask(input.id)!, true);
   }
 
-  restoreTask(task: Task): TodoModelResult<Task, "id-conflict" | "missing-project"> {
+  restoreTask(task: Task): TodoModelResult<StoredTask, "id-conflict" | "missing-project"> {
     if (task.projectId && !this.getProject(task.projectId)) return conflict("missing-project");
     if (!this.store.hasRow("tasks", task.id)) return this.createTask({ ...task, completedAt: null });
     const existing = this.getTask(task.id);
@@ -398,7 +400,7 @@ export class TodoModel {
     return success(this.getTask(task.id)!, true);
   }
 
-  patchTask(id: string, fields: { text?: string; showUpDate?: string | null; sortKey?: string; projectId?: string | null }): TodoModelResult<Task, "missing-task" | "missing-project"> {
+  patchTask(id: string, fields: { text?: string; showUpDate?: string | null; sortKey?: string; projectId?: string | null }): TodoModelResult<StoredTask, "missing-task" | "missing-project"> {
     if (!this.getTask(id)) return conflict("missing-task");
     if (fields.projectId && !this.getProject(fields.projectId)) return conflict("missing-project");
     this.store.transaction(() => {
@@ -407,7 +409,7 @@ export class TodoModel {
     return success(this.getTask(id)!, true);
   }
 
-  updateTask(id: string, fields: Partial<Omit<Task, "id" | "createdAt">>): TodoModelResult<Task, "missing-task" | "missing-project" | "invalid-recurrence"> {
+  updateTask(id: string, fields: Partial<Omit<Task, "id" | "createdAt">>): TodoModelResult<StoredTask, "missing-task" | "missing-project" | "invalid-recurrence"> {
     const task = this.getTask(id);
     if (!task) return conflict("missing-task");
     if (("completedAt" in fields || "recurrenceDate" in fields) &&
@@ -421,7 +423,7 @@ export class TodoModel {
     return success(this.getTask(id)!, true);
   }
 
-  completeTask(id: string): TodoModelResult<Task, "missing-task"> {
+  completeTask(id: string): TodoModelResult<StoredTask, "missing-task"> {
     const task = this.getTask(id);
     if (!task) return conflict("missing-task");
     if (task.completedAt) return success(task, false);
@@ -429,7 +431,7 @@ export class TodoModel {
     return success(this.getTask(id)!, true);
   }
 
-  reopenTask(id: string): TodoModelResult<Task, "missing-task"> {
+  reopenTask(id: string): TodoModelResult<StoredTask, "missing-task"> {
     const task = this.getTask(id);
     if (!task) return conflict("missing-task");
     if (!task.completedAt) return success(task, false);
@@ -437,7 +439,7 @@ export class TodoModel {
     return success(this.getTask(id)!, true);
   }
 
-  setTaskRecurrence(id: string, recurrence: Recurrence | null): TodoModelResult<Task, "missing-task"> {
+  setTaskRecurrence(id: string, recurrence: Recurrence | null): TodoModelResult<StoredTask, "missing-task"> {
     if (!this.getTask(id)) return conflict("missing-task");
     this.store.transaction(() => {
       put(this.store, "tasks", id, "recurrence", recurrence ? JSON.stringify(recurrence) : null);
@@ -447,7 +449,7 @@ export class TodoModel {
     return success(this.getTask(id)!, true);
   }
 
-  completeOccurrence(id: string, scheduledOn: string, completedOn: string): TodoModelResult<Task, "missing-task" | "invalid-recurrence"> {
+  completeOccurrence(id: string, scheduledOn: string, completedOn: string): TodoModelResult<StoredTask, "missing-task" | "invalid-recurrence"> {
     const task = this.getTask(id);
     if (!task) return conflict("missing-task");
     if (this.store.hasCell("tasks", id, "recurrence") && !task.recurrence) return conflict("invalid-recurrence");
@@ -463,7 +465,7 @@ export class TodoModel {
   }
 
   undoOccurrence(id: string, expectedRecurrenceDate: string, recurrenceDateBefore: string,
-    showUpDateBefore: string | null): TodoModelResult<Task, "missing-task" | "invalid-recurrence"> {
+    showUpDateBefore: string | null): TodoModelResult<StoredTask, "missing-task" | "invalid-recurrence"> {
     const task = this.getTask(id);
     if (!task) return conflict("missing-task");
     if (this.store.hasCell("tasks", id, "recurrence") && !task.recurrence) return conflict("invalid-recurrence");
@@ -508,6 +510,8 @@ export type {
   ProjectAfterConflict,
   ProjectAttention,
   ProjectState,
+  StoredProject,
+  StoredTask,
   Task,
   TodoIssue,
 } from "./types";
