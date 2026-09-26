@@ -70,8 +70,11 @@ data on reconnect.
 The canonical `@zero/agent-core` model owns projection, recovery, and mutation
 rules. The shared replica is a TanStack adapter with one screen-facing
 interface. Its three entity collections share one store, transaction model,
-recovery channel, and replica-level refresh operation. Platform adapters own
-persistence, authentication, WebSocket construction, and lifecycle events.
+recovery channel, and replica-level refresh operation. A shared synchronization
+lifecycle owns connection-attempt deduplication, TinyBase synchronization,
+bounded reconnect backoff, refresh, and race-safe teardown. Platform adapters
+own persistence, authentication, WebSocket construction, connection eligibility,
+and platform lifecycle events.
 
 - **Mobile:** one Expo SQLite file per Clerk account, named
   `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection;

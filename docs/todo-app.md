@@ -57,7 +57,9 @@ ordering, relationships, and recovery. TaskDO retains erasure, durable saves,
 WebSocket lifecycle, and RPC result mapping. The shared client module exposes
 one account replica with TanStack-backed `tasks`, `projects`, and `waits`
 operation groups plus one synchronization refresh. Mobile and web provide
-persistence, authentication, socket, and account-lifecycle adapters. See
+persistence, authentication, socket, and account-lifecycle adapters. Their
+shared synchronization lifecycle owns TinyBase connection, retry, refresh, and
+teardown semantics. See
 `docs/storage.md`.
 
 **Collapse to one list (decided 2026-08-31; merged 2026-09-12):** the
