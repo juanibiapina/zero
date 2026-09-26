@@ -164,11 +164,13 @@ export async function openBrowserTaskdoReplica(
     persistenceSafetyRefresh = setInterval(refreshPersisted, PERSISTENCE_SAFETY_REFRESH_MS);
   };
 
+  let refreshReplica = async () => {};
   const replica = createTaskdoReplica({
     store,
     queryClient: replicaQueryClient,
     queryKeyScope: [accountId],
     save: persist,
+    refresh: () => refreshReplica(),
   });
   const unsubscribe = replica.subscribe(onSnapshot);
   if (persister) {
@@ -195,7 +197,7 @@ export async function openBrowserTaskdoReplica(
     startPersistenceSafetyRefresh();
   }
 
-  let connecting = false;
+  let connectionAttempt: Promise<void> | undefined;
   let socket: WebSocket | undefined;
   let synchronizer: Awaited<ReturnType<typeof createWsSynchronizer>> | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
@@ -209,56 +211,73 @@ export async function openBrowserTaskdoReplica(
     retryDelay = Math.min(retryDelay * 2, 30_000);
   };
   const connect = async () => {
-    if (stopped || connecting || socket?.readyState === WebSocket.OPEN || !navigator.onLine) return;
-    connecting = true;
-    const live = new WebSocket(taskSyncUrl());
-    socket = live;
-    live.addEventListener("close", () => {
-      if (socket !== live) return;
-      socket = undefined;
-      onConnection(false);
-      void synchronizer?.destroy().catch(() => {});
-      synchronizer = undefined;
-      scheduleReconnect();
-    });
-    try {
-      await new Promise<void>((resolve, reject) => {
-        live.addEventListener("open", () => resolve(), { once: true });
-        live.addEventListener("error", () => reject(new Error("Sync unavailable")), { once: true });
+    if (stopped || socket?.readyState === WebSocket.OPEN || !navigator.onLine) return;
+    if (connectionAttempt) return connectionAttempt;
+    connectionAttempt = (async () => {
+      const live = new WebSocket(taskSyncUrl());
+      socket = live;
+      live.addEventListener("close", () => {
+        if (socket !== live) return;
+        socket = undefined;
+        onConnection(false);
+        void synchronizer?.destroy().catch(() => {});
+        synchronizer = undefined;
+        scheduleReconnect();
       });
-      if (stopped) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          live.addEventListener("open", () => resolve(), { once: true });
+          live.addEventListener("error", () => reject(new Error("Sync unavailable")), { once: true });
+        });
+        if (stopped) {
+          live.close();
+          return;
+        }
+        synchronizer = await createWsSynchronizer(store, live);
+        await synchronizer.startSync();
+        if (stopped || socket !== live) return;
+        retryDelay = 1_000;
+        onConnection(true);
+      } catch {
         live.close();
-        return;
+        if (socket === live) socket = undefined;
+        onConnection(false);
+        scheduleReconnect();
       }
-      synchronizer = await createWsSynchronizer(store, live);
-      await synchronizer.startSync();
-      if (stopped || socket !== live) return;
-      retryDelay = 1_000;
-      onConnection(true);
-    } catch {
-      live.close();
-      if (socket === live) socket = undefined;
-      onConnection(false);
-      scheduleReconnect();
+    })();
+    try {
+      await connectionAttempt;
     } finally {
-      connecting = false;
+      connectionAttempt = undefined;
     }
   };
-  const reconnectNow = () => {
+  const reconnectNow = async () => {
     if (retry) clearTimeout(retry);
     retry = undefined;
-    void connect();
+    await connect();
   };
   const onVisible = () => {
     if (document.visibilityState === "visible") {
-      reconnectNow();
+      void reconnectNow();
       refreshPersisted();
       startPersistenceSafetyRefresh();
     } else {
       stopPersistenceSafetyRefresh();
     }
   };
-  window.addEventListener("online", reconnectNow);
+  refreshReplica = async () => {
+    refreshPersisted();
+    await pendingSave;
+    if (synchronizer && socket?.readyState === WebSocket.OPEN) {
+      await synchronizer.load();
+      await synchronizer.save();
+      return;
+    }
+    await reconnectNow();
+    if (!synchronizer || socket?.readyState !== WebSocket.OPEN) throw new Error("Sync unavailable");
+  };
+  const onOnline = () => { void reconnectNow(); };
+  window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisible);
   void connect();
 
@@ -269,7 +288,7 @@ export async function openBrowserTaskdoReplica(
     async close() {
       if (stopped) return;
       stopped = true;
-      window.removeEventListener("online", reconnectNow);
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisible);
       if (retry) clearTimeout(retry);
       stopPersistenceSafetyRefresh();

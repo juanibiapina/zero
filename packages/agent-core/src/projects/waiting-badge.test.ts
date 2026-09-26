@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { Project } from "./types";
-import type { Task } from "../tasks/types";
-import type { ManualWaitingCondition } from "../waits/types";
+import type { Task } from "../taskdo/types";
+import type { ManualWaitingCondition } from "../taskdo/types";
 import { waitingBadge } from "./waiting-badge";
 
 const TODAY = "2026-06-01";

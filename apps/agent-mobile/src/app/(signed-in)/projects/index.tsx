@@ -6,8 +6,8 @@ import {
   LOADING_TEXT_DELAY_MS,
   projectStatusSections, listView,
   PROJECT_DISPLAY_STATUS_LABELS, projectStatusContext,
-  type Project, type ProjectsApi, type ProjectDisplayStatus, type TasksApi,
-  type WaitsApi,
+  type Project, type ProjectDisplayStatus,
+  type TaskdoReplica,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, RefreshControl, SectionList, View } from 'react-native';
@@ -16,8 +16,8 @@ import { ScreenHeader } from '@/components/screen-header';
 import { ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
-import { useProjectsApi, useTasksApi, useWaitsApi } from '@/lib/todo-api-hooks';
-import { useDelayed, useForegroundRefetch, useLoadError, usePullRefresh } from '@/lib/screen-hooks';
+import { useTodoReplica } from '@/lib/todo-replica-hook';
+import { useDelayed, usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
 function ProjectRow({ item, status, context, onOpen }: {
@@ -62,22 +62,19 @@ function SectionHeader({ status, count, collapsed, onToggle }: {
 }
 
 export default function ProjectsScreen() {
-  const projectsApi = useProjectsApi();
-  const tasksApi = useTasksApi();
-  const waitsApi = useWaitsApi();
+  const replica = useTodoReplica();
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title="Projects" />
-      {projectsApi && tasksApi && waitsApi ? (
-        <Projects api={projectsApi} tasksApi={tasksApi} waitsApi={waitsApi} />
+      {replica ? (
+        <Projects replica={replica} />
       ) : <View className="flex-1" />}
     </View>
   );
 }
 
-function Projects({ api, tasksApi, waitsApi }: {
-  api: ProjectsApi; tasksApi: TasksApi; waitsApi: WaitsApi;
-}) {
+function Projects({ replica }: { replica: TaskdoReplica }) {
+  const { projects: api, tasks: tasksApi, waits: waitsApi } = replica;
   const router = useRouter();
   const { getToken } = useAuth();
   const { data: projects, isLoading } = useLiveQuery((q) =>
@@ -88,13 +85,11 @@ function Projects({ api, tasksApi, waitsApi }: {
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
-  const loadError = useLoadError(api);
+  const loadError = null;
   const [writeError, setWriteError] = useState<string | null>(null);
   const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
   const accent = useColor('--color-accent');
-  const refetchAll = useCallback(async () => { await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]); }, [api, tasksApi, waitsApi]);
-  useForegroundRefetch(refetchAll);
-  const { refreshing, onRefresh } = usePullRefresh(refetchAll);
+  const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
   const onToggle = useCallback((status: ProjectDisplayStatus, current: boolean) => {
     setCollapseOverride((prev) => ({ ...prev, [status]: !current }));
   }, []);

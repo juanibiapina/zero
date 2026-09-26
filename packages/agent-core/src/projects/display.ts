@@ -2,7 +2,7 @@
 // ProjectState; these values describe calculated presentation only.
 
 import type { Project, ProjectDisplayStatus } from "./types";
-import type { Task } from "../tasks/types";
+import type { Task } from "../taskdo/types";
 
 export const PROJECT_DISPLAY_STATUS_LABELS: Record<
   ProjectDisplayStatus,

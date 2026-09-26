@@ -6,16 +6,13 @@ import {
   localToday,
   messageOf,
   upcomingSections,
-  type ProjectsApi,
   type Task,
-  type TasksApi,
-  type WaitsApi,
+  type TaskdoReplica,
 } from "@zero/agent-core";
 import { Input } from "@/components/ui/input";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { useTodoData } from "@/lib/todo-data";
 import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
-import { useForegroundRefetch } from "@/lib/screen-hooks";
 
 // Upcoming lists tasks scheduled for a future day, grouped into day sections.
 // The complement of Home: what has shown up stays there, what is still ahead
@@ -35,23 +32,16 @@ export function UpcomingPage() {
 }
 
 function UpcomingPanel() {
-  const { api, projectsApi, waitsApi } = useTodoData();
-  return api && projectsApi && waitsApi ? (
-    <UpcomingReady api={api} projectsApi={projectsApi} waitsApi={waitsApi} />
+  const { replica } = useTodoData();
+  return replica ? (
+    <UpcomingReady replica={replica} />
   ) : (
     <div className="min-h-24" />
   );
 }
 
-function UpcomingReady({
-  api,
-  projectsApi,
-  waitsApi,
-}: {
-  api: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
-}) {
+function UpcomingReady({ replica }: { replica: TaskdoReplica }) {
+  const { tasks: api, projects: projectsApi, waits: waitsApi } = replica;
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
@@ -66,8 +56,6 @@ function UpcomingReady({
   );
 
   const [error, setError] = useState<string | null>(null);
-
-  useForegroundRefetch(api.refetch);
 
   const completion = useTaskCompletionFeedback({
     api,

@@ -53,10 +53,11 @@ import {
   type AddMode,
   type HomeCallToAction,
   type Project,
-  type ProjectsApi,
+  type TodoProjects,
   type Task,
-  type TasksApi,
-  type WaitsApi,
+  type TaskdoReplica,
+  type TodoTasks,
+  type TodoWaits,
   type WaitingCondition,
 } from "@zero/agent-core";
 import {
@@ -65,7 +66,7 @@ import {
   type TextRange,
 } from "@zeroapps/recurrence";
 import { useTodoData } from "@/lib/todo-data";
-import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
+import { useDelayed } from "@/lib/screen-hooks";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
 
 // Home is one screen: a single reorderable list of tasks — the loose ones you
@@ -74,18 +75,14 @@ import { requestIconSuggestions } from "@/lib/icon-suggestions";
 // the quick-add defaults to a task and can switch to a project. See
 // docs/plans/todo-single-list-1-merge.md.
 export function HomePage() {
-  const { api: tasksApi, projectsApi, waitsApi } = useTodoData();
+  const { replica } = useTodoData();
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl space-y-6">
           <h1 className="text-2xl font-bold tracking-tight">Home</h1>
-          {tasksApi && projectsApi && waitsApi ? (
-            <Home
-              tasksApi={tasksApi}
-              projectsApi={projectsApi}
-              waitsApi={waitsApi}
-            />
+          {replica ? (
+            <Home replica={replica} />
           ) : (
             <div className="min-h-24" />
           )}
@@ -95,15 +92,8 @@ export function HomePage() {
   );
 }
 
-function Home({
-  tasksApi,
-  projectsApi,
-  waitsApi,
-}: {
-  tasksApi: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
-}) {
+function Home({ replica }: { replica: TaskdoReplica }) {
+  const { tasks: tasksApi, projects: projectsApi, waits: waitsApi } = replica;
   const [mode, setMode] = useState<AddMode>("task");
   const [text, setText] = useState("");
   const [ignoredSchedule, setIgnoredSchedule] = useState<{
@@ -303,9 +293,9 @@ function TaskList({
   waitsApi,
   onError,
 }: {
-  api: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
+  api: TodoTasks;
+  projectsApi: TodoProjects;
+  waitsApi: TodoWaits;
   onError: (m: string) => void;
 }) {
   const { data: tasks, isLoading } = useLiveQuery((q) =>
@@ -317,11 +307,6 @@ function TaskList({
   const { data: conditions } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
-  const refetchAll = useCallback(async () => {
-    await Promise.all([api.refetch(), projectsApi.refetch(), waitsApi.refetch()]);
-  }, [api, projectsApi, waitsApi]);
-  useForegroundRefetch(refetchAll);
-
   const today = localToday();
   const list = homeTasks(tasks ?? [], projects ?? [], today);
 

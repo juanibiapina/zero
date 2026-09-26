@@ -11,7 +11,7 @@ import {
   unresolvedProjectAfters,
   wouldCreateAfterCycle,
 } from "./afters";
-import type { ProjectAfter, ProjectAttention } from "../waits/types";
+import type { ProjectAfter, ProjectAttention } from "../taskdo/types";
 import type { Project } from "./types";
 
 function after(over: Partial<ProjectAfter> = {}): ProjectAfter {

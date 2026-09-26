@@ -12,12 +12,10 @@ import { MemoryRouter as RouterMemoryRouter, Route, Routes } from "react-router"
 import {
   defaultToastController,
   type Project,
-  type ProjectsApi,
   type ProjectState,
   type Task,
-  type TasksApi,
+  type TaskdoReplica,
   type WaitingCondition,
-  type WaitsApi,
 } from "@zero/agent-core";
 
 import { ProjectsPage } from "./ProjectsPage";
@@ -29,23 +27,18 @@ import { createInMemoryTodoData } from "@/testing/in-memory-todo-data";
 // Give the real pages one fresh in-memory replica through their public data
 // owner. The list and detail page therefore exercise one shared source.
 const h = {
-  api: null as ProjectsApi | null,
-  tasksApi: null as TasksApi | null,
-  waitsApi: null as WaitsApi | null,
+  replica: null as TaskdoReplica | null,
 };
 
 function MemoryRouter(props: ComponentProps<typeof RouterMemoryRouter>) {
   const value: TodoData = {
-    api: h.tasksApi,
-    projectsApi: h.api,
-    waitsApi: h.waitsApi,
+    replica: h.replica,
     ready: true,
     connected: true,
     durable: true,
     error: null,
     durabilityError: null,
     recoveries: [],
-    repair: async () => {},
   };
   return <TodoDataContextProvider value={value}><RouterMemoryRouter {...props} /></TodoDataContextProvider>;
 }
@@ -150,9 +143,7 @@ function setApi(
   waits: WaitingCondition[] = [],
 ) {
   const { data } = createInMemoryTodoData({ projects: initial, tasks, waits });
-  h.api = data.projectsApi;
-  h.tasksApi = data.api;
-  h.waitsApi = data.waitsApi;
+  h.replica = data.replica;
 }
 
 // Render the projects list + detail routes together so a row tap really
@@ -228,9 +219,7 @@ async function moveWithKeyboard(
 
 describe("ProjectsPage", () => {
   afterEach(() => {
-    h.api = null;
-    h.tasksApi = null;
-    h.waitsApi = null;
+    h.replica = null;
     defaultToastController.dismiss();
     vi.restoreAllMocks();
     vi.useRealTimers();
@@ -306,12 +295,12 @@ describe("ProjectsPage", () => {
     renderApp();
     const backlog = await screen.findByRole("button", { name: /^Backlog·/ });
     expect(backlog).toHaveAttribute("aria-expanded", "true");
-    await act(async () => { await h.api!.setState("6", "backlog").isPersisted.promise; });
+    await act(async () => { await h.replica!.projects.setState("6", "backlog").isPersisted.promise; });
     await waitFor(() => expect(backlog).toHaveAttribute("aria-expanded", "false"));
     fireEvent.click(backlog);
     expect(backlog).toHaveAttribute("aria-expanded", "true");
-    await act(async () => { await h.api!.setState("6", "in-play").isPersisted.promise; });
-    await act(async () => { await h.api!.setState("6", "backlog").isPersisted.promise; });
+    await act(async () => { await h.replica!.projects.setState("6", "in-play").isPersisted.promise; });
+    await act(async () => { await h.replica!.projects.setState("6", "backlog").isPersisted.promise; });
     expect(backlog).toHaveAttribute("aria-expanded", "true");
   });
 
@@ -379,7 +368,7 @@ describe("ProjectsPage", () => {
       ],
     );
     measureTaskRows();
-    const reorder = vi.spyOn(h.tasksApi!, "reorder");
+    const reorder = vi.spyOn(h.replica!.tasks, "reorder");
     renderApp(["/projects/1"]);
     const region = await screen.findByRole("region", { name: "Tasks" });
     const order = () =>
@@ -404,7 +393,6 @@ describe("ProjectsPage", () => {
     expect(newKey).toBeDefined();
     expect(newKey > "a1" && newKey < "a3").toBe(true);
 
-    await act(async () => { await h.tasksApi!.refetch(); });
     expect(order()).toEqual([
       'Complete "first"',
       'Complete "last"',
@@ -426,7 +414,7 @@ describe("ProjectsPage", () => {
       { ...task("c", "last", "1"), sortKey: "a5" },
     ]);
     measureTaskRows();
-    const reorder = vi.spyOn(h.tasksApi!, "reorder");
+    const reorder = vi.spyOn(h.replica!.tasks, "reorder");
     renderApp(["/projects/1"]);
     const region = await screen.findByRole("region", { name: "Tasks" });
     const order = () => within(region).getAllByRole("button", { name: /^Complete / })
@@ -720,24 +708,6 @@ describe("ProjectsPage", () => {
     );
   });
 
-  it("re-pulls tasks and waits after a delete so cascaded orphans disappear", async () => {
-    setApi([project("1", "Run a 5K", "next")]);
-    // The server cascades the delete to the project's tasks/conditions; the
-    // screen re-pulls both dependent collections once the delete persists so
-    // any lingering orphan (e.g. a future-dated task in Upcoming) drops.
-    const tasksRefetch = vi.spyOn(h.tasksApi!, "refetch");
-    const waitsRefetch = vi.spyOn(h.waitsApi!, "refetch");
-    renderApp();
-    await openDetail("Run a 5K");
-    fireEvent.click(screen.getByRole("button", { name: "Project actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    });
-    await waitFor(() => expect(tasksRefetch).toHaveBeenCalled());
-    await waitFor(() => expect(waitsRefetch).toHaveBeenCalled());
-  });
-
   it("redirects to the list when the project id is unknown", async () => {
     setApi([project("1", "Run a 5K", "next")]);
     renderApp(["/projects/nope"]);
@@ -771,9 +741,7 @@ describe("project icon suggestions", () => {
   };
 
   afterEach(() => {
-    h.api = null;
-    h.tasksApi = null;
-    h.waitsApi = null;
+    h.replica = null;
     __resetIconSuggestions();
     fetchMock.mockReset();
     vi.useRealTimers();

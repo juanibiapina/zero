@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { homeTasks } from "./home";
-import type { Task } from "./types";
+import type { Task } from "../taskdo/types";
 import type { Project } from "../projects/types";
 // The default task's showUpDate; TODAY is a day after it so it is "shown up".
 const TODAY = "2026-01-02";

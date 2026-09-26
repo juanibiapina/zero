@@ -24,33 +24,3 @@ export function useDelayed(active: boolean, ms: number): boolean {
   return active && elapsed;
 }
 
-// The load-error channel an entity's data layer exposes.
-export type LoadErrorSource = {
-  getLoadError: () => string | null;
-  subscribeLoadError: (cb: () => void) => () => void;
-};
-
-// Read a data layer's current load (sync) error, re-reading whenever it changes.
-export function useLoadError(source: LoadErrorSource): string | null {
-  const [error, setError] = useState<string | null>(() => source.getLoadError());
-  useEffect(() => {
-    const read = () => setError(source.getLoadError());
-    read();
-    return source.subscribeLoadError(read);
-  }, [source]);
-  return error;
-}
-
-// Refetch the entity's list when the browser tab becomes visible again, so a
-// list changed elsewhere (Telegram, another device) shows up without a cold
-// start.
-export function useForegroundRefetch(refetch: () => void | Promise<void>): void {
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void refetch();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [refetch]);
-}
-

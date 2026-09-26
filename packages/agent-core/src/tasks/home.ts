@@ -1,6 +1,6 @@
 import type { Project } from "../projects/types";
 import { compareByOrder } from "./order";
-import type { Task } from "./types";
+import type { Task } from "../taskdo/types";
 
 // Home is open work whose day has arrived. A Project Task needs an arrived date
 // and an In-play owner; manual Waiting and After do not suppress work the user

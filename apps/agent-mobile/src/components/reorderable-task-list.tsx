@@ -3,7 +3,7 @@ import {
   orderKeyBetween,
   tomorrow,
   type Task,
-  type TasksApi,
+  type TodoTasks,
 } from '@zero/agent-core';
 import type { ReactElement } from 'react';
 import { useCallback, useMemo, useState } from 'react';
@@ -203,7 +203,7 @@ export function ReorderableTaskList({
   empty,
   keyboardShouldPersistTaps,
 }: {
-  api: TasksApi;
+  api: TodoTasks;
   tasks: Task[];
   today: string;
   refreshing: boolean;

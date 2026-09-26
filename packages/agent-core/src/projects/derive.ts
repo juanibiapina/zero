@@ -1,8 +1,8 @@
-import type { Task } from "../tasks/types";
+import type { Task } from "../taskdo/types";
 import type {
   ManualWaitingCondition,
   ProjectAttention,
-} from "../waits/types";
+} from "../taskdo/types";
 import {
   isManualWaitingCondition,
   unresolvedProjectAfters,

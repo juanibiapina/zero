@@ -1,16 +1,12 @@
-import { createCollection, safeRandomUUID } from "@tanstack/db";
+import { createCollection, safeRandomUUID, type Collection, type Transaction } from "@tanstack/db";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import type { QueryClient } from "@tanstack/react-query";
 import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
 import type { MergeableStore } from "tinybase";
 
-import type { ProjectsApi, ProjectEditFields } from "../projects/collection";
-import type { Project } from "../projects/types";
-import type { TasksApi } from "../tasks/collection";
+import type { Project, ProjectState } from "../projects/types";
 import { localToday } from "../tasks/today";
-import type { Task } from "../tasks/types";
-import type { WaitsApi } from "../waits/collection";
-import type { ProjectAttention } from "../waits/types";
+import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
 
 export type TodoRecoveryRepair =
@@ -33,16 +29,57 @@ export type TodoSnapshot = {
   recoveries: TodoRecovery[];
 };
 
-export type TodoApis = {
-  api: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
+export type ProjectEditFields = {
+  title?: string;
+  icon?: string;
+  description?: string | null;
 };
 
-export type TaskdoReplica = TodoApis & {
+export type TodoTasks = {
+  collection: Collection<Task, string>;
+  add: (
+    text: string,
+    showUpDate?: string | null,
+    projectId?: string | null,
+    sourceCaptureId?: string | null,
+    recurrence?: Recurrence | null,
+  ) => Transaction;
+  complete: (id: string, completedOn?: PlainDate) => Transaction;
+  completeForever: (id: string) => Transaction;
+  undoOccurrence: (taskBefore: Task, completedOn: PlainDate) => Transaction;
+  setRecurrence: (id: string, recurrence: Recurrence | null) => Transaction;
+  reopen: (task: Task) => Transaction;
+  edit: (id: string, text: string) => Transaction;
+  reschedule: (id: string, showUpDate: string | null) => Transaction;
+  reorder: (id: string, sortKey: string) => Transaction;
+  moveToProject: (id: string, projectId: string | null) => Transaction;
+};
+
+export type TodoProjects = {
+  collection: Collection<Project, string>;
+  add: (title: string, sourceCaptureId?: string | null) => Transaction;
+  setState: (id: string, state: ProjectState) => Transaction;
+  reopen: (project: Project) => Transaction;
+  edit: (id: string, fields: ProjectEditFields) => Transaction;
+  remove: (id: string) => Transaction;
+};
+
+export type TodoWaits = {
+  collection: Collection<ProjectAttention, string>;
+  addWaiting: (projectId: string, text: string) => Transaction;
+  addAfter: (projectId: string, afterProjectId: string) => Transaction;
+  resolveWaiting: (id: string) => Transaction;
+  remove: (id: string) => Transaction;
+};
+
+export type TaskdoReplica = {
   store: MergeableStore;
+  tasks: TodoTasks;
+  projects: TodoProjects;
+  waits: TodoWaits;
   snapshot: () => TodoSnapshot;
   subscribe: (listener: (snapshot: TodoSnapshot) => void) => () => void;
+  refresh: () => Promise<void>;
   repair: (recovery: TodoRecovery) => Promise<boolean>;
   close: () => Promise<void>;
 };
@@ -58,6 +95,7 @@ export type CreateTaskdoReplicaOptions = Clock & {
   queryClient: QueryClient;
   queryKeyScope: readonly unknown[];
   save?: () => Promise<unknown>;
+  refresh?: () => Promise<void>;
 };
 
 function recoveryFor(store: MergeableStore, issue: TodoIssue): TodoRecovery {
@@ -141,6 +179,7 @@ export function createTaskdoReplica({
   queryClient,
   queryKeyScope,
   save = async () => {},
+  refresh = async () => {},
   now = () => new Date(),
   today = localToday,
   randomId = safeRandomUUID,
@@ -265,10 +304,7 @@ export function createTaskdoReplica({
     },
   }));
 
-  const noError = () => null;
-  const noErrorSubscription = () => () => {};
-  const noRefetch = async () => {};
-  const api: TasksApi = {
+  const taskActions: TodoTasks = {
     collection: tasks,
     add: (text, showUpDate = null, projectId = null, sourceCaptureId = null, recurrence = null) => tasks.insert({
       id: randomId(), text, createdAt: now().toISOString(), showUpDate: recurrence?.origin ?? showUpDate,
@@ -294,12 +330,8 @@ export function createTaskdoReplica({
     reschedule: (id, date) => tasks.update(id, (draft) => { draft.showUpDate = date; }),
     reorder: (id, sortKey) => tasks.update(id, (draft) => { draft.sortKey = sortKey; }),
     moveToProject: (id, projectId) => tasks.update(id, (draft) => { draft.projectId = projectId; }),
-    offline: true,
-    refetch: noRefetch,
-    getLoadError: noError,
-    subscribeLoadError: noErrorSubscription,
   };
-  const projectsApi: ProjectsApi = {
+  const projectActions: TodoProjects = {
     collection: projects,
     add: (title, sourceCaptureId = null) => projects.insert({
       id: randomId(), title, icon: "📁", description: null, state: "in-play",
@@ -311,12 +343,8 @@ export function createTaskdoReplica({
       ? projects.update(project.id, (draft) => { draft.state = project.state; })
       : projects.insert({ ...project }),
     remove: (id) => projects.delete(id),
-    offline: true,
-    refetch: noRefetch,
-    getLoadError: noError,
-    subscribeLoadError: noErrorSubscription,
   };
-  const waitsApi: WaitsApi = {
+  const waitActions: TodoWaits = {
     collection: waits,
     addWaiting: (projectId, text) => waits.insert({
       id: randomId(), projectId, kind: "free-text", text, refId: null,
@@ -328,17 +356,13 @@ export function createTaskdoReplica({
     }),
     resolveWaiting: (id) => waits.update(id, (draft) => { draft.resolvedAt = now().toISOString(); }),
     remove: (id) => waits.delete(id),
-    offline: true,
-    refetch: noRefetch,
-    getLoadError: noError,
-    subscribeLoadError: noErrorSubscription,
   };
 
   return {
     store,
-    api,
-    projectsApi,
-    waitsApi,
+    tasks: taskActions,
+    projects: projectActions,
+    waits: waitActions,
     snapshot: () => snapshot,
     subscribe(listener) {
       listeners.add(listener);
@@ -350,6 +374,7 @@ export function createTaskdoReplica({
       await write(() => { changed = repairTodoRecovery(store, recovery); });
       return changed;
     },
+    refresh,
     async close() {
       if (closed) return;
       closed = true;

@@ -21,11 +21,11 @@ import {
   type Project,
   type ProjectEditFields,
   type ProjectState,
-  type ProjectsApi,
+  type TodoProjects,
   type Task,
-  type TasksApi,
+  type TaskdoReplica,
   type WaitingCondition,
-  type WaitsApi,
+  type TodoWaits,
 } from '@zero/agent-core';
 import {
   useCallback,
@@ -57,8 +57,8 @@ import {
   useIconSuggestions,
 } from '@/lib/icon-suggestions';
 import { useLocalDay } from '@/lib/local-day';
-import { useProjectsApi, useTasksApi, useWaitsApi } from '@/lib/todo-api-hooks';
-import { useForegroundRefetch, usePullRefresh } from '@/lib/screen-hooks';
+import { useTodoReplica } from '@/lib/todo-replica-hook';
+import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
 const ADD_ICON = Icon.select({
@@ -85,11 +85,9 @@ const ROW_DISCLOSURE_ICON = Icon.select({
 // shared React Native add drawer.
 // See docs/entities/project.md.
 export default function ProjectDetailScreen() {
-  const projectsApi = useProjectsApi();
-  const tasksApi = useTasksApi();
-  const waitsApi = useWaitsApi();
-  return projectsApi && tasksApi && waitsApi ? (
-    <ProjectDetail api={projectsApi} tasksApi={tasksApi} waitsApi={waitsApi} />
+  const replica = useTodoReplica();
+  return replica ? (
+    <ProjectDetail replica={replica} />
   ) : (
     <View className="flex-1 bg-background" />
   );
@@ -120,7 +118,7 @@ function BackRow({ onBack }: { onBack: () => void }) {
 
 type CommitProjectEdit = (
   fields: ProjectEditFields,
-) => ReturnType<ProjectsApi['edit']> | null;
+) => ReturnType<TodoProjects['edit']> | null;
 
 function normalizeDescription(value: string | null | undefined): string | null {
   if (value == null || value.trim() === '') return null;
@@ -214,15 +212,8 @@ function useProjectDescriptionDraft(
   return { value, onChange, flush };
 }
 
-function ProjectDetail({
-  api,
-  tasksApi,
-  waitsApi,
-}: {
-  api: ProjectsApi;
-  tasksApi: TasksApi;
-  waitsApi: WaitsApi;
-}) {
+function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
+  const { projects: api, tasks: tasksApi, waits: waitsApi } = replica;
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { getToken } = useAuth();
@@ -273,15 +264,10 @@ function ProjectDetail({
         : setError(messageOf(e));
       try {
         const tx = api.setState(project.id, state);
-        void tx.isPersisted.promise.then(
-          () => (state === 'done' ? waitsApi.refetch() : undefined),
-          failed,
-        ).catch(() =>
-          reportProjectFailure('Project done · Pull to refresh'),
-        );
+        void tx.isPersisted.promise.catch(failed);
       } catch (e) { failed(e); }
     },
-    [api, project, waitsApi],
+    [api, project],
   );
 
   const completeProject = useCallback(() => {
@@ -291,40 +277,29 @@ function ProjectDetail({
       description: `${project.icon} ${project.title}`,
       act: () => {
         const tx = api.setState(project.id, 'done');
-        void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
         return tx;
       },
       undo: () => {
         const tx = api.reopen(project);
-        void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
         return tx;
       },
       onError: () => reportProjectFailure('Project update failed · Retry'),
     });
-  }, [api, project, waitsApi]);
+  }, [api, project]);
 
   const commitDelete = useCallback(() => {
     if (!project) return;
     setError(null);
-    // The write lives on the shared projects data layer, not this screen, so it
+    // The write lives on the shared replica, not this screen, so it
     // persists even though we pop away immediately — no toast, no deferred window.
-    // The server cascades the delete to the project's tasks and waiting
-    // conditions, so once it persists we re-pull those two collections to drop
-    // any lingering orphan (a future-dated task of this project would otherwise
-    // sit in Upcoming until the next refetch — Upcoming applies no project gate).
+    // The canonical model cascades the project's tasks and waiting conditions
+    // in the same local write.
     const failed = () => reportProjectFailure('Delete failed · Retry');
     try {
       const tx = api.remove(project.id);
-      void tx.isPersisted.promise.then(async () => {
-        try {
-          await Promise.all([tasksApi.refetch(), waitsApi.refetch()]);
-          if (tasksApi.getLoadError() || waitsApi.getLoadError()) throw new Error('refresh');
-        } catch {
-          reportProjectFailure('Project deleted · Pull to refresh');
-        }
-      }, failed);
+      void tx.isPersisted.promise.catch(failed);
     } catch { failed(); }
-  }, [api, tasksApi, waitsApi, project]);
+  }, [api, project]);
 
   // This project's open tasks, the list the shared task editor resolves against:
   // moving a task to another project drops it here (closes the sheet), while a
@@ -373,13 +348,7 @@ function ProjectDetail({
     return () => sub.remove();
   }, [detail, add, flushDescription]);
 
-  // The header's derived status reads tasks and waits, so a pull re-pulls all
-  // three lists this screen shows.
-  const refetchAll = useCallback(async () => {
-    await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]);
-  }, [api, tasksApi, waitsApi]);
-  useForegroundRefetch(refetchAll);
-  const { refreshing, onRefresh } = usePullRefresh(refetchAll);
+  const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
   const today = useLocalDay();
   const presentationOf = useCallback(
     (task: Task) => {
@@ -907,7 +876,7 @@ function ProjectWaits({
   onError,
 }: {
   project: Project;
-  waitsApi: WaitsApi;
+  waitsApi: TodoWaits;
   projects: Project[];
   onAddWaiting: () => void;
   onAddAfter: () => void;

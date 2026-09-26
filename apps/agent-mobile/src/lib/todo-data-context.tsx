@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
-import { useTodoData, type TodoData } from './taskdo-tasks-api';
+import { useTodoData, type TodoData } from './use-todo-data';
 
 export type { TodoData };
 

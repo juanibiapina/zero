@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { homeCallToAction } from "./call-to-action";
 import type { Project, ProjectState } from "./types";
-import type { Task } from "../tasks/types";
-import type { WaitingCondition } from "../waits/types";
+import type { Task } from "../taskdo/types";
+import type { WaitingCondition } from "../taskdo/types";
 
 const TODAY = "2026-06-01";
 

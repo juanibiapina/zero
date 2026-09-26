@@ -7,11 +7,11 @@ import {
   waitingUntil,
 } from "./derive";
 import type { Project, ProjectState } from "./types";
-import type { Task } from "../tasks/types";
+import type { Task } from "../taskdo/types";
 import type {
   ManualWaitingCondition,
   ProjectAfter,
-} from "../waits/types";
+} from "../taskdo/types";
 
 const TODAY = "2026-06-01";
 

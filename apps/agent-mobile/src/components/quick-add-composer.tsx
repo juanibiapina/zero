@@ -7,11 +7,11 @@ import {
   toast,
   type AddMode,
   type Project,
-  type ProjectsApi,
-  type TasksApi,
+  type TodoProjects,
+  type TodoTasks,
   type Task,
   type WaitingCondition,
-  type WaitsApi,
+  type TodoWaits,
 } from '@zero/agent-core';
 import {
   parseSchedule,
@@ -37,7 +37,7 @@ export type QuickAddScope =
   | {
       kind: 'project';
       project: Project | null;
-      waitsApi: WaitsApi;
+      waitsApi: TodoWaits;
     };
 
 export type QuickAddController = {
@@ -68,8 +68,8 @@ export function useQuickAdd({
   showFab = true,
   waitForPersist = false,
 }: {
-  tasksApi: TasksApi;
-  projectsApi: ProjectsApi;
+  tasksApi: TodoTasks;
+  projectsApi: TodoProjects;
   projects: Project[];
   openTasks: Task[];
   conditions: WaitingCondition[];

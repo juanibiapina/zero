@@ -1,7 +1,7 @@
-import type { ProjectAttention } from "../waits/types";
+import type { ProjectAttention } from "../taskdo/types";
 import { projectDisplayStatus } from "./derive";
 import type { Project } from "./types";
-import type { Task } from "../tasks/types";
+import type { Task } from "../taskdo/types";
 
 export type HomeCallToAction =
   | { kind: "plan"; next: number; waiting: number; after: number }

@@ -1,11 +1,11 @@
 import {
   type AddMode,
   type Project,
-  type ProjectsApi,
-  type TasksApi,
+  type TodoProjects,
+  type TodoTasks,
   type Task,
   type WaitingCondition,
-  type WaitsApi,
+  type TodoWaits,
 } from '@zero/agent-core';
 import { useCallback, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
@@ -50,9 +50,9 @@ export function useProjectAdd({
   projects: Project[];
   conditions: WaitingCondition[];
   openTasks: Task[];
-  tasksApi: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
+  tasksApi: TodoTasks;
+  projectsApi: TodoProjects;
+  waitsApi: TodoWaits;
   getToken: TokenGetter;
   onError: (message: string | null) => void;
   showFab?: boolean;

@@ -1,15 +1,11 @@
 import { useAuth } from "@clerk/react";
 import { QueryClient } from "@tanstack/react-query";
 import {
-  type ProjectsApi,
-  type TasksApi,
-  type TodoRecovery,
+  type TaskdoReplica,
   type TodoSnapshot,
-  type WaitsApi,
 } from "@zero/agent-core";
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -22,16 +18,13 @@ import { Button } from "@/components/ui/button";
 import { openBrowserTaskdoReplica, type BrowserTaskdoReplica } from "./browser-taskdo-replica";
 
 export type TodoData = {
-  api: TasksApi | null;
-  projectsApi: ProjectsApi | null;
-  waitsApi: WaitsApi | null;
+  replica: TaskdoReplica | null;
   ready: boolean;
   connected: boolean;
   durable: boolean;
   error: string | null;
   durabilityError: string | null;
   recoveries: TodoSnapshot["recoveries"];
-  repair: (recovery: TodoRecovery) => Promise<void>;
 };
 
 const TodoDataContext = createContext<TodoData | null>(null);
@@ -123,21 +116,14 @@ export function TodoDataProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   const active = state?.accountId === userId ? state : null;
-  const repair = useCallback(async (recovery: TodoRecovery) => {
-    if (!active?.replica) throw new Error("Local todo data is not ready");
-    await active.replica.repair(recovery);
-  }, [active]);
   const value: TodoData = {
-    api: active?.replica?.api ?? null,
-    projectsApi: active?.replica?.projectsApi ?? null,
-    waitsApi: active?.replica?.waitsApi ?? null,
+    replica: active?.replica ?? null,
     ready: !!active?.replica,
     connected: active?.connected ?? false,
     durable: active?.durable ?? false,
     error: active?.error ?? null,
     durabilityError: active?.durabilityError ?? null,
     recoveries: active?.recoveries ?? [],
-    repair,
   };
 
   if (!value.ready) return value.error
@@ -173,7 +159,7 @@ function TodoDataNotices() {
               variant="outline"
               onClick={() => {
                 setRepairError(null);
-                void data.repair(recovery).catch((error: unknown) => setRepairError(String(error)));
+                void data.replica?.repair(recovery).catch((error: unknown) => setRepairError(String(error)));
               }}
             >
               {recovery.repair === "make-task-loose" ? "Keep task loose"

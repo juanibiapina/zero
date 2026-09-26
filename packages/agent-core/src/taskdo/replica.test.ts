@@ -10,6 +10,7 @@ function setup() {
   const store = createMergeableStore();
   let id = 0;
   let saves = 0;
+  let refreshes = 0;
   const replica = createTaskdoReplica({
     store,
     queryClient: new QueryClient(),
@@ -18,29 +19,37 @@ function setup() {
     now: () => new Date(NOW),
     today: () => "2026-09-25",
     save: async () => { saves++; },
+    refresh: async () => { refreshes++; },
   });
-  return { replica, store, saves: () => saves };
+  return { replica, store, saves: () => saves, refreshes: () => refreshes };
 }
 
 describe("TaskDO replica adapter", () => {
-  it("exposes TasksApi mutations through persisted TanStack transactions", async () => {
+  it("exposes one replica-level refresh operation", async () => {
+    const { replica, refreshes } = setup();
+    await replica.refresh();
+    expect(refreshes()).toBe(1);
+    await replica.close();
+  });
+
+  it("exposes TodoTasks mutations through persisted TanStack transactions", async () => {
     const { replica, store, saves } = setup();
-    await replica.projectsApi.add("Project").isPersisted.promise;
+    await replica.projects.add("Project").isPersisted.promise;
     const project = replica.snapshot().projects[0];
-    await replica.api.add("Task", null, project.id).isPersisted.promise;
+    await replica.tasks.add("Task", null, project.id).isPersisted.promise;
     const task = replica.snapshot().tasks[0];
-    await replica.api.edit(task.id, "Edited").isPersisted.promise;
-    await replica.api.reschedule(task.id, "2026-10-01").isPersisted.promise;
-    await replica.api.reorder(task.id, "a5").isPersisted.promise;
-    await replica.api.moveToProject(task.id, null).isPersisted.promise;
-    await replica.api.setRecurrence(task.id, {
+    await replica.tasks.edit(task.id, "Edited").isPersisted.promise;
+    await replica.tasks.reschedule(task.id, "2026-10-01").isPersisted.promise;
+    await replica.tasks.reorder(task.id, "a5").isPersisted.promise;
+    await replica.tasks.moveToProject(task.id, null).isPersisted.promise;
+    await replica.tasks.setRecurrence(task.id, {
       version: 1, origin: "2026-10-01", anchor: "scheduled", weekStartsOn: "MO",
       pattern: { unit: "day", interval: 1 },
     }).isPersisted.promise;
     const before = replica.snapshot().tasks[0];
-    await replica.api.complete(task.id, "2026-10-01").isPersisted.promise;
+    await replica.tasks.complete(task.id, "2026-10-01").isPersisted.promise;
     expect(replica.snapshot().tasks[0]).toMatchObject({ recurrenceDate: "2026-10-02", showUpDate: "2026-10-02" });
-    await replica.api.undoOccurrence(before, "2026-10-01").isPersisted.promise;
+    await replica.tasks.undoOccurrence(before, "2026-10-01").isPersisted.promise;
     expect(replica.snapshot().tasks[0]).toMatchObject({ recurrenceDate: "2026-10-01", showUpDate: "2026-10-01" });
     expect(store.getCell("tasks", task.id, "recurrence")).toBeTypeOf("string");
     expect(saves()).toBe(9);
@@ -49,17 +58,17 @@ describe("TaskDO replica adapter", () => {
 
   it("retains Project, Waiting, After, settlement, restore, and deletion behavior", async () => {
     const { replica, store } = setup();
-    await replica.projectsApi.add("Source").isPersisted.promise;
-    await replica.projectsApi.add("Target").isPersisted.promise;
+    await replica.projects.add("Source").isPersisted.promise;
+    await replica.projects.add("Target").isPersisted.promise;
     const [source, target] = replica.snapshot().projects;
-    await replica.api.add("Task", null, source.id).isPersisted.promise;
-    await replica.waitsApi.addWaiting(source.id, "Reply").isPersisted.promise;
-    await replica.waitsApi.addAfter(source.id, target.id).isPersisted.promise;
-    await replica.projectsApi.setState(target.id, "done").isPersisted.promise;
+    await replica.tasks.add("Task", null, source.id).isPersisted.promise;
+    await replica.waits.addWaiting(source.id, "Reply").isPersisted.promise;
+    await replica.waits.addAfter(source.id, target.id).isPersisted.promise;
+    await replica.projects.setState(target.id, "done").isPersisted.promise;
     expect(replica.snapshot().conditions.map((condition) => condition.kind)).toEqual(["free-text"]);
-    await replica.projectsApi.reopen({ ...target, state: "in-play" }).isPersisted.promise;
+    await replica.projects.reopen({ ...target, state: "in-play" }).isPersisted.promise;
     expect(replica.snapshot().conditions).toHaveLength(2);
-    await replica.projectsApi.remove(source.id).isPersisted.promise;
+    await replica.projects.remove(source.id).isPersisted.promise;
     expect(replica.snapshot()).toMatchObject({ tasks: [], conditions: [] });
     expect(store.getCell("projects", source.id, "deletedAt")).toBe(NOW);
     await replica.close();
@@ -83,7 +92,7 @@ describe("TaskDO replica adapter", () => {
 
   it("maps canonical conflicts to the established client-facing messages", async () => {
     const { replica } = setup();
-    const transaction = replica.api.add("Task", null, "missing");
+    const transaction = replica.tasks.add("Task", null, "missing");
     await expect(transaction.isPersisted.promise).rejects.toThrow("Project was deleted or is not on this device");
     await replica.close();
   });

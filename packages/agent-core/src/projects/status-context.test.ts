@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { projectStatusContext } from "./status-context";
 import type { Project } from "./types";
-import type { WaitingCondition } from "../waits/types";
+import type { WaitingCondition } from "../taskdo/types";
 
 const TODAY = "2026-06-01";
 

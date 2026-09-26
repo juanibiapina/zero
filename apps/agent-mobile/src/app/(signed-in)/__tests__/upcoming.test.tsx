@@ -91,7 +91,7 @@ describe('UpcomingScreen', () => {
     await fireEvent.press(screen.getByLabelText('Complete "ship the release"'));
 
     await waitFor(() => expect(screen.queryByText('ship the release')).toBeNull());
-    expect(screen.data.api!.collection.get('later')?.completedAt).not.toBeNull();
+    expect(screen.data.replica!.tasks.collection.get('later')?.completedAt).not.toBeNull();
   });
 
   it('edits future work and opens its project', async () => {
@@ -119,7 +119,7 @@ describe('UpcomingScreen', () => {
     await fireEvent.press(screen.getByLabelText('No date'));
 
     await waitFor(() => expect(screen.queryByText('ship the release')).toBeNull());
-    expect(screen.data.api!.collection.get('later')?.showUpDate).toBeNull();
+    expect(screen.data.replica!.tasks.collection.get('later')?.showUpDate).toBeNull();
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 });

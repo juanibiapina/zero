@@ -1,6 +1,6 @@
 import { dayLabel } from "../tasks/dates";
-import type { Task } from "../tasks/types";
-import type { ProjectAttention } from "../waits/types";
+import type { Task } from "../taskdo/types";
+import type { ProjectAttention } from "../taskdo/types";
 import { projectDisplayStatus, waitingSince, waitingUntil } from "./derive";
 import type { Project } from "./types";
 import { waitingLabel } from "./waiting-label";

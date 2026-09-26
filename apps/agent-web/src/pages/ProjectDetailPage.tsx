@@ -51,11 +51,12 @@ import {
   type ProjectDisplayStatus,
   type ProjectEditFields,
   type Project,
-  type ProjectsApi,
+  type TodoProjects,
   type ProjectState,
   type Task,
-  type TasksApi,
-  type WaitsApi,
+  type TaskdoReplica,
+  type TodoTasks,
+  type TodoWaits,
   type WaitingCondition,
 } from "@zero/agent-core";
 import {
@@ -63,7 +64,6 @@ import {
   useIconSuggestions,
 } from "@/lib/icon-suggestions";
 import { useTodoData } from "@/lib/todo-data";
-import { useForegroundRefetch } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 
 // A project opens its OWN screen (route /projects/:id), not a bottom sheet: it
@@ -71,13 +71,13 @@ import { cn } from "@/lib/utils";
 // status, manual Waiting, After relationships, and Tasks are sibling regions in
 // that order. See docs/plans/todo-project-waiting-after.md.
 export function ProjectDetailPage() {
-  const { projectsApi: api, api: tasksApi, waitsApi } = useTodoData();
+  const { replica } = useTodoData();
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
         <div className="mx-auto w-full max-w-2xl">
-          {api && tasksApi && waitsApi ? (
-            <ProjectDetailReady api={api} tasksApi={tasksApi} waitsApi={waitsApi} />
+          {replica ? (
+            <ProjectDetailReady replica={replica} />
           ) : (
             <div className="min-h-24" />
           )}
@@ -87,23 +87,11 @@ export function ProjectDetailPage() {
   );
 }
 
-function ProjectDetailReady({
-  api,
-  tasksApi,
-  waitsApi,
-}: {
-  api: ProjectsApi;
-  tasksApi: TasksApi;
-  waitsApi: WaitsApi;
-}) {
+function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
+  const { projects: api, tasks: tasksApi, waits: waitsApi } = replica;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-
-  const refetchAll = useCallback(async () => {
-    await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]);
-  }, [api, tasksApi, waitsApi]);
-  useForegroundRefetch(refetchAll);
 
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, "asc"),
@@ -134,10 +122,9 @@ function ProjectDetailReady({
       setError(null);
       const tx = api.setState(pid, state);
       void tx.isPersisted.promise
-        .then(() => (state === "done" ? waitsApi.refetch() : undefined))
         .catch((e) => setError(messageOf(e)));
     },
-    [api, waitsApi],
+    [api],
   );
 
   const completeProject = useCallback(
@@ -147,37 +134,31 @@ function ProjectDetailReady({
         description: `${item.icon} ${item.title}`,
         act: () => {
           const tx = api.setState(item.id, "done");
-          void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
           return tx;
         },
         undo: () => {
           const tx = api.reopen(item);
-          void tx.isPersisted.promise.then(() => waitsApi.refetch()).catch(() => {});
           return tx;
         },
         onError: setError,
       });
     },
-    [api, waitsApi],
+    [api],
   );
 
   // Delete happens immediately (it is already behind the overflow menu — a
   // deliberate act), then we return to the list. The write lives on the shared
-  // projects data layer, so it persists even as this screen unmounts. The server
-  // cascades the delete to the project's tasks and waiting conditions, so once
-  // the delete persists we re-pull those two collections to drop any lingering
-  // orphan (a future-dated task of this project would otherwise sit in Upcoming
-  // until the next refetch — Upcoming applies no project gate).
+  // replica, so it persists even as this screen unmounts. The canonical model
+  // applies the task and waiting-condition cascade in the same local write.
   const commitDelete = useCallback(
     (pid: string) => {
       setError(null);
       const tx = api.remove(pid);
       tx.isPersisted.promise
-        .then(() => Promise.all([tasksApi.refetch(), waitsApi.refetch()]))
         .catch((e) => setError(messageOf(e)));
       void navigate("/projects");
     },
-    [api, tasksApi, waitsApi, navigate],
+    [api, navigate],
   );
 
   const today = localToday();
@@ -674,7 +655,7 @@ function ProjectTasks({
   onComplete,
   onError,
 }: {
-  api: TasksApi;
+  api: TodoTasks;
   projectId: string;
   onComplete: (task: Task) => void;
   onError: (message: string) => void;
@@ -866,9 +847,9 @@ function ProjectAddMenu({
   conditions: WaitingCondition[];
   tasks: Task[];
   today: string;
-  tasksApi: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
+  tasksApi: TodoTasks;
+  projectsApi: TodoProjects;
+  waitsApi: TodoWaits;
   onError: (message: string) => void;
 }) {
   const navigate = useNavigate();
@@ -984,7 +965,7 @@ function ProjectRelations({
   onError,
 }: {
   project: Project;
-  waitsApi: WaitsApi;
+  waitsApi: TodoWaits;
   projects: Project[];
   tasks: Task[];
   today: string;

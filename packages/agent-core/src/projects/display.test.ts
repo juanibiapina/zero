@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Project } from "./types";
-import type { Task } from "../tasks/types";
+import type { Task } from "../taskdo/types";
 import { DEFAULT_ICON, taskIcon } from "./display";
 
 const project = (over: Partial<Project> & { id: string }): Project => ({

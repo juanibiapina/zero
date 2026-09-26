@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Task } from "../tasks/types";
-import type { WaitingCondition } from "../waits/types";
+import type { Task } from "../taskdo/types";
+import type { WaitingCondition } from "../taskdo/types";
 import { projectStatusSections } from "./sections";
 import type { Project, ProjectState } from "./types";
 

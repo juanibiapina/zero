@@ -86,7 +86,7 @@ describe('ProjectsScreen', () => {
     await fireEvent(input, 'submitEditing');
 
     await waitFor(() => expect(screen.getByText('Have a baby')).toBeTruthy());
-    const created = [...screen.data.projectsApi!.collection.values()][0];
+    const created = [...screen.data.replica!.projects.collection.values()][0];
     expect(created?.title).toBe('Have a baby');
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith(`/projects/${created?.id}`));
   });
@@ -100,7 +100,7 @@ describe('ProjectsScreen', () => {
     await fireEvent(input, 'submitEditing');
 
     await waitFor(() => expect(screen.queryByPlaceholderText('Add a task')).toBeNull());
-    expect([...screen.data.api!.collection.values()][0]).toMatchObject({
+    expect([...screen.data.replica!.tasks.collection.values()][0]).toMatchObject({
       text: 'Call the dentist',
       projectId: null,
       showUpDate: null,

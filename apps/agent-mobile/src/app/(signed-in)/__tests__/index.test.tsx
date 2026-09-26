@@ -100,7 +100,7 @@ describe('HomeScreen', () => {
     await fireEvent(input, 'submitEditing');
 
     await waitFor(() => expect(screen.getByText('call the dentist')).toBeTruthy());
-    expect([...screen.data.api!.collection.values()][0]).toMatchObject({
+    expect([...screen.data.replica!.tasks.collection.values()][0]).toMatchObject({
       text: 'call the dentist',
       projectId: null,
     });
@@ -116,7 +116,7 @@ describe('HomeScreen', () => {
     await fireEvent(input, 'submitEditing');
 
     await waitFor(() => expect(screen.getByText('stand up')).toBeTruthy());
-    expect([...screen.data.api!.collection.values()][0]?.recurrence?.pattern).toEqual({
+    expect([...screen.data.replica!.tasks.collection.values()][0]?.recurrence?.pattern).toEqual({
       unit: 'day',
       interval: 1,
     });
@@ -132,7 +132,7 @@ describe('HomeScreen', () => {
     expect(toast?.message).toBe('Completed');
     await act(async () => toast?.action?.onPress());
     await waitFor(() => expect(screen.getByText('mail the letter')).toBeTruthy());
-    expect(screen.data.api!.collection.get('t')?.completedAt).toBeNull();
+    expect(screen.data.replica!.tasks.collection.get('t')?.completedAt).toBeNull();
   });
 
   it('edits a task through its detail sheet', async () => {
@@ -144,7 +144,7 @@ describe('HomeScreen', () => {
     await fireEvent(input, 'submitEditing');
 
     await waitFor(() => expect(screen.getByText('buy oat milk')).toBeTruthy());
-    expect(screen.data.api!.collection.get('t')?.text).toBe('buy oat milk');
+    expect(screen.data.replica!.tasks.collection.get('t')?.text).toBe('buy oat milk');
   });
 
   it('moves a postponed Home task out of the visible list', async () => {
@@ -164,7 +164,7 @@ describe('HomeScreen', () => {
     });
 
     await waitFor(() => expect(screen.queryByText('buy milk')).toBeNull());
-    expect(screen.data.api!.collection.get('t')?.showUpDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(screen.data.replica!.tasks.collection.get('t')?.showUpDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 });

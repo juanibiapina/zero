@@ -1,14 +1,13 @@
 // @zero/agent-core — shared, platform-agnostic app code.
 
-// Shared list-region behavior and the screen-facing collection interfaces.
+// Shared list-region behavior.
 export { listView, LOADING_TEXT_DELAY_MS, type ListView } from "./collection/view";
 
 // The error-to-message helper shared by every list screen.
 export { messageOf } from "./errors";
 
 // The Task data layer (the single list) shared by web + mobile.
-export type { Task } from "./tasks/types";
-export type { TasksApi } from "./tasks/collection";
+export type { Task } from "./taskdo/types";
 export { localToday } from "./tasks/today";
 export { homeTasks } from "./tasks/home";
 export {
@@ -37,7 +36,6 @@ export type {
   ProjectState,
   ProjectDisplayStatus,
 } from "./projects/types";
-export type { ProjectsApi, ProjectEditFields } from "./projects/collection";
 export {
   projectStatusSections,
   type ProjectSection,
@@ -81,8 +79,7 @@ export type {
   ProjectAfter,
   ProjectAttention,
   WaitingCondition,
-} from "./waits/types";
-export type { WaitsApi, AddProjectAttention } from "./waits/collection";
+} from "./taskdo/types";
 export {
   ALL_PROJECT_DISPLAY_STATUSES,
   BACKLOG_COLLAPSE_THRESHOLD,
@@ -96,12 +93,19 @@ export {
   projectTodoData,
   repairTodoRecovery,
   type CreateTaskdoReplicaOptions,
+  type ProjectEditFields,
   type TaskdoReplica,
-  type TodoApis,
+  type TodoProjects,
   type TodoRecovery,
   type TodoRecoveryRepair,
   type TodoSnapshot,
+  type TodoTasks,
+  type TodoWaits,
 } from "./taskdo/replica";
+export {
+  createInMemoryTaskdoReplica,
+  type InMemoryTodoSeed,
+} from "./taskdo/in-memory";
 export {
   TodoModel,
   type ProjectDefaults,

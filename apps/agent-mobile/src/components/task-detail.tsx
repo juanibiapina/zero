@@ -9,7 +9,7 @@ import {
   weekdayShort,
   type Project,
   type Task,
-  type TasksApi,
+  type TodoTasks,
   type WaitingCondition,
   type ProjectDisplayStatus,
 } from '@zero/agent-core';
@@ -474,7 +474,7 @@ export function useTaskDetail({
   onError,
   waitForPersist = false,
 }: {
-  api: TasksApi;
+  api: TodoTasks;
   list: Task[];
   // The user's projects, for the move-to-project picker and the row's label.
   projects: Project[];

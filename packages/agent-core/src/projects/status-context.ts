@@ -1,5 +1,5 @@
-import type { Task } from "../tasks/types";
-import type { ProjectAttention } from "../waits/types";
+import type { Task } from "../taskdo/types";
+import type { ProjectAttention } from "../taskdo/types";
 import { projectAfterContext } from "./afters";
 import { projectDisplayStatus } from "./derive";
 import type { Project } from "./types";

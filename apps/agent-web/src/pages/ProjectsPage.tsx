@@ -14,14 +14,12 @@ import {
   PROJECT_DISPLAY_STATUS_LABELS,
   projectStatusContext,
   type Project,
-  type ProjectsApi,
   type ProjectDisplayStatus,
-  type TasksApi,
-  type WaitsApi,
+  type TaskdoReplica,
 } from "@zero/agent-core";
 import { useTodoData } from "@/lib/todo-data";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
-import { useDelayed, useForegroundRefetch } from "@/lib/screen-hooks";
+import { useDelayed } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 
 // Projects is a status-grouped list of outcome-oriented containers. The add
@@ -44,23 +42,16 @@ export function ProjectsPage() {
 }
 
 function ProjectsPanel() {
-  const { projectsApi: api, api: tasksApi, waitsApi } = useTodoData();
-  return api && tasksApi && waitsApi ? (
-    <ProjectsReady api={api} tasksApi={tasksApi} waitsApi={waitsApi} />
+  const { replica } = useTodoData();
+  return replica ? (
+    <ProjectsReady replica={replica} />
   ) : (
     <div className="min-h-24" />
   );
 }
 
-function ProjectsReady({
-  api,
-  tasksApi,
-  waitsApi,
-}: {
-  api: ProjectsApi;
-  tasksApi: TasksApi;
-  waitsApi: WaitsApi;
-}) {
+function ProjectsReady({ replica }: { replica: TaskdoReplica }) {
+  const { projects: api, tasks: tasksApi, waits: waitsApi } = replica;
   const navigate = useNavigate();
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ p: api.collection }).orderBy(({ p }) => p.createdAt, "asc"),
@@ -78,11 +69,6 @@ function ProjectsReady({
   const [error, setError] = useState<string | null>(null);
   const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const refetchAll = useCallback(async () => {
-    await Promise.all([api.refetch(), tasksApi.refetch(), waitsApi.refetch()]);
-  }, [api, tasksApi, waitsApi]);
-  useForegroundRefetch(refetchAll);
 
   const onAdd = useCallback(() => {
     const trimmed = title.trim();

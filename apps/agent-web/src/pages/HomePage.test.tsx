@@ -4,11 +4,9 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter as RouterMemoryRouter, Route, Routes, useLocation } from "react-router";
 import {
   type Project,
-  type ProjectsApi,
   type Task,
-  type TasksApi,
+  type TaskdoReplica,
   type WaitingCondition,
-  type WaitsApi,
   defaultToastController,
 } from "@zero/agent-core";
 
@@ -19,23 +17,18 @@ import { createInMemoryTodoData } from "@/testing/in-memory-todo-data";
 
 // Give the real page a fresh in-memory replica through its public data owner.
 const h = {
-  tasksApi: null as TasksApi | null,
-  projectsApi: null as ProjectsApi | null,
-  waitsApi: null as WaitsApi | null,
+  replica: null as TaskdoReplica | null,
 };
 
 function MemoryRouter(props: ComponentProps<typeof RouterMemoryRouter>) {
   const value: TodoData = {
-    api: h.tasksApi,
-    projectsApi: h.projectsApi,
-    waitsApi: h.waitsApi,
+    replica: h.replica,
     ready: true,
     connected: true,
     durable: true,
     error: null,
     durabilityError: null,
     recoveries: [],
-    repair: async () => {},
   };
   return <TodoDataContextProvider value={value}><RouterMemoryRouter {...props} /></TodoDataContextProvider>;
 }
@@ -74,16 +67,15 @@ function setApi(
   rescheduled.length = 0;
   moved.length = 0;
   const { data } = createInMemoryTodoData({ tasks, projects, waits });
-  h.tasksApi = data.api;
-  h.projectsApi = data.projectsApi;
-  h.waitsApi = data.waitsApi;
-  const reschedule = h.tasksApi!.reschedule;
-  h.tasksApi!.reschedule = (id, showUpDate) => {
+  const replica = data.replica!;
+  h.replica = replica;
+  const reschedule = replica.tasks.reschedule;
+  replica.tasks.reschedule = (id, showUpDate) => {
     rescheduled.push({ id, showUpDate });
     return reschedule(id, showUpDate);
   };
-  const moveToProject = h.tasksApi!.moveToProject;
-  h.tasksApi!.moveToProject = (id, projectId) => {
+  const moveToProject = replica.tasks.moveToProject;
+  replica.tasks.moveToProject = (id, projectId) => {
     moved.push({ id, projectId });
     return moveToProject(id, projectId);
   };
@@ -91,9 +83,7 @@ function setApi(
 
 describe("HomePage", () => {
   afterEach(() => {
-    h.tasksApi = null;
-    h.projectsApi = null;
-    h.waitsApi = null;
+    h.replica = null;
     defaultToastController.dismiss();
   });
 

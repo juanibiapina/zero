@@ -9,7 +9,7 @@
 // Ported from the former captures/upcoming.ts in the single-list merge.
 
 import { compareByOrder } from "./order";
-import type { Task } from "./types";
+import type { Task } from "../taskdo/types";
 
 // One day's worth of upcoming tasks. `date` is the local YYYY-MM-DD; the UI
 // formats it to a label ("Tomorrow", a weekday + date) in the device locale.

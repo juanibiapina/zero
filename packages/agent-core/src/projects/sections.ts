@@ -1,7 +1,7 @@
 // One Project-list policy for pages and selectors. Derived status uses the full
 // snapshot even when an After selector offers only eligible targets.
-import type { Task } from "../tasks/types";
-import type { ProjectAttention } from "../waits/types";
+import type { Task } from "../taskdo/types";
+import type { ProjectAttention } from "../taskdo/types";
 import { candidateAfterProjects } from "./afters";
 import { projectDisplayStatus } from "./derive";
 import { BACKLOG_COLLAPSE_THRESHOLD } from "./display";

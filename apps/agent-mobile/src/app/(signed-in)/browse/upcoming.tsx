@@ -6,10 +6,8 @@ import {
   dayLabel,
   taskIcon,
   upcomingSections,
-  type ProjectsApi,
   type Task,
-  type TasksApi,
-  type WaitsApi,
+  type TaskdoReplica,
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, RefreshControl, SectionList, View } from 'react-native';
@@ -20,7 +18,7 @@ import { useTaskDetail } from '@/components/task-detail';
 import { CheckCircle, ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
-import { useProjectsApi, useTasksApi, useWaitsApi } from '@/lib/todo-api-hooks';
+import { useTodoReplica } from '@/lib/todo-replica-hook';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
@@ -60,9 +58,7 @@ function UpcomingRow({
 // The complement of Home: what has shown up stays on Home, what is still ahead
 // shows here — every future-dated open task, loose or project, no other gate.
 export default function UpcomingScreen() {
-  const tasksApi = useTasksApi();
-  const projectsApi = useProjectsApi();
-  const waitsApi = useWaitsApi();
+  const replica = useTodoReplica();
 
   return (
     <View className="flex-1 bg-background">
@@ -75,8 +71,8 @@ export default function UpcomingScreen() {
       >
         <Text className="text-accent">‹ Browse</Text>
       </Pressable>
-      {tasksApi && projectsApi && waitsApi ? (
-        <Upcoming api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} />
+      {replica ? (
+        <Upcoming replica={replica} />
       ) : (
         <View className="flex-1" />
       )}
@@ -84,15 +80,8 @@ export default function UpcomingScreen() {
   );
 }
 
-function Upcoming({
-  api,
-  projectsApi,
-  waitsApi,
-}: {
-  api: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
-}) {
+function Upcoming({ replica }: { replica: TaskdoReplica }) {
+  const { tasks: api, projects: projectsApi, waits: waitsApi } = replica;
   const { getToken } = useAuth();
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
@@ -153,7 +142,7 @@ function Upcoming({
   }, [detail, projectAdd]);
 
   const accent = useColor('--color-accent');
-  const { refreshing, onRefresh } = usePullRefresh(api.refetch);
+  const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
 
   const renderItem = useCallback(
     ({ item }: { item: Task }) => (

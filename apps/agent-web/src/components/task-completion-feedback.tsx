@@ -3,8 +3,8 @@ import {
   undoableAction,
   type Project,
   type Task,
-  type TasksApi,
-  type WaitsApi,
+  type TodoTasks,
+  type TodoWaits,
 } from "@zero/agent-core";
 import { useCallback, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
@@ -20,8 +20,8 @@ export function useTaskCompletionFeedback({
   today,
   onError,
 }: {
-  api: TasksApi;
-  waitsApi: WaitsApi;
+  api: TodoTasks;
+  waitsApi: TodoWaits;
   projects: Project[];
   today: string;
   onError: (message: string) => void;

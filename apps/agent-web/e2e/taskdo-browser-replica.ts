@@ -49,9 +49,9 @@ const ready = openBrowserTaskdoReplica(accountId, {
 }).then(async (opened) => {
   replica = opened;
   await Promise.all([
-    opened.api.collection.preload(),
-    opened.projectsApi.collection.preload(),
-    opened.waitsApi.collection.preload(),
+    opened.tasks.collection.preload(),
+    opened.projects.collection.preload(),
+    opened.waits.collection.preload(),
   ]);
   durable = opened.durable;
   durabilityError = opened.durabilityError;
@@ -62,7 +62,7 @@ window.taskdoProof = {
   ready,
   async add(text) {
     await ready;
-    const transaction = replica!.api.add(text);
+    const transaction = replica!.tasks.add(text);
     await transaction.isPersisted.promise;
     return replica!.snapshot().tasks.map((task) => task.text).sort();
   },

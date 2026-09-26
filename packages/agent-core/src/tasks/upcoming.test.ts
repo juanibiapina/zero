@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { upcomingSections } from "./upcoming";
-import type { Task } from "./types";
+import type { Task } from "../taskdo/types";
 
 const task = (id: string, over: Partial<Task> = {}): Task => ({
   id,

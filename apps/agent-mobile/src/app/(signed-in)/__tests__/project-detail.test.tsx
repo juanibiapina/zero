@@ -154,7 +154,7 @@ describe('ProjectDetailScreen', () => {
     await fireEvent.changeText(input, 'Finish a community race');
     await fireEvent(input, 'blur');
 
-    await waitFor(() => expect(screen.data.projectsApi!.collection.get('1')?.description)
+    await waitFor(() => expect(screen.data.replica!.projects.collection.get('1')?.description)
       .toBe('Finish a community race'));
   });
 
@@ -178,7 +178,7 @@ describe('ProjectDetailScreen', () => {
     await fireEvent(input, 'submitEditing');
 
     await waitFor(() => expect(screen.getByText('buy running shoes')).toBeTruthy());
-    expect([...screen.data.api!.collection.values()][0]?.projectId).toBe('1');
+    expect([...screen.data.replica!.tasks.collection.values()][0]?.projectId).toBe('1');
   });
 
   it('resolves a Waiting item immediately', async () => {
@@ -187,7 +187,7 @@ describe('ProjectDetailScreen', () => {
     await fireEvent.press(screen.getByLabelText('Resolve condition: the letter comes back'));
 
     await waitFor(() => expect(screen.queryByText('the letter comes back')).toBeNull());
-    expect(screen.data.waitsApi!.collection.get('wait')?.resolvedAt).not.toBeNull();
+    expect(screen.data.replica!.waits.collection.get('wait')?.resolvedAt).not.toBeNull();
   });
 
   it('opens and removes an After relationship through its public controls', async () => {
@@ -200,7 +200,7 @@ describe('ProjectDetailScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/projects/2');
     await fireEvent.press(screen.getByLabelText('Remove After relationship with Sell old house'));
     await waitFor(() => expect(screen.queryByText('After')).toBeNull());
-    expect(screen.data.waitsApi!.collection.get('after')).toBeUndefined();
+    expect(screen.data.replica!.waits.collection.get('after')).toBeUndefined();
   });
 
   it('moves the project to backlog from its status sheet', async () => {
@@ -209,7 +209,7 @@ describe('ProjectDetailScreen', () => {
     await fireEvent.press(screen.getByLabelText('Project status: Next'));
     await fireEvent.press(screen.getByText('Move to backlog'));
 
-    await waitFor(() => expect(screen.data.projectsApi!.collection.get('1')?.state).toBe('backlog'));
+    await waitFor(() => expect(screen.data.replica!.projects.collection.get('1')?.state).toBe('backlog'));
   });
 
   it('marks the project done and offers Undo', async () => {
@@ -219,11 +219,11 @@ describe('ProjectDetailScreen', () => {
     await fireEvent.press(screen.getByText('Mark done'));
 
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
-    expect(screen.data.projectsApi!.collection.get('1')?.state).toBe('done');
+    expect(screen.data.replica!.projects.collection.get('1')?.state).toBe('done');
     const toast = defaultToastController.getSnapshot()[0];
     expect(toast?.message).toBe('Project completed');
     await act(async () => toast?.action?.onPress());
-    await waitFor(() => expect(screen.data.projectsApi!.collection.get('1')?.state).toBe('in-play'));
+    await waitFor(() => expect(screen.data.replica!.projects.collection.get('1')?.state).toBe('in-play'));
   });
 
   it('offers a way back when the project no longer exists', async () => {

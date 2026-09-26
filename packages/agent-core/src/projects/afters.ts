@@ -1,4 +1,4 @@
-import type { ProjectAfter, ProjectAttention } from "../waits/types";
+import type { ProjectAfter, ProjectAttention } from "../taskdo/types";
 import type { Project } from "./types";
 
 export function isManualWaitingCondition(

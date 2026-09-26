@@ -9,10 +9,8 @@ import {
   homeTasks,
   taskIcon,
   type HomeCallToAction,
-  type ProjectsApi,
   type Task,
-  type TasksApi,
-  type WaitsApi,
+  type TaskdoReplica,
 } from '@zero/agent-core';
 import { useAuth } from '@clerk/expo';
 import { router } from 'expo-router';
@@ -27,11 +25,9 @@ import { ScreenHeader } from '@/components/screen-header';
 import { useTaskDetail } from '@/components/task-detail';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
-import { useProjectsApi, useTasksApi, useWaitsApi } from '@/lib/todo-api-hooks';
+import { useTodoReplica } from '@/lib/todo-replica-hook';
 import {
   useDelayed,
-  useForegroundRefetch,
-  useLoadError,
   usePullRefresh,
 } from '@/lib/screen-hooks';
 
@@ -73,9 +69,7 @@ export default function HomeScreen() {
 }
 
 function SignedInHomeScreen() {
-  const tasksApi = useTasksApi();
-  const projectsApi = useProjectsApi();
-  const waitsApi = useWaitsApi();
+  const replica = useTodoReplica();
   const todoData = useTodoDataContext();
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
 
@@ -101,15 +95,15 @@ function SignedInHomeScreen() {
                 variant="outlined"
                 onPress={() => {
                   setRecoveryError(null);
-                  void todoData.repair(entry).catch((error: unknown) => setRecoveryError(String(error)));
+                  void replica?.repair(entry).catch((error: unknown) => setRecoveryError(String(error)));
                 }}
               />
             </Host>
           ) : null}
         </View>
       ))}
-      {tasksApi && projectsApi && waitsApi ? (
-        <Home api={tasksApi} projectsApi={projectsApi} waitsApi={waitsApi} />
+      {replica ? (
+        <Home replica={replica} />
       ) : (
         <View className="flex-1" />
       )}
@@ -117,15 +111,8 @@ function SignedInHomeScreen() {
   );
 }
 
-function Home({
-  api,
-  projectsApi,
-  waitsApi,
-}: {
-  api: TasksApi;
-  projectsApi: ProjectsApi;
-  waitsApi: WaitsApi;
-}) {
+function Home({ replica }: { replica: TaskdoReplica }) {
+  const { tasks: api, projects: projectsApi, waits: waitsApi } = replica;
   const { getToken } = useAuth();
   const { data: tasks, isLoading } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
@@ -158,14 +145,10 @@ function Home({
   // reads empty then, which would look like "create").
   const hydrating = isLoading || projectsLoading;
 
-  const loadError = useLoadError(api);
+  const loadError = null;
   const [writeError, setWriteError] = useState<string | null>(null);
 
-  const refetchAll = useCallback(async () => {
-    await Promise.all([api.refetch(), projectsApi.refetch(), waitsApi.refetch()]);
-  }, [api, projectsApi, waitsApi]);
-  useForegroundRefetch(refetchAll);
-  const { refreshing, onRefresh } = usePullRefresh(refetchAll);
+  const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
   const view = listView({ count: list.length, isLoading, loadError });
   const error = writeError ?? (list.length === 0 ? loadError : null);
 
