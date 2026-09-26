@@ -188,7 +188,7 @@ describe("TaskDO routes", () => {
     ]);
   });
 
-  it("does not expose unsupported fixture mutations", async () => {
+  it("does not expose unsupported todo mutations", async () => {
     const app = build("test", "taskdo-proof-a");
     expect((await app.request(`/api/tasks/${TASK_ID}`, "DELETE")).status).toBe(404);
     expect((await app.request(`/api/tasks/${TASK_ID}/unknown`, "POST")).status).toBe(404);

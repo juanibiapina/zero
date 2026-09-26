@@ -89,7 +89,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async editProject(id: string, fields: { title?: string; icon?: string; description?: string | null }): Promise<Project | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     if (!this.project(id)) return null;
     this.tasksStore.transaction(() => {
       if (fields.title !== undefined) this.tasksStore.setCell("projects", id, "title", fields.title);
@@ -104,7 +104,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async setProjectState(id: string, state: ProjectState): Promise<Project | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const before = this.project(id);
     if (!before) return null;
     if (before.state === state) return before;
@@ -129,7 +129,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async deleteProject(id: string): Promise<{ tasks: number; conditions: number; afters: number }> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     let tasks = 0;
     let conditions = 0;
     let afters = 0;
@@ -181,7 +181,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async addWaitingCondition(id: string, projectId: string, text: string): Promise<WaitingCondition | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const existing = this.condition(id);
     if (existing) return existing;
     if (this.tasksStore.hasRow("conditions", id) || !this.project(projectId)) return null;
@@ -191,7 +191,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async addProjectAfter(id: string, projectId: string, refId: string): Promise<AddProjectAfterResult> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const existing = this.condition(id);
     if (existing?.kind === "project-status" && existing.projectId === projectId && existing.refId === refId) {
       return { relationship: existing };
@@ -216,7 +216,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async resolveWaitingCondition(id: string): Promise<WaitingCondition | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const existing = this.condition(id);
     if (!existing || existing.kind !== "free-text" || existing.resolvedAt) return existing;
     this.tasksStore.setCell("conditions", id, "resolvedAt", new Date().toISOString());
@@ -225,7 +225,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async deleteWaitingCondition(id: string): Promise<void> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     if (!this.tasksStore.hasRow("conditions", id)) return;
     this.tasksStore.delRow("conditions", id);
     await this.persister.save();
@@ -285,7 +285,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
 
   async addTask(id: string, text: string, showUpDate: string | null, projectId: string | null = null,
     sourceCaptureId: string | null = null, recurrence: Recurrence | null = null): Promise<Task | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const existing = this.task(id);
     if (existing) return existing;
     if (this.tasksStore.hasRow("tasks", id) || (projectId !== null && !this.project(projectId))) return null;
@@ -311,7 +311,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async editTask(id: string, text: string): Promise<Task | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     if (!this.task(id)) return null;
     this.tasksStore.setCell("tasks", id, "text", text);
     await this.persister.save();
@@ -320,7 +320,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
 
   async patchTask(id: string, fields: { text?: string; showUpDate?: string | null;
     sortKey?: string; projectId?: string | null }): Promise<Task | "missing-project" | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     if (!this.task(id)) return null;
     if (fields.projectId && !this.project(fields.projectId)) return "missing-project";
     this.tasksStore.transaction(() => {
@@ -334,7 +334,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async completeTask(id: string): Promise<Task | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const task = this.task(id);
     if (!task || task.completedAt) return task;
     this.tasksStore.setCell("tasks", id, "completedAt", new Date().toISOString());
@@ -343,7 +343,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async reopenTask(id: string): Promise<Task | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const task = this.task(id);
     if (!task || !task.completedAt) return task;
     this.tasksStore.delCell("tasks", id, "completedAt");
@@ -352,7 +352,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async setTaskRecurrence(id: string, recurrence: Recurrence | null): Promise<Task | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     if (!this.task(id)) return null;
     this.tasksStore.transaction(() => {
       if (recurrence) {
@@ -369,7 +369,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
   }
 
   async completeTaskOccurrence(id: string, scheduledOn: string, completedOn: string): Promise<Task | "invalid-recurrence" | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const task = this.task(id);
     if (!task) return null;
     if (this.tasksStore.hasCell("tasks", id, "recurrence") && !task.recurrence) return "invalid-recurrence";
@@ -387,7 +387,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
 
   async undoTaskOccurrence(id: string, expectedRecurrenceDate: string,
     recurrenceDateBefore: string, showUpDateBefore: string | null): Promise<Task | "invalid-recurrence" | null> {
-    if (await this.isErased()) throw new Error("Fixture account erased");
+    if (await this.isErased()) throw new Error("Todo account erased");
     const task = this.task(id);
     if (!task) return null;
     if (this.tasksStore.hasCell("tasks", id, "recurrence") && !task.recurrence) return "invalid-recurrence";
