@@ -126,6 +126,19 @@ export {
   OFFLINE_OUTBOX_VERSION,
 } from "./collection/version";
 
+// The TaskDO local replica shared by the web and mobile platform adapters.
+export {
+  createTaskdoReplica,
+  projectTodoData,
+  repairTodoRecovery,
+  type CreateTaskdoReplicaOptions,
+  type TaskdoReplica,
+  type TodoApis,
+  type TodoRecovery,
+  type TodoRecoveryRepair,
+  type TodoSnapshot,
+} from "./taskdo/replica";
+
 // The add-mode registry: what the quick-add box can create, shared web + mobile.
 export {
   ADD_MODE_LABEL,

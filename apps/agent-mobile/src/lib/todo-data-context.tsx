@@ -2,9 +2,9 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
-import { useTodoData } from './taskdo-tasks-api';
+import { useTodoData, type TodoData } from './taskdo-tasks-api';
 
-export type TodoData = ReturnType<typeof useTodoData>;
+export type { TodoData };
 
 const TodoDataContext = createContext<TodoData | null>(null);
 

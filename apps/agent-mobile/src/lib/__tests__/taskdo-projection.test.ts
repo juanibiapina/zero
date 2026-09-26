@@ -1,7 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
+import { projectTodoData, repairTodoRecovery } from '@zero/agent-core';
 import { createMergeableStore } from 'tinybase';
-
-import { projectTodoData, repairTodoRecovery } from '../taskdo-projection';
 
 const createdAt = '2026-09-25T12:00:00.000Z';
 const project = (title: string) => ({ title, createdAt, state: 'in-play', icon: '📁' });
