@@ -1,5 +1,3 @@
-import { OFFLINE_OUTBOX_VERSION } from '@zero/agent-core';
-
 import {
   resolveRuntimeProfile,
   type RuntimeProfile,
@@ -10,5 +8,4 @@ import {
 export const RUNTIME_PROFILE: RuntimeProfile = resolveRuntimeProfile({
   hermeticE2E: process.env.EXPO_PUBLIC_HERMETIC_E2E,
   apiUrl: process.env.EXPO_PUBLIC_API_URL,
-  offlineOutboxVersion: OFFLINE_OUTBOX_VERSION,
 });

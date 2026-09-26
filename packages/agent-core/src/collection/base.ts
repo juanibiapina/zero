@@ -185,9 +185,8 @@ export type EntityApi<Row extends EntityRow, Verbs extends AnyVerbs<Row>> = {
   subscribeLoadError: (cb: () => void) => () => void;
 };
 
-// The platform's offline-transactions entry point. Injected because web imports
-// it from `@tanstack/offline-transactions` and mobile from its `/react-native`
-// subpath (which wires native netinfo connectivity); the config shape is shared.
+// The platform's offline-transactions entry point. The web app injects the
+// browser implementation while this package stays independent of the DOM.
 export type StartOfflineExecutor = (config: OfflineConfig) => OfflineExecutor;
 
 // Optional diagnostic sink. agent-core is lib-clean (no DOM), so it does not

@@ -9,7 +9,7 @@ import { RUNTIME_PROFILE } from './runtime-profile';
 // expo-localization's IANA zone; Hermes Intl can return "UTC" and pin the wrong
 // day. The store is AsyncStorage, RN's small unencrypted KV. See docs/timezone.md.
 
-const STORE_KEY = RUNTIME_PROFILE.persistence.timezoneKey;
+const STORE_KEY = RUNTIME_PROFILE.storageKeys.timezoneKey;
 
 export function createMobileTimezoneSync(getToken: TokenGetter): TimezoneSync {
   return createTimezoneSync({

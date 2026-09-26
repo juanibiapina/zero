@@ -8,14 +8,12 @@ import {
 
 describe('mobile runtime profile', () => {
   it('preserves every normal runtime value', () => {
-    expect(resolveRuntimeProfile({ offlineOutboxVersion: 2 })).toEqual({
+    expect(resolveRuntimeProfile()).toEqual({
       name: 'normal',
       hermetic: false,
       clerkModules: 'real',
       apiBaseUrl: DEFAULT_API_BASE_URL,
-      persistence: {
-        databaseName: 'zero-app.sqlite',
-        outboxDatabaseName: 'zero-app-outbox-v2.sqlite',
+      storageKeys: {
         timezoneKey: 'zero.timezone.synced',
         iconSuggestionsKey: 'zero.icon-suggestions.v1',
       },
@@ -35,10 +33,9 @@ describe('mobile runtime profile', () => {
   });
 
   it('selects fake auth, localhost, isolated state, and suppressed side effects together', () => {
-    const normal = resolveRuntimeProfile({ offlineOutboxVersion: 2 });
+    const normal = resolveRuntimeProfile();
     const hermetic = resolveRuntimeProfile({
       hermeticE2E: '1',
-      offlineOutboxVersion: 2,
     });
 
     expect(hermetic).toEqual({
@@ -46,9 +43,7 @@ describe('mobile runtime profile', () => {
       hermetic: true,
       clerkModules: 'fake',
       apiBaseUrl: HERMETIC_API_BASE_URL,
-      persistence: {
-        databaseName: 'zero-app-e2e.sqlite',
-        outboxDatabaseName: 'zero-app-e2e-outbox-v2.sqlite',
+      storageKeys: {
         timezoneKey: 'zero.e2e.timezone.synced',
         iconSuggestionsKey: 'zero.e2e.icon-suggestions.v1',
       },
@@ -58,10 +53,10 @@ describe('mobile runtime profile', () => {
         cleartextEnabled: true,
       },
     });
-    for (const key of Object.keys(normal.persistence) as (
-      keyof typeof normal.persistence
+    for (const key of Object.keys(normal.storageKeys) as (
+      keyof typeof normal.storageKeys
     )[]) {
-      expect(hermetic.persistence[key]).not.toBe(normal.persistence[key]);
+      expect(hermetic.storageKeys[key]).not.toBe(normal.storageKeys[key]);
     }
   });
 

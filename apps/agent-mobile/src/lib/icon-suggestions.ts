@@ -15,7 +15,7 @@ import type {
 import { fetchIconSuggestions, type TokenGetter } from './api';
 import { RUNTIME_PROFILE } from './runtime-profile';
 
-const STORAGE_KEY = RUNTIME_PROFILE.persistence.iconSuggestionsKey;
+const STORAGE_KEY = RUNTIME_PROFILE.storageKeys.iconSuggestionsKey;
 
 type Store = Record<string, CachedIconSuggestions>;
 

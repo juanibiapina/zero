@@ -3,9 +3,7 @@ export type RuntimeProfile = Readonly<{
   hermetic: boolean;
   clerkModules: 'real' | 'fake';
   apiBaseUrl: string;
-  persistence: Readonly<{
-    databaseName: string;
-    outboxDatabaseName: string;
+  storageKeys: Readonly<{
     timezoneKey: string;
     iconSuggestionsKey: string;
   }>;
@@ -22,5 +20,4 @@ export const HERMETIC_API_BASE_URL: 'http://localhost:8787';
 export function resolveRuntimeProfile(options?: {
   hermeticE2E?: string;
   apiUrl?: string;
-  offlineOutboxVersion?: number;
 }): RuntimeProfile;
