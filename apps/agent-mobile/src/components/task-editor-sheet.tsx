@@ -11,7 +11,11 @@ import {
 } from 'react';
 import { Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import {
+  KeyboardEvents,
+  KeyboardStickyView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import Animated, {
   Easing,
   Extrapolation,
@@ -172,7 +176,7 @@ export function TaskEditorSheet({
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
   leading, modeSelector, context, editorContent, trailing,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
-  onOpen, collapsedFabLabel,
+  onOpen, onKeyboardWillHide, collapsedFabLabel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -196,6 +200,7 @@ export function TaskEditorSheet({
   highlightRanges?: TextRange[];
   onDismissHighlight?: (range: TextRange) => void;
   onOpen?: () => void;
+  onKeyboardWillHide?: () => void;
   collapsedFabLabel?: string;
 }) {
   const insets = useSafeAreaInsets();
@@ -223,6 +228,14 @@ export function TaskEditorSheet({
     const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => { show.remove(); hide.remove(); };
   }, []);
+  useEffect(() => {
+    if (!inline || !open || onKeyboardWillHide == null) return;
+    const hide = KeyboardEvents.addListener(
+      'keyboardWillHide',
+      onKeyboardWillHide,
+    );
+    return () => hide.remove();
+  }, [inline, open, onKeyboardWillHide]);
   useImperativeHandle(inputRef, () => ({ focus: () => field.current?.focus() }), []);
   useEffect(() => {
     if (!inline || sheetHeight === 0) return;

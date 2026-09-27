@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { Text as RNText } from 'react-native';
 import { AddModeSelector, TaskEditorSheet } from '../task-editor-sheet';
 
@@ -13,6 +13,39 @@ const base = {
 };
 
 describe('TaskEditorSheet', () => {
+  it('reports keyboard dismissal while the inline editor is open', async () => {
+    const onKeyboardWillHide = jest.fn();
+    const view = await render(
+      <TaskEditorSheet
+        {...base}
+        inline
+        onKeyboardWillHide={onKeyboardWillHide}
+      />,
+    );
+
+    await act(async () => {
+      (global as typeof globalThis & {
+        __emitKeyboardEvent: (name: string) => void;
+      }).__emitKeyboardEvent('keyboardWillHide');
+    });
+    expect(onKeyboardWillHide).toHaveBeenCalledTimes(1);
+
+    await view.rerender(
+      <TaskEditorSheet
+        {...base}
+        open={false}
+        inline
+        onKeyboardWillHide={onKeyboardWillHide}
+      />,
+    );
+    await act(async () => {
+      (global as typeof globalThis & {
+        __emitKeyboardEvent: (name: string) => void;
+      }).__emitKeyboardEvent('keyboardWillHide');
+    });
+    expect(onKeyboardWillHide).toHaveBeenCalledTimes(1);
+  });
+
   it('uses one persistent collapsed control to open the inline editor', async () => {
     const open = jest.fn();
     const view = await render(

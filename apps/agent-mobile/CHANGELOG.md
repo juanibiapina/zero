@@ -2,7 +2,7 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
-- 2026-09-27: Pressing + now smoothly transforms the button into the add drawer as the keyboard appears, and reverses back into the button when you close it.
+- 2026-09-27: Pressing + now smoothly transforms the button into the add drawer as the keyboard appears, and one Back press closes both the keyboard and drawer.
 
 - 2026-09-27: You can start using tasks and projects without signing in, then sign in from the account button whenever you want cross-device sync.
 

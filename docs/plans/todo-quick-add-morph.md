@@ -7,8 +7,8 @@ this plan.
 
 On mobile, make the circular quick-add FAB expand into the full-width quick-add
 bar and collapse back into the FAB. The bar must continue to rise with the
-keyboard. This is visual polish only; it must not change creation or dismissal
-behavior.
+keyboard. When Android Back starts hiding the keyboard, the bar must collapse
+in the same interaction.
 
 ## Current context
 
@@ -32,8 +32,8 @@ behavior.
   flow.
 - Rapid repeated entry, Task/Project modes, date and Project chips, and busy
   state keep their current behavior.
-- Backdrop, Android Back, keyboard hiding, and non-empty-draft confirmation keep
-  their current dismissal semantics.
+- Android Back and keyboard dismissal close an empty quick-add bar together.
+  A non-empty draft keeps the bar open behind the discard confirmation.
 - The expanded bar stays flush with the keyboard and the collapsed FAB retains
   its current screen and tab-bar insets.
 - Accessibility labels and focus order remain correct. System reduced-motion
@@ -47,6 +47,7 @@ behavior.
   transition without a flash, duplicate actionable controls, or touch-through.
 - The transition remains smooth during keyboard entrance and dismissal on the
   supported Pixel development device.
+- One Android Back press closes both the keyboard and an empty quick-add bar.
 - Every preserved behavior above remains covered by focused interaction tests
   through the public quick-add or screen interface. Tests assert behavior, not
   animation frame values.

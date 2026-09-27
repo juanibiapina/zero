@@ -115,6 +115,41 @@ describe('HomeScreen', () => {
     });
   });
 
+  it('closes an empty quick-add editor when the keyboard starts hiding', async () => {
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByLabelText('Task'));
+    expect(screen.getByPlaceholderText('Add a task')).toBeTruthy();
+
+    await act(async () => {
+      (global as typeof globalThis & {
+        __emitKeyboardEvent: (name: string) => void;
+      }).__emitKeyboardEvent('keyboardWillHide');
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText('Add a task')).toBeNull(),
+    );
+    expect(screen.getByLabelText('Task')).toBeTruthy();
+  });
+
+  it('asks before discarding a quick-add draft when the keyboard starts hiding', async () => {
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.changeText(
+      screen.getByPlaceholderText('Add a task'),
+      'keep this draft',
+    );
+
+    await act(async () => {
+      (global as typeof globalThis & {
+        __emitKeyboardEvent: (name: string) => void;
+      }).__emitKeyboardEvent('keyboardWillHide');
+    });
+
+    expect(await screen.findByText('Discard changes?')).toBeTruthy();
+    expect(screen.getByDisplayValue('keep this draft')).toBeTruthy();
+  });
+
   it('parses recurring quick-add text into the stored task', async () => {
     const screen = await renderScreen();
     await fireEvent.press(screen.getByLabelText('Task'));

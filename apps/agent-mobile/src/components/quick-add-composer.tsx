@@ -104,6 +104,7 @@ export function useQuickAdd({
   const [pickingProject, setPickingProject] = useState(false);
   const [pickingAfter, setPickingAfter] = useState(false);
   const inputRef = useRef<{ focus: () => void }>(null);
+  const ignoreNextKeyboardHide = useRef(false);
 
   const contextProject = scope.kind === 'project' ? scope.project : null;
   const contextProjectId = contextProject?.id ?? null;
@@ -152,6 +153,7 @@ export function useQuickAdd({
   };
 
   const closeAdd = useCallback(() => {
+    ignoreNextKeyboardHide.current = true;
     Keyboard.dismiss();
     setDrafts({ task: '', waiting: '', after: '', project: '' });
     setIgnoredSchedule(null);
@@ -169,6 +171,7 @@ export function useQuickAdd({
   const open = useCallback(
     (options?: { initialMode?: AddMode; projectId?: string }) => {
       defaultToastController.dismiss();
+      ignoreNextKeyboardHide.current = false;
       const initialMode =
         options?.initialMode && modes.includes(options.initialMode)
           ? options.initialMode
@@ -302,6 +305,30 @@ export function useQuickAdd({
     }
   }, [confirmingDiscard, hasDraft, closeAdd]);
 
+  const handleKeyboardWillHide = useCallback(() => {
+    if (ignoreNextKeyboardHide.current) {
+      ignoreNextKeyboardHide.current = false;
+      return;
+    }
+    if (
+      !adding ||
+      confirmingDiscard ||
+      pickingAfter ||
+      pickingProject ||
+      schedulingAdd
+    ) {
+      return;
+    }
+    requestClose();
+  }, [
+    adding,
+    confirmingDiscard,
+    pickingAfter,
+    pickingProject,
+    schedulingAdd,
+    requestClose,
+  ]);
+
   const handleBack = useCallback(() => {
     if (confirmingDiscard) {
       setConfirmingDiscard(false);
@@ -369,6 +396,7 @@ export function useQuickAdd({
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus={mode !== 'after'}
         inline
+        onKeyboardWillHide={handleKeyboardWillHide}
         onOpen={showFab ? () => open() : undefined}
         collapsedFabLabel={fabLabel}
         inputRef={inputRef}

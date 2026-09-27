@@ -10,6 +10,11 @@ appId: dev.juanibiapina.zeroagent
 - assertVisible: "New item text"
 - assertVisible: "No date"
 - assertVisible: "No project"
+- pressKey: Back
+- assertVisible: "^Task$"
+- assertNotVisible: "New item text"
+- tapOn: "^Task$"
+- assertVisible: "New item text"
 - inputText: "E2E guest task"
 - tapOn:
     id: "quick-add-submit"

@@ -7,5 +7,4 @@ appId: dev.juanibiapina.zeroagent
 - tapOn: "Task"
 - assertVisible: "New item text"
 - pressKey: back
-- pressKey: back
 - assertVisible: "Task"
