@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { QueryClient } from '@tanstack/react-query';
-import { deleteDatabaseAsync } from 'expo-sqlite';
+import { deleteDatabaseAsync, openDatabaseAsync } from 'expo-sqlite';
 
 import { clearIconSuggestions } from './icon-suggestions';
 import { RUNTIME_PROFILE } from './runtime-profile';
@@ -11,6 +11,19 @@ const ACCOUNT_ID = /^[a-zA-Z0-9_-]+$/;
 export async function deleteTodoWorkspaceDatabase(databaseName: string) {
   if (!DATABASE_NAME.test(databaseName)) {
     throw new Error('Refusing to delete an invalid todo workspace database');
+  }
+  if (RUNTIME_PROFILE.hermetic) {
+    // Expo's development client keeps a diagnostic connection to databases it
+    // observes, so deleting the file is rejected even after our owned handle
+    // closes. Erase TinyBase's only table instead; the harness deletes the
+    // exact test-only file after force-stopping the app.
+    const database = await openDatabaseAsync(databaseName, { useNewConnection: true });
+    try {
+      await database.execAsync('DROP TABLE IF EXISTS "taskdo_local"');
+    } finally {
+      await database.closeAsync();
+    }
+    return;
   }
   await deleteDatabaseAsync(databaseName);
 }
