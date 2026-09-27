@@ -69,11 +69,9 @@ import { useTodoData } from "@/lib/todo-data";
 import { useDelayed } from "@/lib/screen-hooks";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
 
-// Home is one screen: a single reorderable list of tasks — the loose ones you
-// dropped in and the project tasks you have taken on (availability-gated by
-// homeTasks). There is no separate capture inbox after the single-list merge;
-// the quick-add defaults to a task and can switch to a project. See
-// docs/entities/task.md.
+// Home is one screen: a single reorderable list of loose and project tasks,
+// availability-gated by homeTasks. The quick-add defaults to a task and can
+// switch to a project. See docs/entities/task.md.
 export function HomePage() {
   const { replica } = useTodoData();
   return (
@@ -432,7 +430,6 @@ function TaskList({
   // snapshot hydrates (every collection reads empty during hydration).
   const cta = homeCallToAction(
     list.length,
-    0,
     projects ?? [],
     tasks ?? [],
     today,

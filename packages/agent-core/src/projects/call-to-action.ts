@@ -11,13 +11,12 @@ export type HomeCallToAction =
 
 export function homeCallToAction(
   plateCount: number,
-  captureCount: number,
   projects: Project[],
   tasks: Task[],
   today: string,
   conditions: ProjectAttention[] = [],
 ): HomeCallToAction | null {
-  if (plateCount > 0 || captureCount > 0) return null;
+  if (plateCount > 0) return null;
 
   let next = 0;
   let waiting = 0;

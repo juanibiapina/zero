@@ -63,15 +63,11 @@ function freeTextCondition(projectId: string): WaitingCondition {
 
 describe("homeCallToAction", () => {
   it("returns null when the plate has tasks", () => {
-    expect(homeCallToAction(1, 0, [project("p")], [], TODAY)).toBeNull();
-  });
-
-  it("returns null when the inbox has captures", () => {
-    expect(homeCallToAction(0, 3, [project("p")], [], TODAY)).toBeNull();
+    expect(homeCallToAction(1, [project("p")], [], TODAY)).toBeNull();
   });
 
   it("plans for an in-play project calculated as Next", () => {
-    expect(homeCallToAction(0, 0, [project("p")], [], TODAY)).toEqual({
+    expect(homeCallToAction(0, [project("p")], [], TODAY)).toEqual({
       kind: "plan",
       next: 1,
       waiting: 0,
@@ -89,7 +85,6 @@ describe("homeCallToAction", () => {
     expect(
       homeCallToAction(
         0,
-        0,
         projects,
         [],
         TODAY,
@@ -103,7 +98,6 @@ describe("homeCallToAction", () => {
     expect(
       homeCallToAction(
         0,
-        0,
         mixed,
         [],
         TODAY,
@@ -114,7 +108,6 @@ describe("homeCallToAction", () => {
     const allAfter = [project("a"), project("b"), project("prerequisite")];
     expect(
       homeCallToAction(
-        0,
         0,
         allAfter,
         [],
@@ -132,7 +125,6 @@ describe("homeCallToAction", () => {
     expect(
       homeCallToAction(
         0,
-        0,
         [project("b1", "backlog"), project("b2", "backlog"), project("d", "done")],
         [],
         TODAY,
@@ -141,10 +133,9 @@ describe("homeCallToAction", () => {
   });
 
   it("asks to create with no projects or only Done projects", () => {
-    expect(homeCallToAction(0, 0, [], [], TODAY)).toEqual({ kind: "create" });
+    expect(homeCallToAction(0, [], [], TODAY)).toEqual({ kind: "create" });
     expect(
       homeCallToAction(
-        0,
         0,
         [project("d1", "done"), project("d2", "done")],
         [],
@@ -156,7 +147,6 @@ describe("homeCallToAction", () => {
   it("does not count an in-play project calculated as Active", () => {
     expect(
       homeCallToAction(
-        0,
         0,
         [project("p")],
         [task({ id: "t", projectId: "p", showUpDate: "2026-01-01" })],

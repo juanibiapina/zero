@@ -60,10 +60,8 @@ function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
   );
 }
 
-// Home is one reorderable list of tasks: the loose ones you dropped in and the
-// project tasks you have taken on (availability-gated by homeTasks). No separate
-// capture inbox after the single-list merge. The quick-add defaults to a task
-// and can switch to a project.
+// Home is one reorderable list of loose and project tasks, availability-gated
+// by homeTasks. The quick-add defaults to a task and can switch to a project.
 export default function HomeScreen() {
   return <SignedInHomeScreen />;
 }
@@ -135,7 +133,6 @@ function Home({ replica }: { replica: TaskdoReplica }) {
 
   const cta = homeCallToAction(
     list.length,
-    0,
     projects ?? [],
     tasks ?? [],
     today,
