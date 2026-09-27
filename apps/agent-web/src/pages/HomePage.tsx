@@ -188,7 +188,6 @@ function Home({ replica }: { replica: TaskdoReplica }) {
       taskText,
       effectiveDate,
       projectId,
-      null,
       recurrence,
     );
     tx.isPersisted.promise.catch((e) => setError(messageOf(e)));

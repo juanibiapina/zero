@@ -126,11 +126,19 @@ export {
   TodoModel,
   type ProjectDefaults,
   type ProjectInput,
+  type LegacyTodoProvenance,
   type TaskInput,
   type TodoModelResult,
   type TodoProjection,
 } from "./taskdo/model";
-export type { ProjectAfterConflict, StoredProject, StoredTask, TodoIssue } from "./taskdo/types";
+export type {
+  LegacyProject,
+  LegacyTask,
+  ProjectAfterConflict,
+  StoredProject,
+  StoredTask,
+  TodoIssue,
+} from "./taskdo/types";
 
 // The add-mode registry: what the quick-add box can create, shared web + mobile.
 export {

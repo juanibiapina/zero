@@ -106,7 +106,13 @@ describe("task routes", () => {
   });
 
   it("delegates all supported patch fields", async () => {
-    const updated = task({ text: "edited", showUpDate: "2026-10-02", sortKey: "a5", projectId: PROJECT_ID });
+    const updated = task({
+      text: "edited",
+      showUpDate: "2026-10-02",
+      sortKey: "a5",
+      projectId: PROJECT_ID,
+      sourceCaptureId: TASK_ID,
+    });
     const patchTask = vi.fn(() => updated);
     const fields = { text: "edited", showUpDate: "2026-10-02", sortKey: "a5", projectId: PROJECT_ID };
     const response = await buildApp({ patchTask })(`/api/tasks/${TASK_ID}`, json("PATCH", fields));

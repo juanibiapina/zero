@@ -11,15 +11,15 @@ export type Task = {
   createdAt: string;
   completedAt: string | null;
   projectId: string | null;
-  sourceCaptureId?: string | null;
   sortKey: string | null;
 };
 
 export type StoredTask = Task & {
   recurrence: Recurrence | null;
   recurrenceDate: PlainDate | null;
-  sourceCaptureId: string | null;
 };
+
+export type LegacyTask = StoredTask & { sourceCaptureId: string | null };
 
 export type Project = {
   id: string;
@@ -28,10 +28,10 @@ export type Project = {
   description: string | null;
   state: ProjectState;
   createdAt: string;
-  sourceCaptureId?: string | null;
 };
 
-export type StoredProject = Project & { sourceCaptureId: string | null };
+export type StoredProject = Project;
+export type LegacyProject = StoredProject & { sourceCaptureId: string | null };
 
 type ProjectAttentionBase = {
   id: string;

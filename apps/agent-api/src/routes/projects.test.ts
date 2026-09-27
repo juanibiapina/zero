@@ -88,7 +88,9 @@ describe("project routes", () => {
   });
 
   it("delegates edits before state changes and returns the final Project", async () => {
-    const edited = project({ title: "Under 30", icon: "⏱️", description: "plan" });
+    const edited = project({
+      title: "Under 30", icon: "⏱️", description: "plan", sourceCaptureId: PROJECT_ID,
+    });
     const final = project({ ...edited, state: "backlog" });
     const editProject = vi.fn(() => edited);
     const setProjectState = vi.fn(() => final);

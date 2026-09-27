@@ -7,8 +7,8 @@ import type { Env } from "../types";
 import {
   TaskDomain,
   type AddProjectAfterResult,
+  type LegacyProjectCreateOptions,
   type Project,
-  type ProjectDefaults,
   type ProjectState,
   type Task,
   type WaitingCondition,
@@ -52,8 +52,9 @@ export class TaskDO extends WsServerDurableObject<Env> {
     return this.purging ? [] : this.domain.listProjectRecoveries();
   }
 
-  addProject(id: string, title: string, opts: ProjectDefaults = {}): Promise<Project | null> {
-    return this.domain.addProject(id, title, opts);
+  addProject(id: string, title: string, opts: LegacyProjectCreateOptions = {}): Promise<Project | null> {
+    const { sourceCaptureId, ...defaults } = opts;
+    return this.domain.addLegacyProject(id, title, defaults, { sourceCaptureId });
   }
 
   editProject(id: string, fields: { title?: string; icon?: string; description?: string | null }): Promise<Project | null> {
@@ -102,7 +103,7 @@ export class TaskDO extends WsServerDurableObject<Env> {
 
   addTask(id: string, text: string, showUpDate: string | null, projectId: string | null = null,
     sourceCaptureId: string | null = null, recurrence: Recurrence | null = null): Promise<Task | null> {
-    return this.domain.addTask(id, text, showUpDate, projectId, sourceCaptureId, recurrence);
+    return this.domain.addLegacyTask(id, text, showUpDate, projectId, { sourceCaptureId }, recurrence);
   }
 
   editTask(id: string, text: string): Promise<Task | null> {

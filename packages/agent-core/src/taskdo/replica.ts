@@ -41,7 +41,6 @@ export type TodoTasks = {
     text: string,
     showUpDate?: string | null,
     projectId?: string | null,
-    sourceCaptureId?: string | null,
     recurrence?: Recurrence | null,
   ) => Transaction;
   complete: (id: string, completedOn?: PlainDate) => Transaction;
@@ -57,7 +56,7 @@ export type TodoTasks = {
 
 export type TodoProjects = {
   collection: Collection<Project, string>;
-  add: (title: string, sourceCaptureId?: string | null) => Transaction;
+  add: (title: string) => Transaction;
   setState: (id: string, state: ProjectState) => Transaction;
   reopen: (project: Project) => Transaction;
   edit: (id: string, fields: ProjectEditFields) => Transaction;
@@ -306,9 +305,9 @@ export function createTaskdoReplica({
 
   const taskActions: TodoTasks = {
     collection: tasks,
-    add: (text, showUpDate = null, projectId = null, sourceCaptureId = null, recurrence = null) => tasks.insert({
+    add: (text, showUpDate = null, projectId = null, recurrence = null) => tasks.insert({
       id: randomId(), text, createdAt: now().toISOString(), showUpDate: recurrence?.origin ?? showUpDate,
-      projectId, sourceCaptureId, recurrence, recurrenceDate: recurrence?.origin ?? null,
+      projectId, recurrence, recurrenceDate: recurrence?.origin ?? null,
       completedAt: null, sortKey: null,
     }),
     edit: (id, text) => tasks.update(id, (draft) => { draft.text = text; }),
@@ -333,9 +332,9 @@ export function createTaskdoReplica({
   };
   const projectActions: TodoProjects = {
     collection: projects,
-    add: (title, sourceCaptureId = null) => projects.insert({
+    add: (title) => projects.insert({
       id: randomId(), title, icon: "📁", description: null, state: "in-play",
-      createdAt: now().toISOString(), sourceCaptureId,
+      createdAt: now().toISOString(),
     }),
     edit: (id, fields: ProjectEditFields) => projects.update(id, (draft) => { Object.assign(draft, fields); }),
     setState: (id, state) => projects.update(id, (draft) => { draft.state = state; }),

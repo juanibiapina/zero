@@ -128,7 +128,7 @@ describe("canonical TinyBase todo model", () => {
 
   it("keeps raw row representation stable", () => {
     const { model, store } = setup();
-    model.createProject({ id: "p", title: "P", description: null, sourceCaptureId: null });
+    model.createProject({ id: "p", title: "P", description: null });
     model.createTask({ id: "task", text: "Task", recurrence: daily, projectId: "p" });
     model.createAfter("after", "p", "p2");
     expect(store.getRow("projects", "p")).toEqual({ title: "P", icon: "📁", state: "in-play", createdAt: NOW });

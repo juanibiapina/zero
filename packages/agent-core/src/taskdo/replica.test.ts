@@ -6,8 +6,9 @@ import { createTaskdoReplica, projectTodoData } from "./replica";
 
 const NOW = "2026-09-25T12:00:00.000Z";
 
-function setup() {
+function setup(seed?: (store: ReturnType<typeof createMergeableStore>) => void) {
   const store = createMergeableStore();
+  seed?.(store);
   let id = 0;
   let saves = 0;
   let refreshes = 0;
@@ -94,6 +95,46 @@ describe("TaskDO replica adapter", () => {
     const { replica } = setup();
     const transaction = replica.tasks.add("Task", null, "missing");
     await expect(transaction.isPersisted.promise).rejects.toThrow("Project was deleted or is not on this device");
+    await replica.close();
+  });
+
+  it("keeps legacy provenance cells while hiding them from the current replica interface", async () => {
+    const { replica, store, saves } = setup((seedStore) => {
+      seedStore.setRow("projects", "project", {
+        title: "Project", icon: "📁", state: "in-play", createdAt: NOW,
+        sourceCaptureId: "legacy-project-capture",
+      });
+      seedStore.setRow("tasks", "task", {
+        text: "Task", createdAt: NOW, projectId: "project",
+        sourceCaptureId: "legacy-task-capture",
+      });
+    });
+
+    expect(replica.snapshot().projects[0]).not.toHaveProperty("sourceCaptureId");
+    expect(replica.snapshot().tasks[0]).not.toHaveProperty("sourceCaptureId");
+
+    await Promise.all([
+      replica.projects.collection.preload(),
+      replica.tasks.collection.preload(),
+    ]);
+    await replica.projects.edit("project", { title: "Edited project" }).isPersisted.promise;
+    await replica.tasks.edit("task", "Edited task").isPersisted.promise;
+
+    expect(store.getCell("projects", "project", "sourceCaptureId")).toBe("legacy-project-capture");
+    expect(store.getCell("tasks", "task", "sourceCaptureId")).toBe("legacy-task-capture");
+    expect(saves()).toBe(2);
+    await replica.close();
+  });
+
+  it("does not expose provenance through current add interfaces", async () => {
+    const { replica } = setup();
+    const unsupportedLegacyCalls = () => {
+      // @ts-expect-error Capture provenance is available only at the legacy server seam.
+      replica.tasks.add("Task", null, null, "capture-id");
+      // @ts-expect-error Capture provenance is available only at the legacy server seam.
+      replica.projects.add("Project", "capture-id");
+    };
+    expect(unsupportedLegacyCalls).toBeTypeOf("function");
     await replica.close();
   });
 });

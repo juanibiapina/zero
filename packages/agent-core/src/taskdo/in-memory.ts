@@ -20,7 +20,6 @@ export function createInMemoryTaskdoReplica(seed: InMemoryTodoSeed = {}): Taskdo
     state: project.state,
     createdAt: project.createdAt,
     ...(project.description ? { description: project.description } : {}),
-    ...(project.sourceCaptureId ? { sourceCaptureId: project.sourceCaptureId } : {}),
   });
   for (const task of seed.tasks ?? []) store.setRow("tasks", task.id, {
     text: task.text,
@@ -28,7 +27,6 @@ export function createInMemoryTaskdoReplica(seed: InMemoryTodoSeed = {}): Taskdo
     ...(task.completedAt ? { completedAt: task.completedAt } : {}),
     ...(task.showUpDate ? { showUpDate: task.showUpDate } : {}),
     ...(task.projectId ? { projectId: task.projectId } : {}),
-    ...(task.sourceCaptureId ? { sourceCaptureId: task.sourceCaptureId } : {}),
     ...(task.recurrence ? { recurrence: JSON.stringify(task.recurrence) } : {}),
     ...(task.recurrenceDate ? { recurrenceDate: task.recurrenceDate } : {}),
     ...(task.sortKey ? { sortKey: task.sortKey } : {}),

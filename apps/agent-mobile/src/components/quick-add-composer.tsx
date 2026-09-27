@@ -243,7 +243,6 @@ export function useQuickAdd({
       taskText,
       effectiveDate,
       addProjectId,
-      null,
       effectiveRecurrence,
     );
     if (waitForPersist) {

@@ -8,6 +8,8 @@ import type {
   ProjectAfterConflict,
   ProjectAttention,
   ProjectState,
+  LegacyProject,
+  LegacyTask,
   StoredProject,
   StoredTask,
   Task,
@@ -29,16 +31,16 @@ export type ProjectDefaults = {
   icon?: string;
   description?: string | null;
   state?: ProjectState;
-  sourceCaptureId?: string | null;
   createdAt?: string;
 };
+
+export type LegacyTodoProvenance = { sourceCaptureId?: string | null };
 
 export type TaskInput = {
   id: string;
   text: string;
   showUpDate?: string | null;
   projectId?: string | null;
-  sourceCaptureId?: string | null;
   recurrence?: Recurrence | null;
   recurrenceDate?: string | null;
   completedAt?: string | null;
@@ -112,7 +114,6 @@ export class TodoModel {
       description: typeof row.description === "string" ? row.description : null,
       state: row.state,
       createdAt: row.createdAt,
-      sourceCaptureId: typeof row.sourceCaptureId === "string" ? row.sourceCaptureId : null,
     };
   }
 
@@ -129,9 +130,22 @@ export class TodoModel {
       recurrence: parseRecurrence(row.recurrence),
       recurrenceDate: typeof row.recurrenceDate === "string" ? row.recurrenceDate : null,
       projectId: typeof row.projectId === "string" && this.getProject(row.projectId) ? row.projectId : null,
-      sourceCaptureId: typeof row.sourceCaptureId === "string" ? row.sourceCaptureId : null,
       sortKey: typeof row.sortKey === "string" ? row.sortKey : null,
     };
+  }
+
+  getProjectWithLegacyProvenance(id: string): LegacyProject | null {
+    const project = this.getProject(id);
+    if (!project) return null;
+    const sourceCaptureId = this.store.getCell("projects", id, "sourceCaptureId");
+    return { ...project, sourceCaptureId: typeof sourceCaptureId === "string" ? sourceCaptureId : null };
+  }
+
+  getTaskWithLegacyProvenance(id: string): LegacyTask | null {
+    const task = this.getTask(id);
+    if (!task) return null;
+    const sourceCaptureId = this.store.getCell("tasks", id, "sourceCaptureId");
+    return { ...task, sourceCaptureId: typeof sourceCaptureId === "string" ? sourceCaptureId : null };
   }
 
   private getCondition(id: string): ProjectAttention | null {
@@ -257,9 +271,20 @@ export class TodoModel {
       state: input.state ?? "in-play",
       createdAt: input.createdAt ?? this.timestamp(),
       ...(input.description ? { description: input.description } : {}),
-      ...(input.sourceCaptureId ? { sourceCaptureId: input.sourceCaptureId } : {}),
     });
     return success(this.getProject(input.id)!, true);
+  }
+
+  createProjectWithLegacyProvenance(
+    input: ProjectInput,
+    provenance: LegacyTodoProvenance,
+  ): TodoModelResult<LegacyProject, "id-conflict"> {
+    const result = this.createProject(input);
+    if (!result.ok) return result;
+    if (result.changed && provenance.sourceCaptureId) {
+      this.store.setCell("projects", input.id, "sourceCaptureId", provenance.sourceCaptureId);
+    }
+    return success(this.getProjectWithLegacyProvenance(input.id)!, result.changed);
   }
 
   restoreProject(project: Project): TodoModelResult<StoredProject, "missing-project" | "id-conflict"> {
@@ -392,12 +417,23 @@ export class TodoModel {
       sortKey: input.sortKey ?? sortKey,
       ...(showUpDate ? { showUpDate } : {}),
       ...(input.projectId ? { projectId: input.projectId } : {}),
-      ...(input.sourceCaptureId ? { sourceCaptureId: input.sourceCaptureId } : {}),
       ...(input.recurrence ? { recurrence: JSON.stringify(input.recurrence) } : {}),
       ...(recurrenceDate ? { recurrenceDate } : {}),
       ...(input.completedAt ? { completedAt: input.completedAt } : {}),
     });
     return success(this.getTask(input.id)!, true);
+  }
+
+  createTaskWithLegacyProvenance(
+    input: TaskInput,
+    provenance: LegacyTodoProvenance,
+  ): TodoModelResult<LegacyTask, "id-conflict" | "missing-project"> {
+    const result = this.createTask(input);
+    if (!result.ok) return result;
+    if (result.changed && provenance.sourceCaptureId) {
+      this.store.setCell("tasks", input.id, "sourceCaptureId", provenance.sourceCaptureId);
+    }
+    return success(this.getTaskWithLegacyProvenance(input.id)!, result.changed);
   }
 
   restoreTask(task: Task): TodoModelResult<StoredTask, "id-conflict" | "missing-project"> {
@@ -537,6 +573,8 @@ export type {
   ProjectAfterConflict,
   ProjectAttention,
   ProjectState,
+  LegacyProject,
+  LegacyTask,
   StoredProject,
   StoredTask,
   Task,
