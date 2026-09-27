@@ -8,6 +8,8 @@ appId: dev.juanibiapina.zeroagent
 - assertVisible: "Home"
 - tapOn: "^Task$"
 - assertVisible: "New item text"
+- assertVisible: "No date"
+- assertVisible: "No project"
 - inputText: "E2E guest task"
 - tapOn:
     id: "quick-add-submit"

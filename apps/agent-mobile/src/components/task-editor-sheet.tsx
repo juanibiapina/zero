@@ -12,12 +12,32 @@ import {
 import { Keyboard, Modal, Pressable, ScrollView, type TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  interpolateColor,
+  ReduceMotion,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { useResolveClassNames } from 'uniwind';
 
 import { ScheduleHighlightInput } from '@/components/schedule-highlight-input';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/cn';
+import { useColor } from '@/lib/theme';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const FAB_SIZE = 56;
+const FAB_EDGE_GAP = 24;
+const SHEET_RADIUS = 16;
+const ENTER_DURATION = 300;
+const EXIT_DURATION = 250;
+const MATERIAL_STANDARD = Easing.bezier(0.4, 0, 0.2, 1);
 
 type EditorAction = {
   label: string;
@@ -152,6 +172,7 @@ export function TaskEditorSheet({
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
   leading, modeSelector, context, editorContent, trailing,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
+  onOpen, collapsedFabLabel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -174,17 +195,26 @@ export function TaskEditorSheet({
   overlay?: ReactNode;
   highlightRanges?: TextRange[];
   onDismissHighlight?: (range: TextRange) => void;
+  onOpen?: () => void;
+  collapsedFabLabel?: string;
 }) {
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [bottomGap, setBottomGap] = useState(0);
+  const [sheetHeight, setSheetHeight] = useState(0);
   const screen = useRef<View>(null);
   const field = useRef<TextInput>(null);
-  const previousAutoFocus = useRef(autoFocus);
+  const previouslyFocusedForOpen = useRef(false);
+  const progress = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const accent = useColor('--color-accent');
+  const surface = useColor('--color-surface');
+  const shellBaseStyle = useResolveClassNames('shadow-raised');
   useEffect(() => {
-    if (inline && open && autoFocus && !previousAutoFocus.current) field.current?.focus();
-    previousAutoFocus.current = autoFocus;
+    const shouldFocus = inline && open && autoFocus;
+    if (shouldFocus && !previouslyFocusedForOpen.current) field.current?.focus();
+    previouslyFocusedForOpen.current = shouldFocus;
   }, [inline, open, autoFocus]);
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', (event) =>
@@ -194,13 +224,124 @@ export function TaskEditorSheet({
     return () => { show.remove(); hide.remove(); };
   }, []);
   useImperativeHandle(inputRef, () => ({ focus: () => field.current?.focus() }), []);
+  useEffect(() => {
+    if (!inline || sheetHeight === 0) return;
+    progress.set(
+      withTiming(open ? 1 : 0, {
+        duration: reduceMotion ? 0 : open ? ENTER_DURATION : EXIT_DURATION,
+        easing: MATERIAL_STANDARD,
+        reduceMotion: ReduceMotion.System,
+      }),
+    );
+  }, [inline, open, progress, reduceMotion, sheetHeight]);
   const measureBottomGap = useCallback(() => {
     if (!inline || open) return;
     screen.current?.measureInWindow((_x, y, _width, screenHeight) => {
       setBottomGap(Math.max(0, height - y - screenHeight));
     });
   }, [height, inline, open]);
-  const content = (
+  const scrimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.get(), [0, 0.35, 1], [0, 0, 1], Extrapolation.CLAMP),
+  }));
+  const shellStyle = useAnimatedStyle(() => {
+    const value = progress.get();
+    return {
+      width: interpolate(value, [0, 1], [FAB_SIZE, width]),
+      height: interpolate(value, [0, 1], [FAB_SIZE, sheetHeight || FAB_SIZE]),
+      borderRadius: interpolate(value, [0, 1], [FAB_SIZE / 2, SHEET_RADIUS]),
+      backgroundColor: interpolateColor(value, [0, 1], [accent, surface]),
+      transform: [
+        { translateX: interpolate(value, [0, 1], [-FAB_EDGE_GAP, 0]) },
+        { translateY: interpolate(value, [0, 1], [-FAB_EDGE_GAP, 0]) },
+      ],
+    };
+  });
+  const sheetContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.get(), [0.16, 0.46], [0, 1], Extrapolation.CLAMP),
+  }));
+  const plusStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.get(), [0, 0.24], [1, 0], Extrapolation.CLAMP),
+    transform: [{ scale: interpolate(progress.get(), [0, 0.24], [1, 0.9], Extrapolation.CLAMP) }],
+  }));
+
+  const sheetBody = (
+    <View
+      accessibilityLabel="sheet"
+      style={{ paddingBottom: insets.bottom + 8 }}
+      className={cn(!inline && 'rounded-t-2xl bg-surface pt-2 shadow-raised', inline && 'pt-2')}
+    >
+      <ScrollView style={{ maxHeight: Math.max(180, height - keyboardHeight - insets.top - insets.bottom - 32), flexGrow: 0 }} keyboardShouldPersistTaps="handled">
+      <View
+        testID="task-editor-grip"
+        importantForAccessibility="no"
+        className="mb-1 h-1 w-9 self-center rounded-full bg-divider"
+      />
+      {modeSelector}
+      {context}
+      {editorContent ?? (
+        <View className="min-h-16 flex-row items-center gap-3 px-screen-x py-4">
+          {leading}
+          {highlightRanges ? (
+            <ScheduleHighlightInput
+              ref={field}
+              value={draft}
+              ranges={highlightRanges}
+              onDismissRange={onDismissHighlight}
+              onChangeText={onChangeDraft}
+              onSubmitEditing={onSubmit}
+              returnKeyType="done"
+              blurOnSubmit
+              multiline
+              placeholder={placeholder}
+              accessibilityLabel={
+                inputAccessibilityLabel ??
+                (autoFocus ? 'New item text' : 'Task text')
+              }
+              autoFocus={inline && open && autoFocus}
+              style={{ padding: 0, maxHeight: 120 }}
+              variant="editor"
+              className="flex-1"
+              testID="task-edit-input"
+            />
+          ) : (
+            <Input
+              ref={field}
+              value={draft}
+              onChangeText={onChangeDraft}
+              onSubmitEditing={onSubmit}
+              returnKeyType="done"
+              blurOnSubmit
+              multiline
+              placeholder={placeholder}
+              accessibilityLabel={
+                inputAccessibilityLabel ??
+                (autoFocus ? 'New item text' : 'Task text')
+              }
+              autoFocus={inline && open && autoFocus}
+              style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
+              variant="editor"
+              className="flex-1"
+              testID="task-edit-input"
+            />
+          )}
+          {trailing}
+        </View>
+      )}
+      {scheduleAction || projectAction ? (
+        <View className="border-t border-divider">
+          {scheduleAction ? (
+            <EditorActionRow {...scheduleAction} />
+          ) : null}
+          {scheduleAction && projectAction ? (
+            <View className="h-px bg-divider" />
+          ) : null}
+          {projectAction ? <EditorActionRow {...projectAction} /> : null}
+        </View>
+      ) : null}
+      </ScrollView>
+    </View>
+  );
+  const modalContent = (
     <>
       <Pressable
         accessibilityRole="button"
@@ -209,86 +350,10 @@ export function TaskEditorSheet({
         onPress={onClose}
       />
       <KeyboardStickyView
-        offset={{ opened: inline ? bottomGap : 0 }}
+        offset={{ opened: 0 }}
         style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
       >
-        {/* 32 dp covers the ~27 dp lead observed on the Pixel 7. */}
-        {inline ? <KeyboardGapFill height={bottomGap + insets.bottom + 32} /> : null}
-        <View
-          accessibilityLabel="sheet"
-          style={{ paddingBottom: insets.bottom + 8 }}
-          className="rounded-t-2xl bg-surface pt-2 shadow-raised"
-        >
-          <ScrollView style={{ maxHeight: Math.max(180, height - keyboardHeight - insets.top - insets.bottom - 32), flexGrow: 0 }} keyboardShouldPersistTaps="handled">
-          <View
-            testID="task-editor-grip"
-            importantForAccessibility="no"
-            className="mb-1 h-1 w-9 self-center rounded-full bg-divider"
-          />
-          {modeSelector}
-          {context}
-          {editorContent ?? (
-            <View className="min-h-16 flex-row items-center gap-3 px-screen-x py-4">
-              {leading}
-              {highlightRanges ? (
-                <ScheduleHighlightInput
-                  ref={field}
-                  value={draft}
-                  ranges={highlightRanges}
-                  onDismissRange={onDismissHighlight}
-                  onChangeText={onChangeDraft}
-                  onSubmitEditing={onSubmit}
-                  returnKeyType="done"
-                  blurOnSubmit
-                  multiline
-                  placeholder={placeholder}
-                  accessibilityLabel={
-                    inputAccessibilityLabel ??
-                    (autoFocus ? 'New item text' : 'Task text')
-                  }
-                  autoFocus={inline && autoFocus}
-                  style={{ padding: 0, maxHeight: 120 }}
-                  variant="editor"
-                  className="flex-1"
-                  testID="task-edit-input"
-                />
-              ) : (
-                <Input
-                  ref={field}
-                  value={draft}
-                  onChangeText={onChangeDraft}
-                  onSubmitEditing={onSubmit}
-                  returnKeyType="done"
-                  blurOnSubmit
-                  multiline
-                  placeholder={placeholder}
-                  accessibilityLabel={
-                    inputAccessibilityLabel ??
-                    (autoFocus ? 'New item text' : 'Task text')
-                  }
-                  autoFocus={inline && autoFocus}
-                  style={{ paddingTop: 0, paddingBottom: 0, maxHeight: 120 }}
-                  variant="editor"
-                  className="flex-1"
-                  testID="task-edit-input"
-                />
-              )}
-              {trailing}
-            </View>
-          )}
-          {scheduleAction || projectAction ? (
-            <View className="border-t border-divider">
-              {scheduleAction ? (
-                <EditorActionRow {...scheduleAction} />
-              ) : null}
-              {scheduleAction && projectAction ? (
-                <View className="h-px bg-divider" />
-              ) : null}
-              {projectAction ? <EditorActionRow {...projectAction} /> : null}
-            </View>
-          ) : null}
-          </ScrollView>
-        </View>
+        {sheetBody}
       </KeyboardStickyView>
       {overlay}
     </>
@@ -296,7 +361,7 @@ export function TaskEditorSheet({
   if (!inline) {
     return (
       <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-        {content}
+        {modalContent}
       </Modal>
     );
   }
@@ -307,7 +372,85 @@ export function TaskEditorSheet({
       pointerEvents="box-none"
       className="absolute inset-0"
     >
-      {open ? content : null}
+      <>
+          <AnimatedPressable
+            accessibilityLabel={dismissLabel}
+            accessibilityElementsHidden={!open}
+            importantForAccessibility={open ? 'yes' : 'no-hide-descendants'}
+            pointerEvents={open ? 'auto' : 'none'}
+            onPress={onClose}
+            style={[{ position: 'absolute', inset: 0 }, scrimStyle]}
+          >
+            <View className="flex-1 bg-scrim" />
+          </AnimatedPressable>
+          {!open && onOpen != null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={collapsedFabLabel}
+              onPress={onOpen}
+              style={{
+                position: 'absolute',
+                right: FAB_EDGE_GAP,
+                bottom: FAB_EDGE_GAP,
+                width: FAB_SIZE,
+                height: FAB_SIZE,
+                zIndex: 1,
+              }}
+            />
+          ) : null}
+          <KeyboardStickyView
+            offset={{ opened: bottomGap }}
+            pointerEvents="box-none"
+            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'flex-end' }}
+          >
+            {/* 32 dp covers the ~27 dp lead observed on the Pixel 7. */}
+            <KeyboardGapFill height={bottomGap + insets.bottom + 32} />
+            <Animated.View
+              testID="task-editor-morph-shell"
+              pointerEvents={open || onOpen != null ? 'auto' : 'none'}
+              style={[
+                shellBaseStyle,
+                { overflow: 'hidden', opacity: open || onOpen != null ? 1 : 0 },
+                shellStyle,
+              ]}
+            >
+              <Animated.View
+                testID="task-editor-morph-content"
+                accessibilityElementsHidden={!open}
+                importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+                onLayout={(event) => setSheetHeight(event.nativeEvent.layout.height)}
+                style={[
+                  {
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width,
+                  },
+                  sheetContentStyle,
+                ]}
+              >
+                {sheetBody}
+              </Animated.View>
+              <Animated.View
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                style={[
+                  {
+                    position: 'absolute',
+                    inset: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                  plusStyle,
+                ]}
+              >
+                <Text className="text-3xl leading-none text-on-accent">+</Text>
+              </Animated.View>
+            </Animated.View>
+          </KeyboardStickyView>
+          {overlay}
+        </>
     </View>
   );
 }

@@ -116,14 +116,11 @@ Waiting conditions through email, calendar, or other observed content.
 
 ## Roadmap
 
-1. **Morph the mobile quick-add FAB into its expanded bar.** The current
-   cross-fade works; the remaining polish is the shared-shape transition in
-   [`todo-quick-add-morph.md`](plans/todo-quick-add-morph.md).
-2. **AI-assisted Task refinement.** Let the agent propose a Project and Tasks
+1. **AI-assisted Task refinement.** Let the agent propose a Project and Tasks
    from a loose Task, then commit only after explicit confirmation. The open
    design choices are in
    [`todo-task-to-project-ai.md`](plans/todo-task-to-project-ai.md).
-3. **Connect the agent to todo workflows.** Resolve Waiting conditions from
+2. **Connect the agent to todo workflows.** Resolve Waiting conditions from
    observed email, calendar, or content, then add carefully scoped todo write
    tools where a confirmed workflow needs them.
 

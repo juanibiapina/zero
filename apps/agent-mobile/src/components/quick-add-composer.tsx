@@ -351,15 +351,6 @@ export function useQuickAdd({
 
   const bar = (
     <>
-      {showFab && !adding ? (
-        <View
-          pointerEvents="box-none"
-          className="absolute inset-x-0 bottom-0 items-end px-screen-x pb-6"
-        >
-          <Fab label={fabLabel} onPress={() => open()} />
-        </View>
-      ) : null}
-
       <TaskEditorSheet
         open={adding}
         onClose={requestClose}
@@ -378,6 +369,8 @@ export function useQuickAdd({
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus={mode !== 'after'}
         inline
+        onOpen={showFab ? () => open() : undefined}
+        collapsedFabLabel={fabLabel}
         inputRef={inputRef}
         inputAccessibilityLabel={mode === 'waiting' ? 'Waiting on' : undefined}
         modeSelector={

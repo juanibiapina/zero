@@ -1,7 +1,7 @@
 # Mobile quick-add FAB-to-bar morph
 
-Status: planned. The completed Task row-removal animation is not part of this
-plan.
+Status: implemented. The completed Task row-removal animation is not part of
+this plan.
 
 ## Goal
 
@@ -12,10 +12,11 @@ behavior.
 
 ## Current context
 
-- [`quick-add.tsx`](../../apps/agent-mobile/src/components/quick-add.tsx) owns
-  the transition between the collapsed `Fab` and expanded `QuickAddBar`.
-- The two states currently render as separate conditional trees with a short
-  `FadeIn`/`FadeOut`. This is a cross-fade, not a shape morph.
+- [`quick-add-composer.tsx`](../../apps/agent-mobile/src/components/quick-add-composer.tsx)
+  owns the collapsed `Fab`, while
+  [`task-editor-sheet.tsx`](../../apps/agent-mobile/src/components/task-editor-sheet.tsx)
+  owns the inline expanded editor and its container transform. The older
+  `quick-add.tsx`/`QuickAddBar` pair is not mounted by the current app.
 - `KeyboardStickyView` keeps the open bar aligned with the keyboard under
   Android edge-to-edge insets. Preserve that proven boundary unless an on-device
   replacement is equally reliable.

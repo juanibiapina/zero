@@ -1,0 +1,11 @@
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 45000
+- tapOn: "Task"
+- assertVisible: "New item text"
+- pressKey: back
+- pressKey: back
+- assertVisible: "Task"

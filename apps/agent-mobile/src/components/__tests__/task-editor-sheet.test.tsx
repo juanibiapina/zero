@@ -13,6 +13,73 @@ const base = {
 };
 
 describe('TaskEditorSheet', () => {
+  it('uses one persistent collapsed control to open the inline editor', async () => {
+    const open = jest.fn();
+    const view = await render(
+      <TaskEditorSheet
+        {...base}
+        open={false}
+        inline
+        autoFocus
+        onOpen={open}
+        collapsedFabLabel="Task"
+      />,
+    );
+
+    expect(
+      view.getByTestId('task-edit-input', { includeHiddenElements: true }).props
+        .autoFocus,
+    ).toBe(false);
+    await fireEvent.press(view.getByLabelText('Task'));
+    expect(open).toHaveBeenCalledTimes(1);
+
+    await view.rerender(
+      <TaskEditorSheet
+        {...base}
+        inline
+        autoFocus
+        onOpen={open}
+        collapsedFabLabel="Task"
+      />,
+    );
+    expect(view.queryByLabelText('Task')).toBeNull();
+    expect(view.getByDisplayValue('Write proposal').props.autoFocus).toBe(true);
+  });
+
+  it('does not block a separate FAB when its inline editor is closed', async () => {
+    const view = await render(
+      <TaskEditorSheet {...base} open={false} inline />,
+    );
+
+    expect(
+      view.getByTestId('task-editor-morph-shell', {
+        includeHiddenElements: true,
+      }).props.pointerEvents,
+    ).toBe('none');
+  });
+
+  it('measures the expanded content outside the collapsed shell constraint', async () => {
+    const view = await render(
+      <TaskEditorSheet
+        {...base}
+        open={false}
+        inline
+        onOpen={jest.fn()}
+        collapsedFabLabel="Task"
+        scheduleAction={{ label: 'No date', active: false, onPress: jest.fn() }}
+        projectAction={{ label: 'No project', active: false, onPress: jest.fn() }}
+      />,
+    );
+
+    expect(
+      view.getByTestId('task-editor-morph-content', {
+        includeHiddenElements: true,
+      }).props.style,
+    ).toEqual(expect.arrayContaining([
+      expect.objectContaining({ position: 'absolute', top: 0 }),
+    ]));
+  });
+
   it('shows the drawer grip and project icon once, then opens both metadata pickers', async () => {
     const schedule = jest.fn();
     const project = jest.fn();
