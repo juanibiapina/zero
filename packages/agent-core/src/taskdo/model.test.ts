@@ -25,6 +25,22 @@ function addProjects(model: TodoModel, ...ids: string[]) {
 }
 
 describe("canonical TinyBase todo model", () => {
+  it("normalizes absent recurrence cells to the complete Task shape", () => {
+    const { model, store } = setup();
+    store.setRow("tasks", "task", { text: "Task", createdAt: NOW });
+
+    expect(model.getTask("task")).toMatchObject({
+      id: "task",
+      recurrence: null,
+      recurrenceDate: null,
+    });
+    expect(model.project().tasks).toMatchObject([{
+      id: "task",
+      recurrence: null,
+      recurrenceDate: null,
+    }]);
+  });
+
   it("creates Tasks idempotently with stable rows, timestamps, and trailing order keys", () => {
     const { model, store, setNow } = setup();
     store.setRow("tasks", "bad", { text: "bad", createdAt: "2026-01-01T00:00:00.000Z", sortKey: "\u0000bad" });

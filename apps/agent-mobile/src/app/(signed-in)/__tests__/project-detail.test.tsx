@@ -97,6 +97,8 @@ const task = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   id,
   text,
   showUpDate: '2026-09-01',
+  recurrence: null,
+  recurrenceDate: null,
   createdAt: '2026-09-01T00:00:00.000Z',
   completedAt: null,
   projectId: '1',

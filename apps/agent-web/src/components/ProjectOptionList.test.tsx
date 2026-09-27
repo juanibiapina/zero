@@ -13,6 +13,7 @@ const projects = [
 ];
 const tasks: Task[] = [{
   id: "work", text: "Work", projectId: "active", showUpDate: "2000-01-01",
+  recurrence: null, recurrenceDate: null,
   completedAt: null, createdAt: "2026-01-01", sortKey: null,
 }];
 const conditions: WaitingCondition[] = [

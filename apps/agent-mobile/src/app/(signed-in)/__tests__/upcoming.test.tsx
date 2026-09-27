@@ -35,6 +35,8 @@ const task = (
   createdAt: '2026-09-01T00:00:00.000Z',
   completedAt: null,
   showUpDate,
+  recurrence: null,
+  recurrenceDate: null,
   projectId,
   sortKey: null,
 });

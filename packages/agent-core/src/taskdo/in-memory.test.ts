@@ -11,6 +11,7 @@ describe("in-memory TaskDO replica", () => {
       }],
       tasks: [{
         id: "task", text: "Task", projectId: "project", showUpDate: null,
+        recurrence: null, recurrenceDate: null,
         completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", sortKey: null,
       }],
       waits: [{
@@ -22,7 +23,7 @@ describe("in-memory TaskDO replica", () => {
 
     expect(replica.snapshot()).toMatchObject({
       projects: [{ id: "project" }],
-      tasks: [{ id: "task", projectId: "project" }],
+      tasks: [{ id: "task", projectId: "project", recurrence: null, recurrenceDate: null }],
       conditions: [{ id: "wait", projectId: "project" }],
     });
     await Promise.all([
@@ -30,6 +31,7 @@ describe("in-memory TaskDO replica", () => {
       replica.projects.collection.preload(),
       replica.waits.collection.preload(),
     ]);
+    expect(replica.tasks.collection.get("task")).toMatchObject({ recurrence: null, recurrenceDate: null });
     await replica.tasks.edit("task", "Edited").isPersisted.promise;
     expect(replica.snapshot().tasks[0]?.text).toBe("Edited");
     await replica.close();

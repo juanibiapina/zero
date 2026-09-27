@@ -10,6 +10,7 @@ const project = (id: string, state: ProjectState = "in-play", createdAt = "2023-
 });
 const task = (projectId: string, showUpDate: string): Task => ({
   id: `${projectId}-task`, text: "Work", projectId, showUpDate,
+  recurrence: null, recurrenceDate: null,
   createdAt: "2023-01-01", completedAt: null, sortKey: null,
 });
 const wait = (projectId: string, createdAt: string): WaitingCondition => ({

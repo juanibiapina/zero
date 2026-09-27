@@ -63,6 +63,8 @@ function task(over: Partial<Task> = {}): Task {
     text: over.text ?? "t",
     showUpDate:
       over.showUpDate !== undefined ? over.showUpDate : "2026-01-01",
+    recurrence: over.recurrence ?? null,
+    recurrenceDate: over.recurrenceDate ?? null,
     createdAt: over.createdAt ?? "2026-01-01T00:00:00.000Z",
     completedAt: over.completedAt ?? null,
     projectId: over.projectId ?? "p",

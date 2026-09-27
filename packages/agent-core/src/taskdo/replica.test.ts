@@ -39,6 +39,7 @@ describe("TaskDO replica adapter", () => {
     const project = replica.snapshot().projects[0];
     await replica.tasks.add("Task", null, project.id).isPersisted.promise;
     const task = replica.snapshot().tasks[0];
+    expect(task).toMatchObject({ recurrence: null, recurrenceDate: null });
     await replica.tasks.edit(task.id, "Edited").isPersisted.promise;
     await replica.tasks.reschedule(task.id, "2026-10-01").isPersisted.promise;
     await replica.tasks.reorder(task.id, "a5").isPersisted.promise;
@@ -54,6 +55,17 @@ describe("TaskDO replica adapter", () => {
     expect(replica.snapshot().tasks[0]).toMatchObject({ recurrenceDate: "2026-10-01", showUpDate: "2026-10-01" });
     expect(store.getCell("tasks", task.id, "recurrence")).toBeTypeOf("string");
     expect(saves()).toBe(9);
+    await replica.close();
+  });
+
+  it("publishes complete Tasks through snapshots and the TanStack collection", async () => {
+    const { replica } = setup((store) => {
+      store.setRow("tasks", "task", { text: "Task", createdAt: NOW });
+    });
+
+    expect(replica.snapshot().tasks[0]).toMatchObject({ recurrence: null, recurrenceDate: null });
+    await replica.tasks.collection.preload();
+    expect(replica.tasks.collection.get("task")).toMatchObject({ recurrence: null, recurrenceDate: null });
     await replica.close();
   });
 

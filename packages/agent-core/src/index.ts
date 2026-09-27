@@ -132,8 +132,6 @@ export {
 } from "./taskdo/model";
 export type {
   ProjectAfterConflict,
-  StoredProject,
-  StoredTask,
   TodoIssue,
 } from "./taskdo/types";
 

@@ -38,6 +38,8 @@ const taskRow = (id: string, text: string, over: Partial<Task> = {}): Task => ({
   id,
   text,
   showUpDate: over.showUpDate === undefined ? null : over.showUpDate,
+  recurrence: over.recurrence ?? null,
+  recurrenceDate: over.recurrenceDate ?? null,
   createdAt: over.createdAt ?? `2023-01-0${id}T00:00:00.000Z`,
   completedAt: over.completedAt ?? null,
   projectId: over.projectId ?? null,

@@ -6,17 +6,12 @@ export type Task = {
   id: string;
   text: string;
   showUpDate: PlainDate | null;
-  recurrence?: Recurrence | null;
-  recurrenceDate?: PlainDate | null;
+  recurrence: Recurrence | null;
+  recurrenceDate: PlainDate | null;
   createdAt: string;
   completedAt: string | null;
   projectId: string | null;
   sortKey: string | null;
-};
-
-export type StoredTask = Task & {
-  recurrence: Recurrence | null;
-  recurrenceDate: PlainDate | null;
 };
 
 export type Project = {
@@ -27,8 +22,6 @@ export type Project = {
   state: ProjectState;
   createdAt: string;
 };
-
-export type StoredProject = Project;
 
 type ProjectAttentionBase = {
   id: string;

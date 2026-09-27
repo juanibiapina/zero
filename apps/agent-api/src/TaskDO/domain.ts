@@ -4,8 +4,8 @@ import {
   type ProjectAfterConflict,
   type ProjectDefaults,
   type ProjectState,
-  type StoredProject,
-  type StoredTask,
+  type Project as CurrentProject,
+  type Task as CurrentTask,
   type TodoIssue,
   type WaitingCondition,
 } from "@zero/agent-core";
@@ -32,8 +32,8 @@ export type TaskRecovery = {
 export type ProjectRecovery = { projectId: string; reason: "invalid-project" };
 
 type LegacyTodoProvenance = { sourceCaptureId?: string | null };
-export type Project = StoredProject & { sourceCaptureId: string | null };
-export type Task = StoredTask & { sourceCaptureId: string | null };
+export type Project = CurrentProject & { sourceCaptureId: string | null };
+export type Task = CurrentTask & { sourceCaptureId: string | null };
 export type LegacyProjectCreateOptions = ProjectDefaults & LegacyTodoProvenance;
 
 type TaskDomainOptions = {

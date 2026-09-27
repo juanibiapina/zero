@@ -69,7 +69,15 @@ describe("TaskDomain adapter", () => {
     const { domain, store } = setup();
     store.setRow("tasks", "unkeyed", { text: "Unkeyed", createdAt: "2026-01-01T00:00:00.000Z" });
     const task = await domain.addTask("keyed", "Keyed", null);
-    expect(task).toMatchObject({ createdAt: NOW, completedAt: null });
+    expect(task).toMatchObject({
+      createdAt: NOW,
+      completedAt: null,
+      recurrence: null,
+      recurrenceDate: null,
+    });
+    expect(domain.listTasks()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ recurrence: null, recurrenceDate: null }),
+    ]));
     expect(domain.listTasks().map((row) => row.id)).toEqual(["keyed", "unkeyed"]);
   });
 

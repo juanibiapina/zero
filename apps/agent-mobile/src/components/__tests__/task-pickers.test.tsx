@@ -19,6 +19,7 @@ const statusProjects = [
 ];
 const openTasks = [{
   id: 'active-task', text: 'Work', projectId: 'active', showUpDate: '2000-01-01',
+  recurrence: null, recurrenceDate: null,
   createdAt: '2026-01-01', completedAt: null, sortKey: null,
 }];
 const conditions = [
