@@ -28,7 +28,7 @@ export type QuickAddProps = {
   busy?: boolean;
   inputRef?: Ref<TextInput>;
   // Wording of the collapsed FAB and the input placeholder. Defaults keep the
-  // Capture copy so existing callers need no change; the Projects list overrides
+  // Task copy so existing callers need no change; the Projects list overrides
   // both. The FAB label doubles as its accessibility label.
   fabLabel?: string;
   placeholder?: string;
@@ -51,7 +51,7 @@ export type QuickAddProps = {
 // Transition layer between two independent, reusable elements: the collapsed
 // `Fab` (plus button) and the expanded `QuickAddBar`. It owns ONLY the motion —
 // cross-fading the two as `open` flips and keeping the open bar stuck to the
-// keyboard — and knows nothing about capture state. Animated.View and
+// keyboard — and knows nothing about todo state. Animated.View and
 // KeyboardStickyView are not RN core components, so Uniwind does not map
 // `className` onto them; their layout comes from resolved styles / inline style.
 export function QuickAdd({

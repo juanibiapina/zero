@@ -27,11 +27,11 @@ export type QuickAddBarProps = {
   onSubmit: () => void;
   busy?: boolean;
   // Overrides the placeholder. Without it, a selected mode's placeholder comes
-  // from the registry; with no mode either, it falls back to the capture prompt.
+  // from the registry; with no mode either, it falls back to the Task prompt.
   placeholder?: string;
   autoFocus?: boolean;
   inputRef?: Ref<TextInput>;
-  // Accessibility label of the submit button. Defaults to the Capture wording.
+  // Accessibility label of the submit button. Defaults to the Task wording.
   fabLabel?: string;
   // The create-time date + project composer chips (Home quick-add). Rendered as
   // a row below the input when both handlers are supplied. The date is the sole

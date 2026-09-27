@@ -74,14 +74,14 @@ export const createTasksRoutes = () => {
             schema: z.object({
               id: z.string().uuid(),
               text: z.string().min(1),
-              // Optional: a loose quick-capture has no day (null/absent = always
+              // Optional: a loose quick-add has no day (null/absent = always
               // relevant). A project-screen add or a dated quick-add sends one.
               showUpDate: PlainDate.nullable().optional(),
               recurrence: RecurrenceInput.nullable().optional(),
               // Optional: the Project this task belongs to. Omitted/absent for a
               // loose task.
               projectId: z.string().uuid().nullable().optional(),
-              // Optional: the capture this task was refined from.
+              // Retained only for legacy clients and stored legacy provenance.
               sourceCaptureId: z.string().uuid().nullable().optional(),
             }),
           },

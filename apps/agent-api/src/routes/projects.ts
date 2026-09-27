@@ -84,7 +84,7 @@ export const createProjectsRoutes = (
               icon: z.string().min(1).optional(),
               description: z.string().nullable().optional(),
               state: ProjectState.optional(),
-              // Optional: the capture this project was refined from.
+              // Retained only for legacy clients and stored legacy provenance.
               sourceCaptureId: z.string().uuid().nullable().optional(),
             }).strict(),
           },
