@@ -72,9 +72,11 @@ rules. The shared replica is a TanStack adapter with one screen-facing
 interface. Its three entity collections share one store, transaction model,
 recovery channel, and replica-level refresh operation. A shared synchronization
 lifecycle owns connection-attempt deduplication, TinyBase synchronization,
-bounded reconnect backoff, refresh, and race-safe teardown. Platform adapters
-own persistence, authentication, WebSocket construction, connection eligibility,
-and platform lifecycle events.
+bounded reconnect backoff, refresh, and race-safe teardown. A shared
+account-replica owner immediately hides the previous account, serializes its
+teardown before opening the next account, and ignores stale opens and events.
+Platform adapters own persistence, authentication, WebSocket construction,
+connection eligibility, durability reporting, and platform lifecycle events.
 
 - **Mobile:** one Expo SQLite file per Clerk account, named
   `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection;
@@ -101,9 +103,11 @@ and platform lifecycle events.
 - **Fallback:** if IndexedDB or Web Locks are unavailable, web uses an in-memory
   replica that still synchronizes online and reports that offline durability is
   unavailable.
-- **Account lifecycle:** web closes the synchronizer and persister before it
-  exposes another account. Database names include the Clerk account ID, so one
-  account cannot hydrate another account's rows.
+- **Account lifecycle:** mobile and web use the same account-replica owner. It
+  closes the synchronizer and persistence handle before it exposes another
+  account, and closes any handle whose open resolves after a switch or sign-out.
+  Storage names include the Clerk account ID, so one account cannot hydrate
+  another account's rows.
 
 The retired web OPFS database and IndexedDB outbox are not opened, migrated,
 replayed, or deleted. They remain inert in existing browser profiles.
