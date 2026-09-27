@@ -63,10 +63,10 @@ function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
 // Home is one reorderable list of loose and project tasks, availability-gated
 // by homeTasks. The quick-add defaults to a task and can switch to a project.
 export default function HomeScreen() {
-  return <SignedInHomeScreen />;
+  return <TodoHomeScreen />;
 }
 
-function SignedInHomeScreen() {
+function TodoHomeScreen() {
   const replica = useTodoReplica();
   const todoData = useTodoDataContext();
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
@@ -75,7 +75,9 @@ function SignedInHomeScreen() {
     <View className="flex-1 bg-background">
       <ScreenHeader title="Home" />
       {todoData ? <Text variant="subtitle" className="px-screen-x">
-        {todoData.connected ? 'Synced' : 'Offline · saved on this device'}
+        {!todoData.signedIn
+          ? 'Saved on this device'
+          : todoData.connected ? 'Synced' : 'Offline · saved on this device'}
       </Text> : null}
       {todoData?.error ? <Text variant="error" className="px-screen-x">{todoData.error}</Text> : null}
       {recoveryError ? <Text variant="error" className="px-screen-x">{recoveryError}</Text> : null}

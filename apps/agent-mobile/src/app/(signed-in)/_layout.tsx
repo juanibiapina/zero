@@ -1,5 +1,4 @@
 import { useAuth } from '@clerk/expo';
-import { Redirect } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
@@ -10,9 +9,9 @@ import { RUNTIME_PROFILE } from '../../lib/runtime-profile';
 import { TodoDataProvider } from '../../lib/todo-data-context';
 import { createMobileTimezoneSync } from '../../lib/timezone-sync';
 
-// Keep the server's stored timezone equal to this device's, silently. Built once
-// inside the signed-in tree (where the Clerk token getter is valid); getToken is
-// read through a ref so the sync is not rebuilt on a new function identity.
+// Keep the server's stored timezone equal to this device's only while signed in.
+// getToken is read through a ref so the sync is not rebuilt on a new function
+// identity.
 function useTimezoneSync(enabled: boolean): void {
   const { getToken } = useAuth();
   const getTokenRef = useRef(getToken);
@@ -31,7 +30,7 @@ function useTimezoneSync(enabled: boolean): void {
   }, [enabled]);
 }
 
-export default function SignedInLayout() {
+export default function TodoLayout() {
   const { isLoaded, isSignedIn } = useAuth();
   const accent = useColor('--color-accent');
   const surface = useColor('--color-surface');
@@ -54,10 +53,6 @@ export default function SignedInLayout() {
         <ActivityIndicator />
       </View>
     );
-  }
-
-  if (!isSignedIn) {
-    return <Redirect href="/sign-in" />;
   }
 
   // Home and Projects remain direct destinations. Browse is a stack for

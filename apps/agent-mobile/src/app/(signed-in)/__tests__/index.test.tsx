@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { View } from 'react-native';
 import { defaultToastController, type Project, type ProjectAttention, type Task } from '@zero/agent-core';
 
 import {
@@ -18,10 +17,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: async () => 'token' }),
-}));
-const mockUserButton = () => <View accessibilityLabel="Account" />;
-jest.mock('@clerk/expo/native', () => ({
-  UserButton: () => mockUserButton(),
+  useUser: () => ({ user: null }),
 }));
 
 const task = (id: string, text: string, over: Partial<Task> = {}): Task => ({
@@ -56,8 +52,13 @@ const after = (projectId: string, refId: string): ProjectAttention => ({
   createdAt: '2026-09-01T00:00:00.000Z',
 });
 
-async function renderScreen(seed: InMemoryTodoSeed = {}) {
+async function renderScreen(seed: InMemoryTodoSeed = {}, guest = false) {
   const data = createInMemoryTodoData(seed);
+  if (guest) {
+    data.workspaceStatus = 'guest';
+    data.signedIn = false;
+    data.connected = false;
+  }
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -82,6 +83,12 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(screen.getByText('Create your first project')).toBeTruthy());
     expect(screen.getByText('Home')).toBeTruthy();
     expect(screen.getByLabelText('Account')).toBeTruthy();
+  });
+
+  it('labels guest work as saved on this device', async () => {
+    const screen = await renderScreen({}, true);
+    await waitFor(() => expect(screen.getByText('Saved on this device')).toBeTruthy());
+    expect(screen.queryByText('Offline · saved on this device')).toBeNull();
   });
 
   it('shows arrived project work even when the project has an unresolved After relationship', async () => {

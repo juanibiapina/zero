@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-27: You can start using tasks and projects without signing in, then sign in from the account button whenever you want cross-device sync.
+
 - 2026-09-27: Pulling down to refresh now reconnects and synchronizes your todo list before the spinner stops.
 
 - 2026-09-26: Resolving a Waiting item removes it from the Project immediately without requiring an app restart.

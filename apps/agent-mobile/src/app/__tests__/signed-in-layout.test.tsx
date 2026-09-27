@@ -1,8 +1,9 @@
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import { render } from '@testing-library/react-native';
-import { AppState, Platform } from 'react-native';
+import type { ReactNode } from 'react';
+import { AppState, Platform, Text } from 'react-native';
 
-import SignedInLayout from '../(signed-in)/_layout';
+import TodoLayout from '../(signed-in)/_layout';
 
 const mockUseAuth = jest.fn();
 const mockOnColdStart = jest.fn(async () => {});
@@ -33,38 +34,24 @@ jest.mock('../../../modules/home-app-icon', () => ({
   setHomeAppIcon: (icon: string) => mockSetAppIcon(icon),
 }));
 
-jest.mock('expo-router', () => ({
-  Redirect: ({ href }: { href: string }) => {
-    const { Text } = require('react-native');
-    return <Text>redirect:{href}</Text>;
-  },
-}));
+function mockTrigger({ children }: { children?: ReactNode }) {
+  return <>{children}</>;
+}
+function MockTriggerIcon() { return null; }
+function MockTriggerLabel({ children }: { children?: ReactNode }) {
+  return <Text>{children}</Text>;
+}
+function MockTriggerBadge() { return null; }
+mockTrigger.Icon = MockTriggerIcon;
+mockTrigger.Label = MockTriggerLabel;
+mockTrigger.Badge = MockTriggerBadge;
+function mockNativeTabs({ children }: { children?: ReactNode }) {
+  return <Text>tabs{children}</Text>;
+}
+mockNativeTabs.Trigger = mockTrigger;
+jest.mock('expo-router/unstable-native-tabs', () => ({ NativeTabs: mockNativeTabs }));
 
-jest.mock('expo-router/unstable-native-tabs', () => {
-  const { Text } = require('react-native');
-  function NativeTabs({ children }: { children?: unknown }) {
-    return <Text>tabs{children}</Text>;
-  }
-  function Trigger({ children }: { children?: unknown }) {
-    return <>{children}</>;
-  }
-  function TriggerIcon() {
-    return null;
-  }
-  function TriggerLabel({ children }: { children?: unknown }) {
-    return <Text>{children}</Text>;
-  }
-  function TriggerBadge() {
-    return null;
-  }
-  Trigger.Icon = TriggerIcon;
-  Trigger.Label = TriggerLabel;
-  Trigger.Badge = TriggerBadge;
-  NativeTabs.Trigger = Trigger;
-  return { NativeTabs };
-});
-
-describe('SignedInLayout', () => {
+describe('TodoLayout', () => {
   beforeEach(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     mockSetAppIcon.mockReset();
@@ -76,15 +63,16 @@ describe('SignedInLayout', () => {
 
   it('shows a loading indicator until Clerk is loaded', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: false, isSignedIn: false });
-    const { toJSON } = await render(<SignedInLayout />);
+    const { toJSON } = await render(<TodoLayout />);
     expect(JSON.stringify(toJSON())).toContain('ActivityIndicator');
     expect(mockSetAppIcon).not.toHaveBeenCalled();
   });
 
-  it('redirects to sign-in when signed out', async () => {
+  it('opens the todo tabs when signed out', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
-    const { getByText } = await render(<SignedInLayout />);
-    expect(getByText('redirect:/sign-in')).toBeTruthy();
+    const { getByText, toJSON } = await render(<TodoLayout />);
+    expect(getByText(/^tabs/)).toBeTruthy();
+    expect(JSON.stringify(toJSON())).toMatch(/Home.*Projects.*Browse/);
   });
 
   it('shows Home, Projects, and Browse in that order without an Upcoming tab', async () => {
@@ -94,7 +82,7 @@ describe('SignedInLayout', () => {
       userId: 'user-test',
       getToken: async () => null,
     });
-    const { getByText, queryByText, toJSON } = await render(<SignedInLayout />);
+    const { getByText, queryByText, toJSON } = await render(<TodoLayout />);
     expect(getByText(/^tabs/)).toBeTruthy();
     expect(JSON.stringify(toJSON())).toMatch(/Home.*Projects.*Browse/);
     expect(queryByText('Upcoming')).toBeNull();
@@ -102,13 +90,13 @@ describe('SignedInLayout', () => {
 
   it('does not sync timezone while signed out', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
-    await render(<SignedInLayout />);
+    await render(<TodoLayout />);
     expect(mockCreateSync).not.toHaveBeenCalled();
   });
 
   it('restores the three-row default launcher icon when signed out', async () => {
     mockUseAuth.mockReturnValue({ isLoaded: true, isSignedIn: false });
-    await render(<SignedInLayout />);
+    await render(<TodoLayout />);
 
     expect(mockSetAppIcon).toHaveBeenCalledWith('Default');
   });
@@ -121,7 +109,7 @@ describe('SignedInLayout', () => {
       getToken: async () => null,
     });
     const spy = jest.spyOn(AppState, 'addEventListener');
-    await render(<SignedInLayout />);
+    await render(<TodoLayout />);
 
     expect(mockOnColdStart).toHaveBeenCalledTimes(1);
 

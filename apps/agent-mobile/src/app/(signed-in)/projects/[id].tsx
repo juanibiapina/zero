@@ -58,6 +58,7 @@ import {
 } from '@/lib/icon-suggestions';
 import { useLocalDay } from '@/lib/local-day';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
+import { useTodoDataContext } from '@/lib/todo-data-context';
 import { usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
 
@@ -500,6 +501,7 @@ function IconPickerSheet({
   onPick: (emoji: string) => void;
 }) {
   const { getToken } = useAuth();
+  const authenticatedFeatures = useTodoDataContext()?.signedIn ?? false;
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -512,8 +514,10 @@ function IconPickerSheet({
   );
   const cached = useIconSuggestions(project.id);
   useEffect(() => {
-    if (open) void requestIconSuggestions(getToken, project.id, basis);
-  }, [open, getToken, project.id, basis]);
+    if (open && authenticatedFeatures) {
+      void requestIconSuggestions(getToken, project.id, basis);
+    }
+  }, [open, authenticatedFeatures, getToken, project.id, basis]);
   const loading = !cached || cached.status === 'loading';
   const icons = cached?.icons ?? [];
   const stale =
@@ -561,8 +565,9 @@ function IconPickerSheet({
         style={{ height: Math.round(height * 0.85), paddingBottom: insets.bottom }}
         className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-surface"
       >
-        {/* Suggested row on top — additive over the full grid below. */}
-        <View className="flex-row flex-wrap items-center gap-2 px-4 pt-3 pb-2">
+        {authenticatedFeatures ? <>
+          {/* Suggested row on top — additive over the full grid below. */}
+          <View className="flex-row flex-wrap items-center gap-2 px-4 pt-3 pb-2">
           <Text className="text-[12px] font-medium text-foreground-muted">
             Suggested
           </Text>
@@ -603,8 +608,9 @@ function IconPickerSheet({
               ↻
             </Text>
           </Pressable>
-        </View>
-        <View className="h-px bg-divider" />
+          </View>
+          <View className="h-px bg-divider" />
+        </> : null}
         {/* The full searchable picker, inline (not its own modal), filling the
             rest of the sheet. */}
         <View className="flex-1">

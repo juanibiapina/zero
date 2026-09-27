@@ -25,6 +25,16 @@ export function useAuth() {
   };
 }
 
+export function useUser() {
+  return {
+    user: {
+      fullName: 'E2E test user',
+      imageUrl: null,
+      primaryEmailAddress: { emailAddress: `${E2E_FAKE_TOKEN}@example.test` },
+    },
+  };
+}
+
 export function useSSO() {
   return {
     startSSOFlow: async () => ({

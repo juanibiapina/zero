@@ -7,6 +7,7 @@ function memoryStorage(initial: string | null = null) {
   return {
     getItem: jest.fn(async () => value),
     setItem: jest.fn(async (_key: string, next: string) => { value = next; }),
+    removeItem: jest.fn(async () => { value = null; }),
   };
 }
 

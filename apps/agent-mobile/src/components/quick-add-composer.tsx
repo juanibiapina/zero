@@ -31,6 +31,7 @@ import type { TokenGetter } from '@/lib/api';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
 import { useLocalDay } from '@/lib/local-day';
 import { showTaskDestination } from '@/lib/task-feedback';
+import { useTodoDataContext } from '@/lib/todo-data-context';
 
 export type QuickAddScope =
   | { kind: 'global' }
@@ -83,6 +84,7 @@ export function useQuickAdd({
   showFab?: boolean;
   waitForPersist?: boolean;
 }): QuickAddController {
+  const authenticatedFeatures = useTodoDataContext()?.signedIn ?? false;
   const [drafts, setDrafts] = useState<Record<AddMode, string>>({
     task: '',
     waiting: '',
@@ -215,10 +217,12 @@ export function useQuickAdd({
       const tx = projectsApi.add(trimmed);
       tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
       const id = String(tx.mutations[0]?.key);
-      void requestIconSuggestions(getToken, id, {
-        title: trimmed,
-        description: null,
-      });
+      if (authenticatedFeatures) {
+        void requestIconSuggestions(getToken, id, {
+          title: trimmed,
+          description: null,
+        });
+      }
       if (onProjectCreated) {
         closeAdd();
         onProjectCreated(id);
@@ -276,6 +280,7 @@ export function useQuickAdd({
     contextProject,
     projectsApi,
     getToken,
+    authenticatedFeatures,
     onProjectCreated,
     effectiveText,
     tasksApi,

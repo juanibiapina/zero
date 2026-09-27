@@ -31,6 +31,13 @@ jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: async () => 'token' }),
 }));
 
+function MockEmojiKeyboard() {
+  return <View accessibilityLabel="Manual emoji picker" />;
+}
+jest.mock('rn-emoji-keyboard', () => ({
+  EmojiKeyboard: MockEmojiKeyboard,
+}));
+
 function MockView({ children }: { children?: ReactNode }) {
   return <View>{children}</View>;
 }
@@ -126,8 +133,13 @@ const after = (): ProjectAttention => ({
   createdAt: '2026-09-01T00:00:00.000Z',
 });
 
-async function renderScreen(seed: InMemoryTodoSeed = {}) {
+async function renderScreen(seed: InMemoryTodoSeed = {}, guest = false) {
   const data = createInMemoryTodoData({ projects: [project('1', 'Run a 5K')], ...seed });
+  if (guest) {
+    data.workspaceStatus = 'guest';
+    data.signedIn = false;
+    data.connected = false;
+  }
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -158,6 +170,20 @@ describe('ProjectDetailScreen', () => {
 
     await waitFor(() => expect(screen.data.replica!.projects.collection.get('1')?.description)
       .toBe('Finish a community race'));
+  });
+
+  it('keeps the manual icon picker but hides account-only suggestions for guests', async () => {
+    const fetch = jest.spyOn(global, 'fetch');
+    const screen = await renderScreen({}, true);
+    await waitFor(() => expect(screen.getByLabelText('Change icon')).toBeTruthy());
+
+    fireEvent.press(screen.getByLabelText('Change icon'));
+
+    await waitFor(() => expect(screen.getByLabelText('Manual emoji picker')).toBeTruthy());
+    expect(screen.queryByText('Suggested')).toBeNull();
+    expect(screen.queryByLabelText('Refresh suggested icons')).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
   });
 
   it('shows project tasks in manual order', async () => {

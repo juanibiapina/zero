@@ -9,13 +9,14 @@ import { useTodoData } from '../use-todo-data';
 
 const mockAuth = { userId: 'A' as string | null };
 const mockGetToken = jest.fn(async () => 'token');
+const mockSignOut = jest.fn(async () => {});
 const mockQueryClient = {};
 const mockOpenReplica = jest.fn<(
   options: { descriptor: TodoWorkspaceDescriptor },
 ) => Promise<TaskdoReplica>>();
 
 jest.mock('@clerk/expo', () => ({
-  useAuth: () => ({ userId: mockAuth.userId, getToken: mockGetToken }),
+  useAuth: () => ({ userId: mockAuth.userId, getToken: mockGetToken, signOut: mockSignOut }),
 }));
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => mockQueryClient,

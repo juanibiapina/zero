@@ -14,6 +14,7 @@ const EMPTY_SNAPSHOT: TodoSnapshot = {
 function memoryStorage(
   initial: string | null = null,
   onSet: (value: string) => void = () => {},
+  onRemove: () => void = () => {},
 ) {
   let value = initial;
   return {
@@ -21,6 +22,10 @@ function memoryStorage(
     setItem: jest.fn(async (_key: string, next: string) => {
       onSet(next);
       value = next;
+    }),
+    removeItem: jest.fn(async () => {
+      onRemove();
+      value = null;
     }),
   };
 }
@@ -32,6 +37,19 @@ function replica(close: () => Promise<void> = async () => {}): TaskdoReplica {
   } as TaskdoReplica;
 }
 
+function syncedReplica({
+  checkpoint = async () => {},
+  close = async () => {},
+}: {
+  checkpoint?: () => Promise<void>;
+  close?: () => Promise<void>;
+} = {}): TaskdoReplica & { checkpoint: () => Promise<void> } {
+  return {
+    ...replica(close),
+    checkpoint,
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -39,6 +57,131 @@ function deferred<T>() {
 }
 
 describe('mobile todo workspace owner', () => {
+  it('signs out only after checkpointing and deleting the validated active workspace', async () => {
+    const order: string[] = [];
+    const storage = memoryStorage(null, () => {}, () => { order.push('forget'); });
+    const registry = createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' });
+    const owner = createTodoWorkspaceOwner({
+      registry,
+      open: async (descriptor) => syncedReplica({
+        checkpoint: async () => { order.push('checkpoint'); },
+        close: async () => { order.push('close'); },
+      }),
+      deleteDatabase: async (databaseName) => { order.push(`delete ${databaseName}`); },
+      clearAccountCaches: async (accountId) => { order.push(`clear ${accountId}`); },
+      signOut: async () => { order.push('signOut'); },
+    });
+    await owner.setAccount('account-A');
+
+    await owner.signOut();
+
+    expect(order).toEqual([
+      'checkpoint',
+      'close',
+      'delete taskdo-fixture-account-A.sqlite',
+      'clear account-A',
+      'forget',
+      'signOut',
+    ]);
+    expect(storage.removeItem).toHaveBeenCalledWith('workspace');
+    expect(owner.getSnapshot()).toMatchObject({
+      accountId: null,
+      status: 'guest',
+      ready: true,
+    });
+  });
+
+  it('preserves the active database when its sync checkpoint fails', async () => {
+    const storage = memoryStorage();
+    const close = jest.fn(async () => {});
+    const deleteDatabase = jest.fn(async () => {});
+    const signOut = jest.fn(async () => {});
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' }),
+      open: async () => syncedReplica({
+        checkpoint: async () => { throw new Error('network unavailable'); },
+        close,
+      }),
+      deleteDatabase,
+      clearAccountCaches: async () => {},
+      signOut,
+    });
+    await owner.setAccount('account-A');
+
+    await expect(owner.signOut()).rejects.toThrow('network unavailable');
+
+    expect(close).not.toHaveBeenCalled();
+    expect(deleteDatabase).not.toHaveBeenCalled();
+    expect(storage.removeItem).not.toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
+    expect(owner.getSnapshot()).toMatchObject({ status: 'account', ready: true });
+  });
+
+  it('allows an explicit discard after a checkpoint failure', async () => {
+    const order: string[] = [];
+    const checkpoint = jest.fn(async () => { throw new Error('offline'); });
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({
+        storage: memoryStorage(),
+        storageKey: 'workspace',
+        createWorkspaceId: () => 'fresh-guest',
+      }),
+      open: async (descriptor) => descriptor.binding.kind === 'bound'
+        ? syncedReplica({
+            checkpoint,
+            close: async () => { order.push('close'); },
+          })
+        : replica(),
+      deleteDatabase: async () => { order.push('delete'); },
+      clearAccountCaches: async () => { order.push('clear'); },
+      signOut: async () => { order.push('signOut'); },
+    });
+    await owner.setAccount('account-A');
+    await expect(owner.signOut()).rejects.toThrow('offline');
+
+    await owner.signOut({ discardLocalCopy: true });
+
+    expect(checkpoint).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['close', 'delete', 'clear', 'signOut']);
+    expect(owner.getSnapshot()).toMatchObject({ status: 'guest', ready: true });
+  });
+
+  it('stays locked and retries only Clerk sign-out after local cleanup succeeded', async () => {
+    const storage = memoryStorage();
+    const deleteDatabase = jest.fn(async () => {});
+    const signOut = jest.fn(async () => {
+      if (signOut.mock.calls.length === 1) throw new Error('Clerk unavailable');
+    });
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({
+        storage,
+        storageKey: 'workspace',
+        createWorkspaceId: () => 'after-retry',
+      }),
+      open: async (descriptor) => descriptor.binding.kind === 'bound'
+        ? syncedReplica()
+        : replica(),
+      deleteDatabase,
+      clearAccountCaches: async () => {},
+      signOut,
+    });
+    await owner.setAccount('account-A');
+
+    await expect(owner.signOut()).rejects.toThrow('Clerk unavailable');
+    expect(owner.getSnapshot()).toMatchObject({
+      status: 'signing-out',
+      replica: null,
+      ready: false,
+      error: expect.stringContaining('Clerk unavailable'),
+    });
+    await owner.signOut();
+
+    expect(deleteDatabase).toHaveBeenCalledTimes(1);
+    expect(storage.removeItem).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledTimes(2);
+    expect(owner.getSnapshot()).toMatchObject({ status: 'guest', ready: true });
+  });
+
   it('opens a fresh signed-out workspace as a ready local replica', async () => {
     const opened: TodoWorkspaceDescriptor[] = [];
     const registry = createTodoWorkspaceRegistry({

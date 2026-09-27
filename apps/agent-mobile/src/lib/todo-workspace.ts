@@ -11,6 +11,7 @@ export type TodoWorkspaceDescriptor = {
 type TodoWorkspaceStorage = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
 };
 
 type CreateTodoWorkspaceRegistryOptions = {
@@ -155,6 +156,19 @@ export function createTodoWorkspaceRegistry({
     },
     forSignedInAccount(accountId: string): Promise<TodoWorkspaceDescriptor> {
       const operation = tail.then(() => resolveSignedInAccount(accountId));
+      tail = operation.then(() => {}, () => {});
+      return operation;
+    },
+    forget(expected: TodoWorkspaceDescriptor): Promise<void> {
+      const operation = tail.then(async () => {
+        const stored = await storage.getItem(storageKey);
+        if (stored === null) return;
+        const descriptor = parseDescriptor(stored);
+        if (JSON.stringify(descriptor) !== JSON.stringify(expected)) {
+          throw new Error('Saved todo workspace changed during sign out');
+        }
+        await storage.removeItem(storageKey);
+      });
       tail = operation.then(() => {}, () => {});
       return operation;
     },

@@ -93,8 +93,7 @@ back only where the native component does not fit.
   into the installed dev client. The **first** use of any `@expo/ui` component
   needs a **new EAS dev build** (the sign-in Button first shipped in build 14) —
   JS hot-reload alone crashes on render on an older client that lacks the native
-  view (same hazard as the Clerk `UserButton`). Once the module is in the client,
-  further JS changes hot-reload normally.
+  view. Once the module is in the client, further JS changes hot-reload normally.
 - **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
   native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
@@ -158,37 +157,24 @@ profiles retain all architectures.
 ## Authentication and environment
 
 The app signs in with **Clerk**, against the **same Clerk instance as the web
-app**, so a user has one account across web and mobile. Sign-in is now the entry
-screen: signed-out users see "Continue with Google" (Google OAuth via Clerk's
-`useSSO`); after signing in they reach the home screen. The Clerk session is
-persisted in `expo-secure-store`, so it survives app restarts. The root provider
-also enables Clerk's `resourceCache` (`__experimental_resourceCache`), backed by
-SecureStore, so a previously signed-in user can cold-start offline. Token caching
-alone is not enough: Clerk also needs its cached client and environment resources.
-First sign-in still requires a connection.
+app**, so a user has one account across web and mobile. Sign-in is optional:
+signed-out users open the todo app with a durable device-only workspace, and the
+account button offers Google OAuth through Clerk's `useSSO`. Signing in binds
+that same workspace to the account and adds cross-device sync. The Clerk session
+is persisted in `expo-secure-store`, so it survives app restarts. The root
+provider also enables Clerk's `resourceCache` (`__experimental_resourceCache`),
+backed by SecureStore, so a previously signed-in user can cold-start offline.
+Token caching alone is not enough: Clerk also needs its cached client and
+environment resources. First sign-in still requires a connection.
 
 The Clerk SDK is **`@clerk/expo` v4 (Core 3)**. The old `@clerk/clerk-expo`
 (Core 2) is deprecated. Google sign-in goes through `useSSO` (a Custom Tab +
 `sso-callback` deep link), **not** the native `useSignInWithGoogle`, so the
 optional `@clerk/expo-google-signin` package and its config plugin are not
-needed. Core 3 also exposes native components under `@clerk/expo/native`.
-
-The home header uses one of these: `<UserButton />` from `@clerk/expo/native` —
-a circular avatar that opens the native profile (manage account, security, sign
-out). It renders a real native view (Jetpack Compose on Android) and is **Beta**,
-so expect occasional API changes. Two consequences:
-
-- The `@clerk/expo` **config plugin** is now in `app.json` (`["@clerk/expo",
-  { "appleSignIn": false }]`; Apple sign-in off since the app is Android-only).
-  It autolinks the native module and adds Android packaging tweaks. Because it is
-  a native module, it needs a **new EAS dev build** to run on the phone — a JS
-  hot-reload alone will not add it.
-- Do **not** hot-reload the `UserButton` JS onto an older dev client that lacks
-  the native view: it resolves `requireNativeView('ClerkUserButtonView')` and the
-  home screen crashes. Rebuild the dev client first, then reload JS as usual.
-
-To theme the native surface toward the app's brand later, pass a `theme` JSON
-path to the plugin (see Clerk's "Theming Expo native components").
+needed. The header's account surface is app-owned so sign-out can checkpoint
+sync, remove the account-bound device database, and only then end the Clerk
+session. If that checkpoint cannot be confirmed, the app keeps the local copy
+and offers retry or an explicitly destructive discard.
 
 Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
 

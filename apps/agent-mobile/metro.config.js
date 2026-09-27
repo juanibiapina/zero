@@ -24,10 +24,6 @@ if (profile.clerkModules === 'fake') {
       __dirname,
       'src/lib/fake-auth/clerk-expo-resource-cache.ts',
     ),
-    '@clerk/expo/native': path.resolve(
-      __dirname,
-      'src/lib/fake-auth/clerk-expo-native.tsx',
-    ),
   };
   const defaultResolveRequest = config.resolver.resolveRequest;
   config.resolver.resolveRequest = (context, moduleName, platform) => {

@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { View } from 'react-native';
 import { type Project, type ProjectAttention } from '@zero/agent-core';
 
 import { __resetIconSuggestions } from '@/lib/icon-suggestions';
@@ -17,10 +16,7 @@ const mockPush = jest.fn<(href: string) => void>();
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ getToken: async () => 'token' }),
-}));
-const mockUserButton = () => <View accessibilityLabel="Account" />;
-jest.mock('@clerk/expo/native', () => ({
-  UserButton: () => mockUserButton(),
+  useUser: () => ({ user: null }),
 }));
 
 const project = (id: string, title: string, over: Partial<Project> = {}): Project => ({
@@ -43,8 +39,13 @@ const waiting = (id: string, projectId: string, createdAt: string): ProjectAtten
   createdAt,
 });
 
-async function renderScreen(seed: InMemoryTodoSeed = {}) {
+async function renderScreen(seed: InMemoryTodoSeed = {}, guest = false) {
   const data = createInMemoryTodoData(seed);
+  if (guest) {
+    data.workspaceStatus = 'guest';
+    data.signedIn = false;
+    data.connected = false;
+  }
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -89,6 +90,19 @@ describe('ProjectsScreen', () => {
     const created = [...screen.data.replica!.projects.collection.values()][0];
     expect(created?.title).toBe('Have a baby');
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith(`/projects/${created?.id}`));
+  });
+
+  it('creates a guest project without requesting account-only icon suggestions', async () => {
+    const fetch = jest.spyOn(global, 'fetch');
+    const screen = await renderScreen({}, true);
+    await fireEvent.press(screen.getByLabelText('Add'));
+    const input = screen.getByPlaceholderText('Name an outcome');
+    await fireEvent.changeText(input, 'Plan locally');
+    await fireEvent(input, 'submitEditing');
+
+    await waitFor(() => expect(screen.getByText('Plan locally')).toBeTruthy());
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
   });
 
   it('creates a loose task from the shared Add surface', async () => {

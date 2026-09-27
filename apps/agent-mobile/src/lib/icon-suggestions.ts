@@ -23,6 +23,7 @@ let cache: Store = {};
 const subscribers = new Set<() => void>();
 const inFlight = new Set<string>();
 let hydrated = false;
+let generation = 0;
 
 const emit = () => {
   for (const cb of subscribers) cb();
@@ -33,9 +34,12 @@ const emit = () => {
 // the stored copy, so an in-flight request is never clobbered by a stale disk read.
 const hydrate = async () => {
   if (hydrated) return;
+  const hydrateGeneration = generation;
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (raw) cache = { ...(JSON.parse(raw) as Store), ...cache };
+    if (raw && generation === hydrateGeneration) {
+      cache = { ...(JSON.parse(raw) as Store), ...cache };
+    }
   } catch {
     // A corrupt or unavailable store just starts empty.
   }
@@ -80,12 +84,13 @@ export const requestIconSuggestions = async (
   if (inFlight.has(id)) return;
   if (!opts.force && cache[id]) return;
   inFlight.add(id);
+  const requestGeneration = generation;
   set(id, { icons: cache[id]?.icons ?? [], basis, status: 'loading' });
   try {
     const icons = await fetchIconSuggestions(getToken, basis);
-    set(id, { icons, basis, status: 'ready' });
+    if (generation === requestGeneration) set(id, { icons, basis, status: 'ready' });
   } catch {
-    set(id, { icons: [], basis, status: 'error' });
+    if (generation === requestGeneration) set(id, { icons: [], basis, status: 'error' });
   } finally {
     inFlight.delete(id);
   }
@@ -98,9 +103,15 @@ export const useIconSuggestions = (
   useSyncExternalStore(subscribe, () => getIconSuggestions(id));
 
 // Test seam: drop the in-memory and persisted cache between tests.
-export const __resetIconSuggestions = () => {
+export const clearIconSuggestions = async () => {
+  generation += 1;
   cache = {};
   inFlight.clear();
   hydrated = true;
-  void AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+  emit();
+  await AsyncStorage.removeItem(STORAGE_KEY);
+};
+
+export const __resetIconSuggestions = () => {
+  void clearIconSuggestions().catch(() => {});
 };

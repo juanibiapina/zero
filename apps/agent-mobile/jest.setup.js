@@ -243,7 +243,7 @@ jest.mock('react-native-keyboard-controller', () => {
 });
 
 // @expo/ui renders real native views (requireNativeView), which is unavailable
-// under jest — like Clerk's UserButton. Provide a minimal mock that renders the
+// under jest. Provide a minimal mock that renders the
 // pieces the sheet content uses as plain, queryable RN elements: BottomSheet
 // shows its children only while presented; Button is a Pressable whose
 // accessibilityLabel is its `label`. Defined with React.createElement (no JSX)

@@ -3,7 +3,7 @@
 // reporting signed-in, the release E2E build silently breaks; this catches it.
 import { describe, expect, it } from '@jest/globals';
 
-import { E2E_FAKE_TOKEN, useAuth, useSSO } from '../clerk-expo';
+import { E2E_FAKE_TOKEN, useAuth, useSSO, useUser } from '../clerk-expo';
 import { resourceCache } from '../clerk-expo-resource-cache';
 import { tokenCache } from '../clerk-expo-token-cache';
 
@@ -17,6 +17,10 @@ describe('fake clerk auth', () => {
 
   it('exposes a non-crashing useSSO stub', () => {
     expect(typeof useSSO().startSSOFlow).toBe('function');
+  });
+
+  it('exposes account identity for the app-owned header', () => {
+    expect(useUser().user.primaryEmailAddress.emailAddress).toContain(E2E_FAKE_TOKEN);
   });
 
   it('keeps Clerk token and resource persistence inert', async () => {
