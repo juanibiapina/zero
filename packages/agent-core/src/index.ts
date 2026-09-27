@@ -126,14 +126,11 @@ export {
   TodoModel,
   type ProjectDefaults,
   type ProjectInput,
-  type LegacyTodoProvenance,
   type TaskInput,
   type TodoModelResult,
   type TodoProjection,
 } from "./taskdo/model";
 export type {
-  LegacyProject,
-  LegacyTask,
   ProjectAfterConflict,
   StoredProject,
   StoredTask,

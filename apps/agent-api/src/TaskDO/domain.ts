@@ -1,12 +1,11 @@
 import {
   TodoModel,
-  type LegacyProject as Project,
-  type LegacyTask as Task,
-  type LegacyTodoProvenance,
   type ProjectAfter,
   type ProjectAfterConflict,
   type ProjectDefaults,
   type ProjectState,
+  type StoredProject,
+  type StoredTask,
   type TodoIssue,
   type WaitingCondition,
 } from "@zero/agent-core";
@@ -32,6 +31,9 @@ export type TaskRecovery = {
 
 export type ProjectRecovery = { projectId: string; reason: "invalid-project" };
 
+type LegacyTodoProvenance = { sourceCaptureId?: string | null };
+export type Project = StoredProject & { sourceCaptureId: string | null };
+export type Task = StoredTask & { sourceCaptureId: string | null };
 export type LegacyProjectCreateOptions = ProjectDefaults & LegacyTodoProvenance;
 
 type TaskDomainOptions = {
@@ -45,10 +47,12 @@ type TaskDomainOptions = {
 // RPC result contracts. Todo row rules live in @zero/agent-core.
 export class TaskDomain {
   private readonly model: TodoModel;
+  private readonly store: MergeableStore;
   private readonly save: () => Promise<void>;
   private readonly isErased: () => Promise<boolean>;
 
   constructor({ store, save, isErased = async () => false, now = () => new Date() }: TaskDomainOptions) {
+    this.store = store;
     this.model = new TodoModel({ store, now });
     this.save = save;
     this.isErased = isErased;
@@ -63,11 +67,15 @@ export class TaskDomain {
   }
 
   private projectForLegacyRest(id: string): Project {
-    return this.model.getProjectWithLegacyProvenance(id)!;
+    const project = this.model.getProject(id)!;
+    const sourceCaptureId = this.store.getCell("projects", id, "sourceCaptureId");
+    return { ...project, sourceCaptureId: typeof sourceCaptureId === "string" ? sourceCaptureId : null };
   }
 
   private taskForLegacyRest(id: string): Task {
-    return this.model.getTaskWithLegacyProvenance(id)!;
+    const task = this.model.getTask(id)!;
+    const sourceCaptureId = this.store.getCell("tasks", id, "sourceCaptureId");
+    return { ...task, sourceCaptureId: typeof sourceCaptureId === "string" ? sourceCaptureId : null };
   }
 
   listProjects(): Project[] {
@@ -94,10 +102,13 @@ export class TaskDomain {
     provenance: LegacyTodoProvenance,
   ): Promise<Project | null> {
     await this.assertActive("Account erased");
-    const result = this.model.createProjectWithLegacyProvenance({ id, title, ...opts }, provenance);
+    const result = this.model.createProject({ id, title, ...opts });
     if (!result.ok) return null;
+    if (result.changed && provenance.sourceCaptureId) {
+      this.store.setCell("projects", id, "sourceCaptureId", provenance.sourceCaptureId);
+    }
     if (result.changed) await this.save();
-    return result.value;
+    return this.projectForLegacyRest(result.value.id);
   }
 
   async editProject(id: string, fields: { title?: string; icon?: string; description?: string | null }): Promise<Project | null> {
@@ -198,13 +209,13 @@ export class TaskDomain {
     recurrence: Recurrence | null = null,
   ): Promise<Task | null> {
     await this.assertActive();
-    const result = this.model.createTaskWithLegacyProvenance(
-      { id, text, showUpDate, projectId, recurrence },
-      provenance,
-    );
+    const result = this.model.createTask({ id, text, showUpDate, projectId, recurrence });
     if (!result.ok) return null;
+    if (result.changed && provenance.sourceCaptureId) {
+      this.store.setCell("tasks", id, "sourceCaptureId", provenance.sourceCaptureId);
+    }
     if (result.changed) await this.save();
-    return result.value;
+    return this.taskForLegacyRest(result.value.id);
   }
 
   async editTask(id: string, text: string): Promise<Task | null> {
@@ -271,7 +282,5 @@ export type {
   ProjectAfterConflict,
   ProjectDefaults,
   ProjectState,
-  LegacyProject as Project,
-  LegacyTask as Task,
   WaitingCondition,
 } from "@zero/agent-core";

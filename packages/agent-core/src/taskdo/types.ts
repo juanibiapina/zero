@@ -19,8 +19,6 @@ export type StoredTask = Task & {
   recurrenceDate: PlainDate | null;
 };
 
-export type LegacyTask = StoredTask & { sourceCaptureId: string | null };
-
 export type Project = {
   id: string;
   title: string;
@@ -31,7 +29,6 @@ export type Project = {
 };
 
 export type StoredProject = Project;
-export type LegacyProject = StoredProject & { sourceCaptureId: string | null };
 
 type ProjectAttentionBase = {
   id: string;
