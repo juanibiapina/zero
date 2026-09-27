@@ -1,3 +1,5 @@
+import { safeRandomUUID } from '@tanstack/db';
+
 export type TodoWorkspaceDescriptor = {
   version: 1;
   databaseName: string;
@@ -14,6 +16,7 @@ type TodoWorkspaceStorage = {
 type CreateTodoWorkspaceRegistryOptions = {
   storage: TodoWorkspaceStorage;
   storageKey: string;
+  createWorkspaceId?: () => string;
 };
 
 function assertAccountIdentity(accountId: string) {
@@ -75,6 +78,7 @@ function parseDescriptor(value: string): TodoWorkspaceDescriptor {
 export function createTodoWorkspaceRegistry({
   storage,
   storageKey,
+  createWorkspaceId = safeRandomUUID,
 }: CreateTodoWorkspaceRegistryOptions) {
   let tail: Promise<void> = Promise.resolve();
 
@@ -102,7 +106,32 @@ export function createTodoWorkspaceRegistry({
     return descriptor;
   };
 
+  const resolveGuest = async (): Promise<TodoWorkspaceDescriptor> => {
+    const stored = await storage.getItem(storageKey);
+    if (stored === null) {
+      const workspaceId = createWorkspaceId();
+      assertAccountIdentity(workspaceId);
+      const descriptor: TodoWorkspaceDescriptor = {
+        version: 1,
+        databaseName: `taskdo-workspace-${workspaceId}.sqlite`,
+        binding: { kind: 'unbound' },
+      };
+      await storage.setItem(storageKey, JSON.stringify(descriptor));
+      return descriptor;
+    }
+    const descriptor = parseDescriptor(stored);
+    if (descriptor.binding.kind !== 'unbound') {
+      throw new Error('Cannot open a bound todo workspace while signed out');
+    }
+    return descriptor;
+  };
+
   return {
+    forGuest(): Promise<TodoWorkspaceDescriptor> {
+      const operation = tail.then(resolveGuest);
+      tail = operation.then(() => {}, () => {});
+      return operation;
+    },
     forSignedInAccount(accountId: string): Promise<TodoWorkspaceDescriptor> {
       const operation = tail.then(() => resolveSignedInAccount(accountId));
       tail = operation.then(() => {}, () => {});

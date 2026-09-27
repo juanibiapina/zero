@@ -38,14 +38,14 @@ export function useTodoData(): TodoData {
     open: async (accountId, events) => {
       const descriptor = await workspace.forSignedInAccount(accountId);
       return {
-        replica: await openTaskDOReplica(
-          descriptor.databaseName,
-          accountId,
-          tokenSource.getToken,
+        replica: await openTaskDOReplica({
+          descriptor,
+          getToken: tokenSource.getToken,
           queryClient,
-          events.onSnapshot,
-          events.onConnection,
-        ),
+          onSnapshot: events.onSnapshot,
+          onConnection: events.onConnection,
+          onDurability: events.onDurability,
+        }),
         durability: { durable: true, error: null },
       };
     },

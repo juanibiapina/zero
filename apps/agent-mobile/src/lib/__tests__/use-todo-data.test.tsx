@@ -4,12 +4,15 @@ import type { TaskdoReplica } from '@zero/agent-core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { RUNTIME_PROFILE } from '../runtime-profile';
+import type { TodoWorkspaceDescriptor } from '../todo-workspace';
 import { useTodoData } from '../use-todo-data';
 
 const mockAuth = { userId: 'A' as string | null };
 const mockGetToken = jest.fn(async () => 'token');
 const mockQueryClient = {};
-const mockOpenReplica = jest.fn();
+const mockOpenReplica = jest.fn<(
+  options: { descriptor: TodoWorkspaceDescriptor },
+) => Promise<TaskdoReplica>>();
 
 jest.mock('@clerk/expo', () => ({
   useAuth: () => ({ userId: mockAuth.userId, getToken: mockGetToken }),
@@ -18,7 +21,7 @@ jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => mockQueryClient,
 }));
 jest.mock('../taskdo-replica', () => ({
-  openTaskDOReplica: (...args: unknown[]) => mockOpenReplica(...args),
+  openTaskDOReplica: (options: { descriptor: TodoWorkspaceDescriptor }) => mockOpenReplica(options),
 }));
 
 function replica(accountId: string, close: () => Promise<void>): TaskdoReplica {
@@ -43,8 +46,10 @@ describe('useTodoData', () => {
 
   it('opens the adopted database and refuses a later different Clerk account', async () => {
     const order: string[] = [];
-    mockOpenReplica.mockImplementation(async (databaseName, accountId) => {
-      order.push(`database ${String(databaseName)}`);
+    mockOpenReplica.mockImplementation(async ({ descriptor }) => {
+      if (descriptor.binding.kind !== 'bound') throw new Error('Expected bound workspace');
+      const { accountId } = descriptor.binding;
+      order.push(`database ${String(descriptor.databaseName)}`);
       order.push(`open ${String(accountId)}`);
       return replica(String(accountId), async () => { order.push(`close ${String(accountId)}`); });
     });
