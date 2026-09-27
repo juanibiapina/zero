@@ -1,31 +1,23 @@
 import { useAuth } from "@clerk/react";
 import { QueryClient } from "@tanstack/react-query";
 import {
-  type TaskdoReplica,
-  type TodoSnapshot,
+  createAccountTaskdoReplicaOwner,
+  type AccountTaskdoReplicaState,
 } from "@zero/agent-core";
 import {
   createContext,
   useContext,
   useEffect,
-  useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
-import { openBrowserTaskdoReplica, type BrowserTaskdoReplica } from "./browser-taskdo-replica";
+import { openBrowserTaskdoReplica } from "./browser-taskdo-replica";
 
-export type TodoData = {
-  replica: TaskdoReplica | null;
-  ready: boolean;
-  connected: boolean;
-  durable: boolean;
-  error: string | null;
-  durabilityError: string | null;
-  recoveries: TodoSnapshot["recoveries"];
-};
+export type TodoData = Omit<AccountTaskdoReplicaState, "accountId">;
 
 const TodoDataContext = createContext<TodoData | null>(null);
 
@@ -39,92 +31,41 @@ export function useTodoData(): TodoData {
   return value;
 }
 
-type State = {
-  accountId: string;
-  replica: BrowserTaskdoReplica | null;
-  connected: boolean;
-  durable: boolean;
-  durabilityError: string | null;
-  error: string | null;
-  recoveries: TodoSnapshot["recoveries"];
-};
-
 export function TodoDataProvider({ children }: { children: ReactNode }) {
   const { userId } = useAuth();
-  const closeChain = useRef<Promise<unknown>>(Promise.resolve());
-  const [state, setState] = useState<State | null>(null);
+  const [owner] = useState(() => createAccountTaskdoReplicaOwner({
+    initialDurability: { durable: false, error: null },
+    open: async (accountId, events) => {
+      const replica = await openBrowserTaskdoReplica(accountId, {
+        queryClient: new QueryClient(),
+        onSnapshot: events.onSnapshot,
+        onConnection: events.onConnection,
+        onDurability: events.onDurability,
+      });
+      return {
+        replica,
+        durability: { durable: replica.durable, error: replica.durabilityError },
+      };
+    },
+  }));
+  const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot, owner.getSnapshot);
 
   useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    let opened: BrowserTaskdoReplica | undefined;
-    const opening = closeChain.current.then(() => openBrowserTaskdoReplica(userId, {
-      queryClient: new QueryClient(),
-      onSnapshot: (snapshot) => {
-        if (!cancelled) setState((current) => ({
-          accountId: userId,
-          replica: current?.accountId === userId ? current.replica : null,
-          connected: current?.accountId === userId ? current.connected : false,
-          durable: current?.accountId === userId ? current.durable : false,
-          durabilityError: current?.accountId === userId ? current.durabilityError : null,
-          error: null,
-          recoveries: snapshot.recoveries,
-        }));
-      },
-      onConnection: (connected) => {
-        if (!cancelled) setState((current) => current?.accountId === userId
-          ? { ...current, connected }
-          : { accountId: userId, replica: null, connected, durable: false, durabilityError: null, error: null, recoveries: [] });
-      },
-      onDurability: (durable, durabilityError) => {
-        if (!cancelled) setState((current) => current?.accountId === userId
-          ? { ...current, durable, durabilityError }
-          : { accountId: userId, replica: null, connected: false, durable, durabilityError, error: null, recoveries: [] });
-      },
-    })).then((replica) => {
-      opened = replica;
-      if (cancelled) return replica.close().then(() => replica);
-      setState((current) => ({
-        accountId: userId,
-        replica,
-        connected: current?.accountId === userId ? current.connected : false,
-        durable: replica.durable,
-        durabilityError: replica.durabilityError,
-        error: null,
-        recoveries: replica.snapshot().recoveries,
-      }));
-      return replica;
-    }).catch((cause: unknown) => {
-      if (!cancelled) setState({
-        accountId: userId,
+    void owner.setAccount(userId ?? null);
+    return () => { void owner.setAccount(null); };
+  }, [owner, userId]);
+
+  const value: TodoData = state.accountId === (userId ?? null)
+    ? state
+    : {
         replica: null,
+        ready: false,
         connected: false,
         durable: false,
+        error: null,
         durabilityError: null,
-        error: String(cause),
         recoveries: [],
-      });
-      return undefined;
-    });
-
-    return () => {
-      cancelled = true;
-      closeChain.current = opening.then(async () => {
-        await opened?.close();
-      });
-    };
-  }, [userId]);
-
-  const active = state?.accountId === userId ? state : null;
-  const value: TodoData = {
-    replica: active?.replica ?? null,
-    ready: !!active?.replica,
-    connected: active?.connected ?? false,
-    durable: active?.durable ?? false,
-    error: active?.error ?? null,
-    durabilityError: active?.durabilityError ?? null,
-    recoveries: active?.recoveries ?? [],
-  };
+      };
 
   if (!value.ready) return value.error
     ? <div className="p-6 text-sm text-destructive">{value.error}</div>

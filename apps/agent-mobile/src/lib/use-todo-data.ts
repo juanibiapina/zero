@@ -1,73 +1,57 @@
 import { useAuth } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  type TaskdoReplica,
-  type TodoSnapshot,
+  createAccountTaskdoReplicaOwner,
+  type AccountTaskdoReplicaState,
 } from '@zero/agent-core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
+import type { TokenGetter } from './api';
 import { openTaskDOReplica } from './taskdo-replica';
 
-type Replica = Awaited<ReturnType<typeof openTaskDOReplica>>;
+export type TodoData = Omit<AccountTaskdoReplicaState, 'accountId' | 'durabilityError'>;
 
-export type TodoData = {
-  replica: TaskdoReplica | null;
-  error: string | null;
-  connected: boolean;
-  durable: boolean;
-  recoveries: TodoSnapshot['recoveries'];
-  ready: boolean;
-};
+class CurrentTokenSource {
+  constructor(private current: TokenGetter) {}
+
+  readonly getToken: TokenGetter = () => this.current();
+
+  update(getToken: TokenGetter) {
+    this.current = getToken;
+  }
+}
 
 export function useTodoData(): TodoData {
   const { userId, getToken } = useAuth();
   const queryClient = useQueryClient();
-  const tokenRef = useRef(getToken);
-  useEffect(() => { tokenRef.current = getToken; }, [getToken]);
-  const currentToken = useCallback(() => tokenRef.current(), []);
-  const [replica, setReplica] = useState<{ userId: string; value: TaskdoReplica } | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [recoveries, setRecoveries] = useState<TodoSnapshot['recoveries']>([]);
+  const [tokenSource] = useState(() => new CurrentTokenSource(getToken));
+  useEffect(() => { tokenSource.update(getToken); }, [getToken, tokenSource]);
+  const [owner] = useState(() => createAccountTaskdoReplicaOwner({
+    open: async (accountId, events) => ({
+      replica: await openTaskDOReplica(
+        accountId,
+        tokenSource.getToken,
+        queryClient,
+        events.onSnapshot,
+        events.onConnection,
+      ),
+      durability: { durable: true, error: null },
+    }),
+  }));
+  const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot, owner.getSnapshot);
 
   useEffect(() => {
-    let cancelled = false;
-    let opened: Replica | undefined;
-    if (!userId) return;
+    void owner.setAccount(userId ?? null);
+    return () => { void owner.setAccount(null); };
+  }, [owner, userId]);
 
-    void openTaskDOReplica(
-      userId,
-      currentToken,
-      queryClient,
-      (snapshot) => {
-        if (!cancelled) setRecoveries(snapshot.recoveries);
-      },
-      (live) => {
-        if (!cancelled) setConnected(live);
-      },
-    ).then((handle) => {
-      opened = handle;
-      if (cancelled) void handle.close();
-      else {
-        setReplica({ userId, value: handle });
-      }
-    }).catch((cause: unknown) => {
-      if (!cancelled) setError(String(cause));
-    });
-
-    return () => {
-      cancelled = true;
-      if (opened) void opened.close();
-    };
-  }, [userId, currentToken, queryClient]);
-
-  const active = replica && replica.userId === userId ? replica.value : null;
+  const active = state.accountId === (userId ?? null) ? state : null;
   return {
-    replica: active,
-    ready: !!active,
-    error,
-    connected,
-    durable: true,
-    recoveries,
+    replica: active?.replica ?? null,
+    ready: active?.ready ?? false,
+    error: active?.error ?? null,
+    connected: active?.connected ?? false,
+    durable: active?.durable ?? true,
+    recoveries: active?.recoveries ?? [],
   };
 }
