@@ -31,8 +31,12 @@ rows are replicated to the account-scoped client store. Client-facing Project:
 - `icon` — one emoji, default 📁;
 - `description` — nullable free text;
 - `state` — `in-play | backlog | done`, default `in-play`;
-- `createdAt` — ISO timestamp;
-- `sourceCaptureId` — nullable dormant provenance.
+- `createdAt` — ISO timestamp.
+
+Raw TaskDO rows may also contain the retired Capture workflow's nullable
+`sourceCaptureId` cell. Current Project projections and create interfaces omit
+it. Synchronization and storage preserve it unchanged, while legacy REST
+requests and responses retain the old field contract.
 
 ## Calculated display status
 

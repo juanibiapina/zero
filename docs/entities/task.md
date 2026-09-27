@@ -25,8 +25,8 @@ Capture data was disposable and dropped; task data was preserved (migration
 
 A single line of work: `text`, an optional `showUpDate`, an optional normalized
 `recurrence` plus its `recurrenceDate` cursor, a `completedAt` that flips when
-done, an optional `projectId` (loose when null), a manual-order `sortKey`, and a
-dormant `sourceCaptureId`. Minimal on purpose; no priority or subtasks. The show-up date is the **sole commitment gate** for a project task
+done, an optional `projectId` (loose when null), and a manual-order `sortKey`.
+Minimal on purpose; no priority or subtasks. The show-up date is the **sole commitment gate** for a project task
 (the former take-on/park star was retired).
 
 ## Vocabulary
@@ -99,8 +99,6 @@ are replicated to the account-scoped client store. Client-facing `Task`:
 - `completedAt` — nullable ISO timestamp; `null` = open.
 - `projectId` — nullable; the project this task belongs to, else loose
   (migration 0047).
-- `sourceCaptureId` — nullable; **dormant** provenance kept for a future Refine
-  (migration 0050).
 - `sortKey` — nullable fractional-index string (base-62) for the manual order;
   `null` sorts **last** (newest-at-bottom). Keyed in practice — `add` mints a
   trailing key, `reorder` mints one between neighbors, and a DO-init backfill keys
@@ -175,12 +173,18 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   TaskDO adds durable persistence and REST/RPC result mapping; web and mobile
   supply account-scoped persistence and synchronization adapters. See
   `docs/storage.md`.
+- **Legacy compatibility** — raw TaskDO rows may contain a nullable
+  `sourceCaptureId` cell created by the retired Capture workflow. It remains in
+  synchronization and storage unchanged. Current client projections and create
+  interfaces omit it; legacy REST requests may still send it and REST responses
+  still return its stored value or `null`.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, every open task in manual order (future-dated
     included); the client splits Home and Upcoming.
   - `POST /api/tasks { id, text, showUpDate?, projectId?, sourceCaptureId? }`
     → `201 { task }`; `showUpDate` optional (a loose task omits it). The server
-    dedupes on the client `id`. `400` on empty text or a non-UUID id.
+    dedupes on the client `id`. `sourceCaptureId` is accepted only for legacy
+    client compatibility. `400` on empty text or a non-UUID id.
   - `POST /api/tasks/{id}/complete` and `/reopen` → `200 { task }`, `404` unknown.
   - `PATCH /api/tasks/{id} { text?, showUpDate?, sortKey?, projectId? }`
     → `200 { task }`, `404` unknown, `400` on empty text / malformed date /
@@ -200,6 +204,6 @@ are replicated to the account-scoped client store. Client-facing `Task`:
 
 ## Next
 
-- **Refine returns** over all tasks (the dormant `sourceCaptureId`).
+- **AI-assisted refinement** of a loose Task into a Project proposal.
 - **Agent `create_task` tool.**
 - Likely never (not used in Todoist today): subtasks, priorities, labels.

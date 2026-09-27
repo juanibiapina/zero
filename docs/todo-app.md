@@ -649,8 +649,8 @@ Home is one reorderable `sortKey`-ordered list (swipe-right to postpone,
 long-press/grip to reorder, complete with the single bottom Undo, tap to
 rename/schedule); Upcoming lists every future-dated open task grouped by day.
 Migration 0051 drops `captures` and preserves every `tasks` row with a nullable
-`showUpDate` + backfilled `sortKey`; the dormant `sourceCaptureId` stays for a
-future Refine. Shared helpers moved onto the task module (`homeTasks` gained the
+`showUpDate` + backfilled `sortKey`; `sourceCaptureId` stays as inert legacy
+storage and REST compatibility data. Shared helpers moved onto the task module (`homeTasks` gained the
 shown-up gate + sortKey ordering; `upcomingSections`, `orderKeyBetween` /
 `compareByOrder`, and the date helpers were ported from the deleted `captures/`).
 Server + agent-core + web suites pass; mobile unit tests pass and **Pixel 7
@@ -984,7 +984,7 @@ Next:
 
 - **AI-assisted Task refinement into a Project** — adapt the original
   Capture-era exploration to the current Task-only model
-  (`docs/plans/todo-capture-to-project-ai.md`).
+  (`docs/plans/todo-task-to-project-ai.md`).
 - **AI-resolve a waiting condition** — from email/calendar/content.
 - later: agent `create_task` tool and structured waiting-condition kinds on
   mobile.
