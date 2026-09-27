@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { TaskdoReplica, TodoSnapshot } from "./replica";
 import {
   createAccountTaskdoReplicaOwner,
+  selectAccountTaskdoReplicaState,
   type AccountTaskdoReplicaEvents,
+  type AccountTaskdoReplicaState,
   type OpenAccountTaskdoReplica,
 } from "./account-replica-owner";
 
@@ -38,6 +40,72 @@ function replica(id: string, close = vi.fn(async () => {})): TaskdoReplica {
 function opened(value: TaskdoReplica, durable = true) {
   return { replica: value, durability: { durable, error: null } };
 }
+
+function accountState(accountId: string | null): AccountTaskdoReplicaState {
+  return {
+    accountId,
+    replica: accountId ? replica(accountId) : null,
+    ready: accountId !== null,
+    connected: accountId !== null,
+    durable: false,
+    error: accountId ? "current error" : null,
+    durabilityError: "current durability error",
+    recoveries: accountId ? snapshot(accountId).recoveries : [],
+  };
+}
+
+describe("account TaskDO replica client state", () => {
+  it("selects the matching account without exposing its identity", () => {
+    const state = selectAccountTaskdoReplicaState(accountState("A"), "A");
+
+    expect(state).toMatchObject({
+      ready: true,
+      connected: true,
+      durable: false,
+      error: "current error",
+      durabilityError: "current durability error",
+      recoveries: snapshot("A").recoveries,
+    });
+    expect(state).not.toHaveProperty("accountId");
+  });
+
+  it("hides a stale account with the requested fallback durability", () => {
+    expect(selectAccountTaskdoReplicaState(
+      accountState("A"),
+      "B",
+      { durable: false, error: "not persisted" },
+    )).toEqual({
+      replica: null,
+      ready: false,
+      connected: false,
+      durable: false,
+      error: null,
+      durabilityError: "not persisted",
+      recoveries: [],
+    });
+  });
+
+  it("uses durable local state by default while hiding a stale account", () => {
+    expect(selectAccountTaskdoReplicaState(accountState("A"), "B")).toMatchObject({
+      replica: null,
+      ready: false,
+      durable: true,
+      durabilityError: null,
+    });
+  });
+
+  it("selects the signed-out state when both account identities are null", () => {
+    const state = selectAccountTaskdoReplicaState(accountState(null), null);
+
+    expect(state).toMatchObject({
+      replica: null,
+      ready: false,
+      durable: false,
+      durabilityError: "current durability error",
+    });
+    expect(state).not.toHaveProperty("accountId");
+  });
+});
 
 describe("account TaskDO replica owner", () => {
   it("does not open without an account and immediately hides a signed-out account", async () => {

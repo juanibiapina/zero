@@ -2,14 +2,15 @@ import { useAuth } from '@clerk/expo';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   createAccountTaskdoReplicaOwner,
-  type AccountTaskdoReplicaState,
+  selectAccountTaskdoReplicaState,
+  type TaskdoReplicaClientState,
 } from '@zero/agent-core';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import type { TokenGetter } from './api';
 import { openTaskDOReplica } from './taskdo-replica';
 
-export type TodoData = Omit<AccountTaskdoReplicaState, 'accountId' | 'durabilityError'>;
+export type TodoData = TaskdoReplicaClientState;
 
 class CurrentTokenSource {
   constructor(private current: TokenGetter) {}
@@ -45,13 +46,5 @@ export function useTodoData(): TodoData {
     return () => { void owner.setAccount(null); };
   }, [owner, userId]);
 
-  const active = state.accountId === (userId ?? null) ? state : null;
-  return {
-    replica: active?.replica ?? null,
-    ready: active?.ready ?? false,
-    error: active?.error ?? null,
-    connected: active?.connected ?? false,
-    durable: active?.durable ?? true,
-    recoveries: active?.recoveries ?? [],
-  };
+  return selectAccountTaskdoReplicaState(state, userId ?? null);
 }

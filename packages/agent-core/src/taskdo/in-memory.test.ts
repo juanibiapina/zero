@@ -1,8 +1,38 @@
 import { describe, expect, it } from "vitest";
 
-import { createInMemoryTaskdoReplica } from "./in-memory";
+import {
+  createInMemoryTaskdoClientState,
+  createInMemoryTaskdoReplica,
+} from "./in-memory";
 
 describe("in-memory TaskDO replica", () => {
+  it("creates ready client state from the replica snapshot", async () => {
+    const { state, replica } = createInMemoryTaskdoClientState({
+      tasks: [{
+        id: "orphan", text: "Orphan", projectId: "missing", showUpDate: null,
+        recurrence: null, recurrenceDate: null,
+        completedAt: null, createdAt: "2026-09-25T10:00:00.000Z", sortKey: null,
+      }],
+    });
+
+    expect(state).toEqual({
+      replica,
+      ready: true,
+      connected: true,
+      durable: true,
+      error: null,
+      durabilityError: null,
+      recoveries: [{
+        table: "tasks",
+        id: "orphan",
+        text: "Orphan",
+        reason: "Missing Project",
+        repair: "make-task-loose",
+      }],
+    });
+    await replica.close();
+  });
+
   it("seeds all todo entities behind the same public replica interface", async () => {
     const replica = createInMemoryTaskdoReplica({
       projects: [{

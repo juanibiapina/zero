@@ -2,7 +2,8 @@ import { useAuth } from "@clerk/react";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createAccountTaskdoReplicaOwner,
-  type AccountTaskdoReplicaState,
+  selectAccountTaskdoReplicaState,
+  type TaskdoReplicaClientState,
 } from "@zero/agent-core";
 import {
   createContext,
@@ -17,7 +18,7 @@ import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { openBrowserTaskdoReplica } from "./browser-taskdo-replica";
 
-export type TodoData = Omit<AccountTaskdoReplicaState, "accountId">;
+export type TodoData = TaskdoReplicaClientState;
 
 const TodoDataContext = createContext<TodoData | null>(null);
 
@@ -55,17 +56,11 @@ export function TodoDataProvider({ children }: { children: ReactNode }) {
     return () => { void owner.setAccount(null); };
   }, [owner, userId]);
 
-  const value: TodoData = state.accountId === (userId ?? null)
-    ? state
-    : {
-        replica: null,
-        ready: false,
-        connected: false,
-        durable: false,
-        error: null,
-        durabilityError: null,
-        recoveries: [],
-      };
+  const value = selectAccountTaskdoReplicaState(
+    state,
+    userId ?? null,
+    { durable: false, error: null },
+  );
 
   if (!value.ready) return value.error
     ? <div className="p-6 text-sm text-destructive">{value.error}</div>

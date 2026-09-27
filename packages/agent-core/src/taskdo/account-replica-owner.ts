@@ -16,6 +16,8 @@ export type AccountTaskdoReplicaState = {
   recoveries: TodoSnapshot["recoveries"];
 };
 
+export type TaskdoReplicaClientState = Omit<AccountTaskdoReplicaState, "accountId">;
+
 export type AccountTaskdoReplicaEvents = {
   onSnapshot: (snapshot: TodoSnapshot) => void;
   onConnection: (connected: boolean) => void;
@@ -46,12 +48,10 @@ export type CreateAccountTaskdoReplicaOwnerOptions = {
 
 const DEFAULT_DURABILITY: TodoReplicaDurability = { durable: true, error: null };
 
-function emptyState(
-  accountId: string | null,
+function emptyClientState(
   durability: TodoReplicaDurability,
-): AccountTaskdoReplicaState {
+): TaskdoReplicaClientState {
   return {
-    accountId,
     replica: null,
     ready: false,
     connected: false,
@@ -60,6 +60,25 @@ function emptyState(
     durabilityError: durability.error,
     recoveries: [],
   };
+}
+
+function emptyState(
+  accountId: string | null,
+  durability: TodoReplicaDurability,
+): AccountTaskdoReplicaState {
+  return { accountId, ...emptyClientState(durability) };
+}
+
+export function selectAccountTaskdoReplicaState(
+  state: AccountTaskdoReplicaState,
+  expectedAccountId: string | null,
+  fallbackDurability: TodoReplicaDurability = DEFAULT_DURABILITY,
+): TaskdoReplicaClientState {
+  if (state.accountId !== expectedAccountId) {
+    return emptyClientState(fallbackDurability);
+  }
+  const { accountId: _accountId, ...clientState } = state;
+  return clientState;
 }
 
 export function createAccountTaskdoReplicaOwner({

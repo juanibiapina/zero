@@ -115,15 +115,18 @@ export {
 } from "./taskdo/replica-session";
 export {
   createAccountTaskdoReplicaOwner,
+  selectAccountTaskdoReplicaState,
   type AccountTaskdoReplicaEvents,
   type AccountTaskdoReplicaOwner,
   type AccountTaskdoReplicaState,
   type CreateAccountTaskdoReplicaOwnerOptions,
   type OpenAccountTaskdoReplica,
   type OpenedAccountTaskdoReplica,
+  type TaskdoReplicaClientState,
   type TodoReplicaDurability,
 } from "./taskdo/account-replica-owner";
 export {
+  createInMemoryTaskdoClientState,
   createInMemoryTaskdoReplica,
   type InMemoryTodoSeed,
 } from "./taskdo/in-memory";

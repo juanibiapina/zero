@@ -4,6 +4,7 @@ import { createMergeableStore } from "tinybase";
 import type { Project } from "../projects/types";
 import type { Task } from "../taskdo/types";
 import type { ProjectAttention } from "../taskdo/types";
+import type { TaskdoReplicaClientState } from "./account-replica-owner";
 import { createTaskdoReplica, type TaskdoReplica } from "./replica";
 
 export type InMemoryTodoSeed = {
@@ -45,4 +46,23 @@ export function createInMemoryTaskdoReplica(seed: InMemoryTodoSeed = {}): Taskdo
     queryClient: new QueryClient(),
     queryKeyScope: ["test"],
   });
+}
+
+export function createInMemoryTaskdoClientState(seed: InMemoryTodoSeed = {}): {
+  state: TaskdoReplicaClientState;
+  replica: TaskdoReplica;
+} {
+  const replica = createInMemoryTaskdoReplica(seed);
+  return {
+    replica,
+    state: {
+      replica,
+      ready: true,
+      connected: true,
+      durable: true,
+      error: null,
+      durabilityError: null,
+      recoveries: replica.snapshot().recoveries,
+    },
+  };
 }
