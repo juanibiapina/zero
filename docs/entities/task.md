@@ -161,8 +161,7 @@ are replicated to the account-scoped client store. Client-facing `Task`:
 
 - **UI** — mobile Home and Projects tabs, with Upcoming under Browse
   (`apps/agent-mobile`), and web `/home` (Home) + `/upcoming`
-  (`apps/agent-web`). `/captures` remains a compatibility redirect that replaces
-  the old URL with `/home`. Home and project screens are reorderable on both surfaces:
+  (`apps/agent-web`). Home and project screens are reorderable on both surfaces:
   web uses a drag handle (also keyboard-operable), mobile uses long-press drag.
   A mobile Home row swipes right to Tomorrow; a mobile project row swipes right
   to Today. Both tap the circle to complete and the row to open the detail sheet.

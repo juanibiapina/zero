@@ -2,7 +2,7 @@
 
 User-facing changes to the web app, most recent first.
 
-- 2026-09-27: Home now uses the clearer `/home` address. Existing `/captures` bookmarks continue to open Home.
+- 2026-09-27: Home now uses `/home` as its sole address; the retired `/captures` address is no longer supported.
 
 - 2026-09-26: Tasks and Projects now stay available offline, update live across devices and browser tabs, and recover automatically after reconnecting.
 

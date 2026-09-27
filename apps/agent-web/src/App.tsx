@@ -58,7 +58,6 @@ function AuthGate() {
         <Route element={<AppShell />}>
           <Route index element={<HomeRoute />} />
           <Route path="home" element={<HomePage />} />
-          <Route path="captures" element={<Navigate to="/home" replace />} />
           {/* The second section: tasks scheduled for a future day. */}
           <Route path="upcoming" element={<UpcomingPage />} />
           {/* The Projects list (entity #3). */}
