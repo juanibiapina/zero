@@ -10,6 +10,7 @@ export type TaskdoSynchronizer = {
 
 export type TaskdoSyncLifecycle = {
   start(): void;
+  checkpoint(): Promise<void>;
   reconnect(): Promise<void>;
   refresh(): Promise<void>;
   stop(): Promise<void>;
@@ -142,6 +143,18 @@ export function createTaskdoSyncLifecycle({
   return {
     start() {
       void connect();
+    },
+    async checkpoint() {
+      await reconnect();
+      const active = session;
+      if (!active?.synchronizer || active.socket.readyState !== SOCKET_OPEN) {
+        throw new Error("Sync unavailable");
+      }
+      await active.synchronizer.load();
+      if (session !== active || active.socket.readyState !== SOCKET_OPEN) {
+        throw new Error("Sync unavailable");
+      }
+      await active.synchronizer.save();
     },
     reconnect,
     async refresh() {

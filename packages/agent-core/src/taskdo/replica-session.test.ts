@@ -28,7 +28,15 @@ const flush = async () => {
   for (let turn = 0; turn < 8; turn++) await Promise.resolve();
 };
 
-function setup({ refreshLocal }: { refreshLocal?: () => Promise<void> } = {}) {
+function setup({
+  canConnect,
+  persistLocal,
+  refreshLocal,
+}: {
+  canConnect?: () => boolean;
+  persistLocal?: () => Promise<void>;
+  refreshLocal?: () => Promise<void>;
+} = {}) {
   const store = createMergeableStore();
   const socket = new OpenSocket();
   const snapshots: number[] = [];
@@ -47,9 +55,11 @@ function setup({ refreshLocal }: { refreshLocal?: () => Promise<void> } = {}) {
     store,
     queryClient: new QueryClient(),
     queryKeyScope: ["test"],
+    save: persistLocal,
     onSnapshot: (snapshot) => snapshots.push(snapshot.tasks.length),
     refreshLocal,
     sync: {
+      canConnect,
       onConnection: (connected) => connections.push(connected),
       openSocket: () => socket as unknown as WebSocket,
       createSynchronizer: () => synchronizer,
@@ -84,6 +94,86 @@ describe("synced TaskDO replica session", () => {
     await session.refresh();
 
     expect(order).toEqual(["local", "load", "save"]);
+    await session.close();
+  });
+
+  it("checkpoints local persistence before pulling and acknowledging the merged state", async () => {
+    const order: string[] = [];
+    let acknowledge: (() => void) | undefined;
+    const acknowledged = new Promise<void>((resolve) => { acknowledge = resolve; });
+    const { load, save, session } = setup({
+      persistLocal: async () => { order.push("local"); },
+    });
+    load.mockImplementation(async () => { order.push("load"); });
+    save.mockImplementation(async () => {
+      order.push("save");
+      await acknowledged;
+    });
+    await flush();
+
+    let settled = false;
+    const checkpoint = session.checkpoint().then(() => { settled = true; });
+    await flush();
+
+    expect(order).toEqual(["local", "load", "save"]);
+    expect(settled).toBe(false);
+    acknowledge?.();
+    await checkpoint;
+    expect(settled).toBe(true);
+    await session.close();
+  });
+
+  it("rejects a checkpoint when synchronization is unavailable", async () => {
+    const { session, socket } = setup({ canConnect: () => false });
+
+    await expect(session.checkpoint()).rejects.toThrow("Sync unavailable");
+    expect(socket.closeCount).toBe(0);
+    await session.close();
+  });
+
+  it("does not tear down synchronization while a checkpoint awaits acknowledgement", async () => {
+    let acknowledge: (() => void) | undefined;
+    const acknowledged = new Promise<void>((resolve) => { acknowledge = resolve; });
+    const { destroy, save, session, socket } = setup();
+    save.mockImplementation(() => acknowledged);
+    await flush();
+
+    const checkpoint = session.checkpoint();
+    await flush();
+    let closed = false;
+    const close = session.close().then(() => { closed = true; });
+    await flush();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(destroy).not.toHaveBeenCalled();
+    expect(socket.closeCount).toBe(0);
+    expect(closed).toBe(false);
+
+    acknowledge?.();
+    await checkpoint;
+    await close;
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(socket.closeCount).toBe(1);
+  });
+
+  it("serializes reconnect behind an in-flight checkpoint", async () => {
+    let acknowledge: (() => void) | undefined;
+    const acknowledged = new Promise<void>((resolve) => { acknowledge = resolve; });
+    const { save, session } = setup();
+    save.mockImplementation(() => acknowledged);
+    await flush();
+
+    const checkpoint = session.checkpoint();
+    await flush();
+    let reconnected = false;
+    const reconnect = session.reconnect().then(() => { reconnected = true; });
+    await flush();
+
+    expect(reconnected).toBe(false);
+    acknowledge?.();
+    await checkpoint;
+    await reconnect;
+    expect(reconnected).toBe(true);
     await session.close();
   });
 

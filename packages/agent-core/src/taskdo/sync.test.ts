@@ -196,6 +196,19 @@ describe("TaskDO synchronization lifecycle", () => {
     await refresh;
   });
 
+  it("checkpoints through a newly established connection", async () => {
+    const { lifecycle, sockets, synchronizers } = setup();
+
+    const checkpoint = lifecycle.checkpoint();
+    await flush();
+    expect(sockets).toHaveLength(1);
+    sockets[0].open();
+    await checkpoint;
+
+    expect(synchronizers[0].load.mock.calls).toHaveLength(1);
+    expect(synchronizers[0].save.mock.calls).toHaveLength(1);
+  });
+
   it("reports socket and synchronizer setup failures as disconnected", async () => {
     const socketFailure = setup();
     socketFailure.lifecycle.start();

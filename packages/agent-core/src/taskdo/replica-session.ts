@@ -10,6 +10,7 @@ import {
 } from "./sync";
 
 export type SyncedTaskdoReplicaSession = TaskdoReplica & {
+  checkpoint: () => Promise<void>;
   reconnect: () => Promise<void>;
 };
 
@@ -35,29 +36,44 @@ export function createSyncedTaskdoReplicaSession({
   sync: syncOptions,
   ...clock
 }: CreateSyncedTaskdoReplicaSessionOptions): SyncedTaskdoReplicaSession {
+  const persistLocal = save ?? (async () => {});
+  let closed = false;
+  let sessionOperations: Promise<void> = Promise.resolve();
+  const runSessionOperation = <T>(operation: () => Promise<T>): Promise<T> => {
+    if (closed) return Promise.reject(new Error("Replica session is closed"));
+    const result = sessionOperations.then(operation);
+    sessionOperations = result.then(() => {}, () => {});
+    return result;
+  };
   let refreshSession = async () => {};
   const replica = createTaskdoReplica({
     store,
     queryClient,
     queryKeyScope,
-    save,
+    save: persistLocal,
     refresh: () => refreshSession(),
     ...clock,
   });
   const unsubscribe = replica.subscribe(onSnapshot);
   const sync = createTaskdoSyncLifecycle({ store, ...syncOptions });
-  refreshSession = async () => {
+  refreshSession = () => runSessionOperation(async () => {
     await refreshLocal?.();
     await sync.refresh();
-  };
+  });
   sync.start();
 
   let closePromise: Promise<void> | undefined;
   return {
     ...replica,
-    reconnect: () => sync.reconnect(),
+    checkpoint: () => runSessionOperation(async () => {
+      await persistLocal();
+      await sync.checkpoint();
+    }),
+    reconnect: () => closed ? Promise.resolve() : runSessionOperation(() => sync.reconnect()),
     close() {
       closePromise ??= (async () => {
+        closed = true;
+        await sessionOperations;
         await sync.stop();
         unsubscribe();
         await replica.close();
