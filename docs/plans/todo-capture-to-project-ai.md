@@ -43,8 +43,8 @@ value alone (projects created by hand) and de-risks the rest. Delivered as three
 **vertical sub-slices, each web + mobile** — A1 create & list, A2 status
 (grouping + change, via a tap-to-open detail sheet), A3 enrich (icon/title/
 description in the sheet) — then the Rule-of-Three base extraction as a non-vertical
-follow-up. All four shipped (extraction: #66). **Detailed plan:
-`docs/plans/todo-project-entity.md`.**
+follow-up. All four shipped (extraction: #66). The shipped Project model is
+documented in `docs/entities/project.md`.
 
 **Slice B — un-park Task under Project.** Add `projectId` + `sourceCaptureId`
 columns (both already named as "next" in `docs/entities/task.md`). A project shows

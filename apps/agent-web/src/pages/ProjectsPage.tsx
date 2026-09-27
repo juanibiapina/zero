@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 // Projects is a status-grouped list of outcome-oriented containers. The add
 // field creates a Project by name; tapping a row navigates to that project's own
 // screen (/projects/:id — a destination, not a bottom sheet; see
-// docs/plans/todo-project-detail-rework.md). Done and delete are still deferred
+// docs/entities/project.md). Done and delete are still deferred
 // behind an inline ~5s Undo here on the list, whether triggered here or handed
 // back from the detail screen via navigation state.
 export function ProjectsPage() {

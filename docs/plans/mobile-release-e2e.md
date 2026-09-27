@@ -1,7 +1,7 @@
 # Plan: Mobile release E2E suite (hermetic, mocked auth, local worker)
 
-> Superseded for local Pixel execution by
-> `docs/plans/todo-mobile-metro-e2e.md`. The Pixel now keeps its development
+> Superseded for local Pixel execution by the harness documented in
+> `apps/agent-mobile/README.md`. The Pixel now keeps its development
 > client and loads hermetic JavaScript from Metro. This plan's fake-auth and
 > local-Worker rationale still applies to the optional emulator adapter.
 

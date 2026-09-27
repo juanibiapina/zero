@@ -11,7 +11,7 @@ export const unstable_settings = { initialRouteName: 'index' };
 // sheet — while the bottom tab bar stays visible. Headers are off; each screen
 // renders its own chrome (the list its ScreenHeader, the detail a back row), and
 // the native swipe / hardware Back pops the stack. See
-// docs/plans/todo-project-detail-rework.md.
+// docs/entities/project.md.
 export default function ProjectsStackLayout() {
   return <Stack screenOptions={{ headerShown: false }} />;
 }

@@ -73,7 +73,7 @@ import { requestIconSuggestions } from "@/lib/icon-suggestions";
 // dropped in and the project tasks you have taken on (availability-gated by
 // homeTasks). There is no separate capture inbox after the single-list merge;
 // the quick-add defaults to a task and can switch to a project. See
-// docs/plans/todo-single-list-1-merge.md.
+// docs/entities/task.md.
 export function HomePage() {
   const { replica } = useTodoData();
   return (
@@ -102,7 +102,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   } | null>(null);
   // Create-time date and project for a task quick-add (the mini-composer). Both
   // default to "unset": null date + no project = a loose Home task. Reset after
-  // each add. See docs/plans/todo-retire-take-on.md.
+  // each add. See docs/entities/task.md.
   const [date, setDate] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

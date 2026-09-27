@@ -68,8 +68,8 @@ Capture/Task split proved premature — the user works in one list the way they 
 in Todoist. This went through two stages. First the separate **Today tab was
 removed** and the app was one **Captures** list, with Capture growing the moves a
 single list wants (postpone to a day, drag-to-reorder, the detail sheet + date
-scheduler) while Task sat parked. Then the **single-list merge** (2026-09-12,
-`docs/plans/todo-single-list-1-merge.md`) finished the job the other way round:
+scheduler) while Task sat parked. Then the **single-list merge** finished the
+job the other way round on 2026-09-12:
 **Capture was collapsed into Task**, so Task is the single entity and the one
 list, and Capture is deleted. The scheduling/reorder/visibility behavior that had
 been built on Capture moved onto Task. See the shipped entry below and
@@ -90,8 +90,8 @@ committed.
 - **Capture** — **retired.** Collapsed into Task by the single-list merge
   (2026-09-12); a quick-add with no project is a loose task now. Tombstone at
   `docs/entities/capture.md`.
-- **Project** — the first container, entity #3 (plan:
-  `docs/plans/todo-project-entity.md`; source of truth: `docs/entities/project.md`).
+- **Project** — the first container, entity #3 (source of truth:
+  `docs/entities/project.md`).
   Goal-oriented (baby, diploma, buy a house, watch a movie), sometimes
   maintenance-oriented (a "baby maintenance" project should maybe not exist). Has
   a nice icon (baby face, diploma), persisted lifecycle state (in-play / backlog /
@@ -177,14 +177,13 @@ merge coordination, and visible recovery. Public todo REST routes remain for
 older installed clients and other callers. See
 [the replica plan](plans/todo-local-replica-sync.md).
 
-Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu. Plan: `docs/plans/todo-browse-upcoming-mobile.md`.
+Implemented (2026-09-24): **Browse on mobile.** Home and Projects stay direct tabs; the rightmost Browse tab opens a menu with Upcoming. Its task list, editing, completion, and future-date rules stay the same. Android Back and the visible Browse action return to the menu.
 
 Implemented (2026-09-24): **Reorder tasks on a web project page.** The project's
 Tasks region now follows the saved manual order and has a handle for pointer and
 keyboard moves. A move writes only the task's existing global order key and
 persists through refresh or navigation; completion and date chips remain separate
-actions. See `docs/entities/task.md` for ordering and
-`docs/plans/todo-web-project-task-reorder.md` for the implementation plan.
+actions. See `docs/entities/task.md` for ordering.
 
 Implemented and Pixel-verified (2026-09-17): **Save Project descriptions before
 workspace actions and exits.** The Project workspace now owns the description
@@ -201,8 +200,7 @@ in dashboard Worker tests. The hermetic Pixel 7 run passed both behavior flows:
 it retained the existing loose Task and a newly created Project description
 through Back and reopening, then the local Worker returned exactly that Task and
 described Project. Production stores, launcher state, development-client
-identity, reverse ports, and harness processes remained isolated. Plan:
-`docs/plans/todo-project-description-save.md`.
+identity, reverse ports, and harness processes remained isolated.
 
 Implemented and Pixel-verified (2026-09-17): **Create Tasks from the mobile
 Projects list.** The Projects-list Add drawer now offers Project and Task modes,
@@ -235,11 +233,11 @@ Project Task completion with Waiting for…, default-collapsed After, and light,
 dark, and 1.3× font layouts. Both Projects and their cascaded Task/relationships
 were deleted and device settings restored. Project-completion relationship
 restoration remains package-tested but cannot be proven end to end until the new
-Worker is deployed. Plan: `docs/plans/todo-project-waiting-after.md`.
+Worker is deployed.
 
-Implemented and Pixel-verified (2026-09-16): **Recurring tasks and natural-language dates.** Task quick-add on web and mobile recognizes one-time dates and date-level repeat phrases through the new private `@zeroapps/recurrence` package, which hides Chrono, Temporal, and RRULE behind normalized versioned JSON. Tasks persist a separate recurrence cursor so one-off postpones do not move the pattern. Scheduled `every` rules catch up every missed occurrence, `every!` rules advance from completion, invalid month days clamp backward, inclusive end dates finish normally, and the existing single Undo restores the prior occurrence. Migration 0055 adds recurrence JSON + cursor columns; completion is expected-cursor guarded so offline replay cannot advance twice. **Device proof:** a throwaway `every day` task created through natural-language quick-add persisted its `every day` summary, advanced from Home into Upcoming, returned through Undo, and disappeared through Complete forever; production Workers Logs recorded two occurrence completions, one occurrence Undo, and the permanent completion. The throwaway task was removed. A follow-up now places the exact parsed schedule phrase on a colored inline background on mobile and web; tapping/clicking it keeps that phrase as title text and moves recognition to the previous date phrase in the same draft. On the Pixel 7, light and dark themes showed aligned ordinary text and high-contrast schedule badges, a long recurrence wrapped cleanly across three lines, tapping the active `Friday` badge moved the background and schedule summary to `today` without losing focus, recognized submission stored the cleaned title, and every throwaway task or draft was completed or discarded. Plans: `docs/plans/todo-recurring-tasks.md` and `docs/plans/todo-inline-schedule-highlighting.md`.
+Implemented and Pixel-verified (2026-09-16): **Recurring tasks and natural-language dates.** Task quick-add on web and mobile recognizes one-time dates and date-level repeat phrases through the new private `@zeroapps/recurrence` package, which hides Chrono, Temporal, and RRULE behind normalized versioned JSON. Tasks persist a separate recurrence cursor so one-off postpones do not move the pattern. Scheduled `every` rules catch up every missed occurrence, `every!` rules advance from completion, invalid month days clamp backward, inclusive end dates finish normally, and the existing single Undo restores the prior occurrence. Migration 0055 adds recurrence JSON + cursor columns; completion is expected-cursor guarded so offline replay cannot advance twice. **Device proof:** a throwaway `every day` task created through natural-language quick-add persisted its `every day` summary, advanced from Home into Upcoming, returned through Undo, and disappeared through Complete forever; production Workers Logs recorded two occurrence completions, one occurrence Undo, and the permanent completion. The throwaway task was removed. A follow-up now places the exact parsed schedule phrase on a colored inline background on mobile and web; tapping/clicking it keeps that phrase as title text and moves recognition to the previous date phrase in the same draft. On the Pixel 7, light and dark themes showed aligned ordinary text and high-contrast schedule badges, a long recurrence wrapped cleanly across three lines, tapping the active `Friday` badge moved the background and schedule summary to `today` without losing focus, recognized submission stored the cleaned title, and every throwaway task or draft was completed or discarded.
 
-Implemented and Pixel-verified (2026-09-16): **Smaller clear-Home launcher icon.** The user selected candidate A from a Pixel-corrected comparison: the current checkmark path and material strokes are both 15% smaller, leaving visible white space around the mark under Pixel Launcher's circular mask. The adaptive foreground now occupies 444 × 323 pixels instead of 520 × 377 while preserving the checkmark's angle, proportions, graphite material, center, and safe-zone containment. Two generator runs produced identical hashes across all 31 tracked outputs; only the empty SVG, its three Android PNGs, and the family comparison changed. Mobile's 22 suites / 153 tests, lint with 3 existing warnings, typecheck, Android export, and clean prebuild passed. The whole-repo check reached the existing unrelated dashboard test shutdown timeout. Local ARM64 development-client versionCode 83 built successfully and installed on the Pixel 7 while preserving the naturally enabled Empty alias. Launcher search showed the selected reduced checkmark, and tapping it opened the development client. Verification made no production-data writes. Plan: `docs/plans/todo-smaller-empty-launcher-icon.md`.
+Implemented and Pixel-verified (2026-09-16): **Smaller clear-Home launcher icon.** The user selected candidate A from a Pixel-corrected comparison: the current checkmark path and material strokes are both 15% smaller, leaving visible white space around the mark under Pixel Launcher's circular mask. The adaptive foreground now occupies 444 × 323 pixels instead of 520 × 377 while preserving the checkmark's angle, proportions, graphite material, center, and safe-zone containment. Two generator runs produced identical hashes across all 31 tracked outputs; only the empty SVG, its three Android PNGs, and the family comparison changed. Mobile's 22 suites / 153 tests, lint with 3 existing warnings, typecheck, Android export, and clean prebuild passed. The whole-repo check reached the existing unrelated dashboard test shutdown timeout. Local ARM64 development-client versionCode 83 built successfully and installed on the Pixel 7 while preserving the naturally enabled Empty alias. Launcher search showed the selected reduced checkmark, and tapping it opened the development client. Verification made no production-data writes.
 
 Implemented and Pixel-verified (2026-09-15): **Three-row Android default
 icon.** Android's primary APK, pre-hydration, and signed-out icon now uses the
@@ -263,8 +261,7 @@ test shutdown timeout after the touched mobile checks passed. The four-ABI
 `1.2.0` preview APK then built locally as versionCode 82 with runtime fingerprint
 `e8aabe44052797dbbcb55bd179a7edeeb78896db`; its manifest retains the six
 launcher aliases and preview update channel. The link-shareable APK replaced
-versionCode 80 in the dedicated Drive folder and is the folder's only file. Plan:
-`docs/plans/todo-android-three-row-app-icon.md`.
+versionCode 80 in the dedicated Drive folder and is the folder's only file.
 
 Implemented and Pixel-verified (2026-09-15): **Swipe project tasks to Today.**
 A right swipe on a mobile project task now reveals Today, writes the reactive
@@ -282,8 +279,7 @@ revealed Today during the committed swipe,
 settled as Active with `Scheduled · Today`, appeared on Home, retained Home's
 Tomorrow reveal, and persisted after project refresh. Screenshot and hierarchy
 evidence captured both the Today reveal and settled caption; deleting the
-throwaway project removed its task from Home. Plan:
-`docs/plans/todo-project-task-swipe-today.md`.
+throwaway project removed its task from Home.
 
 Implemented and Pixel-verified (2026-09-15): **Automatic local-day
 rollover and empty-Home refresh.** The mobile app now keeps one reactive
@@ -301,7 +297,7 @@ NixOS `workerd` `EPIPE` failure in the untouched dashboard Worker tests. On the
 Pixel 7, with networking disabled and the clock temporarily set to 23:59, an
 existing future task appeared on Home at 00:00 and disappeared from Upcoming
 without a pull, relaunch, or production-data write; automatic time and
-networking were restored. Plan: `docs/plans/todo-mobile-midnight-refresh.md`.
+networking were restored.
 
 Implemented, published, and device-verified (2026-09-15):
 **Frequent private Android releases.** The preview app now includes
@@ -329,8 +325,7 @@ published update, while an incompatible runtime returned 204 with
 is link-shareable, and is the folder's only file. A tester installed that APK and
 cold-launched it twice; EAS then recorded one OTA install for one Android user,
 zero failed installs, and a 0% crash rate. The offline cold-launch check was
-skipped. Plan:
-`docs/plans/todo-mobile-frequent-releases.md`.
+skipped.
 
 Implemented and Pixel-verified (2026-09-15): **Project completion
 dependencies.** An existing project can now depend on completion of one or more
@@ -352,12 +347,10 @@ Next, and both throwaway projects were deleted. Screenshot evidence captured the
 Blocked detail. No existing entity changed and no EAS rebuild was required for
 device verification. Local preview APK `1.0.0` versionCode 77 then built
 successfully and replaced versionCode 76 in the dedicated Drive folder; the new
-file is link-shareable and is the folder's only APK. Plan:
-`docs/plans/todo-project-completion-dependency.md`.
+file is link-shareable and is the folder's only APK.
 
 Implemented and Pixel-verified (2026-09-15): **Project state is distinct from
-calculated status** (Stage 1 of
-`docs/plans/todo-project-completion-dependency.md`; dependency behavior remains
+calculated status** (Stage 1; dependency behavior remains
 unimplemented). Projects now persist only In-play / Backlog / Done through a
 `state` field; Active / Next / Waiting remain calculated presentation. Migration
 0053 preserved every Project while mapping the old in-play values. One shared
@@ -389,8 +382,7 @@ timeout after all mobile checks passed. Local development-client build 74 was
 installed on the Pixel 7. Launcher search showed the selected checkmark under
 the Pixel's circular mask, its default alias was the only enabled launcher
 entry, and tapping it opened Home. The test read existing production data but
-made no production-data writes. Plan:
-`docs/plans/todo-empty-launcher-icon-weight.md`.
+made no production-data writes.
 
 Implemented and verified in the browser and on the Pixel 7 (2026-09-14):
 **Transparent, full-size web favicon.** Browser tabs now receive the approved
@@ -403,11 +395,10 @@ supersedes only the web presentation in the square-first icon item below: Apple
 touch, splash, iOS, Android legacy, and all five adaptive/monochrome launcher
 outputs remained byte-identical. Web tests/build and mobile tests/lint/typecheck,
 Android export, clean prebuild, real-size Chromium rendering, and Pixel launcher
-search plus app launch passed without production-data writes. Plan:
-`docs/plans/todo-transparent-full-size-web-favicon.md`.
+search plus app launch passed without production-data writes.
 
 Implemented and Pixel-verified (2026-09-14): **task project jump and filtered
-assignment** (plan: `docs/plans/todo-task-project-jump-and-filter.md`). A
+assignment**. A
 project-owned task's mobile editor now keeps its Project row for reassignment
 and adds a separate native arrow that opens the exact project from Home or
 Upcoming; the arrow stays hidden when that project is already open. The shared
@@ -425,8 +416,7 @@ Implemented and verified in the browser and on the Pixel 7 (2026-09-14):
 full-bleed square instead of baking in a circular crop. Web displays that square
 directly; iOS and Android receive generated platform derivatives and apply their
 own launcher masks. The splash keeps a transparent mark. Generation rejects bad
-background, alpha, color, dimension, or Android safe-zone output; see
-`docs/plans/todo-square-mask-safe-icons.md`.
+background, alpha, color, dimension, or Android safe-zone output.
 
 Implemented and Pixel-verified (2026-09-14): **Dynamic Home-task launcher
 icon.** Android now uses the approved checkmark when Home is clear, one to three
@@ -437,8 +427,7 @@ work stays out. An app-owned Expo module changes launcher aliases only after the
 app backgrounds while leaving `MainActivity` enabled for Clerk, app links, and
 the development client. Asset generation is deterministic; unit tests, clean
 prebuild, native compilation, all five Pixel states, repeated alias relaunches,
-and default restoration pass. Plan and evidence:
-`docs/plans/todo-dynamic-task-count-icon.md`.
+and default restoration pass.
 
 Updated (2026-09-14): **Quiet project screens.** Removed the empty-project
 message/Add task shortcut and the explanatory paragraph in the status sheet at
@@ -449,14 +438,12 @@ both status sheets using a throwaway project, deleted afterward.
 
 Implemented and launcher-verified on the Pixel 7 (2026-09-14): **Selected
 white/graphite icon** on mobile and web. The approved SVG generates platform
-assets and web favicons through `bin/generate-todo-icons`; see
-`docs/plans/todo-selected-icon-integration.md`. Native archive rules now exclude
+assets and web favicons through `bin/generate-todo-icons`. Native archive rules now exclude
 stale generated projects so Expo config applies on every build. The
 `development-pixel` profile verifies native changes on ARM64 without reducing
 preview compatibility. Application UI colors are unchanged.
 
-Implemented and Pixel-verified (2026-09-13): **Beta flow polish**, plan and proof
-at `docs/plans/todo-beta-polish.md`. Task drafts survive scheduling/moving/completion;
+Implemented and Pixel-verified (2026-09-13): **Beta flow polish.** Task drafts survive scheduling/moving/completion;
 project deletion confirms its cascade; Undo respects longer native timeouts;
 project pickers scroll and show selection; project creation shares draft protection;
 departure failures stay visible; destination feedback links to the resulting list;
@@ -468,8 +455,7 @@ contrast were deliberately excluded. Each slice has its own commit and mobile
 changelog entry.
 
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Direct
-project status and focused settings on mobile** (plan:
-`docs/plans/todo-project-status-and-settings.md`). The derived-status pill is now
+project status and focused settings on mobile**. The derived-status pill is now
 the status-change control and opens the existing valid manual moves: Put in
 play, Move to backlog, or Mark done. The `⋯` menu is now a compact native
 Project settings menu containing only Delete project. Project descriptions and
@@ -484,8 +470,7 @@ empty-description prompt was inspected read-only on an existing project; no
 existing project was changed.
 
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Create a project
-from inside another project on mobile** (plan:
-`docs/plans/todo-project-create-from-project-screen.md`). The project-detail add
+from inside another project on mobile**. The project-detail add
 drawer now offers Task / Waiting / Project through the existing deep
 `useQuickAdd` module; Task remains first and resets as the default, while Project
 uses the same optimistic, offline-durable create path and View toast as Home.
@@ -498,8 +483,7 @@ child persisted in the Projects list; reopening defaulted to Task. Both
 throwaway projects were deleted and no existing entity was changed.
 
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Project task
-reorder and the original swipe-to-Tomorrow behavior on mobile** (plan:
-`docs/plans/todo-project-task-reorder-postpone.md`). The project swipe target was
+reorder and the original swipe-to-Tomorrow behavior on mobile**. The project swipe target was
 superseded by Today on 2026-09-15; the rest of this item records the original
 gesture shipment. Project detail introduced the same deep
 `ReorderableTaskList` module as Home: long-press drag writes the moved
@@ -520,8 +504,7 @@ and completion targets remained distinct. Screenshot and hierarchy evidence were
 captured, then deleting the project removed every throwaway task from Upcoming.
 
 Implemented and device-verified on the Pixel 7 (2026-09-13): **Project task
-schedule clarity on mobile** (plan:
-`docs/plans/todo-project-task-list-clarity.md`). A future task no longer appears
+schedule clarity on mobile**. A future task no longer appears
 as an unexplained automatic row under Waiting on: the project status now reads
 `Waiting · until <day>`, while the source task reads `Scheduled · <day>`.
 Waiting on is reserved for real condition entities, with condition-before-date
@@ -536,8 +519,7 @@ the row opened the shared editor, completion Undo restored a throwaway task, and
 the project was deleted afterward.
 
 Shipped, device-verified on the Pixel 7 (2026-09-12): **Retire take-on — the
-show-up date is the sole commitment gate** (plan:
-`docs/plans/todo-retire-take-on.md`). The take-on/park star (`takenOnAt`) is gone
+show-up date is the sole commitment gate**. The take-on/park star (`takenOnAt`) is gone
 end to end: a project task reaches Home only when it has a date that has arrived
 (`showUpDate <= today`) and its project is `active`; an undated project task is
 groomed on the project screen only (the loose/project null-date asymmetry — a
@@ -565,9 +547,8 @@ picker-open flags plus a short suppression window for the close race.
 **Device-verified on the Pixel 7** (throwaway project): project-screen date chip
 commits a groomed task (No date → Today → project Active, task on Home); the Home
 composer files a dateless task to a project (groomed, off Home) and dates a loose
-task onto Home; both pickers open without closing the composer. Supersedes
-Decision A of `docs/plans/todo-project-task-row-parity.md` (the star is replaced,
-not kept).
+task onto Home; both pickers open without closing the composer. The star is
+replaced, not kept.
 
 Implemented (2026-09-12, mobile; Pixel 7 verified): **task creation and editing
 share an editor-first bottom drawer** (`TaskEditorSheet`). A grip, strong title
@@ -580,13 +561,10 @@ retain their separate write lifecycles. Editing keeps the Modal. On
 start the keyboard immediately; `KeyboardStickyView` docks the drawer using
 the measured gap below the screen. The Projects list kept its then-project-only bar,
 but its input adopted the same editor typography; the 2026-09-17 follow-up added
-Task as a second mode. See
-`docs/plans/todo-unify-task-editor-drawer.md` and
-`docs/plans/todo-task-drawer-editor-first-restyle.md`.
+Task as a second mode.
 
 Shipped (2026-09-12, mobile — device pending): **the project screen reuses the
-shared task editor and quick-add composer** (plan:
-`docs/plans/todo-project-task-edit-and-shared-add.md`). Tapping a task on a
+shared task editor and quick-add composer**. Tapping a task on a
 project's screen now opens the same `useTaskDetail` editor Home and Upcoming open
 (rename, schedule, move, complete-with-Undo), instead of a dead row. The
 project-screen add path became the same composer Home uses: the quick-add state,
@@ -605,7 +583,7 @@ per-task inline date chip from the take-on retire (scheduling now lives in the
 editor), so its task rows read like every other list row.
 
 Shipped (2026-09-12): **Delete a project cascades to its tasks and waiting
-conditions** (plan: `docs/plans/todo-project-delete-cascade.md`). Deleting a
+conditions**. Deleting a
 project no longer leaves
 orphans: `DELETE /api/projects/{id}` now also hard-removes every task with that
 `projectId` (open or completed) and every waiting condition on the project. Before
@@ -628,8 +606,7 @@ confirming the server delete, not just a client hide. Deleting a project stays
 permanent (no undo).
 
 Implemented, device verification pending (2026-09-12): **Date-aware
-availability** — the last slice of the single-list series (plan part 3
-`docs/plans/todo-single-list-3-date-availability.md`). A project's derived status
+availability** — the last slice of the single-list series. A project's derived status
 is now date-aware: a taken-on task postponed to a future day no longer keeps its
 project `active` — the project instead **waits until that day**, derived purely
 from the task's `showUpDate` with **no** stored `waiting_conditions` row, and the
@@ -651,8 +628,7 @@ single-list series; the remaining loose ends are pushing/device-verifying parts 
 and 2 and giving web Upcoming a move-to-project affordance (see the plan's "Series
 closeout").
 
-Shipped (2026-09-12): **Move a loose task to a project** (plan part 2
-`docs/plans/todo-single-list-2-move-to-project.md`). A task's detail now carries a
+Shipped (2026-09-12): **Move a loose task to a project**. A task's detail now carries a
 Project row + picker: filing a loose task under a project (or moving it back to
 loose) rides one new `projectId` field on `PATCH /api/tasks/{id}` (store
 `setProject`, RPC `setTaskProject`, collection `moveToProject`, log `task_moved`).
@@ -664,7 +640,7 @@ unit tests pass and **Pixel 7 device verification is pending**. Part 3 (date-awa
 project status / derived "waiting until a day") is the next slice.
 
 Shipped (2026-09-12): **One list — Capture collapsed into Task** (plan series
-`docs/plans/todo-single-list-overview.md`, part 1 `todo-single-list-1-merge.md`).
+`docs/plans/todo-single-list-overview.md`).
 Task is now the single entity and the app's entry point; the Capture entity is
 deleted (no `captures` table/route/store/collection/type, no Process, no Refine).
 A quick-add with no project creates a **loose task**; Task absorbed the nullable
@@ -696,7 +672,7 @@ shared `listView` helper in `@zero/agent-core` gates the list on the row count
 so a hydrated snapshot shows at once. See `docs/storage.md` for the mechanics.
 
 Shipped (2026-08-30): **Task**, the first typed entity, and the **Today** view
-over it (plan: `docs/plans/todo-task-entity.md`). Built as a sibling of the
+over it. Built as a sibling of the
 Capture stack, web first, then mobile: a `tasks` table + `/api/tasks` in the
 per-user UserDO (add is exactly-once on the client-minted id; complete flips
 `completedAt`; list returns open tasks); a shared `@zero/agent-core` Task type,
@@ -709,8 +685,7 @@ query filters `showUpDate <= localToday`, so overdue rolls in and future stays
 hidden). Mobile device verification (Maestro, Pixel 7) still needs a standalone
 EAS build for the durable-snapshot path.
 
-Shipped (2026-09-02): **Upcoming** as section #2 on both surfaces (plan:
-`docs/plans/todo-upcoming-tab.md`). A second tab (mobile) / nav entry (web) that
+Shipped (2026-09-02): **Upcoming** as section #2 on both surfaces. A second tab (mobile) / nav entry (web) that
 lists open, future-dated captures (`showUpDate > today`) grouped into day
 sections (Tomorrow and beyond), the complement of the Captures list (which shows
 what has already shown up). Grouping is one shared pure helper `upcomingSections`
@@ -730,8 +705,7 @@ build. This reverses the earlier one-list-no-nav shape (Today tab removal) in
 intent: nav returns, but sections grow one real screen at a time.
 
 Shipped (2026-09-04): **Project**, entity #3 and the first container — slice A1
-(plan: `docs/plans/todo-project-entity.md`, slice `todo-project-entity-a1.md`;
-source of truth: `docs/entities/project.md`). Built as a third full sibling of
+(source of truth: `docs/entities/project.md`). Built as a third full sibling of
 Capture/Task, web first then mobile: a `projects` table + `/api/projects` in the
 per-user UserDO (`add` is exactly-once on the client-minted id; `list` is
 oldest-first), a shared `@zero/agent-core` `Project` type, the original
@@ -739,7 +713,7 @@ REST-backed Project collection, and the shared `listView` count-gate;
 a name-only create with outcome-naming helper text over a flat list on web
 (`/projects`, a `SideNav` entry) and mobile (a `NativeTabs` Projects tab). First on-device run of the new native tab needs a fresh EAS dev build.
 
-Shipped (slice A2, plan `todo-project-entity-a2.md`): the five-status model.
+Shipped (slice A2): the five-status model.
 The original Project store plus `PATCH /api/projects/{id}` (list scoped to the
 non-`done` working set), a pure `projectsByStatus` grouping helper, and
 `api.setStatus` in the collection (offline-replaying). On both surfaces the list
@@ -750,7 +724,7 @@ detail sheet is a generic reusable primitive — web on `@radix-ui/react-dialog`
 mobile on the universal `@expo/ui` `BottomSheet` — shared with the Captures
 detail sheet.
 
-Shipped (slice A3, plan `todo-project-entity-a3.md`): enrichment in the detail
+Shipped (slice A3): enrichment in the detail
 sheet. A widened `PATCH /api/projects/{id}` carries
 title/icon/description alongside status, and `api.edit` in the collection
 (offline-replaying; `setStatus` and `edit` share one update, disambiguated by the
@@ -772,8 +746,7 @@ Delete button in the detail sheet drops the row behind the same ~5s Undo as
 offline-safe on web and mobile. The canonical TinyBase model applies the same
 deletion cascade for TaskDO, web, and mobile.
 
-Tightening (2026-09-04, internal, no user-facing change; plan
-`docs/plans/todo-tightening.md`): the six list screens (Captures / Projects /
+Tightening (2026-09-04, internal, no user-facing change): the six list screens (Captures / Projects /
 Upcoming × web + mobile) shared four copies of the same plumbing. The pure,
 UI-agnostic pieces moved into `@zero/agent-core` (`messageOf`,
 `LOADING_TEXT_DELAY_MS`, the Upcoming `dayLabel` helpers, and the Projects
@@ -788,8 +761,7 @@ agent-core stays React-free. `apps/agent-web` also gained a Vitest +
 `@testing-library/react` toolchain and a `ProjectsPage` suite, so the web surface
 is no longer untested.
 
-Shipped (2026-09-06): **Home** — the Today screen reworked (plan:
-`docs/plans/todo-home-rework.md`). Renamed Today → Home on both surfaces (web nav
+Shipped (2026-09-06): **Home** — the Today screen reworked. Renamed Today → Home on both surfaces (web nav
 + mobile tab; the `/captures` route is unchanged). The empty region is now one
 Clarify → Engage pipeline: a plate with tasks shows the tasks (each project task
 badged with its project's icon); an empty plate with captures shows the inbox
@@ -814,13 +786,12 @@ interface, with a thin per-surface renderer (web DOM + CSS, mobile RN +
 reanimated). We tried `sonner`/`sonner-native` first; sonner-native does not
 render on our New-Arch + react-native-screens stack (sonner-native#316), and
 react-native-toast-message has an open New-Arch regression (#583) — so no
-maintained library fit. Plans: `docs/plans/todo-home-create-project.md` (feature),
-`docs/plans/toast-primitive.md` (the primitive). Device-verified on the Pixel 7
+maintained library fit. Plan: `docs/plans/toast-primitive.md` (the primitive). Device-verified on the Pixel 7
 (Maestro): the toast renders and View lands on Projects; no EAS rebuild was needed
 (the mobile renderer adds no native module).
 
 Shipped (2026-09-09): **immediate complete/done/delete with one bottom Undo
-snackbar** (plan: `docs/plans/todo-delete-complete-redesign.md`). The old deferred
+snackbar**. The old deferred
 model — the acted-on row lingered struck-through with an inline Undo for ~5s
 (`DONE_UNDO_MS`) before the write committed — is gone on both surfaces. It had two
 faults the user hit: the ghost row lingering, and (because the timer was cleared on
@@ -855,8 +826,7 @@ the repeated "commit immediately + raise the shared Undo snackbar" wiring (four
 call sites: Home task-complete, Home/Upcoming capture-process, and now
 project-detail task-complete) was extracted into one shared `undoableAction` helper
 in `@zero/agent-core`, which owns the fixed `'undo'` toast id so "only one Undo on
-screen" is an enforced invariant rather than a copy-pasted literal. Plan:
-`docs/plans/todo-project-detail-undo-toast.md`.
+screen" is an enforced invariant rather than a copy-pasted literal.
 
 Shipped (2026-09-09, fix — device-verified on the Pixel 7): the Undo snackbar
 now actually **restores** the row on the persisted (device/web) path. On-device
@@ -870,13 +840,12 @@ kind, **`revive`**, that carries the full row and **re-inserts** it when absent
 (updates in place when Undo is tapped before the eviction lands), fixing Undo on
 all surfaces at once (Home + Upcoming + project screen for tasks; Home + Upcoming
 for captures). Verified on the Pixel 7 (reopen and unprocess both restore the row,
-`reopenTask`/`unprocessCapture` fire, no `CollectionOperationError`). Plan and
-design record: `docs/plans/todo-undo-restore-fix.md`, `docs/storage.md`.
+`reopenTask`/`unprocessCapture` fire, no `CollectionOperationError`). See
+`docs/storage.md` for the current durability model.
 This failure shows why unit tests alone can miss device-specific behavior.
 
 Shipped (2026-09-16, device-verified on the Pixel 7): **mobile snackbars can be
-swiped away horizontally and sit above the plus FAB** (plan:
-`docs/plans/todo-toast-swipe-dismiss.md`). A short drag springs back; a committed
+swiped away horizontally and sit above the plus FAB**. A short drag springs back; a committed
 drag or flick slides off-screen and dismisses only that toast snapshot, so a
 same-id replacement is safe. The root renderer reserves the 56dp FAB and its
 bottom spacing while keeping tab and safe-area clearance. This is mobile-renderer
@@ -901,8 +870,8 @@ Project names still open their Project, and sticky errors show a short recovery
 cue with Dismiss. Large text can wrap without hiding actions. Web stays unchanged.
 Plan: `docs/plans/mobile-compact-snackbar.md`.
 
-Shipped (2026-09-10): **how long a project has been waiting**, on both surfaces
-(plan: `docs/plans/todo-project-waiting-time.md`). Each waiting project's row
+Shipped (2026-09-10): **how long a project has been waiting**, on both surfaces.
+Each waiting project's row
 shows a muted trailing badge with the elapsed time since its oldest unresolved
 condition (a readable phrase like "3 days", via date-fns `formatDistanceStrict`),
 and the Waiting section is ordered longest-waiting first. Two pure helpers in
@@ -938,10 +907,9 @@ Shipped:
   pre-existing durable-collection bug where a deleted row reappeared until refresh
   (see `docs/storage.md`).
 - **Automatic appearance.** Mobile and web follow the system light or dark
-  preference, including native/browser chrome. See `todo-dark-mode.md` for the
-  implementation and device proof.
+  preference, including native/browser chrome.
 - **Add a waiting condition with the "+" affordance, not an inline form**
-  (mobile + web; plan `docs/plans/todo-project-waiting-add-fab.md`). On the
+  (mobile + web). On the
   project screen, the waiting-condition add moved off an always-present inline
   composer. Mobile folds it into the project screen's single plus FAB as a
   second **Waiting** mode (beside Task) — free-text only; web opens the same
@@ -955,8 +923,7 @@ Shipped:
 - **Mobile task add on a project is a plus FAB** (not an inline field): the
   project screen's task composer moved to the shared plus button / keyboard-docked
   quick-add bar, task-only (no capture mode, so captures aren't selectable there).
-  Tasks-only rework of one screen; no data/API/collection change. Plan:
-  `docs/plans/todo-project-task-add-fab.md`. Device-verified on the Pixel 7 (dev
+  Tasks-only rework of one screen; no data/API/collection change. Device-verified on the Pixel 7 (dev
   client + Maestro): FAB adds a parked task, bar docks above the tab bar, Back
   closes the bar before popping. Follow-up: the bar now shows the single
   interactive **Task** pill (the sole mode there), reading exactly like Home's.
@@ -988,10 +955,9 @@ Shipped:
   suggestions are an ephemeral client hint (no sync, no server row); the pure
   staleness check lives in `@zero/agent-core`, the cache and fetch per surface.
   Proves the todo app's first server LLM path end to end for heavier features
-  (Capture → Project). Plan: `docs/plans/todo-project-icon-suggestions.md`.
+  (Capture → Project).
 
-Shipped (2026-09-05): **Project detail as a destination** (plan:
-`docs/plans/todo-project-detail-rework.md`). Tapping a project now opens its own
+Shipped (2026-09-05): **Project detail as a destination**. Tapping a project now opens its own
 screen — a `/projects/:id` route on web (`ProjectDetailPage`) and a pushed screen
 within the Projects tab on mobile (`projects/[id].tsx`) — instead of a bottom
 sheet. The screen leads with the work (tasks, then what it's waiting on) and keeps
@@ -1003,8 +969,7 @@ so the rows render correctly. UI/navigation only — no data model, API, store, 
 derivation change. Web has a `ProjectsPage` route test; the mobile project screen
 was later device-exercised in the Undo-restore fix (2026-09-09).
 
-Shipped (2026-09-24): **Status-grouped Project selectors** (plan:
-`docs/plans/todo-project-selectors-status-sections.md`). Web and mobile Task
+Shipped (2026-09-24): **Status-grouped Project selectors**. Web and mobile Task
 assignment and After-target selection now share the Projects list's calculated
 ordering and folding policy, with search reaching folded matches. The full open
 Task and Project attention snapshots drive each selector; no stored state changed.
@@ -1017,11 +982,12 @@ In flight (details in `docs/plans/`):
 
 Next:
 
-- **AI Capture → Project** — swipe a Capture, propose a Project, confirm (the
-  content-driven half of Refine; `docs/plans/todo-capture-to-project-ai.md`).
+- **AI-assisted Task refinement into a Project** — adapt the original
+  Capture-era exploration to the current Task-only model
+  (`docs/plans/todo-capture-to-project-ai.md`).
 - **AI-resolve a waiting condition** — from email/calendar/content.
-- later: agent `create_task` tool, recurring capture, recurring Tasks,
-  structured waiting-condition kinds on mobile.
+- later: agent `create_task` tool and structured waiting-condition kinds on
+  mobile.
 
 Dev infra: `pnpm --filter @zero/agent-mobile e2e:pixel` is the shipped default
 behavioral proof on the USB-attached Pixel 7. It loads the current checkout from

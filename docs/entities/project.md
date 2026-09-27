@@ -23,7 +23,8 @@ Calculated statuses never cross the Project persistence interface.
 
 ## Data shape
 
-`projects` lives in each user's `UserDO` SQLite database. Client-facing Project:
+`projects` is a logical table in each account's TaskDO TinyBase store. The same
+rows are replicated to the account-scoped client store. Client-facing Project:
 
 - `id` — client-minted UUID and exactly-once insert key;
 - `title` — required outcome name;

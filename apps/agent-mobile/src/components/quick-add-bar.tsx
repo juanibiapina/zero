@@ -36,7 +36,7 @@ export type QuickAddBarProps = {
   // The create-time date + project composer chips (Home quick-add). Rendered as
   // a row below the input when both handlers are supplied. The date is the sole
   // commitment gate, so this is how a quick-add task lands on Home / Upcoming or
-  // is filed to a project. See docs/plans/todo-retire-take-on.md.
+  // is filed to a project. See docs/entities/task.md.
   dateChipLabel?: string;
   dateChipActive?: boolean;
   onDateChipPress?: () => void;

@@ -1,7 +1,7 @@
 -- Retire take-on: drop the `takenOnAt` column. The show-up date is now the sole
 -- commitment gate for a project task (a project task reaches Home only when its
 -- date has arrived; committing a groomed task means dating it, not starring it).
--- See docs/plans/todo-retire-take-on.md.
+-- See docs/entities/task.md for the current commitment model.
 --
 -- COLUMN DROP + BACKFILL, STATED LOUDLY: this removes `takenOnAt` from `tasks`.
 -- Before dropping it, any project task that was taken on but had no date was on

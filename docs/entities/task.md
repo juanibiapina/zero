@@ -2,7 +2,7 @@
 
 The single entity of the todo app and its entry point. A Task is one line of
 work: the loose thing you jot down, and the committed next-action under a
-project. After the **single-list merge** (`docs/plans/todo-single-list-1-merge.md`)
+project. After the **single-list merge**
 Task absorbed the former Capture entity, so there is no separate capture inbox or
 Process step — a quick-add with no project creates a **loose task**.
 
@@ -27,8 +27,7 @@ A single line of work: `text`, an optional `showUpDate`, an optional normalized
 `recurrence` plus its `recurrenceDate` cursor, a `completedAt` that flips when
 done, an optional `projectId` (loose when null), a manual-order `sortKey`, and a
 dormant `sourceCaptureId`. Minimal on purpose; no priority or subtasks. The show-up date is the **sole commitment gate** for a project task
-(the former take-on/park star was retired — see
-`docs/plans/todo-retire-take-on.md`).
+(the former take-on/park star was retired).
 
 ## Vocabulary
 
@@ -67,8 +66,7 @@ dormant `sourceCaptureId`. Minimal on purpose; no priority or subtasks. The show
   take-on/park star (`takenOnAt`, dropped in migration 0052).
 - **Deleted with its project** — a task is not orphaned when its project is
   deleted: `DELETE /api/projects/{id}` cascades to every task with that
-  `projectId` (open or completed), removing them in the same call
-  (`DbTaskStore.deleteByProject`, orchestrated by `UserDO.deleteProject`). A loose
+  `projectId` (open or completed), removing them in the same TaskDO transaction. A loose
   task (`projectId == null`) is never touched by a project delete. See
   `docs/entities/project.md`.
 - **Move to project** — set (or clear) `projectId` to file a loose task under a
@@ -86,7 +84,8 @@ dormant `sourceCaptureId`. Minimal on purpose; no priority or subtasks. The show
 
 ## Data shape
 
-`tasks` table in the per-user `UserDO` (SQLite). Client-facing `Task`:
+`tasks` is a logical table in each account's TaskDO TinyBase store. The same rows
+are replicated to the account-scoped client store. Client-facing `Task`:
 
 - `id` — a UUID the **client mints** and the server persists verbatim as the
   primary key (stable end to end; the dedupe key for replayed adds).
@@ -106,9 +105,6 @@ dormant `sourceCaptureId`. Minimal on purpose; no priority or subtasks. The show
   `null` sorts **last** (newest-at-bottom). Keyed in practice — `add` mints a
   trailing key, `reorder` mints one between neighbors, and a DO-init backfill keys
   legacy rows — so `null` is only transient. See Ordering.
-
-The partial index `tasks_open` on `("createdAt")` `WHERE "completedAt" IS NULL`
-serves the open-tasks query.
 
 ## Behavior
 
@@ -146,7 +142,7 @@ serves the open-tasks query.
   project task is groomed: it never reaches Home and leaves the project `next`
   (come groom / schedule one). This date-aware derivation lives in
   `projectDisplayStatus` / `waitingUntil` (see
-  `docs/entities/project.md` and `docs/plans/todo-retire-take-on.md`).
+  `docs/entities/project.md`).
 - **Upcoming** = open ∧ future-dated (`showUpDate > today`), grouped by day, **no
   other gate** — every postponed task, loose or project, taken-on or not
   (`upcomingSections` in `@zero/agent-core`).
@@ -158,18 +154,11 @@ serves the open-tasks query.
   tiebreak. `sortKey` is a fractional index (`fractional-indexing`'s
   `generateKeyBetween`): moving a row mints one key strictly between its
   neighbors — O(1), touches only the moved row. Keys compare by **raw codepoint**,
-  never `localeCompare`; the server comparator (`DbTaskStore.list`) and the client
-  comparator (`compareByOrder` in `@zero/agent-core`) make the identical
-  comparison and both sort `null` last. The two are duplicated (agent-api must not
-  build-depend on the browser/RN package), so a rule change must touch both;
-  `orderKeyBetween` wraps the library behind one tested seam. Home and each
+  never `localeCompare`; the platform-neutral TinyBase model in
+  `@zero/agent-core` owns the comparator for TaskDO, web, and mobile and sorts
+  `null` last. `orderKeyBetween` wraps the library behind one tested seam. Home and each
   project screen are filtered slices of this same order; reordering in either
   writes the moved task's one global `sortKey`.
-- **Sort-key backfill (code, not SQL).** Migration `0051` adds the nullable
-  `sortKey`; valid fractional keys can't be produced in SQL. `DbTaskStore.
-  backfillSortKeys()` keys any `sortKey IS NULL` row in `createdAt` order, called
-  from the `UserDO` init block; idempotent.
-
 ## Interactions (per system)
 
 - **UI** — mobile Home and Projects tabs, with Upcoming under Browse
@@ -181,11 +170,11 @@ serves the open-tasks query.
   Home quick-add opens
   on Task and can switch to Project; the mobile Projects-list Add drawer opens on
   Project and can switch to Task.
-- **Storage** — the server domain store is `DbTaskStore` (`add` mints the trailing
-  `sortKey`; `list` = every open task in manual order, no visibility filter — the
-  client splits Home/Upcoming; `complete` / `reopen` / `editText` /
-  `reschedule` / `reorder` / `setProject` / `deleteByProject` (the project-delete
-  cascade) / `backfillSortKeys`). See `docs/storage.md`.
+- **Storage** — the platform-neutral TinyBase model in `@zero/agent-core` owns
+  Task projections, mutations, recurrence, ordering, and Project cascades.
+  TaskDO adds durable persistence and REST/RPC result mapping; web and mobile
+  supply account-scoped persistence and synchronization adapters. See
+  `docs/storage.md`.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, every open task in manual order (future-dated
     included); the client splits Home and Upcoming.
@@ -212,5 +201,5 @@ serves the open-tasks query.
 ## Next
 
 - **Refine returns** over all tasks (the dormant `sourceCaptureId`).
-- **Agent `create_task` tool**, recurring tasks.
+- **Agent `create_task` tool.**
 - Likely never (not used in Todoist today): subtasks, priorities, labels.

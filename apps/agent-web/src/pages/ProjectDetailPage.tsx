@@ -69,7 +69,7 @@ import { cn } from "@/lib/utils";
 // A project opens its OWN screen (route /projects/:id), not a bottom sheet: it
 // is a place you work, not a transient sheet. Identity, description, dominant
 // status, manual Waiting, After relationships, and Tasks are sibling regions in
-// that order. See docs/plans/todo-project-waiting-after.md.
+// that order. See docs/entities/project.md.
 export function ProjectDetailPage() {
   const { replica } = useTodoData();
   return (
@@ -599,7 +599,7 @@ function MenuItem({
 // "No date" when groomed) and opens the shared scheduler. Picking a date commits
 // the task to Home (an arrived date makes the project active); "No date" keeps it
 // grooming here. This is the replacement for the retired take-on/park star — the
-// date is the sole commitment gate. See docs/plans/todo-retire-take-on.md.
+// date is the sole commitment gate. See docs/entities/task.md.
 function TaskDateChip({
   showUpDate,
   onPick,

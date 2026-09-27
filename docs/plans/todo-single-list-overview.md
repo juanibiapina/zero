@@ -10,12 +10,12 @@ Projects — no separate Captures/Inbox, no `process`, no Refine.
 This is the index for a three-plan series. Build them in order; each has its own
 self-contained plan file.
 
-1. `todo-single-list-1-merge.md` — **the merge.** Delete Capture, Task absorbs
+1. [The merge](https://github.com/juanibiapina/zero/blob/ef8a3dbabe915964907d2dbeb7b6671444d3b322/docs/plans/todo-single-list-1-merge.md) — delete Capture; Task absorbs
    the date + manual reorder + the Captures/Upcoming visibility split, one flat
    Home list, Refine removed. Loose-task postpone works end to end.
-2. `todo-single-list-2-move-to-project.md` — **move a loose task to a project.**
+2. [Move a loose task to a Project](https://github.com/juanibiapina/zero/blob/ef8a3dbabe915964907d2dbeb7b6671444d3b322/docs/plans/todo-single-list-2-move-to-project.md).
    The replacement for the clarify step the merge removes.
-3. `todo-single-list-3-date-availability.md` — **date-aware availability.** A
+3. [Date-aware availability](https://github.com/juanibiapina/zero/blob/ef8a3dbabe915964907d2dbeb7b6671444d3b322/docs/plans/todo-single-list-3-date-availability.md). A
    project's `active`/`waiting` derivation becomes date-aware, and "waiting until
    a day" is derived (no stored condition), so a postponed project task's round
    trip closes automatically.

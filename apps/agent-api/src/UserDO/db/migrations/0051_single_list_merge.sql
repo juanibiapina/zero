@@ -1,6 +1,6 @@
 -- One list: collapse Capture into Task. Task becomes the single entity and the
 -- app's entry point; the Capture entity is deleted. See
--- docs/plans/todo-single-list-1-merge.md.
+-- Historical plan: https://github.com/juanibiapina/zero/blob/ef8a3dbabe915964907d2dbeb7b6671444d3b322/docs/plans/todo-single-list-1-merge.md
 --
 -- DATA LOSS, STATED LOUDLY: this drops the `captures` table outright. Capture
 -- data is disposable (a raw inbox line); there is NO copy into `tasks`. Task

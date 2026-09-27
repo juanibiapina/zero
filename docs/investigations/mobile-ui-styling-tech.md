@@ -1,6 +1,6 @@
 # Investigation: styling and UI tech for the mobile todo app (2026-09-05)
 
-Input to `docs/plans/todo-ui-todoist-alignment.md`. Question: which styling
+Historical input to the mobile Todoist-alignment work. Question: which styling
 and UI stack should `apps/agent-mobile` (Expo SDK 57, RN 0.86, React Compiler
 on, Android-only today) use for the Todoist-alignment pass and after?
 

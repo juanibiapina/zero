@@ -5,9 +5,8 @@
 Replace the third-party toast (sonner on web, sonner-native on mobile) with an
 in-house toast primitive designed as if it were a standalone publishable package:
 a **headless, framework-agnostic controller** (the deep module) plus two thin
-**renderer adapters** (web DOM, mobile React Native). The immediate consumer is
-the "create a Project from Home → toast that links to it" feature
-(`docs/plans/todo-home-create-project.md`), but the primitive is general and
+**renderer adapters** (web DOM, mobile React Native). The immediate consumer was
+the "create a Project from Home → toast that links to it" feature, but the primitive is general and
 carries no app or navigation knowledge.
 
 This exists because no maintained toast library renders on our stack: sonner-native

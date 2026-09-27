@@ -1,7 +1,7 @@
 # Capture (retired)
 
 **Capture no longer exists.** The Capture/Task split proved premature, so the
-**single-list merge** (`docs/plans/todo-single-list-1-merge.md`) collapsed Capture
+**single-list merge** collapsed Capture
 into **Task**: Task is now the single entity and the app's entry point, and a
 quick-add with no project creates a loose task. There is no `captures` table,
 route, store, collection, `Capture` type, or Process/Refine step anymore.
