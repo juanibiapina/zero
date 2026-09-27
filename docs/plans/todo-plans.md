@@ -22,7 +22,9 @@ the live documentation tree. The remaining files have one of two purposes.
   cutover, including migration and recovery evidence.
 
 Use `docs/todo-app.md`, `docs/entities/`, and `docs/storage.md` for present-state
-behavior. Completed execution prose, including the removed animation increment,
-remains in Git history rather than in a second live archive. The repository
-history before commit `ef8a3dbabe915964907d2dbeb7b6671444d3b322` also retains
-the earlier removed execution plans.
+behavior. Completed execution prose remains in Git history rather than in a
+second live archive. This includes completed Capture and mobile E2E plans that
+did not use the `todo-*` filename prefix. The repository history before commit
+`ef8a3dbabe915964907d2dbeb7b6671444d3b322` retains the earlier removed todo
+plans; commit `7d4d1a8c258be9d0044a06c217034c705126d3d1` retains the later non-prefixed
+plans.

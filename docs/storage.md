@@ -57,13 +57,9 @@ data on reconnect.
 - Every signed-in account stores todo entities in its per-account `TaskDO`
   TinyBase mergeable store. Todo REST routes and WebSocket synchronization use
   that same authority.
-- `UserDO` still owns agent conversations, settings, captures, and other
-  non-todo data. The migrated account's old todo tables remain inert recovery
-  data: current code neither reads nor writes them.
-- Non-todo entities continue to use **do-orm** plus one per-entity domain store
-  (for example `DbCaptureStore`) with explicit domain methods.
-- One table per entity (e.g. `captures`). The table shape lives in the entity's
-  own doc.
+- `UserDO` still owns agent conversations, settings, schedules, and other
+  non-todo state. Its old physical todo tables remain inert recovery data:
+  current code neither reads nor writes them.
 
 ## Client replicas
 
