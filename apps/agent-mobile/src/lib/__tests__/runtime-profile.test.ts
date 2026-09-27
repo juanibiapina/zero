@@ -18,6 +18,7 @@ describe('mobile runtime profile', () => {
         iconSuggestionsKey: 'zero.icon-suggestions.v1',
         todoWorkspaceKey: 'zero.todo-workspace.v1',
       },
+      todoWorkspaceId: undefined,
       launcherCountSyncEnabled: true,
       native: {
         updatesEnabled: true,
@@ -49,6 +50,7 @@ describe('mobile runtime profile', () => {
         iconSuggestionsKey: 'zero.e2e.icon-suggestions.v1',
         todoWorkspaceKey: 'zero.e2e.todo-workspace.v1',
       },
+      todoWorkspaceId: 'hermetic-e2e-guest',
       launcherCountSyncEnabled: false,
       native: {
         updatesEnabled: false,

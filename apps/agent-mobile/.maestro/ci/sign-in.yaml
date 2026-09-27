@@ -1,6 +1,5 @@
-# Smoke flow: the app must boot to the sign-in screen (not hang on a spinner or
-# crash). Runs on an emulator in CI. If Clerk fails to initialise the app hangs
-# on a spinner and the wait below times out, catching that regression.
+# Smoke flow: the app must boot into a guest workspace, then offer real Clerk
+# sign-in from the account surface. Runs on an emulator in CI.
 #
 # The actual Google OAuth round-trip needs a real browser + Google account and
 # cannot be automated on the emulator; it is covered by a separate flow.
@@ -10,7 +9,13 @@ appId: dev.juanibiapina.zeroagent
     clearState: true
 - takeScreenshot: 00-launch
 - extendedWaitUntil:
-    visible: "Continue with Google"
+    visible: "Saved on this device"
     timeout: 45000
+- assertVisible: "Home"
+- tapOn: "Account"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Continue with Google"
+    timeout: 30000
 - assertVisible: "Sign in with your Zero account."
 - takeScreenshot: 01-sign-in

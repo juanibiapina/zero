@@ -7,6 +7,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
+import {
+  hermeticSignInRedirect,
+  HERMETIC_ACCOUNT_A,
+  HERMETIC_ACCOUNT_B,
+} from '@/lib/hermetic-auth-control';
+import { RUNTIME_PROFILE } from '@/lib/runtime-profile';
 
 // Dismisses the web browser once the OAuth redirect completes.
 WebBrowser.maybeCompleteAuthSession();
@@ -50,6 +56,23 @@ export default function SignInScreen() {
     }
   }, [startSSOFlow]);
 
+  const onHermeticSignIn = useCallback(async (accountId: string) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({
+        strategy: 'oauth_google',
+        redirectUrl: hermeticSignInRedirect(accountId),
+      });
+      if (!createdSessionId || !setActive) throw new Error('Fake sign-in failed');
+      await setActive({ session: createdSessionId });
+    } catch {
+      setError('Sign-in failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }, [startSSOFlow]);
+
   // E2E-only: exercises the native OAuth redirect handling (the mechanism that
   // decides whether a completed sign-in reaches the app) without Google. Hidden
   // unless the app is built with EXPO_PUBLIC_E2E=1.
@@ -78,14 +101,35 @@ export default function SignInScreen() {
       <Text variant="subtitle">Sign in with your Zero account.</Text>
       {/* Each @expo/ui tree needs its own Host; matchContents sizes it to the
           button so the surrounding RN flex layout is unchanged. */}
-      <Host matchContents>
-        <Button
-          variant="filled"
-          disabled={busy}
-          onPress={() => void onSignInPress()}
-          label={busy ? 'Signing in…' : 'Continue with Google'}
-        />
-      </Host>
+      {RUNTIME_PROFILE.hermetic ? (
+        <View className="gap-3">
+          <Host matchContents>
+            <Button
+              variant="filled"
+              disabled={busy}
+              onPress={() => void onHermeticSignIn(HERMETIC_ACCOUNT_A)}
+              label="Sign in as Account A"
+            />
+          </Host>
+          <Host matchContents>
+            <Button
+              variant="outlined"
+              disabled={busy}
+              onPress={() => void onHermeticSignIn(HERMETIC_ACCOUNT_B)}
+              label="Sign in as Account B"
+            />
+          </Host>
+        </View>
+      ) : (
+        <Host matchContents>
+          <Button
+            variant="filled"
+            disabled={busy}
+            onPress={() => void onSignInPress()}
+            label={busy ? 'Signing in…' : 'Continue with Google'}
+          />
+        </Host>
+      )}
       {error ? <Text variant="error">{error}</Text> : null}
       {e2e ? (
         <Host matchContents>

@@ -36,6 +36,7 @@ function resolveRuntimeProfile({
       clerkModules: 'fake',
       apiBaseUrl: HERMETIC_API_BASE_URL,
       storageKeys: Object.freeze(hermeticStorageKeys()),
+      todoWorkspaceId: 'hermetic-e2e-guest',
       launcherCountSyncEnabled: false,
       native: Object.freeze({
         updatesEnabled: false,
@@ -50,6 +51,7 @@ function resolveRuntimeProfile({
     clerkModules: 'real',
     apiBaseUrl: apiUrl ?? DEFAULT_API_BASE_URL,
     storageKeys: Object.freeze(productionStorageKeys()),
+    todoWorkspaceId: undefined,
     launcherCountSyncEnabled: true,
     native: Object.freeze({
       updatesEnabled: true,

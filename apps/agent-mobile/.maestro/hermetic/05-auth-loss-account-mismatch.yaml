@@ -1,0 +1,41 @@
+# Unexpected auth loss locks Account A data; Account B can discard it without seeing it.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Saved on this device"
+    timeout: 45000
+- tapOn: "^Task$"
+- tapOn: "New item text"
+- inputText: "E2E private Account A task"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E private Account A task"
+    timeout: 30000
+- tapOn: "Account"
+- tapOn: "Sign in"
+- tapOn: "Sign in as Account A"
+- extendedWaitUntil:
+    visible: "Synced"
+    timeout: 45000
+- tapOn: "Account"
+- tapOn: "Simulate unexpected auth loss"
+- extendedWaitUntil:
+    visible: "Tasks locked"
+    timeout: 30000
+- assertNotVisible: "E2E private Account A task"
+- tapOn: "Sign in"
+- tapOn: "Sign in as Account B"
+- extendedWaitUntil:
+    visible: "These tasks belong to another account"
+    timeout: 30000
+- assertNotVisible: "E2E private Account A task"
+- tapOn: "Delete local copy"
+- assertVisible: "Delete this device copy?"
+- tapOn: "Delete copy and continue"
+- extendedWaitUntil:
+    visible: "Synced"
+    timeout: 45000
+- assertVisible: "Nothing on your plate yet"
+- assertNotVisible: "E2E private Account A task"

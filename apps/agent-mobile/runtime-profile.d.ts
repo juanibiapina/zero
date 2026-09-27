@@ -8,6 +8,7 @@ export type RuntimeProfile = Readonly<{
     iconSuggestionsKey: string;
     todoWorkspaceKey: string;
   }>;
+  todoWorkspaceId: string | undefined;
   launcherCountSyncEnabled: boolean;
   native: Readonly<{
     updatesEnabled: boolean;

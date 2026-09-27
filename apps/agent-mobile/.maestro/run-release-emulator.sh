@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs inside android-emulator-runner for the shared hermetic flow. The E2E APK
-# is already signed in and talks to the runner-local Worker on port 8787 through
+# uses stateful fake auth and talks to the runner-local Worker on port 8787 through
 # adb reverse. This adapter installs that standalone CI artifact; the Pixel
 # runner instead keeps its development client and loads current JavaScript from
 # Metro. Both runners execute .maestro/hermetic.

@@ -11,6 +11,11 @@ appId: dev.juanibiapina.zeroagent
 - launchApp:
     clearState: true
 - extendedWaitUntil:
+    visible: "Saved on this device"
+    timeout: 45000
+- tapOn: "Account"
+- tapOn: "Sign in"
+- extendedWaitUntil:
     visible: "Run redirect probe"
     timeout: 45000
 - tapOn: "Run redirect probe"

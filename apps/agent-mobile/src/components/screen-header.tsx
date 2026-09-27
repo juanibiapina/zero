@@ -1,4 +1,4 @@
-import { useUser } from '@clerk/expo';
+import { useAuth, useUser } from '@clerk/expo';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -7,9 +7,26 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
 import { useTodoDataContext } from '@/lib/todo-data-context';
+import { RUNTIME_PROFILE } from '@/lib/runtime-profile';
 
 function messageOf(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function HermeticAuthLossControl({ close }: { close: () => void }) {
+  const { signOut } = useAuth();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Simulate unexpected auth loss"
+      onPress={() => {
+        close();
+        void signOut();
+      }}
+    >
+      <Text className="font-semibold text-accent">Simulate unexpected auth loss</Text>
+    </Pressable>
+  );
 }
 
 function AccountControl() {
@@ -112,6 +129,9 @@ function AccountControl() {
                     {error ? <Text variant="error">{error}</Text> : null}
                     {busy ? <ActivityIndicator accessibilityLabel="Signing out" /> : null}
                     <View className="items-end gap-4">
+                      {RUNTIME_PROFILE.hermetic ? (
+                        <HermeticAuthLossControl close={() => setOpen(false)} />
+                      ) : null}
                       {error ? (
                         <>
                           <Pressable

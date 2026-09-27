@@ -297,26 +297,32 @@ installs an APK.
 
 `run-metro-e2e.sh` owns the full run:
 
-1. It records checksums for every production-account TaskDO replica file.
+1. It records checksums for every non-hermetic account and guest replica file.
 2. It starts a fresh local Worker in Podman on port 8787.
 3. It starts headless Metro on port 8082 with
    `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
-4. It runs the four ordinary behavior flows in `.maestro/hermetic/` sequentially.
-   Before each flow after the first, it starts a Worker with a new temporary
-   persistence directory and removes only the E2E account's phone replica.
-5. Each flow verifies its own authenticated Worker postcondition before that
-   reset: the loose Task, the described Project, or an empty working set after
-   the throwaway selector entities are completed. The navigation flow also
-   starts and finishes with empty todo state.
-6. It saves each flow's Task and Project responses with the run artifacts.
+4. It runs the five ordinary behavior flows in `.maestro/hermetic/` sequentially.
+   Before every flow, an app-owned E2E route signs out fake Clerk, removes only
+   the exact hermetic SQLite files, and clears only hermetic AsyncStorage keys.
+   Before each flow after the first, the runner also starts a Worker with a new
+   temporary persistence directory.
+5. Each flow verifies both fake accounts' Worker postconditions before that
+   reset. Guest persistence/binding/logout and unexpected-auth mismatch are
+   covered alongside Project, selector, and navigation behavior; guest-only
+   navigation leaves both accounts empty.
+6. It saves each flow's Account A and Account B Task and Project responses with
+   the run artifacts.
 7. It verifies production file checksums, launcher alias state, and installed
    package identity.
 8. It removes E2E files, reverse ports, containers, and child processes.
 
-The one hermetic toggle selects fake Clerk modules, the fixed
-`http://localhost:8787` origin, a separate account-scoped TaskDO replica and
-AsyncStorage keys, disabled launcher-count synchronization, disabled EAS Update,
-and E2E cleartext policy.
+The one hermetic toggle selects stateful fake Clerk modules, deterministic
+Account A/Account B sign-in controls, unexpected-auth-loss control, the fixed
+`http://localhost:8787` origin, the exact guest replica
+`taskdo-workspace-hermetic-e2e-guest.sqlite`, isolated AsyncStorage keys,
+disabled launcher-count synchronization, disabled EAS Update, and E2E cleartext
+policy. Fake Clerk starts signed out in the ordinary suite; the extended TaskDO
+proof starts in its dedicated account for backward-compatible offline staging.
 It also aliases Clerk's token cache and resource cache to inert local fakes.
 Normal Metro startup restores real Clerk, normal URL selection, production
 storage names, EAS Update, and launcher synchronization.
@@ -333,7 +339,8 @@ missing Project links, invalid recurrence, and invalid After relationships.
 
 | State | Normal | Hermetic E2E |
 | --- | --- | --- |
-| Todo replica | `taskdo-fixture-<account-id>.sqlite` | `taskdo-fixture-taskdo-proof-mobile.sqlite` |
+| Guest todo replica | random `taskdo-workspace-<id>.sqlite` | `taskdo-workspace-hermetic-e2e-guest.sqlite` |
+| Account todo replica | existing descriptor or `taskdo-fixture-<account-id>.sqlite` | guest file bound to Account A; exact Account A/B fixture names after recovery |
 | Timezone key | `zero.timezone.synced` | `zero.e2e.timezone.synced` |
 | Icon-suggestion key | `zero.icon-suggestions.v1` | `zero.e2e.icon-suggestions.v1` |
 
@@ -351,8 +358,8 @@ non-assertable acceptance criteria.
 
 Two manual emulator workflows remain separate:
 
-- **Mobile E2E** runs `.maestro/ci/` against real Clerk to check signed-out
-  initialization and OAuth redirect handling. These flows clear app state.
+- **Mobile E2E** runs `.maestro/ci/` against real Clerk to check guest startup,
+  optional sign-in, and OAuth redirect handling. These flows clear app state.
 - **Mobile Release E2E** builds the standalone hermetic APK and runs the same
   `.maestro/hermetic/` behavior through `run-release-emulator.sh` against a
   runner-local Worker. It is optional and never runs on push or pull request.

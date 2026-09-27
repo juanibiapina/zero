@@ -7,7 +7,10 @@ HERMETIC_FLOW_DIR="${MOBILE_DIR}/.maestro/hermetic"
 PACKAGE="dev.juanibiapina.zeroagent"
 METRO_PORT=8082
 WORKER_PORT=8787
-TASK_TEXT="E2E loose task"
+ACCOUNT_A="e2e-account-a"
+ACCOUNT_B="e2e-account-b"
+GUEST_TASK_TEXT="E2E guest task"
+PRIVATE_TASK_TEXT="E2E private Account A task"
 PROJECT_TITLE="E2E described project"
 PROJECT_DESCRIPTION="E2E durable project description"
 TASKDO_PROOF="${E2E_TASKDO_PROOF:-0}"
@@ -56,7 +59,7 @@ adb_device() {
 
 production_checksums() {
   local command
-  command='cd files/SQLite 2>/dev/null || exit 0; for f in taskdo-fixture-*.sqlite*; do [ -f "$f" ] || continue; case "$f" in taskdo-fixture-e2e-test-user.sqlite*|taskdo-fixture-taskdo-proof-mobile.sqlite*) continue;; esac; sha256sum "$f"; done'
+  command='cd files/SQLite 2>/dev/null || exit 0; for f in taskdo-*.sqlite*; do [ -f "$f" ] || continue; case "$f" in taskdo-workspace-hermetic-e2e-guest.sqlite*|taskdo-fixture-e2e-account-a.sqlite*|taskdo-fixture-e2e-account-b.sqlite*|taskdo-fixture-taskdo-proof-mobile.sqlite*) continue;; esac; sha256sum "$f"; done'
   adb_device shell "run-as $PACKAGE sh -c '$command'" 2>/dev/null | tr -d '\r' | sort
 }
 
@@ -77,8 +80,31 @@ launcher_alias_state() {
 
 delete_e2e_stores() {
   local command
-  command='rm -f files/SQLite/taskdo-fixture-e2e-test-user.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
+  command='rm -f files/SQLite/taskdo-workspace-hermetic-e2e-guest.sqlite* files/SQLite/taskdo-fixture-e2e-account-a.sqlite* files/SQLite/taskdo-fixture-e2e-account-b.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
   adb_device shell "run-as $PACKAGE sh -c '$command'" >/dev/null 2>&1 || true
+}
+
+reset_e2e_phone_state() {
+  local reset_hierarchy="$ARTIFACT_DIR/reset-hierarchy.txt"
+  adb_device shell am force-stop "$PACKAGE" >/dev/null
+  adb_device shell am start -W \
+    -a android.intent.action.VIEW \
+    -d "zeroagent:///e2e-reset" \
+    "$PACKAGE" >/dev/null
+  for _ in $(seq 1 30); do
+    timeout 10 maestro --no-ansi hierarchy --compact > "$reset_hierarchy" 2>&1 || true
+    grep -Eq 'text=Hermetic state reset|accessibilityText=Hermetic state reset' "$reset_hierarchy" && break
+    sleep 1
+  done
+  if ! grep -Eq 'text=Hermetic state reset|accessibilityText=Hermetic state reset' "$reset_hierarchy"; then
+    echo 'The app-owned hermetic state reset did not complete' >&2
+    return 1
+  fi
+  adb_device shell am force-stop "$PACKAGE" >/dev/null
+  # Exact-file cleanup is a defense against a process killed after metadata was
+  # removed but before SQLite sidecars were closed. It cannot match real guest
+  # or account databases.
+  delete_e2e_stores
 }
 
 capture_diagnostics() {
@@ -269,16 +295,21 @@ if [[ "$worker_code" != "401" ]]; then
   echo "Worker readiness returned ${worker_code:-no response}" >> "$ARTIFACT_DIR/worker.log"
   exit 1
 fi
-empty_tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user')"
-if ! jq -e '.tasks == []' <<< "$empty_tasks_response" >/dev/null; then
-  printf 'Expected an empty local task list; received %s\n' "$empty_tasks_response" >> "$ARTIFACT_DIR/worker.log"
-  exit 1
+if [[ "$TASKDO_PROOF" == "1" ]]; then
+  INITIAL_ACCOUNTS=(taskdo-proof-mobile)
+else
+  INITIAL_ACCOUNTS=("$ACCOUNT_A" "$ACCOUNT_B")
 fi
-empty_projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer e2e-test-user')"
-if ! jq -e '.projects == []' <<< "$empty_projects_response" >/dev/null; then
-  printf 'Expected an empty local Project list; received %s\n' "$empty_projects_response" >> "$ARTIFACT_DIR/worker.log"
-  exit 1
-fi
+for account in "${INITIAL_ACCOUNTS[@]}"; do
+  empty_tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $account")"
+  empty_projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $account")"
+  if ! jq -e '.tasks == []' <<< "$empty_tasks_response" >/dev/null \
+    || ! jq -e '.projects == []' <<< "$empty_projects_response" >/dev/null; then
+    printf 'Expected empty local state for %s; tasks=%s projects=%s\n' \
+      "$account" "$empty_tasks_response" "$empty_projects_response" >> "$ARTIFACT_DIR/worker.log"
+    exit 1
+  fi
+done
 
 STAGE="metro startup"
 verbose "starting hermetic Metro"
@@ -322,17 +353,19 @@ STAGE="launch readiness"
 for _ in $(seq 1 90); do
   timeout 10 maestro --no-ansi hierarchy --compact \
     > "$ARTIFACT_DIR/launch-hierarchy.txt" 2>&1 || true
-  if grep -Eq 'text=Browse|accessibilityText=Browse' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
+  if grep -Eq 'text=Home|accessibilityText=Home' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
     break
   fi
   sleep 2
 done
-if ! grep -Eq 'text=Browse|accessibilityText=Browse' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
+if ! grep -Eq 'text=Home|accessibilityText=Home' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
   echo 'The development client did not load the app bundle' >> "$ARTIFACT_DIR/metro.log"
   exit 1
 fi
 
 if [[ "$TASKDO_PROOF" == "1" ]]; then
+  STAGE="phone reset before TaskDO flow"
+  reset_e2e_phone_state
   STAGE="maestro TaskDO flow"
   adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null
   set +e
@@ -348,10 +381,10 @@ else
   for index in "${!BEHAVIOR_FLOWS[@]}"; do
     flow="${BEHAVIOR_FLOWS[$index]}"
     flow_name="$(basename "$flow" .yaml)"
+    STAGE="phone reset before $flow_name"
+    reset_e2e_phone_state
     if [[ "$index" -gt 0 ]]; then
       STAGE="worker reset before $flow_name"
-      adb_device shell am force-stop "$PACKAGE" >/dev/null
-      delete_e2e_stores
       kill "$WORKER_PID" >/dev/null 2>&1 || true
       wait "$WORKER_PID" >/dev/null 2>&1 || true
       podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
@@ -402,33 +435,52 @@ else
     STAGE="postcondition $flow_name"
     tasks_response=""
     projects_response=""
+    account_b_tasks=""
+    account_b_projects=""
     for _ in $(seq 1 30); do
-      tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
-      projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer e2e-test-user' 2>/dev/null || true)"
+      tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_A" 2>/dev/null || true)"
+      projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $ACCOUNT_A" 2>/dev/null || true)"
+      account_b_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_B" 2>/dev/null || true)"
+      account_b_projects="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $ACCOUNT_B" 2>/dev/null || true)"
       case "$flow_name" in
-        01-add-task)
-          jq -e --arg text "$TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
+        01-guest-bind-and-logout)
+          jq -e --arg text "$GUEST_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
             <<< "$tasks_response" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 && break
+            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 \
+            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
+            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
           ;;
         02-save-project-description)
           jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
             '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
             <<< "$projects_response" >/dev/null 2>&1 \
-            && jq -e '.tasks == []' <<< "$tasks_response" >/dev/null 2>&1 && break
+            && jq -e '.tasks == []' <<< "$tasks_response" >/dev/null 2>&1 \
+            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
+            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
+          ;;
+        05-auth-loss-account-mismatch)
+          jq -e --arg text "$PRIVATE_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
+            <<< "$tasks_response" >/dev/null 2>&1 \
+            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 \
+            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
+            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
           ;;
         *)
           jq -e '.tasks == []' <<< "$tasks_response" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 && break
+            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 \
+            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
+            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
           ;;
       esac
       sleep 1
     done
     printf '%s\n' "$tasks_response" > "$ARTIFACT_DIR/$flow_name-tasks.json"
     printf '%s\n' "$projects_response" > "$ARTIFACT_DIR/$flow_name-projects.json"
+    printf '%s\n' "$account_b_tasks" > "$ARTIFACT_DIR/$flow_name-account-b-tasks.json"
+    printf '%s\n' "$account_b_projects" > "$ARTIFACT_DIR/$flow_name-account-b-projects.json"
     case "$flow_name" in
-      01-add-task)
-        jq -e --arg text "$TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
+      01-guest-bind-and-logout)
+        jq -e --arg text "$GUEST_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
           <<< "$tasks_response" >/dev/null
         jq -e '.projects == []' <<< "$projects_response" >/dev/null
         ;;
@@ -438,11 +490,18 @@ else
           <<< "$projects_response" >/dev/null
         jq -e '.tasks == []' <<< "$tasks_response" >/dev/null
         ;;
+      05-auth-loss-account-mismatch)
+        jq -e --arg text "$PRIVATE_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
+          <<< "$tasks_response" >/dev/null
+        jq -e '.projects == []' <<< "$projects_response" >/dev/null
+        ;;
       *)
         jq -e '.tasks == []' <<< "$tasks_response" >/dev/null
         jq -e '.projects == []' <<< "$projects_response" >/dev/null
         ;;
     esac
+    jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null
+    jq -e '.projects == []' <<< "$account_b_projects" >/dev/null
   done
 fi
 if [[ "$maestro_code" -ne 0 ]]; then exit "$maestro_code"; fi
@@ -494,12 +553,12 @@ if [[ "$TASKDO_PROOF" == "1" ]]; then
   jq -e --arg project "$project_id" \
     '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
     <<< "$taskdo_tasks" >/dev/null
-  normal_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer e2e-test-user')"
+  normal_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_A")"
   jq -e '.tasks == []' <<< "$normal_tasks" >/dev/null
 fi
 
 STAGE="storage isolation"
-adb_device shell am force-stop "$PACKAGE" >/dev/null
+reset_e2e_phone_state
 production_checksums > "$ARTIFACT_DIR/production-after.txt"
 if ! cmp -s "$ARTIFACT_DIR/production-before.txt" "$ARTIFACT_DIR/production-after.txt"; then
   {

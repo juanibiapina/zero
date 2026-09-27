@@ -56,6 +56,9 @@ export function useTodoData(): TodoData {
   const [workspace] = useState(() => createTodoWorkspaceRegistry({
     storage: AsyncStorage,
     storageKey: RUNTIME_PROFILE.storageKeys.todoWorkspaceKey,
+    createWorkspaceId: RUNTIME_PROFILE.todoWorkspaceId
+      ? () => RUNTIME_PROFILE.todoWorkspaceId!
+      : undefined,
   }));
   const [owner] = useState(() => createTodoWorkspaceOwner({
     registry: workspace,
