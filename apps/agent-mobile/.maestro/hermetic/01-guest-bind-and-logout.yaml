@@ -33,7 +33,7 @@ appId: dev.juanibiapina.zeroagent
     visible: "Synced"
     timeout: 45000
 - tapOn: "Synced"
-- assertVisible: "Sync status"
+- assertVisible: "Sync status details"
 - assertVisible: "Offline copy"
 - assertVisible: "App"
 - tapOn: "Close sync status"

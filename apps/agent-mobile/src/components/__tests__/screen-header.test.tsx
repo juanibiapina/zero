@@ -62,19 +62,24 @@ function renderHeader(value: TodoData, showSyncStatus = false) {
 describe('ScreenHeader', () => {
   it('opens Home sync details from the icon beside the account', async () => {
     const lastSyncedAt = '2026-09-27T11:45:00.000Z';
-    const { getByLabelText, getByText } = await renderHeader(data({
+    const { getByLabelText, getByText, queryByLabelText } = await renderHeader(data({
       workspaceStatus: 'account',
       signedIn: true,
       connected: true,
       sync: { phase: 'synced', lastSyncedAt },
     }), true);
 
-    fireEvent.press(getByLabelText('Synced'));
+    const trigger = getByLabelText('Synced');
+    expect(trigger.props.className).toContain('h-12 w-12');
+    fireEvent.press(trigger);
 
-    await waitFor(() => expect(getByText('Sync status')).toBeTruthy());
+    await waitFor(() => expect(getByLabelText('Sync status details')).toBeTruthy());
     expect(getByText('Last synced')).toBeTruthy();
     expect(getByText(new Date(lastSyncedAt).toLocaleString())).toBeTruthy();
     expect(getByText('Version')).toBeTruthy();
+
+    fireEvent.press(getByLabelText('Close sync status'));
+    await waitFor(() => expect(queryByLabelText('Sync status details')).toBeNull());
   });
 
   it('shows connecting instead of offline while Home reconnects', async () => {

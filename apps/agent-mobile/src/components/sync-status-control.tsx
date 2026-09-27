@@ -1,9 +1,17 @@
-import { BottomSheet, Host, Icon } from '@expo/ui';
+import { Host, Icon } from '@expo/ui';
 import { todoSyncPresentation, type TodoSyncDisplayKind } from '@zero/agent-core';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
 import { useTodoDataContext } from '@/lib/todo-data-context';
@@ -65,6 +73,11 @@ export function SyncStatusControl() {
   const data = useTodoDataContext();
   const updates = Updates.useUpdates();
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState({ top: 72, right: 16 });
+  const triggerRef = useRef<View>(null);
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const rippleColor = useColor('--color-ripple');
   if (!data) return null;
 
   const sync = todoSyncPresentation({
@@ -88,48 +101,104 @@ export function SyncStatusControl() {
   const runningUpdate = updates.currentlyRunning.createdAt;
   const updateError = updates.checkError ?? updates.downloadError;
 
+  const showPopover = () => {
+    setAnchor({ top: insets.top + 64, right: 16 });
+    setOpen(true);
+    triggerRef.current?.measureInWindow((x, y, triggerWidth, triggerHeight) => {
+      setAnchor({
+        top: y + triggerHeight + 8,
+        right: Math.max(16, width - x - triggerWidth),
+      });
+    });
+  };
+
+  const popoverWidth = Math.min(340, width - 32);
+  const popoverMaxHeight = Math.max(240, height - anchor.top - insets.bottom - 16);
+
   return (
     <>
       <Pressable
+        ref={triggerRef}
         accessibilityRole="button"
         accessibilityLabel={triggerLabel}
-        hitSlop={8}
-        onPress={() => setOpen(true)}
-        className="h-10 w-10 items-center justify-center rounded-full"
+        accessibilityHint="Shows sync and app update details"
+        android_ripple={{ color: rippleColor, borderless: true, radius: 24 }}
+        onPress={showPopover}
+        className="h-12 w-12 items-center justify-center overflow-hidden rounded-full"
       >
-        <StatusIcon kind={triggerKind} updateReady={updates.isUpdatePending} />
+        <View pointerEvents="none">
+          <StatusIcon kind={triggerKind} updateReady={updates.isUpdatePending} />
+        </View>
       </Pressable>
-      <Host>
-        <BottomSheet
-          isPresented={open}
-          onDismiss={() => setOpen(false)}
-          showDragIndicator
-          contentPadding={{ top: 8, bottom: 28, left: 20, right: 20 }}
-          testID="sync-status-sheet"
-        >
-          <View className="gap-5">
-            <View className="gap-1">
-              <Text variant="title" selectable>Sync status</Text>
-              <Text variant="subtitle" selectable>{sync.description}</Text>
-            </View>
-            <View className="gap-1 rounded-2xl bg-surface-muted px-4 py-2">
-              <DetailRow label="Status"><Text className="font-semibold" selectable>{sync.label}</Text></DetailRow>
-              <DetailRow label="Last synced">
-                {lastSync ? (
-                  <>
-                    <Text className="font-semibold" selectable>{formatRelative(data.sync.lastSyncedAt!)}</Text>
-                    <Text variant="caption" selectable>{lastSync.toLocaleString()}</Text>
-                  </>
-                ) : <Text className="font-semibold" selectable>Not yet</Text>}
-              </DetailRow>
-              <DetailRow label="Offline copy">
-                <Text className="font-semibold" selectable>{data.durable ? 'Available' : 'Unavailable'}</Text>
-              </DetailRow>
-            </View>
-            {data.durabilityError ? <Text variant="error" selectable>{data.durabilityError}</Text> : null}
-            <View className="gap-1">
-              <Text variant="section">App</Text>
-              <View className="gap-1 rounded-2xl bg-surface-muted px-4 py-2">
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => setOpen(false)}
+      >
+        <View className="flex-1">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss sync status"
+            onPress={() => setOpen(false)}
+            className="absolute inset-0"
+          />
+          <View
+            accessibilityLabel="Sync status details"
+            style={{
+              top: anchor.top,
+              right: anchor.right,
+              width: popoverWidth,
+              maxHeight: popoverMaxHeight,
+            }}
+            className="absolute overflow-hidden rounded-2xl border border-divider bg-surface shadow-raised"
+          >
+            <ScrollView
+              contentContainerStyle={{ padding: 20, gap: 16 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View className="flex-row items-start gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted" pointerEvents="none">
+                  <StatusIcon kind={triggerKind} updateReady={updates.isUpdatePending} />
+                </View>
+                <View className="min-w-0 flex-1 gap-0.5 pt-0.5">
+                  <Text className="text-editor" selectable>{sync.label}</Text>
+                  <Text variant="subtitle" selectable>{sync.description}</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close sync status"
+                  onPress={() => setOpen(false)}
+                  className="h-12 items-center justify-center px-1"
+                >
+                  <Text variant="subtitle" className="font-semibold text-accent">Close</Text>
+                </Pressable>
+              </View>
+
+              <View className="h-px bg-divider" />
+
+              <View className="gap-1">
+                <DetailRow label="Last synced">
+                  {lastSync ? (
+                    <>
+                      <Text className="font-semibold" selectable>{formatRelative(data.sync.lastSyncedAt!)}</Text>
+                      <Text variant="caption" selectable>{lastSync.toLocaleString()}</Text>
+                    </>
+                  ) : <Text className="font-semibold" selectable>Not yet</Text>}
+                </DetailRow>
+                <DetailRow label="Offline copy">
+                  <Text className="font-semibold" selectable>{data.durable ? 'Available' : 'Unavailable'}</Text>
+                </DetailRow>
+              </View>
+
+              {data.durabilityError ? <Text variant="error" selectable>{data.durabilityError}</Text> : null}
+
+              <View className="h-px bg-divider" />
+
+              <View className="gap-1">
+                <Text variant="section">App</Text>
                 <DetailRow label="Version">
                   <Text className="font-semibold" selectable>{Constants.expoConfig?.version ?? 'Development'}</Text>
                 </DetailRow>
@@ -146,19 +215,12 @@ export function SyncStatusControl() {
                   </DetailRow>
                 ) : null}
               </View>
+
               {updateError ? <Text variant="error" selectable>{updateError.message}</Text> : null}
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close sync status"
-              onPress={() => setOpen(false)}
-              className="h-12 items-center justify-center rounded-xl bg-surface-muted"
-            >
-              <Text className="font-semibold">Done</Text>
-            </Pressable>
+            </ScrollView>
           </View>
-        </BottomSheet>
-      </Host>
+        </View>
+      </Modal>
     </>
   );
 }

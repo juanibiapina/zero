@@ -48,19 +48,20 @@ function AccountControl() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Account"
-        hitSlop={8}
         onPress={() => {
           setError(null);
           setConfirming(false);
           setOpen(true);
         }}
-        className="h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-surface-muted"
+        className="h-12 w-12 items-center justify-center rounded-full"
       >
-        {signedIn && user?.imageUrl ? (
-          <Image source={user.imageUrl} style={{ width: 40, height: 40 }} />
-        ) : (
-          <Text className="text-[20px]">👤</Text>
-        )}
+        <View className="h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-surface-muted">
+          {signedIn && user?.imageUrl ? (
+            <Image source={user.imageUrl} style={{ width: 40, height: 40 }} />
+          ) : (
+            <Text className="text-[20px]">👤</Text>
+          )}
+        </View>
       </Pressable>
 
       <Modal
@@ -180,7 +181,7 @@ export function ScreenHeader({ title, showSyncStatus = false }: { title: string;
       style={{ paddingTop: insets.top + 12 }}
     >
       <Text variant="title">{title}</Text>
-      <View className="flex-row items-center gap-1">
+      <View className="flex-row items-center gap-2">
         {showSyncStatus ? <SyncStatusControl /> : null}
         <AccountControl />
       </View>

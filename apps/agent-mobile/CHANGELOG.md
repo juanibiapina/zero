@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-27: The Home sync icon is easier to tap, and its details now open in a compact dark-mode-friendly popover that closes reliably.
+
 - 2026-09-27: Home now shows sync as an icon beside your account. Tap it to see the last successful sync, offline storage, app version, and update progress; returning to the app shows Connecting instead of briefly flashing Offline.
 
 - 2026-09-27: Pressing + now smoothly transforms the button into the add drawer as the keyboard appears, and one Back press closes both the keyboard and drawer.
