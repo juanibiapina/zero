@@ -13,14 +13,12 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "E2E private Account A task"
     timeout: 30000
-- tapOn: "Account"
-- tapOn: "Sign in"
+- tapOn: "E2E sign in"
 - tapOn: "Sign in as Account A"
 - extendedWaitUntil:
     visible: "Synced"
     timeout: 45000
-- tapOn: "Account"
-- tapOn: "Simulate unexpected auth loss"
+- tapOn: "E2E simulate auth loss"
 - extendedWaitUntil:
     visible: "Tasks locked"
     timeout: 30000

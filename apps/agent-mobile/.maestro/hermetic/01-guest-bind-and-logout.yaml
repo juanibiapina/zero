@@ -20,17 +20,13 @@ appId: dev.juanibiapina.zeroagent
     visible: "E2E guest task"
     timeout: 45000
 - assertVisible: "Saved on this device"
-- tapOn: "Account"
-- tapOn: "Sign in"
+- tapOn: "E2E sign in"
 - tapOn: "Sign in as Account A"
 - extendedWaitUntil:
     visible: "Synced"
     timeout: 45000
 - assertVisible: "E2E guest task"
-- tapOn: "Account"
-- tapOn: "Sign out"
-- assertVisible: "Sign out and remove this device copy?"
-- tapOn: "Remove copy and sign out"
+- tapOn: "E2E safe sign out"
 - extendedWaitUntil:
     visible: "Saved on this device"
     timeout: 45000

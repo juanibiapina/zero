@@ -25,6 +25,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { useTaskDetail } from '@/components/task-detail';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
+import { RUNTIME_PROFILE } from '@/lib/runtime-profile';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
 import {
   useDelayed,
@@ -69,6 +70,7 @@ export default function HomeScreen() {
 function TodoHomeScreen() {
   const replica = useTodoReplica();
   const todoData = useTodoDataContext();
+  const { signOut: loseAuth } = useAuth();
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
 
   return (
@@ -79,6 +81,30 @@ function TodoHomeScreen() {
           ? 'Saved on this device'
           : todoData.connected ? 'Synced' : 'Offline · saved on this device'}
       </Text> : null}
+      {RUNTIME_PROFILE.hermetic && todoData ? (
+        <View className="flex-row gap-4 px-screen-x py-1">
+          {todoData.signedIn ? (
+            <>
+              <Text
+                accessibilityRole="button"
+                onPress={() => void todoData.signOut()}
+                className="text-accent"
+              >E2E safe sign out</Text>
+              <Text
+                accessibilityRole="button"
+                onPress={() => void loseAuth()}
+                className="text-accent"
+              >E2E simulate auth loss</Text>
+            </>
+          ) : (
+            <Text
+              accessibilityRole="button"
+              onPress={() => router.push('/sign-in')}
+              className="text-accent"
+            >E2E sign in</Text>
+          )}
+        </View>
+      ) : null}
       {todoData?.error ? <Text variant="error" className="px-screen-x">{todoData.error}</Text> : null}
       {recoveryError ? <Text variant="error" className="px-screen-x">{recoveryError}</Text> : null}
       {todoData?.recoveries.map((entry) => (
