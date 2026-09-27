@@ -159,6 +159,23 @@ export function createTodoWorkspaceRegistry({
       tail = operation.then(() => {}, () => {});
       return operation;
     },
+    forMismatchedAccount(accountId: string): Promise<TodoWorkspaceDescriptor> {
+      const operation = tail.then(async () => {
+        assertAccountIdentity(accountId);
+        const stored = await storage.getItem(storageKey);
+        if (stored === null) throw new Error('No saved todo workspace to recover');
+        const descriptor = parseDescriptor(stored);
+        if (
+          descriptor.binding.kind !== 'bound'
+          || descriptor.binding.accountId === accountId
+        ) {
+          throw new Error('Saved todo workspace does not belong to a different account');
+        }
+        return descriptor;
+      });
+      tail = operation.then(() => {}, () => {});
+      return operation;
+    },
     forget(expected: TodoWorkspaceDescriptor): Promise<void> {
       const operation = tail.then(async () => {
         const stored = await storage.getItem(storageKey);

@@ -22,6 +22,8 @@ export type TodoData = TaskdoReplicaClientState & {
   signedIn: boolean;
   signOut: () => Promise<void>;
   discardLocalCopyAndSignOut: () => Promise<void>;
+  signOutWrongAccount: () => Promise<void>;
+  deleteLocalCopyAndContinue: () => Promise<void>;
 };
 
 class CurrentTokenSource {
@@ -81,6 +83,14 @@ export function useTodoData(): TodoData {
     () => owner.signOut({ discardLocalCopy: true }),
     [owner],
   );
+  const signOutWrongAccount = useCallback(
+    () => owner.signOutMismatchedAccount(),
+    [owner],
+  );
+  const deleteLocalCopyAndContinue = useCallback(
+    () => owner.deleteMismatchedWorkspace(),
+    [owner],
+  );
   const expectedAccountId = userId ?? null;
   const clientState = selectTodoWorkspaceOwnerState(state, expectedAccountId);
   const workspaceStatus = state.accountId === expectedAccountId && state.status !== 'closed'
@@ -92,5 +102,7 @@ export function useTodoData(): TodoData {
     signedIn: userId !== null && userId !== undefined,
     signOut: signOutSafely,
     discardLocalCopyAndSignOut,
+    signOutWrongAccount,
+    deleteLocalCopyAndContinue,
   };
 }

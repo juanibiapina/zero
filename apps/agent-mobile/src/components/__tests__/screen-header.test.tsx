@@ -31,6 +31,8 @@ function data(overrides: Partial<TodoData> = {}): TodoData {
     signedIn: false,
     signOut: async () => {},
     discardLocalCopyAndSignOut: async () => {},
+    signOutWrongAccount: async () => {},
+    deleteLocalCopyAndContinue: async () => {},
     ...overrides,
   };
 }

@@ -15,6 +15,8 @@ export function createInMemoryTodoData(seed: InMemoryTodoSeed = {}): TodoData {
     signedIn: true,
     signOut: async () => {},
     discardLocalCopyAndSignOut: async () => {},
+    signOutWrongAccount: async () => {},
+    deleteLocalCopyAndContinue: async () => {},
   };
 }
 

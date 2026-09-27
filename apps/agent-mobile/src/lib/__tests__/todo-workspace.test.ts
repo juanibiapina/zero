@@ -142,6 +142,45 @@ describe('mobile todo workspace registry', () => {
     expect(storage.setItem).not.toHaveBeenCalled();
   });
 
+  it('returns only a freshly validated workspace bound to a different account for recovery', async () => {
+    const descriptor = {
+      version: 1 as const,
+      databaseName: 'taskdo-fixture-account-A.sqlite',
+      binding: { kind: 'bound' as const, accountId: 'account-A' },
+    };
+    const storage = memoryStorage(JSON.stringify(descriptor));
+    const registry = createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' });
+
+    await expect(registry.forMismatchedAccount('account-B')).resolves.toEqual(descriptor);
+    expect(storage.getItem).toHaveBeenCalledWith('workspace');
+  });
+
+  it('never authorizes recovery deletion for the current account or unsafe metadata', async () => {
+    const sameAccount = createTodoWorkspaceRegistry({
+      storage: memoryStorage(JSON.stringify({
+        version: 1,
+        databaseName: 'taskdo-fixture-account-A.sqlite',
+        binding: { kind: 'bound', accountId: 'account-A' },
+      })),
+      storageKey: 'workspace',
+    });
+    const corrupt = createTodoWorkspaceRegistry({
+      storage: memoryStorage(JSON.stringify({
+        version: 1,
+        databaseName: '../account-A.sqlite',
+        binding: { kind: 'bound', accountId: 'account-A' },
+      })),
+      storageKey: 'workspace',
+    });
+
+    await expect(sameAccount.forMismatchedAccount('account-A')).rejects.toThrow(
+      'does not belong to a different account',
+    );
+    await expect(corrupt.forMismatchedAccount('account-B')).rejects.toThrow(
+      'metadata is invalid',
+    );
+  });
+
   it('serializes concurrent first opens into one persisted adoption', async () => {
     const storage = memoryStorage();
     const registry = createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' });

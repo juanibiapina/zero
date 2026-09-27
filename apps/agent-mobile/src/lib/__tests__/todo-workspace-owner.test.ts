@@ -333,6 +333,173 @@ describe('mobile todo workspace owner', () => {
     });
   });
 
+  it('signs out a mismatched Clerk account without deleting the bound workspace', async () => {
+    const descriptor = {
+      version: 1 as const,
+      databaseName: 'taskdo-fixture-account-A.sqlite',
+      binding: { kind: 'bound' as const, accountId: 'account-A' },
+    };
+    const storage = memoryStorage(JSON.stringify(descriptor));
+    const deleteDatabase = jest.fn(async () => {});
+    const clearAccountCaches = jest.fn(async () => {});
+    const signOut = jest.fn(async () => {});
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' }),
+      open: async () => replica(),
+      deleteDatabase,
+      clearAccountCaches,
+      signOut,
+    });
+    await owner.setAccount('account-B');
+
+    await owner.signOutMismatchedAccount();
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(deleteDatabase).not.toHaveBeenCalled();
+    expect(clearAccountCaches).not.toHaveBeenCalled();
+    expect(storage.removeItem).not.toHaveBeenCalled();
+    expect(owner.getSnapshot()).toMatchObject({
+      accountId: null,
+      status: 'locked',
+      replica: null,
+      ready: false,
+    });
+    await expect(
+      createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' })
+        .forSignedInAccount('account-A'),
+    ).resolves.toEqual(descriptor);
+  });
+
+  it('deletes the mismatched local copy and opens a fresh workspace for the current account', async () => {
+    const storage = memoryStorage(JSON.stringify({
+      version: 1,
+      databaseName: 'taskdo-fixture-account-A.sqlite',
+      binding: { kind: 'bound', accountId: 'account-A' },
+    }));
+    const order: string[] = [];
+    const opened: TodoWorkspaceDescriptor[] = [];
+    const signOut = jest.fn(async () => {});
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' }),
+      open: async (descriptor) => {
+        opened.push(descriptor);
+        order.push(`open ${descriptor.databaseName}`);
+        return replica();
+      },
+      deleteDatabase: async (databaseName) => { order.push(`delete ${databaseName}`); },
+      clearAccountCaches: async (accountId) => { order.push(`clear ${accountId}`); },
+      signOut,
+    });
+    await owner.setAccount('account-B');
+
+    await owner.deleteMismatchedWorkspace();
+
+    expect(order).toEqual([
+      'delete taskdo-fixture-account-A.sqlite',
+      'clear account-A',
+      'open taskdo-fixture-account-B.sqlite',
+    ]);
+    expect(opened).toEqual([{
+      version: 1,
+      databaseName: 'taskdo-fixture-account-B.sqlite',
+      binding: { kind: 'bound', accountId: 'account-B' },
+    }]);
+    expect(signOut).not.toHaveBeenCalled();
+    expect(owner.getSnapshot()).toMatchObject({
+      accountId: 'account-B',
+      status: 'account',
+      ready: true,
+    });
+  });
+
+  it('fails closed and retries a mismatched database deletion from validated metadata', async () => {
+    const storage = memoryStorage(JSON.stringify({
+      version: 1,
+      databaseName: 'taskdo-fixture-account-A.sqlite',
+      binding: { kind: 'bound', accountId: 'account-A' },
+    }));
+    const deleteDatabase = jest.fn(async () => {
+      if (deleteDatabase.mock.calls.length === 1) throw new Error('database busy');
+    });
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' }),
+      open: async () => replica(),
+      deleteDatabase,
+      clearAccountCaches: async () => {},
+    });
+    await owner.setAccount('account-B');
+
+    await expect(owner.deleteMismatchedWorkspace()).rejects.toThrow('database busy');
+    expect(owner.getSnapshot()).toMatchObject({
+      status: 'mismatch',
+      replica: null,
+      error: expect.stringContaining('database busy'),
+    });
+    await owner.deleteMismatchedWorkspace();
+
+    expect(deleteDatabase).toHaveBeenCalledTimes(2);
+    expect(deleteDatabase).toHaveBeenNthCalledWith(1, 'taskdo-fixture-account-A.sqlite');
+    expect(deleteDatabase).toHaveBeenNthCalledWith(2, 'taskdo-fixture-account-A.sqlite');
+    expect(storage.getItem.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(owner.getSnapshot()).toMatchObject({ status: 'account', ready: true });
+  });
+
+  it('retries metadata removal without repeating completed destructive steps', async () => {
+    let removeAttempts = 0;
+    const storage = memoryStorage(JSON.stringify({
+      version: 1,
+      databaseName: 'taskdo-fixture-account-A.sqlite',
+      binding: { kind: 'bound', accountId: 'account-A' },
+    }), () => {}, () => {
+      removeAttempts += 1;
+      if (removeAttempts === 1) throw new Error('storage unavailable');
+    });
+    const deleteDatabase = jest.fn(async () => {});
+    const clearAccountCaches = jest.fn(async () => {});
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' }),
+      open: async () => replica(),
+      deleteDatabase,
+      clearAccountCaches,
+    });
+    await owner.setAccount('account-B');
+
+    await expect(owner.deleteMismatchedWorkspace()).rejects.toThrow('storage unavailable');
+    expect(owner.getSnapshot()).toMatchObject({
+      status: 'mismatch',
+      error: expect.stringContaining('storage unavailable'),
+    });
+    await owner.deleteMismatchedWorkspace();
+
+    expect(deleteDatabase).toHaveBeenCalledTimes(1);
+    expect(clearAccountCaches).toHaveBeenCalledTimes(1);
+    expect(storage.removeItem).toHaveBeenCalledTimes(2);
+    expect(owner.getSnapshot()).toMatchObject({ status: 'account', ready: true });
+  });
+
+  it('does not offer a retaining sign-out after destructive recovery has started', async () => {
+    const storage = memoryStorage(JSON.stringify({
+      version: 1,
+      databaseName: 'taskdo-fixture-account-A.sqlite',
+      binding: { kind: 'bound', accountId: 'account-A' },
+    }));
+    const signOut = jest.fn(async () => {});
+    const owner = createTodoWorkspaceOwner({
+      registry: createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' }),
+      open: async () => replica(),
+      deleteDatabase: async () => {},
+      clearAccountCaches: async () => { throw new Error('cache unavailable'); },
+      signOut,
+    });
+    await owner.setAccount('account-B');
+    await expect(owner.deleteMismatchedWorkspace()).rejects.toThrow('cache unavailable');
+
+    await expect(owner.signOutMismatchedAccount()).rejects.toThrow(
+      'Finish replacing the local workspace before signing out',
+    );
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
   it('locks a bound workspace when auth disappears without exposing it as guest data', async () => {
     const close = jest.fn(async () => {});
     const opened: TodoWorkspaceDescriptor[] = [];

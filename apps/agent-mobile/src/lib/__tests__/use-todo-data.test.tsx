@@ -42,6 +42,7 @@ describe('useTodoData', () => {
     mockAuth.userId = 'A';
     mockOpenReplica.mockReset();
     mockGetToken.mockClear();
+    mockSignOut.mockClear();
     await AsyncStorage.clear();
   });
 
@@ -98,6 +99,36 @@ describe('useTodoData', () => {
 
     await hook.unmount();
     expect(order).toEqual(['database taskdo-fixture-A.sqlite', 'open A', 'close A']);
+  });
+
+  it('lets a mismatched Clerk account sign out without forgetting the bound workspace', async () => {
+    await AsyncStorage.setItem(
+      RUNTIME_PROFILE.storageKeys.todoWorkspaceKey,
+      JSON.stringify({
+        version: 1,
+        databaseName: 'taskdo-fixture-A.sqlite',
+        binding: { kind: 'bound', accountId: 'A' },
+      }),
+    );
+    mockAuth.userId = 'B';
+    const hook = await renderHook(() => useTodoData());
+    await waitFor(() => expect(hook.result.current.workspaceStatus).toBe('mismatch'));
+
+    await hook.result.current.signOutWrongAccount();
+
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    mockAuth.userId = null;
+    await hook.rerender({});
+    await waitFor(() => expect(hook.result.current.workspaceStatus).toBe('locked'));
+    expect(hook.result.current).toMatchObject({
+      workspaceStatus: 'locked',
+      replica: null,
+      ready: false,
+    });
+    await expect(AsyncStorage.getItem(
+      RUNTIME_PROFILE.storageKeys.todoWorkspaceKey,
+    )).resolves.toContain('taskdo-fixture-A.sqlite');
+    await hook.unmount();
   });
 
   it('never exposes a replica whose account became stale while opening', async () => {

@@ -161,6 +161,13 @@ export function createTodoWorkspaceOwner({
     cachesCleared: boolean;
     descriptorForgotten: boolean;
   } | null = null;
+  let pendingMismatchDeletion: {
+    currentAccountId: string;
+    descriptor: TodoWorkspaceDescriptor;
+    databaseDeleted: boolean;
+    cachesCleared: boolean;
+    descriptorForgotten: boolean;
+  } | null = null;
 
   const setAccount = (accountId: string | null): Promise<void> => {
     if (stopped) return Promise.resolve();
@@ -297,6 +304,102 @@ export function createTodoWorkspaceOwner({
     return operation;
   };
 
+  const signOutMismatchedAccount = () => {
+    if (!signOutAccount) return Promise.reject(new Error('Sign out is unavailable'));
+    const operation = tail.then(async () => {
+      if (state.status !== 'mismatch' || !state.accountId || state.replica) {
+        throw new Error('No mismatched account is active');
+      }
+      if (
+        pendingMismatchDeletion
+        && (
+          pendingMismatchDeletion.databaseDeleted
+          || pendingMismatchDeletion.cachesCleared
+          || pendingMismatchDeletion.descriptorForgotten
+        )
+      ) {
+        throw new Error('Finish replacing the local workspace before signing out');
+      }
+      const accountId = state.accountId;
+      await registry.forMismatchedAccount(accountId);
+      try {
+        await signOutAccount();
+        pendingMismatchDeletion = null;
+        generation += 1;
+        publish(emptyState(null, 'locked'));
+      } catch (cause) {
+        publish({ ...state, error: `Could not sign out: ${errorMessage(cause)}` });
+        throw cause;
+      }
+    });
+    tail = operation.catch(() => {});
+    return operation;
+  };
+
+  const deleteMismatchedWorkspace = () => {
+    if (!deleteDatabase || !clearAccountCaches) {
+      return Promise.reject(new Error('Workspace deletion is unavailable'));
+    }
+    const operation = tail.then(async () => {
+      if (state.status !== 'mismatch' || !state.accountId || state.replica) {
+        throw new Error('No mismatched account is active');
+      }
+      const currentAccountId = state.accountId;
+      try {
+        if (!pendingMismatchDeletion) {
+          pendingMismatchDeletion = {
+            currentAccountId,
+            descriptor: await registry.forMismatchedAccount(currentAccountId),
+            databaseDeleted: false,
+            cachesCleared: false,
+            descriptorForgotten: false,
+          };
+        }
+        const pending = pendingMismatchDeletion;
+        if (pending.currentAccountId !== currentAccountId) {
+          throw new Error('Authenticated account changed during workspace recovery');
+        }
+        if (!pending.databaseDeleted) {
+          const fresh = await registry.forMismatchedAccount(currentAccountId);
+          if (JSON.stringify(fresh) !== JSON.stringify(pending.descriptor)) {
+            throw new Error('Saved todo workspace changed during recovery');
+          }
+          await deleteDatabase(fresh.databaseName);
+          pending.databaseDeleted = true;
+        }
+        if (!pending.cachesCleared) {
+          if (pending.descriptor.binding.kind !== 'bound') {
+            throw new Error('Saved todo workspace is not bound');
+          }
+          await clearAccountCaches(pending.descriptor.binding.accountId);
+          pending.cachesCleared = true;
+        }
+        if (!pending.descriptorForgotten) {
+          await registry.forget(pending.descriptor);
+          pending.descriptorForgotten = true;
+        }
+
+        generation += 1;
+        const ownerGeneration = generation;
+        publish(emptyState(currentAccountId, 'opening'));
+        const descriptor = await registry.forSignedInAccount(currentAccountId);
+        if (!isCurrent(currentAccountId, ownerGeneration)) return;
+        await openDescriptor(currentAccountId, descriptor, ownerGeneration);
+        pendingMismatchDeletion = null;
+      } catch (cause) {
+        if (state.accountId === currentAccountId && !state.ready) {
+          publish({
+            ...emptyState(currentAccountId, 'mismatch'),
+            error: `Could not replace this device copy: ${errorMessage(cause)}`,
+          });
+        }
+        throw cause;
+      }
+    });
+    tail = operation.catch(() => {});
+    return operation;
+  };
+
   return {
     getSnapshot: () => state,
     subscribe(listener: () => void) {
@@ -305,6 +408,8 @@ export function createTodoWorkspaceOwner({
     },
     setAccount,
     signOut,
+    signOutMismatchedAccount,
+    deleteMismatchedWorkspace,
     close(): Promise<void> {
       if (closing) return closing;
       stopped = true;
