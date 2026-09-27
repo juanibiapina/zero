@@ -1,6 +1,7 @@
 import { UserButton } from "@clerk/react";
-import { Link, NavLink } from "react-router";
+import { Link, NavLink, useLocation } from "react-router";
 
+import { SyncStatusControl } from "@/components/sync-status-control";
 import { cn } from "@/lib/utils";
 
 // One signed-in navigation destination.
@@ -73,6 +74,8 @@ const NAV_ITEMS: NavItem[] = [
 // and a bottom bar on small screens (the web mirror of the mobile tab bar).
 // Mount once in the app shell.
 export function SideNav() {
+  const location = useLocation();
+  const showSyncStatus = location.pathname === "/home";
   return (
     <>
       {/* Desktop: fixed left rail. */}
@@ -102,6 +105,7 @@ export function SideNav() {
           ))}
         </nav>
         <div className="flex items-center gap-3 border-t p-4">
+          {showSyncStatus ? <SyncStatusControl /> : null}
           <UserButton appearance={{ elements: { avatarBox: "size-8" } }} />
         </div>
       </aside>
@@ -111,7 +115,10 @@ export function SideNav() {
         <Link to="/" className="text-xl font-bold tracking-tight">
           Zero
         </Link>
-        <UserButton appearance={{ elements: { avatarBox: "size-8" } }} />
+        <div className="flex items-center gap-1">
+          {showSyncStatus ? <SyncStatusControl /> : null}
+          <UserButton appearance={{ elements: { avatarBox: "size-8" } }} />
+        </div>
       </header>
       <nav className="fixed inset-x-0 bottom-0 z-50 flex h-16 items-stretch border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:hidden">
         {NAV_ITEMS.map(({ to, label, icon: Icon }) => (

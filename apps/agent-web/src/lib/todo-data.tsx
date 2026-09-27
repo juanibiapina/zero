@@ -41,6 +41,7 @@ export function TodoDataProvider({ children }: { children: ReactNode }) {
         queryClient: new QueryClient(),
         onSnapshot: events.onSnapshot,
         onConnection: events.onConnection,
+        onSyncState: events.onSyncState,
         onDurability: events.onDurability,
       });
       return {
@@ -77,11 +78,9 @@ export function TodoDataProvider({ children }: { children: ReactNode }) {
 function TodoDataNotices() {
   const data = useTodoData();
   const [repairError, setRepairError] = useState<string | null>(null);
+  if (!data.durabilityError && !repairError && data.recoveries.length === 0) return null;
   return (
     <aside className="mx-auto w-full max-w-2xl space-y-2 px-4 pt-4 text-sm sm:px-6 md:ml-56 lg:px-8">
-      <p className="text-muted-foreground">
-        {data.connected ? "Synced" : data.durable ? "Offline · saved in this browser" : "Offline · changes are not durable"}
-      </p>
       {data.durabilityError ? <p className="text-destructive">{data.durabilityError}</p> : null}
       {repairError ? <p className="text-destructive">{repairError}</p> : null}
       {data.recoveries.map((recovery) => (

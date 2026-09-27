@@ -4,6 +4,7 @@ import { deleteDatabaseAsync, openDatabaseAsync } from 'expo-sqlite';
 
 import { clearIconSuggestions } from './icon-suggestions';
 import { RUNTIME_PROFILE } from './runtime-profile';
+import { clearLastSync } from './sync-metadata';
 
 const DATABASE_NAME = /^taskdo-(?:fixture|workspace)-[a-zA-Z0-9_-]+\.sqlite$/;
 const ACCOUNT_ID = /^[a-zA-Z0-9_-]+$/;
@@ -35,6 +36,7 @@ export async function clearMobileAccountCaches(
   if (!ACCOUNT_ID.test(accountId)) throw new Error('Invalid account identity');
   await Promise.all([
     clearIconSuggestions(),
+    clearLastSync(accountId),
     AsyncStorage.removeItem(RUNTIME_PROFILE.storageKeys.timezoneKey),
   ]);
   queryClient.clear();

@@ -85,9 +85,9 @@ describe('HomeScreen', () => {
     expect(screen.getByLabelText('Account')).toBeTruthy();
   });
 
-  it('labels guest work as saved on this device', async () => {
+  it('labels the guest status control as saved on this device', async () => {
     const screen = await renderScreen({}, true);
-    await waitFor(() => expect(screen.getByText('Saved on this device')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('Saved on this device')).toBeTruthy());
     expect(screen.queryByText('Offline · saved on this device')).toBeNull();
   });
 

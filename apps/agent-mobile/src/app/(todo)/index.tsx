@@ -75,12 +75,7 @@ function TodoHomeScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Home" />
-      {todoData ? <Text variant="subtitle" className="px-screen-x">
-        {!todoData.signedIn
-          ? 'Saved on this device'
-          : todoData.connected ? 'Synced' : 'Offline · saved on this device'}
-      </Text> : null}
+      <ScreenHeader title="Home" showSyncStatus />
       {RUNTIME_PROFILE.hermetic && todoData ? (
         <View className="flex-row gap-4 px-screen-x py-1">
           {todoData.signedIn ? (

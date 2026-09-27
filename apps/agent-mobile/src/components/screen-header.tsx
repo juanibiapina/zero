@@ -6,6 +6,7 @@ import { ActivityIndicator, Modal, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
+import { SyncStatusControl } from '@/components/sync-status-control';
 import { useTodoDataContext } from '@/lib/todo-data-context';
 
 function messageOf(error: unknown) {
@@ -106,9 +107,6 @@ function AccountControl() {
                   </>
                 ) : (
                   <>
-                    <Text variant="subtitle">
-                      {data?.connected ? 'Synced' : 'Offline · saved on this device'}
-                    </Text>
                     {error ? <Text variant="error">{error}</Text> : null}
                     {busy ? <ActivityIndicator accessibilityLabel="Signing out" /> : null}
                     <View className="items-end gap-4">
@@ -174,7 +172,7 @@ function AccountControl() {
 
 // Account actions stay app-owned so signing out can safely checkpoint and
 // remove the local workspace before Clerk drops the session.
-export function ScreenHeader({ title }: { title: string }) {
+export function ScreenHeader({ title, showSyncStatus = false }: { title: string; showSyncStatus?: boolean }) {
   const insets = useSafeAreaInsets();
   return (
     <View
@@ -182,7 +180,10 @@ export function ScreenHeader({ title }: { title: string }) {
       style={{ paddingTop: insets.top + 12 }}
     >
       <Text variant="title">{title}</Text>
-      <AccountControl />
+      <View className="flex-row items-center gap-1">
+        {showSyncStatus ? <SyncStatusControl /> : null}
+        <AccountControl />
+      </View>
     </View>
   );
 }

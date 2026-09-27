@@ -1,6 +1,7 @@
 import type {
   TaskdoReplica,
   TaskdoReplicaClientState,
+  TaskdoSyncState,
   TodoSnapshot,
 } from '@zero/agent-core';
 
@@ -28,6 +29,7 @@ const EMPTY_CLIENT_STATE: TaskdoReplicaClientState = {
   replica: null,
   ready: false,
   connected: false,
+  sync: { phase: 'offline', lastSyncedAt: null },
   durable: true,
   error: null,
   durabilityError: null,
@@ -41,6 +43,7 @@ const errorMessage = (cause: unknown) => (
 type TodoWorkspaceReplicaEvents = {
   onSnapshot: (snapshot: TodoSnapshot) => void;
   onConnection: (connected: boolean) => void;
+  onSyncState: (sync: TaskdoSyncState) => void;
   onDurability: (durable: boolean, error: string | null) => void;
 };
 
@@ -125,6 +128,10 @@ export function createTodoWorkspaceOwner({
       onConnection(connected) {
         if (!isCurrent(accountId, ownerGeneration)) return;
         publish({ ...state, connected });
+      },
+      onSyncState(sync) {
+        if (!isCurrent(accountId, ownerGeneration)) return;
+        publish({ ...state, sync });
       },
       onDurability(durable, error) {
         if (!isCurrent(accountId, ownerGeneration)) return;

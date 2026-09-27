@@ -55,29 +55,42 @@ function setup({ eligible = () => true }: { eligible?: () => boolean } = {}) {
     load: ReturnType<typeof vi.fn>;
     save: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
+    emitStatus: (status: number) => void;
   }> = [];
   const connections: boolean[] = [];
+  const syncStates: Array<{ phase: string; lastSyncedAt: string | null }> = [];
   const lifecycle = createTaskdoSyncLifecycle({
     store: createMergeableStore(),
     canConnect: eligible,
     onConnection: (connected) => connections.push(connected),
+    onSyncState: (state) => syncStates.push(state),
+    now: () => new Date("2026-09-27T12:00:00.000Z"),
     openSocket: () => {
       const socket = new FakeSocket();
       sockets.push(socket);
       return socket as unknown as WebSocket;
     },
     createSynchronizer: () => {
+      const statusListeners = new Set<(synchronizer: TaskdoSynchronizer, status: number) => void>();
       const synchronizer = {
         startSync: vi.fn(async () => {}),
         load: vi.fn(async () => {}),
         save: vi.fn(async () => {}),
         destroy: vi.fn(async () => {}),
+        addStatusListener: vi.fn((listener: (synchronizer: TaskdoSynchronizer, status: number) => void) => {
+          statusListeners.add(listener);
+          return "status";
+        }),
+        delListener: vi.fn(() => statusListeners.clear()),
+        emitStatus: (status: number) => {
+          for (const listener of statusListeners) listener(synchronizer, status);
+        },
       };
       synchronizers.push(synchronizer);
       return synchronizer;
     },
   });
-  return { lifecycle, sockets, synchronizers, connections };
+  return { lifecycle, sockets, synchronizers, connections, syncStates };
 }
 
 describe("TaskDO synchronization lifecycle", () => {
@@ -85,7 +98,7 @@ describe("TaskDO synchronization lifecycle", () => {
   afterEach(() => vi.useRealTimers());
 
   it("connects once and reports the completed initial synchronization", async () => {
-    const { lifecycle, sockets, synchronizers, connections } = setup();
+    const { lifecycle, sockets, synchronizers, connections, syncStates } = setup();
 
     lifecycle.start();
     await flush();
@@ -95,6 +108,10 @@ describe("TaskDO synchronization lifecycle", () => {
 
     expect(synchronizers[0].startSync.mock.calls).toHaveLength(1);
     expect(connections).toEqual([true]);
+    expect(syncStates).toEqual([
+      { phase: "connecting", lastSyncedAt: null },
+      { phase: "synced", lastSyncedAt: "2026-09-27T12:00:00.000Z" },
+    ]);
   });
 
   it("deduplicates concurrent connection attempts", async () => {
@@ -170,6 +187,44 @@ describe("TaskDO synchronization lifecycle", () => {
     expect(sockets).toHaveLength(2);
   });
 
+  it("reports connecting before a failed reconnect instead of flashing offline first", async () => {
+    const { lifecycle, sockets, syncStates } = setup();
+    lifecycle.start();
+    await flush();
+    sockets[0].open();
+    await flush();
+    sockets[0].remoteClose();
+    await flush();
+
+    const reconnect = lifecycle.reconnect();
+    expect(syncStates.at(-1)?.phase).toBe("connecting");
+    await flush();
+    sockets[1].fail();
+    await reconnect;
+
+    expect(syncStates.at(-1)?.phase).toBe("offline");
+  });
+
+  it("reports the previous successful sync when starting offline", async () => {
+    const syncStates: Array<{ phase: string; lastSyncedAt: string | null }> = [];
+    const lifecycle = createTaskdoSyncLifecycle({
+      store: createMergeableStore(),
+      canConnect: () => false,
+      initialLastSyncedAt: "2026-09-26T08:30:00.000Z",
+      onConnection: () => {},
+      onSyncState: (state) => syncStates.push(state),
+      openSocket: () => new FakeSocket() as unknown as WebSocket,
+    });
+
+    lifecycle.start();
+    await flush();
+
+    expect(syncStates).toEqual([{
+      phase: "offline",
+      lastSyncedAt: "2026-09-26T08:30:00.000Z",
+    }]);
+  });
+
   it("refreshes a connected synchronizer with one load and save", async () => {
     const { lifecycle, sockets, synchronizers } = setup();
     lifecycle.start();
@@ -181,6 +236,22 @@ describe("TaskDO synchronization lifecycle", () => {
 
     expect(synchronizers[0].load.mock.calls).toHaveLength(1);
     expect(synchronizers[0].save.mock.calls).toHaveLength(1);
+  });
+
+  it("reports real synchronizer activity and its successful completion", async () => {
+    const { lifecycle, sockets, synchronizers, syncStates } = setup();
+    lifecycle.start();
+    await flush();
+    sockets[0].open();
+    await flush();
+
+    synchronizers[0].emitStatus(2);
+    expect(syncStates.at(-1)?.phase).toBe("syncing");
+    synchronizers[0].emitStatus(0);
+    expect(syncStates.at(-1)).toEqual({
+      phase: "synced",
+      lastSyncedAt: "2026-09-27T12:00:00.000Z",
+    });
   });
 
   it("refresh reconnects immediately and fails truthfully when ineligible", async () => {

@@ -5,10 +5,12 @@ import {
   createSyncedTaskdoReplicaSession,
   createTaskdoReplica,
   type TaskdoReplica,
+  type TaskdoSyncState,
 } from '@zero/agent-core';
 
 import type { TokenGetter } from './api';
 import { API_BASE_URL } from './env';
+import { loadLastSync, saveLastSync } from './sync-metadata';
 import type { TodoWorkspaceDescriptor } from './todo-workspace';
 
 export type MobileTaskdoPersistence = {
@@ -26,6 +28,7 @@ type OpenTaskdoReplicaOptions = {
   queryClient: QueryClient;
   onSnapshot: Parameters<TaskdoReplica['subscribe']>[0];
   onConnection: (connected: boolean) => void;
+  onSyncState?: (state: TaskdoSyncState) => void;
   onDurability?: (durable: boolean, error: string | null) => void;
 };
 
@@ -59,6 +62,7 @@ export function createTaskdoReplicaOpener({
     queryClient,
     onSnapshot,
     onConnection,
+    onSyncState = () => {},
     onDurability = () => {},
   }: OpenTaskdoReplicaOptions): Promise<TaskdoReplica> => {
     assertDatabaseName(descriptor.databaseName);
@@ -132,6 +136,7 @@ export function createTaskdoReplicaOpener({
         onConnection(false);
       } else {
         const accountId = descriptor.binding.accountId;
+        const initialLastSyncedAt = await loadLastSync(accountId);
         const session = createSyncedTaskdoReplicaSession({
           store: persistence.store,
           queryClient,
@@ -141,6 +146,11 @@ export function createTaskdoReplicaOpener({
           refreshLocal: reload,
           sync: {
             onConnection,
+            initialLastSyncedAt,
+            onSyncState: (state) => {
+              onSyncState(state);
+              if (state.lastSyncedAt) void saveLastSync(accountId, state.lastSyncedAt);
+            },
             openSocket: () => openSocket(accountId, getToken),
           },
         });

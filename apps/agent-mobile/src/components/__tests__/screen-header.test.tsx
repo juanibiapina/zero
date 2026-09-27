@@ -5,6 +5,16 @@ import { TodoDataContextProvider, type TodoData } from '@/lib/todo-data-context'
 import { ScreenHeader } from '../screen-header';
 
 const mockPush = jest.fn();
+const mockUpdateState = { current: {
+  currentlyRunning: { isEmbeddedLaunch: true, isEmergencyLaunch: false, emergencyLaunchReason: null },
+  isStartupProcedureRunning: false,
+  isUpdateAvailable: false,
+  isUpdatePending: false,
+  isChecking: false,
+  isDownloading: false,
+  isRestarting: false,
+  restartCount: 0,
+} };
 const mockUser = { current: null as null | {
   imageUrl?: string;
   fullName?: string | null;
@@ -17,12 +27,16 @@ jest.mock('@clerk/expo', () => ({
 jest.mock('expo-router', () => ({
   router: { push: (href: string) => mockPush(href) },
 }));
+jest.mock('expo-updates', () => ({
+  useUpdates: () => mockUpdateState.current,
+}));
 
 function data(overrides: Partial<TodoData> = {}): TodoData {
   return {
     replica: null,
     ready: true,
     connected: false,
+    sync: { phase: 'offline', lastSyncedAt: null },
     durable: true,
     error: null,
     durabilityError: null,
@@ -37,15 +51,43 @@ function data(overrides: Partial<TodoData> = {}): TodoData {
   };
 }
 
-function renderHeader(value: TodoData) {
+function renderHeader(value: TodoData, showSyncStatus = false) {
   return render(
     <TodoDataContextProvider value={value}>
-      <ScreenHeader title="Home" />
+      <ScreenHeader title="Home" showSyncStatus={showSyncStatus} />
     </TodoDataContextProvider>,
   );
 }
 
 describe('ScreenHeader', () => {
+  it('opens Home sync details from the icon beside the account', async () => {
+    const lastSyncedAt = '2026-09-27T11:45:00.000Z';
+    const { getByLabelText, getByText } = await renderHeader(data({
+      workspaceStatus: 'account',
+      signedIn: true,
+      connected: true,
+      sync: { phase: 'synced', lastSyncedAt },
+    }), true);
+
+    fireEvent.press(getByLabelText('Synced'));
+
+    await waitFor(() => expect(getByText('Sync status')).toBeTruthy());
+    expect(getByText('Last synced')).toBeTruthy();
+    expect(getByText(new Date(lastSyncedAt).toLocaleString())).toBeTruthy();
+    expect(getByText('Version')).toBeTruthy();
+  });
+
+  it('shows connecting instead of offline while Home reconnects', async () => {
+    const { getByLabelText, queryByLabelText } = await renderHeader(data({
+      workspaceStatus: 'account',
+      signedIn: true,
+      sync: { phase: 'connecting', lastSyncedAt: '2026-09-27T11:45:00.000Z' },
+    }), true);
+
+    expect(getByLabelText('Connecting')).toBeTruthy();
+    expect(queryByLabelText('Offline')).toBeNull();
+  });
+
   it('offers optional sign-in from the guest account surface', async () => {
     mockPush.mockClear();
     mockUser.current = null;

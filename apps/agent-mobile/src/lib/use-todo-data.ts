@@ -68,6 +68,7 @@ export function useTodoData(): TodoData {
       queryClient,
       onSnapshot: events.onSnapshot,
       onConnection: events.onConnection,
+      onSyncState: events.onSyncState,
       onDurability: events.onDurability,
     }),
     deleteDatabase: deleteTodoWorkspaceDatabase,

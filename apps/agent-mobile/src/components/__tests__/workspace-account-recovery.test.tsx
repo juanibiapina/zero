@@ -15,6 +15,7 @@ function data(overrides: Partial<TodoData> = {}): TodoData {
     replica: null,
     ready: false,
     connected: false,
+    sync: { phase: 'offline', lastSyncedAt: null },
     durable: true,
     error: null,
     durabilityError: null,

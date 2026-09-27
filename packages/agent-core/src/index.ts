@@ -106,6 +106,8 @@ export {
   createTaskdoSyncLifecycle,
   type CreateTaskdoSyncLifecycleOptions,
   type TaskdoSyncLifecycle,
+  type TaskdoSyncPhase,
+  type TaskdoSyncState,
   type TaskdoSynchronizer,
 } from "./taskdo/sync";
 export {
@@ -113,6 +115,11 @@ export {
   type CreateSyncedTaskdoReplicaSessionOptions,
   type SyncedTaskdoReplicaSession,
 } from "./taskdo/replica-session";
+export {
+  todoSyncPresentation,
+  type TodoSyncDisplayKind,
+  type TodoSyncPresentation,
+} from "./taskdo/sync-presentation";
 export {
   createAccountTaskdoReplicaOwner,
   selectAccountTaskdoReplicaState,

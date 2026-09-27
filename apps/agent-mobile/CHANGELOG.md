@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-27: Home now shows sync as an icon beside your account. Tap it to see the last successful sync, offline storage, app version, and update progress; returning to the app shows Connecting instead of briefly flashing Offline.
+
 - 2026-09-27: Pressing + now smoothly transforms the button into the add drawer as the keyboard appears, and one Back press closes both the keyboard and drawer.
 
 - 2026-09-27: You can start using tasks and projects without signing in, then sign in from the account button whenever you want cross-device sync.

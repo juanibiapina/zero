@@ -6,6 +6,15 @@ export type TaskdoSynchronizer = {
   load(): Promise<unknown>;
   save(): Promise<unknown>;
   destroy(): Promise<unknown>;
+  addStatusListener?: (listener: (_synchronizer: TaskdoSynchronizer, status: number) => void) => string;
+  delListener?: (listenerId: string) => unknown;
+};
+
+export type TaskdoSyncPhase = "connecting" | "syncing" | "synced" | "offline";
+
+export type TaskdoSyncState = {
+  phase: TaskdoSyncPhase;
+  lastSyncedAt: string | null;
 };
 
 export type TaskdoSyncLifecycle = {
@@ -21,6 +30,9 @@ export type CreateTaskdoSyncLifecycleOptions = {
   openSocket: () => WebSocket | Promise<WebSocket>;
   canConnect?: () => boolean;
   onConnection: (connected: boolean) => void;
+  onSyncState?: (state: TaskdoSyncState) => void;
+  initialLastSyncedAt?: string | null;
+  now?: () => Date;
   createSynchronizer?: (
     store: MergeableStore,
     socket: WebSocket,
@@ -30,6 +42,7 @@ export type CreateTaskdoSyncLifecycleOptions = {
 type Session = {
   socket: WebSocket;
   synchronizer?: TaskdoSynchronizer;
+  statusListenerId?: string;
 };
 
 const INITIAL_RETRY_MS = 1_000;
@@ -41,6 +54,9 @@ export function createTaskdoSyncLifecycle({
   openSocket,
   canConnect = () => true,
   onConnection,
+  onSyncState = () => {},
+  initialLastSyncedAt = null,
+  now = () => new Date(),
   createSynchronizer = createWsSynchronizer,
 }: CreateTaskdoSyncLifecycleOptions): TaskdoSyncLifecycle {
   let stopped = false;
@@ -48,10 +64,28 @@ export function createTaskdoSyncLifecycle({
   let session: Session | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let retryDelay = INITIAL_RETRY_MS;
+  let syncState: TaskdoSyncState = {
+    phase: "offline",
+    lastSyncedAt: initialLastSyncedAt,
+  };
+  let hasPublishedSyncState = false;
+
+  const publishSyncState = (phase: TaskdoSyncPhase, lastSyncedAt = syncState.lastSyncedAt) => {
+    if (hasPublishedSyncState && syncState.phase === phase && syncState.lastSyncedAt === lastSyncedAt) return;
+    syncState = { phase, lastSyncedAt };
+    hasPublishedSyncState = true;
+    onSyncState(syncState);
+  };
+
+  const markSynced = () => {
+    publishSyncState("synced", now().toISOString());
+  };
 
   const destroySynchronizer = async (active: Session) => {
     const synchronizer = active.synchronizer;
     active.synchronizer = undefined;
+    const listenerId = active.statusListenerId;
+    if (listenerId) synchronizer?.delListener?.(listenerId);
     await synchronizer?.destroy().catch(() => {});
   };
 
@@ -68,6 +102,7 @@ export function createTaskdoSyncLifecycle({
     if (session !== active) return;
     session = undefined;
     onConnection(false);
+    publishSyncState("offline");
     void destroySynchronizer(active);
     scheduleReconnect();
   };
@@ -95,6 +130,17 @@ export function createTaskdoSyncLifecycle({
       }
       const synchronizer = await createSynchronizer(store, socket);
       active.synchronizer = synchronizer;
+      let wasBusy = false;
+      const statusListenerId = synchronizer.addStatusListener?.((_source, status) => {
+        if (status === 0) {
+          if (wasBusy) markSynced();
+          wasBusy = false;
+        } else {
+          wasBusy = true;
+          publishSyncState("syncing");
+        }
+      });
+      if (statusListenerId) active.statusListenerId = statusListenerId;
       if (stopped || session !== active) {
         await destroySynchronizer(active);
         socket.close();
@@ -108,6 +154,7 @@ export function createTaskdoSyncLifecycle({
       }
       retryDelay = INITIAL_RETRY_MS;
       onConnection(true);
+      markSynced();
     } catch {
       if (active && session === active) session = undefined;
       if (active) {
@@ -116,14 +163,20 @@ export function createTaskdoSyncLifecycle({
       }
       if (!stopped) {
         onConnection(false);
+        publishSyncState("offline");
         scheduleReconnect();
       }
     }
   };
 
   const connect = async () => {
-    if (stopped || (session?.socket.readyState === SOCKET_OPEN && session.synchronizer) || !canConnect()) return;
+    if (stopped || (session?.socket.readyState === SOCKET_OPEN && session.synchronizer)) return;
+    if (!canConnect()) {
+      publishSyncState("offline");
+      return;
+    }
     if (connectionAttempt) return connectionAttempt;
+    publishSyncState("connecting");
     const attempt = runConnectionAttempt();
     connectionAttempt = attempt;
     try {
@@ -137,7 +190,6 @@ export function createTaskdoSyncLifecycle({
     if (retry) clearTimeout(retry);
     retry = undefined;
     await connect();
-    if (!stopped && !session?.synchronizer && canConnect()) await connect();
   };
 
   return {

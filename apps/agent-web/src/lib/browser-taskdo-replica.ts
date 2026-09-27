@@ -2,10 +2,12 @@ import { QueryClient } from "@tanstack/react-query";
 import {
   createSyncedTaskdoReplicaSession,
   type TaskdoReplica,
+  type TaskdoSyncState,
   type TodoSnapshot,
 } from "@zero/agent-core";
 import { createMergeableStore } from "tinybase";
 import { openBrowserTaskdoPersistence } from "./browser-taskdo-persistence";
+import { loadLastSync, saveLastSync } from "./sync-metadata";
 
 export { TASKDO_BROWSER_DB_PREFIX } from "./browser-taskdo-persistence";
 
@@ -18,6 +20,7 @@ type OpenBrowserTaskdoReplicaOptions = {
   queryClient?: QueryClient;
   onSnapshot: (snapshot: TodoSnapshot) => void;
   onConnection: (connected: boolean) => void;
+  onSyncState?: (state: TaskdoSyncState) => void;
   onDurability: (durable: boolean, error: string | null) => void;
 };
 
@@ -29,7 +32,7 @@ function taskSyncUrl(): string {
 
 export async function openBrowserTaskdoReplica(
   accountId: string,
-  { queryClient, onSnapshot, onConnection, onDurability }: OpenBrowserTaskdoReplicaOptions,
+  { queryClient, onSnapshot, onConnection, onSyncState = () => {}, onDurability }: OpenBrowserTaskdoReplicaOptions,
 ): Promise<BrowserTaskdoReplica> {
   const replicaQueryClient = queryClient ?? new QueryClient();
   const store = createMergeableStore();
@@ -45,6 +48,11 @@ export async function openBrowserTaskdoReplica(
     sync: {
       canConnect: () => navigator.onLine,
       onConnection,
+      initialLastSyncedAt: loadLastSync(accountId),
+      onSyncState: (state) => {
+        onSyncState(state);
+        if (state.lastSyncedAt) saveLastSync(accountId, state.lastSyncedAt);
+      },
       openSocket: () => new WebSocket(taskSyncUrl()),
     },
   });

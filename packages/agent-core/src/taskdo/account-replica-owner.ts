@@ -1,4 +1,5 @@
 import type { TaskdoReplica, TodoSnapshot } from "./replica";
+import type { TaskdoSyncState } from "./sync";
 
 export type TodoReplicaDurability = {
   durable: boolean;
@@ -10,6 +11,7 @@ export type AccountTaskdoReplicaState = {
   replica: TaskdoReplica | null;
   ready: boolean;
   connected: boolean;
+  sync: TaskdoSyncState;
   durable: boolean;
   error: string | null;
   durabilityError: string | null;
@@ -21,6 +23,7 @@ export type TaskdoReplicaClientState = Omit<AccountTaskdoReplicaState, "accountI
 export type AccountTaskdoReplicaEvents = {
   onSnapshot: (snapshot: TodoSnapshot) => void;
   onConnection: (connected: boolean) => void;
+  onSyncState: (sync: TaskdoSyncState) => void;
   onDurability: (durable: boolean, error: string | null) => void;
 };
 
@@ -55,6 +58,7 @@ function emptyClientState(
     replica: null,
     ready: false,
     connected: false,
+    sync: { phase: "offline", lastSyncedAt: null },
     durable: durability.durable,
     error: null,
     durabilityError: durability.error,
@@ -136,6 +140,7 @@ export function createAccountTaskdoReplicaOwner({
 
       let sawSnapshot = false;
       let sawDurability = false;
+      let sawSyncState = false;
       const events: AccountTaskdoReplicaEvents = {
         onSnapshot(snapshot) {
           if (!isCurrent(accountId, ownerGeneration)) return;
@@ -145,6 +150,11 @@ export function createAccountTaskdoReplicaOwner({
         onConnection(connected) {
           if (!isCurrent(accountId, ownerGeneration)) return;
           publish({ ...state, connected });
+        },
+        onSyncState(sync) {
+          if (!isCurrent(accountId, ownerGeneration)) return;
+          sawSyncState = true;
+          publish({ ...state, sync });
         },
         onDurability(durable, error) {
           if (!isCurrent(accountId, ownerGeneration)) return;
@@ -180,6 +190,7 @@ export function createAccountTaskdoReplicaOwner({
         durable: sawDurability ? state.durable : opened.durability.durable,
         durabilityError: sawDurability ? state.durabilityError : opened.durability.error,
         error: null,
+        sync: sawSyncState ? state.sync : { phase: "offline", lastSyncedAt: null },
         recoveries: sawSnapshot ? state.recoveries : opened.replica.snapshot().recoveries,
       });
     });

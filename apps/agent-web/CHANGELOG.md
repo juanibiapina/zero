@@ -2,6 +2,8 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-27: Home now shows sync as an icon beside your account. Open it to see the last successful sync and offline-storage details; reconnecting shows Connecting instead of briefly reporting Offline.
+
 - 2026-09-27: Home now uses `/home` as its sole address; the retired `/captures` address is no longer supported.
 
 - 2026-09-26: Tasks and Projects now stay available offline, update live across devices and browser tabs, and recover automatically after reconnecting.

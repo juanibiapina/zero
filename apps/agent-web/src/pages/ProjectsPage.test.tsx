@@ -35,6 +35,7 @@ function MemoryRouter(props: ComponentProps<typeof RouterMemoryRouter>) {
     replica: h.replica,
     ready: true,
     connected: true,
+    sync: { phase: "synced", lastSyncedAt: null },
     durable: true,
     error: null,
     durabilityError: null,

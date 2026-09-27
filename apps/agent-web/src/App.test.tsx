@@ -13,6 +13,11 @@ vi.mock("@clerk/react", () => ({
 
 vi.mock("./lib/todo-data", () => ({
   TodoDataProvider: ({ children }: { children: ReactNode }) => children,
+  useTodoData: () => ({
+    sync: { phase: "synced", lastSyncedAt: null },
+    durable: true,
+    durabilityError: null,
+  }),
 }));
 
 vi.mock("./lib/timezone-sync", () => ({
@@ -58,6 +63,7 @@ it("uses /home as the Home destination", async () => {
     "href",
     "/home",
   );
+  expect(screen.getAllByRole("button", { name: "Synced" })).not.toHaveLength(0);
 });
 
 it("handles /captures through the ordinary unknown-route fallback", async () => {
