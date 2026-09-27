@@ -301,14 +301,14 @@ installs an APK.
 2. It starts a fresh local Worker in Podman on port 8787.
 3. It starts headless Metro on port 8082 with
    `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
-4. It runs the five ordinary behavior flows in `.maestro/hermetic/` sequentially.
+4. It runs the four ordinary behavior flows in `.maestro/hermetic/` sequentially.
    Before every flow, an app-owned E2E route signs out fake Clerk, removes only
    the exact hermetic SQLite files, and clears only hermetic AsyncStorage keys.
    Before each flow after the first, the runner also starts a Worker with a new
    temporary persistence directory.
 5. Each flow verifies both fake accounts' Worker postconditions before that
    reset. Guest persistence/binding/logout and unexpected-auth mismatch are
-   covered alongside Project, selector, and navigation behavior; guest-only
+   covered alongside Project and navigation behavior; guest-only
    navigation leaves both accounts empty.
 6. It saves each flow's Account A and Account B Task and Project responses with
    the run artifacts.
