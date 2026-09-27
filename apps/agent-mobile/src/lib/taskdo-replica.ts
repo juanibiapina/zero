@@ -10,22 +10,24 @@ import { API_BASE_URL } from './env';
 import type { TokenGetter } from './api';
 
 export async function openTaskDOReplica(
+  databaseName: string,
   accountId: string,
   getToken: TokenGetter,
   queryClient: QueryClient,
   onSnapshot: Parameters<TaskdoReplica['subscribe']>[0],
   onConnection: (connected: boolean) => void,
 ) {
-  // No shared filename and no anonymous replica: switching accounts cannot
-  // hydrate another user's Tasks, even before an online connection succeeds.
+  // The workspace registry chooses the file and verifies its account binding;
+  // this adapter independently rejects unsafe identities before touching SQLite.
   if (!/^[a-zA-Z0-9_-]+$/.test(accountId)) throw new Error('Invalid account identity');
+  if (!/^taskdo-(?:fixture|workspace)-[a-zA-Z0-9_-]+\.sqlite$/.test(databaseName)) {
+    throw new Error('Invalid todo workspace database name');
+  }
   const [{ openDatabaseAsync }, { createExpoSqlitePersister }] = await Promise.all([
     import('expo-sqlite'),
     import('tinybase/persisters/persister-expo-sqlite'),
   ]);
-  // Keep the historical prefix: changing it would strand the migrated on-device
-  // replica in a different file.
-  const db = await openDatabaseAsync(`taskdo-fixture-${accountId}.sqlite`);
+  const db = await openDatabaseAsync(databaseName);
   const store = createMergeableStore();
   const persister = createExpoSqlitePersister(store, db, 'taskdo_local');
   await persister.startAutoPersisting();

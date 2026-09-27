@@ -6,6 +6,7 @@ export type RuntimeProfile = Readonly<{
   storageKeys: Readonly<{
     timezoneKey: string;
     iconSuggestionsKey: string;
+    todoWorkspaceKey: string;
   }>;
   launcherCountSyncEnabled: boolean;
   native: Readonly<{

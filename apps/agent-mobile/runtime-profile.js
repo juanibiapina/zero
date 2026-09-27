@@ -5,11 +5,13 @@ const HERMETIC_API_BASE_URL = 'http://localhost:8787';
 const productionStorageKeys = () => ({
   timezoneKey: 'zero.timezone.synced',
   iconSuggestionsKey: 'zero.icon-suggestions.v1',
+  todoWorkspaceKey: 'zero.todo-workspace.v1',
 });
 
 const hermeticStorageKeys = () => ({
   timezoneKey: 'zero.e2e.timezone.synced',
   iconSuggestionsKey: 'zero.e2e.icon-suggestions.v1',
+  todoWorkspaceKey: 'zero.e2e.todo-workspace.v1',
 });
 
 function resolveRuntimeProfile({
