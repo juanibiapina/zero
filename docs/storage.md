@@ -80,11 +80,12 @@ and platform lifecycle events.
   `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection;
   pull-to-refresh requests a TinyBase synchronization round or reconnects first.
 - **Web:** one TinyBase IndexedDB database per Clerk account, named
-  `zero-taskdo-replica-<account-id>`. The adapter loads it before exposing the
-  todo owner, then opens same-origin `/api/task-sync`; Clerk authenticates the
-  WebSocket upgrade from the existing session cookie. No token is placed in the
-  URL. Reconnect uses bounded exponential backoff and retries immediately when
-  the browser comes online or the document becomes visible.
+  `zero-taskdo-replica-<account-id>`. The browser persistence module loads it
+  before the adapter exposes the todo owner. The adapter then opens same-origin
+  `/api/task-sync`; Clerk authenticates the WebSocket upgrade from the existing
+  session cookie. No token is placed in the URL. Reconnect uses bounded
+  exponential backoff and retries immediately when the browser comes online or
+  the document becomes visible.
 - **Local-first:** screens render the persisted replica without waiting for the
   network. A disconnected WebSocket is ordinary offline operation. Mutations
   update the local mergeable store and retain TinyBase merge metadata, including
