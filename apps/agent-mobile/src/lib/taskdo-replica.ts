@@ -2,8 +2,7 @@ import { AppState } from 'react-native';
 import { createMergeableStore } from 'tinybase';
 import type { QueryClient } from '@tanstack/react-query';
 import {
-  createTaskdoReplica,
-  createTaskdoSyncLifecycle,
+  createSyncedTaskdoReplicaSession,
   type TaskdoReplica,
 } from '@zero/agent-core';
 
@@ -30,44 +29,40 @@ export async function openTaskDOReplica(
   const store = createMergeableStore();
   const persister = createExpoSqlitePersister(store, db, 'taskdo_local');
   await persister.startAutoPersisting();
-  let refreshReplica = async () => {};
-  const replica = await createTaskdoReplica({
+  const session = createSyncedTaskdoReplicaSession({
     store,
     queryClient,
     queryKeyScope: [accountId],
     save: () => persister.save(),
-    refresh: () => refreshReplica(),
-  });
-  const unsubscribe = replica.subscribe(onSnapshot);
-
-  const sync = createTaskdoSyncLifecycle({
-    store,
-    onConnection,
-    openSocket: async () => {
-      const token = await getToken();
-      if (!token) throw new Error('Signed out');
-      const url = `${API_BASE_URL.replace(/^http/, 'ws')}/api/task-sync`;
-      // React Native WebSocket's third argument supports authentication headers.
-      return new (WebSocket as unknown as new (
-        url: string, protocols: string[], options: { headers: Record<string, string> },
-      ) => WebSocket)(url, [], { headers: { Authorization: `Bearer ${token}` } });
+    onSnapshot,
+    sync: {
+      onConnection,
+      openSocket: async () => {
+        const token = await getToken();
+        if (!token) throw new Error('Signed out');
+        const url = `${API_BASE_URL.replace(/^http/, 'ws')}/api/task-sync`;
+        // React Native WebSocket's third argument supports authentication headers.
+        return new (WebSocket as unknown as new (
+          url: string, protocols: string[], options: { headers: Record<string, string> },
+        ) => WebSocket)(url, [], { headers: { Authorization: `Bearer ${token}` } });
+      },
     },
   });
   const foreground = AppState.addEventListener('change', (state) => {
-    if (state === 'active') void sync.reconnect();
+    if (state === 'active') void session.reconnect();
   });
-  refreshReplica = () => sync.refresh();
-  sync.start();
 
+  let closePromise: Promise<void> | undefined;
   return {
-    ...replica,
-    async close() {
-      foreground.remove();
-      await sync.stop();
-      unsubscribe();
-      await replica.close();
-      await persister.destroy();
-      await db.closeAsync();
+    ...session,
+    close() {
+      closePromise ??= (async () => {
+        foreground.remove();
+        await session.close();
+        await persister.destroy();
+        await db.closeAsync();
+      })();
+      return closePromise;
     },
   };
 }

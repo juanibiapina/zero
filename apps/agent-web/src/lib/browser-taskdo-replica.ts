@@ -1,7 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import {
-  createTaskdoReplica,
-  createTaskdoSyncLifecycle,
+  createSyncedTaskdoReplicaSession,
   type TaskdoReplica,
   type TodoSnapshot,
 } from "@zero/agent-core";
@@ -34,52 +33,44 @@ export async function openBrowserTaskdoReplica(
 ): Promise<BrowserTaskdoReplica> {
   const replicaQueryClient = queryClient ?? new QueryClient();
   const store = createMergeableStore();
-  let stopped = false;
   const persistence = await openBrowserTaskdoPersistence({ accountId, store, onDurability });
 
-  let refreshReplica = async () => {};
-  const replica = createTaskdoReplica({
+  const session = createSyncedTaskdoReplicaSession({
     store,
     queryClient: replicaQueryClient,
     queryKeyScope: [accountId],
     save: persistence.save,
-    refresh: () => refreshReplica(),
-  });
-  const unsubscribe = replica.subscribe(onSnapshot);
-  const sync = createTaskdoSyncLifecycle({
-    store,
-    canConnect: () => navigator.onLine,
-    onConnection,
-    openSocket: () => new WebSocket(taskSyncUrl()),
+    onSnapshot,
+    refreshLocal: persistence.refresh,
+    sync: {
+      canConnect: () => navigator.onLine,
+      onConnection,
+      openSocket: () => new WebSocket(taskSyncUrl()),
+    },
   });
   const onVisible = () => {
     if (document.visibilityState === "visible") {
-      void sync.reconnect();
+      void session.reconnect();
     }
     persistence.setVisible(document.visibilityState === "visible");
   };
-  refreshReplica = async () => {
-    await persistence.refresh();
-    await sync.refresh();
-  };
-  const onOnline = () => { void sync.reconnect(); };
+  const onOnline = () => { void session.reconnect(); };
   window.addEventListener("online", onOnline);
   document.addEventListener("visibilitychange", onVisible);
-  sync.start();
 
+  let closePromise: Promise<void> | undefined;
   return {
-    ...replica,
+    ...session,
     durable: persistence.durable,
     durabilityError: persistence.durabilityError,
-    async close() {
-      if (stopped) return;
-      stopped = true;
-      window.removeEventListener("online", onOnline);
-      document.removeEventListener("visibilitychange", onVisible);
-      await sync.stop();
-      unsubscribe();
-      await replica.close();
-      await persistence.close();
+    close() {
+      closePromise ??= (async () => {
+        window.removeEventListener("online", onOnline);
+        document.removeEventListener("visibilitychange", onVisible);
+        await session.close();
+        await persistence.close();
+      })();
+      return closePromise;
     },
   };
 }
