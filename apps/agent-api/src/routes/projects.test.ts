@@ -15,7 +15,6 @@ const project = (over: Partial<Project> = {}): Project => ({
   description: null,
   state: "in-play",
   createdAt: "2026-09-26T10:00:00.000Z",
-  sourceCaptureId: null,
   ...over,
 });
 
@@ -48,7 +47,7 @@ describe("project routes", () => {
   });
 
   it("delegates creation with defaults and optional fields intact", async () => {
-    const created = project({ description: "race", state: "backlog", sourceCaptureId: PROJECT_ID });
+    const created = project({ description: "race", state: "backlog" });
     const addProject = vi.fn(() => created);
     const response = await buildApp({ addProject })("/api/projects", json("POST", {
       id: PROJECT_ID,
@@ -56,7 +55,6 @@ describe("project routes", () => {
       icon: "🏃",
       description: "race",
       state: "backlog",
-      sourceCaptureId: PROJECT_ID,
     }));
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ project: created });
@@ -64,7 +62,6 @@ describe("project routes", () => {
       icon: "🏃",
       description: "race",
       state: "backlog",
-      sourceCaptureId: PROJECT_ID,
     });
   });
 
@@ -89,7 +86,7 @@ describe("project routes", () => {
 
   it("delegates edits before state changes and returns the final Project", async () => {
     const edited = project({
-      title: "Under 30", icon: "⏱️", description: "plan", sourceCaptureId: PROJECT_ID,
+      title: "Under 30", icon: "⏱️", description: "plan",
     });
     const final = project({ ...edited, state: "backlog" });
     const editProject = vi.fn(() => edited);

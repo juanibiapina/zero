@@ -11,6 +11,5 @@ manual drag-reorder, and the Captures/Upcoming visibility split — now lives on
 Task. See **`docs/entities/task.md`** (source of truth) and the merge plan.
 
 Historical note: Capture data was disposable and dropped by migration 0051; task
-data was preserved. Existing `sourceCaptureId` cells remain as inert legacy
-storage and REST compatibility data; the current Task and Project interfaces do
-not expose them.
+data was preserved. Existing `sourceCaptureId` cells may remain as inert legacy
+storage, but no current Task or Project interface reads or exposes them.

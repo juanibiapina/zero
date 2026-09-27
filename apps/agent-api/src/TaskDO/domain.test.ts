@@ -81,34 +81,6 @@ describe("TaskDomain adapter", () => {
     expect(domain.listTasks().map((row) => row.id)).toEqual(["keyed", "unkeyed"]);
   });
 
-  it("preserves legacy REST provenance through creation, reads, and unrelated mutations", async () => {
-    const { domain, store } = setup();
-    const project = await domain.addLegacyProject(
-      "project", "Project", {}, { sourceCaptureId: "project-capture" },
-    );
-    const task = await domain.addLegacyTask(
-      "task", "Task", null, "project", { sourceCaptureId: "task-capture" },
-    );
-    expect(project?.sourceCaptureId).toBe("project-capture");
-    expect(task?.sourceCaptureId).toBe("task-capture");
-
-    await domain.editProject("project", { title: "Edited project" });
-    await domain.editTask("task", "Edited task");
-
-    expect(domain.listProjects()[0]?.sourceCaptureId).toBe("project-capture");
-    expect(domain.listTasks()[0]?.sourceCaptureId).toBe("task-capture");
-    expect(store.getCell("projects", "project", "sourceCaptureId")).toBe("project-capture");
-    expect(store.getCell("tasks", "task", "sourceCaptureId")).toBe("task-capture");
-  });
-
-  it("returns null provenance for legacy REST rows that have no provenance cell", async () => {
-    const { domain } = setup();
-    await domain.addProject("project", "Project");
-    await domain.addTask("task", "Task", null, "project");
-    expect(domain.listProjects()[0]?.sourceCaptureId).toBeNull();
-    expect(domain.listTasks()[0]?.sourceCaptureId).toBeNull();
-  });
-
   it("rejects every mutation after erasure with the established messages", async () => {
     const { domain, erase } = setup();
     erase();

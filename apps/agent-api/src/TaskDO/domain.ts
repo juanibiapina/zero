@@ -4,8 +4,8 @@ import {
   type ProjectAfterConflict,
   type ProjectDefaults,
   type ProjectState,
-  type Project as CurrentProject,
-  type Task as CurrentTask,
+  type Project,
+  type Task,
   type TodoIssue,
   type WaitingCondition,
 } from "@zero/agent-core";
@@ -31,11 +31,6 @@ export type TaskRecovery = {
 
 export type ProjectRecovery = { projectId: string; reason: "invalid-project" };
 
-type LegacyTodoProvenance = { sourceCaptureId?: string | null };
-export type Project = CurrentProject & { sourceCaptureId: string | null };
-export type Task = CurrentTask & { sourceCaptureId: string | null };
-export type LegacyProjectCreateOptions = ProjectDefaults & LegacyTodoProvenance;
-
 type TaskDomainOptions = {
   store: MergeableStore;
   save: () => Promise<void>;
@@ -47,12 +42,10 @@ type TaskDomainOptions = {
 // RPC result contracts. Todo row rules live in @zero/agent-core.
 export class TaskDomain {
   private readonly model: TodoModel;
-  private readonly store: MergeableStore;
   private readonly save: () => Promise<void>;
   private readonly isErased: () => Promise<boolean>;
 
   constructor({ store, save, isErased = async () => false, now = () => new Date() }: TaskDomainOptions) {
-    this.store = store;
     this.model = new TodoModel({ store, now });
     this.save = save;
     this.isErased = isErased;
@@ -66,20 +59,8 @@ export class TaskDomain {
     return this.model.project().issues;
   }
 
-  private projectForLegacyRest(id: string): Project {
-    const project = this.model.getProject(id)!;
-    const sourceCaptureId = this.store.getCell("projects", id, "sourceCaptureId");
-    return { ...project, sourceCaptureId: typeof sourceCaptureId === "string" ? sourceCaptureId : null };
-  }
-
-  private taskForLegacyRest(id: string): Task {
-    const task = this.model.getTask(id)!;
-    const sourceCaptureId = this.store.getCell("tasks", id, "sourceCaptureId");
-    return { ...task, sourceCaptureId: typeof sourceCaptureId === "string" ? sourceCaptureId : null };
-  }
-
   listProjects(): Project[] {
-    return this.model.project().projects.map((project) => this.projectForLegacyRest(project.id));
+    return this.model.project().projects;
   }
 
   listProjectRecoveries(): ProjectRecovery[] {
@@ -92,23 +73,7 @@ export class TaskDomain {
     const result = this.model.createProject({ id, title, ...opts });
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return this.projectForLegacyRest(result.value.id);
-  }
-
-  async addLegacyProject(
-    id: string,
-    title: string,
-    opts: ProjectDefaults,
-    provenance: LegacyTodoProvenance,
-  ): Promise<Project | null> {
-    await this.assertActive("Account erased");
-    const result = this.model.createProject({ id, title, ...opts });
-    if (!result.ok) return null;
-    if (result.changed && provenance.sourceCaptureId) {
-      this.store.setCell("projects", id, "sourceCaptureId", provenance.sourceCaptureId);
-    }
-    if (result.changed) await this.save();
-    return this.projectForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async editProject(id: string, fields: { title?: string; icon?: string; description?: string | null }): Promise<Project | null> {
@@ -116,7 +81,7 @@ export class TaskDomain {
     const result = this.model.editProject(id, fields);
     if (!result.ok) return null;
     await this.save();
-    return this.projectForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async setProjectState(id: string, state: ProjectState): Promise<Project | null> {
@@ -124,7 +89,7 @@ export class TaskDomain {
     const result = this.model.setProjectState(id, state);
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return this.projectForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async deleteProject(id: string): Promise<{ tasks: number; conditions: number; afters: number }> {
@@ -181,7 +146,7 @@ export class TaskDomain {
   }
 
   listTasks(): Task[] {
-    return this.model.project({ taskOrder: "manual" }).tasks.map((task) => this.taskForLegacyRest(task.id));
+    return this.model.project({ taskOrder: "manual" }).tasks;
   }
 
   listRecoveries(): TaskRecovery[] {
@@ -197,25 +162,7 @@ export class TaskDomain {
     const result = this.model.createTask({ id, text, showUpDate, projectId, recurrence });
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return this.taskForLegacyRest(result.value.id);
-  }
-
-  async addLegacyTask(
-    id: string,
-    text: string,
-    showUpDate: string | null,
-    projectId: string | null,
-    provenance: LegacyTodoProvenance,
-    recurrence: Recurrence | null = null,
-  ): Promise<Task | null> {
-    await this.assertActive();
-    const result = this.model.createTask({ id, text, showUpDate, projectId, recurrence });
-    if (!result.ok) return null;
-    if (result.changed && provenance.sourceCaptureId) {
-      this.store.setCell("tasks", id, "sourceCaptureId", provenance.sourceCaptureId);
-    }
-    if (result.changed) await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async editTask(id: string, text: string): Promise<Task | null> {
@@ -223,7 +170,7 @@ export class TaskDomain {
     const result = this.model.patchTask(id, { text });
     if (!result.ok) return null;
     await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async patchTask(id: string, fields: { text?: string; showUpDate?: string | null;
@@ -232,7 +179,7 @@ export class TaskDomain {
     const result = this.model.patchTask(id, fields);
     if (!result.ok) return result.conflict === "missing-project" ? "missing-project" : null;
     await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async completeTask(id: string): Promise<Task | null> {
@@ -240,7 +187,7 @@ export class TaskDomain {
     const result = this.model.completeTask(id);
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async reopenTask(id: string): Promise<Task | null> {
@@ -248,7 +195,7 @@ export class TaskDomain {
     const result = this.model.reopenTask(id);
     if (!result.ok) return null;
     if (result.changed) await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async setTaskRecurrence(id: string, recurrence: Recurrence | null): Promise<Task | null> {
@@ -256,7 +203,7 @@ export class TaskDomain {
     const result = this.model.setTaskRecurrence(id, recurrence);
     if (!result.ok) return null;
     await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async completeTaskOccurrence(id: string, scheduledOn: string, completedOn: string): Promise<Task | "invalid-recurrence" | null> {
@@ -264,7 +211,7 @@ export class TaskDomain {
     const result = this.model.completeOccurrence(id, scheduledOn, completedOn);
     if (!result.ok) return result.conflict === "invalid-recurrence" ? "invalid-recurrence" : null;
     if (result.changed) await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 
   async undoTaskOccurrence(id: string, expectedRecurrenceDate: string,
@@ -273,7 +220,7 @@ export class TaskDomain {
     const result = this.model.undoOccurrence(id, expectedRecurrenceDate, recurrenceDateBefore, showUpDateBefore);
     if (!result.ok) return result.conflict === "invalid-recurrence" ? "invalid-recurrence" : null;
     if (result.changed) await this.save();
-    return this.taskForLegacyRest(result.value.id);
+    return result.value;
   }
 }
 
@@ -281,6 +228,8 @@ export type {
   ProjectAfter,
   ProjectAfterConflict,
   ProjectDefaults,
+  Project,
   ProjectState,
+  Task,
   WaitingCondition,
 } from "@zero/agent-core";

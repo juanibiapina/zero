@@ -173,18 +173,12 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   TaskDO adds durable persistence and REST/RPC result mapping; web and mobile
   supply account-scoped persistence and synchronization adapters. See
   `docs/storage.md`.
-- **Legacy compatibility** — raw TaskDO rows may contain a nullable
-  `sourceCaptureId` cell created by the retired Capture workflow. It remains in
-  synchronization and storage unchanged. Current client projections and create
-  interfaces omit it; legacy REST requests may still send it and REST responses
-  still return its stored value or `null`.
 - **API** — per-user isolated:
   - `GET /api/tasks` → `{ tasks }`, every open task in manual order (future-dated
     included); the client splits Home and Upcoming.
-  - `POST /api/tasks { id, text, showUpDate?, projectId?, sourceCaptureId? }`
+  - `POST /api/tasks { id, text, showUpDate?, projectId?, recurrence? }`
     → `201 { task }`; `showUpDate` optional (a loose task omits it). The server
-    dedupes on the client `id`. `sourceCaptureId` is accepted only for legacy
-    client compatibility. `400` on empty text or a non-UUID id.
+    dedupes on the client `id`. `400` on empty text or a non-UUID id.
   - `POST /api/tasks/{id}/complete` and `/reopen` → `200 { task }`, `404` unknown.
   - `PATCH /api/tasks/{id} { text?, showUpDate?, sortKey?, projectId? }`
     → `200 { task }`, `404` unknown, `400` on empty text / malformed date /

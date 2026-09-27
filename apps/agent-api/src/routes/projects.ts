@@ -35,7 +35,6 @@ const ProjectSchema = z.object({
   description: z.string().nullable(),
   state: ProjectState,
   createdAt: z.string(),
-  sourceCaptureId: z.string().nullable(),
 });
 
 export const createProjectsRoutes = (
@@ -84,8 +83,6 @@ export const createProjectsRoutes = (
               icon: z.string().min(1).optional(),
               description: z.string().nullable().optional(),
               state: ProjectState.optional(),
-              // Retained only for legacy clients and stored legacy provenance.
-              sourceCaptureId: z.string().uuid().nullable().optional(),
             }).strict(),
           },
         },
@@ -113,13 +110,13 @@ export const createProjectsRoutes = (
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, title, icon, description, state, sourceCaptureId } =
+    const { id, title, icon, description, state } =
       c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
     const project = await getTaskDO(c.env, userId).addProject(
-      id, title, { icon, description, state, sourceCaptureId },
+      id, title, { icon, description, state },
     );
     if (!project) return c.json({ error: "project id is in use or was deleted" }, 409);
     log("project_added", { clerk_user_id: userId });

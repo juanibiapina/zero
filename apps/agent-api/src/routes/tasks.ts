@@ -28,7 +28,6 @@ const TaskSchema = z.object({
   createdAt: z.string(),
   completedAt: z.string().nullable(),
   projectId: z.string().nullable(),
-  sourceCaptureId: z.string().nullable(),
   // In practice every stored row is keyed; a null (unkeyed) row sorts last and
   // is tolerated rather than rejected so a stray/legacy null degrades
   // gracefully instead of 500ing the whole list response.
@@ -81,8 +80,6 @@ export const createTasksRoutes = () => {
               // Optional: the Project this task belongs to. Omitted/absent for a
               // loose task.
               projectId: z.string().uuid().nullable().optional(),
-              // Retained only for legacy clients and stored legacy provenance.
-              sourceCaptureId: z.string().uuid().nullable().optional(),
             }),
           },
         },
@@ -110,13 +107,13 @@ export const createTasksRoutes = () => {
 
   router.openapi(addRoute, async (c) => {
     const userId = c.get("userId");
-    const { id, text, showUpDate, recurrence, projectId, sourceCaptureId } =
+    const { id, text, showUpDate, recurrence, projectId } =
       c.req.valid("json");
     // The client mints the id and re-sends it verbatim on every retry/replay, so
     // the DO dedupes on the id (its primary key) and a lost ACK cannot
     // double-insert.
     const task = await getTaskDO(c.env, userId).addTask(
-      id, text, showUpDate ?? null, projectId ?? null, sourceCaptureId ?? null, recurrence ?? null,
+      id, text, showUpDate ?? null, projectId ?? null, recurrence ?? null,
     );
     if (!task) return c.json({ error: "task id is in use or project not found" }, 409);
     log("task_added", { clerk_user_id: userId });

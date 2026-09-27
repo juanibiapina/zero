@@ -26,7 +26,6 @@ const task = (over: Partial<Task> = {}): Task => ({
   createdAt: "2026-09-26T10:00:00.000Z",
   completedAt: null,
   projectId: null,
-  sourceCaptureId: null,
   sortKey: "a0",
   ...over,
 });
@@ -60,14 +59,13 @@ describe("task routes", () => {
     expect(listTasks).toHaveBeenCalledOnce();
   });
 
-  it("delegates task creation with every optional contract field", async () => {
+  it("delegates task creation with recurrence in the canonical RPC argument position", async () => {
     const created = task({
       text: "Pay rent",
       showUpDate: recurrence.origin,
       recurrence,
       recurrenceDate: recurrence.origin,
       projectId: PROJECT_ID,
-      sourceCaptureId: TASK_ID,
     });
     const addTask = vi.fn(() => created);
     const response = await buildApp({ addTask })("/api/tasks", json("POST", {
@@ -75,13 +73,12 @@ describe("task routes", () => {
       text: "Pay rent",
       recurrence,
       projectId: PROJECT_ID,
-      sourceCaptureId: TASK_ID,
     }));
 
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ task: created });
     expect(addTask).toHaveBeenCalledWith(
-      TASK_ID, "Pay rent", null, PROJECT_ID, TASK_ID, recurrence,
+      TASK_ID, "Pay rent", null, PROJECT_ID, recurrence,
     );
   });
 
@@ -111,7 +108,6 @@ describe("task routes", () => {
       showUpDate: "2026-10-02",
       sortKey: "a5",
       projectId: PROJECT_ID,
-      sourceCaptureId: TASK_ID,
     });
     const patchTask = vi.fn(() => updated);
     const fields = { text: "edited", showUpDate: "2026-10-02", sortKey: "a5", projectId: PROJECT_ID };
