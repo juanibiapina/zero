@@ -182,7 +182,11 @@ const openTaskdoPersistence = async (
     import('expo-sqlite'),
     import('tinybase/persisters/persister-expo-sqlite'),
   ]);
-  const database = await openDatabaseAsync(databaseName);
+  // This owner explicitly closes the handle before deleting or reopening the
+  // file. Expo's default connection cache can retain another native reference
+  // across that transition, which makes deleteDatabaseAsync reject a safe
+  // logout as "currently open".
+  const database = await openDatabaseAsync(databaseName, { useNewConnection: true });
   const store = createMergeableStore();
   const persister = createExpoSqlitePersister(
     store,
