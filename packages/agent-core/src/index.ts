@@ -109,6 +109,16 @@ export {
   type TaskdoSynchronizer,
 } from "./taskdo/sync";
 export {
+  createAccountTaskdoReplicaOwner,
+  type AccountTaskdoReplicaEvents,
+  type AccountTaskdoReplicaOwner,
+  type AccountTaskdoReplicaState,
+  type CreateAccountTaskdoReplicaOwnerOptions,
+  type OpenAccountTaskdoReplica,
+  type OpenedAccountTaskdoReplica,
+  type TodoReplicaDurability,
+} from "./taskdo/account-replica-owner";
+export {
   createInMemoryTaskdoReplica,
   type InMemoryTodoSeed,
 } from "./taskdo/in-memory";
