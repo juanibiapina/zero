@@ -69,6 +69,25 @@ describe('mobile todo workspace registry', () => {
     expect(storage.setItem).not.toHaveBeenCalled();
   });
 
+  it('binds an existing guest database to the first signed-in account', async () => {
+    const guest = {
+      version: 1 as const,
+      databaseName: 'taskdo-workspace-stable.sqlite',
+      binding: { kind: 'unbound' as const },
+    };
+    const storage = memoryStorage(JSON.stringify(guest));
+    const registry = createTodoWorkspaceRegistry({ storage, storageKey: 'workspace' });
+
+    await expect(registry.forSignedInAccount('account-A')).resolves.toEqual({
+      ...guest,
+      binding: { kind: 'bound', accountId: 'account-A' },
+    });
+    expect(storage.setItem).toHaveBeenCalledWith('workspace', JSON.stringify({
+      ...guest,
+      binding: { kind: 'bound', accountId: 'account-A' },
+    }));
+  });
+
   it('never opens a bound account database as a guest workspace', async () => {
     const storage = memoryStorage(JSON.stringify({
       version: 1,

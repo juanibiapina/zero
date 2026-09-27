@@ -19,6 +19,16 @@ type CreateTodoWorkspaceRegistryOptions = {
   createWorkspaceId?: () => string;
 };
 
+export class TodoWorkspaceAccessError extends Error {
+  constructor(
+    readonly code: 'locked' | 'account-mismatch',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'TodoWorkspaceAccessError';
+  }
+}
+
 function assertAccountIdentity(accountId: string) {
   if (!/^[a-zA-Z0-9_-]+$/.test(accountId)) {
     throw new Error('Invalid account identity');
@@ -97,11 +107,19 @@ export function createTodoWorkspaceRegistry({
       return descriptor;
     }
     const descriptor = parseDescriptor(stored);
-    if (descriptor.binding.kind !== 'bound') {
-      throw new Error('Cannot open an unbound todo workspace while signed in');
+    if (descriptor.binding.kind === 'unbound') {
+      const bound: TodoWorkspaceDescriptor = {
+        ...descriptor,
+        binding: { kind: 'bound', accountId },
+      };
+      await storage.setItem(storageKey, JSON.stringify(bound));
+      return bound;
     }
     if (descriptor.binding.accountId !== accountId) {
-      throw new Error('Todo workspace belongs to a different account');
+      throw new TodoWorkspaceAccessError(
+        'account-mismatch',
+        'Todo workspace belongs to a different account',
+      );
     }
     return descriptor;
   };
@@ -121,7 +139,10 @@ export function createTodoWorkspaceRegistry({
     }
     const descriptor = parseDescriptor(stored);
     if (descriptor.binding.kind !== 'unbound') {
-      throw new Error('Cannot open a bound todo workspace while signed out');
+      throw new TodoWorkspaceAccessError(
+        'locked',
+        'Cannot open a bound todo workspace while signed out',
+      );
     }
     return descriptor;
   };
@@ -139,3 +160,5 @@ export function createTodoWorkspaceRegistry({
     },
   };
 }
+
+export type TodoWorkspaceRegistry = ReturnType<typeof createTodoWorkspaceRegistry>;

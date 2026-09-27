@@ -44,6 +44,40 @@ describe('useTodoData', () => {
     await AsyncStorage.clear();
   });
 
+  it('opens guest data while signed out and binds that same database after login', async () => {
+    mockAuth.userId = null;
+    const order: string[] = [];
+    let guestDatabase = '';
+    mockOpenReplica.mockImplementation(async ({ descriptor }) => {
+      if (descriptor.binding.kind === 'unbound') guestDatabase = descriptor.databaseName;
+      order.push(`open ${descriptor.binding.kind} ${descriptor.databaseName}`);
+      return replica(
+        descriptor.binding.kind === 'bound' ? descriptor.binding.accountId : 'guest',
+        async () => { order.push(`close ${descriptor.binding.kind}`); },
+      );
+    });
+    const hook = await renderHook(() => useTodoData());
+    await waitFor(() => expect(hook.result.current.ready).toBe(true));
+    expect(hook.result.current.recoveries[0]?.id).toBe('guest');
+
+    mockAuth.userId = 'A';
+    await hook.rerender({});
+    await waitFor(() => expect(hook.result.current.recoveries[0]?.id).toBe('A'));
+
+    expect(order).toEqual([
+      `open unbound ${guestDatabase}`,
+      'close unbound',
+      `open bound ${guestDatabase}`,
+    ]);
+    await hook.unmount();
+    expect(order).toEqual([
+      `open unbound ${guestDatabase}`,
+      'close unbound',
+      `open bound ${guestDatabase}`,
+      'close bound',
+    ]);
+  });
+
   it('opens the adopted database and refuses a later different Clerk account', async () => {
     const order: string[] = [];
     mockOpenReplica.mockImplementation(async ({ descriptor }) => {
