@@ -6,16 +6,17 @@
 #
 # Screenshots land under ~/.maestro/tests/<timestamp>/. launchApp has no
 # clearState, so it keeps the signed-in session. Assumes the app is signed in
-# and sitting on the Captures tab.
+# and sitting on Home.
 appId: dev.juanibiapina.zeroagent
 ---
 - launchApp
 - extendedWaitUntil:
-    visible: 'Captures'
+    visible: 'Home'
     timeout: 45000
 - takeScreenshot: 01-captures
-# Quick-add open with the keyboard up.
-- tapOn: '^Capture$'
+# Quick-add open with the keyboard up. Screenshot artifact names stay stable so
+# existing before/after comparisons keep their paths.
+- tapOn: '^Task$'
 - takeScreenshot: 02-captures-quickadd
 - inputText: 'Screenshot sweep row'
 - takeScreenshot: 03-captures-quickadd-text

@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
 // tw-animate-css utilities the app already ships, which Radix awaits before
 // unmounting.
 //
-// It knows nothing about any entity: callers pass `children`. The Projects
-// detail sheet (and, later, the Captures detail sheet and the A3 edit fields)
-// render their content inside it. `title` is shown as the sheet heading and
+// It knows nothing about any entity: callers pass `children`. Task details,
+// completion feedback, and Project edit flows render their content inside it.
+// `title` is shown as the sheet heading and
 // doubles as the required accessible name; pass `srOnlyTitle` to keep the name
 // for screen readers without a visible heading.
 export type SheetProps = {

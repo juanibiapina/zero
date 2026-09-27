@@ -5,8 +5,6 @@
 // taken-on or not. A task belongs to at most one of the two views for a given
 // day, so there is no overdue or today case here. Pure, so both the web and
 // mobile screens share one tested grouping and it is unit-tested without a UI.
-//
-// Ported from the former captures/upcoming.ts in the single-list merge.
 
 import { compareByOrder } from "./order";
 import type { Task } from "../taskdo/types";

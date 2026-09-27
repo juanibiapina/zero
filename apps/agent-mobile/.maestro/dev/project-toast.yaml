@@ -12,18 +12,15 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: 'Home'
     timeout: 45000
-# Open the quick-add (collapsed FAB is labelled "Capture").
-- tapOn: '^Capture$'
+# Open the quick-add.
+- tapOn: '^Task$'
 # Switch to Project mode and name an outcome.
 - tapOn: 'Add a project'
 - inputText: 'Maestro toast project'
 - takeScreenshot: 01-project-quickadd
-# Submit with the "+" button. Its accessibility label reuses "Capture" (the
-# fab label), which also matches the capture pill, so target the second match
-# (pills render first, the submit button last).
+# Submit with the "+" button.
 - tapOn:
-    text: '^Capture$'
-    index: 1
+    id: 'quick-add-submit'
 # The toast names the project and offers a "View" link. It renders in an elevated
 # overlay whose bounds uiautomator misreports, so `tapOn: 'View'` lands off the
 # button — tap the button's on-screen position (top-right) instead, promptly

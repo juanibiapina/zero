@@ -14,7 +14,7 @@ describe('QuickAddBar', () => {
 
   it('offers task and project pills when a mode is set', async () => {
     const onModeChange = jest.fn();
-    const { getByLabelText, queryByLabelText } = await render(
+    const { getByLabelText } = await render(
       <QuickAddBar
         value=""
         mode="project"
@@ -24,8 +24,6 @@ describe('QuickAddBar', () => {
       />,
     );
 
-    // Capture was retired in the single-list merge: only task and project.
-    expect(queryByLabelText('Add a capture')).toBeNull();
     expect(getByLabelText('Add a task')).toBeTruthy();
     const project = getByLabelText('Add a project');
     expect(project).toBeTruthy();
@@ -52,8 +50,7 @@ describe('QuickAddBar', () => {
     expect(task).toBeTruthy();
     fireEvent.press(task);
     expect(onModeChange).toHaveBeenCalledWith('task');
-    // …but it is the only pill: capture and project are not offered.
-    expect(queryByLabelText('Add a capture')).toBeNull();
+    // …but it is the only pill: Project is not offered.
     expect(queryByLabelText('Add a project')).toBeNull();
   });
 

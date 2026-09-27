@@ -1,4 +1,4 @@
-// The list-screen React hooks, one copy for the mobile app (Captures, Projects,
+// The list-screen React hooks, one copy for the mobile app (Home, Projects,
 // Upcoming). Kept per-app rather than in @zero/agent-core so the app's own React
 // is the only instance (a workspace lib that called hooks would resolve its own
 // React copy and break the rules-of-hooks dispatcher). The web app has its own

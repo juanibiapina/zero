@@ -12,7 +12,7 @@ jest.mock('@clerk/expo/native', () => ({
 
 describe('ScreenHeader', () => {
   it('renders its title', async () => {
-    const { getByText } = await render(<ScreenHeader title="Captures" />);
-    expect(getByText('Captures')).toBeTruthy();
+    const { getByText } = await render(<ScreenHeader title="Home" />);
+    expect(getByText('Home')).toBeTruthy();
   });
 });

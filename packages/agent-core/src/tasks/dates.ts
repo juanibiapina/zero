@@ -1,8 +1,7 @@
 // Pure date helpers for the task list. The client mints a task's showUpDate in
 // the user's local day and does the shown-up / upcoming split against it (the
-// server stores the string verbatim and has no timezone). Ported from the
-// former captures/dates.ts in the single-list merge; `localToday` and the
-// Today-list `dueToday` still live in ./today.ts.
+// server stores the string verbatim and has no timezone). `localToday` and the
+// Today-list `dueToday` live in ./today.ts.
 
 // The next calendar day after a YYYY-MM-DD string. Parsed at UTC noon so adding
 // 24h never lands on the same date across a DST boundary, then reformatted in

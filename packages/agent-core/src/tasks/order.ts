@@ -3,9 +3,6 @@
 // write that touches only the moved row, never a renumber. The library is
 // hidden behind this one tested seam for derived client lists. The canonical
 // TinyBase model owns persisted Task projection order.
-//
-// Ported from the former captures/order.ts in the single-list merge; the Task
-// list is now the sole consumer.
 
 import { TodoModel } from "../taskdo/model";
 

@@ -95,14 +95,14 @@ back only where the native component does not fit.
   JS hot-reload alone crashes on render on an older client that lacks the native
   view (same hazard as the Clerk `UserButton`). Once the module is in the client,
   further JS changes hot-reload normally.
-- **The Captures list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
-  native but **not virtualized**; Captures is unbounded, so it uses a reanimated
+- **The Home task list -> `FlatList`, never `@expo/ui` `List`.** `@expo/ui` `List` is
+  native but **not virtualized**; Home is unbounded, so it uses a reanimated
   `Animated.FlatList` (virtualized, with row fade + layout animation).
 - **Kept custom on purpose.** The keyboard-attached quick-add bar
   (`KeyboardStickyView` + reanimated) and the in-tree `ConfirmDialog` stay
   hand-rolled: `@expo/ui` has no keyboard-attached quick-add primitive, and the
   only native dialog (RN `Alert`) dismisses the keyboard, which would regress the
-  rapid-capture discard flow. The `Fab` is a floating circular button, not a
+  quick-add discard flow. The `Fab` is a floating circular button, not a
   native `Button` shape.
 - **Verify a bundle without a device**: `pnpm exec expo export --platform android
   --output-dir /tmp/x` compiles through Metro + Babel + Uniwind and surfaces

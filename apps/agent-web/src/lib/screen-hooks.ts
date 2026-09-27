@@ -1,4 +1,4 @@
-// The list-screen React hooks, one copy for the web app (Captures, Projects,
+// The list-screen React hooks, one copy for the web app (Home, Projects,
 // Upcoming). Kept per-app rather than in @zero/agent-core so the app's own React
 // is the only instance (a workspace lib that called hooks would resolve its own
 // React copy and break the rules-of-hooks dispatcher). The mobile app has its
@@ -23,4 +23,3 @@ export function useDelayed(active: boolean, ms: number): boolean {
   }, [active, ms]);
   return active && elapsed;
 }
-

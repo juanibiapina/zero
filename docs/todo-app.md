@@ -27,30 +27,9 @@ design thinking. Ideal end state: the code should not compile (or should refuse)
 if a new entity's required interactions are not wired. Open question: whitelist
 of allowed interactions vs blacklist of forbidden ones.
 
-## Data-store strategy (decided 2026-08-27): per-entity, not a generic bag
+## Data-store strategy
 
-`DbCaptureStore` is deliberately specific to captures, and future entities
-(Project, Person, Note…) get their own thin stores too. NOT a generic
-`Repository<T>` / uniform CRUD bag. Reasons:
-
-- do-orm already IS the generic layer (`db.insert/all/get/update` + conditions).
-  A per-entity store adds only the entity's DOMAIN methods (capture: `add`,
-  `list` = open Captures, `process`) — that is the value, not CRUD.
-- A uniform generic store fights the Minecraft-block philosophy above: adding an
-  entity should force wiring its behavior, not be a no-op in a shared bag.
-- One example is not enough to abstract. Extract a small shared base only at the
-  ~third real entity (Rule of Three), and only for genuinely shared plumbing
-  (id/createdAt conventions, a `list/get` helper) — never the domain methods.
-- Keep product stores separate from the agent's `DbStore` (one namespace per
-  product area); do not widen the agent interface with todo-app entities.
-- Caveat: the TanStack DB adoption may shrink or dissolve the server-side store
-  (client owns collections; the DO persists generically). Settle the sync-engine
-  direction before investing in any server-store framework.
-
-The thing to watch is duplicated CRUD boilerplate across future stores, not
-specificity; do-orm + a Rule-of-Three base covers it when the time comes.
-
-**Todo model status (2026-09-26):** Task, Project, Waiting, and After use one
+Task, Project, Waiting, and After use one
 platform-neutral TinyBase model in `@zero/agent-core`. TaskDO, web, and mobile
 all call it for row decoding, accepted projections, mutations, recurrence,
 ordering, relationships, and recovery. TaskDO retains erasure, durable saves,
