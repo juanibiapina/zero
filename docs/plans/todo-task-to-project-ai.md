@@ -1,8 +1,8 @@
 # Task → Project via AI (brainstorm)
 
-Status: brainstorm, nothing built. Captures the design direction for refining a
-loose Task into a Project with the agent. Not a committed plan yet — the open
-questions at the bottom gate that.
+Status: open design direction. The underlying Task and Project model is built;
+the agent proposal and confirmation workflow is not. The questions at the
+bottom gate implementation.
 
 ## The idea
 
@@ -18,24 +18,17 @@ Project. In the app, an AI assistant should be able to refine that thought:
 
 ## Bottom line
 
-This one feature is the convergence point of the todo-app roadmap. It pulls in
-four unbuilt things at once:
-
-- the **Project** entity (#3),
-- **un-parking Task** (a project's "requirements" = Tasks with `projectId`),
-- the agent's **first write path** into todo-app entities,
-- a **propose / confirm session UI**.
-
-It is the reason Task exists again — `docs/todo-app.md` parks Task until "Projects
-and the agent give it a reason to exist"; this is that reason. Build it in slices;
-each slice ships on its own.
+This feature joins the shipped Task and Project model to the agent. The remaining
+work is the agent's first todo proposal path and a propose/confirm UI; a later
+conversational version would introduce Session as a first-class entity. Build it
+in slices so each increment has a usable boundary.
 
 Biggest scope lever: **does v1 need the back-and-forth chat, or is one-shot
 propose→confirm enough to start?** Lean toward starting without the chat.
 
 ## Recommended slicing
 
-**Slice A — Project entity (#3), no AI.** Historical prerequisite:
+**Slice A — Project entity, no AI (shipped).** Historical prerequisite:
 `projects` table, `DbProjectStore`, `/api/projects`, a collection, a Projects
 screen with a real creation UI. Minimal schema: `id`, `title`, `icon`,
 `description`, `status` (active/next/waiting/backlog/done), `createdAt`. Ships
@@ -46,7 +39,7 @@ description in the sheet) — then the Rule-of-Three base extraction as a non-ve
 follow-up. All four shipped (extraction: #66). The shipped Project model is
 documented in `docs/entities/project.md`.
 
-**Slice B — place Task under Project.** Historical prerequisite: `projectId`
+**Slice B — place Task under Project (shipped).** Historical prerequisite: `projectId`
 lets the existing Task move between loose and Project-owned states. A Project
 shows its Tasks. No Capture provenance is part of the current domain.
 
@@ -87,10 +80,10 @@ so the agent's conversational baggage stays out of a structured task.
 - **"generic process with AI":** the gesture is generic, but v1 lets the agent
   pick the target type while only **Project** is supported. Other target types
   (Note, Task-only) come later without changing the gesture.
-- **web-first vs mobile-first:** the gesture is mobile, but the AI proposal +
-  confirm sheet iterate far faster on **web** (Home remains at `/captures`; no EAS rebuild
-  per native change). Consider building slice C's proposal web-first, then port
-  the sheet to mobile.
+- **web-first vs mobile-first:** the gesture is mobile, but the AI proposal and
+  confirmation surface may iterate faster on **web** (Home is `/home`; no native
+  build per UI change). Consider building slice C's proposal web-first, then
+  porting the surface to mobile.
 
 ## Open questions (gate the plan)
 

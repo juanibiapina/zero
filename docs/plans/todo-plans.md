@@ -5,12 +5,10 @@ the live documentation tree. The remaining files have one of two purposes.
 
 ## Active direction
 
-- `todo-capture-animations.md` retains the unimplemented quick-add morph. Its
-  completed row-removal animation remains in the same plan for context.
+- `todo-quick-add-morph.md` covers the remaining mobile FAB-to-bar transition.
+  Completed Task row-removal animation work stays in Git history.
 - `todo-task-to-project-ai.md` is the still-open AI-assisted refinement
-  direction. Its Capture terminology records the original exploration; current
-  work must adapt the idea to the Task-only model documented in
-  `docs/entities/task.md`.
+  direction for turning a loose Task into a proposed Project and Tasks.
 
 ## Historical decisions
 
@@ -24,5 +22,7 @@ the live documentation tree. The remaining files have one of two purposes.
   cutover, including migration and recovery evidence.
 
 Use `docs/todo-app.md`, `docs/entities/`, and `docs/storage.md` for present-state
-behavior. The repository history before commit
-`ef8a3dbabe915964907d2dbeb7b6671444d3b322` retains the removed execution plans.
+behavior. Completed execution prose, including the removed animation increment,
+remains in Git history rather than in a second live archive. The repository
+history before commit `ef8a3dbabe915964907d2dbeb7b6671444d3b322` also retains
+the earlier removed execution plans.
