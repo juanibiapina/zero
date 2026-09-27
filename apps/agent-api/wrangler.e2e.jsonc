@@ -3,7 +3,7 @@
   // the /api/* auth bypass trusts the fake bearer) but drops the `ai` binding.
   // The `ai` binding runs in remote mode and forces wrangler to open a remote
   // proxy session that needs CLOUDFLARE_API_TOKEN; the release flows only touch
-  // tasks/captures (no LLM), and no code reads env.AI, so removing it keeps the
+  // local todo data (no LLM), and no code reads env.AI, so removing it keeps the
   // stack fully local and credential-free.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "zero-api-e2e",
