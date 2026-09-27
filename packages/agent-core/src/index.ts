@@ -109,6 +109,11 @@ export {
   type TaskdoSynchronizer,
 } from "./taskdo/sync";
 export {
+  createSyncedTaskdoReplicaSession,
+  type CreateSyncedTaskdoReplicaSessionOptions,
+  type SyncedTaskdoReplicaSession,
+} from "./taskdo/replica-session";
+export {
   createAccountTaskdoReplicaOwner,
   type AccountTaskdoReplicaEvents,
   type AccountTaskdoReplicaOwner,
