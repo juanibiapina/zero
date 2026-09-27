@@ -89,9 +89,9 @@ synchronize with TaskDO over WebSocket.
 TaskDO retains Durable Object persistence, synchronization, erasure protection,
 and typed REST mapping. Public todo REST routes remain for compatible installed
 clients and other callers, but they reach the same TaskDO authority. `UserDO`
-continues to own non-todo agent state; its old physical todo tables remain inert
-recovery data. See [`docs/storage.md`](storage.md) for the complete current
-model and the historical
+continues to own non-todo agent state; migration 0057 removes its retired todo
+tables. See [`docs/storage.md`](storage.md) for the complete current model and
+the historical
 [`local-replica cutover plan`](plans/todo-local-replica-sync.md) for the rollout
 evidence.
 

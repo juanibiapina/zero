@@ -58,8 +58,8 @@ data on reconnect.
   TinyBase mergeable store. Todo REST routes and WebSocket synchronization use
   that same authority.
 - `UserDO` still owns agent conversations, settings, schedules, and other
-  non-todo state. Its old physical todo tables remain inert recovery data:
-  current code neither reads nor writes them.
+  non-todo state. Migration 0057 removes its retired physical todo tables after
+  TaskDO became the sole authority.
 
 ## Client replicas
 
