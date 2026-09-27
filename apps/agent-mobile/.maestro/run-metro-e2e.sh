@@ -86,7 +86,6 @@ delete_e2e_stores() {
 
 reset_e2e_phone_state() {
   local reset_hierarchy="$ARTIFACT_DIR/reset-hierarchy.txt"
-  adb_device shell am force-stop "$PACKAGE" >/dev/null
   adb_device shell am start -W \
     -a android.intent.action.VIEW \
     -d "zeroagent:///e2e-reset" \
@@ -101,8 +100,7 @@ reset_e2e_phone_state() {
     return 1
   fi
   adb_device shell am force-stop "$PACKAGE" >/dev/null
-  # Exact-file cleanup is a defense against a process killed after metadata was
-  # removed but before SQLite sidecars were closed. It cannot match real guest
+  # Once the app has closed SQLite, exact-file cleanup cannot match real guest
   # or account databases.
   delete_e2e_stores
 }
