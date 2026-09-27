@@ -80,10 +80,12 @@ ticket. They are product ideas, not committed schema or implementation plans.
 
 ### Architecture
 
-`TaskDO` is the sole server authority for todo data. A platform-neutral TinyBase
-model in `@zero/agent-core` owns projections, mutations, recurrence, ordering,
-relationships, and recovery. Web and mobile keep account-scoped TinyBase
-replicas, expose the same screen-facing Task/Project/Waiting operations, and
+`TaskDO` is the sole server authority for synchronized todo data. A
+platform-neutral TinyBase model in `@zero/agent-core` owns projections,
+mutations, recurrence, ordering, relationships, and recovery. Mobile keeps one
+current device workspace, which works locally before sign-in and binds to the
+first account that signs in. Web keeps an account-scoped TinyBase replica. Both
+expose the same screen-facing Task/Project/Waiting operations, and bound clients
 synchronize with TaskDO over WebSocket.
 
 TaskDO retains Durable Object persistence, synchronization, erasure protection,
@@ -98,10 +100,13 @@ evidence.
 ### Implementation status
 
 The present Task, Project, Waiting, and After model is available on mobile and
-web. Current clients provide local persistence, offline writes, live
-synchronization, account isolation, recurrence, Undo, recovery reporting, and
-the Home/Upcoming/Projects surfaces. The product changelogs are the record of
-shipped user-visible increments:
+web. Mobile opens directly into the same Home, Upcoming, Projects, and quick-add
+surface for guests and signed-in users. Guests keep a durable local workspace;
+sign-in adds synchronization plus authenticated timezone and icon-suggestion
+features. Those authenticated features are absent, rather than partially
+rendered, for guests. Current clients also provide offline writes, account
+isolation, recurrence, Undo, and recovery reporting. The product changelogs are
+the record of shipped user-visible increments:
 
 - [`apps/agent-mobile/CHANGELOG.md`](../apps/agent-mobile/CHANGELOG.md)
 - [`apps/agent-web/CHANGELOG.md`](../apps/agent-web/CHANGELOG.md)

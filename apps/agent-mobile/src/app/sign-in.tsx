@@ -46,7 +46,7 @@ export default function SignInScreen() {
       });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
-        return; // the auth gate redirects to home
+        return; // the updated auth state redirects to home
       }
       setError("Sign-in didn't complete. Please try again.");
     } catch {

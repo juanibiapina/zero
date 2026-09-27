@@ -176,6 +176,17 @@ sync, remove the account-bound device database, and only then end the Clerk
 session. If that checkpoint cannot be confirmed, the app keeps the local copy
 and offers retry or an explicitly destructive discard.
 
+The app has one current device database, selected by a persisted workspace
+descriptor. A new guest database is unbound. Its first sign-in binds that same
+database to the account and starts TaskDO WebSocket sync. Existing account-first
+installs continue to use `taskdo-fixture-<account-id>.sqlite`; that historical
+prefix is part of the installed-data contract. An unexpected loss of the Clerk
+session locks a bound workspace without deleting it. The same account unlocks
+it after signing in again. A different account cannot rebind it: the recovery
+screen can sign the wrong account out while retaining the locked workspace, or
+delete the device copy explicitly before continuing. Guests do not run timezone
+sync or request AI icon suggestions; manual emoji selection remains available.
+
 Environment variables (Expo inlines `EXPO_PUBLIC_*` at build time):
 
 | Variable                            | Required | Default                          | Purpose                                             |
@@ -209,8 +220,9 @@ Native sign-in needs two one-time settings in the Clerk dashboard, under
 
 After OAuth, Clerk's Custom Tab redirects to `zeroagent://sso-callback`. Android
 delivers that to expo-router as a deep link, so the app has an `sso-callback`
-route (`src/app/sso-callback.tsx`) that bounces to `/` and lets the auth gate
-route to home. Without it the app lands on a dead route after sign-in.
+route (`src/app/sso-callback.tsx`) that bounces to `/` and returns to the todo
+home with the updated session. Without it the app lands on a dead route after
+sign-in.
 
 ## Develop / test loop (no Android Studio)
 
@@ -330,8 +342,8 @@ storage names, EAS Update, and launcher synchronization.
 To run the extended TinyBase persistence proof, use
 `E2E_TASKDO_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel`. The three
 additional flows prove loose-Task offline restart and REST sync, then Project
-and linked-Task offline restart and Worker REST sync. Every signed-in account
-uses one account-scoped TinyBase SQLite file under Expo's `files/SQLite/`.
+and linked-Task offline restart and Worker REST sync. The active signed-in
+workspace uses one TinyBase SQLite file under Expo's `files/SQLite/`.
 The historical filename prefix remains `taskdo-fixture-` so an installed app
 continues opening the already-migrated file. The harness cleans only its test
 account's file. Home lists raw conflicts and offers safe local repairs for

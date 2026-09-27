@@ -5,12 +5,14 @@ How the todo app persists its entities, across both layers. Entity docs
 storage mechanics — they do not re-explain how data is saved. This file is the
 source of truth for that.
 
-There are two layers: the **server** (authoritative) and the **client**. `TaskDO`
-is the only server authority for todo data. Updated mobile clients use a complete
-TinyBase replica whose acknowledged local writes persist offline and merge with
-the server replica. Web uses the same shared replica implementation with browser
-persistence and lifecycle adapters. Older installed clients can still use the
-code bundled into those builds, but their REST requests reach the same `TaskDO`.
+There are two layers: the **server** (authoritative for synchronized accounts)
+and the **client**. `TaskDO` is the only server authority for todo data. Mobile
+opens a durable TinyBase workspace immediately, including when no account is
+signed in. Its acknowledged local writes persist offline; after the workspace
+is bound to an account, they merge with the server replica. Web uses the same
+shared replica implementation with browser persistence and lifecycle adapters.
+Older installed clients can still use the code bundled into those builds, but
+their REST requests reach the same `TaskDO`.
 
 ## TaskDO local-replica path
 
@@ -24,10 +26,11 @@ in-process `TaskDomain` is the TaskDO adapter: it rejects erased-account writes,
 saves successful typed mutations, and maps canonical conflicts and issues to
 the established RPC and REST values. `TaskDO` retains the Durable Object
 lifecycle: SQL persistence, WebSocket synchronization, socket shutdown, and
-account purge/erasure protection. Mobile persists an account-named Expo SQLite
-replica; web persists an account-named IndexedDB replica. Both synchronize
-through the same authenticated WebSocket. The shared replica adapter exposes
-one account replica with `tasks`, `projects`, and `waits` operation groups. It
+account purge/erasure protection. Mobile persists its current workspace in Expo
+SQLite; web persists an account-named IndexedDB replica. Bound mobile workspaces
+and web replicas synchronize through the same authenticated WebSocket. The
+shared replica adapter exposes one replica with `tasks`, `projects`, and `waits`
+operation groups. It
 builds their TanStack collections, publishes query projections, maps
 client-facing errors and recovery actions, and waits for local persistence
 before reporting a transaction persisted. Current clients do not open retired todo caches or
@@ -68,15 +71,22 @@ rules. The shared replica is a TanStack adapter with one screen-facing
 interface. Its three entity collections share one store, transaction model,
 recovery channel, and replica-level refresh operation. A shared synchronization
 lifecycle owns connection-attempt deduplication, TinyBase synchronization,
-bounded reconnect backoff, refresh, and race-safe teardown. A shared
+bounded reconnect backoff, refresh, and race-safe teardown. Web's shared
 account-replica owner immediately hides the previous account, serializes its
 teardown before opening the next account, and ignores stale opens and events.
-Platform adapters own persistence, authentication, WebSocket construction,
-connection eligibility, durability reporting, and platform lifecycle events.
+Mobile wraps the replica with its device-workspace lifecycle. Platform adapters
+own persistence, authentication, WebSocket construction, connection
+eligibility, durability reporting, and platform lifecycle events.
 
-- **Mobile:** one Expo SQLite file per Clerk account, named
-  `taskdo-fixture-<account-id>.sqlite`. App foregrounding prompts reconnection;
-  pull-to-refresh requests a TinyBase synchronization round or reconnects first.
+- **Mobile:** one saved workspace descriptor selects the current Expo SQLite
+  file. A fresh signed-out install creates
+  `taskdo-workspace-<device-workspace-id>.sqlite` and uses it locally without a
+  server connection. The first sign-in binds that same file to the Clerk
+  account and enables TaskDO WebSocket synchronization; it does not copy the
+  rows into a second database. Existing account-first installs keep opening
+  `taskdo-fixture-<account-id>.sqlite`, preserving the historical filename.
+  App foregrounding prompts reconnection; pull-to-refresh requests a TinyBase
+  synchronization round or reconnects first.
 - **Web:** one TinyBase IndexedDB database per Clerk account, named
   `zero-taskdo-replica-<account-id>`. The browser persistence module loads it
   before the adapter exposes the todo owner. The adapter then opens same-origin
@@ -99,11 +109,16 @@ connection eligibility, durability reporting, and platform lifecycle events.
 - **Fallback:** if IndexedDB or Web Locks are unavailable, web uses an in-memory
   replica that still synchronizes online and reports that offline durability is
   unavailable.
-- **Account lifecycle:** mobile and web use the same account-replica owner. It
-  closes the synchronizer and persistence handle before it exposes another
-  account, and closes any handle whose open resolves after a switch or sign-out.
-  Storage names include the Clerk account ID, so one account cannot hydrate
-  another account's rows.
+- **Account lifecycle:** mobile owns the device workspace around the shared
+  replica. Explicit sign-out first checkpoints acknowledged sync, closes the
+  persistence handle, deletes the bound local database and account-only caches,
+  and then creates a fresh guest workspace. If Clerk loses authentication
+  unexpectedly, the descriptor stays bound and the local rows remain locked;
+  signing back into that account unlocks them. A different account cannot open
+  or rebind the workspace: the user can sign that account out while retaining
+  the locked copy, or explicitly delete the device copy before continuing.
+  Web retains its account-replica owner, which closes one account before it
+  exposes another.
 
 The retired web OPFS database and IndexedDB outbox are not opened, migrated,
 replayed, or deleted. They remain inert in existing browser profiles.
@@ -130,8 +145,8 @@ advance whose row remained open.
 
 ## Replica durability
 
-The account-scoped TinyBase replica is durable local user state, not a
-disposable cache. It retains complete merge metadata so offline changes can
-converge after restart. Recovery projection excludes invalid synchronized rows
-from accepted views while retaining their raw intent until the user chooses a
-safe repair.
+The current TinyBase workspace is durable local user state, not a disposable
+cache. It retains complete merge metadata so offline changes can converge after
+restart once it is bound. Recovery projection excludes invalid synchronized
+rows from accepted views while retaining their raw intent until the user
+chooses a safe repair.

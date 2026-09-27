@@ -83,7 +83,7 @@ Waiting and After.
 - Entity behavior: `docs/entities/task.md`, `docs/entities/project.md`, and
   `docs/entities/waiting-condition.md`
 - Current Project surface:
-  `src/app/(signed-in)/projects/[id].tsx`
+  `src/app/(todo)/projects/[id].tsx`
 - Current shared Task editor: `src/components/task-editor-sheet.tsx`
 - Current transient feedback: `src/components/toaster.tsx`
 - Current tokens: `global.css`

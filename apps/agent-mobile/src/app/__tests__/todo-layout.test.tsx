@@ -3,7 +3,7 @@ import { render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { AppState, Platform, Text } from 'react-native';
 
-import TodoLayout from '../(signed-in)/_layout';
+import TodoLayout from '../(todo)/_layout';
 
 const mockUseAuth = jest.fn();
 const mockOnColdStart = jest.fn(async () => {});

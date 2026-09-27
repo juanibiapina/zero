@@ -62,7 +62,7 @@ Per surface:
   onboarding) also seeds the baseline via `onColdStart(serverZone)`. Web also
   sends `region` derived from the locale. A plain reload no longer re-PATCHes.
 - **Mobile** (`apps/agent-mobile/src/lib/timezone-sync.ts`, wired in the
-  `(signed-in)/_layout.tsx`): an `AsyncStorage` store; no settings GET at boot.
+  `(todo)/_layout.tsx`): an `AsyncStorage` store; no settings GET at boot.
   The stores are per-surface and independent — the single shared state is the
   server; the shared *code* is the port contract and the core.
 
