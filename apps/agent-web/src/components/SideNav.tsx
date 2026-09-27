@@ -3,7 +3,7 @@ import { Link, NavLink } from "react-router";
 
 import { cn } from "@/lib/utils";
 
-// One nav destination. Grows to a handful of sections; a single item today.
+// One signed-in navigation destination.
 type NavItem = {
   to: string;
   label: string;
@@ -64,14 +64,14 @@ function FolderIcon({ className }: { className?: string }) {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/captures", label: "Home", icon: InboxIcon },
+  { to: "/home", label: "Home", icon: InboxIcon },
   { to: "/upcoming", label: "Upcoming", icon: CalendarIcon },
   { to: "/projects", label: "Projects", icon: FolderIcon },
 ];
 
 // Shared section navigation for the signed-in web app: a left sidebar on desktop
-// and a bottom bar on small screens (the web mirror of the mobile tab bar). One
-// section for now; a second lands next. Mount once in the app shell.
+// and a bottom bar on small screens (the web mirror of the mobile tab bar).
+// Mount once in the app shell.
 export function SideNav() {
   return (
     <>

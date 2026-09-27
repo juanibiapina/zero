@@ -57,19 +57,17 @@ function AuthGate() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<HomeRoute />} />
-        {/* Home: the single task list. The path stays /captures (unchanged
-            through the single-list merge) so bookmarks and the nav keep working;
-            the screen is the one task list now. */}
-        <Route path="captures" element={<HomePage />} />
-        {/* The second section: tasks scheduled for a future day. */}
-        <Route path="upcoming" element={<UpcomingPage />} />
-        {/* The Projects list (entity #3). */}
-        <Route path="projects" element={<ProjectsPage />} />
-        {/* A project opens its own screen (a destination, not a sheet). */}
-        <Route path="projects/:id" element={<ProjectDetailPage />} />
-        <Route path="onboarding" element={<OnboardingRoute />} />
-        <Route path="admin" element={<AdminPage />} />
-        <Route path="admin/users/:userId" element={<UserDetailPage />} />
+          <Route path="home" element={<HomePage />} />
+          <Route path="captures" element={<Navigate to="/home" replace />} />
+          {/* The second section: tasks scheduled for a future day. */}
+          <Route path="upcoming" element={<UpcomingPage />} />
+          {/* The Projects list (entity #3). */}
+          <Route path="projects" element={<ProjectsPage />} />
+          {/* A project opens its own screen (a destination, not a sheet). */}
+          <Route path="projects/:id" element={<ProjectDetailPage />} />
+          <Route path="onboarding" element={<OnboardingRoute />} />
+          <Route path="admin" element={<AdminPage />} />
+          <Route path="admin/users/:userId" element={<UserDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
