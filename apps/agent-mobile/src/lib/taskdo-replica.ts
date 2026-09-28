@@ -1,5 +1,9 @@
 import { AppState } from 'react-native';
-import { createMergeableStore, type MergeableStore } from 'tinybase';
+import {
+  createMergeableStore,
+  type MergeableContent,
+  type MergeableStore,
+} from 'tinybase';
 import type { QueryClient } from '@tanstack/react-query';
 import {
   createSyncedTaskdoReplicaSession,
@@ -20,6 +24,20 @@ export type MobileTaskdoPersistence = {
   startAutoPersisting: () => Promise<unknown>;
   destroy: () => Promise<unknown>;
   close: () => Promise<unknown>;
+};
+
+type TaskdoPersister = {
+  load(initialContent?: MergeableContent): Promise<unknown>;
+  save(): Promise<unknown>;
+  startAutoPersisting(initialContent?: MergeableContent): Promise<unknown>;
+  destroy(): Promise<unknown>;
+};
+
+type CreateTaskdoPersistenceOptions = {
+  store: MergeableStore;
+  close: () => Promise<unknown>;
+  createPersister: (onIgnoredError: (error: unknown) => void) => TaskdoPersister;
+  onIgnoredError: (error: unknown) => void;
 };
 
 type OpenTaskdoReplicaOptions = {
@@ -49,6 +67,47 @@ function assertDatabaseName(databaseName: string) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+const isTinybaseMissingContentError = (error: unknown) =>
+  error instanceof Error && error.message === 'tinybase:1:null';
+
+export function createTaskdoPersistence({
+  store,
+  close,
+  createPersister,
+  onIgnoredError,
+}: CreateTaskdoPersistenceOptions): MobileTaskdoPersistence {
+  let loadingWithInitialContent = false;
+  const persister = createPersister((error) => {
+    if (!(loadingWithInitialContent && isTinybaseMissingContentError(error))) {
+      onIgnoredError(error);
+    }
+  });
+
+  const loadWithInitialContent = async (
+    load: (initialContent: MergeableContent) => Promise<unknown>,
+  ) => {
+    loadingWithInitialContent = true;
+    try {
+      return await load(store.getMergeableContent());
+    } finally {
+      loadingWithInitialContent = false;
+    }
+  };
+
+  return {
+    store,
+    load: () => loadWithInitialContent(
+      (initialContent) => persister.load(initialContent),
+    ),
+    save: () => persister.save(),
+    startAutoPersisting: () => loadWithInitialContent(
+      (initialContent) => persister.startAutoPersisting(initialContent),
+    ),
+    destroy: () => persister.destroy(),
+    close,
+  };
 }
 
 export function createTaskdoReplicaOpener({
@@ -184,35 +243,53 @@ export function createTaskdoReplicaOpener({
   };
 }
 
+// Auth routing can mount the next owner before the previous owner's async
+// cleanup finishes. Keep native SQLite ownership exclusive across that handoff.
+const persistenceTails = new Map<string, Promise<void>>();
+
 const openTaskdoPersistence = async (
   databaseName: string,
   onIgnoredError: (error: unknown) => void,
 ): Promise<MobileTaskdoPersistence> => {
-  const [{ openDatabaseAsync }, { createExpoSqlitePersister }] = await Promise.all([
-    import('expo-sqlite'),
-    import('tinybase/persisters/persister-expo-sqlite'),
-  ]);
+  const previous = persistenceTails.get(databaseName) ?? Promise.resolve();
+  let release!: () => void;
+  const lease = new Promise<void>((resolve) => { release = resolve; });
+  const tail = previous.then(() => lease);
+  persistenceTails.set(databaseName, tail);
+  await previous;
+
   // This owner explicitly closes the handle before deleting or reopening the
   // file. Expo's default connection cache can retain another native reference
   // across that transition, which makes deleteDatabaseAsync reject a safe
   // logout as "currently open".
-  const database = await openDatabaseAsync(databaseName, { useNewConnection: true });
-  const store = createMergeableStore();
-  const persister = createExpoSqlitePersister(
-    store,
-    database,
-    'taskdo_local',
-    undefined,
-    onIgnoredError,
-  );
-  return {
-    store,
-    load: () => persister.load(),
-    save: () => persister.save(),
-    startAutoPersisting: () => persister.startAutoPersisting(),
-    destroy: () => persister.destroy(),
-    close: () => database.closeAsync(),
-  };
+  try {
+    const [{ openDatabaseAsync }, { createExpoSqlitePersister }] = await Promise.all([
+      import('expo-sqlite'),
+      import('tinybase/persisters/persister-expo-sqlite'),
+    ]);
+    const database = await openDatabaseAsync(databaseName, { useNewConnection: true });
+    const store = createMergeableStore();
+    let closePromise: Promise<unknown> | undefined;
+    return createTaskdoPersistence({
+      store,
+      close: () => closePromise ??= database.closeAsync().finally(() => {
+        if (persistenceTails.get(databaseName) === tail) persistenceTails.delete(databaseName);
+        release();
+      }),
+      createPersister: (handleIgnoredError) => createExpoSqlitePersister(
+        store,
+        database,
+        'taskdo_local',
+        undefined,
+        handleIgnoredError,
+      ) as unknown as TaskdoPersister,
+      onIgnoredError,
+    });
+  } catch (error) {
+    if (persistenceTails.get(databaseName) === tail) persistenceTails.delete(databaseName);
+    release();
+    throw error;
+  }
 };
 
 const openAuthenticatedSocket = async (_accountId: string, getToken: TokenGetter) => {

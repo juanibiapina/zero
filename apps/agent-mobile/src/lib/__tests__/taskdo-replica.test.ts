@@ -1,13 +1,17 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { QueryClient } from '@tanstack/react-query';
-import { createMergeableStore } from 'tinybase';
+import { createMergeableStore, type MergeableContent } from 'tinybase';
+import { createCustomPersister, Persists } from 'tinybase/persisters';
 
 import {
+  createTaskdoPersistence,
   createTaskdoReplicaOpener,
   type MobileTaskdoPersistence,
 } from '../taskdo-replica';
 
 const NOW = '2026-09-27T12:00:00.000Z';
+type TaskdoPersister = ReturnType<
+  Parameters<typeof createTaskdoPersistence>[0]['createPersister']>;
 
 function persistence(
   load: MobileTaskdoPersistence['load'] = async () => {},
@@ -21,6 +25,71 @@ function persistence(
     close: jest.fn(async () => {}),
   };
 }
+
+function sqlitePersistence(
+  persistedContent: unknown,
+  onIgnoredError: (error: unknown) => void,
+) {
+  const store = createMergeableStore();
+  let content = persistedContent;
+  const database = {
+    closeAsync: jest.fn(async () => {}),
+  };
+  const persistence = createTaskdoPersistence({
+    store,
+    close: () => database.closeAsync(),
+    createPersister: (handleIgnoredError) => createCustomPersister<undefined, Persists.StoreOrMergeableStore>(
+      store,
+      async () => content as MergeableContent,
+      async (getContent) => { content = getContent(); },
+      async () => undefined,
+      async () => {},
+      handleIgnoredError,
+      Persists.StoreOrMergeableStore,
+    ) as unknown as TaskdoPersister,
+    onIgnoredError,
+  });
+  return { persistence, store, getPersistedContent: () => content };
+}
+
+describe('mobile TaskDO SQLite persistence', () => {
+  it('initializes genuinely empty storage with durable empty mergeable content', async () => {
+    const ignoredErrors: unknown[] = [];
+    const { persistence, store, getPersistedContent } = sqlitePersistence(
+      null,
+      (error) => ignoredErrors.push(error),
+    );
+
+    await persistence.load();
+    await persistence.startAutoPersisting();
+
+    expect(store.getMergeableContent()).toEqual([[{}, '', 0], [{}, '', 0]]);
+    expect(getPersistedContent()).toEqual(store.getMergeableContent());
+    expect(ignoredErrors).toEqual([]);
+    await persistence.destroy();
+    await persistence.close();
+  });
+
+  it('loads existing valid mergeable content instead of the empty default', async () => {
+    const seededStore = createMergeableStore().setRow(
+      'tasks',
+      'existing',
+      { text: 'Persisted task', createdAt: NOW },
+    );
+    const ignoredErrors: unknown[] = [];
+    const { persistence, store } = sqlitePersistence(
+      seededStore.getMergeableContent(),
+      (error) => ignoredErrors.push(error),
+    );
+
+    await persistence.load();
+
+    expect(store.getRow('tasks', 'existing')).toMatchObject({ text: 'Persisted task' });
+    expect(ignoredErrors).toEqual([]);
+    await persistence.destroy();
+    await persistence.close();
+  });
+});
 
 describe('mobile TaskDO replica opener', () => {
   it('rejects a mismatched bound database before opening SQLite', async () => {
@@ -216,5 +285,37 @@ describe('mobile TaskDO replica opener', () => {
     })).rejects.toThrow('cannot read sqlite');
     expect(disk.destroy).toHaveBeenCalledTimes(1);
     expect(disk.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports malformed non-null persisted content as a durability failure', async () => {
+    const durability: [boolean, string | null][] = [];
+    const open = createTaskdoReplicaOpener({
+      openPersistence: async (_databaseName, onIgnoredError) => sqlitePersistence(
+        { malformed: true },
+        onIgnoredError,
+      ).persistence,
+      openSocket: jest.fn<() => Promise<WebSocket>>(),
+      subscribeToForeground: () => () => {},
+    });
+
+    const replica = await open({
+      descriptor: {
+        version: 1,
+        databaseName: 'taskdo-workspace-guest.sqlite',
+        binding: { kind: 'unbound' },
+      },
+      getToken: jest.fn(async () => null),
+      queryClient: new QueryClient(),
+      onSnapshot: () => {},
+      onConnection: () => {},
+      onDurability: (durable, error) => durability.push([durable, error]),
+    });
+
+    expect(durability).toContainEqual([
+      false,
+      'Offline durability is unavailable: tinybase:1:[object Object]',
+    ]);
+    expect(durability).not.toContainEqual([true, null]);
+    await replica.close();
   });
 });
