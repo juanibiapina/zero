@@ -60,12 +60,34 @@ function updateLabel(state: ReturnType<typeof Updates.useUpdates>): string {
 
 function StatusIcon({ kind, updateReady }: { kind: TodoSyncDisplayKind; updateReady: boolean }) {
   const color = useColor(kind === 'warning' ? '--color-danger' : '--color-foreground-secondary');
-  if (kind === 'busy') return <ActivityIndicator color={color} />;
-  const icon = updateReady && kind !== 'offline' && kind !== 'warning' ? ICONS.update : ICONS[kind];
+  const iconKind = kind === 'busy' ? 'synced' : kind;
+  const icon = updateReady && iconKind !== 'offline' && iconKind !== 'warning'
+    ? ICONS.update
+    : ICONS[iconKind];
   return (
-    <Host matchContents>
-      <Icon name={icon} size={22} color={color} testID={`sync-status-${kind}`} />
-    </Host>
+    <View
+      testID="sync-status-icon-frame"
+      className="items-center justify-center"
+      style={{ width: 24, height: 24 }}
+    >
+      <View
+        pointerEvents="none"
+        className="absolute inset-0 items-center justify-center"
+        style={{ opacity: kind === 'busy' ? 0 : 1 }}
+      >
+        <Host matchContents>
+          <Icon
+            name={icon}
+            size={22}
+            color={color}
+            testID={kind === 'busy' ? undefined : `sync-status-${kind}`}
+          />
+        </Host>
+      </View>
+      {kind === 'busy' ? (
+        <ActivityIndicator testID="sync-status-busy" color={color} />
+      ) : null}
+    </View>
   );
 }
 

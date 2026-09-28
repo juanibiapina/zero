@@ -82,8 +82,8 @@ describe('ScreenHeader', () => {
     await waitFor(() => expect(queryByLabelText('Sync status details')).toBeNull());
   });
 
-  it('shows connecting instead of offline while Home reconnects', async () => {
-    const { getByLabelText, queryByLabelText } = await renderHeader(data({
+  it('keeps sync status centered as connecting settles', async () => {
+    const { getByLabelText, getByTestId, queryByLabelText, rerender } = await renderHeader(data({
       workspaceStatus: 'account',
       signedIn: true,
       sync: { phase: 'connecting', lastSyncedAt: '2026-09-27T11:45:00.000Z' },
@@ -91,6 +91,23 @@ describe('ScreenHeader', () => {
 
     expect(getByLabelText('Connecting')).toBeTruthy();
     expect(queryByLabelText('Offline')).toBeNull();
+    expect(getByTestId('sync-status-icon-frame')).toHaveStyle({ width: 24, height: 24 });
+    expect(getByTestId('sync-status-busy')).toBeTruthy();
+
+    rerender(
+      <TodoDataContextProvider value={data({
+        workspaceStatus: 'account',
+        signedIn: true,
+        connected: true,
+        sync: { phase: 'synced', lastSyncedAt: '2026-09-27T11:45:00.000Z' },
+      })}>
+        <ScreenHeader title="Home" showSyncStatus />
+      </TodoDataContextProvider>,
+    );
+
+    await waitFor(() => expect(getByLabelText('Synced')).toBeTruthy());
+    expect(getByTestId('sync-status-icon-frame')).toHaveStyle({ width: 24, height: 24 });
+    expect(getByTestId('sync-status-synced')).toBeTruthy();
   });
 
   it('offers optional sign-in from the guest account surface', async () => {

@@ -4,6 +4,8 @@ User-facing changes to the mobile todo app, most recent first.
 
 - 2026-09-28: Fresh workspaces now save tasks offline immediately instead of showing that offline saving is unavailable.
 
+- 2026-09-28: The Home sync icon now stays centered as it changes from connecting to synced.
+
 - 2026-09-28: A clear Home now shows every Next and Waiting Project in expanded lists. When there are no current Projects, Home explains what Projects are while keeping + as the single way to add something.
 
 - 2026-09-27: The Home sync icon is easier to tap, and its details now open in a compact dark-mode-friendly popover that closes reliably.
