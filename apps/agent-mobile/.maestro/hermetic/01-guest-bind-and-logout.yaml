@@ -42,5 +42,6 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "Saved on this device"
     timeout: 45000
-- assertVisible: "Nothing on your plate yet"
+- assertVisible: "Home is clear"
+- assertVisible: "No projects yet"
 - assertNotVisible: "E2E guest task"

@@ -42,7 +42,9 @@ safe repair is chosen. [`docs/storage.md`](storage.md) is the source of truth.
 ### Product surfaces
 
 - **Home** is the flat list of available Tasks and the default quick-add entry
-  point.
+  point. When that list is clear, Home shows all Next and Waiting Projects; if
+  there are no current Projects, it gives a quiet explanation and leaves the
+  existing add control as the only creation action.
 - **Upcoming** contains future-dated Tasks.
 - **Projects** groups outcomes by calculated attention and manual lifecycle
   state.

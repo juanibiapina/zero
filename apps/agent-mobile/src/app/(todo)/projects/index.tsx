@@ -11,40 +11,14 @@ import {
 } from '@zero/agent-core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, RefreshControl, SectionList, View } from 'react-native';
+import { ProjectListRow } from '@/components/project-list-row';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ScreenHeader } from '@/components/screen-header';
-import { ListRow } from '@/components/ui/list-row';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
 import { useDelayed, usePullRefresh } from '@/lib/screen-hooks';
 import { useColor } from '@/lib/theme';
-
-function ProjectRow({ item, status, context, onOpen }: {
-  item: Project; status: ProjectDisplayStatus; context: string | null;
-  onOpen: (p: Project) => void;
-}) {
-  const icon = <View className="w-[22px] items-center"><Text className="text-[20px]">{item.icon}</Text></View>;
-  const trailing = context ? (
-    <Text
-      numberOfLines={1}
-      variant="caption"
-      className="max-w-[50%] shrink-0"
-      accessibilityLabel={
-        status === 'after'
-          ? `After ${context.replace(/^after /, '')}`
-          : `${PROJECT_DISPLAY_STATUS_LABELS[status]} ${context}`
-      }
-    >
-      {context}
-    </Text>
-  ) : undefined;
-  return (
-    <ListRow leading={icon} trailing={trailing} accessibilityLabel={item.title} onPress={() => onOpen(item)}>
-      <Text>{item.title}</Text>
-    </ListRow>
-  );
-}
 
 function SectionHeader({ status, count, collapsed, onToggle }: {
   status: ProjectDisplayStatus; count: number; collapsed: boolean;
@@ -125,7 +99,14 @@ function Projects({ replica }: { replica: TaskdoReplica }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={accent} colors={[accent]} />}
           sections={sections} keyExtractor={(item) => item.id} stickySectionHeadersEnabled
           renderSectionHeader={({ section }) => <SectionHeader status={section.status} count={section.count} collapsed={section.collapsed} onToggle={onToggle} />}
-          renderItem={({ item, section }) => <ProjectRow item={item} status={section.status} context={labelOf(item)} onOpen={onOpen} />}
+          renderItem={({ item, section }) => (
+            <ProjectListRow
+              project={item}
+              status={section.status}
+              context={labelOf(item)}
+              onPress={() => onOpen(item)}
+            />
+          )}
         />
       )}
       {add.bar}

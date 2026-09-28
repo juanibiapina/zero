@@ -35,5 +35,6 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "Synced"
     timeout: 45000
-- assertVisible: "Nothing on your plate yet"
+- assertVisible: "Home is clear"
+- assertVisible: "No projects yet"
 - assertNotVisible: "E2E private Account A task"

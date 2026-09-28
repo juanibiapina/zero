@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-28: A clear Home now shows every Next and Waiting Project in expanded lists. When there are no current Projects, Home explains what Projects are while keeping + as the single way to add something.
+
 - 2026-09-27: The Home sync icon is easier to tap, and its details now open in a compact dark-mode-friendly popover that closes reliably.
 
 - 2026-09-27: Home now shows sync as an icon beside your account. Tap it to see the last successful sync, offline storage, app version, and update progress; returning to the app shows Connecting instead of briefly flashing Offline.

@@ -46,6 +46,7 @@ jest.mock('react-native-reanimated', () => {
     const b = {
       duration: () => b,
       delay: () => b,
+      reduceMotion: () => b,
       springify: () => b,
       withCallback: () => b,
       build: () => b,

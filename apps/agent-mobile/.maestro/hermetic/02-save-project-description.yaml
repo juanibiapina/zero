@@ -33,6 +33,13 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "E2E described project"
     timeout: 30000
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible: "Home is clear"
+    timeout: 30000
+- assertVisible: "Next"
+- assertVisible: "E2E described project"
+- takeScreenshot: home-clear-next
 - tapOn: "E2E described project"
 - extendedWaitUntil:
     visible: "E2E durable project description"
@@ -67,6 +74,17 @@ appId: dev.juanibiapina.zeroagent
 - inputText: "E2E waiting item"
 - tapOn:
     id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "E2E waiting item"
+    timeout: 30000
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible: "Home is clear"
+    timeout: 30000
+- assertVisible: "Waiting"
+- assertVisible: "E2E described project"
+- takeScreenshot: home-clear-waiting
+- tapOn: "E2E described project"
 - extendedWaitUntil:
     visible: "E2E waiting item"
     timeout: 30000

@@ -4,21 +4,31 @@ import { useLiveQuery } from '@tanstack/react-db';
 import {
   listView,
   LOADING_TEXT_DELAY_MS,
-  homeCallToAction,
-  homeCallToActionCopy,
   homeTasks,
+  projectStatusContext,
+  projectStatusSections,
   taskIcon,
-  type HomeCallToAction,
+  type Project,
+  type ProjectAttention,
+  type ProjectDisplayStatus,
   type Task,
   type TaskdoReplica,
 } from '@zero/agent-core';
 import { useAuth } from '@clerk/expo';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BackHandler, View } from 'react-native';
+import {
+  BackHandler,
+  Pressable,
+  RefreshControl,
+  SectionList,
+  View,
+} from 'react-native';
+import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 
 import { useTodoDataContext } from '@/lib/todo-data-context';
 import { useProjectAdd } from '@/components/project-add';
+import { ProjectListRow } from '@/components/project-list-row';
 import { useQuickAdd } from '@/components/quick-add-composer';
 import { ReorderableTaskList } from '@/components/reorderable-task-list';
 import { ScreenHeader } from '@/components/screen-header';
@@ -26,38 +36,146 @@ import { useTaskDetail } from '@/components/task-detail';
 import { Text } from '@/components/ui/text';
 import { useLocalDay } from '@/lib/local-day';
 import { RUNTIME_PROFILE } from '@/lib/runtime-profile';
+import { useColor } from '@/lib/theme';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
 import {
   useDelayed,
   usePullRefresh,
 } from '@/lib/screen-hooks';
 
-// The all-clear state on Home: shown only when the list is empty. The shared
-// homeCallToAction seam picks the framing from the projects' derived states;
-// every case routes to the Projects tab.
-function HomeCallToActionView({ action }: { action: HomeCallToAction }) {
-  const { title, body, button } = homeCallToActionCopy(action);
+type HomeProjectSection = {
+  status: Extract<ProjectDisplayStatus, 'next' | 'waiting'>;
+  title: 'Next' | 'Waiting';
+  data: Project[];
+};
+
+function HomeClearState({
+  projects,
+  tasks,
+  conditions,
+  today,
+  refreshing,
+  onRefresh,
+}: {
+  projects: Project[];
+  tasks: Task[];
+  conditions: ProjectAttention[];
+  today: string;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const accent = useColor('--color-accent');
+  const ripple = useColor('--color-ripple');
+  const allSections = useMemo(
+    () => projectStatusSections({ projects, tasks, conditions, today }),
+    [conditions, projects, tasks, today],
+  );
+  const currentProjectCount = useMemo(
+    () => allSections.reduce((count, section) => count + section.count, 0),
+    [allSections],
+  );
+  const sections = useMemo<HomeProjectSection[]>(
+    () => allSections.flatMap((section) => {
+      if (section.status !== 'next' && section.status !== 'waiting') return [];
+      return [{
+        status: section.status,
+        title: section.status === 'next' ? 'Next' : 'Waiting',
+        data: section.projects,
+      }];
+    }),
+    [allSections],
+  );
+  const noCurrentProjects = currentProjectCount === 0;
+  const neverHadProjects = projects.length === 0;
+
+  const openProject = useCallback((project: Project) => {
+    router.navigate(`/projects/${project.id}`, { withAnchor: true });
+  }, []);
+
   return (
-    <View className="flex-1 items-center justify-center gap-4 px-screen-x">
-      <View className="items-center gap-1">
-        <Text variant="title" className="text-center">
-          {title}
-        </Text>
-        {body ? (
-          <Text variant="subtitle" className="text-center">
-            {body}
-          </Text>
-        ) : null}
-      </View>
-      <Host matchContents>
-        <Button
-          label={button}
-          variant="filled"
-          style={{ height: 48, borderRadius: 14, paddingHorizontal: 20 }}
-          onPress={() => router.navigate('/projects')}
-        />
-      </Host>
-    </View>
+    <Animated.View
+      entering={FadeIn.duration(200).reduceMotion(ReduceMotion.System)}
+      style={{ flex: 1 }}
+    >
+      <SectionList
+        style={{ flex: 1 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={accent}
+            colors={[accent]}
+          />
+        )}
+        sections={sections}
+        keyExtractor={(project) => project.id}
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={(
+          <View className="flex-row items-center gap-3 border-b border-divider px-screen-x py-6">
+            <View
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted"
+            >
+              <Text className="text-[24px] text-foreground-secondary">✓</Text>
+            </View>
+            <View className="flex-1 gap-0.5">
+              <Text variant="section">Home is clear</Text>
+              <Text variant="subtitle">Nothing needs your attention right now.</Text>
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={
+          noCurrentProjects ? (
+            <View className="gap-2 px-screen-x py-6">
+              <Text variant="section">
+                {neverHadProjects ? 'No projects yet' : 'No current projects'}
+              </Text>
+              <Text variant="subtitle">
+                {neverHadProjects
+                  ? 'Projects group related tasks around an outcome you want to accomplish.'
+                  : 'Start another whenever you have a new outcome to work toward.'}
+              </Text>
+            </View>
+          ) : null
+        }
+        ListFooterComponent={
+          noCurrentProjects ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View all projects"
+              android_ripple={{ color: ripple }}
+              className="min-h-12 justify-center px-screen-x py-3"
+              onPress={() => router.navigate('/projects')}
+            >
+              <Text className="font-semibold text-accent">View all projects</Text>
+            </Pressable>
+          )
+        }
+        renderSectionHeader={({ section }) => (
+          <View className="border-b border-divider bg-background px-screen-x pb-2 pt-6">
+            <Text accessibilityRole="header" variant="section">{section.title}</Text>
+          </View>
+        )}
+        renderItem={({ item, section }) => (
+          <ProjectListRow
+            project={item}
+            status={section.status}
+            context={
+              projectStatusContext(
+                item,
+                tasks,
+                conditions,
+                projects,
+                today,
+              )?.rowLabel ?? null
+            }
+            onPress={() => openProject(item)}
+          />
+        )}
+      />
+    </Animated.View>
   );
 }
 
@@ -141,7 +259,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   const { data: projects, isLoading: projectsLoading } = useLiveQuery((q) =>
     q.from({ p: projectsApi.collection }),
   );
-  const { data: conditions } = useLiveQuery((q) =>
+  const { data: conditions, isLoading: conditionsLoading } = useLiveQuery((q) =>
     q.from({ w: waitsApi.collection }),
   );
 
@@ -154,16 +272,10 @@ function Home({ replica }: { replica: TaskdoReplica }) {
     [tasks, projects, today],
   );
 
-  const cta = homeCallToAction(
-    list.length,
-    projects ?? [],
-    tasks ?? [],
-    today,
-    conditions ?? [],
-  );
-  // Do not flash the CTA while the local snapshot hydrates (every collection
-  // reads empty then, which would look like "create").
-  const hydrating = isLoading || projectsLoading;
+  // Do not flash the clear state while the local snapshot hydrates. Every
+  // collection reads empty during that window, and attention status depends on
+  // all three collections being ready.
+  const hydrating = isLoading || projectsLoading || conditionsLoading;
 
   const [writeError, setWriteError] = useState<string | null>(null);
 
@@ -254,6 +366,19 @@ function Home({ replica }: { replica: TaskdoReplica }) {
         ) : (
           <View className="flex-1" />
         )
+      ) : view === 'empty' ? (
+        hydrating ? (
+          <View className="flex-1" />
+        ) : (
+          <HomeClearState
+            projects={projects ?? []}
+            tasks={tasks ?? []}
+            conditions={conditions ?? []}
+            today={today}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+          />
+        )
       ) : (
         <ReorderableTaskList
           api={api}
@@ -266,15 +391,6 @@ function Home({ replica }: { replica: TaskdoReplica }) {
           onError={setWriteError}
           presentationOf={presentationOf}
           swipeAction="postpone-tomorrow"
-          empty={
-            view === 'empty' && cta ? (
-              hydrating ? (
-                <View className="flex-1" />
-              ) : (
-                <HomeCallToActionView action={cta} />
-              )
-            ) : null
-          }
         />
       )}
 
