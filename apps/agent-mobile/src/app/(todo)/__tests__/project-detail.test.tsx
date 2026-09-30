@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Pressable, Text as RNText, View } from 'react-native';
+import { Alert, Pressable, Text as RNText, View } from 'react-native';
 import { defaultToastController, type Project, type ProjectAttention, type Task } from '@zero/agent-core';
 
 import {
@@ -252,6 +252,24 @@ describe('ProjectDetailScreen', () => {
     expect(toast?.message).toBe('Project completed');
     await act(async () => toast?.action?.onPress());
     await waitFor(() => expect(screen.data.replica!.projects.collection.get('1')?.state).toBe('in-play'));
+  });
+
+  it('deletes a project with an unblurred description and returns without editing it afterward', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const screen = await renderScreen();
+    const input = await waitFor(() => screen.getByLabelText('Project description'));
+    await fireEvent.changeText(input, 'Unsaved description');
+    await fireEvent.press(screen.getByLabelText('Project settings'));
+    await fireEvent.press(screen.getByText('Delete project'));
+    const confirm = alert.mock.calls[0]?.[2]?.find((button) => button.text === 'Delete');
+    expect(confirm).toBeDefined();
+    await act(async () => confirm!.onPress!());
+    expect(screen.data.replica!.projects.collection.get('1')).toBeUndefined();
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('This project is no longer here.')).toBeNull();
+    expect(screen.getByLabelText('Project title')).toBeTruthy();
+    await screen.unmount();
+    alert.mockRestore();
   });
 
   it('offers a way back when the project no longer exists', async () => {

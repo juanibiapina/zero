@@ -1,0 +1,38 @@
+# Deletion must remain navigable with a description draft still focused.
+appId: dev.juanibiapina.zeroagent
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Saved on this device"
+    timeout: 45000
+- tapOn: "E2E sign in"
+- tapOn: "Sign in as Account A"
+- extendedWaitUntil:
+    visible: "Synced"
+    timeout: 45000
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 45000
+- tapOn: "Projects"
+- tapOn: "Add"
+- tapOn: "Name an outcome"
+- inputText: "E2E delete draft project"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Project description"
+    timeout: 30000
+- tapOn: "Project description"
+- inputText: "Draft before deletion"
+# The dev client's floating gear overlaps the top of Project settings.
+# Tap the uncovered lower edge of the same button on the Pixel 7.
+- tapOn:
+    point: "91%,15%"
+- tapOn: "Delete project"
+- tapOn: "Delete"
+- takeScreenshot: after-project-deletion
+- extendedWaitUntil:
+    visible: "Projects"
+    timeout: 30000
+- assertNotVisible: "E2E delete draft project"
+- tapOn: "Home"
+- assertVisible: "Home"

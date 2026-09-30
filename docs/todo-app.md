@@ -50,6 +50,9 @@ safe repair is chosen. [`docs/storage.md`](storage.md) is the source of truth.
   state.
 - A **Project workspace** holds identity, status, description, Waiting
   conditions, After relationships, and Tasks.
+  Deleting a Project returns to the previous screen even with a description
+  draft still focused; the outgoing workspace stays mounted through the native
+  back transition, and navigation cleanup skips edits to removed Projects.
 
 Mobile is the primary daily surface; web is the companion surface. Both expose
 the same todo model. The current interaction details live in the entity docs.

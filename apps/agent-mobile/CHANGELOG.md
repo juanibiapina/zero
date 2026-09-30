@@ -2,6 +2,8 @@
 
 User-facing changes to the mobile todo app, most recent first.
 
+- 2026-09-30: Deleting a Project returns to the previous screen without crashing or going black.
+
 - 2026-09-30: The Android home-screen icon once again matches the tasks visible on Home, including when you use the app without signing in.
 
 - 2026-09-28: Fresh workspaces now save tasks offline immediately instead of showing that offline saving is unavailable.

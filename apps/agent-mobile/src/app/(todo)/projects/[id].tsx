@@ -233,11 +233,18 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
-  const project = list.find((p) => p.id === id) ?? null;
+  // Keep the outgoing workspace mounted during the native back transition.
+  // Replacing its list with the missing-project view while Android is popping
+  // the screen can reparent Fabric views that still belong to the list.
+  const [deletingProject, setDeletingProject] = useState<Project | null>(null);
+  const project = list.find((p) => p.id === id)
+    ?? (deletingProject?.id === id ? deletingProject : null);
 
   const commitEdit = useCallback(
     (fields: ProjectEditFields) => {
-      if (!project) return null;
+      // Navigation and focus cleanup can flush a draft after optimistic deletion.
+      // The collection is authoritative even while this render still has the project.
+      if (!project || !api.collection.get(project.id)) return null;
       setError(null);
       const tx = api.edit(project.id, fields);
       tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
@@ -297,9 +304,10 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
     // in the same local write.
     const failed = () => reportProjectFailure('Delete failed · Retry');
     try {
+      setDeletingProject(project);
       const tx = api.remove(project.id);
       void tx.isPersisted.promise.catch(failed);
-    } catch { failed(); }
+    } catch { setDeletingProject(null); failed(); }
   }, [api, project]);
 
   // This project's open tasks, the list the shared task editor resolves against:
