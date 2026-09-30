@@ -20,12 +20,8 @@ Invariants:
   `currentColor`, no `transparent` — and every shipped PNG is grayscale. The
   landing page has no destructive, success, or warning state, so it needs no
   chromatic value.
-- **No Tailwind CSS in the output.** `global.css` is hand-written; the built
-  stylesheet contains nothing else. `astro.config.mjs` still registers
-  `@tailwindcss/vite` and `package.json` still lists the two Tailwind
-  devDependencies, but with no `@import "tailwindcss"` they emit zero bytes.
-  Both are a known leftover, to be dropped by the next change that already
-  touches `pnpm-lock.yaml`.
+- **Handwritten CSS.** `global.css` owns the site's styles. Landing has no
+  Tailwind build plugin or direct Tailwind dependencies.
 - **Light only.** The console ships light-only, so the landing page keeps
   `color-scheme: light` and defines no `prefers-color-scheme` block.
 - Structure is one surface, a 68rem centered column, 1px rules, and varied
@@ -102,4 +98,6 @@ pnpm --filter @zero/landing run build
 pnpm --filter @zero/landing run deploy
 ```
 
-Workers Builds uses `apps/landing` as its root directory. Its production branch is `main`, with `pnpm run build` as the build command and `pnpm run deploy` as the deploy command.
+Workers Builds auto-deploys the site on relevant pushes to `main`. See
+[AGENTS.md — Deployment](../AGENTS.md#deployment) for connector configuration,
+package-scoped commands, and build watch paths.

@@ -475,6 +475,10 @@ redeploy is paid once for something that needs it. Until then, the dead plugin
 config is a known, documented leftover — note it in the commit message so the
 next lockfile change can pick it up.
 
+**Follow-up completed:** the landing Tailwind plugin and both direct
+Tailwind dependencies have been removed. See [the landing site documentation](../landing.md)
+for current styling and build behavior.
+
 ## Copy changes (minimal, each justified)
 
 This is a visual rework; the only copy edits are consequences of deletions.
