@@ -15,8 +15,8 @@ in the same interaction.
 - [`quick-add-composer.tsx`](../../apps/agent-mobile/src/components/quick-add-composer.tsx)
   owns the collapsed `Fab`, while
   [`task-editor-sheet.tsx`](../../apps/agent-mobile/src/components/task-editor-sheet.tsx)
-  owns the inline expanded editor and its container transform. The older
-  `quick-add.tsx`/`QuickAddBar` pair is not mounted by the current app.
+  owns the inline expanded editor and its container transform. The retired
+  quick-add implementation and its tests have been removed.
 - `KeyboardStickyView` keeps the open bar aligned with the keyboard under
   Android edge-to-edge insets. Preserve that proven boundary unless an on-device
   replacement is equally reliable.

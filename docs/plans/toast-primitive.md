@@ -124,10 +124,11 @@ This is the whole engine. It is pure enough to test with fake timers.
   now has a `SafeAreaProvider`). High `elevation` + `zIndex` so it sits above
   content.
 - Each toast is an `Animated.View` (reanimated) with `entering={FadeInUp}`
-  `exiting={FadeOutUp}` — the **proven pattern already working on-device** in
-  `components/quick-add.tsx` (FadeIn/FadeOut) — so exit plays on unmount when the
-  controller drops the toast. No height measurement, no dynamic stack math (that
-  measurement path is exactly what broke sonner-native on our stack).
+  `exiting={FadeOutUp}`. The former `components/quick-add.tsx` implementation
+  demonstrated FadeIn/FadeOut on-device before it was removed. Exit plays on
+  unmount when the controller drops the toast. No height measurement, no dynamic
+  stack math (that measurement path is exactly what broke sonner-native on our
+  stack).
 - Row shows `message` and, when present, a `Pressable onPress={action.onPress}`
   styled with Uniwind classes, mirroring `RefineBanner`.
 - Mount once in `apps/agent-mobile/src/app/_layout.tsx` (inside
