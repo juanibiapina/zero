@@ -1,7 +1,7 @@
 # Unexpected auth loss locks Account A data; Account B can discard it without seeing it.
 appId: dev.juanibiapina.zeroagent
 ---
-- launchApp
+- openLink: ${METRO_DEEP_LINK}
 - extendedWaitUntil:
     visible: "Saved on this device"
     timeout: 45000

@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, waitFor } from '@testing-library/react-native';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 import type { Project, Task } from '@zero/agent-core';
 
+import type { TodoData } from '@/lib/todo-data-context';
 import {
   createInMemoryTodoData,
   InMemoryTodoDataProvider,
@@ -38,17 +39,26 @@ const project = (id: string, state: Project['state']): Project => ({
   createdAt: '2026-09-14T06:00:00.000Z',
 });
 
-function renderSync(seed: InMemoryTodoSeed = {}) {
+let todoData: TodoData;
+let renderedSync: Awaited<ReturnType<typeof render>> | undefined;
+
+async function renderSync(seed: InMemoryTodoSeed = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
   });
-  return render(
+  todoData = createInMemoryTodoData(seed);
+  renderedSync = await render(
     <QueryClientProvider client={client}>
-      <InMemoryTodoDataProvider data={createInMemoryTodoData(seed)}>
+      <InMemoryTodoDataProvider data={todoData}>
         <HomeAppIconSync />
       </InMemoryTodoDataProvider>
     </QueryClientProvider>,
   );
+  return todoData.replica!;
+}
+
+async function expectIcon(icon: string) {
+  await waitFor(() => expect(mockSetAppIcon).toHaveBeenLastCalledWith(icon));
 }
 
 describe('HomeAppIconSync', () => {
@@ -58,22 +68,108 @@ describe('HomeAppIconSync', () => {
     mockSetAppIcon.mockReturnValue(true);
   });
 
-  it('selects the Empty alias for an empty Home', async () => {
-    renderSync();
-    await waitFor(() => expect(mockSetAppIcon).toHaveBeenCalledWith('Empty'));
+  afterEach(async () => {
+    await renderedSync?.unmount();
+    renderedSync = undefined;
+    await todoData?.replica?.close();
+    jest.useRealTimers();
+  });
+
+  it.each<[number, string]>([
+    [0, 'Empty'],
+    [1, 'OneTask'],
+    [2, 'TwoTasks'],
+    [3, 'ThreeTasks'],
+    [4, 'FourPlusTasks'],
+    [5, 'FourPlusTasks'],
+  ])('selects %s visible Home tasks as %s', async (count, icon) => {
+    await renderSync({ tasks: Array.from({ length: count }, (_, index) => task(String(index))) });
+    await expectIcon(icon);
   });
 
   it('counts only tasks visible on Home', async () => {
-    renderSync({
+    await renderSync({
       projects: [project('next', 'in-play'), project('backlog', 'backlog')],
       tasks: [
         task('visible'),
+        task('scheduled', { projectId: 'next', showUpDate: '2026-09-14' }),
         task('complete', { completedAt: '2026-09-14T07:30:00.000Z' }),
         task('future', { showUpDate: '9999-12-31' }),
         task('groomed', { projectId: 'next' }),
         task('backlog', { projectId: 'backlog', showUpDate: '2026-09-14' }),
       ],
     });
-    await waitFor(() => expect(mockSetAppIcon).toHaveBeenCalledWith('OneTask'));
+    await expectIcon('TwoTasks');
+  });
+
+  it('follows adding, completing, and reopening tasks', async () => {
+    const replica = await renderSync();
+    await expectIcon('Empty');
+
+    await act(async () => {
+      await replica.tasks.add('First task').isPersisted.promise;
+    });
+    await expectIcon('OneTask');
+    const first = replica.snapshot().tasks[0]!;
+
+    await act(async () => {
+      await replica.tasks.add('Second task').isPersisted.promise;
+    });
+    await expectIcon('TwoTasks');
+    const second = replica.snapshot().tasks.find((entry) => entry.id !== first.id)!;
+
+    await act(async () => {
+      await replica.tasks.complete(first.id).isPersisted.promise;
+    });
+    await expectIcon('OneTask');
+    await act(async () => {
+      await replica.tasks.reopen(first).isPersisted.promise;
+    });
+    await expectIcon('TwoTasks');
+    await act(async () => {
+      await replica.tasks.complete(first.id).isPersisted.promise;
+      await replica.tasks.complete(second.id).isPersisted.promise;
+    });
+    await expectIcon('Empty');
+  });
+
+  it('follows the owning Project entering and leaving play', async () => {
+    const replica = await renderSync({
+      projects: [project('owner', 'backlog')],
+      tasks: [task('scheduled', { projectId: 'owner', showUpDate: '2026-09-14' })],
+    });
+    await expectIcon('Empty');
+    await act(async () => {
+      await replica.projects.setState('owner', 'in-play').isPersisted.promise;
+    });
+    await expectIcon('OneTask');
+    await act(async () => {
+      await replica.projects.setState('owner', 'backlog').isPersisted.promise;
+    });
+    await expectIcon('Empty');
+  });
+
+  it('keeps the four-plus icon when another visible task is added', async () => {
+    const replica = await renderSync({ tasks: ['1', '2', '3', '4'].map((id) => task(id)) });
+    await expectIcon('FourPlusTasks');
+    mockSetAppIcon.mockClear();
+
+    await act(async () => {
+      await replica.tasks.add('Fifth task').isPersisted.promise;
+    });
+
+    expect(replica.snapshot().tasks).toHaveLength(5);
+    expect(mockSetAppIcon).not.toHaveBeenCalled();
+  });
+
+  it('counts a future task when the local day advances', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate'] });
+    jest.setSystemTime(new Date(2026, 8, 15, 23, 59, 59, 900));
+    await renderSync({ tasks: [task('tomorrow', { showUpDate: '2026-09-16' })] });
+    await expectIcon('Empty');
+
+    await act(async () => { jest.advanceTimersByTime(200); });
+
+    await expectIcon('OneTask');
   });
 });

@@ -3,8 +3,8 @@ import { describe, expect, it } from '@jest/globals';
 import {
   DEFAULT_API_BASE_URL,
   HERMETIC_API_BASE_URL,
-  resolveRuntimeProfile,
 } from '../../../runtime-profile';
+import { resolveApplicationRuntimeProfile as resolveRuntimeProfile } from '../runtime-profile';
 
 describe('mobile runtime profile', () => {
   it('preserves every normal runtime value', () => {
@@ -62,6 +62,21 @@ describe('mobile runtime profile', () => {
     )[]) {
       expect(hermetic.storageKeys[key]).not.toBe(normal.storageKeys[key]);
     }
+  });
+
+  it('enables only launcher synchronization for the explicit hermetic proof', () => {
+    const ordinary = resolveRuntimeProfile({ hermeticE2E: '1' });
+    expect(resolveRuntimeProfile({ hermeticE2E: '1', launcherIconProof: '1' }))
+      .toEqual({ ...ordinary, launcherCountSyncEnabled: true });
+    expect(resolveRuntimeProfile({ hermeticE2E: '1', launcherIconProof: '0' }))
+      .toEqual(ordinary);
+    expect(() => resolveRuntimeProfile({ launcherIconProof: '1' }))
+      .toThrow('requires EXPO_PUBLIC_HERMETIC_E2E=1');
+  });
+
+  it.each(['true', 'yes', '', '2'])('rejects unknown launcher proof value %p', (value) => {
+    expect(() => resolveRuntimeProfile({ hermeticE2E: '1', launcherIconProof: value }))
+      .toThrow('must be unset, "0", or "1"');
   });
 
   it('does not let an ordinary URL override change hermetic localhost', () => {

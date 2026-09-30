@@ -5,6 +5,9 @@ the live documentation tree. The remaining files have one of two purposes.
 
 ## Active direction
 
+- [`android-todo-count-icon.md`](android-todo-count-icon.md) covers restoring
+  Android's launcher icon from the hydrated Home Task count, with layout
+  regression tests and an explicit Pixel proof.
 - `todo-quick-add-morph.md` covers the remaining mobile FAB-to-bar transition.
   Completed Task row-removal animation work stays in Git history.
 - `todo-task-to-project-ai.md` is the still-open AI-assisted refinement

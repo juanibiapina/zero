@@ -1,0 +1,54 @@
+# The runner checks the real launcher before and after backgrounding each phase.
+appId: dev.juanibiapina.zeroagent
+---
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 45000
+- runFlow:
+    when:
+      true: ${ACTION == 'ready'}
+    commands:
+      - extendedWaitUntil:
+          visible: "Saved on this device"
+          timeout: 45000
+      - assertVisible: "Home is clear"
+- runFlow:
+    when:
+      true: ${ACTION == 'add'}
+    commands:
+      - tapOn: "^Task$"
+      - inputText: "E2E icon task ${TASK_NUMBER}"
+      - tapOn:
+          id: "quick-add-submit"
+      - extendedWaitUntil:
+          visible: "^E2E icon task ${TASK_NUMBER}$"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${ACTION == 'bind'}
+    commands:
+      - tapOn: "E2E sign in"
+      - tapOn: "Sign in as Account A"
+      - extendedWaitUntil:
+          visible: "Synced"
+          timeout: 45000
+      - assertVisible: "E2E icon task 5"
+- runFlow:
+    when:
+      true: ${ACTION == 'complete'}
+    commands:
+      - tapOn: 'Complete "E2E icon task ${TASK_NUMBER}"'
+      - extendedWaitUntil:
+          notVisible: "^E2E icon task ${TASK_NUMBER}$"
+          timeout: 30000
+      - assertVisible: "E2E icon task 5"
+- runFlow:
+    when:
+      true: ${ACTION == 'sign-out'}
+    commands:
+      - tapOn: "E2E safe sign out"
+      - extendedWaitUntil:
+          visible: "Saved on this device"
+          timeout: 45000
+      - assertVisible: "Home is clear"
+      - assertNotVisible: "E2E icon task 5"

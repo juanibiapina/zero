@@ -1,7 +1,7 @@
 # A fresh guest workspace persists, binds to Account A, and is removed locally on logout.
 appId: dev.juanibiapina.zeroagent
 ---
-- launchApp
+- openLink: ${METRO_DEEP_LINK}
 - extendedWaitUntil:
     visible: "Saved on this device"
     timeout: 45000
@@ -22,7 +22,7 @@ appId: dev.juanibiapina.zeroagent
     visible: "E2E guest task"
     timeout: 30000
 - stopApp
-- launchApp
+- openLink: ${METRO_DEEP_LINK}
 - extendedWaitUntil:
     visible: "E2E guest task"
     timeout: 45000

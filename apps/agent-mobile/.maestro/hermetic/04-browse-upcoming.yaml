@@ -1,7 +1,7 @@
 # Hermetic navigation proof; starts with empty isolated Worker and phone state.
 appId: dev.juanibiapina.zeroagent
 ---
-- launchApp
+- openLink: ${METRO_DEEP_LINK}
 - extendedWaitUntil:
     visible: "Browse"
     timeout: 45000

@@ -52,8 +52,8 @@ safe repair is chosen. [`docs/storage.md`](storage.md) is the source of truth.
   conditions, After relationships, and Tasks.
 
 Mobile is the primary daily surface; web is the companion surface. Both expose
-the same todo model. The current interaction details live in the entity docs,
-and the mobile development and device workflow lives in
+the same todo model. The current interaction details live in the entity docs.
+Mobile launcher behavior, development, and device verification live in
 [`apps/agent-mobile/README.md`](../apps/agent-mobile/README.md).
 
 ### Entity map

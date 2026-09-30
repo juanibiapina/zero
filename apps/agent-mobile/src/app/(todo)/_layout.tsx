@@ -3,7 +3,6 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
 import { HomeAppIconSync } from '../../components/home-app-icon-sync';
-import { syncHomeAppIcon } from '../../lib/home-app-icon';
 import { useColor } from '../../lib/theme';
 import { RUNTIME_PROFILE } from '../../lib/runtime-profile';
 import { TodoDataProvider } from '../../lib/todo-data-context';
@@ -37,15 +36,6 @@ export default function TodoLayout() {
   const iconColor = useColor('--color-foreground-secondary');
 
   useTimezoneSync(isLoaded && isSignedIn);
-  useEffect(() => {
-    if (
-      RUNTIME_PROFILE.launcherCountSyncEnabled &&
-      isLoaded &&
-      !isSignedIn
-    ) {
-      void syncHomeAppIcon('Default');
-    }
-  }, [isLoaded, isSignedIn]);
 
   if (!isLoaded) {
     return (
@@ -79,9 +69,9 @@ export default function TodoLayout() {
       </NativeTabs>
   );
   return (
-    <>
+    <TodoDataProvider>
       {RUNTIME_PROFILE.launcherCountSyncEnabled ? <HomeAppIconSync /> : null}
-      <TodoDataProvider>{tabs}</TodoDataProvider>
-    </>
+      {tabs}
+    </TodoDataProvider>
   );
 }

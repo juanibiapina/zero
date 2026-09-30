@@ -142,9 +142,11 @@ leaves `MainActivity` enabled for Expo dev-client launches, the app scheme, and
 Clerk's hosted callback; only its six aliases carry the launcher filter. The app
 derives the state from the same hydrated `homeTasks` list Home renders, queues
 only a changed count bucket, and applies it when the app enters the background.
-Signed-out state restores the three-row default. Remote or date-based changes
-made while the process is stopped appear after the next app sync and background
-transition. iOS, the splash mark, the tab icon, and web remain static.
+Guest and signed-in workspaces both drive the count; safe sign-out opens a fresh
+guest Home, which selects the empty checkmark once loaded. Opening or inaccessible
+workspaces queue no count. Remote or date-based changes made while the process is
+stopped appear after the next app sync and background transition. iOS, the splash
+mark, the tab icon, and web remain static.
 
 Launcher and splash changes require a new native build. Application UI colors
 are independent of these assets. The EAS archive rules exclude generated
@@ -305,7 +307,9 @@ pnpm --filter @zero/agent-mobile e2e:pixel
 The Pixel must have the existing development client installed, be USB-connected,
 and appear as `model:Pixel_7` in `adb devices -l`. Rootless Podman and Maestro
 must be available. The command refuses a missing or non-debuggable app and never
-installs an APK.
+installs an APK. Ordinary flows cold-start through the runner's explicit Metro
+link to `MainActivity`; launching an icon alias can restart the development
+client through a second activity and crash React Native Fabric.
 
 `run-metro-e2e.sh` owns the full run:
 
@@ -338,6 +342,19 @@ proof starts in its dedicated account for backward-compatible offline staging.
 It also aliases Clerk's token cache and resource cache to inert local fakes.
 Normal Metro startup restores real Clerk, normal URL selection, production
 storage names, EAS Update, and launcher synchronization.
+
+To prove the Android launcher follows Home, run:
+
+```bash
+E2E_LAUNCHER_ICON_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel
+```
+
+This mode enables launcher synchronization in the isolated hermetic workspace.
+It checks the real launcher alias before and after backgrounding, through all
+count buckets, account binding, completion, and safe sign-out. Cleanup restores
+all six aliases' original enabled settings, including manifest defaults, on
+success, failure, or interruption. The ordinary suite keeps launcher
+synchronization disabled. Run this mode separately from the TaskDO proof.
 
 To run the extended TinyBase persistence proof, use
 `E2E_TASKDO_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel`. The three

@@ -1,7 +1,7 @@
 # Hermetic E2E: Project description persists and Project completion feedback stays usable.
 appId: dev.juanibiapina.zeroagent
 ---
-- launchApp
+- openLink: ${METRO_DEEP_LINK}
 - extendedWaitUntil:
     visible: "Saved on this device"
     timeout: 45000

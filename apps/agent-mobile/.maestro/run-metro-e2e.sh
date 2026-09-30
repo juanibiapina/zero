@@ -6,6 +6,7 @@ MOBILE_DIR="${REPO_ROOT}/apps/agent-mobile"
 HERMETIC_FLOW_DIR="${MOBILE_DIR}/.maestro/hermetic"
 PACKAGE="dev.juanibiapina.zeroagent"
 METRO_PORT=8082
+METRO_DEEP_LINK="zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${METRO_PORT}"
 WORKER_PORT=8787
 ACCOUNT_A="e2e-account-a"
 ACCOUNT_B="e2e-account-b"
@@ -14,10 +15,21 @@ PRIVATE_TASK_TEXT="E2E private Account A task"
 PROJECT_TITLE="E2E described project"
 PROJECT_DESCRIPTION="E2E durable project description"
 TASKDO_PROOF="${E2E_TASKDO_PROOF:-0}"
-if [[ "$TASKDO_PROOF" == "1" ]]; then
+LAUNCHER_ICON_PROOF="${E2E_LAUNCHER_ICON_PROOF:-0}"
+if [[ "$LAUNCHER_ICON_PROOF" != "0" && "$LAUNCHER_ICON_PROOF" != "1" ]]; then
+  echo 'E2E_LAUNCHER_ICON_PROOF must be unset, "0", or "1"' >&2
+  exit 1
+fi
+if [[ "$LAUNCHER_ICON_PROOF" == "1" && "$TASKDO_PROOF" == "1" ]]; then
+  echo 'Run the launcher and TaskDO proofs separately' >&2
+  exit 1
+fi
+if [[ "$LAUNCHER_ICON_PROOF" == "1" ]]; then
+  FLOW_COUNT=1
+elif [[ "$TASKDO_PROOF" == "1" ]]; then
   FLOW_COUNT=2
 else
-  FLOW_COUNT="$(find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' | wc -l | tr -d '[:space:]')"
+  FLOW_COUNT="$(find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' ! -name '*launcher*' | wc -l | tr -d '[:space:]')"
 fi
 IMAGE="node:22-slim"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
@@ -78,6 +90,8 @@ launcher_alias_state() {
   ' | tr -d '\r' | sort
 }
 
+source "$MOBILE_DIR/.maestro/launcher-icon-proof.sh"
+
 delete_e2e_stores() {
   local command
   command='rm -f files/SQLite/taskdo-workspace-hermetic-e2e-guest.sqlite* files/SQLite/taskdo-fixture-e2e-account-a.sqlite* files/SQLite/taskdo-fixture-e2e-account-b.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
@@ -132,7 +146,10 @@ print_failure() {
       tail -20 "$ARTIFACT_DIR/worker.log" >&2 || true
       ;;
     storage*) cat "$ARTIFACT_DIR/storage-check.txt" >&2 2>/dev/null || true ;;
-    launcher*) diff -u "$ARTIFACT_DIR/launcher-before.txt" "$ARTIFACT_DIR/launcher-after.txt" >&2 || true ;;
+    launcher*)
+      [[ -f "$ARTIFACT_DIR/launcher-check.txt" ]] && cat "$ARTIFACT_DIR/launcher-check.txt" >&2
+      diff -u "$ARTIFACT_DIR/launcher-before.txt" "$ARTIFACT_DIR/launcher-after.txt" >&2 || true
+      ;;
   esac
 }
 
@@ -145,6 +162,13 @@ cleanup() {
 
   if [[ -n "$SERIAL" ]]; then
     adb_device shell am force-stop "$PACKAGE" >/dev/null 2>&1 || true
+    if [[ "$LAUNCHER_ICON_PROOF" == "1" && -f "$ARTIFACT_DIR/launcher-before.txt" ]]; then
+      if ! restore_launcher_aliases; then
+        SUCCESS=0
+        STAGE="launcher restoration"
+        code=1
+      fi
+    fi
     if [[ "$PRODUCTION_SNAPSHOT_TAKEN" == "1" ]]; then
       production_checksums > "$ARTIFACT_DIR/production-after.txt" 2>/dev/null || true
       if ! cmp -s "$ARTIFACT_DIR/production-before.txt" "$ARTIFACT_DIR/production-after.txt"; then
@@ -315,6 +339,7 @@ CLERK_KEY="$(node -p "require('${MOBILE_DIR}/eas.json').build.development.env.EX
 env -u EXPO_PUBLIC_API_URL \
   EXPO_PUBLIC_HERMETIC_E2E=1 \
   EXPO_PUBLIC_TASKDO_PROOF="$TASKDO_PROOF" \
+  EXPO_PUBLIC_LAUNCHER_ICON_PROOF="$LAUNCHER_ICON_PROOF" \
   EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
   EXPO_UNSTABLE_HEADLESS=1 \
   setsid bash -c '
@@ -344,7 +369,7 @@ adb_device logcat > "$ARTIFACT_DIR/logcat.txt" 2>&1 &
 LOGCAT_PID=$!
 adb_device shell am start -W \
   -a android.intent.action.VIEW \
-  -d "zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${METRO_PORT}" \
+  -d "$METRO_DEEP_LINK" \
   "$PACKAGE" > "$ARTIFACT_DIR/launch.txt"
 
 STAGE="launch readiness"
@@ -361,7 +386,10 @@ if ! grep -Eq 'text=Home|accessibilityText=Home' "$ARTIFACT_DIR/launch-hierarchy
   exit 1
 fi
 
-if [[ "$TASKDO_PROOF" == "1" ]]; then
+if [[ "$LAUNCHER_ICON_PROOF" == "1" ]]; then
+  run_launcher_icon_proof
+  maestro_code=0
+elif [[ "$TASKDO_PROOF" == "1" ]]; then
   STAGE="phone reset before TaskDO flow"
   reset_e2e_phone_state
   STAGE="maestro TaskDO flow"
@@ -374,7 +402,7 @@ if [[ "$TASKDO_PROOF" == "1" ]]; then
   set -e
 else
   mapfile -t BEHAVIOR_FLOWS < <(
-    find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' | sort
+    find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' ! -name '*launcher*' | sort
   )
   for index in "${!BEHAVIOR_FLOWS[@]}"; do
     flow="${BEHAVIOR_FLOWS[$index]}"
@@ -417,12 +445,12 @@ else
     verbose "running $flow_name"
     set +e
     if [[ "${E2E_VERBOSE:-0}" == "1" ]]; then
-      maestro --no-ansi test "$flow" --format junit \
+      maestro --no-ansi test "$flow" -e "METRO_DEEP_LINK=$METRO_DEEP_LINK" --format junit \
         --output "$ARTIFACT_DIR/maestro/$flow_name.xml" \
         --debug-output "$ARTIFACT_DIR/maestro/$flow_name" 2>&1 | tee -a "$ARTIFACT_DIR/maestro.log"
       maestro_code=${PIPESTATUS[0]}
     else
-      maestro --no-ansi test "$flow" --format junit \
+      maestro --no-ansi test "$flow" -e "METRO_DEEP_LINK=$METRO_DEEP_LINK" --format junit \
         --output "$ARTIFACT_DIR/maestro/$flow_name.xml" \
         --debug-output "$ARTIFACT_DIR/maestro/$flow_name" >> "$ARTIFACT_DIR/maestro.log" 2>&1
       maestro_code=$?
