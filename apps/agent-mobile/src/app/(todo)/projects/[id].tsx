@@ -337,8 +337,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
   // The task detail editor delegates Waiting feedback to the same Project add
   // drawer used by the FAB and section actions.
   const detail = useTaskDetail({
-    api: tasksApi,
-    list: projectTasks,
+    replica,
     projects: list,
     openTasks: tasks,
     conditions: conds,

@@ -31,7 +31,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   const { data: conditions = [], isLoading: conditionsLoading } = useLiveQuery((q) => q.from({ w: replica.waits.collection }));
   const today = useLocalDay();
   const list = homeTasks(tasks, projects, today);
-  const detail = useTaskEditor({ replica, list, projects, tasks, conditions, onError: setError });
+  const detail = useTaskEditor({ replica, projects, tasks, conditions, onError: setError });
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const onDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;

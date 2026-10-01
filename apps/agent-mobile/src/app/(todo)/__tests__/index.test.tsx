@@ -1,7 +1,7 @@
 import { localToday } from '@zero/agent-core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { defaultToastController, type Project, type ProjectAttention, type Task } from '@zero/agent-core';
 
 import {
@@ -297,6 +297,54 @@ describe('HomeScreen', () => {
 
     await waitFor(() => expect(screen.getByText('buy oat milk')).toBeTruthy());
     expect(screen.data.replica!.tasks.collection.get('t')?.text).toBe('buy oat milk');
+  });
+
+  it('recognizes a recurrence in an existing task and retains it through completion and Undo', async () => {
+    const screen = await renderScreen({ tasks: [task('t', 'Water plants')] });
+    await fireEvent.press(await screen.findByLabelText('Edit "Water plants"'));
+    const input = screen.getByDisplayValue('Water plants');
+    await fireEvent.changeText(input, 'Water plants every day');
+    expect(screen.getByTestId('schedule-highlight', { includeHiddenElements: true }).props.children).toBe('every day');
+    await fireEvent.press(screen.getByLabelText('Complete task'));
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast.message).toBe('Completed · Next: Tomorrow');
+    await act(async () => toast.action!.onPress());
+    expect(screen.data.replica!.tasks.collection.get('t')).toMatchObject({ text: 'Water plants', recurrenceDate: localToday(), completedAt: null, recurrence: { pattern: { unit: 'day', interval: 1 } } });
+  });
+
+  it('saves a typed date as a one-off postpone of a recurring task', async () => {
+    const recurrence = { version: 1 as const, origin: localToday(), anchor: 'scheduled' as const, weekStartsOn: 'MO' as const, pattern: { unit: 'day' as const, interval: 1 } };
+    const screen = await renderScreen({ tasks: [task('t', 'Call', { recurrence, recurrenceDate: localToday(), showUpDate: localToday() })] });
+    await fireEvent.press(await screen.findByLabelText('Edit "Call", Every day'));
+    const input = screen.getByDisplayValue('Call');
+    await fireEvent.changeText(input, 'Call tomorrow at 3pm');
+    expect(screen.getByTestId('schedule-highlight', { includeHiddenElements: true }).props.children).toBe('tomorrow');
+    expect(within(screen.getByTestId('task-schedule')).getByText('Tomorrow')).toBeTruthy();
+    await fireEvent(input, 'submitEditing');
+    expect(screen.data.replica!.tasks.collection.get('t')).toMatchObject({ text: 'Call at 3pm', recurrence, recurrenceDate: localToday() });
+    expect(screen.data.replica!.tasks.collection.get('t')!.showUpDate! > localToday()).toBe(true);
+  });
+
+  it('dismisses edit phrases without clearing the existing schedule', async () => {
+    const before = task('t', 'Work', { showUpDate: localToday() });
+    const screen = await renderScreen({ tasks: [before] });
+    await fireEvent.press(await screen.findByLabelText('Edit "Work"'));
+    const input = screen.getByDisplayValue('Work');
+    await fireEvent.changeText(input, 'Work today tomorrow');
+    await fireEvent.press(screen.getByLabelText('Keep schedule words in task title'));
+    expect(screen.getByTestId('schedule-highlight', { includeHiddenElements: true }).props.children).toBe('today');
+    await fireEvent.press(screen.getByLabelText('Keep schedule words in task title'));
+    expect(screen.queryByTestId('schedule-highlight', { includeHiddenElements: true })).toBeNull();
+    await fireEvent(input, 'submitEditing');
+    expect(screen.data.replica!.tasks.collection.get('t')).toMatchObject({ text: 'Work today tomorrow', showUpDate: before.showUpDate, recurrence: null });
+  });
+
+  it('leaves stored schedule words literal when opening and closing an unchanged task', async () => {
+    const screen = await renderScreen({ tasks: [task('t', 'Review every day')] });
+    await fireEvent.press(await screen.findByLabelText('Edit "Review every day"'));
+    expect(screen.queryByTestId('schedule-highlight', { includeHiddenElements: true })).toBeNull();
+    await fireEvent(screen.getByDisplayValue('Review every day'), 'submitEditing');
+    expect(screen.data.replica!.tasks.collection.get('t')).toMatchObject({ text: 'Review every day', recurrence: null });
   });
 
   it('moves a postponed Home task out of the visible list', async () => {

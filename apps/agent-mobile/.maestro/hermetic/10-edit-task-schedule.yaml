@@ -1,0 +1,45 @@
+# Editing recognizes a new recurrence; dismissal keeps words and the existing repeat.
+appId: dev.juanibiapina.zeroagent
+---
+- openLink: ${METRO_DEEP_LINK}
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 45000
+- tapOn: "Home"
+- tapOn: "Task"
+- inputText: "E2E edit schedule"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: 'Edit "E2E edit schedule"'
+    timeout: 30000
+- tapOn: 'Edit "E2E edit schedule"'
+- tapOn: "Task text"
+- eraseText: 100
+- inputText: "E2E edited task every "
+- inputText: "day"
+- assertVisible: "every day"
+- takeScreenshot: edit-recognized-recurrence
+- pressKey: Back
+- pressKey: Back
+- extendedWaitUntil:
+    visible: 'Edit "E2E edited task", Every day'
+    timeout: 30000
+- tapOn: 'Edit "E2E edited task", Every day'
+- assertVisible: "E2E edited task"
+- tapOn: "Task text"
+- eraseText: 100
+- inputText: "E2E edited task every week"
+- tapOn: "Keep schedule words in task title"
+- assertVisible: "every day"
+- takeScreenshot: edit-dismissed-recurrence
+- pressKey: Back
+- pressKey: Back
+- extendedWaitUntil:
+    visible: 'Edit "E2E edited task every week", Every day'
+    timeout: 30000
+- tapOn: 'Edit "E2E edited task every week", Every day'
+- assertVisible: "E2E edited task every week"
+- assertVisible: "every day"
+- assertNotVisible: "Keep schedule words in task title"
+- pressKey: Back

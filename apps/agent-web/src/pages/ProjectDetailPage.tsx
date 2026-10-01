@@ -164,7 +164,7 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
   );
 
   const today = useLocalDay();
-  const detail = useTaskEditor({ replica, list: tasks.filter((task) => task.projectId === id), projects: list, tasks, conditions: conds, currentProjectId: id, onError: setError });
+  const detail = useTaskEditor({ replica, projects: list, tasks, conditions: conds, currentProjectId: id, onError: setError });
   const add = useTodoAdd({ replica, projectId: id, initialKind: "task" });
 
   // The project isn't in the loaded set: a bad or deleted id. Once the

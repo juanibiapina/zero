@@ -150,9 +150,16 @@ are replicated to the account-scoped client store. Client-facing `Task`:
 - **Edit / reschedule** through the rows or detail sheet. A mobile Home swipe
   postpones to Tomorrow; a mobile project-screen swipe schedules Today. The
   editor offers Today / Tomorrow / calendar / clear, Project assignment, Stop
-  repeating, and Complete forever with Undo. It commits the title before
-  scheduling, moving, completing, or navigating; Undo preserves that edited
-  title. Writes are optimistic and report local persistence failures.
+  repeating, and Complete forever with Undo. Changing the title recognizes and
+  highlights dates and repeats, previews the schedule, and saves the cleaned
+  title and schedule together. A typed repeat replaces the existing recurrence;
+  a typed one-time date postpones an existing repeat without changing its rule
+  or cursor. Dismissing a phrase keeps its words and preserves the existing
+  schedule if no other phrase is recognized. Unchanged stored titles stay
+  literal when opened. A recognized phrase needs a nonempty title to save.
+  The editor commits before scheduling, moving, completing, or navigating;
+  manual schedule choices take precedence, and Undo preserves the edited title
+  and recurrence. Writes are optimistic and report local persistence failures.
 - **Ordering.** The list orders by `sortKey` ascending, `createdAt` as the
   tiebreak. `sortKey` is a fractional index (`fractional-indexing`'s
   `generateKeyBetween`): moving a row mints one key strictly between its

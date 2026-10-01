@@ -25,7 +25,7 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
   const today = useLocalDay();
   const sections = upcomingSections(tasks, today);
   const [error, setError] = useState<string | null>(null);
-  const detail = useTaskEditor({ replica, list: sections.flatMap((section) => section.tasks), projects, tasks, conditions, onError: setError });
+  const detail = useTaskEditor({ replica, projects, tasks, conditions, onError: setError });
   return <div className="flex flex-col gap-6">
     {error ? <ErrorText>{error}</ErrorText> : null}
     {isLoading && tasks.length === 0 ? <div className="min-h-24" /> : sections.length === 0 ? <p className="text-sm text-muted-foreground">Nothing scheduled ahead.</p> : sections.map((section) => <section key={section.date} className="flex flex-col gap-3">

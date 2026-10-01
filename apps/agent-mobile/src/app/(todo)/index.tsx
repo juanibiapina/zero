@@ -298,8 +298,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   // The task detail editor delegates Project-scoped Waiting feedback to the
   // shared four-mode Project drawer mounted by this screen.
   const detail = useTaskDetail({
-    api,
-    list,
+    replica,
     projects: projects ?? [],
     openTasks: tasks ?? [],
     conditions: conditions ?? [],

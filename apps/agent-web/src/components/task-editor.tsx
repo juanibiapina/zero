@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { messageOf, toast, undoableAction, type Project, type Task, type TaskdoReplica, type WaitingCondition } from "@zero/agent-core";
-import { toText } from "@zeroapps/recurrence";
+import { parseSchedule, toText, type TextRange } from "@zeroapps/recurrence";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ScheduleHighlightInput } from "@/components/ScheduleHighlightInput";
 import { Sheet } from "@/components/ui/sheet";
 import { TaskDateField, TaskProjectField } from "@/components/task-fields";
 import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
@@ -11,9 +11,8 @@ import { useLocalDay } from "@/lib/local-day";
 
 import { reportTodoError } from "@/lib/todo-feedback";
 
-export function useTaskEditor({ replica, list, projects, tasks, conditions, currentProjectId, onError }: {
+export function useTaskEditor({ replica, projects, tasks, conditions, currentProjectId, onError }: {
   replica: TaskdoReplica;
-  list: Task[];
   projects: Project[];
   tasks: Task[];
   conditions: WaitingCondition[];
@@ -25,7 +24,13 @@ export function useTaskEditor({ replica, list, projects, tasks, conditions, curr
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const savedDraft = useRef("");
-  const selected = list.find((task) => task.id === selectedId) ?? null;
+  const [recognizing, setRecognizing] = useState(false);
+  const [ignored, setIgnored] = useState<TextRange[]>([]);
+  const parsed = recognizing ? parseSchedule(draft, { today, weekStartsOn: "MO", ignored }) : { kind: "none" as const };
+  const schedule = parsed.kind === "scheduled" && parsed.remainingText.trim() ? parsed.schedule : undefined;
+  const selected = tasks.find((task) => task.id === selectedId) ?? null;
+  const effectiveDate = schedule?.kind === "once" ? schedule.date : schedule?.kind === "recurring" ? schedule.recurrence.origin : selected?.showUpDate ?? null;
+  const effectiveRecurrence = schedule?.kind === "recurring" ? schedule.recurrence : selected?.recurrence;
   const selectedProject = projects.find((project) => project.id === selected?.projectId);
   const fail = (error: unknown) => { onError(messageOf(error)); reportTodoError(error); };
   const completion = useTaskCompletionFeedback({ replica, projects, today, onError: fail });
@@ -34,18 +39,27 @@ export function useTaskEditor({ replica, list, projects, tasks, conditions, curr
     if (!selected) return null;
     const current = replica.tasks.collection.get(selected.id);
     if (!current) return null;
-    const text = draft.trim() || current.text;
-    const edited = text !== savedDraft.current;
-    if (edited && text !== current.text) {
-      savedDraft.current = text;
-      replica.tasks.edit(current.id, text).isPersisted.promise.catch(fail);
+    if (parsed.kind === "scheduled" && !parsed.remainingText.trim()) {
+      onError("Enter a task title alongside the schedule.");
+      return null;
     }
-    return { ...current, text: edited ? text : current.text };
+    const text = (parsed.kind === "scheduled" ? parsed.remainingText : draft).trim() || current.text;
+    const edited = recognizing && (text !== savedDraft.current || schedule !== undefined);
+    if (edited && (text !== current.text || schedule)) {
+      replica.tasks.edit(current.id, text, schedule).isPersisted.promise.catch(fail);
+    }
+    savedDraft.current = edited ? text : current.text;
+    setDraft(savedDraft.current);
+    setRecognizing(false);
+    setIgnored([]);
+    return replica.tasks.collection.get(current.id) ?? null;
   };
-  const close = () => { commitDraft(); setSelectedId(null); };
+  const close = () => { if (commitDraft()) setSelectedId(null); };
   const open = (task: Task) => {
     savedDraft.current = task.text;
     setDraft(task.text);
+    setRecognizing(false);
+    setIgnored([]);
     setSelectedId(task.id);
   };
   const complete = () => {
@@ -79,10 +93,14 @@ export function useTaskEditor({ replica, list, projects, tasks, conditions, curr
             <Button type="button" variant="outline" size="icon" aria-label="Complete task" onClick={complete}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="12" cy="12" r="9" /></svg>
             </Button>
-            <Input autoFocus value={draft} aria-label="Task text" onChange={(event) => setDraft(event.target.value)} />
+            <ScheduleHighlightInput autoFocus value={draft} aria-label="Task text"
+              ranges={parsed.kind === "scheduled" ? parsed.consumed : []}
+              onDismissRange={(range) => setIgnored((current) => [...current, range])}
+              onChange={(event) => { setDraft(event.target.value); setRecognizing(true); setIgnored([]); }} />
           </div>
           <div className="flex flex-wrap gap-2">
-            <TaskDateField date={selected.showUpDate} label={selected.recurrence ? toText(selected.recurrence) : undefined} onOpen={commitDraft}
+            {parsed.kind === "scheduled" ? <Button type="button" variant="ghost" onClick={() => setIgnored((current) => [...current, parsed.consumed[0]])}>Keep schedule words in task title</Button> : null}
+            <TaskDateField date={effectiveDate} label={schedule?.kind !== "once" && effectiveRecurrence ? toText(effectiveRecurrence) : undefined} onOpen={commitDraft}
               onPick={(date) => {
                 const task = commitDraft();
                 if (!task || task.showUpDate === date) return;
@@ -101,7 +119,7 @@ export function useTaskEditor({ replica, list, projects, tasks, conditions, curr
               } : undefined}
             />
             <TaskProjectField projects={projects} tasks={tasks} conditions={conditions} projectId={selected.projectId} onPick={move} onOpen={commitDraft} />
-            {selectedProject && selectedProject.id !== currentProjectId ? <Button type="button" variant="ghost" aria-label={`Open project ${selectedProject.title}`} onClick={() => { commitDraft(); setSelectedId(null); void navigate(`/projects/${selectedProject.id}`); }}>Open project</Button> : null}
+            {selectedProject && selectedProject.id !== currentProjectId ? <Button type="button" variant="ghost" aria-label={`Open project ${selectedProject.title}`} onClick={() => { if (commitDraft()) { setSelectedId(null); void navigate(`/projects/${selectedProject.id}`); } }}>Open project</Button> : null}
           </div>
         </form> : null}
       </Sheet>

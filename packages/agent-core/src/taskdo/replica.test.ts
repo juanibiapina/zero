@@ -58,6 +58,22 @@ describe("TaskDO replica adapter", () => {
     await replica.close();
   });
 
+  it("saves title and recurrence together, preserving repeats during renames and one-off rescheduling", async () => {
+    const { replica, saves } = setup();
+    await replica.tasks.add("Water plants").isPersisted.promise;
+    const id = replica.snapshot().tasks[0].id;
+    const recurrence = { version: 1 as const, origin: "2026-09-25", anchor: "scheduled" as const, weekStartsOn: "MO" as const, pattern: { unit: "day" as const, interval: 1 } };
+    await replica.tasks.edit(id, "Water garden", { kind: "recurring", recurrence }).isPersisted.promise;
+    expect(saves()).toBe(2);
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water garden", recurrence, recurrenceDate: recurrence.origin, showUpDate: recurrence.origin });
+    await replica.tasks.edit(id, "Water flowers").isPersisted.promise;
+    await replica.tasks.edit(id, "Water later", { kind: "once", date: "2026-09-27" }).isPersisted.promise;
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water later", recurrence, recurrenceDate: recurrence.origin, showUpDate: "2026-09-27" });
+    await replica.tasks.edit(id, "Water weekly", { kind: "recurring", recurrence: { ...recurrence, origin: "2026-09-28", pattern: { unit: "week", interval: 1, weekdays: ["MO"] } } }).isPersisted.promise;
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water weekly", recurrenceDate: "2026-09-28", showUpDate: "2026-09-28", recurrence: { pattern: { unit: "week" } } });
+    await replica.close();
+  });
+
   it("publishes complete Tasks through snapshots and the TanStack collection", async () => {
     const { replica } = setup((store) => {
       store.setRow("tasks", "task", { text: "Task", createdAt: NOW });

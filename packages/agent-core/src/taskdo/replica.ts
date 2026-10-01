@@ -1,7 +1,7 @@
 import { createCollection, safeRandomUUID, type Collection, type Transaction } from "@tanstack/db";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import type { QueryClient } from "@tanstack/react-query";
-import type { PlainDate, Recurrence } from "@zeroapps/recurrence";
+import type { PlainDate, Recurrence, Schedule } from "@zeroapps/recurrence";
 import type { MergeableStore } from "tinybase";
 
 import type { Project, ProjectState } from "../projects/types";
@@ -48,7 +48,7 @@ export type TodoTasks = {
   undoOccurrence: (taskBefore: Task, completedOn: PlainDate) => Transaction;
   setRecurrence: (id: string, recurrence: Recurrence | null) => Transaction;
   reopen: (task: Task) => Transaction;
-  edit: (id: string, text: string) => Transaction;
+  edit: (id: string, text: string, schedule?: Schedule) => Transaction;
   reschedule: (id: string, showUpDate: string | null) => Transaction;
   reorder: (id: string, sortKey: string) => Transaction;
   moveToProject: (id: string, projectId: string | null) => Transaction;
@@ -79,6 +79,7 @@ export type TaskdoReplica = {
   snapshot: () => TodoSnapshot;
   subscribe: (listener: (snapshot: TodoSnapshot) => void) => () => void;
   refresh: () => Promise<void>;
+  saveLocal: () => Promise<void>;
   repair: (recovery: TodoRecovery) => Promise<boolean>;
   close: () => Promise<void>;
 };
@@ -310,7 +311,11 @@ export function createTaskdoReplica({
       projectId, recurrence, recurrenceDate: recurrence?.origin ?? null,
       completedAt: null, sortKey: null,
     }),
-    edit: (id, text) => tasks.update(id, (draft) => { draft.text = text; }),
+    edit: (id, text, schedule) => tasks.update(id, (draft) => {
+      draft.text = text;
+      if (schedule?.kind === "once") draft.showUpDate = schedule.date;
+      if (schedule?.kind === "recurring") Object.assign(draft, model.planTaskRecurrence(schedule.recurrence));
+    }),
     complete: (id, completedOn = today()) => tasks.update(id, (draft) => {
       Object.assign(draft, model.planTaskCompletion(draft, completedOn));
     }),
@@ -374,6 +379,7 @@ export function createTaskdoReplica({
       return changed;
     },
     refresh,
+    saveLocal: () => write(() => {}),
     async close() {
       if (closed) return;
       closed = true;

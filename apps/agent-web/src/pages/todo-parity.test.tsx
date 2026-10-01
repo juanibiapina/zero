@@ -59,6 +59,85 @@ describe("web todo parity", () => {
     expect(await screen.findByText("Every day")).toBeVisible();
   });
 
+  it.each(["/home", "/upcoming", "/projects/p"])("recognizes and saves a recurrence while editing on %s", async (path) => {
+    const replica = open(path, { projects: [project("p", "Garden")], tasks: [task("t", "Water plants", { projectId: "p", showUpDate: path === "/upcoming" ? tomorrow(localToday()) : localToday() })] });
+    await rename("Water plants", "Water plants every day");
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("every day");
+    expect(screen.getByRole("button", { name: "every day" })).toBeVisible();
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water plants", recurrenceDate: localToday(), showUpDate: localToday(), recurrence: { pattern: { unit: "day", interval: 1 } } });
+  });
+
+  it("keeps a newly edited recurrence through completion and Undo", async () => {
+    const replica = open("/home", { tasks: [task("t", "Original")] });
+    await rename("Original", "Water plants every day");
+    fireEvent.click(screen.getByRole("button", { name: "Complete task" }));
+    expect(defaultToastController.getSnapshot()[0].message).toBe("Completed · Next: Tomorrow");
+    await act(async () => defaultToastController.getSnapshot()[0].action!.onPress());
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water plants", recurrenceDate: localToday(), completedAt: null });
+  });
+
+  it("dismisses successive edit phrases and preserves an existing recurrence", async () => {
+    const recurrence = { version: 1 as const, origin: localToday(), anchor: "scheduled" as const, weekStartsOn: "MO" as const, pattern: { unit: "day" as const, interval: 1 } };
+    const before = task("t", "Work", { recurrence, recurrenceDate: localToday(), showUpDate: localToday() });
+    const replica = open("/home", { tasks: [before] });
+    fireEvent.click(await screen.findByRole("button", { name: 'Edit "Work", Every day' }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Task text" }), { target: { value: "Work today tomorrow" } });
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("tomorrow");
+    fireEvent.click(screen.getByRole("button", { name: "Keep schedule words in task title" }));
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("today");
+    fireEvent.click(screen.getByRole("button", { name: "Keep schedule words in task title" }));
+    expect(screen.queryByTestId("schedule-highlight")).toBeNull();
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
+    expect(replica.snapshot().tasks[0]).toEqual({ ...before, text: "Work today tomorrow" });
+  });
+
+  it("postpones an existing recurrence from a typed date while retaining time words", async () => {
+    const recurrence = { version: 1 as const, origin: localToday(), anchor: "scheduled" as const, weekStartsOn: "MO" as const, pattern: { unit: "day" as const, interval: 1 } };
+    const replica = open("/home", { tasks: [task("t", "Call", { recurrence, recurrenceDate: localToday(), showUpDate: localToday() })] });
+    fireEvent.click(await screen.findByRole("button", { name: 'Edit "Call", Every day' }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Task text" }), { target: { value: "Call tomorrow at 3pm" } });
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("tomorrow");
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Tomorrow" })).toBeVisible();
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Call at 3pm", showUpDate: tomorrow(localToday()), recurrence, recurrenceDate: localToday() });
+  });
+
+  it("keeps stored schedule words literal until the draft changes", async () => {
+    const replica = open("/home", { tasks: [task("t", "Review every day")] });
+    fireEvent.click(await screen.findByRole("button", { name: 'Edit "Review every day"' }));
+    expect(screen.queryByTestId("schedule-highlight")).toBeNull();
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Review every day", recurrence: null });
+  });
+
+  it("keeps a recognized phrase without a title available for correction", async () => {
+    const replica = open("/home", { tasks: [task("t", "Original")] });
+    await rename("Original", "every day");
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
+    expect(screen.getByRole("textbox", { name: "Task text" })).toHaveValue("every day");
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Original", recurrence: null });
+  });
+
+  it("keeps the manual date choice after committing a typed future recurrence", async () => {
+    const replica = open("/home", { tasks: [task("t", "Original")] });
+    await rename("Original", "Water plants every day starting tomorrow");
+    fireEvent.click(screen.getByRole("button", { name: "every day" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Today/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water plants", showUpDate: localToday(), recurrenceDate: tomorrow(localToday()), recurrence: { origin: tomorrow(localToday()) } });
+  });
+
+  it("stops a newly typed recurrence without reapplying it on close", async () => {
+    const replica = open("/home", { tasks: [task("t", "Original")] });
+    await rename("Original", "Water plants every day");
+    fireEvent.click(screen.getByRole("button", { name: "every day" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop repeating" }));
+    fireEvent.submit(screen.getByRole("textbox", { name: "Task text" }).closest("form")!);
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water plants", recurrence: null, recurrenceDate: null });
+  });
+
   it("keeps a Home title edit when a reschedule removes it from the list", async () => {
     const replica = open("/home", { tasks: [task("t", "Original")] });
     await rename("Original", "Edited before scheduling");

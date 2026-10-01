@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-01: Dates and repeats you type while editing a task are highlighted and saved with its title. Dismiss a highlighted phrase to keep those words and the existing schedule.
+
 - 2026-10-01: Recurring tasks show a repeat icon and schedule beneath their text; completing one shows its next occurrence in the Undo toast.
 
 User-facing changes to the web app, most recent first.

@@ -107,10 +107,6 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
       })),
     [tasks, today],
   );
-  // The flat list of visible upcoming tasks, so the detail editor resolves the
-  // tapped task and drops it (closing the sheet) when rescheduled to today.
-  const list = useMemo(() => sections.flatMap((s) => s.data), [sections]);
-
   const [writeError, setWriteError] = useState<string | null>(null);
   const projectAdd = useProjectAdd({
     project: null,
@@ -128,8 +124,7 @@ function Upcoming({ replica }: { replica: TaskdoReplica }) {
   // The task detail editor delegates Project-scoped Waiting feedback to the
   // shared four-mode Project drawer mounted by this screen.
   const detail = useTaskDetail({
-    api,
-    list,
+    replica,
     projects: projects ?? [],
     openTasks: tasks ?? [],
     conditions: conditions ?? [],
