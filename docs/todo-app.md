@@ -87,11 +87,11 @@ ticket. They are product ideas, not committed schema or implementation plans.
 
 `TaskDO` is the sole server authority for synchronized todo data. A
 platform-neutral TinyBase model in `@zero/agent-core` owns projections,
-mutations, recurrence, ordering, relationships, and recovery. Mobile keeps one
-current device workspace, which works locally before sign-in and binds to the
-first account that signs in. Web keeps an account-scoped TinyBase replica. Both
-expose the same screen-facing Task/Project/Waiting operations, and bound clients
-synchronize with TaskDO over WebSocket.
+mutations, recurrence, ordering, relationships, and recovery. Both surfaces
+work locally before sign-in and add guest work to the first account that signs
+in. They expose the same screen-facing Task/Project/Waiting operations, and
+bound clients synchronize with TaskDO over WebSocket. Platform ownership and
+adoption policies live in [`docs/storage.md`](storage.md).
 
 TaskDO retains Durable Object persistence, synchronization, erasure protection,
 and typed REST mapping. Public todo REST routes remain for compatible installed
@@ -105,12 +105,12 @@ evidence.
 ### Implementation status
 
 The present Task, Project, Waiting, and After model is available on mobile and
-web. Mobile opens directly into the same Home, Upcoming, Projects, and quick-add
-surface for guests and signed-in users. Guests keep a durable local workspace;
-sign-in adds synchronization plus authenticated timezone and icon-suggestion
-features. Those authenticated features are absent, rather than partially
-rendered, for guests. Current clients also provide offline writes, account
-isolation, recurrence, Undo, and recovery reporting. The product changelogs are
+web. Both open the same Home, Upcoming, Projects, and quick-add surfaces for
+guests and signed-in users. Sign-in adds synchronization plus authenticated
+timezone and icon-suggestion features. Guest screens omit those authenticated
+requests. Web todo loading is independent of agent settings, so a failed
+settings request does not block local work. Current clients also provide
+offline writes, account isolation, recurrence, Undo, and recovery reporting. The product changelogs are
 the record of shipped user-visible increments. On Home, a status icon beside
 the account control reports local, connecting, syncing, synced, offline, and
 storage-warning states without briefly treating an ordinary reconnect as

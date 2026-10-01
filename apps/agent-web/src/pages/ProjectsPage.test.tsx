@@ -348,7 +348,7 @@ describe("ProjectsPage", () => {
     await openDetail("Run a 5K");
     fireEvent.click(screen.getByRole("button", { name: "Add to Run a 5K" }));
     fireEvent.click(screen.getByRole("button", { name: "Task" }));
-    const input = screen.getByRole("textbox", { name: "Add task" });
+    const input = screen.getByRole("textbox", { name: "Add a task" });
     fireEvent.change(input, { target: { value: "buy running shoes" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Add" }));
@@ -461,6 +461,8 @@ describe("ProjectsPage", () => {
       within(region).getAllByRole("button", { name: /^Complete / })
         .map((button) => button.getAttribute("aria-label")),
     ).toEqual(['Complete "third"', 'Complete "first"', 'Complete "second"']));
+    // dnd-kit keeps a document click guard for 50 ms after a pointer drop.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
   });
 
   it("keeps the date control usable after an offline-capable reorder", async () => {
@@ -502,7 +504,7 @@ describe("ProjectsPage", () => {
     expect(snap[0].secondaryAction?.label).toBe("Waiting for…");
     expect(snap[0].action?.label).toBe("Undo");
     await act(async () => snap[0].secondaryAction?.onPress());
-    expect(screen.getByRole("textbox", { name: "Waiting condition" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "What are you waiting for?" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await act(async () => {
       snap[0].action?.onPress();
@@ -572,7 +574,7 @@ describe("ProjectsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add to Send tax letter" }));
     fireEvent.click(screen.getByRole("button", { name: "Waiting condition" }));
     fireEvent.change(
-      screen.getByRole("textbox", { name: "Add waiting condition" }),
+      screen.getByRole("textbox", { name: "What are you waiting for?" }),
       { target: { value: "the letter comes back" } },
     );
     await act(async () => {
@@ -760,7 +762,7 @@ describe("project icon suggestions", () => {
   it("pre-warms suggestions when a project is created", async () => {
     setApi([]);
     renderApp();
-    fireEvent.change(await screen.findByRole("textbox", { name: "New project" }), {
+    fireEvent.change(await screen.findByRole("textbox", { name: "Name an outcome" }), {
       target: { value: "Run a 5K" },
     });
     await act(async () => {

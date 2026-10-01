@@ -79,7 +79,7 @@ export function Toaster() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4 md:bottom-4"
     >
       {rendered.map((t) => (
         <ToastRow key={t.id} toast={t} />
@@ -124,6 +124,9 @@ function ToastRow({ toast }: { toast: Rendered }) {
         ) : null}
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+        <button type="button" aria-label={`Dismiss ${toast.message}`} className="grid size-10 place-items-center rounded-md text-muted-foreground hover:bg-muted" onClick={() => defaultToastController.dismiss(toast.id)}>
+          <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="m6 6 12 12M6 18 18 6" /></svg>
+        </button>
         {toast.action ? (
           <button
             type="button"

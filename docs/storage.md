@@ -7,10 +7,11 @@ source of truth for that.
 
 There are two layers: the **server** (authoritative for synchronized accounts)
 and the **client**. `TaskDO` is the only server authority for todo data. Mobile
-opens a durable TinyBase workspace immediately, including when no account is
-signed in. Its acknowledged local writes persist offline; after the workspace
-is bound to an account, they merge with the server replica. Web uses the same
-shared replica implementation with browser persistence and lifecycle adapters.
+and web open a local TinyBase workspace immediately, including when no account
+is signed in. Acknowledged local writes persist offline; after first sign-in,
+that guest work merges into the bound account and synchronizes with the server.
+Both use the shared replica implementation with platform persistence and
+lifecycle adapters.
 Older installed clients can still use the code bundled into those builds, but
 their REST requests reach the same `TaskDO`.
 
@@ -87,13 +88,22 @@ eligibility, durability reporting, and platform lifecycle events.
   `taskdo-fixture-<account-id>.sqlite`, preserving the historical filename.
   App foregrounding prompts reconnection; pull-to-refresh requests a TinyBase
   synchronization round or reconnects first.
-- **Web:** one TinyBase IndexedDB database per Clerk account, named
-  `zero-taskdo-replica-<account-id>`. The browser persistence module loads it
-  before the adapter exposes the todo owner. The adapter then opens same-origin
-  `/api/task-sync`; Clerk authenticates the WebSocket upgrade from the existing
-  session cookie. No token is placed in the URL. Reconnect uses bounded
-  exponential backoff and retries immediately when the browser comes online or
-  the document becomes visible.
+- **Web:** account replicas use `zero-taskdo-replica-<account-id>` in IndexedDB;
+  guests use a separate `zero-taskdo-replica-guest-<uuid>` database without a
+  server connection. The localStorage registry `zero.todo-workspaces.v1`
+  selects the guest and records pending first-account adoptions. A browser-wide
+  Web Lock serializes ownership changes. Binding takes the guest persistence
+  lock before recording the account; stale guest tabs then reject writes.
+  Adoption merges complete TinyBase content into the existing account store
+  under its persistence lock before synchronization begins. Only a durable
+  destination save retires the adoption record. Failed adoption remains
+  retryable for the bound account and never becomes available to another
+  account. The retired guest database remains inert.
+  Bound replicas open same-origin `/api/task-sync`; Clerk authenticates the
+  upgrade from the existing session cookie. No token is placed in the URL.
+  Reconnect uses bounded exponential backoff and retries immediately when the
+  browser comes online or the document becomes visible. Sync details also
+  offer explicit Refresh.
 - **Local-first:** screens render the persisted replica without waiting for the
   network. A disconnected WebSocket is ordinary offline operation. Mutations
   update the local mergeable store and retain TinyBase merge metadata, including
@@ -106,9 +116,14 @@ eligibility, durability reporting, and platform lifecycle events.
   seconds as a safety net and refresh immediately when they become visible;
   hidden tabs do not poll. This preserves concurrent offline changes and merge
   metadata while allowing every tab to receive current rows promptly.
-- **Fallback:** if IndexedDB or Web Locks are unavailable, web uses an in-memory
-  replica that still synchronizes online and reports that offline durability is
-  unavailable.
+- **Durability failures:** a failed local save rejects the transaction's
+  persistence acknowledgment, reports unavailable offline storage, and retains
+  raw local intent. A successful local retry restores durability.
+- **Fallback:** unavailable IndexedDB produces an in-memory replica and a
+  durability warning. An account with no guest registry can also synchronize
+  in memory when Web Locks are unavailable. Guest ownership and adoption
+  require Web Locks and localStorage. Unavailable or contradictory ownership
+  information produces a retry state and keeps existing databases intact.
 - **Account lifecycle:** mobile owns the device workspace around the shared
   replica. Explicit sign-out first checkpoints acknowledged sync, closes the
   persistence handle, deletes the bound local database and account-only caches,
@@ -117,8 +132,11 @@ eligibility, durability reporting, and platform lifecycle events.
   signing back into that account unlocks them. A different account cannot open
   or rebind the workspace: the user can sign that account out while retaining
   the locked copy, or explicitly delete the device copy before continuing.
-  Web retains its account-replica owner, which closes one account before it
-  exposes another.
+  Web closes one workspace before exposing another and hides stale opens and
+  events. Sign-out retains the account database and opens a separate guest
+  workspace. Switching accounts opens only that account's replica; guest data
+  already bound to another account is excluded. Storage notifications cause
+  signed-out sibling tabs to reopen the current guest after adoption.
 
 The retired web OPFS database and IndexedDB outbox are not opened, migrated,
 replayed, or deleted. They remain inert in existing browser profiles.

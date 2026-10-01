@@ -2,6 +2,16 @@
 
 User-facing changes to the web app, most recent first.
 
+- 2026-09-30: Start using Tasks and Projects without signing in. Your browser keeps the work locally; your first sign-in adds it to that account alongside its existing work.
+
+- 2026-09-30: Open the full Task editor from Home, Upcoming, or a Project to rename, schedule, move, stop repeats, complete forever, or visit its Project. Title edits survive completion and Undo.
+
+- 2026-09-30: Add scheduled or repeating Tasks from Projects and Project pages, choose their destination, and keep nonempty drafts until you save or confirm discard. Failed additions can retry saving without creating duplicates.
+
+- 2026-09-30: Home and Upcoming update at midnight and when you return to the tab. Clear Home shows every Next and Waiting Project.
+
+- 2026-09-30: Open Project status for its explanation and lifecycle actions. Dismiss feedback directly and refresh from sync details; save failures stay visible across navigation.
+
 - 2026-09-27: Home now shows sync as an icon beside your account. Open it to see the last successful sync and offline-storage details; reconnecting shows Connecting instead of briefly reporting Offline.
 
 - 2026-09-27: Home now uses `/home` as its sole address; the retired `/captures` address is no longer supported.

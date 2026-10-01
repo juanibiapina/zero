@@ -1,14 +1,11 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ErrorText } from "@/components/ConnectionStatus";
+import { TodoComposer } from "@/components/todo-composer";
+import { useLocalDay } from "@/lib/local-day";
 import {
   LOADING_TEXT_DELAY_MS,
-  localToday,
-  messageOf,
   projectStatusSections,
   listView,
   PROJECT_DISPLAY_STATUS_LABELS,
@@ -18,7 +15,6 @@ import {
   type TaskdoReplica,
 } from "@zero/agent-core";
 import { useTodoData } from "@/lib/todo-data";
-import { requestIconSuggestions } from "@/lib/icon-suggestions";
 import { useDelayed } from "@/lib/screen-hooks";
 import { cn } from "@/lib/utils";
 
@@ -65,36 +61,12 @@ function ProjectsReady({ replica }: { replica: TaskdoReplica }) {
     q.from({ w: waitsApi.collection }),
   );
 
-  const [title, setTitle] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [collapseOverride, setCollapseOverride] = useState<Partial<Record<ProjectDisplayStatus, boolean>>>({});
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const onAdd = useCallback(() => {
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    setError(null);
-    const tx = api.add(trimmed);
-    tx.isPersisted.promise.catch((e) => setError(messageOf(e)));
-    // Pre-warm emoji icon suggestions in the background off the optimistic
-    // insert's id, so the picker shows them instantly when opened (create is
-    // name-only, so the basis is the title alone). Fire-and-forget; a failure
-    // only costs the shortcut.
-    const key = tx.mutations[0]?.key as string | number | undefined;
-    if (key !== undefined) {
-      void requestIconSuggestions(String(key), {
-        title: trimmed,
-        description: null,
-      });
-    }
-    setTitle("");
-    inputRef.current?.focus();
-  }, [api, title]);
 
   const list = useMemo(() => projects ?? [], [projects]);
   const tasks = useMemo(() => openTasks ?? [], [openTasks]);
   const conds = useMemo(() => conditions ?? [], [conditions]);
-  const today = localToday();
+  const today = useLocalDay();
   const sections = useMemo(
     () =>
       projectStatusSections({ projects: list, tasks, conditions: conds, today, collapseOverride }),
@@ -112,35 +84,7 @@ function ProjectsReady({ replica }: { replica: TaskdoReplica }) {
 
   return (
     <div className="space-y-6">
-      <form
-        className="space-y-1"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onAdd();
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <Input
-            ref={inputRef}
-            autoFocus
-            value={title}
-            placeholder="Name an outcome"
-            aria-label="New project"
-            className="h-11"
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <Button
-            type="submit"
-            size="lg"
-            className="h-11 min-w-20"
-            disabled={title.trim() === ""}
-          >
-            Add
-          </Button>
-        </div>
-      </form>
-
-      {error && <ErrorText>{error}</ErrorText>}
+      <TodoComposer replica={replica} initialKind="project" />
 
       {view === "loading" ? (
         showLoadingText ? (

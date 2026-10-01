@@ -19,6 +19,7 @@ type OpenBrowserTaskdoPersistenceOptions = {
   accountId: string;
   store: MergeableStore;
   onDurability: (durable: boolean, error: string | null) => void;
+  beforeSave?: () => void;
 };
 
 const errorMessage = (error: unknown): string => {
@@ -35,6 +36,7 @@ export async function openBrowserTaskdoPersistence({
   accountId,
   store,
   onDurability,
+  beforeSave,
 }: OpenBrowserTaskdoPersistenceOptions): Promise<BrowserTaskdoPersistence> {
   if (!/^[a-zA-Z0-9_-]+$/.test(accountId)) throw new Error("Invalid account identity");
 
@@ -42,6 +44,7 @@ export async function openBrowserTaskdoPersistence({
   const lockName = `${dbName}-persistence`;
   let durabilityError: string | null = null;
   let durable = false;
+  let failureRevision = 0;
   let persister: IndexedDbPersister | undefined;
   let persistenceListeners: string[] = [];
   let pending: Promise<unknown> = Promise.resolve();
@@ -52,6 +55,7 @@ export async function openBrowserTaskdoPersistence({
   let mergePersisted: (() => Promise<void>) | undefined;
 
   const markFailure = (error: unknown) => {
+    failureRevision += 1;
     durable = false;
     durabilityError = `Offline durability is unavailable: ${errorMessage(error)}`;
     onDurability(false, durabilityError);
@@ -127,8 +131,16 @@ export async function openBrowserTaskdoPersistence({
     pending = pending.then(() => withLock(async () => {
       const activePersister = persister;
       if (!activePersister || !mergePersisted) return;
+      beforeSave?.();
       await mergePersisted();
+      const beforeFailure = failureRevision;
       await activePersister.save();
+      if (failureRevision !== beforeFailure) throw new Error(durabilityError ?? "Offline save failed");
+      if (!durable) {
+        durable = true;
+        durabilityError = null;
+        onDurability(true, null);
+      }
       notifyPeers();
     })).catch(markFailure);
     await pending;

@@ -98,22 +98,20 @@ describe("HomePage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the plan CTA when the list is empty and a project is next", async () => {
-    setApi([], [projectRow("p")]);
+  it("shows every Next Project when Home is clear", async () => {
+    setApi([], [projectRow("p", { title: "First project" }), projectRow("q", { title: "Second project" })]);
     render(<HomePage />, { wrapper: MemoryRouter });
-
-    const cta = await screen.findByRole("link", { name: "Plan your day" });
-    expect(cta).toHaveAttribute("href", "/projects");
-    expect(screen.getByText("1 Next")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "First project" })).toHaveAttribute("href", "/projects/p");
+    expect(screen.getByRole("link", { name: "Second project" })).toHaveAttribute("href", "/projects/q");
+    expect(screen.getByRole("heading", { name: "Next" })).toBeInTheDocument();
   });
 
-  it("shows the create CTA when there are no projects and no tasks", async () => {
+  it("explains Projects while keeping the existing add flow when Home is clear", async () => {
     setApi();
     render(<HomePage />, { wrapper: MemoryRouter });
-
-    expect(
-      await screen.findByRole("link", { name: "Create your first project" }),
-    ).toHaveAttribute("href", "/projects");
+    expect(await screen.findByRole("heading", { name: "No projects yet" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Project" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Create your first project" })).toBeNull();
   });
 
   it("renders a loose task and no CTA", async () => {

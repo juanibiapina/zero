@@ -14,6 +14,7 @@ export { TASKDO_BROWSER_DB_PREFIX } from "./browser-taskdo-persistence";
 export type BrowserTaskdoReplica = TaskdoReplica & {
   durable: boolean;
   durabilityError: string | null;
+  saveLocal: () => Promise<void>;
 };
 
 type OpenBrowserTaskdoReplicaOptions = {
@@ -22,6 +23,7 @@ type OpenBrowserTaskdoReplicaOptions = {
   onConnection: (connected: boolean) => void;
   onSyncState?: (state: TaskdoSyncState) => void;
   onDurability: (durable: boolean, error: string | null) => void;
+  prepareStore?: (store: ReturnType<typeof createMergeableStore>, save: () => Promise<void>) => Promise<void>;
 };
 
 function taskSyncUrl(): string {
@@ -32,17 +34,25 @@ function taskSyncUrl(): string {
 
 export async function openBrowserTaskdoReplica(
   accountId: string,
-  { queryClient, onSnapshot, onConnection, onSyncState = () => {}, onDurability }: OpenBrowserTaskdoReplicaOptions,
+  { queryClient, onSnapshot, onConnection, onSyncState = () => {}, onDurability, prepareStore }: OpenBrowserTaskdoReplicaOptions,
 ): Promise<BrowserTaskdoReplica> {
   const replicaQueryClient = queryClient ?? new QueryClient();
   const store = createMergeableStore();
   const persistence = await openBrowserTaskdoPersistence({ accountId, store, onDurability });
+  let closed = false;
+  const save = async () => {
+    if (closed) throw new Error("This workspace is closed.");
+    await persistence.save();
+    if (!persistence.durable) throw new Error(persistence.durabilityError ?? "Your change could not be saved offline.");
+  };
+  try { await prepareStore?.(store, save); }
+  catch (error) { await persistence.close(); throw error; }
 
   const session = createSyncedTaskdoReplicaSession({
     store,
     queryClient: replicaQueryClient,
     queryKeyScope: [accountId],
-    save: persistence.save,
+    save,
     onSnapshot,
     refreshLocal: persistence.refresh,
     sync: {
@@ -69,9 +79,11 @@ export async function openBrowserTaskdoReplica(
   let closePromise: Promise<void> | undefined;
   return {
     ...session,
+    saveLocal: save,
     durable: persistence.durable,
     durabilityError: persistence.durabilityError,
     close() {
+      closed = true;
       closePromise ??= (async () => {
         window.removeEventListener("online", onOnline);
         document.removeEventListener("visibilitychange", onVisible);

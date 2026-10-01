@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { todoSyncPresentation, type TodoSyncDisplayKind } from "@zero/agent-core";
+import { Button } from "@/components/ui/button";
+import { reportTodoError } from "@/lib/todo-feedback";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTodoData } from "@/lib/todo-data";
@@ -32,7 +35,8 @@ function formatRelative(value: string, now = new Date()): string {
 
 export function SyncStatusControl() {
   const data = useTodoData();
-  const status = todoSyncPresentation({ signedIn: true, durable: data.durable, sync: data.sync });
+  const [refreshing, setRefreshing] = useState(false);
+  const status = todoSyncPresentation({ signedIn: data.authenticatedFeatures !== false, durable: data.durable, sync: data.sync });
   const lastSync = data.sync.lastSyncedAt ? new Date(data.sync.lastSyncedAt) : null;
 
   return (
@@ -70,6 +74,10 @@ export function SyncStatusControl() {
             <dd className="font-medium">{data.durable ? "Available" : "Unavailable"}</dd>
           </div>
         </dl>
+        {data.replica ? <div className="border-t p-3"><Button variant="outline" disabled={refreshing} onClick={() => {
+          setRefreshing(true);
+          void data.replica!.refresh().catch(reportTodoError).finally(() => setRefreshing(false));
+        }}>{refreshing ? "Refreshing…" : "Refresh"}</Button></div> : null}
         {data.durabilityError ? <p className="border-t px-4 py-3 text-sm text-destructive">{data.durabilityError}</p> : null}
       </PopoverContent>
     </Popover>

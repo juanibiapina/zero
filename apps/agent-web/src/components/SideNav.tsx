@@ -3,6 +3,12 @@ import { Link, NavLink, useLocation } from "react-router";
 
 import { SyncStatusControl } from "@/components/sync-status-control";
 import { cn } from "@/lib/utils";
+import { useTodoData } from "@/lib/todo-data";
+
+function AccountControl() {
+  const { authenticatedFeatures = true } = useTodoData();
+  return authenticatedFeatures ? <><Link to="/settings" className="text-sm text-muted-foreground hover:text-foreground">Settings</Link><UserButton appearance={{ elements: { avatarBox: "size-8" } }} /></> : <Link to="/sign-in" className="text-sm font-semibold text-primary">Sign in</Link>;
+}
 
 // One signed-in navigation destination.
 type NavItem = {
@@ -106,7 +112,7 @@ export function SideNav() {
         </nav>
         <div className="flex items-center gap-3 border-t p-4">
           {showSyncStatus ? <SyncStatusControl /> : null}
-          <UserButton appearance={{ elements: { avatarBox: "size-8" } }} />
+          <AccountControl />
         </div>
       </aside>
 
@@ -115,9 +121,9 @@ export function SideNav() {
         <Link to="/" className="text-xl font-bold tracking-tight">
           Zero
         </Link>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-3">
           {showSyncStatus ? <SyncStatusControl /> : null}
-          <UserButton appearance={{ elements: { avatarBox: "size-8" } }} />
+          <AccountControl />
         </div>
       </header>
       <nav className="fixed inset-x-0 bottom-0 z-50 flex h-16 items-stretch border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:hidden">

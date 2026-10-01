@@ -30,11 +30,13 @@ import {
 import { ErrorText } from "@/components/ConnectionStatus";
 import { ProjectOptionList } from "@/components/ProjectOptionList";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
-import { useTaskCompletionFeedback } from "@/components/task-completion-feedback";
+import { useTaskEditor } from "@/components/task-editor";
+import { reportTodoError } from "@/lib/todo-feedback";
+import { useTodoAdd, type TodoAddKind } from "@/components/todo-composer";
+import { useLocalDay } from "@/lib/local-day";
 import { EmojiPicker } from "frimousse";
 import {
   isBasisStale,
-  localToday,
   compareByOrder,
   isProjectAfter,
   messageOf,
@@ -46,12 +48,10 @@ import {
   projectStatusContext,
   scheduleLabel,
   PROJECT_DISPLAY_STATUS_LABELS,
-  toast,
   undoableAction,
   type ProjectDisplayStatus,
   type ProjectEditFields,
   type Project,
-  type TodoProjects,
   type ProjectState,
   type Task,
   type TaskdoReplica,
@@ -155,20 +155,15 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
       setError(null);
       const tx = api.remove(pid);
       tx.isPersisted.promise
-        .catch((e) => setError(messageOf(e)));
+        .catch((e) => { setError(messageOf(e)); reportTodoError(e); });
       void navigate("/projects");
     },
     [api, navigate],
   );
 
-  const today = localToday();
-  const completion = useTaskCompletionFeedback({
-    api: tasksApi,
-    waitsApi,
-    projects: list,
-    today,
-    onError: setError,
-  });
+  const today = useLocalDay();
+  const detail = useTaskEditor({ replica, list: tasks.filter((task) => task.projectId === id), projects: list, tasks, conditions: conds, currentProjectId: id, onError: setError });
+  const add = useTodoAdd({ replica, projectId: id, initialKind: "task" });
 
   // The project isn't in the loaded set: a bad or deleted id. Once the
   // collection has loaded (not just an empty pre-hydration snapshot), redirect
@@ -227,17 +222,7 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
         onDelete={() => commitDelete(project.id)}
       />
 
-      <ProjectAddMenu
-        project={project}
-        projects={list}
-        conditions={conds}
-        tasks={tasks}
-        today={today}
-        tasksApi={tasksApi}
-        projectsApi={api}
-        waitsApi={waitsApi}
-        onError={setError}
-      />
+      <ProjectAddMenu project={project} onOpen={add.open} />
 
       <ProjectRelations
         project={project}
@@ -252,11 +237,14 @@ function ProjectDetailReady({ replica }: { replica: TaskdoReplica }) {
         <ProjectTasks
           api={tasksApi}
           projectId={project.id}
-          onComplete={completion.complete}
+          onComplete={detail.complete}
+          onOpen={detail.open}
+          onAdd={() => add.open("task")}
           onError={setError}
         />
       </div>
-      {completion.composer}
+      {detail.editor}
+      {add.composer}
     </div>
   );
 }
@@ -373,6 +361,8 @@ function ProjectHeader({
   const [title, setTitle] = useState(project.title);
   const [pickingIcon, setPickingIcon] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const { authenticatedFeatures = true } = useTodoData();
 
   const commitTitle = () => {
     const trimmed = title.trim();
@@ -407,7 +397,7 @@ function ProjectHeader({
           <PopoverContent align="start" className="w-fit p-0">
             {/* Pre-warmed AI suggestions sit above the full manual picker: an
                 additive shortcut, never a replacement. */}
-            <SuggestedIconRow project={project} onPick={applyIcon} />
+            {authenticatedFeatures ? <SuggestedIconRow project={project} onPick={applyIcon} /> : null}
             <EmojiPicker.Root
               className="isolate flex h-[368px] w-fit flex-col"
               onEmojiSelect={({ emoji }) => applyIcon(emoji)}
@@ -472,7 +462,7 @@ function ProjectHeader({
         <div className="flex shrink-0 items-center gap-2 pt-1">
           <OverflowMenu>
             {project.state === "backlog" ? (
-              <MenuItem onSelect={() => onState("in-play")}>Put in play</MenuItem>
+              <MenuItem onSelect={() => onState("in-play")}>Move out of backlog</MenuItem>
             ) : (
               <MenuItem onSelect={() => onState("backlog")}>
                 Move to backlog
@@ -485,14 +475,20 @@ function ProjectHeader({
           </OverflowMenu>
         </div>
       </div>
+      <div><Button variant="outline" aria-label={`Project status: ${PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}${statusContext ? ` · ${statusContext}` : ""}`} onClick={() => { commitTitle(); setStatusOpen(true); }}>
+        {PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}{statusContext ? ` · ${statusContext}` : ""}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="m9 5 7 7-7 7" /></svg>
+      </Button></div>
       {description}
-      <div>
-        <span className="inline-flex max-w-full truncate rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-          {PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}
-          {statusContext ? ` · ${statusContext}` : ""}
-        </span>
-      </div>
     </div>
+    <Sheet open={statusOpen} onClose={() => setStatusOpen(false)} title="Project status">
+      <div className="flex flex-col gap-4">
+        <p className="font-medium">{PROJECT_DISPLAY_STATUS_LABELS[displayStatus]}{statusContext ? ` · ${statusContext}` : ""}</p>
+        <p className="text-sm text-muted-foreground">{{ active: "This Project has dated work available now.", next: "Give a Task a date to bring this Project forward.", waiting: "This Project has future-dated work or a Waiting condition to review.", after: "This Project follows another Project's completion.", backlog: "This Project stays in Backlog until you move it out.", done: "This Project is complete." }[displayStatus]}</p>
+        <Button variant="outline" onClick={() => { setStatusOpen(false); onState(project.state === "backlog" ? "in-play" : "backlog"); }}>{project.state === "backlog" ? "Move out of backlog" : "Move to backlog"}</Button>
+        <Button onClick={() => { setStatusOpen(false); onState("done"); }}>Mark done</Button>
+      </div>
+    </Sheet>
     <Sheet
       open={deleting}
       onClose={() => setDeleting(false)}
@@ -608,7 +604,7 @@ function TaskDateChip({
   onPick: (date: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const today = localToday();
+  const today = useLocalDay();
   const scheduled = showUpDate != null;
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -653,18 +649,20 @@ function ProjectTasks({
   api,
   projectId,
   onComplete,
+  onOpen,
+  onAdd,
   onError,
 }: {
   api: TodoTasks;
   projectId: string;
   onComplete: (task: Task) => void;
+  onOpen: (task: Task) => void;
+  onAdd: () => void;
   onError: (message: string) => void;
 }) {
   const { data: tasks } = useLiveQuery((q) =>
     q.from({ t: api.collection }).where(({ t }) => isNull(t.completedAt)),
   );
-  const [text, setText] = useState("");
-  const [adding, setAdding] = useState(false);
   const list = (tasks ?? [])
     .filter((t: Task) => t.projectId === projectId)
     .sort(compareByOrder);
@@ -687,17 +685,6 @@ function ProjectTasks({
     tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
   };
 
-  const onAdd = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    // A project-screen task is undated (groomed) by default: it lives here until
-    // it is given a date, which commits it to Home. The date is the gate.
-    const tx = api.add(trimmed, null, projectId);
-    tx.isPersisted.promise.catch((e) => onError(messageOf(e)));
-    setText("");
-    setAdding(false);
-  }, [api, text, projectId, onError]);
-
   const onSchedule = useCallback(
     (t: Task, showUpDate: string | null) => {
       const tx = api.reschedule(t.id, showUpDate);
@@ -717,28 +704,7 @@ function ProjectTasks({
         >
           Tasks
         </h2>
-        <Popover open={adding} onOpenChange={setAdding}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" aria-label="Add task">+</Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="flex w-80 flex-col gap-3">
-            <h3 className="font-semibold">Add task</h3>
-            <Input
-              value={text}
-              autoFocus
-              placeholder="Add a task"
-              aria-label="Add a task"
-              onChange={(event) => setText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onAdd();
-              }}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
-              <Button disabled={!text.trim()} onClick={onAdd}>Add</Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+        <Button variant="ghost" size="sm" aria-label="Add task" onClick={onAdd}>+</Button>
       </div>
       <DndContext
         sensors={sensors}
@@ -755,6 +721,7 @@ function ProjectTasks({
                 key={task.id}
                 task={task}
                 onComplete={() => onComplete(task)}
+                onOpen={() => onOpen(task)}
                 onSchedule={(date) => onSchedule(task, date)}
               />
             ))}
@@ -768,10 +735,12 @@ function ProjectTasks({
 function ProjectTaskRow({
   task,
   onComplete,
+  onOpen,
   onSchedule,
 }: {
   task: Task;
   onComplete: () => void;
+  onOpen: () => void;
   onSchedule: (date: string | null) => void;
 }) {
   const {
@@ -823,133 +792,21 @@ function ProjectTaskRow({
         className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
         onClick={onComplete}
       />
-      <span className="min-w-0 flex-1 text-sm">{task.text}</span>
+      <button type="button" className="min-w-0 flex-1 break-words text-left text-sm" aria-label={`Edit "${task.text}"`} onClick={onOpen}>{task.text}</button>
       <TaskDateChip showUpDate={task.showUpDate} onPick={onSchedule} />
     </li>
   );
 }
 
-type ProjectAddFlow = "task" | "waiting" | "after" | "project";
-
-function ProjectAddMenu({
-  project,
-  projects,
-  conditions,
-  tasks,
-  today,
-  tasksApi,
-  projectsApi,
-  waitsApi,
-  onError,
-}: {
-  project: Project;
-  projects: Project[];
-  conditions: WaitingCondition[];
-  tasks: Task[];
-  today: string;
-  tasksApi: TodoTasks;
-  projectsApi: TodoProjects;
-  waitsApi: TodoWaits;
-  onError: (message: string) => void;
-}) {
-  const navigate = useNavigate();
+function ProjectAddMenu({ project, onOpen }: { project: Project; onOpen: (kind: TodoAddKind) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [flow, setFlow] = useState<ProjectAddFlow | null>(null);
-  const [text, setText] = useState("");
-  const open = (next: ProjectAddFlow) => {
-    setMenuOpen(false);
-    setFlow(next);
-  };
-  const close = () => {
-    setFlow(null);
-    setText("");
-  };
-  const write = (tx: { isPersisted: { promise: Promise<unknown> } }) => {
-    tx.isPersisted.promise.catch((error) => onError(messageOf(error)));
-  };
-  const submitText = () => {
-    const trimmed = text.trim();
-    if (!trimmed || !flow) return;
-    if (flow === "task") write(tasksApi.add(trimmed, null, project.id));
-    if (flow === "waiting") write(waitsApi.addWaiting(project.id, trimmed));
-    if (flow === "project") {
-      const tx = projectsApi.add(trimmed);
-      write(tx);
-      const id = String(tx.mutations[0]?.key);
-      void requestIconSuggestions(id, { title: trimmed, description: null });
-      toast("Project created", {
-        description: trimmed,
-        action: { label: "View", onPress: () => void navigate(`/projects/${id}`) },
-      });
-    }
-    close();
-  };
-  const title = flow === "task"
-    ? "Add task"
-    : flow === "waiting"
-      ? "Add waiting condition"
-      : flow === "after"
-        ? "After project"
-        : "Add project";
-
-  return (
-    <div className="flex justify-end">
-      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-        <PopoverTrigger asChild>
-          <Button aria-label={`Add to ${project.title}`}>+ Add</Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="flex w-56 flex-col gap-1 p-1">
-          <p className="px-3 py-2 text-sm font-semibold">Add to {project.title}</p>
-          {([
-            ["task", "Task"],
-            ["waiting", "Waiting condition"],
-            ["after", "After project"],
-            ["project", "Project"],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className="min-h-10 rounded-md px-3 text-left text-sm hover:bg-accent"
-              onClick={() => open(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </PopoverContent>
-      </Popover>
-
-      <Sheet open={flow != null} onClose={close} title={title}>
-        {flow === "after" ? (
-          <div className="flex flex-col gap-3">
-            <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions}
-              today={today} afterSourceProjectId={project.id} emptyCopy="No available projects"
-              onPick={(candidateId) => {
-                if (!candidateId) return;
-                write(waitsApi.addAfter(project.id, candidateId));
-                close();
-              }} />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <Input
-              value={text}
-              autoFocus
-              aria-label={title}
-              placeholder={flow === "waiting" ? "What are you waiting for?" : flow === "project" ? "Name an outcome" : "Add a task"}
-              onChange={(event) => setText(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") submitText();
-              }}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={close}>Cancel</Button>
-              <Button disabled={!text.trim()} onClick={submitText}>Add</Button>
-            </div>
-          </div>
-        )}
-      </Sheet>
-    </div>
-  );
+  return <div className="flex justify-end"><Popover open={menuOpen} onOpenChange={setMenuOpen}>
+    <PopoverTrigger asChild><Button aria-label={`Add to ${project.title}`}>+ Add</Button></PopoverTrigger>
+    <PopoverContent align="end" className="flex w-56 flex-col gap-1 p-1">
+      <p className="px-3 py-2 text-sm font-semibold">Add to {project.title}</p>
+      {([["task", "Task"], ["waiting", "Waiting condition"], ["after", "After project"], ["project", "Project"]] as const).map(([kind, label]) => <Button key={kind} variant="ghost" onClick={() => { setMenuOpen(false); onOpen(kind); }}>{label}</Button>)}
+    </PopoverContent>
+  </Popover></div>;
 }
 
 function conditionLabel(condition: WaitingCondition): string {

@@ -94,10 +94,10 @@ and clearing the filter restores the previous fold. Task assignment keeps a
 separate No project choice; After selection shows only eligible targets while
 calculating their status against the full Project and attention snapshot.
 
-On mobile, the Projects-list Add control opens the shared global create drawer
-with Project selected and Task also available. Project creation still opens the
-new Project. Task creation stays on the list and can create a loose Task or use
-the existing date and Project rows before submission.
+Projects-list creation starts on Project with Task also available on both
+surfaces. Creating a Project opens its workspace; creating a Task stays on the
+list. Task creation choices and draft rules live in
+[`task.md`](task.md).
 
 ## Project workspace
 
@@ -119,19 +119,22 @@ On mobile, a dirty description queues an optimistic edit before another
 workspace action or navigation continues. Blank description text clears the
 stored value to `null`.
 
-The main Add control opens the shared drawer directly with Task selected and
-Task, Waiting, After, and Project selectors visible. Once a region exists, its
-local `+` opens that drawer with the matching selector active. After opens its
-filtered Project picker above the drawer. The status control remains
-lifecycle-only.
+Mobile Add opens the shared drawer directly with Task selected. Web Add offers
+Task, Waiting condition, After project, or Project and then opens the shared
+creation sheet. Once a region exists, its local `+` opens the matching flow.
+After offers only eligible Projects.
+
+The status control precedes description, explains the current calculated
+attention, and offers manual lifecycle actions: Complete, Move to backlog,
+Move out of backlog, or Reopen, as applicable. Deletion stays in Project
+actions.
 
 ## Completion feedback
 
-Task completion persists immediately. A Project Task's transient feedback names
-and links its Project and offers Undo plus **Waiting for…**, which opens the
-shared add drawer with Waiting selected, labels the destination **Project**, and
-labels the **What needs to happen?** field **Waiting on**. Loose Tasks omit
-Project actions.
+Task completion behavior and its contextual Waiting flow live in
+[`task.md`](task.md). On web, transient feedback has a keyboard-operable dismiss
+control and clears on navigation or browser backgrounding. Save failures stay
+visible until dismissed or a successful retry resolves them.
 
 Project completion also persists immediately and offers Undo. There are no
 notifications when an After relationship resolves.

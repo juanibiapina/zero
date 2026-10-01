@@ -1,5 +1,4 @@
 import { useAuth } from "@clerk/react";
-import { QueryClient } from "@tanstack/react-query";
 import {
   createAccountTaskdoReplicaOwner,
   selectAccountTaskdoReplicaState,
@@ -16,9 +15,10 @@ import {
 
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
-import { openBrowserTaskdoReplica } from "./browser-taskdo-replica";
+import { BROWSER_WORKSPACE_KEY, GUEST_OWNER_ID, openBrowserTodoWorkspace } from "./browser-todo-workspace";
+import type { BrowserTaskdoReplica } from "./browser-taskdo-replica";
 
-export type TodoData = TaskdoReplicaClientState;
+export type TodoData = TaskdoReplicaClientState & { authenticatedFeatures?: boolean; saveLocal?: () => Promise<void> };
 
 const TodoDataContext = createContext<TodoData | null>(null);
 
@@ -37,13 +37,7 @@ export function TodoDataProvider({ children }: { children: ReactNode }) {
   const [owner] = useState(() => createAccountTaskdoReplicaOwner({
     initialDurability: { durable: false, error: null },
     open: async (accountId, events) => {
-      const replica = await openBrowserTaskdoReplica(accountId, {
-        queryClient: new QueryClient(),
-        onSnapshot: events.onSnapshot,
-        onConnection: events.onConnection,
-        onSyncState: events.onSyncState,
-        onDurability: events.onDurability,
-      });
+      const replica = await openBrowserTodoWorkspace(accountId === GUEST_OWNER_ID ? null : accountId, events);
       return {
         replica,
         durability: { durable: replica.durable, error: replica.durabilityError },
@@ -52,23 +46,24 @@ export function TodoDataProvider({ children }: { children: ReactNode }) {
   }));
   const state = useSyncExternalStore(owner.subscribe, owner.getSnapshot, owner.getSnapshot);
 
+  const ownerId = userId ?? GUEST_OWNER_ID;
   useEffect(() => {
-    void owner.setAccount(userId ?? null);
-    return () => { void owner.setAccount(null); };
-  }, [owner, userId]);
+    void owner.setAccount(ownerId);
+    const changed = (event: StorageEvent) => {
+      if (event.key === BROWSER_WORKSPACE_KEY && !userId) void owner.setAccount(ownerId);
+    };
+    window.addEventListener("storage", changed);
+    return () => { window.removeEventListener("storage", changed); void owner.setAccount(null); };
+  }, [owner, ownerId, userId]);
 
-  const value = selectAccountTaskdoReplicaState(
-    state,
-    userId ?? null,
-    { durable: false, error: null },
-  );
+  const value = selectAccountTaskdoReplicaState(state, ownerId, { durable: false, error: null });
 
   if (!value.ready) return value.error
-    ? <div className="p-6 text-sm text-destructive">{value.error}</div>
+    ? <div className="flex flex-col gap-3 p-6"><p role="alert" className="text-sm text-destructive">{value.error}</p><Button variant="outline" onClick={() => void owner.setAccount(ownerId)}>Try again</Button></div>
     : <Loading />;
 
   return (
-    <TodoDataContextProvider value={value}>
+    <TodoDataContextProvider value={{ ...value, authenticatedFeatures: Boolean(userId), saveLocal: (value.replica as BrowserTaskdoReplica).saveLocal }}>
       <TodoDataNotices />
       {children}
     </TodoDataContextProvider>

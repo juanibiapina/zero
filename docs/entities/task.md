@@ -76,11 +76,10 @@ Minimal on purpose; no priority or subtasks. The show-up date is the **sole comm
   the clarify/process step the single-list merge removed. Filing a task into a
   project changes only `projectId` — the show-up date is the commitment gate, so
   a dated task stays dated (and on Home if arrived) and an undated one is groomed
-  on the project screen. Reachable from the task detail's Project row on mobile
-  (Home and Upcoming) and web (Home). On mobile, that row opens a title-filterable
-  assignment picker; when the task has a project, a separate trailing arrow opens
-  that project's screen directly. The arrow is omitted when editing from the
-  owning project's screen.
+  on the project screen. The full Task editor is available from Home, Upcoming,
+  and Project Tasks on both surfaces. Its Project row opens a title-filterable
+  assignment picker; a separate trailing arrow opens the owning Project directly
+  and is omitted when already editing from that Project.
 
 ## Data shape
 
@@ -106,13 +105,16 @@ are replicated to the account-scoped client store. Client-facing `Task`:
 
 ## Behavior
 
-- **Add** a task. A quick-add with no project mints a loose task (no day); a
-  project-screen add mints a parked task under that project. On parse-enabled
-  task quick-adds, the active one-time or recurring schedule phrase appears on
-  a colored background and is removed from the stored title. Tapping/clicking it
-  keeps that phrase as ordinary title text and activates the previous schedule
-  candidate in the same title; dismissing every candidate leaves the task
-  unscheduled.
+- **Add** a task from Home, Projects, or a Project. Home defaults to loose and
+  undated; a Project defaults to undated work assigned to that Project. Every
+  Task creation flow offers date and Project choices and recognizes dates and
+  repeats in the title. The active schedule phrase appears on a colored
+  background and is removed from the stored title. Tapping/clicking it keeps
+  that phrase as ordinary title text and activates the previous schedule
+  candidate; dismissing every candidate leaves the Task unscheduled. Child
+  pickers preserve the draft. Closing a creation drawer or sheet with a
+  nonempty draft asks before clearing it. On web, a failed local save retains
+  the draft and retries the existing addition without inserting another row.
 - **Complete** an ordinary task: it leaves the list at once and a single bottom
   **Undo** snackbar reopens it. For a Project Task, the same feedback names and
   links the Project and offers **Waiting for…**, which opens the shared Project
@@ -145,9 +147,11 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   other gate** — every postponed task, loose or project, taken-on or not
   (`upcomingSections` in `@zero/agent-core`).
 - **Edit / reschedule** through the rows or detail sheet. A mobile Home swipe
-  postpones to Tomorrow; a mobile project-screen swipe schedules Today; the
-  editor offers Today / Tomorrow / calendar / clear. Writes are optimistic and
-  offline-durable.
+  postpones to Tomorrow; a mobile project-screen swipe schedules Today. The
+  editor offers Today / Tomorrow / calendar / clear, Project assignment, Stop
+  repeating, and Complete forever with Undo. It commits the title before
+  scheduling, moving, completing, or navigating; Undo preserves that edited
+  title. Writes are optimistic and report local persistence failures.
 - **Ordering.** The list orders by `sortKey` ascending, `createdAt` as the
   tiebreak. `sortKey` is a fractional index (`fractional-indexing`'s
   `generateKeyBetween`): moving a row mints one key strictly between its
@@ -166,8 +170,8 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   A mobile Home row swipes right to Tomorrow; a mobile project row swipes right
   to Today. Both tap the circle to complete and the row to open the detail sheet.
   Home quick-add opens
-  on Task and can switch to Project; the mobile Projects-list Add drawer opens on
-  Project and can switch to Task.
+  on Task and can switch to Project; Projects-list creation starts on Project
+  and can switch to Task.
 - **Storage** — the platform-neutral TinyBase model in `@zero/agent-core` owns
   Task projections, mutations, recurrence, ordering, and Project cascades.
   TaskDO adds durable persistence and REST/RPC result mapping; web and mobile
@@ -191,7 +195,10 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   account-scoped TinyBase replica in `@zero/agent-core`. See `docs/storage.md`.
 - **Timezone lives on the client.** The server returns every open task; the
   client splits Home/Upcoming against its own local today (`localToday` in
-  `@zero/agent-core`), so the DO needs no timezone.
+  `@zero/agent-core`), so the DO needs no timezone. Both surfaces subscribe to
+  local-day changes. Mounted lists, Project status, pickers, and creation
+  update at the next calendar midnight and on foreground return without
+  changing synchronized rows.
 - **Shared view rule.** The list region gates on the row count, not `isLoading`,
   via the shared `listView` helper, so a hydrated local snapshot paints before the
   live query settles.
