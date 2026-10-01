@@ -2,13 +2,11 @@ import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { isNull, type Transaction } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
-import { toast, type TaskdoReplica } from "@zero/agent-core";
-import { parseSchedule, toText, type TextRange } from "@zeroapps/recurrence";
+import { TaskDraft, toast, type TaskdoReplica } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
-import { ScheduleHighlightInput } from "@/components/ScheduleHighlightInput";
 import { ProjectOptionList } from "@/components/ProjectOptionList";
-import { TaskDateField, TaskProjectField } from "@/components/task-fields";
+import { TaskFields } from "@/components/task-fields";
 import { reportTodoError } from "@/lib/todo-feedback";
 import { useLocalDay } from "@/lib/local-day";
 import { useTodoData } from "@/lib/todo-data";
@@ -28,10 +26,9 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
   const navigate = useNavigate();
   const today = useLocalDay();
   const [kind, setKind] = useState(initialKind);
-  const [text, setText] = useState("");
-  const [date, setDate] = useState<string | null>(null);
+  const [draft, setDraft] = useState(() => TaskDraft.create());
+  const text = draft.text;
   const [projectId, setProjectId] = useState(contextProjectId);
-  const [ignored, setIgnored] = useState<TextRange[]>([]);
   const [pending, setPending] = useState(false);
   const [retryAddition, setRetryAddition] = useState<(() => Promise<void>) | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -39,16 +36,15 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
   const { data: projects = [] } = useLiveQuery((q) => q.from({ p: replica.projects.collection }));
   const { data: tasks = [] } = useLiveQuery((q) => q.from({ t: replica.tasks.collection }).where(({ t }) => isNull(t.completedAt)));
   const { data: conditions = [] } = useLiveQuery((q) => q.from({ w: replica.waits.collection }));
-  const parsed = useMemo(() => kind === "task" ? parseSchedule(text, { today, weekStartsOn: "MO", ignored }) : { kind: "none" as const }, [kind, text, today, ignored]);
-  const schedule = parsed.kind === "scheduled" ? parsed.schedule : null;
-  const recurrence = schedule?.kind === "recurring" ? schedule.recurrence : null;
-  const effectiveDate = schedule?.kind === "once" ? schedule.date : recurrence?.origin ?? date;
-  const effectiveText = parsed.kind === "scheduled" ? parsed.remainingText : text.trim();
+  const draftView = useMemo(() => draft.view(today), [draft, today]);
+  const recurrence = draftView.recurrence;
+  const effectiveDate = draftView.date;
+  const effectiveText = kind === "task" ? draftView.title : text.trim();
   const context = projects.find((project) => project.id === contextProjectId);
   const kinds: TodoAddKind[] = contextProjectId ? ["task", "waiting", "after", "project"] : ["task", "project"];
   const placeholder = kind === "project" ? "Name an outcome" : kind === "waiting" ? "What are you waiting for?" : "Add a task";
   const reset = () => {
-    setText(""); setDate(null); setProjectId(contextProjectId); setIgnored([]); onDraftChange?.(false);
+    setDraft(TaskDraft.create()); setProjectId(contextProjectId); onDraftChange?.(false);
   };
 
   const finish = () => {
@@ -120,19 +116,14 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
       </div>
       {(kind === "waiting" || kind === "after") && context ? <p className="text-sm text-muted-foreground">For {context.icon} {context.title}</p> : null}
       {kind === "after" ? <ProjectOptionList projects={projects} tasks={tasks} conditions={conditions} today={today} afterSourceProjectId={contextProjectId ?? undefined} emptyCopy="No available projects" onPick={(id) => { if (id) void add(id); }} /> : <>
-        <div className="flex items-center gap-2">
-          <ScheduleHighlightInput ref={input} autoFocus value={text} ranges={parsed.kind === "scheduled" ? parsed.consumed : []} placeholder={placeholder} aria-label={placeholder}
-            onChange={(event) => { setText(event.target.value); setIgnored([]); onDraftChange?.(event.target.value.trim() !== ""); }}
-            onDismissRange={(range) => setIgnored((current) => [...current, range])} />
-          <Button type="submit" disabled={pending || !effectiveText.trim()}>{pending ? "Saving…" : "Add"}</Button>
-        </div>
-        {kind === "task" ? <div className="flex flex-wrap gap-2">
-          <TaskDateField compact date={effectiveDate} label={recurrence ? toText(recurrence) : undefined} onPick={(next) => {
-            if (parsed.kind === "scheduled") { setText(effectiveText); setIgnored(effectiveText ? [{ start: 0, end: effectiveText.length, text: effectiveText }] : []); }
-            setDate(next);
-          }} />
-          <TaskProjectField compact projects={projects} tasks={tasks} conditions={conditions} projectId={projectId} onPick={setProjectId} />
-        </div> : null}
+        <TaskFields compact draft={draftView}
+          inputProps={{ ref: input, autoFocus: true, placeholder, "aria-label": placeholder }}
+          onChangeText={(next) => { setDraft((current) => current.change(next)); onDraftChange?.(next.trim() !== ""); }}
+          onDismissRange={(range) => setDraft((current) => current.dismiss(range))}
+          trailing={<Button type="submit" disabled={pending || (kind === "task" ? draftView.commit.kind !== "ready" : !effectiveText.trim())}>{pending ? "Saving…" : "Add"}</Button>}
+          dateField={kind === "task" ? { onPick: (next) => setDraft((current) => current.pickCreationDate(next, today)) } : undefined}
+          projectField={kind === "task" ? { projects, tasks, conditions, projectId, onPick: setProjectId } : undefined}
+        />
       </>}
     </fieldset>
     {retryAddition ? <div className="flex flex-col gap-2"><p role="alert" className="text-sm text-destructive">Your addition is still in memory. Save it again before continuing.</p><Button type="submit" disabled={pending}>{pending ? "Saving…" : "Try saving again"}</Button></div> : null}

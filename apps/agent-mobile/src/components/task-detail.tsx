@@ -4,7 +4,7 @@ import {
   projectStatusSections,
   messageOf,
   monthMatrix,
-  scheduleLabel,
+  TaskDraft,
   tomorrow,
   undoableAction,
   weekdayShort,
@@ -14,7 +14,7 @@ import {
   type WaitingCondition,
   type ProjectDisplayStatus,
 } from '@zero/agent-core';
-import { parseSchedule, toText, type TextRange } from '@zeroapps/recurrence';
+import { toText } from '@zeroapps/recurrence';
 import { Host, Icon } from '@expo/ui';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -489,10 +489,7 @@ export function useTaskDetail({
 }): TaskDetail {
   const api = replica.tasks;
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const savedDraft = useRef('');
-  const [recognizing, setRecognizing] = useState(false);
-  const [ignored, setIgnored] = useState<TextRange[]>([]);
+  const [draft, setDraft] = useState(() => TaskDraft.create());
   const pendingSave = useRef<Promise<unknown> | null>(null);
   const retrySave = useRef(false);
   const [scheduling, setScheduling] = useState(false);
@@ -507,19 +504,13 @@ export function useTaskDetail({
     ? (projects.find((p) => p.id === selected.projectId) ?? null)
     : null;
 
-  const parsed = useMemo(() => recognizing ? parseSchedule(draft, { today, weekStartsOn: 'MO', ignored }) : { kind: 'none' as const }, [recognizing, draft, today, ignored]);
-  const schedule = parsed.kind === 'scheduled' && parsed.remainingText.trim() ? parsed.schedule : undefined;
-  const effectiveDate = schedule?.kind === 'once' ? schedule.date : schedule?.kind === 'recurring' ? schedule.recurrence.origin : selected?.showUpDate;
-  const effectiveRecurrence = schedule?.kind === 'recurring' ? schedule.recurrence : selected?.recurrence;
+  const draftView = useMemo(() => draft.view(today, selected), [draft, today, selected]);
 
   const open = useCallback((item: Task) => {
     closingDetailRef.current = false;
-    savedDraft.current = item.text;
     pendingSave.current = null;
     retrySave.current = false;
-    setRecognizing(false);
-    setIgnored([]);
-    setDraft(item.text);
+    setDraft(TaskDraft.edit(item));
     setSelectedId(item.id);
   }, []);
 
@@ -529,26 +520,24 @@ export function useTaskDetail({
     if (!selected) return null;
     const current = api.collection.get(selected.id);
     if (!current) return null;
-    if (parsed.kind === 'scheduled' && !parsed.remainingText.trim()) {
-      onError('Enter a task title alongside the schedule.');
+    const prepared = draft.view(today, current).commit;
+    if (prepared.kind === 'invalid') {
+      onError(prepared.message);
       return null;
     }
-    const text = (parsed.kind === 'scheduled' ? parsed.remainingText : draft).trim() || current.text;
-    const edited = recognizing && (text !== savedDraft.current || schedule !== undefined);
-    if ((edited && (text !== current.text || schedule)) || retrySave.current) {
+    if (prepared.kind === 'ready' || retrySave.current) {
       onError(null);
-      pendingSave.current = edited && (text !== current.text || schedule)
-        ? api.edit(current.id, text, schedule).isPersisted.promise
+      pendingSave.current = prepared.kind === 'ready'
+        ? api.edit(current.id, prepared.text, prepared.schedule).isPersisted.promise
         : replica.saveLocal();
       retrySave.current = false;
       pendingSave.current.catch((e) => { retrySave.current = true; onError(messageOf(e)); });
     }
-    savedDraft.current = edited ? text : current.text;
-    setDraft(savedDraft.current);
-    setRecognizing(false);
-    setIgnored([]);
-    return api.collection.get(current.id) ?? null;
-  }, [api, replica, draft, selected, onError, parsed, recognizing, schedule]);
+    const applied = api.collection.get(current.id);
+    if (!applied) return null;
+    setDraft(draft.acknowledge(applied));
+    return applied;
+  }, [api, replica, draft, selected, onError, today]);
 
   const commitAndClose = useCallback(() => {
     if (closingDetailRef.current || !commitDraft()) return;
@@ -681,10 +670,10 @@ export function useTaskDetail({
         open={selected != null}
         onClose={commitAndClose}
         dismissLabel="Close task"
-        draft={draft}
-        onChangeDraft={(text) => { setDraft(text); setRecognizing(true); setIgnored([]); }}
-        highlightRanges={parsed.kind === 'scheduled' ? parsed.consumed : []}
-        onDismissHighlight={(range) => setIgnored((current) => [...current, range])}
+        draft={draftView.text}
+        onChangeDraft={(text) => setDraft((current) => current.change(text))}
+        highlightRanges={draftView.ranges}
+        onDismissHighlight={(range) => setDraft((current) => current.dismiss(range))}
         onSubmit={commitAndClose}
         autoFocus={false}
         leading={
@@ -693,22 +682,11 @@ export function useTaskDetail({
         scheduleAction={
           selected
             ? {
-                label: schedule?.kind === 'once'
-                  ? scheduleLabel(schedule.date, today)
-                  : effectiveRecurrence
-                  ? toText(effectiveRecurrence)
-                  : effectiveDate
-                    ? scheduleLabel(effectiveDate, today)
-                    : 'No date',
+                label: draftView.label,
                 accessibilityLabel: 'Set schedule',
-                active: effectiveDate != null,
+                active: draftView.date != null,
                 onPress: () => { if (commitDraft()) setScheduling(true); },
                 testID: 'task-schedule',
-                trailingAction: parsed.kind === 'scheduled' ? {
-                  icon: <Text className="text-[20px]">×</Text>,
-                  accessibilityLabel: 'Keep schedule words in task title',
-                  onPress: () => setIgnored((current) => [...current, parsed.consumed[0]]),
-                } : undefined,
               }
             : undefined
         }

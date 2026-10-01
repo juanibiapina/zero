@@ -243,6 +243,20 @@ describe('HomeScreen', () => {
     expect(screen.getByDisplayValue('keep this draft')).toBeTruthy();
   });
 
+  it('keeps independent Task and Project drafts when switching creation modes', async () => {
+    const screen = await renderScreen();
+    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'Call tomorrow');
+    await fireEvent.press(screen.getByLabelText('Add a project'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Name an outcome'), 'Read every day');
+    expect(screen.queryByTestId('schedule-highlight', { includeHiddenElements: true })).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Add a task'));
+    expect(screen.getByDisplayValue('Call tomorrow')).toBeTruthy();
+    expect(screen.getByTestId('schedule-highlight', { includeHiddenElements: true }).props.children).toBe('tomorrow');
+    await fireEvent.press(screen.getByLabelText('Add a project'));
+    expect(screen.getByDisplayValue('Read every day')).toBeTruthy();
+  });
+
   it('parses recurring quick-add text into the stored task', async () => {
     const screen = await renderScreen();
     await fireEvent.press(screen.getByLabelText('Task'));

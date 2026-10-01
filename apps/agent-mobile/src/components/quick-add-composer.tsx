@@ -3,7 +3,7 @@ import {
   DEFAULT_ICON,
   defaultToastController,
   messageOf,
-  scheduleLabel,
+  TaskDraft,
   toast,
   type AddMode,
   type Project,
@@ -13,11 +13,6 @@ import {
   type WaitingCondition,
   type TodoWaits,
 } from '@zero/agent-core';
-import {
-  parseSchedule,
-  toText,
-  type TextRange,
-} from '@zeroapps/recurrence';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Keyboard, Pressable, View } from 'react-native';
@@ -85,20 +80,15 @@ export function useQuickAdd({
   waitForPersist?: boolean;
 }): QuickAddController {
   const authenticatedFeatures = useTodoDataContext()?.signedIn ?? false;
-  const [drafts, setDrafts] = useState<Record<AddMode, string>>({
-    task: '',
+  const [taskDraft, setTaskDraft] = useState(() => TaskDraft.create());
+  const [drafts, setDrafts] = useState<Record<Exclude<AddMode, 'task'>, string>>({
     waiting: '',
     after: '',
     project: '',
   });
-  const [ignoredSchedule, setIgnoredSchedule] = useState<{
-    text: string;
-    ranges: TextRange[];
-  } | null>(null);
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const [addDate, setAddDate] = useState<string | null>(null);
   const [addProjectId, setAddProjectId] = useState<string | null>(null);
   const [schedulingAdd, setSchedulingAdd] = useState(false);
   const [pickingProject, setPickingProject] = useState(false);
@@ -108,58 +98,27 @@ export function useQuickAdd({
 
   const contextProject = scope.kind === 'project' ? scope.project : null;
   const contextProjectId = contextProject?.id ?? null;
-  const text = drafts[mode];
-  const hasDraft = Object.values(drafts).some((draft) => draft.trim() !== '');
+  const text = mode === 'task' ? taskDraft.text : drafts[mode];
+  const hasDraft = [taskDraft.text, ...Object.values(drafts)].some((draft) => draft.trim() !== '');
   const today = useLocalDay();
-  const parsedSchedule = useMemo(
-    () =>
-      mode === 'task'
-        ? parseSchedule(text, {
-            today,
-            weekStartsOn: 'MO',
-            ignored: ignoredSchedule?.text === text ? ignoredSchedule.ranges : [],
-          })
-        : { kind: 'none' as const },
-    [mode, text, today, ignoredSchedule],
-  );
-  const parsedValue =
-    parsedSchedule.kind === 'scheduled' ? parsedSchedule.schedule : null;
-  const effectiveText =
-    parsedSchedule.kind === 'scheduled'
-      ? parsedSchedule.remainingText
-      : text.trim();
-  const effectiveRecurrence =
-    parsedValue?.kind === 'recurring' ? parsedValue.recurrence : null;
-  const effectiveDate =
-    parsedValue?.kind === 'once'
-      ? parsedValue.date
-      : effectiveRecurrence?.origin ?? addDate;
+  const taskView = useMemo(() => taskDraft.view(today), [taskDraft, today]);
+  const effectiveDate = taskView.date;
+  const effectiveRecurrence = taskView.recurrence;
   const setText = useCallback(
     (next: string) => {
-      setDrafts((current) => ({ ...current, [mode]: next }));
-      if (mode === 'task' && next !== ignoredSchedule?.text) {
-        setIgnoredSchedule(null);
-      }
+      if (mode === 'task') setTaskDraft((current) => current.change(next));
+      else setDrafts((current) => ({ ...current, [mode]: next }));
     },
-    [mode, ignoredSchedule],
+    [mode],
   );
-
-  const ignoreScheduleRange = (range: TextRange) => {
-    setIgnoredSchedule((current) => ({
-      text,
-      ranges:
-        current?.text === text ? [...current.ranges, range] : [range],
-    }));
-  };
 
   const closeAdd = useCallback(() => {
     ignoreNextKeyboardHide.current = true;
     Keyboard.dismiss();
-    setDrafts({ task: '', waiting: '', after: '', project: '' });
-    setIgnoredSchedule(null);
+    setDrafts({ waiting: '', after: '', project: '' });
+    setTaskDraft(TaskDraft.create());
     setConfirmingDiscard(false);
     setAdding(false);
-    setAddDate(null);
     setAddProjectId(null);
     setSchedulingAdd(false);
     setPickingProject(false);
@@ -243,8 +202,9 @@ export function useQuickAdd({
       return;
     }
 
-    const taskText = effectiveText.trim();
-    if (!taskText) return;
+    const prepared = taskView.commit;
+    if (prepared.kind !== 'ready') return;
+    const taskText = prepared.text;
     defaultToastController.dismiss();
     const tx = tasksApi.add(
       taskText,
@@ -285,7 +245,7 @@ export function useQuickAdd({
     getToken,
     authenticatedFeatures,
     onProjectCreated,
-    effectiveText,
+    taskView,
     tasksApi,
     effectiveDate,
     addProjectId,
@@ -384,14 +344,8 @@ export function useQuickAdd({
         dismissLabel="Dismiss quick add"
         draft={text}
         onChangeDraft={setText}
-        highlightRanges={
-          mode === 'task'
-            ? parsedSchedule.kind === 'scheduled'
-              ? parsedSchedule.consumed
-              : []
-            : undefined
-        }
-        onDismissHighlight={ignoreScheduleRange}
+        highlightRanges={mode === 'task' ? taskView.ranges : undefined}
+        onDismissHighlight={(range) => setTaskDraft((current) => current.dismiss(range))}
         onSubmit={onAdd}
         placeholder={ADD_MODE_PLACEHOLDER[mode]}
         autoFocus={mode !== 'after'}
@@ -463,25 +417,9 @@ export function useQuickAdd({
         scheduleAction={
           taskActionsVisible
             ? {
-                label: effectiveRecurrence
-                  ? toText(effectiveRecurrence)
-                  : effectiveDate
-                    ? scheduleLabel(effectiveDate, today)
-                    : 'No date',
+                label: taskView.label,
                 active: effectiveDate != null,
                 onPress: () => setSchedulingAdd(true),
-                trailingAction:
-                  parsedSchedule.kind === 'scheduled'
-                    ? {
-                        icon: <Text className="text-[20px]">×</Text>,
-                        accessibilityLabel: 'Keep schedule words in task title',
-                        onPress: () => {
-                          const range = parsedSchedule.consumed[0];
-                          if (range) ignoreScheduleRange(range);
-                        },
-                        testID: 'quick-add-unrecognize-schedule',
-                      }
-                    : undefined,
               }
             : undefined
         }
@@ -515,18 +453,9 @@ export function useQuickAdd({
 
       <ScheduleSheet
         open={schedulingAdd}
-        showUpDate={addDate}
+        showUpDate={taskView.pickerDate}
         onPick={(date) => {
-          if (parsedSchedule.kind === 'scheduled') {
-            setDrafts((current) => ({ ...current, task: effectiveText }));
-            setIgnoredSchedule({
-              text: effectiveText,
-              ranges: effectiveText
-                ? [{ start: 0, end: effectiveText.length, text: effectiveText }]
-                : [],
-            });
-          }
-          setAddDate(date);
+          setTaskDraft((current) => current.pickCreationDate(date, today));
           setSchedulingAdd(false);
         }}
         onClose={() => setSchedulingAdd(false)}

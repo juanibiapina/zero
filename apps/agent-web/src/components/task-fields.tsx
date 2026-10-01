@@ -1,10 +1,41 @@
-import { useState } from "react";
-import { scheduleLabel, type Project, type Task, type WaitingCondition } from "@zero/agent-core";
+import { useState, type ComponentProps, type ReactNode } from "react";
+import { scheduleLabel, type Project, type Task, type TaskDraftView, type WaitingCondition } from "@zero/agent-core";
+import type { TextRange } from "@zeroapps/recurrence";
+import { ScheduleHighlightInput } from "@/components/ScheduleHighlightInput";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarGlyph, ScheduleMenu } from "@/components/schedule-menu";
 import { ProjectOptionList } from "@/components/ProjectOptionList";
 import { useLocalDay } from "@/lib/local-day";
+
+export function TaskFields({ draft, onChangeText, onDismissRange, inputProps, leading, trailing, dateField, projectField, compact = false, children }: {
+  draft: TaskDraftView;
+  onChangeText: (text: string) => void;
+  onDismissRange: (range: TextRange) => void;
+  inputProps: Omit<ComponentProps<typeof ScheduleHighlightInput>, "value" | "ranges" | "onChange" | "onDismissRange">;
+  leading?: ReactNode;
+  trailing?: ReactNode;
+  dateField?: Omit<ComponentProps<typeof TaskDateField>, "date" | "label" | "compact">;
+  projectField?: Omit<ComponentProps<typeof TaskProjectField>, "compact">;
+  compact?: boolean;
+  children?: ReactNode;
+}) {
+  const ranges = dateField ? draft.ranges : [];
+  return <>
+    <div className={compact ? "flex items-center gap-2" : "flex items-center gap-3"}>
+      {leading}
+      <ScheduleHighlightInput {...inputProps} value={draft.text} ranges={ranges}
+        onChange={(event) => onChangeText(event.target.value)} onDismissRange={onDismissRange} />
+      {trailing}
+    </div>
+    {dateField || projectField ? <div className="flex flex-wrap gap-2">
+      {!compact && ranges[0] ? <Button type="button" variant="ghost" onClick={() => onDismissRange(ranges[0])}>Keep schedule words in task title</Button> : null}
+      {dateField ? <TaskDateField {...dateField} compact={compact} date={draft.date} label={draft.date != null || draft.recurrence ? draft.label : undefined} /> : null}
+      {projectField ? <TaskProjectField {...projectField} compact={compact} /> : null}
+      {children}
+    </div> : null}
+  </>;
+}
 
 export function TaskDateField({ date, label, onPick, onOpen, onStopRecurrence, onCompleteForever, compact = false }: {
   date: string | null;

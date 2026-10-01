@@ -9,6 +9,7 @@ export { messageOf } from "./errors";
 // The Task data layer (the single list) shared by web + mobile.
 export type { Task } from "./taskdo/types";
 export { localToday } from "./tasks/today";
+export { TaskDraft, type TaskDraftView, type TaskDraftCommit } from "./tasks/draft";
 export { homeTasks } from "./tasks/home";
 export {
   dayLabel,

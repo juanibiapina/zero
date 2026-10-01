@@ -87,7 +87,10 @@ ticket. They are product ideas, not committed schema or implementation plans.
 
 `TaskDO` is the sole server authority for synchronized todo data. A
 platform-neutral TinyBase model in `@zero/agent-core` owns projections,
-mutations, recurrence, ordering, relationships, and recovery. Both surfaces
+mutations, recurrence, ordering, relationships, and recovery. A shared Task
+draft module owns title interpretation, schedule preview, dismissal, and commit
+normalization for creation and editing. Mobile and web supply field-rendering
+adapters and retain their workflow-specific submit and close policies. Both surfaces
 work locally before sign-in and add guest work to the first account that signs
 in. They expose the same screen-facing Task/Project/Waiting operations, and
 bound clients synchronize with TaskDO over WebSocket. Platform ownership and

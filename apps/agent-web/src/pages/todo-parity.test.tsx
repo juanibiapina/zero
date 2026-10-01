@@ -217,6 +217,32 @@ describe("web todo parity", () => {
     expect(replica.snapshot().projects).toHaveLength(1);
   });
 
+  it("keeps creation text and focus when switching entity modes", async () => {
+    open("/home");
+    const input = await screen.findByRole("textbox", { name: "Add a task" });
+    fireEvent.change(input, { target: { value: "Project every day" } });
+    const projectMode = screen.getByRole("radio", { name: "Project" });
+    projectMode.focus();
+    fireEvent.click(projectMode);
+    expect(projectMode).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Name an outcome" })).toHaveValue("Project every day");
+    expect(screen.queryByTestId("schedule-highlight")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "Task" }));
+    expect(screen.getByRole("textbox", { name: "Add a task" })).toHaveValue("Project every day");
+    expect(screen.getByTestId("schedule-highlight")).toHaveTextContent("every day");
+  });
+
+  it("creates a Task with the manually selected date after typing a repeat", async () => {
+    const replica = open("/home");
+    fireEvent.change(await screen.findByRole("textbox", { name: "Add a task" }), { target: { value: "Water plants every day" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Date:/ }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Tomorrow/ }));
+    expect(screen.getByRole("textbox", { name: "Add a task" })).toHaveValue("Water plants");
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(replica.snapshot().tasks).toHaveLength(1));
+    expect(replica.snapshot().tasks[0]).toMatchObject({ text: "Water plants", showUpDate: tomorrow(localToday()), recurrence: null });
+  });
+
   it("retains a failed addition and retries its local save without duplicating it", async () => {
     const replica = createTaskdoReplica({ store: createMergeableStore(), queryClient: new QueryClient(), queryKeyScope: ["failed-add"], save: async () => { throw new Error("Disk unavailable"); } });
     const base = createInMemoryTodoData();

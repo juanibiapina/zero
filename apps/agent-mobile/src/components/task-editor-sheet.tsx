@@ -343,7 +343,14 @@ export function TaskEditorSheet({
       {scheduleAction || projectAction ? (
         <View className="border-t border-divider">
           {scheduleAction ? (
-            <EditorActionRow {...scheduleAction} />
+            <EditorActionRow {...scheduleAction}
+              trailingAction={highlightRanges?.[0] && onDismissHighlight ? {
+                icon: <Text className="text-[20px]">×</Text>,
+                accessibilityLabel: 'Keep schedule words in task title',
+                onPress: () => onDismissHighlight(highlightRanges[0]),
+                testID: inline ? 'quick-add-unrecognize-schedule' : undefined,
+              } : scheduleAction.trailingAction}
+            />
           ) : null}
           {scheduleAction && projectAction ? (
             <View className="h-px bg-divider" />
