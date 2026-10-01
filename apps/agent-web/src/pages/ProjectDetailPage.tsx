@@ -1,3 +1,5 @@
+import { taskRecurrenceLabel } from "@zero/agent-core";
+import { TaskRecurrence } from "@/components/task-recurrence";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useLiveQuery } from "@tanstack/react-db";
@@ -792,7 +794,7 @@ function ProjectTaskRow({
         className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10"
         onClick={onComplete}
       />
-      <button type="button" className="min-w-0 flex-1 break-words text-left text-sm" aria-label={`Edit "${task.text}"`} onClick={onOpen}>{task.text}</button>
+      <button type="button" className="min-w-0 flex-1 break-words text-left text-sm" aria-label={[`Edit "${task.text}"`, taskRecurrenceLabel(task)].filter(Boolean).join(", ")} onClick={onOpen}><span>{task.text}</span><TaskRecurrence task={task} /></button>
       <TaskDateChip showUpDate={task.showUpDate} onPick={onSchedule} />
     </li>
   );

@@ -1,3 +1,4 @@
+import { taskCompletionMessage } from "@zero/agent-core";
 import { undoableAction, type Project, type Task, type TaskdoReplica } from "@zero/agent-core";
 import { useState } from "react";
 import { useNavigate } from "react-router";
@@ -15,7 +16,7 @@ export function useTaskCompletionFeedback({ replica, projects, today, onError }:
   const complete = (task: Task) => {
     const project = projects.find((candidate) => candidate.id === task.projectId);
     undoableAction({
-      message: "Completed",
+      message: () => taskCompletionMessage(replica.tasks.collection.get(task.id), today),
       description: project ? `${project.icon} ${project.title}` : undefined,
       descriptionAction: project ? { accessibilityLabel: `Open project ${project.title}`, onPress: () => void navigate(`/projects/${project.id}`) } : undefined,
       secondaryAction: project ? { label: "Waiting for…", onPress: () => { setWaitingProjectId(project.id); add.open("waiting"); } } : undefined,

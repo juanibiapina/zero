@@ -204,7 +204,7 @@ describe("HomePage", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: 'Edit "stand up"' }),
+        screen.getByRole("button", { name: 'Edit "stand up", Every day' }),
       ).toBeInTheDocument(),
     );
   });

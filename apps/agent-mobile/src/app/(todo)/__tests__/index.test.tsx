@@ -1,3 +1,4 @@
+import { localToday } from '@zero/agent-core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -256,6 +257,21 @@ describe('HomeScreen', () => {
       unit: 'day',
       interval: 1,
     });
+  });
+
+  it('shows recurrence and the next occurrence, then restores it with Undo', async () => {
+    const today = localToday();
+    const recurring = { ...task('r', 'Water plants'), showUpDate: today, recurrenceDate: today,
+      recurrence: { version: 1 as const, origin: today, anchor: 'scheduled' as const, weekStartsOn: 'MO' as const, pattern: { unit: 'day' as const, interval: 1 } } };
+    const screen = await renderScreen({ tasks: [recurring] });
+    expect(await screen.findByText('Every day')).toBeTruthy();
+    expect(screen.getByLabelText('Edit "Water plants", Every day')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Complete "Water plants"'));
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast.message).toBe('Completed · Next: Tomorrow');
+    await act(async () => toast.action!.onPress());
+    expect(await screen.findByText('Every day')).toBeTruthy();
+    expect(screen.data.replica!.tasks.collection.get('r')).toMatchObject(recurring);
   });
 
   it('completes and restores a task through Undo', async () => {

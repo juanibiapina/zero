@@ -1,3 +1,5 @@
+import { taskRecurrenceLabel } from '@zero/agent-core';
+import { TaskRecurrence } from '@/components/task-recurrence';
 import {
   messageOf,
   orderKeyBetween,
@@ -152,7 +154,7 @@ function TaskRow({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
-                presentation.accessibilityLabel ?? `Edit "${item.text}"`
+                [presentation.accessibilityLabel ?? `Edit "${item.text}"`, taskRecurrenceLabel(item)].filter(Boolean).join(', ')
               }
               android_ripple={{ color: ripple }}
               className="flex-row items-center gap-3 px-screen-x py-row-y"
@@ -171,6 +173,7 @@ function TaskRow({
                   ) : null}
                   <Text className="flex-1">{item.text}</Text>
                 </View>
+                <TaskRecurrence task={item} />
                 {presentation.caption ? (
                   <Text variant="caption">{presentation.caption}</Text>
                 ) : null}

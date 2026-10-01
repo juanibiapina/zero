@@ -39,6 +39,26 @@ async function rename(oldText: string, text: string) {
 }
 
 describe("web todo parity", () => {
+  it.each(["/home", "/upcoming", "/projects/p"])("shows recurrence and next-date feedback with Project actions on %s", async (path) => {
+    const today = localToday();
+    const origin = path === "/upcoming" ? tomorrow(today) : today;
+    const recurrence = { version: 1 as const, origin, anchor: "scheduled" as const, weekStartsOn: "MO" as const, pattern: { unit: "day" as const, interval: 1 } };
+    const before = task("t", "Water plants", { projectId: "p", showUpDate: origin, recurrenceDate: origin, recurrence });
+    const replica = open(path, { projects: [project("p", "Garden")], tasks: [before] });
+    expect(await screen.findByText("Every day")).toBeVisible();
+    expect(screen.getByRole("button", { name: 'Edit "Water plants", Every day' })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: 'Complete "Water plants"' }));
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast.message).toMatch(/^Completed · Next:/);
+    if (path !== "/upcoming") expect(toast.message).toBe("Completed · Next: Tomorrow");
+    expect(toast.description).toBe("🏠 Garden");
+    expect(toast.descriptionAction?.accessibilityLabel).toBe("Open project Garden");
+    expect(toast.secondaryAction?.label).toBe("Waiting for…");
+    await act(async () => toast.action!.onPress());
+    await waitFor(() => expect(replica.tasks.collection.get("t")).toMatchObject(before));
+    expect(await screen.findByText("Every day")).toBeVisible();
+  });
+
   it("keeps a Home title edit when a reschedule removes it from the list", async () => {
     const replica = open("/home", { tasks: [task("t", "Original")] });
     await rename("Original", "Edited before scheduling");
@@ -88,7 +108,7 @@ describe("web todo parity", () => {
     if (parsed.kind !== "scheduled" || parsed.schedule.kind !== "recurring") throw new Error("Expected repeat");
     const before = task("t", "Inspect", { projectId: "p", showUpDate: tomorrow(localToday()), recurrence: parsed.schedule.recurrence, recurrenceDate: parsed.schedule.recurrence.origin });
     const replica = open(path, { projects: [project("p", "Renovate")], tasks: [before] });
-    fireEvent.click(await screen.findByRole("button", { name: 'Edit "Inspect"' }));
+    fireEvent.click(await screen.findByRole("button", { name: 'Edit "Inspect", Every day' }));
     fireEvent.click(screen.getByRole("button", { name: "every day" }));
     fireEvent.click(screen.getByRole("button", { name: "Complete forever" }));
     await act(async () => { defaultToastController.getSnapshot().find((toast) => toast.message === "Completed forever")!.action!.onPress(); });

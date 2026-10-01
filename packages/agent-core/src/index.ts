@@ -183,3 +183,5 @@ export {
   type TimezoneSync,
   type TimezoneSyncDeps,
 } from "./timezone/sync";
+
+export { taskRecurrenceLabel, taskCompletionMessage } from "./tasks/recurrence-display";

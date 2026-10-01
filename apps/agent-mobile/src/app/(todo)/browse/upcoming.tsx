@@ -1,3 +1,5 @@
+import { taskRecurrenceLabel } from '@zero/agent-core';
+import { TaskRecurrence } from '@/components/task-recurrence';
 import { useAuth } from '@clerk/expo';
 import { router } from 'expo-router';
 import { isNull } from '@tanstack/db';
@@ -44,11 +46,14 @@ function UpcomingRow({
         <CheckCircle label={`Complete "${item.text}"`} onPress={() => onComplete(item)} />
       }
       onPress={() => onOpen(item)}
-      accessibilityLabel={`Edit "${item.text}"`}
+      accessibilityLabel={[`Edit "${item.text}"`, taskRecurrenceLabel(item)].filter(Boolean).join(', ')}
     >
-      <View className="flex-row items-center gap-3">
-        {icon != null ? <Text className="text-[16px]">{icon}</Text> : null}
-        <Text className="flex-1">{item.text}</Text>
+      <View className="gap-0.5">
+        <View className="flex-row items-center gap-3">
+          {icon != null ? <Text className="text-[16px]">{icon}</Text> : null}
+          <Text className="flex-1">{item.text}</Text>
+        </View>
+        <TaskRecurrence task={item} />
       </View>
     </ListRow>
   );

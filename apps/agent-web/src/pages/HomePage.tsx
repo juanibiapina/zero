@@ -1,3 +1,5 @@
+import { taskRecurrenceLabel } from "@zero/agent-core";
+import { TaskRecurrence } from "@/components/task-recurrence";
 import { useCallback, useState } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { isNull } from "@tanstack/db";
@@ -5,7 +7,7 @@ import { Link } from "react-router";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { homeTasks, listView, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, projectStatusContext, projectStatusSections, tomorrow, type TaskdoReplica } from "@zero/agent-core";
+import { homeTasks, listView, LOADING_TEXT_DELAY_MS, messageOf, orderKeyBetween, projectStatusContext, projectStatusSections, tomorrow, type Task, type TaskdoReplica } from "@zero/agent-core";
 import { ErrorText } from "@/components/ConnectionStatus";
 import { TodoComposer } from "@/components/todo-composer";
 import { useTaskEditor } from "@/components/task-editor";
@@ -53,7 +55,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
     {view === "loading" || (view === "empty" && hydrating) ? showLoading ? <p className="text-sm text-muted-foreground">Loading your tasks…</p> : <div className="min-h-24" /> : list.length ? <section aria-label="Tasks">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={list.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-          <ul className="flex flex-col gap-3">{list.map((task) => <Row key={task.id} id={task.id} text={task.text} icon={projects.find((project) => project.id === task.projectId)?.icon}
+          <ul className="flex flex-col gap-3">{list.map((task) => <Row key={task.id} id={task.id} text={task.text} task={task} icon={projects.find((project) => project.id === task.projectId)?.icon}
             onComplete={() => detail.complete(task)} onOpen={() => detail.open(task)} onPostpone={() => { void replica.tasks.reschedule(task.id, tomorrow(today)).isPersisted.promise.catch((cause) => setError(messageOf(cause))); }} />)}</ul>
         </SortableContext>
       </DndContext>
@@ -72,7 +74,7 @@ function Home({ replica }: { replica: TaskdoReplica }) {
   </div>;
 }
 
-function Row({ id, text, icon, onComplete, onOpen, onPostpone }: { id: string; text: string; icon?: string; onComplete: () => void; onOpen: () => void; onPostpone: () => void }) {
+function Row({ id, text, task, icon, onComplete, onOpen, onPostpone }: { id: string; text: string; task: Task; icon?: string; onComplete: () => void; onOpen: () => void; onPostpone: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1 : undefined }} className="group flex items-center gap-3 rounded-xl border bg-card px-4 py-4">
     <button type="button" aria-label={`Reorder "${text}"`} className="shrink-0 cursor-grab touch-none rounded-md px-1 text-muted-foreground active:cursor-grabbing" {...attributes} {...listeners}>
@@ -80,7 +82,7 @@ function Row({ id, text, icon, onComplete, onOpen, onPostpone }: { id: string; t
     </button>
     <button type="button" aria-label={`Complete "${text}"`} className="size-6 shrink-0 rounded-full border-2 border-muted-foreground/50 hover:border-primary" onClick={onComplete} />
     {icon ? <span aria-hidden>{icon}</span> : null}
-    <button type="button" className="min-w-0 flex-1 break-words text-left" aria-label={`Edit "${text}"`} onClick={onOpen}>{text}</button>
+    <button type="button" className="min-w-0 flex-1 break-words text-left" aria-label={[`Edit "${text}"`, taskRecurrenceLabel(task)].filter(Boolean).join(", ")} onClick={onOpen}><span>{text}</span><TaskRecurrence task={task} /></button>
     <button type="button" aria-label={`Postpone "${text}" to tomorrow`} className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground hover:text-foreground" onClick={onPostpone}>Tomorrow</button>
   </li>;
 }

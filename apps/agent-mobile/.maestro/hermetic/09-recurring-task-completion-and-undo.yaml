@@ -1,0 +1,39 @@
+# Recurrence is visible on Home and Upcoming; completion announces the next date.
+appId: dev.juanibiapina.zeroagent
+---
+- openLink: ${METRO_DEEP_LINK}
+- extendedWaitUntil:
+    visible: "Home"
+    timeout: 45000
+- tapOn: "Home"
+- tapOn: "Task"
+- assertVisible: "New item text"
+- inputText: "E2E water plants every day"
+- tapOn:
+    id: "quick-add-submit"
+- extendedWaitUntil:
+    visible: "Every day"
+    timeout: 30000
+- assertVisible: 'Edit "E2E water plants", Every day'
+- takeScreenshot: recurring-task-home
+- tapOn: 'Complete "E2E water plants"'
+- assertVisible: "Completed · Next: Tomorrow"
+# As in the Project toast flow, tap the visual action rather than Android
+# overlay bounds. Keep Undo immediate so screenshot work cannot consume its window.
+- tapOn:
+    point: "86%,75%"
+- extendedWaitUntil:
+    visible: 'Edit "E2E water plants", Every day'
+    timeout: 30000
+- takeScreenshot: recurring-task-restored-with-undo
+- tapOn: 'Complete "E2E water plants"'
+- assertVisible: "Completed · Next: Tomorrow"
+- assertVisible: "Undo"
+- takeScreenshot: recurring-task-next-occurrence
+- tapOn: "Browse"
+- tapOn: "Upcoming"
+- assertVisible: "Every day"
+- assertVisible: 'Edit "E2E water plants", Every day'
+- takeScreenshot: recurring-task-upcoming
+- tapOn: "Back to Browse"
+- tapOn: "Home"

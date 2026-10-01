@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-01: Recurring tasks show a repeat icon and schedule beneath their text; completing one shows its next occurrence in the Undo toast.
+
 User-facing changes to the web app, most recent first.
 
 - 2026-09-30: Start using Tasks and Projects without signing in. Your browser keeps the work locally; your first sign-in adds it to that account alongside its existing work.

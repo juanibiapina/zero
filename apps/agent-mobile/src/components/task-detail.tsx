@@ -1,3 +1,4 @@
+import { taskCompletionMessage } from "@zero/agent-core";
 import {
   PROJECT_DISPLAY_STATUS_LABELS,
   projectStatusSections,
@@ -554,7 +555,7 @@ export function useTaskDetail({
         ? projects.find((candidate) => candidate.id === item.projectId)
         : null;
       undoableAction({
-        message: 'Completed',
+        message: () => taskCompletionMessage(api.collection.get(item.id), today),
         description: project ? `${project.icon} ${project.title}` : undefined,
         descriptionAction: project
           ? {

@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-01: Recurring tasks show a repeat icon and schedule beneath their text; completing one shows its next occurrence in the Undo toast.
+
 User-facing changes to the mobile todo app, most recent first.
 
 - 2026-09-30: Deleting a Project returns to the previous screen without crashing or going black.

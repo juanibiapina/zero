@@ -122,7 +122,8 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   completion. A recurring task instead advances the same row:
   scheduled recurrence can remain overdue for catch-up, while `every!` advances
   from the completion day. The row leaves only when the next date is future or
-  the series is exhausted. The same single Undo restores the prior occurrence.
+  the series is exhausted. The completion toast shows the next occurrence’s date when the series continues.
+  The same single Undo restores the prior occurrence.
 - **Home = open ∧ available**, where availability splits loose vs project on the
   date (the date is the sole commitment gate):
   - a **loose** task (projectId null) is available when shown-up: `showUpDate ==
@@ -163,6 +164,9 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   writes the moved task's one global `sortKey`.
 ## Interactions (per system)
 
+- **Recurring task rows** show a small repeat icon and recurrence text beneath
+  the task text on Home, Upcoming, and Project Tasks, on mobile and web.
+  Completion-based schedules say “after completion.”
 - **UI** — mobile Home and Projects tabs, with Upcoming under Browse
   (`apps/agent-mobile`), and web `/home` (Home) + `/upcoming`
   (`apps/agent-web`). Home and project screens are reorderable on both surfaces:

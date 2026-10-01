@@ -100,7 +100,7 @@ function ToastRow({ toast }: { toast: Rendered }) {
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
+        <p className="break-words text-sm font-medium text-foreground">
           {toast.message}
         </p>
         {toast.description ? (

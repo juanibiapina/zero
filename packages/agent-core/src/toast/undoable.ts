@@ -18,7 +18,7 @@ import {
 // () => api.complete(id) and () => api.reopen(id)); a page surfaces a write error
 // via tx.isPersisted.promise.
 export function undoableAction(opts: {
-  message: string;
+  message: string | (() => string);
   act: () => Transaction;
   undo: () => Transaction;
   onError: (message: string) => void;
@@ -30,7 +30,7 @@ export function undoableAction(opts: {
   link?: ToastAction;
 }): void {
   opts.act().isPersisted.promise.catch((e) => opts.onError(messageOf(e)));
-  toast(opts.message, {
+  toast(typeof opts.message === "function" ? opts.message() : opts.message, {
     id: "undo",
     description: opts.description,
     descriptionAction: opts.descriptionAction,

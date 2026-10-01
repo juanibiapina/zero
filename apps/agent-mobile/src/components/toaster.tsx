@@ -194,7 +194,7 @@ function ToastRow({ toast }: { toast: Toast }) {
       defaultToastController.deferDismiss(toast, Math.max(0, base - (Date.now() - started)));
     };
   }, [toast]);
-  const compact = width >= 360 && fontScale <= 1.3;
+  const compact = width >= 360 && fontScale <= 1.3 && !toast.message.includes(' · Next:');
   // Animated.View is not Uniwind-mapped, so resolve its static classes to styles.
   const cardStyle = useResolveClassNames(
     'w-full max-w-[440px] min-h-14 flex-row flex-wrap items-center rounded-xl bg-surface-muted px-3 py-1',
@@ -205,12 +205,12 @@ function ToastRow({ toast }: { toast: Toast }) {
   };
   const content = (
     <>
-      <Text className={toast.description ? 'shrink-0 font-medium' : 'min-w-0 flex-1 font-medium'}>
+      <Text className={compact ? (toast.description ? 'shrink-0 font-medium' : 'min-w-0 flex-1 font-medium') : 'w-full font-medium'}>
         {toast.message}
       </Text>
       {toast.description ? (
         <Text
-          className={`min-w-0 flex-1 ${toast.descriptionAction ? 'text-toast-action' : 'text-foreground-secondary'}`}
+          className={`${compact ? 'min-w-0 flex-1' : 'w-full'} ${toast.descriptionAction ? 'text-toast-action' : 'text-foreground-secondary'}`}
           numberOfLines={compact ? 1 : undefined}
         >
           {` · ${toast.description}`}
@@ -230,13 +230,13 @@ function ToastRow({ toast }: { toast: Toast }) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={toast.descriptionAction.accessibilityLabel}
-            className={`${compact ? 'flex-1' : 'w-full'} min-h-12 min-w-0 flex-row items-center`}
+            className={`${compact ? 'flex-1' : 'w-full'} min-h-12 min-w-0 ${compact ? 'flex-row items-center' : 'flex-col items-start justify-center py-1'}`}
             onPress={() => dismissAfter(toast.descriptionAction)}
           >
             {content}
           </Pressable>
         ) : (
-          <View className={`${compact ? 'flex-1' : 'w-full'} min-h-12 min-w-0 flex-row items-center`}>
+          <View className={`${compact ? 'flex-1' : 'w-full'} min-h-12 min-w-0 ${compact ? 'flex-row items-center' : 'flex-col items-start justify-center py-1'}`}>
             {content}
           </View>
         )}
