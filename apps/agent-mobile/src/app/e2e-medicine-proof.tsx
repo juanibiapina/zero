@@ -90,11 +90,14 @@ export default function MedicineProof() {
   return <View className="flex-1 justify-center gap-4 bg-background px-screen-x">
     <Text>{status}</Text>
     <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule()} className="min-h-12"><Text>Schedule native proof</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule(235_000)} className="min-h-12"><Text>Schedule visible reminder proof</Text></Pressable>
     <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule(185_000)} className="min-h-12"><Text>Schedule reboot proof</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void take()} className="min-h-12"><Text>Take native proof</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void importReceipts()} className="min-h-12"><Text>Import medicine receipts</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void replayUndo()} className="min-h-12"><Text>Check undone receipt replay</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void quiescence()} className="min-h-12"><Text>Check quiescence race</Text></Pressable>
+    <Pressable accessibilityRole="button" onPress={() => NativeReminders?.openNotificationSettings()} className="min-h-12"><Text>Open medicine notification settings</Text></Pressable>
+    <Pressable accessibilityRole="button" onPress={() => NativeReminders?.openReminderSettings()} className="min-h-12"><Text>Open medicine reminder category</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void clear()} className="min-h-12"><Text>Clear native proof</Text></Pressable>
   </View>;
 }

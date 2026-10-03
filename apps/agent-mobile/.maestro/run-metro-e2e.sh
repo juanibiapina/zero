@@ -71,7 +71,7 @@ adb_device() {
 
 production_checksums() {
   local command
-  command='cd files/SQLite 2>/dev/null || exit 0; for f in taskdo-*.sqlite*; do [ -f "$f" ] || continue; case "$f" in taskdo-workspace-hermetic-e2e-guest.sqlite*|taskdo-fixture-e2e-account-a.sqlite*|taskdo-fixture-e2e-account-b.sqlite*|taskdo-fixture-taskdo-proof-mobile.sqlite*) continue;; esac; sha256sum "$f"; done'
+  command='cd files/SQLite 2>/dev/null || exit 0; for f in taskdo-*.sqlite*; do [ -f "$f" ] || continue; case "$f" in taskdo-workspace-hermetic-e2e-guest.sqlite*|taskdo-fixture-e2e-account-a.sqlite*|taskdo-fixture-e2e-account-b.sqlite*|taskdo-fixture-taskdo-proof-mobile.sqlite*|taskdo-workspace-medicine-proof.sqlite*) continue;; esac; sha256sum "$f"; done'
   adb_device shell "run-as $PACKAGE sh -c '$command'" 2>/dev/null | tr -d '\r' | sort
 }
 
@@ -94,7 +94,7 @@ source "$MOBILE_DIR/.maestro/launcher-icon-proof.sh"
 
 delete_e2e_stores() {
   local command
-  command='rm -f files/SQLite/taskdo-workspace-hermetic-e2e-guest.sqlite* files/SQLite/taskdo-fixture-e2e-account-a.sqlite* files/SQLite/taskdo-fixture-e2e-account-b.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite*'
+  command='rm -f files/SQLite/taskdo-workspace-hermetic-e2e-guest.sqlite* files/SQLite/taskdo-fixture-e2e-account-a.sqlite* files/SQLite/taskdo-fixture-e2e-account-b.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite* files/SQLite/taskdo-workspace-medicine-proof.sqlite*'
   adb_device shell "run-as $PACKAGE sh -c '$command'" >/dev/null 2>&1 || true
 }
 

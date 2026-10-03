@@ -21,13 +21,14 @@ jest.mock('../../../modules/medicine-reminders', () => ({
     replace: async () => {}, acknowledge: async () => {}, quiesce: async () => {}, clear: async () => {},
     requestNotifications: () => { mockCapabilities = { ...mockCapabilities, notifications: true }; },
     openExactAlarmSettings: () => {}, openNotificationSettings: () => {}, openSoundSettings: () => {},
+    openReminderSettings: jest.fn(),
   },
 }));
 let replica: TaskdoReplica | null = null;
 const foreground = new Set<(state: AppStateStatus) => void>();
 beforeEach(async () => {
   await AsyncStorage.clear();
-  mockCapabilities = { supported: true, notifications: true, exactAlarms: true, quietChannel: true, alarmChannel: true, alarmVolume: 5 };
+  mockCapabilities = { supported: true, notifications: true, exactAlarms: true, quietChannel: true, quietChannelImportance: 4, alarmChannel: true, alarmVolume: 5 };
   foreground.clear();
   jest.spyOn(AppState, 'addEventListener').mockImplementation((event, listener) => {
     if (event === 'change') foreground.add(listener);
@@ -59,6 +60,19 @@ describe('Medicine reminder warnings', () => {
     await fireEvent.press(screen.getByLabelText('Allow notifications'));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(screen.queryByLabelText('Allow notifications')).toBeNull();
+  });
+  it('opens the reminder category settings when visibility is low and recovers on return', async () => {
+    Object.assign(mockCapabilities, { quietChannelImportance: 2 });
+    const screen = await openMedicine();
+    const warning = 'Medicine reminders are set to Silent.';
+    await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText(warning));
+    await fireEvent.press(screen.getByLabelText('Show medicine reminders prominently'));
+    const native = require('../../../modules/medicine-reminders').default;
+    expect(native.openReminderSettings).toHaveBeenCalled();
+    Object.assign(mockCapabilities, { quietChannelImportance: 4 });
+    await act(async () => { for (const listener of foreground) listener('active'); });
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
   it('warns when phone reminders are off and hides after enabling them', async () => {
     const screen = await openMedicine(false);

@@ -3,6 +3,7 @@ import { requireOptionalNativeModule } from 'expo';
 export type ReminderCapabilities = {
   supported: boolean; notifications: boolean; exactAlarms: boolean;
   quietChannel: boolean; alarmChannel: boolean; alarmVolume: number;
+  quietChannelImportance: number;
 };
 type MedicineReminders = {
   capabilities(): Promise<ReminderCapabilities>;
@@ -16,6 +17,7 @@ type MedicineReminders = {
   requestNotifications(): void;
   openExactAlarmSettings(): void;
   openNotificationSettings(): void;
+  openReminderSettings(): void;
   openSoundSettings(): void;
 };
 export default typeof requireOptionalNativeModule === 'function' ? requireOptionalNativeModule<MedicineReminders>('MedicineReminders') : null;

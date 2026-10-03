@@ -104,7 +104,8 @@ function ReminderSettings() {
     try { await operation(); if (NativeReminders) setCapabilities(await NativeReminders.capabilities()); }
     catch (cause) { setError(errorText(cause)); }
   };
-  const active = state?.enabled && capabilities?.notifications && capabilities.exactAlarms && capabilities.quietChannel && capabilities.alarmChannel && capabilities.alarmVolume > 0 && !state.error && !error;
+  const prominent = capabilities != null && capabilities.quietChannelImportance >= 3;
+  const active = state?.enabled && capabilities?.notifications && capabilities.exactAlarms && capabilities.quietChannel && capabilities.alarmChannel && prominent && capabilities.alarmVolume > 0 && !state.error && !error;
   if (active) return null;
   if (NativeReminders && controller && !capabilities && !state?.error && !error) return null;
   const label = !NativeReminders || !controller ? 'Medicine reminders are unavailable in this app.'
@@ -112,6 +113,7 @@ function ReminderSettings() {
     : !state?.enabled ? 'Medicine reminders are off on this phone.'
     : !capabilities?.notifications ? 'Notifications are off. Medicine reminders won’t appear.'
     : !capabilities.quietChannel || !capabilities.alarmChannel ? 'Medicine notifications are blocked.'
+    : !prominent ? 'Medicine reminders are set to Silent.'
     : !capabilities.exactAlarms ? 'Medicine alarms are blocked.'
     : 'Alarm volume is off.';
   return <View className="border-b border-divider">
@@ -120,6 +122,7 @@ function ReminderSettings() {
       {!NativeReminders || !controller ? <Text variant="subtitle">Install an Android build with medicine reminders to enable alarms.</Text> : <>
         {!capabilities?.notifications ? <Action label="Allow notifications" onPress={() => void perform(() => NativeReminders?.requestNotifications())} /> : null}
         {capabilities?.notifications && (!capabilities.quietChannel || !capabilities.alarmChannel) ? <Action label="Enable medicine notification channels" onPress={() => void perform(() => NativeReminders?.openNotificationSettings())} /> : null}
+        {capabilities?.quietChannel && !prominent ? <Action label="Show medicine reminders prominently" onPress={() => void perform(() => NativeReminders?.openReminderSettings())} /> : null}
         {capabilities?.alarmVolume === 0 ? <><Text variant="subtitle">Alarm volume is off.</Text><Action label="Set alarm volume" onPress={() => void perform(() => NativeReminders?.openSoundSettings())} /></> : null}
         {!capabilities?.exactAlarms ? <Action label="Allow exact alarms" onPress={() => void perform(() => NativeReminders?.openExactAlarmSettings())} /> : null}
         {!state?.enabled ? <Action label="Enable reminders on this phone" disabled={state?.pending} onPress={() => void perform(() => enableMedicineReminders(replica!, controller.workspace))} /> : null}

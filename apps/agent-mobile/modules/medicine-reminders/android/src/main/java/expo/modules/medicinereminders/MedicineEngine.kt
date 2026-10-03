@@ -14,8 +14,9 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 internal object MedicineEngine {
-  const val QUIET = "medicine-reminders-v1"
+  const val QUIET = "medicine-reminders"
   const val RING = "medicine-alarms-v1"
+  private const val GROUP = "medicines"
   private const val PREFS = "medicine-reminders-v1"
   private val lock = Any()
   private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -27,6 +28,7 @@ internal object MedicineEngine {
   private fun key(medicine: String, slot: String, day: String) = JSONArray(listOf(medicine, slot, day)).toString()
   private fun alarmManager(c: Context) = c.getSystemService(AlarmManager::class.java)
   private fun notificationManager(c: Context) = c.getSystemService(NotificationManager::class.java)
+  private fun groupEnabled(c: Context) = Build.VERSION.SDK_INT < 28 || notificationManager(c).getNotificationChannelGroup(GROUP)?.isBlocked != true
 
   fun silenceProof(c: Context) {
     check(c.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) { "Proof requires a debug build" }
@@ -41,12 +43,19 @@ internal object MedicineEngine {
     return mapOf("supported" to true, "notifications" to manager.areNotificationsEnabled(),
       "exactAlarms" to (Build.VERSION.SDK_INT < 31 || alarmManager(c).canScheduleExactAlarms()),
       "alarmVolume" to c.getSystemService(android.media.AudioManager::class.java).getStreamVolume(android.media.AudioManager.STREAM_ALARM),
-      "quietChannel" to (manager.getNotificationChannel(QUIET)?.importance != NotificationManager.IMPORTANCE_NONE),
-      "alarmChannel" to (manager.getNotificationChannel(RING)?.importance != NotificationManager.IMPORTANCE_NONE))
+      "quietChannelImportance" to (manager.getNotificationChannel(QUIET)?.importance ?: NotificationManager.IMPORTANCE_NONE),
+      "quietChannel" to (groupEnabled(c) && manager.getNotificationChannel(QUIET)?.importance != NotificationManager.IMPORTANCE_NONE),
+      "alarmChannel" to (groupEnabled(c) && manager.getNotificationChannel(RING)?.importance != NotificationManager.IMPORTANCE_NONE))
   }
   fun channels(c: Context) {
-    notificationManager(c).createNotificationChannel(NotificationChannel(QUIET, "Medicine reminders", NotificationManager.IMPORTANCE_LOW).apply { setSound(null, null) })
-    notificationManager(c).createNotificationChannel(NotificationChannel(RING, "Medicine alarms", NotificationManager.IMPORTANCE_HIGH).apply { setSound(null, null) })
+    val manager = notificationManager(c)
+    if (manager.getNotificationChannelGroup(GROUP) == null) manager.createNotificationChannelGroup(NotificationChannelGroup(GROUP, "Medicines"))
+    manager.createNotificationChannel(NotificationChannel(QUIET, "Medicine reminders", NotificationManager.IMPORTANCE_HIGH).apply {
+      group = GROUP
+      setSound(null, null)
+      enableVibration(false)
+    })
+    manager.createNotificationChannel(NotificationChannel(RING, "Medicine alarms", NotificationManager.IMPORTANCE_HIGH).apply { group = GROUP; setSound(null, null) })
   }
   fun receipts(c: Context, workspace: String): String = synchronized(lock) {
     val state = load(c)
@@ -61,6 +70,7 @@ internal object MedicineEngine {
     state.put("receipts", remaining); save(c, state)
   }
   fun replace(c: Context, workspace: String, payload: String) = synchronized(lock) {
+    channels(c)
     val state = load(c)
     check(state.optString("workspace", workspace) == workspace || array(state, "medicines").length() == 0) { "Another workspace owns reminders" }
     cancelIntents(c, state)
@@ -146,7 +156,7 @@ internal object MedicineEngine {
   }
   fun canRing(c: Context, dose: JSONObject): Boolean = synchronized(lock) {
     val state = load(c)
-    notificationManager(c).areNotificationsEnabled() && notificationManager(c).getNotificationChannel(RING)?.importance != NotificationManager.IMPORTANCE_NONE && !state.optBoolean("quiesced") && eligible(state, dose) && currentAlarm(state, dose) && dose.getString("on") == LocalDate.now().toString() && !obj(state, "suppressed").optBoolean(dose.getString("id"))
+    notificationManager(c).areNotificationsEnabled() && groupEnabled(c) && notificationManager(c).getNotificationChannel(RING)?.importance != NotificationManager.IMPORTANCE_NONE && !state.optBoolean("quiesced") && eligible(state, dose) && currentAlarm(state, dose) && dose.getString("on") == LocalDate.now().toString() && !obj(state, "suppressed").optBoolean(dose.getString("id"))
   }
   fun restore(c: Context, notificationsLost: Boolean = false) = synchronized(lock) {
     val state = load(c)
@@ -223,7 +233,7 @@ internal object MedicineEngine {
     cancelIntents(c, state); schedule(c, state)
   }
   private fun show(c: Context, state: JSONObject, dose: JSONObject, ringing: Boolean) {
-    if (!notificationManager(c).areNotificationsEnabled()) return
+    if (!notificationManager(c).areNotificationsEnabled() || !groupEnabled(c)) return
     channels(c)
     if (notificationManager(c).getNotificationChannel(if (ringing) RING else QUIET)?.importance == NotificationManager.IMPORTANCE_NONE) return
     val id = dose.getString("id")
@@ -244,7 +254,7 @@ internal object MedicineEngine {
     val takenPending = PendingIntent.getBroadcast(c, 0, taken, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     return Notification.Builder(c, if (ringing) RING else QUIET).setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(dose.getString("name"))
       .setContentText(if (ringing) "${dose.getString("alarmLabel")} dose not recorded" else listOf(dose.optString("instructions", ""), "Alarm at ${dose.getString("alarmLabel")}").filter { it.isNotBlank() }.joinToString(" · "))
-      .setContentIntent(openPending).setCategory(if (ringing) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER).setOnlyAlertOnce(true)
+      .setContentIntent(openPending).setCategory(if (ringing) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER).setOngoing(!ringing).setOnlyAlertOnce(true)
       .addAction(Notification.Action.Builder(null, "Taken", takenPending).build()).build()
   }
 }
