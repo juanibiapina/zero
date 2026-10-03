@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { safeRandomUUID } from "@tanstack/db";
-import { medicineEndDate, medicineOccurrences, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose } from "@zero/agent-core";
+import { MedicineDraft, medicineEndDate, medicineOccurrences, medicineState, medicineToday, type Medicine, type MedicineInput, type TaskdoReplica, type Dose } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
@@ -12,9 +11,7 @@ const time = (instant: string) => new Date(instant).toLocaleTimeString([], { hou
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
 
 function MedicineForm({ replica, source, copy = false, onSaved }: { replica: TaskdoReplica; source?: Medicine; copy?: boolean; onSaved: (id: string) => void }) {
-  const [draft, setDraft] = useState<MedicineInput>(() => source ? { ...source, startsOn: copy ? medicineToday() : source.startsOn, endsOn: copy ? null : source.endsOn, paused: copy ? false : source.paused, doses: source.doses.map((dose) => ({ ...dose, id: copy ? safeRandomUUID() : dose.id })) } : {
-    name: "", instructions: "", startsOn: medicineToday(), endsOn: null, paused: false, doses: [{ id: safeRandomUUID(), remindAt: "20:00", alarmAt: "22:00" }],
-  });
+  const [draft, setDraft] = useState<MedicineInput>(() => MedicineDraft.create(medicineToday(), source, copy).input);
   const [endMode, setEndMode] = useState<"ongoing" | "last-day" | "days">(source?.endsOn && !copy ? "last-day" : "ongoing");
   const [days, setDays] = useState("10"); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const end = (() => { try { return endMode === "ongoing" ? null : endMode === "days" ? medicineEndDate(draft.startsOn, Number(days)) : draft.endsOn ?? draft.startsOn; } catch { return null; } })();
@@ -36,7 +33,7 @@ function MedicineForm({ replica, source, copy = false, onSaved }: { replica: Tas
           <div className="flex gap-3"><label className="flex flex-1 flex-col gap-1">Alarm<Input type="time" aria-label={`Alarm ${index + 1}`} value={dose.alarmAt} onChange={(event) => setDraft({ ...draft, doses: draft.doses.map((item) => item.id === dose.id ? { ...item, alarmAt: event.target.value } : item) })} required /></label>
             <label className="flex flex-1 flex-col gap-1">Remind from<Input type="time" aria-label={`Remind from ${index + 1}`} value={dose.remindAt} onChange={(event) => setDraft({ ...draft, doses: draft.doses.map((item) => item.id === dose.id ? { ...item, remindAt: event.target.value } : item) })} required /></label></div>
         </div>)}
-        <Button type="button" variant="outline" onClick={() => setDraft({ ...draft, doses: [...draft.doses, { id: safeRandomUUID(), remindAt: "", alarmAt: "" }] })}>Add dose time</Button>
+        <Button type="button" variant="outline" disabled={draft.doses.length >= 24} onClick={() => setDraft(MedicineDraft.create(medicineToday(), draft).addTime().input)}>Add dose time</Button>
       </fieldset>
       <label className="flex flex-col gap-2">Starts<Input type="date" value={draft.startsOn} onChange={(event) => setDraft({ ...draft, startsOn: event.target.value })} required /></label>
       <fieldset className="flex flex-col gap-2"><legend>Ends</legend><div className="flex flex-wrap gap-3">{(["ongoing", "last-day", "days"] as const).map((mode) => <label key={mode} className="flex min-h-10 items-center gap-2"><input type="radio" name="end-mode" checked={endMode === mode} onChange={() => setEndMode(mode)} />{mode === "ongoing" ? "Ongoing" : mode === "days" ? "Number of days" : "Last day"}</label>)}</div></fieldset>

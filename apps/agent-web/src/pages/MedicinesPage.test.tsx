@@ -9,6 +9,32 @@ import { MedicinesPage } from "./MedicinesPage";
 let replica: TaskdoReplica;
 afterEach(async () => { cleanup(); await replica.close(); });
 
+it("starts a once-daily medicine with a one-hour reminder", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter><MedicinesPage /></MemoryRouter>
+  </TodoDataContextProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Add medicine" }));
+  expect(screen.getByLabelText("Alarm 1")).toHaveValue("20:00");
+  expect(screen.getByLabelText("Remind from 1")).toHaveValue("19:00");
+});
+
+it("adds a third dose with a thirty-minute reminder and preserves edited reminder times", async () => {
+  const todo = createInMemoryTodoData();
+  replica = todo.replica;
+  render(<TodoDataContextProvider value={{ ...todo.data, authenticatedFeatures: false }}>
+    <MemoryRouter><MedicinesPage /></MemoryRouter>
+  </TodoDataContextProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "Add medicine" }));
+  fireEvent.change(screen.getByLabelText("Remind from 1"), { target: { value: "18:00" } });
+  fireEvent.click(screen.getByRole("button", { name: "Add dose time" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add dose time" }));
+  expect(screen.getByLabelText("Remind from 1")).toHaveValue("18:00");
+  expect(screen.getByLabelText("Alarm 3")).toHaveValue("14:00");
+  expect(screen.getByLabelText("Remind from 3")).toHaveValue("13:30");
+});
+
 it("creates a finite multi-dose course and records, undoes, and retains independent history", async () => {
   const todo = createInMemoryTodoData();
   replica = todo.replica;
@@ -20,6 +46,7 @@ it("creates a finite multi-dose course and records, undoes, and retains independ
   </TodoDataContextProvider>);
   fireEvent.click(screen.getByRole("button", { name: "Add medicine" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Medicine name" }), { target: { value: "Daily pill" } });
+  fireEvent.change(screen.getByLabelText("Alarm 1"), { target: { value: "22:00" } });
   fireEvent.click(screen.getByRole("radio", { name: "Number of days" }));
   fireEvent.click(screen.getByRole("button", { name: "Add dose time" }));
   fireEvent.change(screen.getByLabelText("Alarm 2"), { target: { value: "23:00" } });

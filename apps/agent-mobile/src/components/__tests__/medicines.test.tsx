@@ -43,6 +43,7 @@ describe('Medicine creation and management', () => {
     await fireEvent.press(screen.getByLabelText('Add medicine'));
     await waitFor(() => expect(screen.data.replica!.snapshot().medicines).toHaveLength(1));
     expect(screen.data.replica!.snapshot().medicines[0].doses.map((dose) => dose.alarmAt)).toEqual(['08:00', '14:00', '20:00']);
+    expect(screen.data.replica!.snapshot().medicines[0].doses.map((dose) => dose.remindAt)).toEqual(['07:30', '13:30', '19:30']);
     expect(screen.data.replica!.snapshot().tasks).toHaveLength(0);
     expect(screen.queryByLabelText('Medicine name')).toBeNull();
     expect(screen.getByText('Vitamin D')).toBeTruthy();
@@ -119,7 +120,7 @@ describe('Medicine creation and management', () => {
     expect(screen.queryByText('Discard changes?')).toBeNull();
     await fireEvent(screen.getByTestId('native-date-time-picker'), 'change', { type: 'set' }, new Date('2000-01-01T21:00:00'));
     expect(screen.getByLabelText('Change dose 1 time, 21:00')).toBeTruthy();
-    expect(screen.getByLabelText('Change reminder 1, 20:45')).toBeTruthy();
+    expect(screen.getByLabelText('Change reminder 1, 20:00')).toBeTruthy();
     await fireEvent(screen.getByLabelText('Medicine name'), 'requestClose');
     expect(screen.queryByLabelText('Change dose 1 time, 21:00')).toBeNull();
     expect(screen.queryByText('Discard changes?')).toBeNull();

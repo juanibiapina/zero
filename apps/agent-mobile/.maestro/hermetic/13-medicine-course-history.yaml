@@ -24,7 +24,7 @@ appId: dev.juanibiapina.zeroagent
 - tapOn: Add medicine
 - tapOn: Open E2E daily medicine
 - assertVisible: Today
-- assertVisible: Quiet reminder 19:45
+- assertVisible: Quiet reminder 19:00
 - tapOn: Taken 20:00 dose
 - assertVisible: Undo 20:00 dose
 - assertVisible: ".*Taken at.*"

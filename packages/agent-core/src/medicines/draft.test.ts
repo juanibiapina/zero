@@ -12,14 +12,29 @@ const custom: MedicineInput = {
 };
 
 describe("Medicine drafts", () => {
+  it("starts a once-daily routine with a reminder one hour before the alarm", () => {
+    const input = MedicineDraft.create(today).change({ name: "Daily medicine" }).commit();
+    expect(input.doses.map(({ alarmAt, remindAt }) => ({ alarmAt, remindAt }))).toEqual([{ alarmAt: "20:00", remindAt: "19:00" }]);
+  });
   it.each([
-    [1, ["20:00"]], [2, ["08:00", "20:00"]], [3, ["08:00", "14:00", "20:00"]], [4, ["08:00", "12:00", "16:00", "20:00"]],
-  ] as const)("suggests %i daily times with a fifteen-minute quiet reminder", (count, times) => {
+    [1, ["20:00"], ["19:00"]],
+    [2, ["08:00", "20:00"], ["07:45", "19:45"]],
+    [3, ["08:00", "14:00", "20:00"], ["07:30", "13:30", "19:30"]],
+    [4, ["08:00", "12:00", "16:00", "20:00"], ["07:45", "11:45", "15:45", "19:45"]],
+  ] as const)("suggests %i daily times with their default reminders", (count, times, reminders) => {
     const input = MedicineDraft.create(today).change({ name: "Daily medicine" }).frequency(count).commit();
     expect(input.doses.map((dose) => dose.alarmAt)).toEqual(times);
-    expect(input.doses.map((dose) => dose.remindAt)).toEqual(times.map((time) => `${time.slice(0, 2) === "20" ? "19" : String(Number(time.slice(0, 2)) - 1).padStart(2, "0")}:45`));
+    expect(input.doses.map((dose) => dose.remindAt)).toEqual(reminders);
     expect(input.startsOn).toBe(today);
     expect(input.endsOn).toBeNull();
+  });
+  it.each([1, 3])("recognizes the %i-dose preset with its longer reminder lead as suggested", (count) => {
+    expect(MedicineDraft.create(today).frequency(count).suggested).toBe(true);
+  });
+  it("adds a third custom dose with a thirty-minute reminder while preserving existing slots", () => {
+    const input = MedicineDraft.create(today, custom).addTime().commit();
+    expect(input.doses.slice(0, 2)).toEqual(custom.doses);
+    expect(input.doses[2]).toMatchObject({ alarmAt: "08:00", remindAt: "07:30" });
   });
   it("keeps custom slots, leads, dates, and pause when only the name changes", () => {
     const draft = MedicineDraft.create(today, custom).change({ name: "Renamed" });
