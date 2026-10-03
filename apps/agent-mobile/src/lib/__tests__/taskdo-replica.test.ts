@@ -53,6 +53,47 @@ function sqlitePersistence(
 }
 
 describe('mobile TaskDO SQLite persistence', () => {
+  it.each(['disk notification', 'explicit refresh'] as const)(
+    'preserves acknowledged mutations during an overlapping %s', async (trigger) => {
+    const store = createMergeableStore();
+    let content = store.getMergeableContent();
+    let notify: (() => Promise<unknown>) | undefined;
+    let blockReads = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const persistence = createTaskdoPersistence({
+      store,
+      close: async () => {},
+      onIgnoredError: (error) => { throw error; },
+      createPersister: (handleIgnoredError) => createCustomPersister<undefined, Persists.StoreOrMergeableStore>(
+        store,
+        async () => {
+          const captured = content;
+          if (blockReads) await gate;
+          return captured;
+        },
+        async (getContent) => { content = JSON.parse(JSON.stringify(getContent())) as MergeableContent; },
+        async (listener) => { notify = listener as typeof notify; return undefined; },
+        async () => { notify = undefined; },
+        handleIgnoredError,
+        Persists.StoreOrMergeableStore,
+      ) as unknown as TaskdoPersister,
+    });
+    await persistence.load();
+    await persistence.startAutoPersisting();
+    blockReads = true;
+    const staleRead = trigger === 'explicit refresh' ? persistence.load() : notify?.();
+    await Promise.resolve();
+    store.setRow('tasks', 'new', { text: 'Saved offline task', createdAt: NOW });
+    await persistence.save();
+    release();
+    await staleRead;
+    await persistence.destroy();
+    await persistence.close();
+    const restored = createMergeableStore().setMergeableContent(content);
+    expect(restored.getRow('tasks', 'new')).toEqual({ text: 'Saved offline task', createdAt: NOW });
+  });
+
   it('initializes genuinely empty storage with durable empty mergeable content', async () => {
     const ignoredErrors: unknown[] = [];
     const { persistence, store, getPersistedContent } = sqlitePersistence(
@@ -92,6 +133,40 @@ describe('mobile TaskDO SQLite persistence', () => {
 });
 
 describe('mobile TaskDO replica opener', () => {
+  it('rejects a Task save when the real persister reports an ignored disk error', async () => {
+    let failWrite = false;
+    const durability: [boolean, string | null][] = [];
+    const open = createTaskdoReplicaOpener({
+      openPersistence: async (_name, onIgnoredError) => {
+        const store = createMergeableStore();
+        let content = store.getMergeableContent();
+        return createTaskdoPersistence({
+          store, close: async () => {}, onIgnoredError,
+          createPersister: (handleIgnoredError) => createCustomPersister<undefined, Persists.StoreOrMergeableStore>(
+            store, async () => content,
+            async (getContent) => { if (failWrite) throw new Error('disk full'); content = getContent() as MergeableContent; },
+            async () => undefined, async () => {}, handleIgnoredError, Persists.StoreOrMergeableStore,
+          ) as unknown as TaskdoPersister,
+        });
+      },
+      openSocket: jest.fn<() => Promise<WebSocket>>(),
+      subscribeToForeground: () => () => {},
+    });
+    const replica = await open({
+      descriptor: { version: 1, databaseName: 'taskdo-workspace-guest.sqlite', binding: { kind: 'unbound' } },
+      getToken: async () => null, queryClient: new QueryClient(),
+      onSnapshot: () => {}, onConnection: () => {},
+      onDurability: (durable, error) => durability.push([durable, error]),
+    });
+    failWrite = true;
+    try {
+      await expect(replica.tasks.add('Not durable').isPersisted.promise).rejects.toThrow('Offline persistence failed');
+      expect(durability.at(-1)).toEqual([false, 'Offline durability is unavailable: disk full']);
+    } finally {
+      await replica.close();
+    }
+  });
+
   it('rejects a mismatched bound database before opening SQLite', async () => {
     const openPersistence = jest.fn(async () => persistence());
     const open = createTaskdoReplicaOpener({

@@ -29,7 +29,7 @@ export type MobileTaskdoPersistence = {
 type TaskdoPersister = {
   load(initialContent?: MergeableContent): Promise<unknown>;
   save(): Promise<unknown>;
-  startAutoPersisting(initialContent?: MergeableContent): Promise<unknown>;
+  startAutoSave(): Promise<unknown>;
   destroy(): Promise<unknown>;
 };
 
@@ -96,15 +96,16 @@ export function createTaskdoPersistence({
     }
   };
 
+  let initialLoad: Promise<unknown> | undefined;
   return {
     store,
-    load: () => loadWithInitialContent(
+    // SQLite has one owner. Reloading after initialization can overwrite live
+    // edits and cause TinyBase to skip saves while the read is in progress.
+    load: () => initialLoad ??= loadWithInitialContent(
       (initialContent) => persister.load(initialContent),
     ),
     save: () => persister.save(),
-    startAutoPersisting: () => loadWithInitialContent(
-      (initialContent) => persister.startAutoPersisting(initialContent),
-    ),
+    startAutoPersisting: () => persister.startAutoSave(),
     destroy: () => persister.destroy(),
     close,
   };
@@ -156,9 +157,10 @@ export function createTaskdoReplicaOpener({
       const failuresBeforeSave = durabilityFailures;
       try {
         await persistence.save();
-        if (durabilityFailures === failuresBeforeSave) onDurability(true, null);
+        if (durabilityFailures !== failuresBeforeSave) throw new Error('Offline persistence failed');
+        onDurability(true, null);
       } catch (error) {
-        markDurabilityFailure(error);
+        if (durabilityFailures === failuresBeforeSave) markDurabilityFailure(error);
         throw error;
       }
     };

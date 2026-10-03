@@ -87,7 +87,10 @@ eligibility, durability reporting, and platform lifecycle events.
   rows into a second database. Existing account-first installs keep opening
   `taskdo-fixture-<account-id>.sqlite`, preserving the historical filename.
   App foregrounding prompts reconnection; pull-to-refresh requests a TinyBase
-  synchronization round or reconnects first.
+  synchronization round or reconnects first. Each SQLite file has one active
+  owner, which loads it once on open and automatically saves subsequent changes.
+  Refresh keeps the live store intact; reloading disk snapshots during edits can
+  overwrite changes and make TinyBase skip saves.
 - **Web:** account replicas use `zero-taskdo-replica-<account-id>` in IndexedDB;
   guests use a separate `zero-taskdo-replica-guest-<uuid>` database without a
   server connection. The localStorage registry `zero.todo-workspaces.v1`
