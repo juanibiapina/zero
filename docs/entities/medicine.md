@@ -14,7 +14,11 @@ The mobile list emphasizes names and times. Detail emphasizes today's independen
 
 ## Daily behavior
 
-At the early time, the Android phone posts a prominent, soundless reminder with Taken. It stays ongoing with a status-bar icon while the dose is pending. Android notification settings group Medicine reminders and alarms under Medicines; the app opens the reminder category’s settings when it is set to Silent. If still unrecorded at the alarm time, it rings using alarm audio for up to sixty seconds. Taken records that one occurrence, removes its notification, and cancels or stops its sound without opening the app. Swiping a notification away does not record the dose. There is no separate Stop alarm action.
+At the early time, the Android phone posts a prominent, soundless reminder with Taken. It stays ongoing with a status-bar icon while the dose is pending. Android notification settings group Medicine reminders and alarms under Medicines; the app opens the reminder category’s settings when it is set to Silent. If still unrecorded at the alarm time, it rings using alarm audio for up to sixty seconds. Taken records that one occurrence, removes its notification, and cancels or stops its sound without opening the app. Swiping a notification away does not record the dose. The alarm notification and native alarm screen offer Stop alarm. Stop silences all currently ringing Medicine doses on this phone and leaves them pending; their reminders remain available. Stopped or timed-out alarm instances do not replay after refresh or restart.
+
+The same native alarm screen opens when you tap its notification or open the app during ringing. Medicine names are centered with their alarm time and instructions beneath them. Stop alarm and Taken stay at the bottom while long lists scroll above them. Taken silences the session and records every displayed dose in one durable native save; Stop alarm leaves them pending. App navigation stays covered until the alarm ends; Back does not dismiss it. Android system navigation remains available. The screen also closes on Taken, timeout, or removal of its active workspace.
+
+Android full-screen access controls automatic presentation over the lock screen and screen wake-up. When unlocked, Android may show a heads-up notification instead. Denied access retains notification Stop and tap-to-open controls; Medicine setup offers the Android setting to enable full-screen alarms. These native controls work without JavaScript, login, or a network connection.
 
 Taking the morning dose leaves afternoon and evening doses scheduled. Undo clears only the chosen confirmation; it re-arms a future alarm but does not replay an elapsed one. Notification actions preserve their original slot and date. At midnight old pending notifications close and the next date is independent.
 
@@ -34,9 +38,9 @@ Android delivery is enabled separately on each phone. Exact-alarm access and not
 
 ## Development and verification
 
-The local [medicine-reminders module](../../apps/agent-mobile/modules/medicine-reminders) implements Android delivery. After generating the development Android project, run its notification tests from `apps/agent-mobile/android` with `./gradlew :medicine-reminders:testDebugUnitTest --max-workers=1`.
+The local [medicine-reminders module](../../apps/agent-mobile/modules/medicine-reminders) implements Android delivery. After generating the development Android project, run its notification and alarm-screen tests from `apps/agent-mobile/android` with `./gradlew :medicine-reminders:testDebugUnitTest --max-workers=1`.
 
-The course/history flow runs in the normal suite:
+The course/history, visible-reminder, and muted alarm-screen flows run in the normal suite:
 
 ```bash
 pnpm --filter @zero/agent-mobile e2e:pixel

@@ -105,7 +105,7 @@ function ReminderSettings() {
     catch (cause) { setError(errorText(cause)); }
   };
   const prominent = capabilities != null && capabilities.quietChannelImportance >= 3;
-  const active = state?.enabled && capabilities?.notifications && capabilities.exactAlarms && capabilities.quietChannel && capabilities.alarmChannel && prominent && capabilities.alarmVolume > 0 && !state.error && !error;
+  const active = state?.enabled && capabilities?.notifications && capabilities.exactAlarms && capabilities.quietChannel && capabilities.alarmChannel && prominent && capabilities.fullScreenAlarms && capabilities.alarmVolume > 0 && !state.error && !error;
   if (active) return null;
   if (NativeReminders && controller && !capabilities && !state?.error && !error) return null;
   const label = !NativeReminders || !controller ? 'Medicine reminders are unavailable in this app.'
@@ -115,6 +115,7 @@ function ReminderSettings() {
     : !capabilities.quietChannel || !capabilities.alarmChannel ? 'Medicine notifications are blocked.'
     : !prominent ? 'Medicine reminders are set to Silent.'
     : !capabilities.exactAlarms ? 'Medicine alarms are blocked.'
+    : !capabilities.fullScreenAlarms ? 'Full-screen medicine alarms are blocked.'
     : 'Alarm volume is off.';
   return <View className="border-b border-divider">
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen((current) => !current)} className="min-h-12 flex-row items-center justify-between gap-3 py-3"><Text accessibilityRole="alert" variant="caption" className="flex-1 text-danger">{label}</Text><MedicineGlyph name={open ? 'collapse' : 'expand'} /></Pressable>
@@ -124,6 +125,7 @@ function ReminderSettings() {
         {capabilities?.notifications && (!capabilities.quietChannel || !capabilities.alarmChannel) ? <Action label="Enable medicine notification channels" onPress={() => void perform(() => NativeReminders?.openNotificationSettings())} /> : null}
         {capabilities?.quietChannel && !prominent ? <Action label="Show medicine reminders prominently" onPress={() => void perform(() => NativeReminders?.openReminderSettings())} /> : null}
         {capabilities?.alarmVolume === 0 ? <><Text variant="subtitle">Alarm volume is off.</Text><Action label="Set alarm volume" onPress={() => void perform(() => NativeReminders?.openSoundSettings())} /></> : null}
+        {!capabilities?.fullScreenAlarms ? <Action label="Allow full-screen alarms" onPress={() => void perform(() => NativeReminders?.openFullScreenSettings())} /> : null}
         {!capabilities?.exactAlarms ? <Action label="Allow exact alarms" onPress={() => void perform(() => NativeReminders?.openExactAlarmSettings())} /> : null}
         {!state?.enabled ? <Action label="Enable reminders on this phone" disabled={state?.pending} onPress={() => void perform(() => enableMedicineReminders(replica!, controller.workspace))} /> : null}
         {state?.error ? <><Text variant="error" selectable>{state.error}</Text><Action label="Retry reminders" onPress={() => void perform(() => controller.refresh())} /></> : null}

@@ -150,6 +150,8 @@ The same TinyBase workspace synchronizes `medicines` and `doses`. Medicine store
 
 Android also owns a durable native schedule/receipt store used by alarm receivers without React. Taken first commits native suppression and a receipt. Import applies the receipt and replay-consumption metadata in `medicineReceipts` to the shared store, waits for SQLite persistence, replaces native plans durably, and then acknowledges the captured receipts. Native reconciliation identifies captured actions already reflected in the durable workspace, so a winning Undo or replay marker controls their suppression. Newer undrained receipts retain suppression until their own import. In-app Taken uses this same path. Before ordinary sign-out, receivers quiesce and receipts import before the existing sync checkpoint and workspace deletion. Explicit discard or account erasure removes native state along with the local workspace. Guest binding retains the database identity and its native receipt ownership.
 
+Android stores ended alarm instances by occurrence and scheduled time, scoped to the workspace. Stop and timeout retain the pending-dose reminder and leave confirmation history untouched. These markers survive native plan replacement, expire after their occurrence date, and clear with the workspace. Ringing sessions and their screen observers live only for the current playback lifetime.
+
 Native delivery state and reminder enablement are device-local implementation state; Medicine and Dose remain the two product models. Behavior lives in [`Medicine and Dose`](entities/medicine.md).
 
 ## Recurring Task transitions

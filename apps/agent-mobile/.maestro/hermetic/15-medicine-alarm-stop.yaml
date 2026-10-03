@@ -1,0 +1,43 @@
+appId: dev.juanibiapina.zeroagent
+---
+- openLink: ${METRO_DEEP_LINK}
+- extendedWaitUntil:
+    visible: Browse
+    timeout: 45000
+- openLink: zeroagent:///e2e-medicine-proof
+- extendedWaitUntil:
+    visible: Schedule native proof
+    timeout: 45000
+- tapOn: Schedule native proof
+- extendedWaitUntil:
+    visible: Alarm scheduled .*
+    timeout: 30000
+- extendedWaitUntil:
+    visible: Stop alarm
+    timeout: 180000
+- assertVisible: E2E medicine.*
+- takeScreenshot: medicine-native-alarm
+- pressKey: Back
+- assertVisible: Stop alarm
+- tapOn: Stop alarm
+- assertNotVisible: Stop alarm
+- assertVisible: Alarm scheduled .*
+- tapOn: Import medicine receipts
+- assertVisible: "Persisted taken doses: 0"
+- tapOn: Clear native proof
+- assertVisible: Medicine proof cleared
+- tapOn: Schedule native proof
+- extendedWaitUntil:
+    visible: Stop alarm
+    timeout: 180000
+- swipe:
+    start: 50%, 12%
+    end: 50%, 0%
+- tapOn: Taken
+- extendedWaitUntil:
+    visible: Import medicine receipts
+    timeout: 10000
+- tapOn: Import medicine receipts
+- assertVisible: "Persisted taken doses: 1.*"
+- tapOn: Clear native proof
+- assertVisible: Medicine proof cleared

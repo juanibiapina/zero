@@ -21,14 +21,14 @@ jest.mock('../../../modules/medicine-reminders', () => ({
     replace: async () => {}, acknowledge: async () => {}, quiesce: async () => {}, clear: async () => {},
     requestNotifications: () => { mockCapabilities = { ...mockCapabilities, notifications: true }; },
     openExactAlarmSettings: () => {}, openNotificationSettings: () => {}, openSoundSettings: () => {},
-    openReminderSettings: jest.fn(),
+    openReminderSettings: jest.fn(), openFullScreenSettings: jest.fn(),
   },
 }));
 let replica: TaskdoReplica | null = null;
 const foreground = new Set<(state: AppStateStatus) => void>();
 beforeEach(async () => {
   await AsyncStorage.clear();
-  mockCapabilities = { supported: true, notifications: true, exactAlarms: true, quietChannel: true, quietChannelImportance: 4, alarmChannel: true, alarmVolume: 5 };
+  mockCapabilities = { supported: true, notifications: true, exactAlarms: true, quietChannel: true, quietChannelImportance: 4, fullScreenAlarms: true, alarmChannel: true, alarmVolume: 5 };
   foreground.clear();
   jest.spyOn(AppState, 'addEventListener').mockImplementation((event, listener) => {
     if (event === 'change') foreground.add(listener);
@@ -71,6 +71,19 @@ describe('Medicine reminder warnings', () => {
     const native = require('../../../modules/medicine-reminders').default;
     expect(native.openReminderSettings).toHaveBeenCalled();
     Object.assign(mockCapabilities, { quietChannelImportance: 4 });
+    await act(async () => { for (const listener of foreground) listener('active'); });
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+  it('offers full-screen alarm settings and recovers when access is enabled', async () => {
+    Object.assign(mockCapabilities, { fullScreenAlarms: false });
+    const screen = await openMedicine();
+    const warning = 'Full-screen medicine alarms are blocked.';
+    await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText(warning));
+    await fireEvent.press(screen.getByLabelText('Allow full-screen alarms'));
+    const native = require('../../../modules/medicine-reminders').default;
+    expect(native.openFullScreenSettings).toHaveBeenCalled();
+    Object.assign(mockCapabilities, { fullScreenAlarms: true });
     await act(async () => { for (const listener of foreground) listener('active'); });
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });

@@ -43,6 +43,7 @@ internal object MedicineEngine {
     return mapOf("supported" to true, "notifications" to manager.areNotificationsEnabled(),
       "exactAlarms" to (Build.VERSION.SDK_INT < 31 || alarmManager(c).canScheduleExactAlarms()),
       "alarmVolume" to c.getSystemService(android.media.AudioManager::class.java).getStreamVolume(android.media.AudioManager.STREAM_ALARM),
+      "fullScreenAlarms" to (Build.VERSION.SDK_INT < 34 || manager.canUseFullScreenIntent()),
       "quietChannelImportance" to (manager.getNotificationChannel(QUIET)?.importance ?: NotificationManager.IMPORTANCE_NONE),
       "quietChannel" to (groupEnabled(c) && manager.getNotificationChannel(QUIET)?.importance != NotificationManager.IMPORTANCE_NONE),
       "alarmChannel" to (groupEnabled(c) && manager.getNotificationChannel(RING)?.importance != NotificationManager.IMPORTANCE_NONE))
@@ -112,17 +113,29 @@ internal object MedicineEngine {
     for (id in obj(state, "visible").keys()) notificationManager(c).cancel(id, 0)
     MedicineAlarmService.stopAll(c); check(prefs(c).edit().remove("state").commit())
   }
-  fun taken(c: Context, workspace: String, occurrence: String): String = synchronized(lock) {
-    val state = load(c); check(state.optString("workspace") == workspace && !state.optBoolean("quiesced")) { "Reminder workspace is closed" }
-    val dose = JSONObject(occurrence)
-    check(eligible(state, dose)) { "This medicine reminder is no longer active" }
-    val id = dose.getString("id")
-    val receipt = JSONObject(dose.toString()).put("kind", "taken").put("actionId", UUID.randomUUID().toString()).put("takenAt", instant(System.currentTimeMillis()))
-    array(state, "receipts").put(receipt); obj(state, "suppressed").put(id, true)
-    obj(state, "visible").remove(id); save(c, state)
-    notificationManager(c).cancel(id, 0); MedicineAlarmService.remove(c, id)
+  fun taken(c: Context, workspace: String, occurrence: String): String =
+    takeDoses(c, workspace, listOf(JSONObject(occurrence))).single().toString()
+
+  fun takeDoses(c: Context, workspace: String, doses: List<JSONObject>): List<JSONObject> = synchronized(lock) {
+    val state = load(c)
+    check(state.optString("workspace") == workspace && !state.optBoolean("quiesced")) { "Reminder workspace is closed" }
+    check(doses.all { eligible(state, it) }) { "This medicine reminder is no longer active" }
+    val takenAt = instant(System.currentTimeMillis())
+    val receipts = doses.map { dose ->
+      JSONObject(dose.toString()).put("kind", "taken").put("actionId", UUID.randomUUID().toString()).put("takenAt", takenAt)
+    }
+    for (receipt in receipts) {
+      val id = receipt.getString("id")
+      array(state, "receipts").put(receipt); obj(state, "suppressed").put(id, true)
+      obj(state, "visible").remove(id)
+    }
+    save(c, state)
+    for (receipt in receipts) {
+      val id = receipt.getString("id")
+      notificationManager(c).cancel(id, 0); MedicineAlarmService.remove(c, id)
+    }
     cancelIntents(c, state); schedule(c, state)
-    receipt.toString()
+    receipts
   }
   fun undo(c: Context, workspace: String, id: String) = synchronized(lock) {
     val state = load(c); check(state.optString("workspace") == workspace && !state.optBoolean("quiesced"))
@@ -154,9 +167,21 @@ internal object MedicineEngine {
     }
     return false
   }
-  fun canRing(c: Context, dose: JSONObject): Boolean = synchronized(lock) {
+  private fun alarmKey(dose: JSONObject) = JSONArray(listOf(dose.getString("id"), dose.getString("scheduledAt"))).toString()
+  fun endAlarm(c: Context, workspace: String, dose: JSONObject) = synchronized(lock) {
     val state = load(c)
-    notificationManager(c).areNotificationsEnabled() && groupEnabled(c) && notificationManager(c).getNotificationChannel(RING)?.importance != NotificationManager.IMPORTANCE_NONE && !state.optBoolean("quiesced") && eligible(state, dose) && currentAlarm(state, dose) && dose.getString("on") == LocalDate.now().toString() && !obj(state, "suppressed").optBoolean(dose.getString("id"))
+    if (state.optString("workspace") != workspace) return@synchronized
+    obj(state, "endedAlarms").put(alarmKey(dose), dose.getString("on"))
+    val pending = !state.optBoolean("quiesced") && eligible(state, dose) && currentAlarm(state, dose) && !obj(state, "suppressed").optBoolean(dose.getString("id"))
+    if (pending) obj(state, "visible").put(dose.getString("id"), dose)
+    save(c, state)
+    if (pending && notificationManager(c).areNotificationsEnabled() && groupEnabled(c) && notificationManager(c).getNotificationChannel(QUIET)?.importance != NotificationManager.IMPORTANCE_NONE) {
+      notificationManager(c).notify(dose.getString("id"), 0, notification(c, workspace, dose, false))
+    }
+  }
+  fun canRing(c: Context, workspace: String, dose: JSONObject): Boolean = synchronized(lock) {
+    val state = load(c)
+    state.optString("workspace") == workspace && notificationManager(c).areNotificationsEnabled() && groupEnabled(c) && notificationManager(c).getNotificationChannel(RING)?.importance != NotificationManager.IMPORTANCE_NONE && !state.optBoolean("quiesced") && eligible(state, dose) && currentAlarm(state, dose) && dose.getString("on") == LocalDate.now().toString() && !obj(state, "suppressed").optBoolean(dose.getString("id")) && !obj(state, "endedAlarms").has(alarmKey(dose))
   }
   fun restore(c: Context, notificationsLost: Boolean = false) = synchronized(lock) {
     val state = load(c)
@@ -193,6 +218,8 @@ internal object MedicineEngine {
         manager.setAlarmClock(AlarmManager.AlarmClockInfo(time, show), delivery)
       } else manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, delivery)
     }
+    val ended = obj(state, "endedAlarms")
+    for (identity in ended.keys().asSequence().toList()) if (ended.getString(identity) < today.toString()) ended.remove(identity)
     val visible = obj(state, "visible")
     for (id in visible.keys().asSequence().toList()) if (visible.getJSONObject(id).getString("on") < today.toString()) { notificationManager(c).cancel(id, 0); visible.remove(id); MedicineAlarmService.remove(c, id) }
     val medicines = array(state, "medicines")
@@ -212,7 +239,7 @@ internal object MedicineEngine {
             val alarmAt = day.atTime(LocalTime.parse(slot.getString("alarmAt"))).atZone(zone).toInstant().toEpochMilli()
             val remindAt = day.atTime(LocalTime.parse(slot.getString("remindAt"))).atZone(zone).toInstant().toEpochMilli()
             val dose = JSONObject().put("id", id).put("medicineId", m.getString("id")).put("slotId", slot.getString("id")).put("on", day.toString()).put("scheduledAt", instant(alarmAt)).put("takenAt", JSONObject.NULL).put("name", m.getString("name")).put("instructions", if (m.isNull("instructions")) "" else m.optString("instructions", "")).put("alarmLabel", slot.getString("alarmAt"))
-            if (alarmAt > now) {
+            if (alarmAt > now && !obj(state, "endedAlarms").has(alarmKey(dose))) {
               arm("$id/alarm", alarmAt, JSONObject(dose.toString()).put("kind", "alarm"))
               if (remindAt > now) arm("$id/reminder", remindAt, JSONObject(dose.toString()).put("kind", "reminder"))
               else if (!visible.has(id)) show(c, state, dose, false)
@@ -233,6 +260,7 @@ internal object MedicineEngine {
     cancelIntents(c, state); schedule(c, state)
   }
   private fun show(c: Context, state: JSONObject, dose: JSONObject, ringing: Boolean) {
+    if (ringing && !canRing(c, state.optString("workspace"), dose)) return
     if (!notificationManager(c).areNotificationsEnabled() || !groupEnabled(c)) return
     channels(c)
     if (notificationManager(c).getNotificationChannel(if (ringing) RING else QUIET)?.importance == NotificationManager.IMPORTANCE_NONE) return
@@ -240,22 +268,36 @@ internal object MedicineEngine {
     obj(state, "visible").put(id, dose)
     array(state, "receipts").put(JSONObject(dose.toString()).put("actionId", UUID.randomUUID().toString()).put("kind", "presented").put("takenAt", JSONObject.NULL))
     save(c, state)
-    notificationManager(c).notify(id, 0, notification(c, state.optString("workspace"), dose, ringing))
     if (ringing) {
+      notificationManager(c).cancel(id, 0)
       val service = Intent(c, MedicineAlarmService::class.java).putExtra("dose", dose.toString()).putExtra("workspace", state.optString("workspace"))
       c.startForegroundService(service)
-    }
+    } else notificationManager(c).notify(id, 0, notification(c, state.optString("workspace"), dose, false))
   }
-  fun notification(c: Context, workspace: String, dose: JSONObject, ringing: Boolean): Notification {
+  fun notification(c: Context, workspace: String, dose: JSONObject, ringing: Boolean, session: String = ""): Notification {
     val id = dose.getString("id")
-    val open = Intent(Intent.ACTION_VIEW, Uri.parse("zeroagent:///browse/medicines/${Uri.encode(dose.getString("medicineId"))}?dose=${Uri.encode(id)}")).setPackage(c.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val open = if (ringing) {
+      Intent(c, MedicineAlarmActivity::class.java)
+        .setData(Uri.parse("zero-medicine:alarm/${Uri.encode(workspace)}/${Uri.encode(session)}"))
+        .putExtra("workspace", workspace).putExtra("session", session)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    } else Intent(Intent.ACTION_VIEW, Uri.parse("zeroagent:///browse/medicines/${Uri.encode(dose.getString("medicineId"))}?dose=${Uri.encode(id)}")).setPackage(c.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     val openPending = PendingIntent.getActivity(c, id.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val taken = Intent(c, MedicineReceiver::class.java).setAction("medicine.taken").setData(Uri.parse("zero-medicine:taken/${Uri.encode(id)}")).putExtra("workspace", workspace).putExtra("payload", dose.toString())
     val takenPending = PendingIntent.getBroadcast(c, 0, taken, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-    return Notification.Builder(c, if (ringing) RING else QUIET).setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(dose.getString("name"))
+    val builder = Notification.Builder(c, if (ringing) RING else QUIET).setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(dose.getString("name"))
       .setContentText(if (ringing) "${dose.getString("alarmLabel")} dose not recorded" else listOf(dose.optString("instructions", ""), "Alarm at ${dose.getString("alarmLabel")}").filter { it.isNotBlank() }.joinToString(" · "))
       .setContentIntent(openPending).setCategory(if (ringing) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER).setOngoing(!ringing).setOnlyAlertOnce(true)
-      .addAction(Notification.Action.Builder(null, "Taken", takenPending).build()).build()
+      .addAction(Notification.Action.Builder(null, "Taken", takenPending).build())
+    if (ringing) {
+      builder.setFullScreenIntent(openPending, true).setOngoing(true)
+      val stop = Intent(c, MedicineReceiver::class.java).setAction("medicine.stop")
+        .setData(Uri.parse("zero-medicine:stop/${Uri.encode(workspace)}/${Uri.encode(session)}"))
+        .putExtra("workspace", workspace).putExtra("session", session)
+      val pending = PendingIntent.getBroadcast(c, 7402, stop, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+      builder.addAction(Notification.Action.Builder(null, "Stop alarm", pending).build())
+    }
+    return builder.build()
   }
 }
 
@@ -265,6 +307,7 @@ class MedicineReceiver : BroadcastReceiver() {
       when (intent.action) {
         "medicine.taken" -> MedicineEngine.taken(context, intent.getStringExtra("workspace") ?: return, intent.getStringExtra("payload") ?: return)
         "medicine.delivery" -> MedicineEngine.deliver(context, intent.getStringExtra("payload") ?: return)
+        "medicine.stop" -> MedicineAlarmService.stopAlarm(intent.getStringExtra("workspace") ?: return, intent.getStringExtra("session") ?: return)
         else -> MedicineEngine.restore(context, intent.action == Intent.ACTION_BOOT_COMPLETED)
       }
     } catch (error: Exception) { android.util.Log.e("MedicineReminders", "Native reminder operation failed", error) }
