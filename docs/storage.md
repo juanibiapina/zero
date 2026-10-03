@@ -144,6 +144,14 @@ eligibility, durability reporting, and platform lifecycle events.
 The retired web OPFS database and IndexedDB outbox are not opened, migrated,
 replayed, or deleted. They remain inert in existing browser profiles.
 
+## Medicine and Dose storage
+
+The same TinyBase workspace synchronizes `medicines` and `doses`. Medicine stores validated details as one serialized value and retains a deletion tombstone. Daily slots remain nested configuration. Dose keys encode Medicine, slot, and local date; confirmations store action identity, taken time, and the schedule snapshot together in one cell. Concurrent same-cell writes use the existing last-writer-wins policy. Invalid rows remain raw and appear in recovery; deleted parents suppress late offline children.
+
+Android also owns a durable native schedule/receipt store used by alarm receivers without React. Taken first commits native suppression and a receipt. Import applies the receipt and replay-consumption metadata in `medicineReceipts` to the shared store, waits for SQLite persistence, replaces native plans durably, and then acknowledges the captured receipts. Native reconciliation identifies captured actions already reflected in the durable workspace, so a winning Undo or replay marker controls their suppression. Newer undrained receipts retain suppression until their own import. In-app Taken uses this same path. Before ordinary sign-out, receivers quiesce and receipts import before the existing sync checkpoint and workspace deletion. Explicit discard or account erasure removes native state along with the local workspace. Guest binding retains the database identity and its native receipt ownership.
+
+Native delivery state and reminder enablement are device-local implementation state; Medicine and Dose remain the two product models. Behavior lives in [`Medicine and Dose`](entities/medicine.md).
+
 ## Recurring Task transitions
 
 A recurring completion is an in-place state transition, not a completed-row

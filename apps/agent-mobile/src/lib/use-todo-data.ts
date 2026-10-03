@@ -11,6 +11,7 @@ import {
   deleteTodoWorkspaceDatabase,
 } from './mobile-account-cleanup';
 import { openTaskDOReplica } from './taskdo-replica';
+import { attachMedicineReminders } from './medicine-reminders';
 import { createTodoWorkspaceRegistry } from './todo-workspace';
 import {
   createTodoWorkspaceOwner,
@@ -62,7 +63,7 @@ export function useTodoData(): TodoData {
   }));
   const [owner] = useState(() => createTodoWorkspaceOwner({
     registry: workspace,
-    open: async (descriptor, events) => openTaskDOReplica({
+    open: async (descriptor, events) => attachMedicineReminders(await openTaskDOReplica({
       descriptor,
       getToken: tokenSource.getToken,
       queryClient,
@@ -70,7 +71,7 @@ export function useTodoData(): TodoData {
       onConnection: events.onConnection,
       onSyncState: events.onSyncState,
       onDurability: events.onDurability,
-    }),
+    }), descriptor.databaseName),
     deleteDatabase: deleteTodoWorkspaceDatabase,
     clearAccountCaches: (accountId) => clearMobileAccountCaches(accountId, queryClient),
     signOut: signOutSource.signOut,

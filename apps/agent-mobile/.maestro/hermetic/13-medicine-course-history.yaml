@@ -1,0 +1,42 @@
+appId: dev.juanibiapina.zeroagent
+---
+- openLink: ${METRO_DEEP_LINK}
+- extendedWaitUntil:
+    visible: Home
+    timeout: 45000
+- tapOn: Browse
+- tapOn: Medicines
+- tapOn: Add medicine
+- tapOn: Medicine name
+- inputText: E2E daily medicine
+- tapOn: Customize medicine schedule
+- scrollUntilVisible:
+    element: Ongoing
+    direction: DOWN
+- tapOn: Ongoing
+- tapOn: For a number of days
+- scrollUntilVisible:
+    element: "Last day: .*, inclusive"
+    direction: DOWN
+- scrollUntilVisible:
+    element: Add medicine
+    direction: UP
+- tapOn: Add medicine
+- tapOn: Open E2E daily medicine
+- assertVisible: Today
+- assertVisible: Quiet reminder 19:45
+- tapOn: Taken 20:00 dose
+- assertVisible: Undo 20:00 dose
+- assertVisible: ".*Taken at.*"
+- tapOn: Dose history
+- assertVisible: Taken at is the time you pressed Taken.
+- takeScreenshot: medicine-dose-recorded
+- tapOn: Undo 20:00 dose
+- assertVisible: Taken 20:00 dose
+- tapOn: Home
+- assertNotVisible: E2E daily medicine
+- tapOn: Browse
+- assertVisible: E2E daily medicine
+- tapOn: Medicine options
+- tapOn: Pause reminders
+- assertVisible: Resume reminders

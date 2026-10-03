@@ -173,9 +173,10 @@ function AccountControl() {
 
 // Account actions stay app-owned so signing out can safely checkpoint and
 // remove the local workspace before Clerk drops the session.
-export function ScreenHeader({ title, showSyncStatus = false }: { title: string; showSyncStatus?: boolean }) {
+export function ScreenHeader({ title, showSyncStatus = false, backToBrowse = false }: { title: string; showSyncStatus?: boolean; backToBrowse?: boolean }) {
   const insets = useSafeAreaInsets();
   return (
+    <>
     <View
       className="mb-2 flex-row items-center justify-between px-screen-x"
       style={{ paddingTop: insets.top + 12 }}
@@ -186,5 +187,16 @@ export function ScreenHeader({ title, showSyncStatus = false }: { title: string;
         <AccountControl />
       </View>
     </View>
+    {backToBrowse ? (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Back to Browse"
+        onPress={() => router.back()}
+        className="min-h-12 justify-center px-screen-x"
+      >
+        <Text className="text-accent">‹ Browse</Text>
+      </Pressable>
+    ) : null}
+    </>
   );
 }

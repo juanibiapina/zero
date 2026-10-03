@@ -172,14 +172,15 @@ function KeyboardGapFill({ height }: { height: number }) {
 // mount. Editing keeps the native Modal and its slide. The discard overlay
 // stays in the same window as its drawer.
 export function TaskEditorSheet({
-  open, onClose, dismissLabel, draft, onChangeDraft, onSubmit,
+  open, onClose, onBack, dismissLabel, draft, onChangeDraft, onSubmit,
   placeholder = 'Task', autoFocus = false, inline = false, inputRef, inputAccessibilityLabel,
-  leading, modeSelector, context, editorContent, trailing,
+  leading, modeSelector, context, editorContent, secondaryContent, trailing, inputEditable = true,
   scheduleAction, projectAction, overlay, highlightRanges, onDismissHighlight,
   onOpen, onKeyboardWillHide, collapsedFabLabel,
 }: {
   open: boolean;
   onClose: () => void;
+  onBack?: () => void;
   dismissLabel: string;
   draft: string;
   onChangeDraft: (text: string) => void;
@@ -193,6 +194,8 @@ export function TaskEditorSheet({
   modeSelector?: ReactNode;
   context?: ReactNode;
   editorContent?: ReactNode;
+  secondaryContent?: ReactNode;
+  inputEditable?: boolean;
   trailing?: ReactNode;
   scheduleAction?: EditorAction;
   projectAction?: EditorAction;
@@ -319,6 +322,7 @@ export function TaskEditorSheet({
           ) : (
             <Input
               ref={field}
+              editable={inputEditable}
               value={draft}
               onChangeText={onChangeDraft}
               onSubmitEditing={onSubmit}
@@ -340,6 +344,7 @@ export function TaskEditorSheet({
           {trailing}
         </View>
       )}
+      {secondaryContent}
       {scheduleAction || projectAction ? (
         <View className="border-t border-divider">
           {scheduleAction ? (
@@ -380,7 +385,7 @@ export function TaskEditorSheet({
   );
   if (!inline) {
     return (
-      <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={onBack ?? onClose}>
         {modalContent}
       </Modal>
     );

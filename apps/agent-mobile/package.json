@@ -69,6 +69,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "e2e:pixel": "bash .maestro/run-metro-e2e.sh",
+    "e2e:medicine-native": "bash .maestro/medicine-native-proof.sh",
     "lint": "eslint .",
     "uniwind:types": "uniwind generate-artifacts --css ./global.css --dts ./src/uniwind-types.d.ts",
     "typecheck": "tsc --noEmit",

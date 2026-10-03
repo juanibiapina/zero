@@ -339,6 +339,17 @@ jest.mock('@expo/ui', () => {
           ),
         )
       : null;
+  const Picker = ({ selectedValue, onValueChange, enabled = true, children }) => {
+    useHosted('Picker');
+    const [open, setOpen] = mockReactForExpoUi.useState(false);
+    const items = mockReactForExpoUi.Children.toArray(children).filter(mockReactForExpoUi.isValidElement);
+    const selected = items.find((item) => item.props.value === selectedValue);
+    return mockReactForExpoUi.createElement(View, null,
+      mockReactForExpoUi.createElement(Pressable, { accessibilityRole: 'button', disabled: !enabled, onPress: () => setOpen((value) => !value) }, mockReactForExpoUi.createElement(RNText, null, selected?.props.label)),
+      open ? items.map((item) => mockReactForExpoUi.createElement(Pressable, { key: item.props.value, accessibilityRole: 'button', onPress: () => { onValueChange(item.props.value); setOpen(false); } }, mockReactForExpoUi.createElement(RNText, null, item.props.label))) : null,
+    );
+  };
+  Picker.Item = function PickerItem() { return null; };
   return {
     __esModule: true,
     Host,
@@ -349,7 +360,13 @@ jest.mock('@expo/ui', () => {
     Icon,
     TextInput,
     BottomSheet,
+    Picker,
   };
+});
+
+jest.mock('@expo/ui/community/datetime-picker', () => {
+  const { View } = require('react-native');
+  return { DateTimePicker: (props) => mockReactForExpoUi.createElement(View, { ...props, testID: 'native-date-time-picker' }) };
 });
 
 // AsyncStorage has no native module under jest (it throws "NativeModule:

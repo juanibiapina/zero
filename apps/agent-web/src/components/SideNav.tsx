@@ -70,10 +70,29 @@ function FolderIcon({ className }: { className?: string }) {
   );
 }
 
+function MedicineIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="m10.5 20.5 10-10a6.36 6.36 0 0 0-9-9l-10 10a6.36 6.36 0 0 0 9 9Z" />
+      <path d="m8.5 8.5 7 7" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS: NavItem[] = [
   { to: "/home", label: "Home", icon: InboxIcon },
   { to: "/upcoming", label: "Upcoming", icon: CalendarIcon },
   { to: "/projects", label: "Projects", icon: FolderIcon },
+  { to: "/medicines", label: "Medicines", icon: MedicineIcon },
 ];
 
 // Shared section navigation for the signed-in web app: a left sidebar on desktop

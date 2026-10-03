@@ -5,6 +5,7 @@ import { deleteDatabaseAsync, openDatabaseAsync } from 'expo-sqlite';
 import { clearIconSuggestions } from './icon-suggestions';
 import { RUNTIME_PROFILE } from './runtime-profile';
 import { clearLastSync } from './sync-metadata';
+import { clearMedicineReminders } from './medicine-reminders';
 
 const DATABASE_NAME = /^taskdo-(?:fixture|workspace)-[a-zA-Z0-9_-]+\.sqlite$/;
 const ACCOUNT_ID = /^[a-zA-Z0-9_-]+$/;
@@ -13,6 +14,7 @@ export async function deleteTodoWorkspaceDatabase(databaseName: string) {
   if (!DATABASE_NAME.test(databaseName)) {
     throw new Error('Refusing to delete an invalid todo workspace database');
   }
+  await clearMedicineReminders(databaseName);
   if (RUNTIME_PROFILE.hermetic) {
     // Expo's development client keeps a diagnostic connection to databases it
     // observes, so deleting the file is rejected even after our owned handle

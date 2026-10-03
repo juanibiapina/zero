@@ -1,0 +1,99 @@
+import { safeRandomUUID } from "@tanstack/db";
+import { medicineEndDate, validateMedicine, type MedicineInput, type MedicineSlot } from "./model";
+
+const DAILY_TIMES: Record<number, string[]> = {
+  1: ["20:00"],
+  2: ["08:00", "20:00"],
+  3: ["08:00", "14:00", "20:00"],
+  4: ["08:00", "12:00", "16:00", "20:00"],
+};
+export type MedicineCourse = { kind: "ongoing" } | { kind: "days"; days: string } | { kind: "last-day"; on: string };
+const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+const clock = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+const reminder = (time: string, lead = 15) => clock(Math.max(0, minutes(time) - lead));
+
+export class MedicineDraft {
+  private constructor(
+    readonly input: MedicineInput,
+    readonly course: MedicineCourse,
+    readonly changed = false,
+  ) {}
+
+  static create(today: string, source?: MedicineInput, copy = false): MedicineDraft {
+    const input: MedicineInput = source ? {
+      ...source,
+      startsOn: copy ? today : source.startsOn,
+      endsOn: copy ? null : source.endsOn,
+      paused: copy ? false : source.paused,
+      doses: source.doses.map((slot) => ({ ...slot, id: copy ? safeRandomUUID() : slot.id })),
+    } : {
+      name: "", instructions: null, startsOn: today, endsOn: null, paused: false,
+      doses: [{ id: safeRandomUUID(), alarmAt: "20:00", remindAt: "19:45" }],
+    };
+    return new MedicineDraft(input, input.endsOn ? { kind: "last-day", on: input.endsOn } : { kind: "ongoing" });
+  }
+
+  change(fields: Partial<Pick<MedicineInput, "name" | "instructions" | "startsOn">>): MedicineDraft {
+    return new MedicineDraft({ ...this.input, ...fields }, this.course, true);
+  }
+
+  frequency(count: number): MedicineDraft {
+    const times = DAILY_TIMES[count];
+    if (!times) throw new Error("Choose one to four daily times, or customize the schedule");
+    const matching = new Map(this.input.doses.filter((slot) => times.includes(slot.alarmAt)).map((slot) => [slot.alarmAt, slot]));
+    const remaining = this.input.doses.filter((slot) => !times.includes(slot.alarmAt));
+    const doses = times.map((alarmAt) => ({
+      id: matching.get(alarmAt)?.id ?? remaining.shift()?.id ?? safeRandomUUID(), alarmAt, remindAt: reminder(alarmAt),
+    }));
+    return new MedicineDraft({ ...this.input, doses }, this.course, true);
+  }
+
+  time(slotId: string, key: "alarmAt" | "remindAt", value: string): MedicineDraft {
+    const doses = this.input.doses.map((slot) => {
+      if (slot.id !== slotId) return slot;
+      if (key === "remindAt") return { ...slot, remindAt: value };
+      const lead = Math.max(1, minutes(slot.alarmAt) - minutes(slot.remindAt));
+      return { ...slot, alarmAt: value, remindAt: reminder(value, lead) };
+    });
+    return new MedicineDraft({ ...this.input, doses }, this.course, true);
+  }
+
+  addTime(): MedicineDraft {
+    const occupied = new Set(this.input.doses.map((slot) => slot.alarmAt));
+    const alarmAt = [...DAILY_TIMES[3], "12:00", "16:00", ...Array.from({ length: 23 }, (_, index) => [clock((index + 1) * 60), clock((index + 1) * 60 + 30)]).flat()].find((time) => !occupied.has(time));
+    if (!alarmAt || this.input.doses.length >= 24) throw new Error("A medicine supports up to 24 daily times");
+    const slot: MedicineSlot = { id: safeRandomUUID(), alarmAt, remindAt: reminder(alarmAt) };
+    return new MedicineDraft({ ...this.input, doses: [...this.input.doses, slot] }, this.course, true);
+  }
+
+  removeTime(slotId: string): MedicineDraft {
+    if (this.input.doses.length <= 1) return this;
+    return new MedicineDraft({ ...this.input, doses: this.input.doses.filter((slot) => slot.id !== slotId) }, this.course, true);
+  }
+
+  withCourse(course: MedicineCourse): MedicineDraft {
+    return new MedicineDraft(this.input, course, true);
+  }
+
+  get suggested(): boolean {
+    const times = DAILY_TIMES[this.input.doses.length];
+    return !!times && this.input.doses.every((slot, index) => slot.alarmAt === times[index] && slot.remindAt === reminder(slot.alarmAt));
+  }
+
+  get endsOn(): string | null {
+    if (this.course.kind === "ongoing") return null;
+    if (this.course.kind === "last-day") return this.course.on;
+    return medicineEndDate(this.input.startsOn, Number(this.course.days));
+  }
+
+  commit(): MedicineInput {
+    const input = {
+      ...this.input, name: this.input.name.trim(),
+      instructions: this.input.instructions?.trim() || null,
+      endsOn: this.endsOn,
+      doses: this.input.doses.map((slot) => ({ ...slot })),
+    };
+    validateMedicine(input);
+    return input;
+  }
+}

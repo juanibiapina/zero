@@ -1,5 +1,10 @@
 // @zero/agent-core — shared, platform-agnostic app code.
 
+export { MedicineModel, medicineToday, medicineEndDate, medicineOccurrences, medicineState, doseId, validateMedicine, type Medicine, type MedicineInput, type MedicineSlot, type Dose, type MedicineReceipt, type MedicineSnapshot } from "./medicines/model";
+export { MedicineDraft, type MedicineCourse } from "./medicines/draft";
+export type { TodoMedicines } from "./taskdo/replica";
+export { createMedicineReminders, type MedicineReminderPort, type MedicineReminders } from "./medicines/reminders";
+
 // Shared list-region behavior.
 export { listView, LOADING_TEXT_DELAY_MS, type ListView } from "./collection/view";
 

@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-03: Add support for medicines
+
 - 2026-10-03: Offline edits stay saved when storage refreshes overlap a change, and failed saves no longer appear successful.
 
 - 2026-10-01: Dates and repeats you type while editing a task are highlighted and saved with its title. Dismiss a highlighted phrase to keep those words and the existing schedule.

@@ -13,6 +13,7 @@ import { Onboarding } from "./pages/Onboarding";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HomePage } from "./pages/HomePage";
 import { UpcomingPage } from "./pages/UpcomingPage";
+import { MedicinesPage } from "./pages/MedicinesPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { AdminPage } from "./pages/AdminPage";
@@ -90,6 +91,8 @@ function AppRoutes() {
       <Route index element={<Navigate to="/home" replace />} />
       <Route path="home" element={<HomePage />} />
       <Route path="upcoming" element={<UpcomingPage />} />
+      <Route path="medicines" element={<MedicinesPage />} />
+      <Route path="medicines/:id" element={<MedicinesPage />} />
       <Route path="projects" element={<ProjectsPage />} />
       <Route path="projects/:id" element={<ProjectDetailPage />} />
       <Route path="sign-in/*" element={<CenteredPage><SignIn forceRedirectUrl="/home" /></CenteredPage>} />

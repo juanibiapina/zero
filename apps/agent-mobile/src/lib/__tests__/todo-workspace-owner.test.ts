@@ -8,6 +8,8 @@ const EMPTY_SNAPSHOT: TodoSnapshot = {
   tasks: [],
   projects: [],
   conditions: [],
+  medicines: [],
+  doses: [],
   recoveries: [],
 };
 

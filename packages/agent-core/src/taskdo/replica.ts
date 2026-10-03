@@ -8,6 +8,7 @@ import type { Project, ProjectState } from "../projects/types";
 import { localToday } from "../tasks/today";
 import type { ProjectAttention, Task } from "./types";
 import { TodoModel, type TodoIssue } from "./model";
+import { MedicineModel, type MedicineInput, type Medicine, type Dose, type MedicineReceipt } from "../medicines/model";
 
 export type TodoRecoveryRepair =
   | "make-task-loose"
@@ -15,7 +16,7 @@ export type TodoRecoveryRepair =
   | "remove-after";
 
 export type TodoRecovery = {
-  table: "tasks" | "projects" | "conditions";
+  table: "tasks" | "projects" | "conditions" | "medicines" | "doses";
   id: string;
   text: string;
   reason: string;
@@ -27,6 +28,8 @@ export type TodoSnapshot = {
   projects: Project[];
   conditions: ProjectAttention[];
   recoveries: TodoRecovery[];
+  medicines: Medicine[];
+  doses: Dose[];
 };
 
 export type ProjectEditFields = {
@@ -71,11 +74,21 @@ export type TodoWaits = {
   remove: (id: string) => Transaction;
 };
 
+export type TodoMedicines = {
+  add: (input: MedicineInput, creationId?: string) => Promise<Medicine>;
+  edit: (id: string, input: MedicineInput) => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  take: (dose: Dose) => Promise<void>;
+  undo: (id: string) => Promise<void>;
+  applyReceipts: (receipts: MedicineReceipt[], deviceId: string) => Promise<void>;
+};
+
 export type TaskdoReplica = {
   store: MergeableStore;
   tasks: TodoTasks;
   projects: TodoProjects;
   waits: TodoWaits;
+  medicines: TodoMedicines;
   snapshot: () => TodoSnapshot;
   subscribe: (listener: (snapshot: TodoSnapshot) => void) => () => void;
   refresh: () => Promise<void>;
@@ -129,11 +142,14 @@ function recoveryFor(store: MergeableStore, issue: TodoIssue): TodoRecovery {
 
 export function projectTodoData(store: MergeableStore): TodoSnapshot {
   const projection = new TodoModel({ store }).project({ taskOrder: "created" });
+  const medicineSnapshot = new MedicineModel(store).snapshot();
   return {
     tasks: projection.tasks,
     projects: projection.projects,
     conditions: projection.conditions,
-    recoveries: projection.issues.map((issue) => recoveryFor(store, issue)),
+    recoveries: [...projection.issues.map((issue) => recoveryFor(store, issue)), ...medicineSnapshot.recoveries],
+    medicines: medicineSnapshot.medicines,
+    doses: medicineSnapshot.doses,
   };
 }
 
@@ -185,6 +201,7 @@ export function createTaskdoReplica({
   randomId = safeRandomUUID,
 }: CreateTaskdoReplicaOptions): TaskdoReplica {
   const model = new TodoModel({ store, now });
+  const medicineModel = new MedicineModel(store, now);
   const keys = {
     tasks: ["taskdo", ...queryKeyScope, "tasks"],
     projects: ["taskdo", ...queryKeyScope, "projects"],
@@ -201,7 +218,7 @@ export function createTaskdoReplica({
     for (const listener of listeners) listener(snapshot);
   };
   publish();
-  const storeListeners = ["tasks", "projects", "conditions"].map((table) => store.addTableListener(table, publish));
+  const storeListeners = ["tasks", "projects", "conditions", "medicines", "doses"].map((table) => store.addTableListener(table, publish));
   const write = async (mutate: () => void) => {
     if (closed) throw new Error("Local account is closed");
     store.transaction(mutate);
@@ -367,6 +384,23 @@ export function createTaskdoReplica({
     tasks: taskActions,
     projects: projectActions,
     waits: waitActions,
+    medicines: {
+      async add(input, creationId = randomId()) {
+        let result!: Medicine;
+        await write(() => {
+          if (medicineModel.get(creationId)) {
+            medicineModel.edit(creationId, input);
+            result = medicineModel.get(creationId)!;
+          } else result = medicineModel.add(creationId, input);
+        });
+        return result;
+      },
+      edit: (id, input) => write(() => { medicineModel.edit(id, input); }),
+      remove: (id) => write(() => { medicineModel.remove(id); }),
+      take: (dose) => write(() => { medicineModel.take(dose, randomId()); }),
+      undo: (id) => write(() => { medicineModel.undo(id, randomId()); }),
+      applyReceipts: (receipts, deviceId) => write(() => { medicineModel.applyReceipts(receipts, deviceId); }),
+    },
     snapshot: () => snapshot,
     subscribe(listener) {
       listeners.add(listener);
