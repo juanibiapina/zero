@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { createTaskdoReplica, defaultToastController, MedicineDraft, medicineToday } from '@zero/agent-core';
+import { createTaskdoReplica, defaultToastController, MedicineDraft, medicineOccurrences, medicineToday } from '@zero/agent-core';
 import { createMergeableStore } from 'tinybase';
 import type { ReactNode } from 'react';
 
@@ -92,12 +92,12 @@ describe('Medicine creation and management', () => {
     const input = MedicineDraft.create(medicineToday()).change({ name: 'Custom routine' }).commit();
     input.doses[0] = { id: 'evening', remindAt: '20:00', alarmAt: '22:00' };
     const medicine = await data.replica!.medicines.add(input);
+    await data.replica!.medicines.take(medicineOccurrences(medicine, medicineToday())[0]);
     mockParams = { id: medicine.id };
     const screen = await openScreen(<MedicineDetail />, data);
     expect(screen.queryByText('Edit medicine')).toBeNull();
     expect(screen.queryByText('Taken at is the time you pressed Taken.')).toBeNull();
-    await fireEvent.press(screen.getByLabelText('Taken 22:00 dose'));
-    await waitFor(() => expect(screen.getByLabelText('Undo 22:00 dose')).toBeTruthy());
+    expect(screen.getByLabelText('Undo 22:00 dose')).toBeTruthy();
     const confirmation = data.replica!.snapshot().doses[0];
     await fireEvent.press(screen.getByLabelText('Medicine options'));
     await fireEvent.press(screen.getByLabelText('Edit medicine'));
@@ -108,7 +108,18 @@ describe('Medicine creation and management', () => {
     expect(data.replica!.snapshot().medicines[0].doses).toEqual(input.doses);
     expect(data.replica!.snapshot().doses[0]).toEqual(confirmation);
     await fireEvent.press(screen.getByLabelText('Dose history'));
-    expect(screen.getByText('Taken at is the time you pressed Taken.')).toBeTruthy();
+    expect(screen.queryByText('Taken at is the time you pressed Taken.')).toBeNull();
+    expect(screen.getAllByText(/Taken at /)).toHaveLength(2);
+  });
+  it('shows a pending dose without a manual Taken button', async () => {
+    const data = createInMemoryTodoData();
+    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
+    mockParams = { id: medicine.id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    expect(screen.getByText('Today')).toBeTruthy();
+    expect(screen.getByText('20:00')).toBeTruthy();
+    expect(screen.queryByLabelText('Taken 20:00 dose')).toBeNull();
+    expect(data.replica!.snapshot().doses).toHaveLength(0);
   });
   it('keeps creation open through native time selection and closes customization before discard on Back', async () => {
     const screen = await openScreen(<MedicinesList />);

@@ -43,7 +43,7 @@ function useMedicines() {
   return { replica, snapshot, medicines: snapshot?.medicines ?? [], doses: snapshot?.doses ?? [], today };
 }
 function BackToMedicines() {
-  return <Pressable accessibilityRole="button" accessibilityLabel="Back to medicines" onPress={() => router.replace('/browse/medicines')} className="min-h-12 flex-row items-center gap-2 px-screen-x"><MedicineGlyph name="back" /><Text variant="subtitle">Medicines</Text></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel="Back to medicines" onPress={() => router.dismissTo('/browse/medicines')} className="min-h-12 flex-row items-center gap-2 px-screen-x"><MedicineGlyph name="back" /><Text variant="subtitle">Medicines</Text></Pressable>;
 }
 function Page({ title, children }: { title: string; children: ReactNode }) {
   const insets = useSafeAreaInsets();
@@ -158,7 +158,7 @@ export function MedicineDetail() {
   const focusedDose = params.dose ? doses.find((dose) => dose.id === params.dose && dose.medicineId === medicine.id) ?? plannedToday.find((dose) => dose.id === params.dose) : undefined;
   const visibleDoses = params.dose ? focusedDose ? [focusedDose] : [] : plannedToday;
   const history = doses.filter((dose) => dose.medicineId === medicine.id).sort((a, b) => b.on.localeCompare(a.on) || a.scheduledAt.localeCompare(b.scheduledAt));
-  const remove = () => Alert.alert('Delete medicine?', 'Its dose history will also be removed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void run(async () => { await replica.medicines.remove(medicine.id); router.replace('/browse/medicines'); }) }]);
+  const remove = () => Alert.alert('Delete medicine?', 'Its dose history will also be removed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void run(async () => { await replica.medicines.remove(medicine.id); router.dismissTo('/browse/medicines'); }) }]);
   return <View className="flex-1 bg-background">
     <Page title={medicine.name}>
       {medicine.instructions ? <Text className="pb-2">{medicine.instructions}</Text> : null}
@@ -169,15 +169,14 @@ export function MedicineDetail() {
       {visibleDoses.map((planned) => {
         const dose = doses.find((item) => item.id === planned.id) ?? planned;
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
-        const actionable = dose.on === today && state === 'active' && !!slot;
         return <View key={dose.id} className="min-h-16 flex-row flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-divider py-3">
           <View className="gap-0.5"><Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>{time(dose.scheduledAt)}</Text><Text variant="caption">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : slot ? `Quiet reminder ${slot.remindAt}` : 'Unrecorded'}</Text></View>
-          {dose.takenAt ? <Action label={`Undo ${time(dose.scheduledAt)} dose`} disabled={busy} onPress={() => void run(() => replica.medicines.undo(dose.id))} /> : <Pressable accessibilityRole="button" accessibilityLabel={`Taken ${time(dose.scheduledAt)} dose`} accessibilityState={{ disabled: busy || !actionable }} disabled={busy || !actionable} onPress={() => void run(() => replica.medicines.take(dose))} className={`min-h-12 justify-center rounded-xl bg-accent px-5 ${busy || !actionable ? 'opacity-40' : ''}`}><Text className="font-medium text-on-accent">Taken</Text></Pressable>}
+          {dose.takenAt ? <Action label={`Undo ${time(dose.scheduledAt)} dose`} disabled={busy} onPress={() => void run(() => replica.medicines.undo(dose.id))} /> : null}
         </View>;
       })}
       {state !== 'active' && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Dose history" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen((current) => !current)} className="min-h-14 flex-row items-center justify-between gap-3 pt-4"><Text variant="section">History</Text><MedicineGlyph name={historyOpen ? 'collapse' : 'expand'} /></Pressable>
-      {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{dose.on} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}<Text variant="caption" className="pt-3">Taken at is the time you pressed Taken.</Text></View> : null}
+      {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{dose.on} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
       <ReminderSettings />
     </Page>
     {editing || copying ? <MedicineDrawer key={copying ? 'copy' : medicine.id} source={medicine} copy={copying} onClose={() => { setEditing(false); setCopying(false); }} onSaved={(id) => { setEditing(false); setCopying(false); if (copying) router.replace(`/browse/medicines/${id}`); }} /> : null}

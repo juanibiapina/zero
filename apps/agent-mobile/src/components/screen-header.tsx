@@ -191,7 +191,7 @@ export function ScreenHeader({ title, showSyncStatus = false, backToBrowse = fal
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Back to Browse"
-        onPress={() => router.back()}
+        onPress={() => router.dismissTo('/browse')}
         className="min-h-12 justify-center px-screen-x"
       >
         <Text className="text-accent">‹ Browse</Text>

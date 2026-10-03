@@ -25,18 +25,20 @@ appId: dev.juanibiapina.zeroagent
 - tapOn: Open E2E daily medicine
 - assertVisible: Today
 - assertVisible: Quiet reminder 19:00
-- tapOn: Taken 20:00 dose
-- assertVisible: Undo 20:00 dose
-- assertVisible: ".*Taken at.*"
+- assertNotVisible: Taken 20:00 dose
 - tapOn: Dose history
-- assertVisible: Taken at is the time you pressed Taken.
-- takeScreenshot: medicine-dose-recorded
-- tapOn: Undo 20:00 dose
-- assertVisible: Taken 20:00 dose
-- tapOn: Home
-- assertNotVisible: E2E daily medicine
-- tapOn: Browse
-- assertVisible: E2E daily medicine
+- assertVisible: Your recorded doses will appear here.
+- assertNotVisible: Taken at is the time you pressed Taken.
+- takeScreenshot: medicine-course-history
+- tapOn: Back to medicines
+- assertVisible: Open E2E daily medicine
+- tapOn: Back to Browse
+- assertVisible: Upcoming
+- assertNotVisible: Open E2E daily medicine
+- tapOn: Medicines
+- tapOn: Open E2E daily medicine
 - tapOn: Medicine options
 - tapOn: Pause reminders
 - assertVisible: Resume reminders
+- tapOn: Home
+- assertNotVisible: E2E daily medicine
