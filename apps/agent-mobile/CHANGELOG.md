@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-04: Remove Undo from taken medicine doses; confirmation times remain visible.
+
 - 2026-10-04: Change medicine notifications to use a pill icon.
 
 - 2026-10-04: Fix Project title changes being lost when returning to Projects.

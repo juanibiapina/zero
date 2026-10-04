@@ -87,17 +87,20 @@ describe('Medicine creation and management', () => {
     expect(data.replica.snapshot().medicines).toHaveLength(1);
     await data.replica.close();
   });
-  it('preserves a custom schedule and confirmation when editing a description in the drawer', async () => {
+  it.each([false, true])('preserves a taken dose without Undo when editing its description (dose-focused: %s)', async (doseFocused) => {
     const data = createInMemoryTodoData();
     const input = MedicineDraft.create(medicineToday()).change({ name: 'Custom routine' }).commit();
     input.doses[0] = { id: 'evening', remindAt: '20:00', alarmAt: '22:00' };
     const medicine = await data.replica!.medicines.add(input);
-    await data.replica!.medicines.take(medicineOccurrences(medicine, medicineToday())[0]);
-    mockParams = { id: medicine.id };
+    const dose = medicineOccurrences(medicine, medicineToday())[0];
+    await data.replica!.medicines.take(dose);
+    mockParams = { id: medicine.id, ...(doseFocused ? { dose: dose.id } : {}) };
     const screen = await openScreen(<MedicineDetail />, data);
     expect(screen.queryByText('Edit medicine')).toBeNull();
     expect(screen.queryByText('Taken at is the time you pressed Taken.')).toBeNull();
-    expect(screen.getByLabelText('Undo 22:00 dose')).toBeTruthy();
+    expect(screen.getByText('22:00')).toBeTruthy();
+    expect(screen.getByText(/Taken at /)).toBeTruthy();
+    expect(screen.queryByLabelText(/Undo/)).toBeNull();
     const confirmation = data.replica!.snapshot().doses[0];
     await fireEvent.press(screen.getByLabelText('Medicine options'));
     await fireEvent.press(screen.getByLabelText('Edit medicine'));

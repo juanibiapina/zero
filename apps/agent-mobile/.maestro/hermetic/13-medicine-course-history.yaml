@@ -26,6 +26,7 @@ appId: dev.juanibiapina.zeroagent
 - assertVisible: Today
 - assertVisible: Quiet reminder 19:00
 - assertNotVisible: Taken 20:00 dose
+- assertNotVisible: Undo.*dose
 - tapOn: Dose history
 - assertVisible: Your recorded doses will appear here.
 - assertNotVisible: Taken at is the time you pressed Taken.

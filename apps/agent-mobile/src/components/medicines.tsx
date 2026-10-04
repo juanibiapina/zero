@@ -171,7 +171,6 @@ export function MedicineDetail() {
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
         return <View key={dose.id} className="min-h-16 flex-row flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-divider py-3">
           <View className="gap-0.5"><Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>{time(dose.scheduledAt)}</Text><Text variant="caption">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : slot ? `Quiet reminder ${slot.remindAt}` : 'Unrecorded'}</Text></View>
-          {dose.takenAt ? <Action label={`Undo ${time(dose.scheduledAt)} dose`} disabled={busy} onPress={() => void run(() => replica.medicines.undo(dose.id))} /> : null}
         </View>;
       })}
       {state !== 'active' && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
