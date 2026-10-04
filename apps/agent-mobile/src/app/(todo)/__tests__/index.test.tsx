@@ -178,10 +178,11 @@ describe('HomeScreen', () => {
     expect(screen.queryByLabelText('View all projects')).toBeNull();
   });
 
-  it('labels the guest status control as saved on this device', async () => {
+  it('keeps the guest Home header quiet', async () => {
     const screen = await renderScreen({}, true);
-    await waitFor(() => expect(screen.getByLabelText('Saved on this device')).toBeTruthy());
-    expect(screen.queryByText('Offline · saved on this device')).toBeNull();
+    expect(screen.queryByLabelText('Saved on this device')).toBeNull();
+    expect(screen.queryByTestId('sync-status-icon-frame')).toBeNull();
+    expect(screen.getByLabelText('Account')).toBeTruthy();
   });
 
   it('shows arrived project work even when the project has an unresolved After relationship', async () => {

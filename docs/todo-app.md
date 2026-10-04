@@ -116,11 +116,13 @@ timezone and icon-suggestion features. Guest screens omit those authenticated
 requests. Web todo loading is independent of agent settings, so a failed
 settings request does not block local work. Current clients also provide
 offline writes, account isolation, recurrence, Undo, and recovery reporting. The product changelogs are
-the record of shipped user-visible increments. On Home, a status icon beside
-the account control reports local, connecting, syncing, synced, offline, and
-storage-warning states without briefly treating an ordinary reconnect as
-offline. Its details show the last successful sync and offline-copy status;
-mobile also reports the installed app version and available update lifecycle:
+the record of shipped user-visible increments. On mobile Home, a static status
+icon beside the account control appears only for device-saving problems or an
+app update ready for the next launch. Its details include sync status, the last
+successful sync, offline-copy availability, app version, and update lifecycle.
+On web Home, the status icon reports local, connecting, syncing, synced, offline,
+and storage-warning states; its details show the last successful sync and
+offline-copy status:
 
 - [`apps/agent-mobile/CHANGELOG.md`](../apps/agent-mobile/CHANGELOG.md)
 - [`apps/agent-web/CHANGELOG.md`](../apps/agent-web/CHANGELOG.md)

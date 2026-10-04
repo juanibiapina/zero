@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-04: Hide routine sync and update activity on Home; show a static icon only for updates ready for the next launch or device-saving problems.
+
 - 2026-10-04: Remove Undo from taken medicine doses; confirmation times remain visible.
 
 - 2026-10-04: Change medicine notifications to use a pill icon.

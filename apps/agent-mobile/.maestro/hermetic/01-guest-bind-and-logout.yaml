@@ -32,13 +32,8 @@ appId: dev.juanibiapina.zeroagent
 - extendedWaitUntil:
     visible: "Synced"
     timeout: 45000
-- assertVisible:
+- assertNotVisible:
     id: "sync-status-icon-frame"
-- tapOn: "Synced"
-- assertVisible: "Sync status details"
-- assertVisible: "Offline copy"
-- assertVisible: "App"
-- tapOn: "Close sync status"
 - assertVisible: "E2E guest task"
 - tapOn: "E2E safe sign out"
 - extendedWaitUntil:

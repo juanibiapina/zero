@@ -114,11 +114,9 @@ export function SyncStatusControl() {
   const triggerKind = sync.kind === 'warning' || sync.kind === 'offline'
     ? sync.kind
     : updating ? 'busy' : sync.kind;
-  const triggerLabel = (updating || updates.isUpdatePending)
-    && sync.kind !== 'warning'
-    && sync.kind !== 'offline'
-    ? updateLabel(updates)
-    : sync.label;
+  const showTrigger = sync.kind === 'warning' || (updates.isUpdatePending && !updates.isRestarting);
+  const attentionKind = sync.kind === 'warning' ? 'warning' : 'synced';
+  const attentionLabel = sync.kind === 'warning' ? sync.label : 'Update ready for next launch';
   const lastSync = data.sync.lastSyncedAt ? new Date(data.sync.lastSyncedAt) : null;
   const runningUpdate = updates.currentlyRunning.createdAt;
   const updateError = updates.checkError ?? updates.downloadError;
@@ -139,19 +137,19 @@ export function SyncStatusControl() {
 
   return (
     <>
-      <Pressable
+      {showTrigger ? <Pressable
         ref={triggerRef}
         accessibilityRole="button"
-        accessibilityLabel={triggerLabel}
+        accessibilityLabel={attentionLabel}
         accessibilityHint="Shows sync and app update details"
         android_ripple={{ color: rippleColor, borderless: true, radius: 24 }}
         onPress={showPopover}
         className="h-12 w-12 items-center justify-center overflow-hidden rounded-full"
       >
         <View pointerEvents="none">
-          <StatusIcon kind={triggerKind} updateReady={updates.isUpdatePending} />
+          <StatusIcon kind={attentionKind} updateReady={updates.isUpdatePending} />
         </View>
-      </Pressable>
+      </Pressable> : null}
       <Modal
         visible={open}
         transparent

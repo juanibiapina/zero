@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { TodoDataContextProvider, type TodoData } from '@/lib/todo-data-context';
@@ -60,54 +60,95 @@ function renderHeader(value: TodoData, showSyncStatus = false) {
 }
 
 describe('ScreenHeader', () => {
-  it('opens Home sync details from the icon beside the account', async () => {
+  beforeEach(() => {
+    mockUpdateState.current = {
+      currentlyRunning: { isEmbeddedLaunch: true, isEmergencyLaunch: false, emergencyLaunchReason: null },
+      isStartupProcedureRunning: false,
+      isUpdateAvailable: false,
+      isUpdatePending: false,
+      isChecking: false,
+      isDownloading: false,
+      isRestarting: false,
+      restartCount: 0,
+    };
+  });
+
+  it.each(['connecting', 'syncing', 'synced', 'offline'] as const)(
+    'keeps Home quiet while task sync is %s', async (phase) => {
+      const { queryByTestId, getByLabelText } = await renderHeader(data({
+        workspaceStatus: 'account',
+        signedIn: true,
+        sync: { phase, lastSyncedAt: null },
+      }), true);
+
+      expect(queryByTestId('sync-status-icon-frame')).toBeNull();
+      expect(getByLabelText('Account')).toBeTruthy();
+    },
+  );
+
+  it.each(['isChecking', 'isDownloading', 'isStartupProcedureRunning', 'isRestarting'] as const)(
+    'keeps Home quiet during %s', async (state) => {
+      mockUpdateState.current[state] = true;
+      const { queryByTestId } = await renderHeader(data(), true);
+      expect(queryByTestId('sync-status-icon-frame')).toBeNull();
+    },
+  );
+
+  it.each(['connecting', 'syncing', 'synced', 'offline'] as const)(
+    'shows a static pending update while task sync is %s', async (phase) => {
+      mockUpdateState.current.isUpdatePending = true;
+      const { getByLabelText, queryByTestId } = await renderHeader(data({
+        signedIn: true,
+        sync: { phase, lastSyncedAt: null },
+      }), true);
+      expect(getByLabelText('Update ready for next launch')).toBeTruthy();
+      expect(queryByTestId('sync-status-busy')).toBeNull();
+    },
+  );
+
+  it('opens update and sync details and keeps them open when the indicator disappears', async () => {
+    mockUpdateState.current.isUpdatePending = true;
     const lastSyncedAt = '2026-09-27T11:45:00.000Z';
-    const { getByLabelText, getByText, queryByLabelText } = await renderHeader(data({
-      workspaceStatus: 'account',
-      signedIn: true,
-      connected: true,
-      sync: { phase: 'synced', lastSyncedAt },
-    }), true);
+    const value = data({ signedIn: true, sync: { phase: 'synced', lastSyncedAt } });
+    const { getByLabelText, getByText, queryByLabelText, rerender } = await renderHeader(value, true);
 
-    const trigger = getByLabelText('Synced');
-    expect(trigger.props.className).toContain('h-12 w-12');
-    fireEvent.press(trigger);
-
+    fireEvent.press(getByLabelText('Update ready for next launch'));
     await waitFor(() => expect(getByLabelText('Sync status details')).toBeTruthy());
     expect(getByText('Last synced')).toBeTruthy();
     expect(getByText(new Date(lastSyncedAt).toLocaleString())).toBeTruthy();
     expect(getByText('Version')).toBeTruthy();
 
-    fireEvent.press(getByLabelText('Close sync status'));
-    await waitFor(() => expect(queryByLabelText('Sync status details')).toBeNull());
-  });
-
-  it('keeps sync status centered as connecting settles', async () => {
-    const { getByLabelText, getByTestId, queryByLabelText, rerender } = await renderHeader(data({
-      workspaceStatus: 'account',
-      signedIn: true,
-      sync: { phase: 'connecting', lastSyncedAt: '2026-09-27T11:45:00.000Z' },
-    }), true);
-
-    expect(getByLabelText('Connecting')).toBeTruthy();
-    expect(queryByLabelText('Offline')).toBeNull();
-    expect(getByTestId('sync-status-icon-frame')).toHaveStyle({ width: 24, height: 24 });
-    expect(getByTestId('sync-status-busy')).toBeTruthy();
-
-    rerender(
-      <TodoDataContextProvider value={data({
-        workspaceStatus: 'account',
-        signedIn: true,
-        connected: true,
-        sync: { phase: 'synced', lastSyncedAt: '2026-09-27T11:45:00.000Z' },
-      })}>
+    mockUpdateState.current.isUpdatePending = false;
+    await rerender(
+      <TodoDataContextProvider value={value}>
         <ScreenHeader title="Home" showSyncStatus />
       </TodoDataContextProvider>,
     );
+    expect(getByLabelText('Sync status details')).toBeTruthy();
+    fireEvent.press(getByLabelText('Close sync status'));
+    await waitFor(() => expect(queryByLabelText('Sync status details')).toBeNull());
+    expect(queryByLabelText('Synced')).toBeNull();
+  });
 
-    await waitFor(() => expect(getByLabelText('Synced')).toBeTruthy());
-    expect(getByTestId('sync-status-icon-frame')).toHaveStyle({ width: 24, height: 24 });
-    expect(getByTestId('sync-status-synced')).toBeTruthy();
+  it('prioritizes local saving warnings over pending updates', async () => {
+    mockUpdateState.current.isUpdatePending = true;
+    const { getByLabelText, getByText, queryByTestId, queryByLabelText } = await renderHeader(data({
+      durable: false,
+      durabilityError: 'Device storage is full',
+    }), true);
+
+    expect(queryByLabelText('Update ready for next launch')).toBeNull();
+    expect(queryByTestId('sync-status-busy')).toBeNull();
+    fireEvent.press(getByLabelText('Offline saving unavailable'));
+    await waitFor(() => expect(getByText('Device storage is full')).toBeTruthy());
+    expect(getByText('Update ready for next launch')).toBeTruthy();
+  });
+
+  it('hides a pending update during restart', async () => {
+    mockUpdateState.current.isUpdatePending = true;
+    mockUpdateState.current.isRestarting = true;
+    const { queryByTestId } = await renderHeader(data(), true);
+    expect(queryByTestId('sync-status-icon-frame')).toBeNull();
   });
 
   it('offers optional sign-in from the guest account surface', async () => {
