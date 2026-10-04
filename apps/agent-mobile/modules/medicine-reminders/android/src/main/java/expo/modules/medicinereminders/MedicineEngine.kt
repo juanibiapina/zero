@@ -285,7 +285,7 @@ internal object MedicineEngine {
     val openPending = PendingIntent.getActivity(c, id.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val taken = Intent(c, MedicineReceiver::class.java).setAction("medicine.taken").setData(Uri.parse("zero-medicine:taken/${Uri.encode(id)}")).putExtra("workspace", workspace).putExtra("payload", dose.toString())
     val takenPending = PendingIntent.getBroadcast(c, 0, taken, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-    val builder = Notification.Builder(c, if (ringing) RING else QUIET).setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(dose.getString("name"))
+    val builder = Notification.Builder(c, if (ringing) RING else QUIET).setSmallIcon(R.drawable.ic_medicine_notification).setContentTitle(dose.getString("name"))
       .setContentText(if (ringing) "${dose.getString("alarmLabel")} dose not recorded" else listOf(dose.optString("instructions", ""), "Alarm at ${dose.getString("alarmLabel")}").filter { it.isNotBlank() }.joinToString(" · "))
       .setContentIntent(openPending).setCategory(if (ringing) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER).setOngoing(!ringing).setOnlyAlertOnce(true)
       .addAction(Notification.Action.Builder(null, "Taken", takenPending).build())

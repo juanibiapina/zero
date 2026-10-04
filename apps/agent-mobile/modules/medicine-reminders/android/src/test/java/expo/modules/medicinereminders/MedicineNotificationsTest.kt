@@ -20,6 +20,26 @@ class MedicineNotificationsTest {
   private val manager: NotificationManager get() = context.getSystemService(NotificationManager::class.java)
 
   @Test
+  @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+  fun remindersAndAlarmsShowATwoHalfCapsuleOnATransparentBackground() {
+    MedicineEngine.channels(context)
+    val dose = JSONObject("""{"id":"dose","medicineId":"medicine","name":"Pill","alarmLabel":"20:00","instructions":"After food"}""")
+    for (ringing in listOf(false, true)) {
+      val notification = MedicineEngine.notification(context, "workspace", dose, ringing)
+      val icon = notification.smallIcon.loadDrawable(context)!!
+      val bitmap = android.graphics.Bitmap.createBitmap(24, 24, android.graphics.Bitmap.Config.ARGB_8888)
+      icon.setBounds(0, 0, 24, 24)
+      icon.draw(android.graphics.Canvas(bitmap))
+      for ((x, y) in listOf(7 to 17, 17 to 7)) {
+        assertEquals("Capsule half at ($x, $y), ringing=$ringing", 255, android.graphics.Color.alpha(bitmap.getPixel(x, y)))
+      }
+      for ((x, y) in listOf(0 to 0, 7 to 7, 17 to 17, 12 to 12)) {
+        assertEquals("Transparent background or divider at ($x, $y), ringing=$ringing", 0, android.graphics.Color.alpha(bitmap.getPixel(x, y)))
+      }
+    }
+  }
+
+  @Test
   fun aBlockedMedicinesGroupDisablesBothCategories() {
     MedicineEngine.channels(context)
     val group = manager.getNotificationChannelGroup("medicines")

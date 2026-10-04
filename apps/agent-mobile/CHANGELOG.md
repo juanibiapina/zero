@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-04: Change medicine notifications to use a pill icon.
+
 - 2026-10-04: Fix Project title changes being lost when returning to Projects.
 
 - 2026-10-03: Add support for medicines
