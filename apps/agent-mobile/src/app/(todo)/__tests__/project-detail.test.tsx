@@ -162,6 +162,49 @@ describe('ProjectDetailScreen', () => {
     defaultToastController.dismiss();
   });
 
+  it('saves the focused project title before returning to projects', async () => {
+    const screen = await renderScreen();
+    const input = await waitFor(() => screen.getByLabelText('Project title'));
+    await fireEvent.changeText(input, '  Run a marathon  ');
+    mockBack.mockImplementationOnce(() => {
+      expect(screen.data.replica!.projects.collection.get('1')?.title).toBe('Run a marathon');
+    });
+
+    await fireEvent.press(screen.getByLabelText('Back to projects'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    await fireEvent(input, 'blur');
+    await waitFor(() => expect(screen.getByDisplayValue('Run a marathon')).toBeTruthy());
+  });
+
+  it('restores a blank title when returning to projects', async () => {
+    const screen = await renderScreen();
+    const input = await waitFor(() => screen.getByLabelText('Project title'));
+    await fireEvent.changeText(input, '   ');
+
+    await fireEvent.press(screen.getByLabelText('Back to projects'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(screen.data.replica!.projects.collection.get('1')?.title).toBe('Run a 5K');
+    expect(screen.getByDisplayValue('Run a 5K')).toBeTruthy();
+  });
+
+  it('keeps an untouched title current while editing the description', async () => {
+    const screen = await renderScreen();
+    const input = await waitFor(() => screen.getByLabelText('Project description'));
+    await fireEvent.changeText(input, 'Finish a community race');
+    await act(async () => {
+      await screen.data.replica!.projects.edit('1', { title: 'Run a marathon' }).isPersisted.promise;
+    });
+    await waitFor(() => expect(screen.getByDisplayValue('Run a marathon')).toBeTruthy());
+
+    await fireEvent.press(screen.getByLabelText('Back to projects'));
+
+    expect(screen.data.replica!.projects.collection.get('1')).toMatchObject({
+      title: 'Run a marathon', description: 'Finish a community race',
+    });
+  });
+
   it('edits the project description through the screen API', async () => {
     const screen = await renderScreen();
     const input = await waitFor(() => screen.getByLabelText('Project description'));
@@ -254,10 +297,11 @@ describe('ProjectDetailScreen', () => {
     await waitFor(() => expect(screen.data.replica!.projects.collection.get('1')?.state).toBe('in-play'));
   });
 
-  it('deletes a project with an unblurred description and returns without editing it afterward', async () => {
+  it('deletes a project with unblurred title and description drafts without editing it afterward', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const screen = await renderScreen();
     const input = await waitFor(() => screen.getByLabelText('Project description'));
+    await fireEvent.changeText(screen.getByLabelText('Project title'), 'Unsaved title');
     await fireEvent.changeText(input, 'Unsaved description');
     await fireEvent.press(screen.getByLabelText('Project settings'));
     await fireEvent.press(screen.getByText('Delete project'));

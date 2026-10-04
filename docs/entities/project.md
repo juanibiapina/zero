@@ -115,9 +115,10 @@ Waiting and After are never Task-list footers and receive no Task gestures,
 reorder behavior, dividers, or row spacing. Empty relationship regions have no
 heading, prompt, input, helper copy, or local add control.
 
-On mobile, a dirty description queues an optimistic edit before another
-workspace action or navigation continues. Blank description text clears the
-stored value to `null`.
+On mobile, dirty title and description drafts queue an optimistic edit before
+another workspace action or navigation continues, including the **Back to
+projects** button. Titles are trimmed; a blank title restores the stored title.
+Blank description text clears the stored value to `null`.
 
 Mobile Add opens the shared drawer directly with Task selected. Web Add offers
 Task, Waiting condition, After project, or Project and then opens the shared

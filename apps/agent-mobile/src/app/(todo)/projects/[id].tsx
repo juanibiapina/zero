@@ -126,30 +126,31 @@ function normalizeDescription(value: string | null | undefined): string | null {
   return value;
 }
 
-// Own the description draft at the workspace seam. `flush` is synchronous: it
-// queues the existing optimistic transaction and lets the user's action continue.
-function useProjectDescriptionDraft(
+type ProjectDraft = { title: string; description: string };
+type ProjectDraftValues = { title: string; description: string | null };
+
+function useProjectDraft(
   project: Project | null,
   commitEdit: CommitProjectEdit,
 ) {
   const projectId = project?.id ?? null;
-  const initialValue = project?.description ?? '';
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const value =
-    projectId && Object.prototype.hasOwnProperty.call(drafts, projectId)
-      ? drafts[projectId]
-      : initialValue;
+  const [drafts, setDrafts] = useState<Record<string, Partial<ProjectDraft>>>({});
+  const edited = projectId ? drafts[projectId] : undefined;
+  const draft = {
+    title: edited?.title ?? project?.title ?? '',
+    description: edited?.description ?? project?.description ?? '',
+  };
   const queuedRef = useRef<{
     projectId: string;
-    value: string | null;
+    value: ProjectDraftValues;
     revision: number;
   } | null>(null);
   const revisionRef = useRef(0);
   const commitEditRef = useRef(commitEdit);
   const latestRef = useRef<{
     projectId: string;
-    value: string;
-    stored: string | null;
+    draft: ProjectDraft;
+    stored: ProjectDraftValues;
   } | null>(null);
 
   useLayoutEffect(() => {
@@ -157,20 +158,21 @@ function useProjectDescriptionDraft(
     commitEditRef.current = commitEdit;
     latestRef.current = {
       projectId: project.id,
-      value,
-      stored: normalizeDescription(project.description),
+      draft,
+      stored: { title: project.title, description: normalizeDescription(project.description) },
     };
     if (queuedRef.current?.projectId !== project.id) queuedRef.current = null;
-  }, [commitEdit, project, value]);
+  }, [commitEdit, project, draft]);
 
   const onChange = useCallback(
-    (next: string) => {
-      if (!projectId) return;
+    (field: keyof ProjectDraft, next: string) => {
       const latest = latestRef.current;
-      if (latest?.projectId === projectId) {
-        latestRef.current = { ...latest, value: next };
-      }
-      setDrafts((current) => ({ ...current, [projectId]: next }));
+      if (!projectId || latest?.projectId !== projectId) return;
+      const nextDraft = { ...latest.draft, [field]: next };
+      latestRef.current = { ...latest, draft: nextDraft };
+      setDrafts((current) => ({
+        ...current, [projectId]: { ...current[projectId], [field]: next },
+      }));
     },
     [projectId],
   );
@@ -178,30 +180,36 @@ function useProjectDescriptionDraft(
   const flush = useCallback(() => {
     const latest = latestRef.current;
     if (!latest) return;
-    const next = normalizeDescription(latest.value);
     const queued = queuedRef.current;
     const baseline =
       queued?.projectId === latest.projectId ? queued.value : latest.stored;
-    if (next === baseline) return;
+    const next = {
+      title: latest.draft.title.trim() || baseline.title,
+      description: normalizeDescription(latest.draft.description),
+    };
+    if (latest.draft.title !== next.title) {
+      const nextDraft = { ...latest.draft, title: next.title };
+      latestRef.current = { ...latest, draft: nextDraft };
+      setDrafts((current) => ({
+        ...current, [latest.projectId]: { ...current[latest.projectId], title: next.title },
+      }));
+    }
+    const fields: ProjectEditFields = {};
+    if (next.title !== baseline.title) fields.title = next.title;
+    if (next.description !== baseline.description) fields.description = next.description;
+    if (Object.keys(fields).length === 0) return;
 
     const revision = revisionRef.current + 1;
     revisionRef.current = revision;
-    queuedRef.current = {
-      projectId: latest.projectId,
-      value: next,
-      revision,
-    };
-    const tx = commitEditRef.current({ description: next });
+    queuedRef.current = { projectId: latest.projectId, value: next, revision };
+    const tx = commitEditRef.current(fields);
     if (!tx) {
       queuedRef.current = null;
       return;
     }
     void tx.isPersisted.promise.catch(() => {
       const current = queuedRef.current;
-      if (
-        current?.projectId === latest.projectId &&
-        current.revision === revision
-      ) {
+      if (current?.projectId === latest.projectId && current.revision === revision) {
         queuedRef.current = null;
         if (latestRef.current?.projectId === latest.projectId) {
           latestRef.current = { ...latestRef.current, stored: baseline };
@@ -210,7 +218,7 @@ function useProjectDescriptionDraft(
     });
   }, []);
 
-  return { value, onChange, flush };
+  return { draft, onChange, flush };
 }
 
 function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
@@ -252,16 +260,12 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
     },
     [api, project],
   );
-  const {
-    value: descriptionValue,
-    onChange: changeDescription,
-    flush: flushDescription,
-  } = useProjectDescriptionDraft(project, commitEdit);
+  const { draft, onChange: changeDraft, flush: flushDraft } = useProjectDraft(project, commitEdit);
   const back = useCallback(() => {
-    flushDescription();
+    flushDraft();
     router.back();
-  }, [flushDescription, router]);
-  useFocusEffect(useCallback(() => () => flushDescription(), [flushDescription]));
+  }, [flushDraft, router]);
+  useFocusEffect(useCallback(() => () => flushDraft(), [flushDraft]));
 
   const commitState = useCallback(
     (state: ProjectState) => {
@@ -348,13 +352,13 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      flushDescription();
+      flushDraft();
       if (detail.handleBack()) return true;
       if (add.handleBack()) return true;
       return false;
     });
     return () => sub.remove();
-  }, [detail, add, flushDescription]);
+  }, [detail, add, flushDraft]);
 
   const { refreshing, onRefresh } = usePullRefresh(replica.refresh);
   const today = useLocalDay();
@@ -408,7 +412,7 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
     <View
       testID="project-workspace"
       className="flex-1 bg-background"
-      onTouchStart={flushDescription}
+      onTouchStart={flushDraft}
     >
       <BackRow onBack={back} />
       <ReorderableTaskList
@@ -439,11 +443,14 @@ function ProjectDetail({ replica }: { replica: TaskdoReplica }) {
                   projectAfterRemovalImpact(project.id, conds, list),
                 )}
                 onEdit={commitEdit}
+                title={draft.title}
+                onChangeTitle={(value) => changeDraft('title', value)}
+                onCommitTitle={flushDraft}
                 description={
                   <ProjectDescription
-                    value={descriptionValue}
-                    onChange={changeDescription}
-                    onBlur={flushDescription}
+                    value={draft.description}
+                    onChange={(value) => changeDraft('description', value)}
+                    onBlur={flushDraft}
                   />
                 }
                 onState={(state) => {
@@ -642,6 +649,9 @@ function ProjectHeader({
   statusLabel,
   deletionWarning,
   onEdit,
+  title,
+  onChangeTitle,
+  onCommitTitle,
   description,
   onState,
   onDelete,
@@ -650,26 +660,19 @@ function ProjectHeader({
   statusLabel: string;
   deletionWarning: string | null;
   onEdit: (fields: ProjectEditFields) => void;
+  title: string;
+  onChangeTitle: (value: string) => void;
+  onCommitTitle: () => void;
   description: ReactNode;
   onState: (state: ProjectState) => void;
   onDelete: () => void;
 }) {
-  const [title, setTitle] = useState(project.title);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const foreground = useColor('--color-foreground');
   const secondary = useColor('--color-foreground-secondary');
   const danger = useColor('--color-danger');
   const ripple = useColor('--color-ripple');
-
-  const commitTitle = () => {
-    const trimmed = title.trim();
-    if (trimmed === '' || trimmed === project.title) {
-      setTitle(project.title);
-      return;
-    }
-    onEdit({ title: trimmed });
-  };
 
   // Apply an icon (a suggestion chip or the manual grid) and close the picker.
   // A no-op edit is skipped.
@@ -696,9 +699,9 @@ function ProjectHeader({
         </Pressable>
         <Input
           value={title}
-          onChangeText={setTitle}
-          onBlur={commitTitle}
-          onSubmitEditing={commitTitle}
+          onChangeText={onChangeTitle}
+          onBlur={onCommitTitle}
+          onSubmitEditing={onCommitTitle}
           returnKeyType="done"
           blurOnSubmit
           accessibilityLabel="Project title"

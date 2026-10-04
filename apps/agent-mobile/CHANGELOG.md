@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-04: Fix Project title changes being lost when returning to Projects.
+
 - 2026-10-03: Add support for medicines
 
 - 2026-10-03: Offline edits stay saved when storage refreshes overlap a change, and failed saves no longer appear successful.
