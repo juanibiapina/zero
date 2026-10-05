@@ -48,7 +48,7 @@ run_launcher_phase() {
       -n "$PACKAGE/.MainActivity" >> "$ARTIFACT_DIR/launch.txt"
   fi
   STAGE="maestro launcher $checkpoint"
-  maestro --no-ansi test "$HERMETIC_FLOW_DIR/08-launcher-icon-follows-home.yaml" \
+  maestro --no-ansi test "$PROOF_FLOW_DIR/launcher-icon-follows-home.yaml" \
     -e "ACTION=$action" -e "TASK_NUMBER=$number" \
     --format junit --output "$ARTIFACT_DIR/maestro/launcher-$checkpoint.xml" \
     --debug-output "$ARTIFACT_DIR/maestro/launcher-$checkpoint" \
@@ -65,8 +65,6 @@ run_launcher_phase() {
 run_launcher_icon_proof() {
   local count remaining tasks_response="" projects_response="" other_tasks="" other_projects=""
   local icons=(Empty OneTask TwoTasks ThreeTasks FourPlusTasks FourPlusTasks)
-  STAGE="phone reset before launcher proof"
-  reset_e2e_phone_state
   run_launcher_phase ready 0 '' Empty
   for count in 1 2 3 4 5; do
     run_launcher_phase add "$count" "${icons[$((count - 1))]}" "${icons[$count]}"

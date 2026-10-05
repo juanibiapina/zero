@@ -18,8 +18,10 @@ export default function HermeticResetScreen() {
         await signOut();
         await resetHermeticTodoState();
         setStatus('done');
+        console.info('zero-e2e: reset-done');
       } catch {
         setStatus('failed');
+        console.info('zero-e2e: reset-failed');
       }
     })();
   }, [signOut]);

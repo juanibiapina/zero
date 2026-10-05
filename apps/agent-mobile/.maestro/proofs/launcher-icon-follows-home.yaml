@@ -9,7 +9,7 @@ appId: dev.juanibiapina.zeroagent
       true: ${ACTION == 'ready'}
     commands:
       - extendedWaitUntil:
-          visible: "Saved on this device"
+          visible: "E2E sync: Saved on this device"
           timeout: 45000
       - assertVisible: "Home is clear"
 - runFlow:
@@ -30,7 +30,7 @@ appId: dev.juanibiapina.zeroagent
       - tapOn: "E2E sign in"
       - tapOn: "Sign in as Account A"
       - extendedWaitUntil:
-          visible: "Synced"
+          visible: "E2E sync: Synced"
           timeout: 45000
       - assertVisible: "E2E icon task 5"
 - runFlow:
@@ -48,7 +48,7 @@ appId: dev.juanibiapina.zeroagent
     commands:
       - tapOn: "E2E safe sign out"
       - extendedWaitUntil:
-          visible: "Saved on this device"
+          visible: "E2E sync: Saved on this device"
           timeout: 45000
       - assertVisible: "Home is clear"
       - assertNotVisible: "E2E icon task 5"

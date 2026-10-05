@@ -71,8 +71,5 @@ from Metro into the attached Pixel 7 development client. One hermetic profile
 selects fake Clerk auth, localhost networking, isolated device stores, and
 suppressed launcher side effects. `wrangler.e2e.jsonc` trusts the local bearer as
 the userId and writes to a fresh local Durable Object. The harness then asserts
-the result through both the mobile UI and the Worker's HTTP interface.
-
-The manual **Mobile Release E2E** workflow runs the same `.maestro/hermetic/`
-flow on an emulator with a standalone E2E APK. See
+the result through both the mobile UI and the Worker's HTTP interface. See
 `apps/agent-mobile/README.md` ("End-to-end tests").

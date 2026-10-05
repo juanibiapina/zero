@@ -18,11 +18,6 @@ import {
   HERMETIC_ACCOUNT_B,
 } from '../hermetic-auth-control';
 
-// The extended persistence proof starts in its dedicated account. Ordinary
-// hermetic behavior starts signed out and chooses Account A or B through UI.
-const INITIAL_ACCOUNT = process.env.EXPO_PUBLIC_TASKDO_PROOF === '1'
-  ? 'taskdo-proof-mobile'
-  : null;
 export const E2E_ACCOUNT_A = HERMETIC_ACCOUNT_A;
 export const E2E_ACCOUNT_B = HERMETIC_ACCOUNT_B;
 
@@ -40,7 +35,7 @@ function useFakeAuth(): FakeAuth {
 }
 
 export function ClerkProvider({ children }: { children: ReactNode }) {
-  const [accountId, setAccountId] = useState<string | null>(INITIAL_ACCOUNT);
+  const [accountId, setAccountId] = useState<string | null>(null);
   const value = useMemo(() => ({ accountId, setAccountId }), [accountId]);
   return <FakeAuthContext.Provider value={value}>{children}</FakeAuthContext.Provider>;
 }

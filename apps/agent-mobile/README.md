@@ -298,52 +298,91 @@ Before running checks on `mini`:
 
 ## End-to-end tests (Pixel + Maestro)
 
-The default behavioral proof runs the current checkout on the attached Pixel 7:
+Test behavior in Jest at the module interface by default. The phone suite runs
+only the critical flows that need a real phone and the real Worker:
 
 ```bash
 pnpm --filter @zero/agent-mobile e2e:pixel
 ```
 
+It runs the two flows in `.maestro/critical/`:
+
+- **`todo-sync-and-accounts`:** a guest task survives an app restart, uploads
+  when the guest signs in as Account A, and locks on unexpected auth loss.
+  Account B then deletes the local copy and downloads its own server task.
+- **`medicine-reminder-notification`:** a native medicine reminder appears in
+  the notification shade, and Taken from the notification is recorded as a
+  dose.
+
+Change one of these flows only when a change touches its seam (native
+persistence across restart, account binding and sync with the Worker, or native
+notifications) and Jest cannot prove the behavior. Adding a third default flow
+needs a decision recorded here first. Use manual inspection with screenshots for
+visual, auditory, tactile, or accessibility judgment.
+
 The Pixel must have the existing development client installed, be USB-connected,
 and appear as `model:Pixel_7` in `adb devices -l`. Rootless Podman and Maestro
 must be available. The command refuses a missing or non-debuggable app and never
-installs an APK. Ordinary flows cold-start through the runner's explicit Metro
-link to `MainActivity`; launching an icon alias can restart the development
-client through a second activity and crash React Native Fabric.
+installs an APK. It also refuses to run while another installed app handles
+`zeroagent://` links, because Android would open a chooser over every flow;
+disable or uninstall that app first. Flows cold-start through the runner's explicit Metro link to
+`MainActivity`; launching an icon alias can restart the development client
+through a second activity and crash React Native Fabric.
 
 `run-metro-e2e.sh` owns the full run:
 
 1. It records checksums for every non-hermetic account and guest replica file.
-2. It starts a fresh local Worker in Podman on port 8787.
-3. It starts headless Metro on port 8082 with
-   `EXPO_PUBLIC_HERMETIC_E2E=1` and opens the development client through USB.
-4. It runs the four ordinary behavior flows in `.maestro/hermetic/` sequentially.
-   Before every flow, an app-owned E2E route signs out fake Clerk, removes only
-   the exact hermetic SQLite files, and clears only hermetic AsyncStorage keys.
-   Before each flow after the first, the runner also starts a Worker with a new
-   temporary persistence directory.
-5. Each flow verifies both fake accounts' Worker postconditions before that
-   reset. Guest persistence/binding/logout and unexpected-auth mismatch are
-   covered alongside Project and navigation behavior; guest-only
-   navigation leaves both accounts empty.
-6. It saves each flow's Account A and Account B Task and Project responses with
-   the run artifacts.
-7. It verifies production file checksums, launcher alias state, and installed
-   package identity.
-8. It removes E2E files, reverse ports, containers, and child processes.
+2. It starts a fresh local Worker in Podman on port 8787 and headless Metro on
+   port 8082 with `EXPO_PUBLIC_HERMETIC_E2E=1`, side by side. It seeds Account B
+   with one server task.
+3. It opens the development client through USB. Before every flow, the app-owned
+   `zeroagent:///e2e-reset` route signs out fake Clerk, removes only the exact
+   hermetic SQLite files, and clears only hermetic AsyncStorage keys. The route
+   logs `zero-e2e: reset-done`, which the runner reads from the Metro log.
+4. After each flow it checks both fake accounts' Tasks and Projects in the
+   Worker.
+5. It verifies production file checksums, launcher alias state, and installed
+   package identity, then removes E2E files, reverse ports, the container, and
+   child processes.
+
+Startup reuses two caches. The Metro cache lives in
+`~/.cache/zero-mobile-e2e/metro-<hash>`, keyed on `pnpm-lock.yaml` and the
+Metro, Babel, and app config, so a dependency or config change starts a fresh
+cache. Delete that directory to force a cold bundle. The Worker container skips
+`pnpm install` while the lockfile matches the stamp in its `node_modules`
+volume, and keeps Corepack's pnpm download in the `zero-e2e-corepack` volume.
+
+A passing run prints one line and deletes its artifacts:
+
+```
+PASS: 2 flows in 4m20s (startup 1m24s, medicine-reminder-notification 1m09s, todo-sync-and-accounts 1m42s)
+```
+
+A failing run prints the failed flow and Maestro's failure line, or the failed
+runner stage and a short log tail, then a screenshot path and the artifact
+directory under `/tmp/zero-mobile-e2e`. The newest 10 failed runs are kept. Set
+`E2E_VERBOSE=1` to stream stage progress and Maestro output.
 
 The one hermetic toggle selects stateful fake Clerk modules, deterministic
-Account A/Account B sign-in controls, unexpected-auth-loss control, the fixed
+Account A/Account B sign-in controls, unexpected-auth-loss control, an `E2E sync:`
+line on Home with the current sync label, the fixed
 `http://localhost:8787` origin, the exact guest replica
 `taskdo-workspace-hermetic-e2e-guest.sqlite`, isolated AsyncStorage keys,
 disabled launcher-count synchronization, disabled EAS Update, and E2E cleartext
-policy. Fake Clerk starts signed out in the ordinary suite; the extended TaskDO
-proof starts in its dedicated account for backward-compatible offline staging.
-It also aliases Clerk's token cache and resource cache to inert local fakes.
-Normal Metro startup restores real Clerk, normal URL selection, production
-storage names, EAS Update, and launcher synchronization.
+policy. Fake Clerk starts signed out. It also aliases Clerk's token cache and
+resource cache to inert local fakes. Normal Metro startup restores real Clerk,
+normal URL selection, production storage names, EAS Update, and launcher
+synchronization.
 
-To prove the Android launcher follows Home, run:
+| State | Normal | Hermetic E2E |
+| --- | --- | --- |
+| Guest todo replica | random `taskdo-workspace-<id>.sqlite` | `taskdo-workspace-hermetic-e2e-guest.sqlite` |
+| Account todo replica | existing descriptor or `taskdo-fixture-<account-id>.sqlite` | guest file bound to Account A; exact Account A/B fixture names after recovery |
+| Timezone key | `zero.timezone.synced` | `zero.e2e.timezone.synced` |
+| Icon-suggestion key | `zero.icon-suggestions.v1` | `zero.e2e.icon-suggestions.v1` |
+
+To prove the Android launcher follows Home, run the opt-in proof in
+`.maestro/proofs/`:
 
 ```bash
 E2E_LAUNCHER_ICON_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel
@@ -353,48 +392,16 @@ This mode enables launcher synchronization in the isolated hermetic workspace.
 It checks the real launcher alias before and after backgrounding, through all
 count buckets, account binding, completion, and safe sign-out. Cleanup restores
 all six aliases' original enabled settings, including manifest defaults, on
-success, failure, or interruption. The ordinary suite keeps launcher
-synchronization disabled. Run this mode separately from the TaskDO proof.
+success, failure, or interruption.
 
-To run the extended TinyBase persistence proof, use
-`E2E_TASKDO_PROOF=1 pnpm --filter @zero/agent-mobile e2e:pixel`. The three
-additional flows prove loose-Task offline restart and REST sync, then Project
-and linked-Task offline restart and Worker REST sync. The active signed-in
-workspace uses one TinyBase SQLite file under Expo's `files/SQLite/`.
-The historical filename prefix remains `taskdo-fixture-` so an installed app
-continues opening the already-migrated file. The harness cleans only its test
-account's file. Home lists raw conflicts and offers safe local repairs for
-missing Project links, invalid recurrence, and invalid After relationships.
+Medicine deadline delivery, Doze, reboot, and race checks run in the separate
+`pnpm --filter @zero/agent-mobile e2e:medicine-native` harness (see
+`docs/entities/medicine.md`).
 
-| State | Normal | Hermetic E2E |
-| --- | --- | --- |
-| Guest todo replica | random `taskdo-workspace-<id>.sqlite` | `taskdo-workspace-hermetic-e2e-guest.sqlite` |
-| Account todo replica | existing descriptor or `taskdo-fixture-<account-id>.sqlite` | guest file bound to Account A; exact Account A/B fixture names after recovery |
-| Timezone key | `zero.timezone.synced` | `zero.e2e.timezone.synced` |
-| Icon-suggestion key | `zero.icon-suggestions.v1` | `zero.e2e.icon-suggestions.v1` |
-
-A successful run prints one `PASS` line with a flow count derived from the
-hermetic YAML files. A failed run prints the failed stage, the artifact
-directory, the JUnit summary, and a relevant log tail. The artifact
-directory retains Metro, Worker, Maestro, logcat, screenshot, and UI hierarchy
-evidence. Set `E2E_VERBOSE=1` for a diagnostic rerun.
-
-For later behavior changes, keep pure state rules in Jest and add or update a
-behavior-named flow in `.maestro/hermetic/` when native rendering, persistence,
-gestures, routing, or screen composition matters. Use manual inspection only
-for visual, auditory, tactile, accessibility-judgment, or otherwise
-non-assertable acceptance criteria.
-
-Two manual emulator workflows remain separate:
-
-- **Mobile E2E** runs `.maestro/ci/` against real Clerk to check guest startup,
-  optional sign-in, and OAuth redirect handling. These flows clear app state.
-- **Mobile Release E2E** builds the standalone hermetic APK and runs the same
-  `.maestro/hermetic/` behavior through `run-release-emulator.sh` against a
-  runner-local Worker. It is optional and never runs on push or pull request.
-
-Both workflows upload screenshots, logcat, and UI hierarchies. The local dev box
-has no KVM, so emulator execution stays in GitHub Actions.
+The manual **Mobile E2E** GitHub workflow runs `.maestro/ci/` on an emulator
+against real Clerk to check guest startup, optional sign-in, and OAuth redirect
+handling. These flows clear app state, so never run them on the Pixel. The local
+dev box has no KVM, so emulator execution stays in GitHub Actions.
 
 ## Physical device testing (Pixel 7 on `mini`)
 

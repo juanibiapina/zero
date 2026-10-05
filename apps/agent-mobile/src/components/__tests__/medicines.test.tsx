@@ -114,6 +114,18 @@ describe('Medicine creation and management', () => {
     expect(screen.queryByText('Taken at is the time you pressed Taken.')).toBeNull();
     expect(screen.getAllByText(/Taken at /)).toHaveLength(2);
   });
+  it('pauses and resumes reminders from Medicine options', async () => {
+    const data = createInMemoryTodoData();
+    const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());
+    mockParams = { id: medicine.id };
+    const screen = await openScreen(<MedicineDetail />, data);
+    await fireEvent.press(screen.getByLabelText('Medicine options'));
+    await fireEvent.press(screen.getByText('Pause reminders'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(true));
+    expect(screen.getByText('Resume reminders')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Resume reminders'));
+    await waitFor(() => expect(data.replica!.snapshot().medicines[0].paused).toBe(false));
+  });
   it('shows a pending dose without a manual Taken button', async () => {
     const data = createInMemoryTodoData();
     const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Vitamin D' }).commit());

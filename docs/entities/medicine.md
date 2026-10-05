@@ -52,7 +52,7 @@ The local [medicine-reminders module](../../apps/agent-mobile/modules/medicine-r
 ./gradlew :medicine-reminders:testDebugUnitTest --max-workers=1
 ```
 
-The course/history, visible-reminder, and normal dose-time notification flows run in the normal suite:
+Course, history, and pause behavior is covered by Jest. The normal suite runs one medicine phone flow: a reminder notification appears in the shade, and Taken from the notification is recorded as a dose:
 
 ```bash
 pnpm --filter @zero/agent-mobile e2e:pixel

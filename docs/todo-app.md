@@ -148,9 +148,10 @@ remain available in Git history instead of the live documentation tree.
 
 - Run focused package tests, lint, and typechecks while changing a surface.
 - Run `gob run bin/ci` before completion.
-- Use `pnpm --filter @zero/agent-mobile e2e:pixel` for mobile behavior involving
-  persisted collections, routing, gestures, or native rendering. Follow the
-  process-isolation guidance in
+- Test mobile behavior in Jest by default. Run
+  `pnpm --filter @zero/agent-mobile e2e:pixel` when a change touches one of the
+  critical phone seams: native persistence across restart, account binding and
+  sync with the Worker, or native notifications. See "End-to-end tests" in
   [`apps/agent-mobile/README.md`](../apps/agent-mobile/README.md).
 - Add user-visible changes to the affected product changelog. Internal
   refactors and documentation cleanup do not get changelog entries.

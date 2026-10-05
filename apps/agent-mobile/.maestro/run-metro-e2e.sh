@@ -3,7 +3,8 @@ set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MOBILE_DIR="${REPO_ROOT}/apps/agent-mobile"
-HERMETIC_FLOW_DIR="${MOBILE_DIR}/.maestro/hermetic"
+CRITICAL_FLOW_DIR="${MOBILE_DIR}/.maestro/critical"
+PROOF_FLOW_DIR="${MOBILE_DIR}/.maestro/proofs"
 PACKAGE="dev.juanibiapina.zeroagent"
 METRO_PORT=8082
 METRO_DEEP_LINK="zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${METRO_PORT}"
@@ -11,53 +12,55 @@ WORKER_PORT=8787
 ACCOUNT_A="e2e-account-a"
 ACCOUNT_B="e2e-account-b"
 GUEST_TASK_TEXT="E2E guest task"
-PRIVATE_TASK_TEXT="E2E private Account A task"
-PROJECT_TITLE="E2E described project"
-PROJECT_DESCRIPTION="E2E durable project description"
-TASKDO_PROOF="${E2E_TASKDO_PROOF:-0}"
+SERVER_TASK_TEXT="E2E server task"
 LAUNCHER_ICON_PROOF="${E2E_LAUNCHER_ICON_PROOF:-0}"
 if [[ "$LAUNCHER_ICON_PROOF" != "0" && "$LAUNCHER_ICON_PROOF" != "1" ]]; then
   echo 'E2E_LAUNCHER_ICON_PROOF must be unset, "0", or "1"' >&2
   exit 1
 fi
-if [[ "$LAUNCHER_ICON_PROOF" == "1" && "$TASKDO_PROOF" == "1" ]]; then
-  echo 'Run the launcher and TaskDO proofs separately' >&2
-  exit 1
-fi
-if [[ "$LAUNCHER_ICON_PROOF" == "1" ]]; then
-  FLOW_COUNT=1
-elif [[ "$TASKDO_PROOF" == "1" ]]; then
-  FLOW_COUNT=2
-else
-  FLOW_COUNT="$(find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' ! -name '*launcher*' | wc -l | tr -d '[:space:]')"
-fi
 IMAGE="node:22-slim"
+ARTIFACT_ROOT="${E2E_ARTIFACT_ROOT:-/tmp/zero-mobile-e2e}"
+KEEP_FAILED_RUNS=10
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM"
-ARTIFACT_DIR="${E2E_ARTIFACT_ROOT:-/tmp/zero-mobile-e2e}/${RUN_ID}"
-PERSIST_ROOT="$(mktemp -d -t zero-mobile-e2e-worker.XXXXXX)"
-PERSIST_DIR="$PERSIST_ROOT/initial"
-mkdir -p "$PERSIST_DIR"
+ARTIFACT_DIR="${ARTIFACT_ROOT}/${RUN_ID}"
+CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/zero-mobile-e2e"
+PERSIST_DIR="$(mktemp -d -t zero-mobile-e2e-worker.XXXXXX)"
 CONTAINER="zero-mobile-e2e-${RUN_ID,,}"
 CONTAINER="${CONTAINER//[^a-z0-9_.-]/-}"
 STAGE="preflight"
-STARTED_AT="$(date +%s)"
+STARTED_AT="$SECONDS"
+TIMINGS=()
+FLOW_COUNT=0
+FAILED_FLOW=""
 SUCCESS=0
 DIAGNOSTICS_CAPTURED=0
 PRODUCTION_SNAPSHOT_TAKEN=0
 METRO_PID=""
 WORKER_PID=""
-LOGCAT_PID=""
 SERIAL=""
 
 mkdir -p "$ARTIFACT_DIR/maestro"
+: > "$ARTIFACT_DIR/runner.log"
 : > "$ARTIFACT_DIR/metro.log"
 : > "$ARTIFACT_DIR/worker.log"
 : > "$ARTIFACT_DIR/maestro.log"
-: > "$ARTIFACT_DIR/logcat.txt"
 
 verbose() {
   if [[ "${E2E_VERBOSE:-0}" == "1" ]]; then
     printf '[%s] %s\n' "$STAGE" "$*"
+  fi
+}
+
+note() {
+  printf '%s\n' "$*" >> "$ARTIFACT_DIR/runner.log"
+}
+
+duration() {
+  local total="$1"
+  if (( total >= 60 )); then
+    printf '%dm%02ds' "$((total / 60))" "$((total % 60))"
+  else
+    printf '%ds' "$total"
   fi
 }
 
@@ -71,7 +74,7 @@ adb_device() {
 
 production_checksums() {
   local command
-  command='cd files/SQLite 2>/dev/null || exit 0; for f in taskdo-*.sqlite*; do [ -f "$f" ] || continue; case "$f" in taskdo-workspace-hermetic-e2e-guest.sqlite*|taskdo-fixture-e2e-account-a.sqlite*|taskdo-fixture-e2e-account-b.sqlite*|taskdo-fixture-taskdo-proof-mobile.sqlite*|taskdo-workspace-medicine-proof.sqlite*) continue;; esac; sha256sum "$f"; done'
+  command='cd files/SQLite 2>/dev/null || exit 0; for f in taskdo-*.sqlite*; do [ -f "$f" ] || continue; case "$f" in taskdo-workspace-hermetic-e2e-guest.sqlite*|taskdo-fixture-e2e-account-a.sqlite*|taskdo-fixture-e2e-account-b.sqlite*|taskdo-workspace-medicine-proof.sqlite*) continue;; esac; sha256sum "$f"; done'
   adb_device shell "run-as $PACKAGE sh -c '$command'" 2>/dev/null | tr -d '\r' | sort
 }
 
@@ -94,29 +97,43 @@ source "$MOBILE_DIR/.maestro/launcher-icon-proof.sh"
 
 delete_e2e_stores() {
   local command
-  command='rm -f files/SQLite/taskdo-workspace-hermetic-e2e-guest.sqlite* files/SQLite/taskdo-fixture-e2e-account-a.sqlite* files/SQLite/taskdo-fixture-e2e-account-b.sqlite* files/SQLite/taskdo-fixture-taskdo-proof-mobile.sqlite* files/SQLite/taskdo-workspace-medicine-proof.sqlite*'
+  command='rm -f files/SQLite/taskdo-workspace-hermetic-e2e-guest.sqlite* files/SQLite/taskdo-fixture-e2e-account-a.sqlite* files/SQLite/taskdo-fixture-e2e-account-b.sqlite* files/SQLite/taskdo-workspace-medicine-proof.sqlite*'
   adb_device shell "run-as $PACKAGE sh -c '$command'" >/dev/null 2>&1 || true
 }
 
+reset_marker_count() {
+  grep -c 'zero-e2e: reset-' "$ARTIFACT_DIR/metro.log" || true
+}
+
 reset_e2e_phone_state() {
-  local reset_hierarchy="$ARTIFACT_DIR/reset-hierarchy.txt"
-  adb_device shell am start -W \
-    -a android.intent.action.VIEW \
-    -d "zeroagent:///e2e-reset" \
-    "$PACKAGE" >/dev/null
-  for _ in $(seq 1 30); do
-    timeout 45 maestro --no-ansi hierarchy --compact > "$reset_hierarchy" 2>&1 || true
-    grep -Eq 'text=Hermetic state reset|accessibilityText=Hermetic state reset' "$reset_hierarchy" && break
+  local timeout="${1:-90}" before deadline resend_at=0
+  before="$(reset_marker_count)"
+  deadline=$((SECONDS + timeout))
+  if ! adb_device shell pidof "$PACKAGE" >/dev/null 2>&1; then
+    adb_device shell am start -W -a android.intent.action.VIEW \
+      -d "$METRO_DEEP_LINK" "$PACKAGE" >/dev/null
+  fi
+  while (( SECONDS < deadline )); do
+    if (( SECONDS >= resend_at )); then
+      adb_device shell am start -W -a android.intent.action.VIEW \
+        -d "zeroagent:///e2e-reset" "$PACKAGE" >/dev/null
+      resend_at=$((SECONDS + 20))
+    fi
+    if (( $(reset_marker_count) > before )); then
+      if grep 'zero-e2e: reset-' "$ARTIFACT_DIR/metro.log" | tail -1 | grep -q 'reset-done'; then
+        adb_device shell am force-stop "$PACKAGE" >/dev/null
+        # Once the app has closed SQLite, exact-file cleanup cannot match real
+        # guest or account databases.
+        delete_e2e_stores
+        return 0
+      fi
+      note 'The app-owned hermetic state reset failed'
+      return 1
+    fi
     sleep 1
   done
-  if ! grep -Eq 'text=Hermetic state reset|accessibilityText=Hermetic state reset' "$reset_hierarchy"; then
-    echo 'The app-owned hermetic state reset did not complete' >&2
-    return 1
-  fi
-  adb_device shell am force-stop "$PACKAGE" >/dev/null
-  # Once the app has closed SQLite, exact-file cleanup cannot match real guest
-  # or account databases.
-  delete_e2e_stores
+  note "The app-owned hermetic state reset did not finish within ${timeout}s"
+  return 1
 }
 
 capture_diagnostics() {
@@ -126,31 +143,41 @@ capture_diagnostics() {
   if [[ -n "$SERIAL" ]]; then
     timeout 15 adb -s "$SERIAL" exec-out screencap -p > "$ARTIFACT_DIR/screen.png" 2>/dev/null
     timeout 15 maestro --no-ansi hierarchy --compact > "$ARTIFACT_DIR/hierarchy.txt" 2>&1
-    timeout 15 adb -s "$SERIAL" shell uiautomator dump /sdcard/zero-e2e-ui.xml >/dev/null 2>&1
-    timeout 15 adb -s "$SERIAL" pull /sdcard/zero-e2e-ui.xml "$ARTIFACT_DIR/ui.xml" >/dev/null 2>&1
+    timeout 15 adb -s "$SERIAL" logcat -d -t 5000 > "$ARTIFACT_DIR/logcat.txt" 2>&1
   fi
   set -e
 }
 
 print_failure() {
-  printf 'FAIL: %s (artifacts: %s)\n' "$STAGE" "$ARTIFACT_DIR" >&2
-  if [[ -s "$ARTIFACT_DIR/maestro/report.xml" ]]; then
-    grep -E '<testsuite|<failure|<error' "$ARTIFACT_DIR/maestro/report.xml" | tail -8 >&2 || true
+  local screenshot="" log
+  if [[ -n "$FAILED_FLOW" ]]; then
+    printf 'FAIL: %s\n' "$FAILED_FLOW" >&2
+    grep -E '^\[Failed\]' "$ARTIFACT_DIR/maestro.log" | tail -1 >&2 || true
+    if [[ -d "$ARTIFACT_DIR/maestro/$FAILED_FLOW" ]]; then
+      screenshot="$(find "$ARTIFACT_DIR/maestro/$FAILED_FLOW" -path '*/screenshots/*.png' | sort | tail -1)"
+    fi
+    [[ -n "$screenshot" ]] || screenshot="$ARTIFACT_DIR/screen.png"
+    printf 'screenshot: %s\n' "$screenshot" >&2
+  else
+    printf 'FAIL: %s\n' "$STAGE" >&2
+    case "$STAGE" in
+      worker*) log=worker.log ;;
+      metro*|launch*|phone*) log=metro.log ;;
+      *) log="" ;;
+    esac
+    tail -5 "$ARTIFACT_DIR/runner.log" >&2 || true
+    if [[ "$STAGE" == maestro* ]]; then
+      grep -E '^\[Failed\]' "$ARTIFACT_DIR/maestro.log" | tail -1 >&2 || true
+    fi
+    if [[ -n "$log" ]]; then tail -10 "$ARTIFACT_DIR/$log" >&2 || true; fi
   fi
-  case "$STAGE" in
-    worker*) tail -30 "$ARTIFACT_DIR/worker.log" >&2 || true ;;
-    metro*|launch*) tail -30 "$ARTIFACT_DIR/metro.log" >&2 || true ;;
-    maestro*) tail -30 "$ARTIFACT_DIR/maestro.log" >&2 || true ;;
-    postcondition*)
-      tail -20 "$ARTIFACT_DIR/maestro.log" >&2 || true
-      tail -20 "$ARTIFACT_DIR/worker.log" >&2 || true
-      ;;
-    storage*) cat "$ARTIFACT_DIR/storage-check.txt" >&2 2>/dev/null || true ;;
-    launcher*)
-      [[ -f "$ARTIFACT_DIR/launcher-check.txt" ]] && cat "$ARTIFACT_DIR/launcher-check.txt" >&2
-      diff -u "$ARTIFACT_DIR/launcher-before.txt" "$ARTIFACT_DIR/launcher-after.txt" >&2 || true
-      ;;
-  esac
+  printf 'artifacts: %s\n' "$ARTIFACT_DIR" >&2
+}
+
+prune_failed_runs() {
+  find "$ARTIFACT_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null \
+    | sort -rn | tail -n +"$((KEEP_FAILED_RUNS + 1))" | cut -d' ' -f2- \
+    | xargs -r rm -rf
 }
 
 cleanup() {
@@ -175,7 +202,7 @@ cleanup() {
         {
           echo 'Production database checksums changed:'
           diff -u "$ARTIFACT_DIR/production-before.txt" "$ARTIFACT_DIR/production-after.txt" || true
-        } > "$ARTIFACT_DIR/storage-check.txt"
+        } >> "$ARTIFACT_DIR/runner.log"
         if [[ "$SUCCESS" == "1" ]]; then
           SUCCESS=0
           STAGE="storage isolation"
@@ -188,13 +215,12 @@ cleanup() {
     adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null 2>&1 || true
   fi
 
-  [[ -n "$LOGCAT_PID" ]] && kill "$LOGCAT_PID" >/dev/null 2>&1 || true
   [[ -n "$METRO_PID" ]] && kill -- "-$METRO_PID" >/dev/null 2>&1 || true
   [[ -n "$WORKER_PID" ]] && kill "$WORKER_PID" >/dev/null 2>&1 || true
   podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
   [[ -n "$METRO_PID" ]] && wait "$METRO_PID" >/dev/null 2>&1 || true
   [[ -n "$WORKER_PID" ]] && wait "$WORKER_PID" >/dev/null 2>&1 || true
-  rm -rf "$PERSIST_ROOT"
+  rm -rf "$PERSIST_DIR"
 
   if [[ "$SUCCESS" == "1" ]]; then
     for _ in $(seq 1 20); do
@@ -206,6 +232,7 @@ cleanup() {
     if port_is_listening "$METRO_PORT" || port_is_listening "$WORKER_PORT"; then
       SUCCESS=0
       STAGE="process cleanup"
+      note "Port $METRO_PORT or $WORKER_PORT is still listening"
       code=1
     fi
   fi
@@ -215,6 +242,7 @@ cleanup() {
     if ! cmp -s "$ARTIFACT_DIR/package-before.txt" "$ARTIFACT_DIR/package-after.txt"; then
       SUCCESS=0
       STAGE="dev-client identity"
+      note 'The installed development client changed during the run'
       code=1
     fi
   fi
@@ -223,55 +251,66 @@ cleanup() {
     if ! cmp -s "$ARTIFACT_DIR/launcher-before.txt" "$ARTIFACT_DIR/launcher-after.txt"; then
       SUCCESS=0
       STAGE="launcher isolation"
+      diff -u "$ARTIFACT_DIR/launcher-before.txt" "$ARTIFACT_DIR/launcher-after.txt" \
+        >> "$ARTIFACT_DIR/runner.log" 2>&1
       code=1
     fi
   fi
 
   if [[ "$SUCCESS" == "1" && "$code" == "0" ]]; then
-    local flow_label="flows"
+    local flow_label="flows" breakdown
     [[ "$FLOW_COUNT" == "1" ]] && flow_label="flow"
-    printf 'PASS: %s %s in %ss (Pixel 7, hermetic Metro)\n' \
-      "$FLOW_COUNT" "$flow_label" "$(( $(date +%s) - STARTED_AT ))"
+    breakdown="$(IFS=,; printf '%s' "${TIMINGS[*]}")"
+    printf 'PASS: %s %s in %s (%s)\n' \
+      "$FLOW_COUNT" "$flow_label" "$(duration $((SECONDS - STARTED_AT)))" "${breakdown//,/, }"
+    rm -rf "$ARTIFACT_DIR"
     exit 0
   fi
 
   if [[ "$code" == "0" ]]; then code=1; fi
   print_failure
+  prune_failed_runs
   exit "$code"
 }
 trap cleanup EXIT
 trap 'STAGE="interrupted"; exit 130' INT TERM
 
-for command in adb curl jq maestro node podman pnpm setsid ss timeout; do
+for command in adb curl jq maestro node podman pnpm setsid sha256sum ss timeout; do
   if ! command -v "$command" >/dev/null 2>&1; then
-    echo "Missing required command: $command" >&2
+    note "Missing required command: $command"
     exit 1
   fi
 done
 
 mapfile -t PIXELS < <(adb devices -l | awk '$2 == "device" && /model:Pixel_7/ { print $1 }')
 if [[ "${#PIXELS[@]}" -ne 1 ]]; then
-  echo "Expected exactly one connected Pixel 7; found ${#PIXELS[@]}" >&2
+  note "Expected exactly one connected Pixel 7; found ${#PIXELS[@]}"
   exit 1
 fi
 SERIAL="${PIXELS[0]}"
 adb_device wait-for-device
 
 if ! adb_device shell pm path "$PACKAGE" | grep -q '^package:'; then
-  echo "The Zero Agent package is not installed on the Pixel 7" >&2
+  note "The Zero Agent package is not installed on the Pixel 7"
   exit 1
 fi
 if ! adb_device shell dumpsys package "$PACKAGE" | grep -q 'DEBUGGABLE'; then
-  echo "The installed Zero Agent package is not a development client" >&2
+  note "The installed Zero Agent package is not a development client"
   exit 1
 fi
 if ! adb_device shell "run-as $PACKAGE true" >/dev/null 2>&1; then
-  echo "The installed Zero Agent package does not allow debug storage isolation" >&2
+  note "The installed Zero Agent package does not allow debug storage isolation"
+  exit 1
+fi
+link_handlers="$(adb_device shell cmd package query-activities --components \
+  -a android.intent.action.VIEW -d 'zeroagent:///' | tr -d '\r' | grep -v "^$PACKAGE/" || true)"
+if [[ -n "$link_handlers" ]]; then
+  note "Another app handles zeroagent:// links and would open a chooser: $link_handlers"
   exit 1
 fi
 for port in "$METRO_PORT" "$WORKER_PORT"; do
   if port_is_listening "$port"; then
-    echo "Dedicated E2E port $port is already in use" >&2
+    note "Dedicated E2E port $port is already in use"
     exit 1
   fi
 done
@@ -287,23 +326,52 @@ STAGE="worker startup"
 verbose "starting local Worker"
 podman run --rm --name "$CONTAINER" \
   --network host \
+  -e COREPACK_HOME=/corepack \
   -v "$REPO_ROOT":/repo \
   -v zero-release-node-modules:/repo/node_modules \
   -v zero-release-pnpm-store:/pnpm-store \
+  -v zero-e2e-corepack:/corepack \
   -v "$PERSIST_DIR":/persist \
-  -w /repo/apps/agent-api \
+  -w /repo \
   "$IMAGE" \
   bash -lc '
     set -e
     corepack enable
-    pnpm config set store-dir /pnpm-store
-    cd /repo
-    CI=true pnpm install --frozen-lockfile
-    cd /repo/apps/agent-api
+    stamp=/repo/node_modules/.zero-e2e-lockfile
+    lockfile="$(sha256sum pnpm-lock.yaml | cut -d" " -f1)"
+    if [ "$(cat "$stamp" 2>/dev/null)" != "$lockfile" ] \
+      || [ ! -x apps/agent-api/node_modules/.bin/wrangler ]; then
+      pnpm config set store-dir /pnpm-store
+      CI=true pnpm install --frozen-lockfile
+      printf "%s\n" "$lockfile" > "$stamp"
+    fi
+    cd apps/agent-api
     exec pnpm exec wrangler dev --config wrangler.e2e.jsonc \
       --persist-to /persist --ip 0.0.0.0 --port 8787
   ' > "$ARTIFACT_DIR/worker.log" 2>&1 &
 WORKER_PID=$!
+
+STAGE="metro startup"
+verbose "starting hermetic Metro"
+metro_cache_key="$(cat "$REPO_ROOT/pnpm-lock.yaml" "$MOBILE_DIR/metro.config.js" \
+  "$MOBILE_DIR/babel.config.js" "$MOBILE_DIR/app.config.js" "$MOBILE_DIR/app.json" \
+  | sha256sum | cut -c1-16)"
+METRO_TMPDIR="$CACHE_ROOT/metro-$metro_cache_key"
+mkdir -p "$METRO_TMPDIR"
+find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'metro-*' \
+  ! -path "$METRO_TMPDIR" -exec rm -rf {} +
+CLERK_KEY="$(node -p "require('${MOBILE_DIR}/eas.json').build.development.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY")"
+env -u EXPO_PUBLIC_API_URL \
+  TMPDIR="$METRO_TMPDIR" \
+  EXPO_PUBLIC_HERMETIC_E2E=1 \
+  EXPO_PUBLIC_LAUNCHER_ICON_PROOF="$LAUNCHER_ICON_PROOF" \
+  EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
+  EXPO_UNSTABLE_HEADLESS=1 \
+  setsid bash -c '
+    cd "$1"
+    exec pnpm exec expo start --dev-client --localhost --port "$2"
+  ' _ "$MOBILE_DIR" "$METRO_PORT" > "$ARTIFACT_DIR/metro.log" 2>&1 &
+METRO_PID=$!
 
 STAGE="worker readiness"
 worker_code=""
@@ -311,42 +379,27 @@ for _ in $(seq 1 120); do
   worker_code="$(curl -sS -o /dev/null -w '%{http_code}' "http://localhost:$WORKER_PORT/api/tasks" 2>/dev/null || true)"
   [[ "$worker_code" == "401" ]] && break
   if ! kill -0 "$WORKER_PID" 2>/dev/null; then break; fi
-  sleep 2
+  sleep 1
 done
 if [[ "$worker_code" != "401" ]]; then
-  echo "Worker readiness returned ${worker_code:-no response}" >> "$ARTIFACT_DIR/worker.log"
+  note "Worker readiness returned ${worker_code:-no response}"
   exit 1
 fi
-if [[ "$TASKDO_PROOF" == "1" ]]; then
-  INITIAL_ACCOUNTS=(taskdo-proof-mobile)
-else
-  INITIAL_ACCOUNTS=("$ACCOUNT_A" "$ACCOUNT_B")
-fi
-for account in "${INITIAL_ACCOUNTS[@]}"; do
+for account in "$ACCOUNT_A" "$ACCOUNT_B"; do
   empty_tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $account")"
   empty_projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $account")"
   if ! jq -e '.tasks == []' <<< "$empty_tasks_response" >/dev/null \
     || ! jq -e '.projects == []' <<< "$empty_projects_response" >/dev/null; then
-    printf 'Expected empty local state for %s; tasks=%s projects=%s\n' \
-      "$account" "$empty_tasks_response" "$empty_projects_response" >> "$ARTIFACT_DIR/worker.log"
+    note "Expected empty local state for $account; tasks=$empty_tasks_response projects=$empty_projects_response"
     exit 1
   fi
 done
-
-STAGE="metro startup"
-verbose "starting hermetic Metro"
-CLERK_KEY="$(node -p "require('${MOBILE_DIR}/eas.json').build.development.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY")"
-env -u EXPO_PUBLIC_API_URL \
-  EXPO_PUBLIC_HERMETIC_E2E=1 \
-  EXPO_PUBLIC_TASKDO_PROOF="$TASKDO_PROOF" \
-  EXPO_PUBLIC_LAUNCHER_ICON_PROOF="$LAUNCHER_ICON_PROOF" \
-  EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_KEY" \
-  EXPO_UNSTABLE_HEADLESS=1 \
-  setsid bash -c '
-    cd "$1"
-    exec pnpm exec expo start --dev-client --localhost --port "$2" --clear
-  ' _ "$MOBILE_DIR" "$METRO_PORT" > "$ARTIFACT_DIR/metro.log" 2>&1 &
-METRO_PID=$!
+if [[ "$LAUNCHER_ICON_PROOF" == "0" ]]; then
+  seed_body="$(jq -nc --arg id "$(cat /proc/sys/kernel/random/uuid)" --arg text "$SERVER_TASK_TEXT" '{id: $id, text: $text}')"
+  curl -fsS -X POST "http://localhost:$WORKER_PORT/api/tasks" \
+    -H "Authorization: Bearer $ACCOUNT_B" -H 'Content-Type: application/json' \
+    -d "$seed_body" > "$ARTIFACT_DIR/seed-account-b.json"
+fi
 
 STAGE="metro readiness"
 metro_status=""
@@ -357,233 +410,92 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 if [[ "$metro_status" != *"packager-status:running"* ]]; then
-  echo "Metro readiness returned ${metro_status:-no response}" >> "$ARTIFACT_DIR/metro.log"
+  note "Metro readiness returned ${metro_status:-no response}"
   exit 1
 fi
 
 STAGE="launch dev client"
 adb_device reverse "tcp:$METRO_PORT" "tcp:$METRO_PORT" >/dev/null
 adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
-adb_device logcat -c
-adb_device logcat > "$ARTIFACT_DIR/logcat.txt" 2>&1 &
-LOGCAT_PID=$!
 adb_device shell am start -W \
   -a android.intent.action.VIEW \
   -d "$METRO_DEEP_LINK" \
   "$PACKAGE" > "$ARTIFACT_DIR/launch.txt"
 
 STAGE="launch readiness"
-for launch_attempt in $(seq 1 90); do
-  if (( launch_attempt % 10 == 2 )); then
-    adb_device shell am start -W -a android.intent.action.VIEW -d 'zeroagent:///' "$PACKAGE" > "$ARTIFACT_DIR/launch-route.txt"
-  fi
-  timeout 45 maestro --no-ansi hierarchy --compact \
-    > "$ARTIFACT_DIR/launch-hierarchy.txt" 2>&1 || true
-  if grep -Eq 'text=Home|accessibilityText=Home' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
-    break
-  fi
-  sleep 2
-done
-if ! grep -Eq 'text=Home|accessibilityText=Home' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
-  echo 'The development client did not load the app bundle' >> "$ARTIFACT_DIR/metro.log"
-  exit 1
-fi
+reset_e2e_phone_state 600
+TIMINGS+=("startup $(duration $((SECONDS - STARTED_AT)))")
+
+expected_worker_state() {
+  case "$1" in
+    todo-sync-and-accounts)
+      printf '%s' '(.a.tasks | length == 1 and .[0].text == $guest) and (.b.tasks | length == 1 and .[0].text == $server)' ;;
+    *)
+      printf '%s' '(.a.tasks == []) and (.b.tasks | length == 1 and .[0].text == $server)' ;;
+  esac
+}
+
+check_worker_state() {
+  local flow_name="$1" filter state=""
+  filter="$(expected_worker_state "$flow_name") and .a.projects == [] and .b.projects == []"
+  for _ in $(seq 1 30); do
+    state="$(jq -nc \
+      --argjson at "$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_A" 2>/dev/null || echo null)" \
+      --argjson ap "$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $ACCOUNT_A" 2>/dev/null || echo null)" \
+      --argjson bt "$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_B" 2>/dev/null || echo null)" \
+      --argjson bp "$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $ACCOUNT_B" 2>/dev/null || echo null)" \
+      '{a: {tasks: $at.tasks, projects: $ap.projects}, b: {tasks: $bt.tasks, projects: $bp.projects}}')"
+    if jq -e --arg guest "$GUEST_TASK_TEXT" --arg server "$SERVER_TASK_TEXT" "$filter" \
+      <<< "$state" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  printf '%s\n' "$state" > "$ARTIFACT_DIR/$flow_name-worker-state.json"
+  note "Worker state after $flow_name did not match: $state"
+  return 1
+}
 
 if [[ "$LAUNCHER_ICON_PROOF" == "1" ]]; then
+  FLOW_COUNT=1
+  flow_started="$SECONDS"
   run_launcher_icon_proof
-  maestro_code=0
-elif [[ "$TASKDO_PROOF" == "1" ]]; then
-  STAGE="phone reset before TaskDO flow"
-  reset_e2e_phone_state
-  STAGE="maestro TaskDO flow"
-  adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null
-  set +e
-  maestro --no-ansi test "$HERMETIC_FLOW_DIR/05-taskdo-loose-task-offline.yaml" \
-    --format junit --output "$ARTIFACT_DIR/maestro/report.xml" \
-    --debug-output "$ARTIFACT_DIR/maestro" 2>&1 | tee "$ARTIFACT_DIR/maestro.log"
-  maestro_code=${PIPESTATUS[0]}
-  set -e
+  TIMINGS+=("launcher proof $(duration $((SECONDS - flow_started)))")
 else
-  mapfile -t BEHAVIOR_FLOWS < <(
-    find "$HERMETIC_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' ! -name '*taskdo*' ! -name '*launcher*' | sort
-  )
-  for index in "${!BEHAVIOR_FLOWS[@]}"; do
-    flow="${BEHAVIOR_FLOWS[$index]}"
+  mapfile -t FLOWS < <(find "$CRITICAL_FLOW_DIR" -maxdepth 1 -type f -name '*.yaml' | sort)
+  FLOW_COUNT="${#FLOWS[@]}"
+  for index in "${!FLOWS[@]}"; do
+    flow="${FLOWS[$index]}"
     flow_name="$(basename "$flow" .yaml)"
-    STAGE="phone reset before $flow_name"
-    reset_e2e_phone_state
     if [[ "$index" -gt 0 ]]; then
-      STAGE="worker reset before $flow_name"
-      kill "$WORKER_PID" >/dev/null 2>&1 || true
-      wait "$WORKER_PID" >/dev/null 2>&1 || true
-      podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
-      PERSIST_DIR="$PERSIST_ROOT/$flow_name"
-      mkdir -p "$PERSIST_DIR"
-      podman run --rm --name "$CONTAINER" \
-        --network host \
-        -v "$REPO_ROOT":/repo \
-        -v zero-release-node-modules:/repo/node_modules \
-        -v zero-release-pnpm-store:/pnpm-store \
-        -v "$PERSIST_DIR":/persist \
-        -w /repo/apps/agent-api \
-        "$IMAGE" \
-        bash -lc '
-          set -e
-          corepack enable
-          exec pnpm exec wrangler dev --config wrangler.e2e.jsonc \
-            --persist-to /persist --ip 0.0.0.0 --port 8787
-        ' >> "$ARTIFACT_DIR/worker.log" 2>&1 &
-      WORKER_PID=$!
-      worker_code=""
-      for _ in $(seq 1 120); do
-        worker_code="$(curl -sS -o /dev/null -w '%{http_code}' "http://localhost:$WORKER_PORT/api/tasks" 2>/dev/null || true)"
-        [[ "$worker_code" == "401" ]] && break
-        if ! kill -0 "$WORKER_PID" 2>/dev/null; then break; fi
-        sleep 2
-      done
-      [[ "$worker_code" == "401" ]]
+      STAGE="phone reset before $flow_name"
+      reset_e2e_phone_state
     fi
 
     STAGE="maestro $flow_name"
     verbose "running $flow_name"
+    flow_started="$SECONDS"
+    maestro_args=(--no-ansi test "$flow" -e "METRO_DEEP_LINK=$METRO_DEEP_LINK" --format junit
+      --output "$ARTIFACT_DIR/maestro/$flow_name.xml"
+      --debug-output "$ARTIFACT_DIR/maestro/$flow_name")
     set +e
     if [[ "${E2E_VERBOSE:-0}" == "1" ]]; then
-      maestro --no-ansi test "$flow" -e "METRO_DEEP_LINK=$METRO_DEEP_LINK" --format junit \
-        --output "$ARTIFACT_DIR/maestro/$flow_name.xml" \
-        --debug-output "$ARTIFACT_DIR/maestro/$flow_name" 2>&1 | tee -a "$ARTIFACT_DIR/maestro.log"
+      maestro "${maestro_args[@]}" 2>&1 | tee -a "$ARTIFACT_DIR/maestro.log"
       maestro_code=${PIPESTATUS[0]}
     else
-      maestro --no-ansi test "$flow" -e "METRO_DEEP_LINK=$METRO_DEEP_LINK" --format junit \
-        --output "$ARTIFACT_DIR/maestro/$flow_name.xml" \
-        --debug-output "$ARTIFACT_DIR/maestro/$flow_name" >> "$ARTIFACT_DIR/maestro.log" 2>&1
+      maestro "${maestro_args[@]}" >> "$ARTIFACT_DIR/maestro.log" 2>&1
       maestro_code=$?
     fi
     set -e
-    [[ "$maestro_code" -eq 0 ]]
+    if [[ "$maestro_code" -ne 0 ]]; then
+      FAILED_FLOW="$flow_name"
+      exit "$maestro_code"
+    fi
+    TIMINGS+=("$flow_name $(duration $((SECONDS - flow_started)))")
 
     STAGE="postcondition $flow_name"
-    tasks_response=""
-    projects_response=""
-    account_b_tasks=""
-    account_b_projects=""
-    for _ in $(seq 1 30); do
-      tasks_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_A" 2>/dev/null || true)"
-      projects_response="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $ACCOUNT_A" 2>/dev/null || true)"
-      account_b_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_B" 2>/dev/null || true)"
-      account_b_projects="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H "Authorization: Bearer $ACCOUNT_B" 2>/dev/null || true)"
-      case "$flow_name" in
-        01-guest-bind-and-logout)
-          jq -e --arg text "$GUEST_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
-            <<< "$tasks_response" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 \
-            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
-          ;;
-        02-save-project-description)
-          jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
-            '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
-            <<< "$projects_response" >/dev/null 2>&1 \
-            && jq -e '.tasks == []' <<< "$tasks_response" >/dev/null 2>&1 \
-            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
-          ;;
-        05-auth-loss-account-mismatch)
-          jq -e --arg text "$PRIVATE_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
-            <<< "$tasks_response" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 \
-            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
-          ;;
-        *)
-          jq -e '.tasks == []' <<< "$tasks_response" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$projects_response" >/dev/null 2>&1 \
-            && jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null 2>&1 \
-            && jq -e '.projects == []' <<< "$account_b_projects" >/dev/null 2>&1 && break
-          ;;
-      esac
-      sleep 1
-    done
-    printf '%s\n' "$tasks_response" > "$ARTIFACT_DIR/$flow_name-tasks.json"
-    printf '%s\n' "$projects_response" > "$ARTIFACT_DIR/$flow_name-projects.json"
-    printf '%s\n' "$account_b_tasks" > "$ARTIFACT_DIR/$flow_name-account-b-tasks.json"
-    printf '%s\n' "$account_b_projects" > "$ARTIFACT_DIR/$flow_name-account-b-projects.json"
-    case "$flow_name" in
-      01-guest-bind-and-logout)
-        jq -e --arg text "$GUEST_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
-          <<< "$tasks_response" >/dev/null
-        jq -e '.projects == []' <<< "$projects_response" >/dev/null
-        ;;
-      02-save-project-description)
-        jq -e --arg title "$PROJECT_TITLE" --arg description "$PROJECT_DESCRIPTION" \
-          '.projects | length == 1 and .[0].title == $title and .[0].description == $description' \
-          <<< "$projects_response" >/dev/null
-        jq -e '.tasks == []' <<< "$tasks_response" >/dev/null
-        ;;
-      05-auth-loss-account-mismatch)
-        jq -e --arg text "$PRIVATE_TASK_TEXT" '.tasks | length == 1 and .[0].text == $text' \
-          <<< "$tasks_response" >/dev/null
-        jq -e '.projects == []' <<< "$projects_response" >/dev/null
-        ;;
-      *)
-        jq -e '.tasks == []' <<< "$tasks_response" >/dev/null
-        jq -e '.projects == []' <<< "$projects_response" >/dev/null
-        ;;
-    esac
-    jq -e '.tasks == []' <<< "$account_b_tasks" >/dev/null
-    jq -e '.projects == []' <<< "$account_b_projects" >/dev/null
+    check_worker_state "$flow_name"
   done
-fi
-if [[ "$maestro_code" -ne 0 ]]; then exit "$maestro_code"; fi
-
-if [[ "$TASKDO_PROOF" == "1" ]]; then
-  STAGE="TaskDO reconnect"
-  adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
-  taskdo_tasks=""
-  for _ in $(seq 1 45); do
-    taskdo_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
-    if jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$taskdo_tasks" >/dev/null 2>&1; then break; fi
-    sleep 1
-  done
-  printf '%s\n' "$taskdo_tasks" > "$ARTIFACT_DIR/worker-tasks-offline-postcondition.json"
-  jq -e '.tasks | length == 1 and .[0].text == "TaskDO edited on phone"' <<< "$taskdo_tasks" >/dev/null
-  task_id="$(jq -r '.tasks[0].id' <<< "$taskdo_tasks")"
-  edited="$(curl -fsS -X PATCH "http://localhost:$WORKER_PORT/api/tasks/$task_id" \
-    -H 'Authorization: Bearer taskdo-proof-mobile' -H 'Content-Type: application/json' \
-    -d '{"text":"TaskDO edited on web"}')"
-  jq -e '.task.text == "TaskDO edited on web"' <<< "$edited" >/dev/null
-  STAGE="maestro REST-to-phone flow"
-  maestro --no-ansi test "$HERMETIC_FLOW_DIR/06-taskdo-loose-task-rest-sync.yaml" \
-    --format junit --output "$ARTIFACT_DIR/maestro/rest-report.xml" \
-    --debug-output "$ARTIFACT_DIR/maestro/rest" >> "$ARTIFACT_DIR/maestro.log" 2>&1
-  STAGE="TaskDO linked offline restart"
-  adb_device reverse --remove "tcp:$WORKER_PORT" >/dev/null
-  maestro --no-ansi test "$HERMETIC_FLOW_DIR/07-taskdo-project-offline-restart.yaml" \
-    --format junit --output "$ARTIFACT_DIR/maestro/project-report.xml" \
-    --debug-output "$ARTIFACT_DIR/maestro/project" >> "$ARTIFACT_DIR/maestro.log" 2>&1
-  adb_device reverse "tcp:$WORKER_PORT" "tcp:$WORKER_PORT" >/dev/null
-fi
-
-capture_diagnostics
-
-STAGE="postcondition"
-if [[ "$TASKDO_PROOF" == "1" ]]; then
-  taskdo_tasks=""; taskdo_projects=""
-  for _ in $(seq 1 45); do
-    taskdo_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
-    taskdo_projects="$(curl -fsS "http://localhost:$WORKER_PORT/api/projects" -H 'Authorization: Bearer taskdo-proof-mobile' 2>/dev/null || true)"
-    project_id="$(jq -r '.projects[] | select(.title == "TaskDO offline Project") | .id' <<< "$taskdo_projects" 2>/dev/null || true)"
-    if [[ -n "$project_id" ]] && jq -e --arg project "$project_id" \
-      '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
-      <<< "$taskdo_tasks" >/dev/null 2>&1; then break; fi
-    sleep 1
-  done
-  printf '%s\n' "$taskdo_tasks" > "$ARTIFACT_DIR/worker-tasks-postcondition.json"
-  printf '%s\n' "$taskdo_projects" > "$ARTIFACT_DIR/worker-projects-postcondition.json"
-  jq -e --arg project "$project_id" \
-    '.tasks | length == 2 and any(.text == "TaskDO edited on web" and .projectId == null) and any(.text == "TaskDO linked work" and .projectId == $project)' \
-    <<< "$taskdo_tasks" >/dev/null
-  normal_tasks="$(curl -fsS "http://localhost:$WORKER_PORT/api/tasks" -H "Authorization: Bearer $ACCOUNT_A")"
-  jq -e '.tasks == []' <<< "$normal_tasks" >/dev/null
 fi
 
 STAGE="storage isolation"
@@ -593,7 +505,7 @@ if ! cmp -s "$ARTIFACT_DIR/production-before.txt" "$ARTIFACT_DIR/production-afte
   {
     echo 'Production database checksums changed:'
     diff -u "$ARTIFACT_DIR/production-before.txt" "$ARTIFACT_DIR/production-after.txt" || true
-  } > "$ARTIFACT_DIR/storage-check.txt"
+  } >> "$ARTIFACT_DIR/runner.log"
   exit 1
 fi
 

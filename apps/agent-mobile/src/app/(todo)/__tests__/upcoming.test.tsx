@@ -66,6 +66,12 @@ describe('UpcomingScreen', () => {
     defaultToastController.dismiss();
   });
 
+  it('says nothing is scheduled when only undated work exists', async () => {
+    const screen = await renderScreen({ tasks: [task('now', 'undated thought')] });
+    await waitFor(() => expect(screen.getByText('Nothing scheduled ahead.')).toBeTruthy());
+    expect(screen.queryByText('undated thought')).toBeNull();
+  });
+
   it('lists future work and hides undated work', async () => {
     const screen = await renderScreen({
       tasks: [task('now', 'undated thought'), task('later', 'ship the release', '2099-01-01')],

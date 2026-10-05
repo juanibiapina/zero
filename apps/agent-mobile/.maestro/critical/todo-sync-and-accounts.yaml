@@ -1,40 +1,44 @@
-# Unexpected auth loss locks Account A data; Account B can discard it without seeing it.
+# A guest task survives a restart, uploads to Account A, locks on auth loss, and
+# gives way to Account B's server task without leaking into Account B.
 appId: dev.juanibiapina.zeroagent
 ---
 - openLink: ${METRO_DEEP_LINK}
 - extendedWaitUntil:
-    visible: "Saved on this device"
+    visible: "E2E sync: Saved on this device"
     timeout: 45000
 - tapOn: "^Task$"
-- tapOn: "New item text"
-- inputText: "E2E private Account A task"
+- inputText: "E2E guest task"
 - tapOn:
     id: "quick-add-submit"
 - extendedWaitUntil:
-    visible: "E2E private Account A task"
+    visible: "E2E guest task"
     timeout: 30000
+- stopApp
+- openLink: ${METRO_DEEP_LINK}
+- extendedWaitUntil:
+    visible: "E2E guest task"
+    timeout: 45000
 - tapOn: "E2E sign in"
 - tapOn: "Sign in as Account A"
 - extendedWaitUntil:
-    visible: "Synced"
+    visible: "E2E sync: Synced"
     timeout: 45000
+- assertVisible: "E2E guest task"
 - tapOn: "E2E simulate auth loss"
 - extendedWaitUntil:
     visible: "Tasks locked"
     timeout: 30000
-- assertNotVisible: "E2E private Account A task"
+- assertNotVisible: "E2E guest task"
 - tapOn: "Sign in"
 - tapOn: "Sign in as Account B"
 - extendedWaitUntil:
     visible: "These tasks belong to another account"
     timeout: 30000
-- assertNotVisible: "E2E private Account A task"
+- assertNotVisible: "E2E guest task"
 - tapOn: "Delete local copy"
-- assertVisible: "Delete this device copy?"
 - tapOn: "Delete copy and continue"
 - extendedWaitUntil:
-    visible: "Synced"
+    visible: "E2E server task"
     timeout: 45000
-- assertVisible: "Home is clear"
-- assertVisible: "No projects yet"
-- assertNotVisible: "E2E private Account A task"
+- assertVisible: "E2E sync: Synced"
+- assertNotVisible: "E2E guest task"

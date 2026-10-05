@@ -1,3 +1,5 @@
+# A native medicine reminder appears in the shade and Taken from the
+# notification is recorded as a dose.
 appId: dev.juanibiapina.zeroagent
 ---
 - openLink: ${METRO_DEEP_LINK}
@@ -6,9 +8,9 @@ appId: dev.juanibiapina.zeroagent
     timeout: 45000
 - openLink: zeroagent:///e2e-medicine-proof
 - extendedWaitUntil:
-    visible: Schedule native proof
+    visible: Schedule visible reminder proof
     timeout: 45000
-- tapOn: Schedule native proof
+- tapOn: Schedule visible reminder proof
 - extendedWaitUntil:
     visible: Notifications scheduled .*
     timeout: 30000
@@ -16,10 +18,8 @@ appId: dev.juanibiapina.zeroagent
     start: 50%, 0%
     end: 50%, 85%
 - extendedWaitUntil:
-    visible: 23:59 dose due.*|.*dose due.*
-    timeout: 180000
-- assertVisible: E2E medicine
-- takeScreenshot: medicine-normal-deadline
+    visible: E2E medicine
+    timeout: 30000
 - runFlow:
     when:
       notVisible: Taken

@@ -8,6 +8,7 @@ import {
   projectStatusContext,
   projectStatusSections,
   taskIcon,
+  todoSyncPresentation,
   type Project,
   type ProjectAttention,
   type ProjectDisplayStatus,
@@ -216,6 +217,7 @@ function TodoHomeScreen() {
               className="text-accent"
             >E2E sign in</Text>
           )}
+          <Text variant="subtitle">{`E2E sync: ${todoSyncPresentation(todoData).label}`}</Text>
         </View>
       ) : null}
       {todoData?.error ? <Text variant="error" className="px-screen-x">{todoData.error}</Text> : null}

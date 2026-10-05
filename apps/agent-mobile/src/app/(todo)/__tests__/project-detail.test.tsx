@@ -252,6 +252,23 @@ describe('ProjectDetailScreen', () => {
     expect([...screen.data.replica!.tasks.collection.values()][0]?.projectId).toBe('1');
   });
 
+  it('adds a Waiting item from the completed task snackbar', async () => {
+    const screen = await renderScreen({ tasks: [task('t', 'register for the race')] });
+    await waitFor(() => expect(screen.getByText('register for the race')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Complete "register for the race"'));
+
+    const toast = defaultToastController.getSnapshot()[0];
+    expect(toast?.description).toBe('📁 Run a 5K');
+    expect(toast?.secondaryAction?.label).toBe('Waiting…');
+    await act(async () => toast?.secondaryAction?.onPress());
+    const input = await waitFor(() => screen.getByLabelText('Waiting on'));
+    await fireEvent.changeText(input, 'the bib arrives');
+    await fireEvent(input, 'submitEditing');
+
+    await waitFor(() => expect(screen.getByText('the bib arrives')).toBeTruthy());
+    expect([...screen.data.replica!.waits.collection.values()].map((wait) => wait.text)).toEqual(['the bib arrives']);
+  });
+
   it('resolves a Waiting item immediately', async () => {
     const screen = await renderScreen({ waits: [waiting()] });
     await waitFor(() => expect(screen.getByText('the letter comes back')).toBeTruthy());
