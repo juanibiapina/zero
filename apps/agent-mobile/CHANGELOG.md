@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-05: Change the Medicines screen to show reminder setup only when reminders need fixing, with one button to fix it; remove the watch, battery, and muted-sound notes, and show dates as words.
+
 - 2026-10-04: Change medicine reminders to normal notifications with sound, vibration, watch forwarding, and Taken; add battery settings guidance and keep dose-time delivery active through normal power saving.
 
 - 2026-10-04: Hide routine sync and update activity on Home; show a static icon only for updates ready for the next launch or device-saving problems.

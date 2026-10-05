@@ -3,31 +3,36 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { MedicineDraft, medicineToday, type TaskdoReplica } from '@zero/agent-core';
+import type { ReactElement } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
-import type { ReminderCapabilities } from '../../../modules/medicine-reminders';
-import { MedicineDetail } from '../medicines';
+import NativeReminders, { type ReminderCapabilities } from '../../../modules/medicine-reminders';
+import { MedicineDetail, MedicinesList } from '../medicines';
 import { attachMedicineReminders, enableMedicineReminders } from '@/lib/medicine-reminders';
 import { createInMemoryTodoData, InMemoryTodoDataProvider } from '@/testing/in-memory-todo-data';
 
 let mockParams: { id?: string } = {};
 let mockCapabilities: ReminderCapabilities;
-jest.mock('expo-router', () => ({ router: { replace: jest.fn(), back: jest.fn() }, useLocalSearchParams: () => mockParams }));
+let mockReplaceFails = false;
+jest.mock('expo-router', () => ({ router: { replace: jest.fn(), back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => mockParams }));
 jest.mock('@clerk/expo', () => ({ useAuth: () => ({ getToken: async () => 'token' }), useUser: () => ({ user: null }) }));
 jest.mock('../../../modules/medicine-reminders', () => ({
   __esModule: true,
   default: {
     capabilities: async () => mockCapabilities,
     receipts: async () => '[]',
-    replace: async () => {}, acknowledge: async () => {}, quiesce: async () => {}, clear: async () => {},
-    requestNotifications: () => { mockCapabilities = { ...mockCapabilities, notifications: true }; },
-    openExactAlarmSettings: () => {}, openNotificationSettings: () => {}, openSoundSettings: () => {},
-    openReminderSettings: jest.fn(), openBatterySettings: jest.fn(),
+    replace: async () => { if (mockReplaceFails) throw new Error('replace failed'); },
+    acknowledge: async () => {}, quiesce: async () => {}, clear: async () => {},
+    requestNotifications: jest.fn(), openNotificationSettings: jest.fn(),
+    openExactAlarmSettings: jest.fn(), openReminderSettings: jest.fn(), openBatterySettings: jest.fn(), openSoundSettings: jest.fn(),
   },
 }));
+const native = () => NativeReminders as unknown as Record<string, jest.Mock>;
 let replica: TaskdoReplica | null = null;
 const foreground = new Set<(state: AppStateStatus) => void>();
+const returnToApp = () => act(async () => { for (const listener of foreground) listener('active'); });
 beforeEach(async () => {
   await AsyncStorage.clear();
+  mockReplaceFails = false;
   mockCapabilities = { notifications: true, exactAlarms: true, alertChannel: true, alertChannelImportance: 4,
     channelSound: true, notificationVolume: 5, ringerNormal: true,
     backgroundRestricted: false, batteryExempt: false };
@@ -37,8 +42,8 @@ beforeEach(async () => {
     return { remove: () => { foreground.delete(listener); } };
   });
 });
-afterEach(async () => { await replica?.close(); replica = null; jest.restoreAllMocks(); });
-async function openMedicine(enabled = true) {
+afterEach(async () => { await replica?.close(); replica = null; jest.clearAllMocks(); jest.restoreAllMocks(); });
+async function open(screen: ReactElement, { enabled = true } = {}) {
   const data = createInMemoryTodoData();
   const medicine = await data.replica!.medicines.add(MedicineDraft.create(medicineToday()).change({ name: 'Evening medicine' }).commit());
   mockParams = { id: medicine.id };
@@ -46,67 +51,78 @@ async function openMedicine(enabled = true) {
   data.replica = replica;
   if (enabled) await enableMedicineReminders(replica, 'medicine-warning-test');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return render(<QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}><MedicineDetail /></InMemoryTodoDataProvider></QueryClientProvider>);
+  const rendered = await render(<QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}>{screen}</InMemoryTodoDataProvider></QueryClientProvider>);
+  await waitFor(() => expect(rendered.getByText('Evening medicine')).toBeTruthy());
+  return rendered;
 }
-describe('Medicine reminder warnings', () => {
-  it('reports notification permission changes when returning to the app', async () => {
-    const screen = await openMedicine();
-    await waitFor(() => expect(screen.getByLabelText('Reminders on this phone')).toBeTruthy());
+
+describe('Medicine reminder notice', () => {
+  it('shows no reminder text when reminders work', async () => {
+    const screen = await open(<MedicinesList />);
+    await returnToApp();
     expect(screen.queryByRole('alert')).toBeNull();
-    mockCapabilities = { ...mockCapabilities, notifications: false };
-    await act(async () => { for (const listener of foreground) listener('active'); });
-    const warning = 'Notifications are off. Medicine reminders won’t appear.';
-    await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText(warning));
-    expect(screen.getByLabelText('All notification settings')).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText('Allow notifications'));
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.queryByText(/Reminders on this phone|watch|battery/i)).toBeNull();
   });
-  it('detects a silent channel even when its importance is high', async () => {
-    Object.assign(mockCapabilities, { channelSound: false });
-    const screen = await openMedicine();
-    const warning = 'Medicine reminders appear without sound.';
-    await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText(warning));
-    await fireEvent.press(screen.getByLabelText('Medicine notification settings'));
-    const native = require('../../../modules/medicine-reminders').default;
-    expect(native.openReminderSettings).toHaveBeenCalled();
-    Object.assign(mockCapabilities, { channelSound: true });
-    await act(async () => { for (const listener of foreground) listener('active'); });
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-  });
-  it('keeps battery and watch setup accessible without treating missing exemption as blocked delivery', async () => {
-    const screen = await openMedicine();
-    await waitFor(() => expect(screen.getByLabelText('Reminders on this phone')).toBeTruthy());
-    expect(screen.queryByRole('alert')).toBeNull();
-    await fireEvent.press(screen.getByLabelText('Reminders on this phone'));
-    await fireEvent.press(screen.getByLabelText('App battery settings'));
-    const native = require('../../../modules/medicine-reminders').default;
-    expect(native.openBatterySettings).toHaveBeenCalled();
-    expect(screen.getByText(/allow Zero Agent notifications in your watch companion app/)).toBeTruthy();
-    expect(screen.queryByLabelText('Allow full-screen alarms')).toBeNull();
-    expect(screen.queryByLabelText('Set alarm volume')).toBeNull();
-  });
-  it('warns when phone reminders are off and recovers after enabling them', async () => {
-    const screen = await openMedicine(false);
-    const warning = 'Medicine reminders are off on this phone.';
-    await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText(warning));
-    await fireEvent.press(screen.getByLabelText('Enable reminders on this phone'));
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-  });
+
   it.each([
-    { capability: 'exactAlarms', value: false, warning: 'On-time medicine reminders are blocked.', action: 'Allow exact alarms' },
-    { capability: 'alertChannel', value: false, warning: 'Medicine notifications are blocked.', action: 'Medicine notification settings' },
-    { capability: 'notificationVolume', value: 0, warning: 'Phone notification sound is muted. Medicine reminders still appear.', action: 'Phone sound settings' },
-    { capability: 'ringerNormal', value: false, warning: 'Phone notification sound is muted. Medicine reminders still appear.', action: 'Phone sound settings' },
-    { capability: 'backgroundRestricted', value: true, warning: 'Background activity is restricted. Medicine reminders may be delayed.', action: 'App battery settings' },
-    { capability: 'alertChannelImportance', value: 2, warning: 'Medicine reminders appear without sound.', action: 'Medicine notification settings' },
-  ])('reports $capability accurately', async ({ capability, value, warning, action }) => {
+    { capability: 'ringerNormal', value: false },
+    { capability: 'notificationVolume', value: 0 },
+    { capability: 'channelSound', value: false },
+    { capability: 'alertChannelImportance', value: 2 },
+  ])('stays quiet when $capability means only that sound is off', async ({ capability, value }) => {
     mockCapabilities = { ...mockCapabilities, [capability]: value };
-    const screen = await openMedicine();
-    await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText(warning));
-    expect(screen.getByLabelText(action)).toBeTruthy();
+    const screen = await open(<MedicinesList />);
+    await returnToApp();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it.each([
+    { capability: 'alertChannel', value: false, message: 'Medicine notifications are turned off.', action: 'Open settings', opens: 'openReminderSettings' },
+    { capability: 'exactAlarms', value: false, message: 'Reminders can’t arrive on time.', action: 'Allow', opens: 'openExactAlarmSettings' },
+    { capability: 'backgroundRestricted', value: true, message: 'Battery restrictions may delay reminders.', action: 'Battery settings', opens: 'openBatterySettings' },
+  ])('offers one fix when $capability blocks reminders', async ({ capability, value, message, action, opens }) => {
+    mockCapabilities = { ...mockCapabilities, [capability]: value };
+    const screen = await open(<MedicinesList />);
+    await waitFor(() => expect(screen.getByText(message)).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText(action));
+    expect(native()[opens]).toHaveBeenCalled();
+  });
+
+  it('asks for notification permission, then opens settings if it stays off, and clears once allowed', async () => {
+    mockCapabilities = { ...mockCapabilities, notifications: false };
+    const screen = await open(<MedicinesList />);
+    const message = 'Notifications are off, so reminders won’t appear.';
+    await waitFor(() => expect(screen.getByText(message)).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Allow notifications'));
+    expect(native().requestNotifications).toHaveBeenCalled();
+    expect(native().openNotificationSettings).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByLabelText('Allow notifications'));
+    expect(native().openNotificationSettings).toHaveBeenCalled();
+    mockCapabilities = { ...mockCapabilities, notifications: true };
+    await returnToApp();
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('turns reminders on from the notice', async () => {
+    const screen = await open(<MedicinesList />, { enabled: false });
+    await waitFor(() => expect(screen.getByText('Reminders are off on this phone.')).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText('Turn on'));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('retries scheduling after a failure', async () => {
+    const screen = await open(<MedicinesList />);
+    mockReplaceFails = true;
+    await returnToApp();
+    await waitFor(() => expect(screen.getByText('Reminders couldn’t be scheduled.')).toBeTruthy());
+    mockReplaceFails = false;
+    await fireEvent.press(screen.getByLabelText('Try again'));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('keeps reminder setup off the medicine detail page', async () => {
+    const screen = await open(<MedicineDetail />, { enabled: false });
+    await returnToApp();
+    expect(screen.queryByText('Reminders are off on this phone.')).toBeNull();
   });
 });

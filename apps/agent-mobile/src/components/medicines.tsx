@@ -1,6 +1,6 @@
 import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
-import { MedicineDraft, medicineOccurrences, medicineState, medicineToday, type Medicine } from '@zero/agent-core';
+import { MedicineDraft, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Medicine, type TaskdoReplica } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, AppState, FlatList, Pressable, ScrollView, View } from 'react-native';
@@ -29,6 +29,7 @@ function MedicineGlyph({ name }: { name: keyof typeof MEDICINE_ICONS }) {
   return <View accessible={false} importantForAccessibility="no-hide-descendants"><Host matchContents><Icon name={MEDICINE_ICONS[name]} size={20} color={color} /></Host></View>;
 }
 const time = (instant: string) => new Date(instant).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+const day = (date: string) => new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).format(parseLocalDay(date));
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
 function Action({ label, onPress, disabled = false, danger = false }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} className="min-h-12 justify-center py-2"><Text className={danger ? 'font-medium text-danger' : 'font-medium text-accent'}>{label}</Text></Pressable>;
@@ -68,13 +69,13 @@ function MedicineListContent({ snapshot, today }: {
     <FlatList
       data={medicines} keyExtractor={(medicine) => medicine.id}
       contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingBottom: insets.bottom + 96, flexGrow: 1 }}
-      ListHeaderComponent={<View className="px-screen-x"><ReminderSettings />{snapshot.recoveries.filter((entry) => entry.table === 'medicines' || entry.table === 'doses').map((entry) => <Text key={`${entry.table}-${entry.id}`} variant="error">{entry.reason} ({entry.id})</Text>)}</View>}
+      ListHeaderComponent={<View className="px-screen-x"><ReminderNotice />{snapshot.recoveries.filter((entry) => entry.table === 'medicines' || entry.table === 'doses').map((entry) => <Text key={`${entry.table}-${entry.id}`} variant="error">{entry.reason} ({entry.id})</Text>)}</View>}
       ListEmptyComponent={<View className="gap-2 px-screen-x py-8"><Text variant="section">Your medicines, at a glance</Text><Text variant="subtitle">Tap + to add a medicine. Choose how often, and we’ll suggest the times.</Text></View>}
       renderItem={({ item: medicine }) => {
         const state = medicineState(medicine, today);
         const expected = medicineOccurrences(medicine, today);
         const taken = expected.filter((dose) => snapshot.doses.some((item) => item.id === dose.id && item.takenAt)).length;
-        const status = state === 'active' ? taken ? `${taken}/${expected.length} taken` : null : state === 'paused' ? 'Paused' : state === 'ended' ? 'Ended' : `Starts ${medicine.startsOn}`;
+        const status = state === 'active' ? taken ? `${taken}/${expected.length} taken` : null : state === 'paused' ? 'Paused' : state === 'ended' ? 'Ended' : `Starts ${day(medicine.startsOn)}`;
         return <Pressable accessibilityRole="button" accessibilityLabel={`Open ${medicine.name}`} onPress={() => router.push(`/browse/medicines/${medicine.id}`)} android_ripple={{ color: ripple }} className="min-h-16 gap-1 border-b border-divider px-screen-x py-3">
           <View className="flex-row flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><Text className="min-w-0 flex-1 font-semibold">{medicine.name}</Text>{status ? <Text variant="caption">{status}</Text> : null}</View>
           <Text variant="subtitle" className="text-foreground" style={{ fontVariant: ['tabular-nums'] }}>{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text>
@@ -85,55 +86,41 @@ function MedicineListContent({ snapshot, today }: {
     {adding ? <MedicineDrawer onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : <Fab label="Add medicine" onPress={() => setAdding(true)} className="absolute right-4" style={{ bottom: insets.bottom + 16 }} />}
   </View>;
 }
-function ReminderSettings() {
+type ReminderIssue = { kind?: 'notifications'; message: string; action: string; fix: () => unknown | Promise<unknown> };
+function reminderIssue(controller: NonNullable<ReturnType<typeof getMedicineReminders>>, replica: TaskdoReplica, native: NonNullable<typeof NativeReminders>, enabled: boolean, failed: boolean, askedForNotifications: boolean, capabilities: ReminderCapabilities): ReminderIssue | null {
+  if (failed) return { message: 'Reminders couldn’t be scheduled.', action: 'Try again', fix: () => controller.refresh() };
+  if (!enabled) return { message: 'Reminders are off on this phone.', action: 'Turn on', fix: () => enableMedicineReminders(replica, controller.workspace) };
+  if (!capabilities.notifications) return { kind: 'notifications', message: 'Notifications are off, so reminders won’t appear.', action: 'Allow notifications', fix: () => askedForNotifications ? native.openNotificationSettings() : native.requestNotifications() };
+  if (!capabilities.alertChannel) return { message: 'Medicine notifications are turned off.', action: 'Open settings', fix: () => native.openReminderSettings() };
+  if (!capabilities.exactAlarms) return { message: 'Reminders can’t arrive on time.', action: 'Allow', fix: () => native.openExactAlarmSettings() };
+  if (capabilities.backgroundRestricted) return { message: 'Battery restrictions may delay reminders.', action: 'Battery settings', fix: () => native.openBatterySettings() };
+  return null;
+}
+function ReminderNotice() {
   const replica = useTodoReplica(); const controller = getMedicineReminders(replica);
-  const [open, setOpen] = useState(false);
   const [capabilities, setCapabilities] = useState<ReminderCapabilities | null>(null);
   const [delivery, setDelivery] = useState(() => ({ controller, state: controller?.getState() }));
   const state = delivery.controller === controller ? delivery.state : controller?.getState();
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [askedForNotifications, setAskedForNotifications] = useState(false);
+  const refresh = useCallback(() => { void NativeReminders?.capabilities().then(setCapabilities).catch(() => setFailed(true)); }, []);
   useEffect(() => {
-    const refresh = () => { void NativeReminders?.capabilities().then(setCapabilities).catch((cause: unknown) => setError(errorText(cause))); };
     refresh();
     const subscription = AppState.addEventListener('change', (value) => { if (value === 'active') refresh(); });
     const unsubscribe = controller?.subscribe(() => setDelivery({ controller, state: controller.getState() }));
     return () => { subscription.remove(); unsubscribe?.(); };
-  }, [controller]);
-  const perform = async (operation: () => unknown | Promise<unknown>) => {
-    setError(null);
-    try { await operation(); if (NativeReminders) setCapabilities(await NativeReminders.capabilities()); }
-    catch (cause) { setError(errorText(cause)); }
+  }, [controller, refresh]);
+  if (!NativeReminders || !controller || !replica || !capabilities) return null;
+  const issue = reminderIssue(controller, replica, NativeReminders, !!state?.enabled, failed || !!state?.error, askedForNotifications, capabilities);
+  if (!issue) return null;
+  const fix = async () => {
+    setFailed(false);
+    try { await issue.fix(); if (issue.kind === 'notifications') setAskedForNotifications(true); setCapabilities(await NativeReminders!.capabilities()); }
+    catch { setFailed(true); }
   };
-  if (NativeReminders && controller && !capabilities && !state?.error && !error) return null;
-  const warning = !NativeReminders || !controller ? 'Medicine reminders are unavailable in this app.'
-    : state?.error || error ? 'Medicine reminders need attention.'
-    : !state?.enabled ? 'Medicine reminders are off on this phone.'
-    : !capabilities?.notifications ? 'Notifications are off. Medicine reminders won’t appear.'
-    : !capabilities.alertChannel ? 'Medicine notifications are blocked.'
-    : !capabilities.exactAlarms ? 'On-time medicine reminders are blocked.'
-    : capabilities.backgroundRestricted ? 'Background activity is restricted. Medicine reminders may be delayed.'
-    : capabilities.alertChannelImportance < 3 || !capabilities.channelSound ? 'Medicine reminders appear without sound.'
-    : !capabilities.ringerNormal || capabilities.notificationVolume === 0 ? 'Phone notification sound is muted. Medicine reminders still appear.'
-    : null;
-  const label = warning ?? 'Reminders on this phone';
-  return <View className="border-b border-divider">
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen((current) => !current)} className="min-h-12 flex-row items-center justify-between gap-3 py-3"><Text accessibilityRole={warning ? 'alert' : undefined} variant="caption" className={warning ? 'flex-1 text-danger' : 'flex-1'}>{label}</Text><MedicineGlyph name={open ? 'collapse' : 'expand'} /></Pressable>
-    {open ? <View className="pb-3">
-      {!NativeReminders || !controller ? <Text variant="subtitle">Install an Android build with medicine reminders to enable notifications.</Text> : <>
-        {!capabilities?.notifications ? <Action label="Allow notifications" onPress={() => void perform(() => NativeReminders?.requestNotifications())} /> : null}
-        <Action label="Medicine notification settings" onPress={() => void perform(() => NativeReminders?.openReminderSettings())} />
-        {capabilities && (!capabilities.notifications || !capabilities.alertChannel) ? <Action label="All notification settings" onPress={() => void perform(() => NativeReminders?.openNotificationSettings())} /> : null}
-        {capabilities && (!capabilities.ringerNormal || capabilities.notificationVolume === 0) ? <Action label="Phone sound settings" onPress={() => void perform(() => NativeReminders?.openSoundSettings())} /> : null}
-        {!capabilities?.exactAlarms ? <Action label="Allow exact alarms" onPress={() => void perform(() => NativeReminders?.openExactAlarmSettings())} /> : null}
-        <Text variant="subtitle">For reliable reminders, open App battery usage and choose Unrestricted if available. Battery Saver can stay on.</Text>
-        {capabilities?.batteryExempt ? <Text variant="caption">Android battery optimization exemption is enabled.</Text> : null}
-        <Action label="App battery settings" onPress={() => void perform(() => NativeReminders?.openBatterySettings())} />
-        <Text variant="subtitle">To receive reminders on your watch, allow Zero Agent notifications in your watch companion app. Sound and Do Not Disturb follow your device settings.</Text>
-        {!state?.enabled ? <Action label="Enable reminders on this phone" disabled={state?.pending} onPress={() => void perform(() => enableMedicineReminders(replica!, controller.workspace))} /> : null}
-        {state?.error ? <><Text variant="error" selectable>{state.error}</Text><Action label="Retry reminders" onPress={() => void perform(() => controller.refresh())} /></> : null}
-      </>}
-      {error ? <Text variant="error" selectable>{error}</Text> : null}
-    </View> : null}
+  return <View accessibilityRole="alert" className="flex-row flex-wrap items-center justify-between gap-x-3 border-b border-divider py-2">
+    <Text variant="caption" className="min-w-0 flex-1 text-danger">{issue.message}</Text>
+    <Action label={issue.action} disabled={!!state?.pending} onPress={() => void fix()} />
   </View>;
 }
 export function MedicineDetail() {
@@ -154,7 +141,7 @@ export function MedicineDetail() {
     finally { actionPending.current = false; setBusy(false); }
   };
   if (!snapshot) return <Page title="Medicine"><Text variant="subtitle">Opening medicine…</Text></Page>;
-  if (!medicine || !replica) return <Page title="Medicine"><Text variant="subtitle">This medicine is no longer available.</Text><ReminderSettings /></Page>;
+  if (!medicine || !replica) return <Page title="Medicine"><Text variant="subtitle">This medicine is no longer available.</Text></Page>;
   const state = medicineState(medicine, today);
   const plannedToday = medicineOccurrences(medicine, today);
   const focusedDose = params.dose ? doses.find((dose) => dose.id === params.dose && dose.medicineId === medicine.id) ?? plannedToday.find((dose) => dose.id === params.dose) : undefined;
@@ -164,10 +151,10 @@ export function MedicineDetail() {
   return <View className="flex-1 bg-background">
     <Page title={medicine.name}>
       {medicine.instructions ? <Text className="pb-2">{medicine.instructions}</Text> : null}
-      <View className="flex-row items-center justify-between gap-3 pb-5"><Text variant="subtitle" className="flex-1">{medicine.doses.length === 1 ? 'Once a day' : `${medicine.doses.length} times a day`}{medicine.endsOn ? ` · Through ${medicine.endsOn}` : ''}</Text><Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable></View>
+      <View className="flex-row items-center justify-between gap-3 pb-5"><Text variant="subtitle" className="flex-1">{medicine.doses.length === 1 ? 'Once a day' : `${medicine.doses.length} times a day`}{medicine.endsOn ? ` · Through ${day(medicine.endsOn)}` : ''}</Text><Pressable accessibilityRole="button" accessibilityLabel="Medicine options" accessibilityState={{ expanded: options }} onPress={() => setOptions((current) => !current)} className="min-h-12 min-w-12 items-center justify-center"><MedicineGlyph name="more" /></Pressable></View>
       {options ? <View className="border-y border-divider py-2"><Action label="Edit medicine" disabled={busy} onPress={() => setEditing(true)} />{state === 'ended' ? <Action label="Add again" disabled={busy} onPress={() => setCopying(true)} /> : <Action label={medicine.paused ? 'Resume reminders' : 'Pause reminders'} disabled={busy} onPress={() => void run(() => replica.medicines.edit(medicine.id, { ...medicine, paused: !medicine.paused }))} />}<Action label="Delete medicine" danger disabled={busy} onPress={remove} /></View> : null}
       {error ? <Text variant="error" selectable>{error}</Text> : null}
-      <Text accessibilityRole="header" variant="section" className="pb-2">{params.dose ? focusedDose ? `Dose · ${focusedDose.on}` : 'This dose is no longer available.' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${medicine.endsOn}` : state === 'paused' ? 'Paused' : `Starts ${medicine.startsOn}`}</Text>
+      <Text accessibilityRole="header" variant="section" className="pb-2">{params.dose ? focusedDose ? `Dose · ${day(focusedDose.on)}` : 'This dose is no longer available.' : state === 'active' ? 'Today' : state === 'ended' ? `Ended ${day(medicine.endsOn!)}` : state === 'paused' ? 'Paused' : `Starts ${day(medicine.startsOn)}`}</Text>
       {visibleDoses.map((planned) => {
         const dose = doses.find((item) => item.id === planned.id) ?? planned;
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
@@ -177,8 +164,7 @@ export function MedicineDetail() {
       })}
       {state !== 'active' && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Dose history" accessibilityState={{ expanded: historyOpen }} onPress={() => setHistoryOpen((current) => !current)} className="min-h-14 flex-row items-center justify-between gap-3 pt-4"><Text variant="section">History</Text><MedicineGlyph name={historyOpen ? 'collapse' : 'expand'} /></Pressable>
-      {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{dose.on} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
-      <ReminderSettings />
+      {historyOpen ? <View className="pb-5">{!history.length ? <Text variant="subtitle" className="py-3">Your recorded doses will appear here.</Text> : history.map((dose) => <View key={dose.id} className="flex-row flex-wrap justify-between gap-x-4 gap-y-1 border-b border-divider py-3"><Text variant="subtitle">{day(dose.on)} · {time(dose.scheduledAt)}</Text><Text variant="subtitle">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : 'Not recorded'}</Text></View>)}</View> : null}
     </Page>
     {editing || copying ? <MedicineDrawer key={copying ? 'copy' : medicine.id} source={medicine} copy={copying} onClose={() => { setEditing(false); setCopying(false); }} onSaved={(id) => { setEditing(false); setCopying(false); if (copying) router.replace(`/browse/medicines/${id}`); }} /> : null}
   </View>;
