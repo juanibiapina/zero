@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "zero-landing",
+  "name": "zeroapps-landing",
   "compatibility_date": "2026-06-24",
   "assets": {
     "directory": "./dist",
