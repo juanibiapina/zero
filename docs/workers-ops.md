@@ -54,7 +54,7 @@ includes a Durable Object migration, but migrations must be fully applied via a
 non-versioned deployment. [code: 10211]
 ```
 
-The non-production triggers for `zero-api`, `zero-landing` and `zero-docs` all
+The non-production triggers for `zero-api`, `zero-landing` and `zeroapps-docs` all
 run `versions upload` on purpose (a branch push must not route production
 traffic — see AGENTS.md). So a branch that introduces a new DO class, or any
 other migration tag, gets a red **Workers Builds** check on its PR that no code
