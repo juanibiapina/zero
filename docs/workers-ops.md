@@ -1,6 +1,6 @@
 # Workers deploy ops
 
-Deploy-time Cloudflare Workers operational facts for this repo. Two behaviors
+Deploy-time Cloudflare Workers operational facts for this repo: behaviors
 that are easy to get wrong.
 
 ## Force a deploy to fail on a missing secret (`secrets.required`)
@@ -42,6 +42,34 @@ deploy from re-provisioning the domain.
 
 This corrects the earlier "additive / manual delete" claim in
 `docs/plans/drop-old-console-hosts.md`.
+
+The teardown only applies to a domain the Worker still owns. To move a custom
+domain to another Worker, reassign it first with
+`PUT /accounts/{account_id}/workers/domains` and
+`"override_existing_origin": true`; the switch drops no requests. After that, a
+deploy of the old Worker without the entry leaves the domain on the new Worker.
+
+## A route beats a custom domain on the same hostname
+
+A zone route (`"pattern": "host/path*", "zone_name": ...`) takes precedence over
+a custom domain on the same hostname, and the most specific route wins. That is
+how one hostname is split between Workers by path: the custom domain catches
+every path, and routes claim the paths that belong to another Worker. A route
+pattern matches the whole URL, query string included, so end it with `*`.
+
+## Rename a Worker in place, never through `name` alone
+
+Changing `name` in `wrangler.jsonc` and deploying creates a second Worker; the
+old one keeps its Durable Object data, secrets, custom domains and build
+connector. Rename the Worker first with
+`PATCH /accounts/{account_id}/workers/workers/{worker_id}` and `{"name": "<new>"}`,
+then land the `name` change before anything else deploys. The Worker keeps its
+id, Durable Object namespaces and data, secrets, custom domains, routes and
+build connector. Durable Object namespace names keep the old prefix (for
+example `zerovault-api_OrgDO` under `zeroapps-api`); only the label is stale.
+
+Evidence for this section and the previous two: scratch Workers on 2026-10-05,
+deleted afterwards.
 
 ## A branch that adds a Durable Object migration always fails its preview build
 

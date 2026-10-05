@@ -1,6 +1,6 @@
 # Unified dashboard deployment
 
-The existing `zerovault-api` Worker now serves the unified Zero dashboard and
+The existing `zeroapps-api` Worker now serves the unified Zero dashboard and
 public API. Its name remains unchanged to retain the Vault Durable Object and
 KV namespaces.
 

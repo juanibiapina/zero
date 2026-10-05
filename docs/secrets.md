@@ -62,7 +62,7 @@ The mount avoids all three.
 | `pnpm run build:agent` | Builds `@zero/web` with `zero-web` production values, byte-identical to production |
 | `pnpm run build:dashboard` | The same for `@zeroapps/dashboard-web` with `zerovault-web` |
 | `pnpm run deploy:agent` | Builds and deploys `zero-api` with production values |
-| `pnpm run deploy:dashboard` | Builds and deploys `zerovault-api` |
+| `pnpm run deploy:dashboard` | Builds and deploys `zeroapps-api` |
 | `pnpm run deploy:sites` | Deploys landing and docs, which carry no build values |
 
 There is no root `deploy` script on purpose: an unwrapped whole-repo deploy

@@ -65,7 +65,7 @@ check_worker() {
 }
 
 check_worker zero-api zero-web
-check_worker zerovault-api zerovault-web
+check_worker zeroapps-api zerovault-web
 
 if [ "${status}" -ne 0 ]; then
   echo

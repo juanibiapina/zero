@@ -64,11 +64,11 @@ Each of the four deployable Workers has its own Workers Builds git
 connector on `juanibiapina/zero` (branch `main`, root dir `/`):
 
 - `zero-api` (agent) — build `pnpm run build`, deploy `pnpm -F @zero/api run deploy`
-- `zerovault-api` (vault + errors dashboard) — build `pnpm run build`, deploy `pnpm -F @zeroapps/api run deploy`
+- `zeroapps-api` (vault + errors dashboard) — build `pnpm run build`, deploy `pnpm -F @zeroapps/api run deploy`
 - `zeroapps-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zeroapps/landing run build`, deploy `pnpm -F @zeroapps/landing run deploy`
 - `zeroapps-docs` (docs site, `docs.zeroapps.dev`) — build `pnpm -F @zeroapps/docs run build`, deploy `pnpm -F @zeroapps/docs run deploy`
 
-`zero-api` and `zerovault-api` build the whole monorepo (`pnpm run build`) and set
+`zero-api` and `zeroapps-api` build the whole monorepo (`pnpm run build`) and set
 `VITE_CLERK_PUBLISHABLE_KEY` as a build variable, which the dashboard build needs.
 `zeroapps-landing` has no Clerk build var, so its build is scoped to the landing package
 (`pnpm -F @zeroapps/landing run build`) to avoid pulling in the dashboard build.
@@ -86,7 +86,7 @@ trigger only uploads a version for branch pushes.
 | Worker | default branch (`main`) | non-production branches |
 |---|---|---|
 | `zero-api` | `pnpm -F @zero/api run deploy` | `pnpm -F @zero/api exec wrangler versions upload` |
-| `zerovault-api` | `pnpm -F @zeroapps/api run deploy` | none (no preview trigger) |
+| `zeroapps-api` | `pnpm -F @zeroapps/api run deploy` | none (no preview trigger) |
 | `zeroapps-landing` | `pnpm -F @zeroapps/landing run deploy` | `pnpm -F @zeroapps/landing exec wrangler versions upload` |
 | `zeroapps-docs` | `pnpm -F @zeroapps/docs run deploy` | `pnpm -F @zeroapps/docs exec wrangler versions upload` |
 
@@ -107,7 +107,7 @@ Rules, each learned from a real breakage (2026-07-28):
   trigger once named a package that did not exist for months and logged
   `No projects matched the filters` under a `success` outcome. A package rename
   has the same effect, so every connector must be updated when one lands.
-- `zerovault-api` has no preview trigger on purpose. Its build command is the
+- `zeroapps-api` has no preview trigger on purpose. Its build command is the
   whole-repo `pnpm run build`, which needs `VITE_CLERK_PUBLISHABLE_KEY` set as a
   build variable on each trigger, so adding one is a separate decision.
 
@@ -136,7 +136,7 @@ files, 3000+ changed files, or 20+ commits bypasses matching and always builds.
 Per-Worker **include** paths (exclude list is empty for every Worker):
 
 - **zero-api:** `apps/zero-api/*`, `apps/zero-web/*`, `packages/agent-core/*`, `packages/recurrence/*`
-- **zerovault-api:** `apps/zeroapps-api/*`, `apps/zeroapps-dashboard-web/*`, `packages/auth/*`, `packages/vault-core/*`, `packages/errors-core/*`, `packages/ui/*`
+- **zeroapps-api:** `apps/zeroapps-api/*`, `apps/zeroapps-dashboard-web/*`, `packages/auth/*`, `packages/vault-core/*`, `packages/errors-core/*`, `packages/ui/*`
 - **zeroapps-landing:** `apps/zeroapps-landing/*`
 - **zeroapps-docs:** `apps/zeroapps-docs/*`
 - **all four also include the shared build roots:** `packages/typescript-config/*`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`, `patches/*`
@@ -155,7 +155,7 @@ Each command wraps the build in `zero vault run`, because the web bundle needs
 its build-time values and nothing writes them to disk:
 ```bash
 gob run pnpm run deploy:agent      # zero-api
-gob run pnpm run deploy:dashboard  # zerovault-api
+gob run pnpm run deploy:dashboard  # zeroapps-api
 gob run pnpm run deploy:sites      # landing + docs
 ```
 There is no root `deploy` script: an unwrapped whole-repo deploy would ship a
@@ -206,7 +206,7 @@ Packages:
 - **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Routine releases publish compatible JavaScript and assets to the EAS `preview` channel after green `main` CI. Native fingerprint changes use a preview APK built **locally by default** on `mini` with a Nix dev shell; use an EAS cloud build only when explicitly asked. Publish the APK to a dedicated Google Drive folder and replace the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/zero-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
 - **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and OpenAI servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
-- **Dashboard Worker:** `apps/zeroapps-api` (`@zeroapps/api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
+- **Dashboard Worker:** `apps/zeroapps-api` (`@zeroapps/api`, Worker `zeroapps-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
 - **Dashboard frontend:** `apps/zeroapps-dashboard-web` (`@zeroapps/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
 - **Landing site:** `apps/zeroapps-landing` (`@zeroapps/landing`) is a static Astro site served by the asset-only Worker `zeroapps-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
 - **Docs site:** `apps/zeroapps-docs` (`@zeroapps/docs`) is a static Astro + Starlight site served by the asset-only Worker `zeroapps-docs` for `docs.zeroapps.dev`. It documents ZeroVault and ZeroErrors and ships per-page raw-markdown twins (bare `<page>.md`, e.g. `/vault/overview.md`) with a Copy Markdown button, plus `/llms.txt`, `/llms-full.txt`, `/llms-small.txt`. Unknown paths get a real 404 (`not_found_handling: 404-page`). Unlike landing it ships Starlight's own theme JS and a Pagefind search index (the zero-JS invariant is landing-only). The content is real and the site is indexable: no page carries a `noindex` or `nofollow` directive, `robots.txt` is `Allow: /` and declares `https://docs.zeroapps.dev/sitemap-index.xml`, and that sitemap lists exactly the HTML pages, never the `.md` twins or the `llms*.txt` files. It is submitted to Google Search Console under the `sc-domain:zeroapps.dev` property, which covers both `zeroapps.dev` and `docs.zeroapps.dev`. No runtime secrets or API. Build/deploy are package-scoped (`pnpm -F @zeroapps/docs ...`), never the whole-repo build. Auto-deploys on push to `main` via its own Workers Builds connector.
@@ -214,7 +214,7 @@ Packages:
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
 
-All four deployable Workers (`zero-api`, `zerovault-api`, `zeroapps-landing`, `zeroapps-docs`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place. Each connector's build watch paths are scoped to that Worker's dependencies (see Deployment → Build watch paths), so a push only redeploys the Workers it affects.
+All four deployable Workers (`zero-api`, `zeroapps-api`, `zeroapps-landing`, `zeroapps-docs`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place. Each connector's build watch paths are scoped to that Worker's dependencies (see Deployment → Build watch paths), so a push only redeploys the Workers it affects.
 
 Expected dev ports:
 
