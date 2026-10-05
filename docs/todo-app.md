@@ -61,7 +61,7 @@ Mobile launcher behavior, development, and device verification live in
 
 ### Entity map
 
-- **Medicine** defines a daily routine with one or more timed doses and an optional last day. **Dose** is a separate dated occurrence with its scheduled and recorded taken times. Manage both under Browse → Medicines; mobile creation uses the plus drawer with suggested daily times, and Android delivers the early notification and alarm. See [`docs/entities/medicine.md`](entities/medicine.md).
+- **Medicine** defines a daily routine with one or more timed doses and an optional last day. **Dose** is a separate dated occurrence with its scheduled and recorded taken times. Manage both under Browse → Medicines; mobile creation uses the plus drawer with suggested daily times, and Android delivers normal notifications before and at dose time. See [`docs/entities/medicine.md`](entities/medicine.md).
 
 - **Task** is the foundational entity and the only task-list item. It can be
   loose or belong to a Project, and it owns dates, recurrence, ordering, and

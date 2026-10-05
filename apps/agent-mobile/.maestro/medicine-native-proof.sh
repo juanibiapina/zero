@@ -6,19 +6,17 @@ PROOF_METRO_PORT="${E2E_METRO_PORT:-8098}"
 PROOF_DIR="${E2E_ARTIFACT_ROOT:-/tmp/medicine-native-proof}/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$PROOF_DIR"
 for command in adb maestro python3 jq rg; do command -v "$command" >/dev/null; done
-if ! adb shell dumpsys package "$PROOF_PACKAGE" | rg 'DEBUGGABLE' >/dev/null; then
-  echo 'Install the Zero Agent development APK on the test Pixel' >&2
-  exit 1
-fi
-if ! adb shell run-as "$PROOF_PACKAGE" true >/dev/null 2>&1; then
-  echo 'The development APK must allow debug storage access' >&2
-  exit 1
-fi
+adb shell dumpsys package "$PROOF_PACKAGE" | rg 'DEBUGGABLE' >/dev/null
+adb shell run-as "$PROOF_PACKAGE" true >/dev/null
 PROOF_IDLE_CONFIG="$(adb shell settings get global device_idle_constants | tr -d '\r')"
-[[ "$PROOF_IDLE_CONFIG" =~ ^[a-zA-Z0-9_=,.:+-]*$ ]] || { echo 'Unsupported idle configuration' >&2; exit 1; }
-
+PROOF_BATTERY_SAVER="$(adb shell settings get global low_power | tr -d '\r')"
+[[ "$PROOF_IDLE_CONFIG" =~ ^[a-zA-Z0-9_=,.:+-]*$ ]]
+[[ "$PROOF_BATTERY_SAVER" =~ ^(null|0|1)$ ]]
+PROOF_STAGE=prepare
 cleanup() {
   adb shell cmd deviceidle unforce >/dev/null 2>&1 || true
+  adb shell cmd battery reset >/dev/null 2>&1 || true
+  adb shell cmd power set-mode "$([[ "$PROOF_BATTERY_SAVER" == 1 ]] && echo 1 || echo 0)" >/dev/null 2>&1 || true
   if [[ "$PROOF_IDLE_CONFIG" == null ]]; then
     adb shell settings delete global device_idle_constants >/dev/null 2>&1 || true
   else
@@ -26,8 +24,7 @@ cleanup() {
   fi
   adb shell am force-stop "$PROOF_PACKAGE" >/dev/null 2>&1 || true
 }
-PROOF_STAGE=prepare
-trap 'printf "Native proof failed: %s; artifacts: %s\\n" "$PROOF_STAGE" "$PROOF_DIR" >&2' ERR
+trap 'printf "Native proof failed: %s; artifacts: %s\n" "$PROOF_STAGE" "$PROOF_DIR" >&2' ERR
 trap cleanup EXIT
 adb shell pm grant "$PROOF_PACKAGE" android.permission.POST_NOTIFICATIONS
 adb shell appops set "$PROOF_PACKAGE" SCHEDULE_EXACT_ALARM allow
@@ -55,6 +52,9 @@ proof_open() {
   adb reverse "tcp:$PROOF_METRO_PORT" "tcp:$PROOF_METRO_PORT" >/dev/null
   adb shell am start -W -a android.intent.action.VIEW -d "zeroagent://expo-development-client/?url=http%3A%2F%2Flocalhost%3A${PROOF_METRO_PORT}" "$PROOF_PACKAGE" >/dev/null
   for attempt in $(seq 1 20); do
+    if [[ "$attempt" == 2 ]]; then
+      adb shell am start -W -a android.intent.action.VIEW -d 'zeroagent:///e2e-medicine-proof' "$PROOF_PACKAGE" >/dev/null
+    fi
     maestro --no-ansi hierarchy --compact > "$PROOF_DIR/hierarchy.txt"
     if rg -q 'accessibilityText=Schedule native proof.*enabled=true' "$PROOF_DIR/hierarchy.txt"; then return; fi
     if rg -q 'text=Home|text=Medicines' "$PROOF_DIR/hierarchy.txt"; then break; fi
@@ -90,74 +90,116 @@ proof_kill_react() {
   done
   return 1
 }
-proof_taken() {
-  adb shell cmd statusbar expand-notifications
-  maestro --no-ansi hierarchy --compact > "$PROOF_DIR/shade.csv"
-  local expand_point
-  expand_point="$(python3 - "$PROOF_DIR/shade.csv" <<'PY'
-import csv, re, sys
-rows = list(csv.reader(open(sys.argv[1])))
-nodes = {}
-for row in rows:
-    if len(row) != 4 or not row[0].isdigit(): continue
-    attrs = dict(re.findall(r'([^;=]+)=([^;]*)(?:;|$)', row[2]))
-    nodes[row[0]] = (row[3], {key.strip(): value for key, value in attrs.items()})
-def inside(node, parent):
-    while node in nodes:
-        if node == parent: return True
-        node = nodes[node][0]
-    return False
-if not any(attrs.get('text') == 'Taken' for parent, attrs in nodes.values()):
-    for title, (parent, attrs) in nodes.items():
-        if attrs.get('text') != 'E2E medicine': continue
-        while parent in nodes:
-            matches = [attrs for node, (owner, attrs) in nodes.items() if inside(node, parent) and attrs.get('resource-id') == 'android:id/expand_button']
-            if matches:
-                points = list(map(int, re.findall(r'\d+', matches[0]['bounds'])))
-                print((points[0] + points[2]) // 2, (points[1] + points[3]) // 2)
-                sys.exit(0)
-            parent = nodes[parent][0]
-PY
-)"
-  if [[ -n "$expand_point" ]]; then
-    read -r proof_x proof_y <<< "$expand_point"
-    adb shell input tap "$proof_x" "$proof_y"
-  fi
-  cat > "$PROOF_DIR/taken.yaml" <<EOF
-appId: $PROOF_PACKAGE
----
-- tapOn:
-    text: Taken
-    index: 0
-EOF
-  maestro --no-ansi test "$PROOF_DIR/taken.yaml" --debug-output "$PROOF_DIR/maestro" >> "$PROOF_DIR/maestro.log" 2>&1
-  adb shell cmd statusbar collapse
-  proof_state
-  jq -e '.muted and (.state.receipts | any(.kind == "taken")) and (.state.scheduled | all(.kind != "alarm"))' "$PROOF_DIR/state.json" >/dev/null
-}
 proof_schedule() {
   proof_open
-  proof_flow "$1" 'Alarm scheduled .*'
+  proof_flow "$1" 'Notifications scheduled .*'
   proof_state
   jq -e '.muted and .state.workspace == "taskdo-workspace-medicine-proof.sqlite" and (.state.scheduled | any(.kind == "alarm"))' "$PROOF_DIR/state.json" >/dev/null
-  PROOF_DEADLINE="$(python3 - "$PROOF_DIR/state.json" <<'PY'
-import json, sys, datetime
-state = json.load(open(sys.argv[1]))['state']
-occurrence = next(item for item in state['scheduled'] if item['kind'] == 'alarm')
-print(int(datetime.datetime.fromisoformat(occurrence['scheduledAt'].replace('Z', '+00:00')).timestamp()))
-PY
-)"
+  PROOF_DEADLINE="$(jq -r '.state.scheduled[] | select(.kind == "alarm") | .time / 1000' "$PROOF_DIR/state.json" | head -1)"
+  PROOF_EARLY="$(jq -r '.state.scheduled[] | select(.kind == "reminder") | .time / 1000' "$PROOF_DIR/state.json" | head -1)"
+  cp "$PROOF_DIR/state.json" "$PROOF_DIR/$PROOF_STAGE-scheduled.json"
   proof_kill_react
 }
-proof_no_service() {
+proof_no_playback() {
   adb shell dumpsys activity services "$PROOF_PACKAGE" > "$PROOF_DIR/services.txt"
   ! rg -q 'MedicineAlarmService' "$PROOF_DIR/services.txt"
 }
-proof_await_service() {
-  while [[ "$(date +%s)" -lt "$((PROOF_DEADLINE + 35))" ]]; do
-    adb shell dumpsys activity services "$PROOF_PACKAGE" > "$PROOF_DIR/services.txt"
-    if rg -q 'MedicineAlarmService' "$PROOF_DIR/services.txt" && rg -q 'isForeground=true' "$PROOF_DIR/services.txt"; then return; fi
+proof_await_stage() {
+  local kind="$1" deadline="$2"
+  while [[ "$(date +%s)" -le "$((deadline + 30))" ]]; do
+    proof_state
+    if jq -e --arg kind "$kind" '.state.delivered | keys | any(fromjson | .[1] == $kind)' "$PROOF_DIR/state.json" >/dev/null; then
+      adb logcat -d -s MedicineReminders:I > "$PROOF_DIR/$PROOF_STAGE-$kind-logcat.txt"
+      python3 - "$PROOF_DIR/$PROOF_STAGE-$kind-logcat.txt" "$kind" "$deadline" <<'PY'
+import datetime, re, sys
+kind, deadline = sys.argv[2], int(sys.argv[3])
+for line in open(sys.argv[1]):
+    match = re.search(r'notification_presented stage=(\w+) scheduled=(\S+) delivered=(\S+) alert=true', line)
+    if not match or match[1] != kind:
+        continue
+    scheduled, delivered = [datetime.datetime.fromisoformat(v.replace('Z', '+00:00')).timestamp() for v in match.group(2, 3)]
+    if int(scheduled) == deadline and 0 <= delivered - scheduled <= 30:
+        print(f'PASS {kind} delivered in {delivered - scheduled:.3f}s')
+        sys.exit(0)
+raise SystemExit('No on-time scheduled notification in native logs')
+PY
+      cp "$PROOF_DIR/state.json" "$PROOF_DIR/$PROOF_STAGE-$kind-delivered.json"
+      proof_no_playback
+      return
+    fi
     sleep 2
+  done
+  return 1
+}
+proof_shade() {
+  adb shell cmd statusbar collapse
+  adb shell input keyevent KEYCODE_WAKEUP
+  adb shell wm dismiss-keyguard
+  adb shell cmd statusbar expand-notifications
+  for attempt in $(seq 1 5); do
+    maestro --no-ansi hierarchy --compact > "$PROOF_DIR/$PROOF_STAGE-shade.csv"
+    if rg -q 'text=E2E medicine' "$PROOF_DIR/$PROOF_STAGE-shade.csv"; then return; fi
+    sleep 0.5
+  done
+  return 1
+}
+proof_action_point() {
+  python3 - "$PROOF_DIR/$PROOF_STAGE-shade.csv" "$1" <<'PY'
+import csv, re, sys
+nodes = {}
+for row in csv.reader(open(sys.argv[1])):
+    if len(row) == 4 and row[0].isdigit():
+        attrs = {key.strip(): value for key, value in re.findall(r'([^;=]+)=([^;]*)(?:;|$)', row[2])}
+        nodes[row[0]] = (row[3], attrs)
+def inside(node, parent):
+    while node in nodes:
+        if node == parent:
+            return True
+        node = nodes[node][0]
+    return False
+for node, (parent, attrs) in nodes.items():
+    if attrs.get('text') != 'E2E medicine':
+        continue
+    while parent in nodes:
+        children = [attrs for key, (owner, attrs) in nodes.items() if inside(key, parent)]
+        if sys.argv[2] == 'expand' and any(attrs.get('text') == 'Taken' for attrs in children):
+            sys.exit(0)
+        for child in children:
+            matches = child.get('resource-id') == 'android:id/expand_button' if sys.argv[2] == 'expand' else child.get('text') == 'Taken'
+            if matches:
+                x1, y1, x2, y2 = map(int, re.findall(r'\d+', child['bounds']))
+                print((x1 + x2) // 2, (y1 + y2) // 2)
+                sys.exit(0)
+        if any(child.get('resource-id') == 'android:id/expand_button' for child in children):
+            sys.exit(0)
+        parent = nodes[parent][0]
+PY
+}
+proof_taken() {
+  proof_shade
+  local action_point proof_x proof_y
+  for attempt in $(seq 1 5); do
+    action_point="$(proof_action_point taken)"
+    if [[ -n "$action_point" ]]; then break; fi
+    action_point="$(proof_action_point expand)"
+    if [[ -n "$action_point" ]]; then
+      read -r proof_x proof_y <<< "$action_point"
+      adb shell input tap "$proof_x" "$proof_y"
+    fi
+    sleep 0.5
+    maestro --no-ansi hierarchy --compact > "$PROOF_DIR/$PROOF_STAGE-shade.csv"
+  done
+  action_point="$(proof_action_point taken)"
+  [[ -n "$action_point" ]]
+  read -r proof_x proof_y <<< "$action_point"
+  adb shell input tap "$proof_x" "$proof_y"
+  for attempt in $(seq 1 20); do
+    proof_state
+    if jq -e '.muted and (.state.receipts | any(.kind == "taken"))' "$PROOF_DIR/state.json" >/dev/null; then
+      adb shell cmd statusbar collapse
+      return
+    fi
+    sleep 0.25
   done
   return 1
 }
@@ -168,95 +210,111 @@ proof_import() {
   jq -e '(.state.receipts | length == 0) and .state.quiesced' "$PROOF_DIR/state.json" >/dev/null
   proof_flow 'Clear native proof' 'Medicine proof cleared'
 }
+proof_power_saving() {
+  adb shell cmd battery unplug
+  adb shell cmd power set-mode 1
+  for attempt in $(seq 1 20); do
+    adb shell dumpsys power > "$PROOF_DIR/$PROOF_STAGE-power.txt"
+    if rg -q 'Battery Saver is currently: ON|mBatterySaverEnabled=true|mLowPowerModeEnabled=true' "$PROOF_DIR/$PROOF_STAGE-power.txt"; then break; fi
+    sleep 0.25
+  done
+  rg -q 'Battery Saver is currently: ON|mBatterySaverEnabled=true|mLowPowerModeEnabled=true' "$PROOF_DIR/$PROOF_STAGE-power.txt"
+  if [[ "${1:-}" == idle ]]; then
+    if [[ "$PROOF_IDLE_CONFIG" == null || -z "$PROOF_IDLE_CONFIG" ]]; then
+      adb shell settings put global device_idle_constants min_time_to_alarm=0
+    else
+      adb shell settings put global device_idle_constants "$PROOF_IDLE_CONFIG,min_time_to_alarm=0"
+    fi
+    for attempt in $(seq 1 20); do
+      adb shell dumpsys deviceidle > "$PROOF_DIR/$PROOF_STAGE-idle-state.txt"
+      if rg -q 'min_time_to_alarm=0$' "$PROOF_DIR/$PROOF_STAGE-idle-state.txt"; then break; fi
+      sleep 0.25
+    done
+    rg -q 'min_time_to_alarm=0$' "$PROOF_DIR/$PROOF_STAGE-idle-state.txt"
+    adb shell input keyevent KEYCODE_SLEEP
+    for attempt in $(seq 1 5); do
+      if adb shell cmd deviceidle force-idle > "$PROOF_DIR/$PROOF_STAGE-idle.txt"; then break; fi
+      sleep 0.5
+    done
+    adb shell dumpsys deviceidle > "$PROOF_DIR/$PROOF_STAGE-idle-state.txt"
+    rg -q 'mState=IDLE' "$PROOF_DIR/$PROOF_STAGE-idle-state.txt"
+  fi
+}
 
 PROOF_CASE="${E2E_NATIVE_PROOF_CASE:-all}"
-[[ "$PROOF_CASE" == all || "$PROOF_CASE" == boot || "$PROOF_CASE" == handoffs ]] || { echo 'Use all, boot, or handoffs for E2E_NATIVE_PROOF_CASE' >&2; exit 1; }
+[[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == finish || "$PROOF_CASE" == boot || "$PROOF_CASE" == handoffs || "$PROOF_CASE" == power ]]
 if [[ "$PROOF_CASE" == all ]]; then
-PROOF_STAGE=quiet-cancellation
-proof_schedule 'Schedule native proof'
-proof_taken
-cp "$PROOF_DIR/state.json" "$PROOF_DIR/quiet-taken.json"
-while [[ "$(date +%s)" -le "$((PROOF_DEADLINE + 3))" ]]; do proof_no_service; sleep 2; done
-proof_import
-printf 'PASS quiet Taken cancels the deadline with React absent\n'
-
-PROOF_STAGE=idle-delivery
-proof_schedule 'Schedule native proof'
-# AlarmClock normally prevents deep idle close to its deadline. Shorten that
-# test guard instead of changing the phone clock; restore it in cleanup.
-if [[ "$PROOF_IDLE_CONFIG" == null || -z "$PROOF_IDLE_CONFIG" ]]; then
-  adb shell settings put global device_idle_constants min_time_to_alarm=0
-else
-  adb shell settings put global device_idle_constants "$PROOF_IDLE_CONFIG,min_time_to_alarm=0"
+  PROOF_STAGE=early-taken-cancellation
+  proof_schedule 'Schedule native proof'
+  proof_taken
+  jq -e '(.state.scheduled | all(.kind != "alarm"))' "$PROOF_DIR/state.json" >/dev/null
+  proof_no_playback
+  proof_import
+  printf 'PASS early Taken cancels the deadline with JavaScript absent\n'
 fi
-adb shell cmd deviceidle force-idle > "$PROOF_DIR/idle.txt"
-proof_await_service
-cp "$PROOF_DIR/services.txt" "$PROOF_DIR/idle-service.txt"
-adb shell cmd deviceidle unforce >/dev/null
-proof_taken
-proof_no_service
-proof_import
-printf 'PASS exact delivery in idle after process death, Taken stops the service\n'
+if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == power ]]; then
+  for saving in battery-and-idle battery; do
+    PROOF_STAGE="$saving"
+    proof_schedule 'Schedule both stages proof'
+    if [[ "$saving" == battery-and-idle ]]; then proof_power_saving idle; else proof_power_saving; fi
+    proof_await_stage reminder "$PROOF_EARLY"
+    proof_await_stage alarm "$PROOF_DEADLINE"
+    adb shell dumpsys notification > "$PROOF_DIR/$PROOF_STAGE-notifications.txt"
+    rg -q "pkg=$PROOF_PACKAGE" "$PROOF_DIR/$PROOF_STAGE-notifications.txt"
+    adb shell cmd deviceidle unforce >/dev/null
+    adb shell cmd battery reset
+    adb shell cmd power set-mode 0
+    proof_shade
+    rg -q 'dose due' "$PROOF_DIR/$PROOF_STAGE-shade.csv"
+    proof_taken
+    proof_import
+  done
 fi
-
-if [[ "$PROOF_CASE" != handoffs ]]; then
-# Reboot clears Android's scheduled alarms. Check that saved future reminders
-# are restored when the phone starts again, without reopening the app.
-PROOF_STAGE=reboot-restoration
-adb shell dumpsys lock_settings | rg -q 'CredentialType: NONE' || { echo 'Reboot proof needs a test phone without a screen lock' >&2; exit 1; }
-proof_schedule 'Schedule reboot proof'
-adb reboot
-for attempt in $(seq 1 120); do
-  if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | rg -q '^1$'; then break; fi
-  sleep 2
-done
-adb shell input keyevent KEYCODE_WAKEUP
-adb shell wm dismiss-keyguard
-proof_state
-jq -e '.muted and (.state.scheduled | any(.kind == "alarm"))' "$PROOF_DIR/state.json" >/dev/null
-cp "$PROOF_DIR/state.json" "$PROOF_DIR/reboot-restored.json"
-while [[ "$(date +%s)" -lt "$((PROOF_DEADLINE - 5))" ]]; do
-  adb shell input keyevent KEYCODE_WAKEUP
-  adb shell wm dismiss-keyguard
+if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == boot ]]; then
+  PROOF_STAGE=reboot-restoration
+  adb shell dumpsys lock_settings | rg -q 'CredentialType: NONE' || { echo 'Reboot proof needs a test phone without a screen lock' >&2; exit 1; }
+  proof_schedule 'Schedule reboot proof'
+  adb reboot
+  for attempt in $(seq 1 120); do
+    if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | rg -q '^1$'; then break; fi
+    sleep 2
+  done
+  proof_state
+  jq -e '.muted and (.state.scheduled | any(.kind == "alarm"))' "$PROOF_DIR/state.json" >/dev/null
+  cp "$PROOF_DIR/state.json" "$PROOF_DIR/reboot-restored.json"
+  proof_await_stage alarm "$PROOF_DEADLINE"
+  proof_taken
+  proof_import
+  printf 'PASS reboot restores deadline delivery without reopening the app\n'
+fi
+if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == finish ]]; then
+  PROOF_STAGE=independent-simultaneous-doses
+  proof_schedule 'Schedule multiple doses proof'
+  proof_taken
+  jq -e '(.state.scheduled[] | select(.kind == "alarm") | .doses | length == 1)' "$PROOF_DIR/state.json" >/dev/null
+  proof_await_stage alarm "$PROOF_DEADLINE"
   adb shell cmd statusbar expand-notifications
-  maestro --no-ansi hierarchy --compact > "$PROOF_DIR/reboot-shade.csv"
-  if rg -q 'text=Native proof only.*Alarm at' "$PROOF_DIR/reboot-shade.csv"; then break; fi
-  sleep 1
-done
-rg -q 'text=Native proof only.*Alarm at' "$PROOF_DIR/reboot-shade.csv"
-adb shell cmd statusbar collapse
-printf 'PASS quiet notification is restored after reboot\n'
-proof_no_service
-proof_await_service
-PROOF_STARTED_AT="$(date +%s)"
-while [[ "$(date +%s)" -lt "$((PROOF_STARTED_AT + 75))" ]]; do
-  if proof_no_service; then break; fi
-  sleep 2
-done
-PROOF_STOPPED_AT="$(date +%s)"
-proof_no_service
-[[ "$PROOF_STOPPED_AT" -ge "$((PROOF_STARTED_AT + 55))" && "$PROOF_STOPPED_AT" -le "$((PROOF_STARTED_AT + 75))" ]]
-printf 'PASS muted alarm service stops automatically after sixty seconds\n'
-proof_taken
-proof_no_service
-proof_import
-printf 'PASS reboot restores future delivery without starting playback at boot\n'
+  maestro --no-ansi hierarchy --compact > "$PROOF_DIR/multiple-shade.csv"
+  rg -q 'text=E2E second medicine' "$PROOF_DIR/multiple-shade.csv"
+  proof_import
+  printf 'PASS Taken leaves the other simultaneous dose scheduled\n'
 fi
-PROOF_STAGE=undo-replay
-proof_schedule 'Schedule native proof'
-proof_open
-proof_flow 'Check undone receipt replay' 'Undone receipt remains pending'
-proof_state
-jq -e '(.state.suppressed | length == 0) and (.state.scheduled | any(.kind == "alarm")) and (.state.receipts | all(.kind != "taken"))' "$PROOF_DIR/state.json" >/dev/null
-proof_flow 'Clear native proof' 'Medicine proof cleared'
-printf 'PASS replay after Undo rearms the pending native dose\n'
-
-PROOF_STAGE=quiescence-race
-proof_schedule 'Schedule native proof'
-proof_open
-proof_flow 'Check quiescence race' 'Quiescence race safe'
-proof_state
-jq -e '.state.quiesced and (.state.receipts | length == 0) and (.state.scheduled | length == 0)' "$PROOF_DIR/state.json" >/dev/null
-proof_flow 'Clear native proof' 'Medicine proof cleared'
-printf 'PASS checkpoint retains concurrent receipts and refuses late Taken\n'
+if [[ "$PROOF_CASE" == all || "$PROOF_CASE" == remaining || "$PROOF_CASE" == finish || "$PROOF_CASE" == handoffs || "$PROOF_CASE" == boot ]]; then
+  PROOF_STAGE=undo-replay
+  proof_schedule 'Schedule reboot proof'
+  proof_open
+  proof_flow 'Check undone receipt replay' 'Undone receipt remains pending'
+  proof_state
+  jq -e '(.state.suppressed | length == 0) and (.state.scheduled | any(.kind == "alarm")) and (.state.receipts | all(.kind != "taken"))' "$PROOF_DIR/state.json" >/dev/null
+  proof_flow 'Clear native proof' 'Medicine proof cleared'
+  printf 'PASS replay after Undo rearms the pending native dose\n'
+  PROOF_STAGE=quiescence-race
+  proof_schedule 'Schedule reboot proof'
+  proof_open
+  proof_flow 'Check quiescence race' 'Quiescence race safe'
+  proof_state
+  jq -e '.state.quiesced and (.state.receipts | length == 0) and (.state.scheduled | length == 0)' "$PROOF_DIR/state.json" >/dev/null
+  proof_flow 'Clear native proof' 'Medicine proof cleared'
+  printf 'PASS checkpoint retains concurrent receipts and refuses late Taken\n'
+fi
 printf 'Native proof artifacts: %s\n' "$PROOF_DIR"

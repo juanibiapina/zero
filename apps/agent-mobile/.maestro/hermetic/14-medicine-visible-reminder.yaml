@@ -10,7 +10,7 @@ appId: dev.juanibiapina.zeroagent
     timeout: 45000
 - tapOn: Schedule visible reminder proof
 - extendedWaitUntil:
-    visible: Alarm scheduled .*
+    visible: Notifications scheduled .*
     timeout: 30000
 - swipe:
     start: 50%, 0%
@@ -21,8 +21,13 @@ appId: dev.juanibiapina.zeroagent
 - takeScreenshot: medicine-status-bar-icon
 - tapOn: Open medicine notification settings
 - assertVisible: Medicines
+- runFlow:
+    when:
+      visible: Show unused categories
+    commands:
+      - tapOn: Show unused categories
+- tapOn: Medicines
 - assertVisible: Medicine reminders
-- assertVisible: Medicine alarms
 - takeScreenshot: medicine-android-categories
 - pressKey: Back
 - tapOn: Open medicine reminder category

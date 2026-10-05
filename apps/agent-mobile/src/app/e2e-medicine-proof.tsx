@@ -24,18 +24,19 @@ export default function MedicineProof() {
   }, []);
   if (!RUNTIME_PROFILE.hermetic) return <Redirect href="/" />;
   const run = async (action: () => Promise<void>) => { try { await action(); } catch (error) { setStatus(String(error)); } };
-  const schedule = (delay = 125_000) => run(async () => {
+  const schedule = (delay = 125_000, earlyOffset = 240_000, multiple = false) => run(async () => {
     if (!NativeReminders || !replica) throw new Error('Native reminder module or workspace missing');
     await NativeReminders.silenceProof();
     const alarm = new Date(Date.now() + delay); alarm.setSeconds(0, 0);
-    const early = new Date(alarm.getTime() - 240_000);
+    const early = new Date(alarm.getTime() - earlyOffset);
     if (early.getDate() !== alarm.getDate() || alarm.getDate() !== new Date().getDate()) throw new Error('Run the proof away from midnight');
     const hhmm = (date: Date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     await NativeReminders.clear(workspace);
     for (const item of replica.snapshot().medicines) await replica.medicines.remove(item.id);
     const medicine = await replica.medicines.add({ name: 'E2E medicine', instructions: 'Native proof only', startsOn: medicineToday(), endsOn: medicineToday(), paused: false, doses: [{ id: 'evening', remindAt: hhmm(early), alarmAt: hhmm(alarm) }] });
-    await NativeReminders.replace(workspace, JSON.stringify({ medicines: [medicine], confirmed: [] }));
-    setStatus(`Alarm scheduled ${hhmm(alarm)}`);
+    const peer = multiple ? await replica.medicines.add({ ...medicine, name: 'E2E second medicine' }) : null;
+    await NativeReminders.replace(workspace, JSON.stringify({ medicines: peer ? [medicine, peer] : [medicine], confirmed: [] }));
+    setStatus(`Notifications scheduled ${hhmm(alarm)}`);
   });
   const clear = () => run(async () => { await NativeReminders?.clear(workspace); setStatus('Medicine proof cleared'); });
   const take = () => run(async () => {
@@ -91,7 +92,9 @@ export default function MedicineProof() {
     <Text>{status}</Text>
     <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule()} className="min-h-12"><Text>Schedule native proof</Text></Pressable>
     <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule(235_000)} className="min-h-12"><Text>Schedule visible reminder proof</Text></Pressable>
-    <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule(185_000)} className="min-h-12"><Text>Schedule reboot proof</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule(305_000)} className="min-h-12"><Text>Schedule reboot proof</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule(245_000, 120_000)} className="min-h-12"><Text>Schedule both stages proof</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={!replica} onPress={() => void schedule(125_000, 240_000, true)} className="min-h-12"><Text>Schedule multiple doses proof</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void take()} className="min-h-12"><Text>Take native proof</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void importReceipts()} className="min-h-12"><Text>Import medicine receipts</Text></Pressable>
     <Pressable accessibilityRole="button" onPress={() => void replayUndo()} className="min-h-12"><Text>Check undone receipt replay</Text></Pressable>

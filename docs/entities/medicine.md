@@ -1,59 +1,73 @@
 # Medicine and Dose
 
-Medicine is a daily routine with a name, optional instructions, one or more daily dose slots, a start date, an optional inclusive last day, and a paused state. Each slot has its own early reminder and later alarm on the same calendar day. Dates and times follow the phone's local clock.
+Medicine is a daily routine with a name, optional instructions, one or more daily dose slots, a start date, an optional inclusive last day, and a paused state. Each slot has an early reminder and a dose time on the same calendar day. Dates and times follow the phone's local clock.
 
-Dose is a separate dated occurrence identified by Medicine ID, slot ID, and date. It stores its scheduled alarm time and the actual timestamp when Taken was pressed. The confirmation and scheduled-time snapshot persist together, so a concurrent time edit cannot rewrite confirmation history. See [storage](../storage.md) for persistence and synchronization.
+Dose is a separate dated occurrence identified by Medicine ID, slot ID, and date. It stores its scheduled dose time and the actual timestamp when Taken was pressed. The confirmation and scheduled-time snapshot persist together, so a concurrent time edit cannot rewrite confirmation history. See [storage](../storage.md) for persistence and synchronization.
 
 ## Surfaces
 
 Manage routines under Browse → Medicines on mobile, or Medicines in the web sidebar. The mobile Medicines list has its own plus button, opening its dedicated creation drawer. Global quick-add offers only Task and Project. There are no Medicine rows on Home, and Medicine does not change Task ordering, Project attention, Waiting, After, Upcoming grouping, or the launcher Task count.
 
-The mobile drawer starts with a name, optional description, daily frequency, and visible suggested times. New routines start today and continue indefinitely. Once a day suggests 20:00; twice suggests 08:00 and 20:00; three times suggests 08:00, 14:00, and 20:00; four times suggests 08:00, 12:00, 16:00, and 20:00. These are daytime schedules. Suggested reminders come one hour before once-daily alarms and thirty minutes before three-times-daily alarms. Twice-daily and four-times-daily presets use fifteen minutes. New custom slots use the default for the resulting daily count and preserve existing slots; other counts use fifteen minutes. Saved and copied schedules retain their configured reminder times unless you choose a frequency preset. Adjust opens individual times, reminders, start date, and optional course length. Existing custom schedules stay intact when editing a name or description. Failed saves retain the draft; retrying saves the same routine.
+The mobile drawer starts with a name, optional description, daily frequency, and visible suggested times. New routines start today and continue indefinitely. Once a day suggests 20:00; twice suggests 08:00 and 20:00; three times suggests 08:00, 14:00, and 20:00; four times suggests 08:00, 12:00, 16:00, and 20:00. Suggested early reminders come one hour before once-daily doses and thirty minutes before three-times-daily doses. Twice-daily and four-times-daily presets use fifteen minutes. New custom slots use the default for the resulting daily count and preserve existing slots; other counts use fifteen minutes. Saved and copied schedules retain their configured reminder times unless you choose a frequency preset. Adjust opens individual times, reminders, start date, and optional course length. Existing custom schedules stay intact when editing a name or description. Failed saves retain the draft; retrying saves the same routine.
 
-The mobile list emphasizes names and times. Detail emphasizes today's independent doses and actual confirmation times. Recorded doses have no Undo action on mobile. Mobile confirmations use the reminder notification or native alarm screen. History and medicine options expand on request. Android reminder setup appears only when delivery is disabled or needs attention. Ended routines retain history and offer Add again, which creates a fresh Medicine identity and date range. Delete removes the routine and its known history and prevents stale replicas from reviving its accepted state.
+The mobile list emphasizes names and times. Detail emphasizes today's independent doses and actual confirmation times. Recorded doses have no Undo action on mobile. Mobile confirmations use the notification's Taken action. History and medicine options expand on request. Reminders on this phone opens Android notification, battery, and watch setup guidance. Blocked delivery and muted sound have distinct messages. Ended routines retain history and offer Add again, which creates a fresh Medicine identity and date range. Delete removes the routine and its known history and prevents stale replicas from reviving its accepted state.
 
 ## Daily behavior
 
-At the early time, the Android phone posts a prominent, soundless reminder with Taken. It stays ongoing with a status-bar icon while the dose is pending. Android notification settings group Medicine reminders and alarms under Medicines; the app opens the reminder category’s settings when it is set to Silent. If still unrecorded at the alarm time, it rings using alarm audio for up to sixty seconds. Taken records that one occurrence, removes its notification, and cancels or stops its sound without opening the app. Swiping a notification away does not record the dose. The alarm notification and native alarm screen offer Stop alarm. Stop silences all currently ringing Medicine doses on this phone and leaves them pending; their reminders remain available. Stopped or timed-out alarm instances do not replay after refresh or restart.
+At the early time, Android posts a normal notification with Taken. If still pending at dose time, it replaces that card and alerts once again. Both stages use the Medicine reminders category under Medicines, with high importance, the system notification sound, and vibration by default. Android may show a heads-up banner. Sound follows notification volume, ringer mode, Do Not Disturb, and the user's category settings. There is no looping alarm playback or full-screen medicine screen.
 
-The same native alarm screen opens when you tap its notification or open the app during ringing. Medicine names are centered with their alarm time and instructions beneath them. Stop alarm and Taken stay at the bottom while long lists scroll above them. Taken silences the session and records every displayed dose in one durable native save; Stop alarm leaves them pending. App navigation stays covered until the alarm ends; Back does not dismiss it. Android system navigation remains available. The screen also closes on Taken, timeout, or removal of its active workspace.
+A notification can be swiped away. Dismissal leaves the dose pending and does not cancel the later dose-time notification. Refresh and restart do not replay an already delivered stage or immediately restore a dismissed card. Quiet catch-up cards can appear when enabling a schedule after its early time. Reboot restores undismissed pending cards quietly.
 
-Android full-screen access controls automatic presentation over the lock screen and screen wake-up. When unlocked, Android may show a heads-up notification instead. Denied access retains notification Stop and tap-to-open controls; Medicine setup offers the Android setting to enable full-screen alarms. These native controls work without JavaScript, login, or a network connection.
+Taken records that one occurrence, removes its notification, and cancels its future delivery without opening the app. Confirmations persist natively without JavaScript, login, or a network connection. Repeated delivery of the same Taken action does not create another confirmation. Tapping the card opens its Medicine and dated Dose. Medicine details are private on the lock screen, with a generic public notification.
 
-Taking the morning dose leaves afternoon and evening doses scheduled. The shared model's undo operation clears only the chosen confirmation; it re-arms a future alarm but does not replay an elapsed one. Notification actions preserve their original slot and date. At midnight old pending notifications close and the next date is independent.
+Standard notification forwarding allows a paired watch to receive the card. Enable Zero Agent notifications in the watch companion app. Watch sound, vibration, connectivity, and Do Not Disturb govern the watch alert. No standalone watch app is required. Forwarding and Taken availability must be checked on the actual watch model.
 
-Reboot clears Android’s scheduled alarms. The app restores future Medicine reminders from saved schedules when the phone starts again, without requiring you to reopen the app. The reboot test checks this restoration so reminders do not silently stop after a restart or system update.
+Taking the morning dose leaves afternoon and evening doses scheduled. Simultaneous doses share a scheduled wake-up and have separate notifications and Taken actions. The shared model's undo operation clears only the chosen confirmation; it re-arms a future deadline but does not replay an elapsed one. Notification actions preserve their original slot and date. At midnight old pending notifications close and the next date is independent.
+
+### Power saving and upgrades
+
+Dose deadlines use Android alarm-clock scheduling, which wakes the device through normal Battery Saver and Doze and exposes an upcoming-alarm indicator. The wake-up posts an ordinary notification. Early reminders use exact allow-while-idle scheduling; Android throttles these alarms per app in idle, so closely spaced early reminders can be delayed. These schedulers require exact-alarm access on relevant Android versions.
+
+For reliable delivery, open App battery usage through reminder settings and choose Unrestricted if available. Manufacturer power controls can impose additional restrictions. The app reports detected background restrictions and battery optimization exemption separately; an exemption does not prove every manufacturer restriction is disabled. Missing exemption alone does not report reminders as blocked.
+
+Reboot clears Android's scheduled alarms. Saved definitions restore future delivery when the phone starts, without reopening the app. Package replacement, clock/timezone changes, and restored exact-alarm access also restore scheduling.
 
 ## Dates and changes
 
 Ongoing has no last day. Number of days calculates `startsOn + days - 1`; for example October 2 through October 11 is ten days. Every eligible last-day slot runs, then delivery ends. Pausing and missed doses never extend the last day.
 
-Edits apply immediately to eligible future alarms. Past alarms do not replay. Stable slot IDs preserve confirmations through time changes and reordering; a removed then newly added slot has a fresh identity. Reminder time must precede alarm time on the same day; alarm times within one Medicine must be distinct. Instructions apply to all daily slots.
+Edits apply immediately to eligible future notifications. Past deadlines do not replay. Stable slot IDs preserve confirmations through time changes and reordering; a removed then newly added slot has a fresh identity. Reminder time must precede dose time on the same day; dose times within one Medicine must be distinct. Instructions apply to all daily slots.
 
 ## History and delivery limits
 
 Taken at records the time of confirmation, which may differ from the time the medicine was physically taken. History retains recorded occurrences and their scheduled snapshots. It does not reconstruct old schedules, pauses, or complete missed-dose totals.
 
-Android delivery is enabled separately on each phone. Exact-alarm access and notification permission/channel settings must allow delivery. Older APKs can manage Medicine but need a native build containing reminder support to deliver alarms. Closed-app notification confirmations persist natively and import into the shared workspace on the next app opening. Remote edits or confirmations reach a phone when it syncs; an offline phone cannot cancel an alarm based on an unseen remote change. Force-stop, power-off, and alarm-volume settings affect delivery.
+Android delivery is enabled separately on each phone. Exact-alarm access and notification permission/category settings must allow delivery. The new behavior requires a native APK containing the updated reminder module. Closed-app confirmations import into the shared workspace on the next app opening. Remote edits or confirmations reach a phone when it syncs; an offline phone cannot cancel a notification based on an unseen remote change. Power-off, force-stop, OEM extreme power saving, missing permissions, muted devices, and disconnected or filtered watches limit delivery or alerting. Notification importance does not override these settings or guarantee a banner.
 
 ## Development and verification
 
-The local [medicine-reminders module](../../apps/agent-mobile/modules/medicine-reminders) implements Android delivery. After generating the development Android project, run its notification and alarm-screen tests from `apps/agent-mobile/android` with `./gradlew :medicine-reminders:testDebugUnitTest --max-workers=1`.
+The local [medicine-reminders module](../../apps/agent-mobile/modules/medicine-reminders) implements Android delivery. After generating the development Android project, run its channel and delivery tests from `apps/agent-mobile/android`:
 
-The course/history, visible-reminder, and muted alarm-screen flows run in the normal suite:
+```bash
+./gradlew :medicine-reminders:testDebugUnitTest --max-workers=1
+```
+
+The course/history, visible-reminder, and normal dose-time notification flows run in the normal suite:
 
 ```bash
 pnpm --filter @zero/agent-mobile e2e:pixel
 ```
 
-Run native delivery checks with a debug build and a hermetic Metro server:
+Run native delivery checks with a fresh debug APK and a hermetic Metro server:
 
 ```bash
 pnpm --filter @zero/agent-mobile e2e:medicine-native
 ```
 
-The native harness opens `zeroagent:///e2e-medicine-proof`, grants notification and exact-alarm access, and captures artifacts under `/tmp/medicine-native-proof`. The route is available only in the hermetic profile. It uses its own SQLite workspace and mutes playback before installing any schedule; muting survives process death and reboot and applies only to that test workspace.
+The harness opens `zeroagent:///e2e-medicine-proof`, grants notification and exact-alarm access, and captures artifacts under `/tmp/medicine-native-proof`. The route is available only in the hermetic profile. Its separate SQLite workspace uses a separate silent test category; production category defaults stay audible. Silence survives process death and reboot.
 
-Metro defaults to port 8098; override it with `E2E_METRO_PORT`. `E2E_NATIVE_PROOF_CASE=boot` selects reboot, cutoff, replay, and checkpoint checks; `handoffs` selects replay and checkpoint. Reboot checks require a phone without a screen lock. Idle checks temporarily change the alarm-clock wake guard and restore its setting on exit.
+The default native proof checks early Taken cancellation, both stages with Battery Saver, both stages with Battery Saver plus forced Doze, reboot restoration, simultaneous-dose independence, receipt replay, and checkpoint races. It checks native delivery logs against a 30-second timing criterion and checks that no alarm playback starts. This criterion is controlled-device evidence, not an unconditional Android timing guarantee.
 
-When checking process death, background and kill the process rather than force-stopping the app: force-stop cancels Android delivery. Check notification Taken, confirmation persistence across restart, alarm-service cancellation, and future delivery after reboot. The route's Clear native proof action removes test alerts. Silent checks do not verify audible volume; a sound check requires explicit permission.
+Metro defaults to port 8098; override it with `E2E_METRO_PORT`. `E2E_NATIVE_PROOF_CASE=power` selects power-saving cases; `boot` selects reboot, replay, and checkpoint; `handoffs` selects replay and checkpoint. To resume an interrupted run, `remaining` skips the initial early Taken case, and `finish` selects simultaneous doses, replay, and checkpoint. Reboot requires a test phone without a screen lock. The harness restores its temporary Battery Saver, battery simulation, and idle settings on exit.
+
+For process-death checks, background and kill the process rather than force-stopping the app: force-stop cancels Android delivery. Clear native proof removes test alerts. Silent automated checks cannot establish audible or tactile behavior. A physical phone/watch sound check requires an appropriate connected watch and audible device settings.

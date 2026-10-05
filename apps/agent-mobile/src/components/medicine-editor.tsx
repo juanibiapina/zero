@@ -50,7 +50,7 @@ export function MedicineEditorFields({ draft, onChange, disabled = false, error,
       </View>
     </Pressable>
     {customizing ? <View className="border-t border-divider px-screen-x py-3">
-      <Text variant="caption">Quiet reminder before each alarm</Text>
+      <Text variant="caption">Notification before each dose</Text>
       {draft.input.doses.map((slot, index) => <View key={slot.id} className="border-b border-divider py-1">
         <View className="flex-row items-center justify-between gap-2">
           <Pressable accessibilityRole="button" accessibilityLabel={`Change dose ${index + 1} time, ${slot.alarmAt}`} disabled={disabled} onPress={() => pickTime(slot.id, 'alarmAt', slot.alarmAt)} className="min-h-12 flex-1 flex-row items-center justify-between gap-2">
@@ -58,7 +58,7 @@ export function MedicineEditorFields({ draft, onChange, disabled = false, error,
           </Pressable>
           {count > 1 ? <Pressable accessibilityRole="button" accessibilityLabel={`Remove dose ${index + 1}`} disabled={disabled} onPress={() => onChange(draft.removeTime(slot.id))} className="min-h-12 justify-center px-3"><Text variant="caption">Remove</Text></Pressable> : null}
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Change reminder ${index + 1}, ${slot.remindAt}`} disabled={disabled} onPress={() => pickTime(slot.id, 'remindAt', slot.remindAt)} className="min-h-12 flex-row items-center justify-between gap-2"><Text variant="subtitle">Quiet reminder</Text><Text variant="subtitle" style={{ fontVariant: ['tabular-nums'] }}>{slot.remindAt}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Change reminder ${index + 1}, ${slot.remindAt}`} disabled={disabled} onPress={() => pickTime(slot.id, 'remindAt', slot.remindAt)} className="min-h-12 flex-row items-center justify-between gap-2"><Text variant="subtitle">Early reminder</Text><Text variant="subtitle" style={{ fontVariant: ['tabular-nums'] }}>{slot.remindAt}</Text></Pressable>
       </View>)}
       {count < 24 ? <Pressable accessibilityRole="button" accessibilityLabel="Add dose time" disabled={disabled} onPress={() => onChange(draft.addTime())} className="min-h-12 justify-center"><Text className="text-accent">Add another time</Text></Pressable> : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Change medicine start day" disabled={disabled} onPress={() => pickDate(false)} className="min-h-12 flex-row items-center justify-between gap-3"><Text>Starts</Text><Text variant="subtitle">{draft.input.startsOn === medicineToday() ? 'Today' : draft.input.startsOn}</Text></Pressable>
@@ -67,7 +67,7 @@ export function MedicineEditorFields({ draft, onChange, disabled = false, error,
       </Picker></Host>
       {course.kind === 'days' ? <View className="gap-1"><Input accessibilityLabel="Number of days" placeholder="Days" keyboardType="number-pad" editable={!disabled} value={course.days} onChangeText={(days) => onChange(draft.withCourse({ kind: 'days', days }))} className="min-h-12" />{endsOn ? <Text variant="caption">Last day: {endsOn}, inclusive</Text> : null}</View> : null}
       {course.kind === 'last-day' ? <Pressable accessibilityRole="button" accessibilityLabel="Change medicine last day" disabled={disabled} onPress={() => pickDate(true)} className="min-h-12 flex-row items-center justify-between"><Text>Last day</Text><Text className="text-accent">{course.on}</Text></Pressable> : null}
-    </View> : <View className="px-screen-x pb-3"><Text variant="caption">{draft.suggested ? 'Quiet reminder 15 min before · Alarm at dose time' : 'Reminders follow your saved times'}</Text></View>}
+    </View> : <View className="px-screen-x pb-3"><Text variant="caption">{draft.suggested ? 'Notification before each dose and at dose time' : 'Reminders follow your saved times'}</Text></View>}
     {error ? <Text variant="error" selectable className="px-screen-x pb-3">{error}</Text> : null}
     {picker ? <DateTimePicker value={picker.value} mode={picker.mode} is24Hour onChange={(event, date) => { if (event.type === 'set' && date) picker.save(date); setPicker(null); }} /> : null}
   </View>;

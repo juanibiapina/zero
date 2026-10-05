@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-04: Change medicine reminders to normal notifications with sound, vibration, watch forwarding, and Taken; add battery settings guidance and keep dose-time delivery active through normal power saving.
+
 - 2026-10-04: Hide routine sync and update activity on Home; show a static icon only for updates ready for the next launch or device-saving problems.
 
 - 2026-10-04: Remove Undo from taken medicine doses; confirmation times remain visible.

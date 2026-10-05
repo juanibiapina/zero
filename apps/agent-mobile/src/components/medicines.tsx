@@ -104,29 +104,31 @@ function ReminderSettings() {
     try { await operation(); if (NativeReminders) setCapabilities(await NativeReminders.capabilities()); }
     catch (cause) { setError(errorText(cause)); }
   };
-  const prominent = capabilities != null && capabilities.quietChannelImportance >= 3;
-  const active = state?.enabled && capabilities?.notifications && capabilities.exactAlarms && capabilities.quietChannel && capabilities.alarmChannel && prominent && capabilities.fullScreenAlarms && capabilities.alarmVolume > 0 && !state.error && !error;
-  if (active) return null;
   if (NativeReminders && controller && !capabilities && !state?.error && !error) return null;
-  const label = !NativeReminders || !controller ? 'Medicine reminders are unavailable in this app.'
+  const warning = !NativeReminders || !controller ? 'Medicine reminders are unavailable in this app.'
     : state?.error || error ? 'Medicine reminders need attention.'
     : !state?.enabled ? 'Medicine reminders are off on this phone.'
     : !capabilities?.notifications ? 'Notifications are off. Medicine reminders won’t appear.'
-    : !capabilities.quietChannel || !capabilities.alarmChannel ? 'Medicine notifications are blocked.'
-    : !prominent ? 'Medicine reminders are set to Silent.'
-    : !capabilities.exactAlarms ? 'Medicine alarms are blocked.'
-    : !capabilities.fullScreenAlarms ? 'Full-screen medicine alarms are blocked.'
-    : 'Alarm volume is off.';
+    : !capabilities.alertChannel ? 'Medicine notifications are blocked.'
+    : !capabilities.exactAlarms ? 'On-time medicine reminders are blocked.'
+    : capabilities.backgroundRestricted ? 'Background activity is restricted. Medicine reminders may be delayed.'
+    : capabilities.alertChannelImportance < 3 || !capabilities.channelSound ? 'Medicine reminders appear without sound.'
+    : !capabilities.ringerNormal || capabilities.notificationVolume === 0 ? 'Phone notification sound is muted. Medicine reminders still appear.'
+    : null;
+  const label = warning ?? 'Reminders on this phone';
   return <View className="border-b border-divider">
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen((current) => !current)} className="min-h-12 flex-row items-center justify-between gap-3 py-3"><Text accessibilityRole="alert" variant="caption" className="flex-1 text-danger">{label}</Text><MedicineGlyph name={open ? 'collapse' : 'expand'} /></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen((current) => !current)} className="min-h-12 flex-row items-center justify-between gap-3 py-3"><Text accessibilityRole={warning ? 'alert' : undefined} variant="caption" className={warning ? 'flex-1 text-danger' : 'flex-1'}>{label}</Text><MedicineGlyph name={open ? 'collapse' : 'expand'} /></Pressable>
     {open ? <View className="pb-3">
-      {!NativeReminders || !controller ? <Text variant="subtitle">Install an Android build with medicine reminders to enable alarms.</Text> : <>
+      {!NativeReminders || !controller ? <Text variant="subtitle">Install an Android build with medicine reminders to enable notifications.</Text> : <>
         {!capabilities?.notifications ? <Action label="Allow notifications" onPress={() => void perform(() => NativeReminders?.requestNotifications())} /> : null}
-        {capabilities?.notifications && (!capabilities.quietChannel || !capabilities.alarmChannel) ? <Action label="Enable medicine notification channels" onPress={() => void perform(() => NativeReminders?.openNotificationSettings())} /> : null}
-        {capabilities?.quietChannel && !prominent ? <Action label="Show medicine reminders prominently" onPress={() => void perform(() => NativeReminders?.openReminderSettings())} /> : null}
-        {capabilities?.alarmVolume === 0 ? <><Text variant="subtitle">Alarm volume is off.</Text><Action label="Set alarm volume" onPress={() => void perform(() => NativeReminders?.openSoundSettings())} /></> : null}
-        {!capabilities?.fullScreenAlarms ? <Action label="Allow full-screen alarms" onPress={() => void perform(() => NativeReminders?.openFullScreenSettings())} /> : null}
+        <Action label="Medicine notification settings" onPress={() => void perform(() => NativeReminders?.openReminderSettings())} />
+        {capabilities && (!capabilities.notifications || !capabilities.alertChannel) ? <Action label="All notification settings" onPress={() => void perform(() => NativeReminders?.openNotificationSettings())} /> : null}
+        {capabilities && (!capabilities.ringerNormal || capabilities.notificationVolume === 0) ? <Action label="Phone sound settings" onPress={() => void perform(() => NativeReminders?.openSoundSettings())} /> : null}
         {!capabilities?.exactAlarms ? <Action label="Allow exact alarms" onPress={() => void perform(() => NativeReminders?.openExactAlarmSettings())} /> : null}
+        <Text variant="subtitle">For reliable reminders, open App battery usage and choose Unrestricted if available. Battery Saver can stay on.</Text>
+        {capabilities?.batteryExempt ? <Text variant="caption">Android battery optimization exemption is enabled.</Text> : null}
+        <Action label="App battery settings" onPress={() => void perform(() => NativeReminders?.openBatterySettings())} />
+        <Text variant="subtitle">To receive reminders on your watch, allow Zero Agent notifications in your watch companion app. Sound and Do Not Disturb follow your device settings.</Text>
         {!state?.enabled ? <Action label="Enable reminders on this phone" disabled={state?.pending} onPress={() => void perform(() => enableMedicineReminders(replica!, controller.workspace))} /> : null}
         {state?.error ? <><Text variant="error" selectable>{state.error}</Text><Action label="Retry reminders" onPress={() => void perform(() => controller.refresh())} /></> : null}
       </>}
@@ -170,7 +172,7 @@ export function MedicineDetail() {
         const dose = doses.find((item) => item.id === planned.id) ?? planned;
         const slot = medicine.doses.find((candidate) => candidate.id === dose.slotId);
         return <View key={dose.id} className="min-h-16 flex-row flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-divider py-3">
-          <View className="gap-0.5"><Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>{time(dose.scheduledAt)}</Text><Text variant="caption">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : slot ? `Quiet reminder ${slot.remindAt}` : 'Unrecorded'}</Text></View>
+          <View className="gap-0.5"><Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>{time(dose.scheduledAt)}</Text><Text variant="caption">{dose.takenAt ? `Taken at ${time(dose.takenAt)}` : slot ? `Early reminder ${slot.remindAt}` : 'Unrecorded'}</Text></View>
         </View>;
       })}
       {state !== 'active' && !params.dose ? <Text variant="subtitle" className="py-4">{medicine.doses.map((slot) => slot.alarmAt).sort().join('   ·   ')}</Text> : null}

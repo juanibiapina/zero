@@ -105,7 +105,7 @@ reset_e2e_phone_state() {
     -d "zeroagent:///e2e-reset" \
     "$PACKAGE" >/dev/null
   for _ in $(seq 1 30); do
-    timeout 10 maestro --no-ansi hierarchy --compact > "$reset_hierarchy" 2>&1 || true
+    timeout 45 maestro --no-ansi hierarchy --compact > "$reset_hierarchy" 2>&1 || true
     grep -Eq 'text=Hermetic state reset|accessibilityText=Hermetic state reset' "$reset_hierarchy" && break
     sleep 1
   done
@@ -373,8 +373,11 @@ adb_device shell am start -W \
   "$PACKAGE" > "$ARTIFACT_DIR/launch.txt"
 
 STAGE="launch readiness"
-for _ in $(seq 1 90); do
-  timeout 10 maestro --no-ansi hierarchy --compact \
+for launch_attempt in $(seq 1 90); do
+  if (( launch_attempt % 10 == 2 )); then
+    adb_device shell am start -W -a android.intent.action.VIEW -d 'zeroagent:///' "$PACKAGE" > "$ARTIFACT_DIR/launch-route.txt"
+  fi
+  timeout 45 maestro --no-ansi hierarchy --compact \
     > "$ARTIFACT_DIR/launch-hierarchy.txt" 2>&1 || true
   if grep -Eq 'text=Home|accessibilityText=Home' "$ARTIFACT_DIR/launch-hierarchy.txt"; then
     break

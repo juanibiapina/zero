@@ -21,14 +21,16 @@ jest.mock('../../../modules/medicine-reminders', () => ({
     replace: async () => {}, acknowledge: async () => {}, quiesce: async () => {}, clear: async () => {},
     requestNotifications: () => { mockCapabilities = { ...mockCapabilities, notifications: true }; },
     openExactAlarmSettings: () => {}, openNotificationSettings: () => {}, openSoundSettings: () => {},
-    openReminderSettings: jest.fn(), openFullScreenSettings: jest.fn(),
+    openReminderSettings: jest.fn(), openBatterySettings: jest.fn(),
   },
 }));
 let replica: TaskdoReplica | null = null;
 const foreground = new Set<(state: AppStateStatus) => void>();
 beforeEach(async () => {
   await AsyncStorage.clear();
-  mockCapabilities = { supported: true, notifications: true, exactAlarms: true, quietChannel: true, quietChannelImportance: 4, fullScreenAlarms: true, alarmChannel: true, alarmVolume: 5 };
+  mockCapabilities = { notifications: true, exactAlarms: true, alertChannel: true, alertChannelImportance: 4,
+    channelSound: true, notificationVolume: 5, ringerNormal: true,
+    backgroundRestricted: false, batteryExempt: false };
   foreground.clear();
   jest.spyOn(AppState, 'addEventListener').mockImplementation((event, listener) => {
     if (event === 'change') foreground.add(listener);
@@ -47,64 +49,64 @@ async function openMedicine(enabled = true) {
   return render(<QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}><MedicineDetail /></InMemoryTodoDataProvider></QueryClientProvider>);
 }
 describe('Medicine reminder warnings', () => {
-  it('hides setup while enabled, warns after notifications are turned off, and hides after they are restored', async () => {
+  it('reports notification permission changes when returning to the app', async () => {
     const screen = await openMedicine();
-    await waitFor(() => expect(screen.queryByLabelText('Reminders on this phone')).toBeNull());
+    await waitFor(() => expect(screen.getByLabelText('Reminders on this phone')).toBeTruthy());
     expect(screen.queryByRole('alert')).toBeNull();
     mockCapabilities = { ...mockCapabilities, notifications: false };
     await act(async () => { for (const listener of foreground) listener('active'); });
-    await waitFor(() => expect(screen.getByText('Notifications are off. Medicine reminders won’t appear.')).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText('Notifications are off. Medicine reminders won’t appear.'));
-    expect(screen.queryByText('Taken works offline. Changes on other devices arrive when this phone syncs.')).toBeNull();
-    expect(screen.queryByLabelText('Turn off reminders on this phone')).toBeNull();
+    const warning = 'Notifications are off. Medicine reminders won’t appear.';
+    await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
+    await fireEvent.press(screen.getByLabelText(warning));
+    expect(screen.getByLabelText('All notification settings')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Allow notifications'));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-    expect(screen.queryByLabelText('Allow notifications')).toBeNull();
   });
-  it('opens the reminder category settings when visibility is low and recovers on return', async () => {
-    Object.assign(mockCapabilities, { quietChannelImportance: 2 });
+  it('detects a silent channel even when its importance is high', async () => {
+    Object.assign(mockCapabilities, { channelSound: false });
     const screen = await openMedicine();
-    const warning = 'Medicine reminders are set to Silent.';
+    const warning = 'Medicine reminders appear without sound.';
     await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
     await fireEvent.press(screen.getByLabelText(warning));
-    await fireEvent.press(screen.getByLabelText('Show medicine reminders prominently'));
+    await fireEvent.press(screen.getByLabelText('Medicine notification settings'));
     const native = require('../../../modules/medicine-reminders').default;
     expect(native.openReminderSettings).toHaveBeenCalled();
-    Object.assign(mockCapabilities, { quietChannelImportance: 4 });
+    Object.assign(mockCapabilities, { channelSound: true });
     await act(async () => { for (const listener of foreground) listener('active'); });
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
-  it('offers full-screen alarm settings and recovers when access is enabled', async () => {
-    Object.assign(mockCapabilities, { fullScreenAlarms: false });
+  it('keeps battery and watch setup accessible without treating missing exemption as blocked delivery', async () => {
     const screen = await openMedicine();
-    const warning = 'Full-screen medicine alarms are blocked.';
+    await waitFor(() => expect(screen.getByLabelText('Reminders on this phone')).toBeTruthy());
+    expect(screen.queryByRole('alert')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Reminders on this phone'));
+    await fireEvent.press(screen.getByLabelText('App battery settings'));
+    const native = require('../../../modules/medicine-reminders').default;
+    expect(native.openBatterySettings).toHaveBeenCalled();
+    expect(screen.getByText(/allow Zero Agent notifications in your watch companion app/)).toBeTruthy();
+    expect(screen.queryByLabelText('Allow full-screen alarms')).toBeNull();
+    expect(screen.queryByLabelText('Set alarm volume')).toBeNull();
+  });
+  it('warns when phone reminders are off and recovers after enabling them', async () => {
+    const screen = await openMedicine(false);
+    const warning = 'Medicine reminders are off on this phone.';
     await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
     await fireEvent.press(screen.getByLabelText(warning));
-    await fireEvent.press(screen.getByLabelText('Allow full-screen alarms'));
-    const native = require('../../../modules/medicine-reminders').default;
-    expect(native.openFullScreenSettings).toHaveBeenCalled();
-    Object.assign(mockCapabilities, { fullScreenAlarms: true });
-    await act(async () => { for (const listener of foreground) listener('active'); });
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-  });
-  it('warns when phone reminders are off and hides after enabling them', async () => {
-    const screen = await openMedicine(false);
-    await waitFor(() => expect(screen.getByText('Medicine reminders are off on this phone.')).toBeTruthy());
-    await fireEvent.press(screen.getByLabelText('Medicine reminders are off on this phone.'));
     await fireEvent.press(screen.getByLabelText('Enable reminders on this phone'));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-    expect(screen.queryByLabelText('Turn off reminders on this phone')).toBeNull();
   });
   it.each([
-    { capability: 'exactAlarms', value: false, warning: 'Medicine alarms are blocked.', action: 'Allow exact alarms' },
-    { capability: 'quietChannel', value: false, warning: 'Medicine notifications are blocked.', action: 'Enable medicine notification channels' },
-    { capability: 'alarmVolume', value: 0, warning: 'Alarm volume is off.', action: 'Set alarm volume' },
-  ])('warns about $capability instead of hiding a blocked delivery setup', async ({ capability, value, warning, action }) => {
+    { capability: 'exactAlarms', value: false, warning: 'On-time medicine reminders are blocked.', action: 'Allow exact alarms' },
+    { capability: 'alertChannel', value: false, warning: 'Medicine notifications are blocked.', action: 'Medicine notification settings' },
+    { capability: 'notificationVolume', value: 0, warning: 'Phone notification sound is muted. Medicine reminders still appear.', action: 'Phone sound settings' },
+    { capability: 'ringerNormal', value: false, warning: 'Phone notification sound is muted. Medicine reminders still appear.', action: 'Phone sound settings' },
+    { capability: 'backgroundRestricted', value: true, warning: 'Background activity is restricted. Medicine reminders may be delayed.', action: 'App battery settings' },
+    { capability: 'alertChannelImportance', value: 2, warning: 'Medicine reminders appear without sound.', action: 'Medicine notification settings' },
+  ])('reports $capability accurately', async ({ capability, value, warning, action }) => {
     mockCapabilities = { ...mockCapabilities, [capability]: value };
     const screen = await openMedicine();
     await waitFor(() => expect(screen.getByText(warning)).toBeTruthy());
     await fireEvent.press(screen.getByLabelText(warning));
     expect(screen.getByLabelText(action)).toBeTruthy();
-    expect(screen.queryByLabelText('Turn off reminders on this phone')).toBeNull();
   });
 });
