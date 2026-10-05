@@ -28,16 +28,6 @@
       "dependsOn": ["@zero/web#build"],
       "cache": false,
       "outputLogs": "errors-only"
-    },
-    "@zeroapps/api#test": {
-      "dependsOn": ["@zeroapps/dashboard-web#build"],
-      "outputs": [],
-      "outputLogs": "errors-only"
-    },
-    "@zeroapps/api#deploy": {
-      "dependsOn": ["@zeroapps/dashboard-web#build"],
-      "cache": false,
-      "outputLogs": "errors-only"
     }
   }
 }

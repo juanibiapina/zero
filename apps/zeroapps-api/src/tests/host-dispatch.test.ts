@@ -14,6 +14,13 @@ describe("host dispatch", () => {
     expect(response.status).toBe(401);
   });
 
+  it("leaves the dashboard SPA to the zeroapps-dashboard-web Worker", async () => {
+    for (const path of ["/", "/vault/projects", "/assets/app.js"]) {
+      const response = await SELF.default.fetch(`https://dash.zeroapps.dev${path}`);
+      expect(response.status).toBe(404);
+    }
+  });
+
   it("rejects requests to the retired Vault host", async () => {
     const response = await SELF.default.fetch(
       "https://vault.apps.juanibiapina.dev/v1/projects",

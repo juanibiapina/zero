@@ -26,11 +26,10 @@ export default {
       return notFound();
     }
 
-    if (!isDashboardRequest) return notFound();
-    if (url.pathname === "/ping" || url.pathname.startsWith("/api/")) {
+    if (isDashboardRequest && (url.pathname === "/ping" || url.pathname.startsWith("/api/"))) {
       return app.fetch(request, env, ctx);
     }
 
-    return env.ASSETS.fetch(request);
+    return notFound();
   },
 };

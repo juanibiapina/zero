@@ -22,5 +22,4 @@ export interface Env {
    * nothing.
    */
   CI_TOKEN_RATE_LIMITER: RateLimit;
-  ASSETS: { fetch(request: Request): Promise<Response> };
 }

@@ -1,34 +1,32 @@
 # Unified dashboard deployment
 
-The existing `zeroapps-api` Worker now serves the unified Zero dashboard and
-public API. Its name remains unchanged to retain the Vault Durable Object and
-KV namespaces.
+The Zero dashboard (Vault and Errors) runs as two Workers on one hostname:
 
-- Dashboard: `https://dash.zeroapps.dev`
-- Public API: `https://api.zeroapps.dev`
-- Browser endpoints: `/api/vault/*`, `/api/errors/*`
-- Public endpoints: `/vault/v1/*`, `/errors/v1/*`
+| Worker | Package | Serves |
+|---|---|---|
+| `zeroapps-dashboard-web` | `@zeroapps/dashboard-web` | `https://dash.zeroapps.dev` (custom domain): the SPA, with SPA fallback |
+| `zeroapps-api` | `@zeroapps/api` | `https://api.zeroapps.dev` (custom domain), plus `dash.zeroapps.dev/api/*` and `/ping*` (zone routes) |
 
-`apps/zeroapps-api` (`@zeroapps/api`) is the sole console Worker. It binds
-Vault's existing `ORGDO` and `PROJECTVAULTDO`, plus a new `ERRORSDO` namespace.
-`apps/zeroapps-dashboard-web` builds the SPA that its Workers Assets binding serves.
+- Browser endpoints: `/api/vault/*`, `/api/errors/*` on `dash.zeroapps.dev`
+- Public endpoints: `/vault/v1/*`, `/errors/v1/*` on `api.zeroapps.dev`
 
-## Deploy
+The zone routes take precedence over the custom domain, so the SPA's `/api`
+calls stay same-origin and reach `zeroapps-api`. `zeroapps-api` returns 404 for
+any other path on the dashboard host.
 
-Workers Builds runs `pnpm run build` and deploys with:
+`zeroapps-api` binds Vault's `ORGDO` and `PROJECTVAULTDO` plus `ERRORSDO`. It
+was named `zerovault-api` until 2026-10-05 and was renamed in place, so its
+Durable Object namespaces still carry the `zerovault-api_` prefix.
 
-```bash
-pnpm --filter @zeroapps/api run deploy
-```
-
-The dashboard build needs `VITE_CLERK_PUBLISHABLE_KEY` configured as a Workers
-Build variable. Runtime dashboard secrets come from the `zerovault` ZeroVault
-project and are synced with `bin/sync-secrets-to-cloudflare`.
+The dashboard bundle needs `VITE_CLERK_PUBLISHABLE_KEY`, set as a build variable
+on the `zeroapps-dashboard-web` connector. Runtime secrets come from the
+`zerovault` ZeroVault project and are synced with `bin/sync-secrets-to-cloudflare`.
+Build and deploy commands are in AGENTS.md (Deployment).
 
 ## Retired infrastructure
 
 The old `zeroerrors-api` Worker, its `ErrorsDO` class, and its custom domains
-are retired. The unified dashboard Worker owns the active Errors Durable Object.
+are retired. `zeroapps-api` owns the active Errors Durable Object.
 
 `vault.apps.juanibiapina.dev` is retired. Use `@zeroapps/cli` (command `zero`),
 which defaults to the `api.zeroapps.dev` origin and appends `/vault/v1` itself.

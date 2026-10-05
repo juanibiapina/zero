@@ -8,7 +8,8 @@ occurrences. It shares Vault API keys and Clerk organization tenancy.
 
 Errors runs inside the surviving `zeroapps-api` Worker (`apps/zeroapps-api`,
 package `@zeroapps/api`), alongside Vault. The dashboard SPA is
-`apps/zeroapps-dashboard-web` and exposes Errors at `/errors/*`.
+`apps/zeroapps-dashboard-web` (Worker `zeroapps-dashboard-web`) and exposes Errors
+at `/errors/*`.
 
 - Public ingest: `POST https://api.zeroapps.dev/errors/v1/errors`
 - Public issue list: `GET https://api.zeroapps.dev/errors/v1/issues`
