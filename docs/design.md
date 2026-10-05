@@ -136,10 +136,10 @@ closures); it investigates the web in its own loop with `web_search` and
 `read_page`, no nested agent involved, inline in the turn's DO alarm. See
 [`topics.md`](topics.md) and [`research.md`](research.md).
 
-The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend only on the
-`Store` port (`apps/agent-api/src/store/types.ts`), a model factory
-(`agents/model.ts`), a `WebSearch` port (`apps/agent-api/src/websearch/types.ts`), and a
-`GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`); the DO and do-orm stay out of reach.
+The agents and the turn orchestrator (`apps/zero-api/src/agents/*`) depend only on the
+`Store` port (`apps/zero-api/src/store/types.ts`), a model factory
+(`agents/model.ts`), a `WebSearch` port (`apps/zero-api/src/websearch/types.ts`), and a
+`GoogleWorkspace` port (`apps/zero-api/src/google/types.ts`); the DO and do-orm stay out of reach.
 They are unit-tested with an in-memory store, a scripted mock model, and
 in-memory search/Google adapters; `UserDO` supplies the production `DbStore`,
 `createBraveSearch`, and `createGoogleWorkspace` (with a memoized Clerk token
@@ -296,7 +296,7 @@ GET    /api/admin/github/status                 — A user's GitHub install/toke
 ```
 
 Admin routes are gated by the `ADMIN_USER_ID` env var. The user list is sourced
-from Clerk (`apps/agent-api/src/admin-users.ts`) so every signed-up user appears;
+from Clerk (`apps/zero-api/src/admin-users.ts`) so every signed-up user appears;
 it does no per-user UserDO or GitHub calls. The identity detail route pays for a
 per-user Clerk `getUser` plus one UserDO read (Telegram link and
 Google/onboarding status). Usage routes query Analytics Engine separately, so a
@@ -317,7 +317,7 @@ signs the user out on success. The order the stores are cleared in is the load-
 bearing part; see [`data-deletion.md`](data-deletion.md).
 
 The link route accepts the Login Widget callback payload and verifies its HMAC
-against `TELEGRAM_BOT_TOKEN` (`apps/agent-api/src/telegram-auth.ts`). See
+against `TELEGRAM_BOT_TOKEN` (`apps/zero-api/src/telegram-auth.ts`). See
 [`telegram-login.md`](telegram-login.md) for the algorithm, BotFather setup, and
 the required `VITE_TELEGRAM_BOT_USERNAME` env var.
 
@@ -328,7 +328,7 @@ topic only reference them, so `/new`, topic deletion, Telegram unlink, and Googl
 disconnect all leave saved files intact. `delete_file` removes one file; a full account-data purge
 removes all metadata and both new and legacy R2 objects.
 
-`UserFileStore` (`apps/agent-api/src/files/`) is the only module that coordinates
+`UserFileStore` (`apps/zero-api/src/files/`) is the only module that coordinates
 SQLite metadata and R2 bytes. New files use deterministic IDs derived from the
 normalized filename, MIME type, and bytes, with objects under
 `files/{clerkUserId}/{fileId}`. Save writes R2 first and metadata second. A replay
@@ -399,7 +399,7 @@ message string.
 
 Conventions:
 
-- Always go through the `log` / `logError` helpers in `apps/agent-api/src/log.ts`.
+- Always go through the `log` / `logError` helpers in `apps/zero-api/src/log.ts`.
 - Every log carries `service` (`"worker"`) and `msg` (a short snake_case event
   name).
 - Failure paths use `logError` (Cloudflare maps `console.error` to
@@ -436,8 +436,8 @@ See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 ```
 zero/
 ├── apps/
-│   ├── agent-api/       (@zero/agent-api)        — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
-│   └── agent-web/       (@zero/agent-web)        — Vite + React: single Telegram-id form
+│   ├── zero-api/        (@zero/api)              — CF Worker: HTTP API, Telegram webhook, UserDO meta-agent
+│   └── zero-web/        (@zero/web)              — Vite + React: single Telegram-id form
 ├── packages/
 │   ├── agent-core/      (@zero/agent-core)       — Reserved for future shared types (currently empty)
 │   ├── eslint-config/                            — Shared ESLint config

@@ -36,8 +36,8 @@ echo "=== Starting wrangler dev (test config) on :8791 ==="
 # The mount path is relative to this script's working directory (the repo root),
 # and must land next to the wrangler config, which is where wrangler looks for
 # .dev.vars. The pipe disappears when the command exits.
-$ZERO vault run -p zero-api -e development --mount apps/agent-api/.dev.vars -- \
-  pnpm --dir apps/agent-api exec wrangler dev \
+$ZERO vault run -p zero-api -e development --mount apps/zero-api/.dev.vars -- \
+  pnpm --dir apps/zero-api exec wrangler dev \
     --config wrangler.test.jsonc \
     --port 8791 \
     --inspector-port 9233 &
@@ -61,7 +61,7 @@ for port in 3501 3502 8791; do
 done
 
 echo "=== Seeding KV (tg:12345 → user_test) ==="
-pnpm --dir apps/agent-api exec wrangler kv key put \
+pnpm --dir apps/zero-api exec wrangler kv key put \
   --binding KV --local --preview false --config wrangler.test.jsonc \
   "tg:12345" "user_test" || echo "WARN: KV seed may have failed"
 

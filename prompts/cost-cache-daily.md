@@ -10,7 +10,7 @@ weekly job (`cost-cache-weekly.md`) reads this log and reports to a topic.
 - Cloudflare account: `4e04b64af4013414441c59014392bea0`
 - Observability endpoint: `https://api.cloudflare.com/client/v4/accounts/4e04b64af4013414441c59014392bea0/workers/observability/telemetry/query`
 - Auth: `$CLOUDFLARE_API_TOKEN`
-- Current model: `gpt-6-luna` (OpenAI). Pricing from `apps/agent-api/src/agents/model-pi.ts`: input $0.10/M, output $0.50/M, cache_read $0.01/M, cache_write $0.125/M (all writes go to the 5m bucket for OpenAI; above 272K input tokens the full request is billed at 2x input/cache and 1.5x output)
+- Current model: `gpt-6-luna` (OpenAI). Pricing from `apps/zero-api/src/agents/model-pi.ts`: input $0.10/M, output $0.50/M, cache_read $0.01/M, cache_write $0.125/M (all writes go to the 5m bucket for OpenAI; above 272K input tokens the full request is billed at 2x input/cache and 1.5x output)
 - Brave search: most users are on the **free** plan (1 req/s, throttled). A per-user canary routes some users to the **paid** plan ($5 per 1,000 requests, billed on `status:200`; first ~1,000/month free). Every `brave_request` line carries a `cohort` field (`paid`｜`free`); the paid cohort's bill is its `status:200` count × $5/1000. See `docs/plans/brave-paid-canary.md` and `docs/research.md` (Search usage).
 - **Log file:** `/home/juan/Sync/notes/zero/pulse/COST_LOG.md` — newest entry first, one entry per day. This is the weekly job's only input, so every field below must be present.
 

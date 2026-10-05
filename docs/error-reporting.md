@@ -2,7 +2,7 @@
 
 The agent Worker reports its own failures to ZeroErrors, project `zero-agent`.
 Read them at `https://dash.zeroapps.dev/errors`. One function does the reporting:
-`apps/agent-api/src/reporting/zero-errors.ts`.
+`apps/zero-api/src/reporting/zero-errors.ts`.
 
 ## What gets reported
 
@@ -58,11 +58,11 @@ Nothing is sent unless `env.ENVIRONMENT === "production"`, so local runs, unit
 tests and `bin/e2e-test` cannot write into the production issue list.
 
 - Local: the `dev` script mounts `ENVIRONMENT=development` from ZeroVault
-  `zero-api/development` at `apps/agent-api/.dev.vars`, for as long as
+  `zero-api/development` at `apps/zero-api/.dev.vars`, for as long as
   `wrangler dev` runs.
 - Production: `ENVIRONMENT=production` lives in ZeroVault `zero-api/production`
   and reaches the Worker through `bin/sync-secrets-to-cloudflare`. It is listed
-  in `secrets.required` in `apps/agent-api/wrangler.jsonc`, so a deploy without
+  in `secrets.required` in `apps/zero-api/wrangler.jsonc`, so a deploy without
   it fails instead of silently going quiet. **Run the sync before deploying** a
   change that adds it.
 

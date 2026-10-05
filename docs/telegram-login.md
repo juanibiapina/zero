@@ -8,7 +8,7 @@ and records the binding between the Clerk user and the Telegram account.
 ## Where the binding lives
 
 Two stores, both written on link, both cleared on unlink. All of it is behind
-`apps/agent-api/src/telegram/identity.ts`; nothing else should touch either
+`apps/zero-api/src/telegram/identity.ts`; nothing else should touch either
 store.
 
 - **`TelegramAccountDO`** — one Durable Object per Telegram account, keyed by
@@ -73,7 +73,7 @@ for dev is overkill for one developer.
 
 ## Verification algorithm
 
-The worker validates payloads in `apps/agent-api/src/telegram-auth.ts`. The
+The worker validates payloads in `apps/zero-api/src/telegram-auth.ts`. The
 recipe (from [Telegram's docs](https://core.telegram.org/widgets/login#checking-authorization)):
 
 1. `secret_key = SHA-256(TELEGRAM_BOT_TOKEN)`
@@ -114,7 +114,7 @@ if the user has already started the bot
 `/start` update, which is the first moment Zero can speak. The `welcome`
 payload is unused today and kept for future attribution.
 
-`/start` is handled in `apps/agent-api/src/commands/start.ts`:
+`/start` is handled in `apps/zero-api/src/commands/start.ts`:
 
 - unlinked sender → a reply pointing at the web app (the same reply an
   ordinary message from an unlinked sender now gets, instead of silence)

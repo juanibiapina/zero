@@ -10,25 +10,25 @@ points one way. The rest of this doc walks each layer.
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                      Entry Point                              │
-│                 (apps/agent-api/src/index.ts)                       │
+│                 (apps/zero-api/src/index.ts)                       │
 │            Worker default export + DO exports                 │
 └─────────────────────────────────┬─────────────────────────────┘
                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                        App Layer                              │
-│                  (apps/agent-api/src/app.ts)                        │
+│                  (apps/zero-api/src/app.ts)                        │
 │        Hono, CORS, Clerk middleware, auth guard               │
 └─────────────────────────────────┬─────────────────────────────┘
                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                      Routes Layer                             │
-│                (apps/agent-api/src/routes/*.ts)                     │
+│                (apps/zero-api/src/routes/*.ts)                     │
 │        OpenAPIHono endpoints, Zod validation, KV access       │
 └─────────────────────────────────┬─────────────────────────────┘
                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                Durable Object Layer                           │
-│              (apps/agent-api/src/UserDO/index.ts)                   │
+│              (apps/zero-api/src/UserDO/index.ts)                   │
 │   per-user SQLite (topics, conversations) + alarm turn runner │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -44,7 +44,7 @@ or apply non-trivial authorization beyond the app-level guard.
 
 ## Entry Point
 
-**Reference:** `apps/agent-api/src/index.ts`
+**Reference:** `apps/zero-api/src/index.ts`
 
 The entry point is the Worker's default export. It creates the Hono app and
 delegates request handling to it, and re-exports the Durable Object classes
@@ -70,7 +70,7 @@ Object class — see the Durable Object Layer below.
 
 ## App Layer
 
-**Reference:** `apps/agent-api/src/app.ts`
+**Reference:** `apps/zero-api/src/app.ts`
 
 Sets up Hono and the middleware stack:
 
@@ -96,7 +96,7 @@ Routes read `c.get("userId")` and access KV directly via `c.env.KV`.
 
 ## Routes Layer
 
-**Reference:** `apps/agent-api/src/routes/telegram.ts`
+**Reference:** `apps/zero-api/src/routes/telegram.ts`
 
 Routes are defined with `OpenAPIHono` + Zod schemas. Each `createRoute()`
 sits immediately above its `router.openapi()` handler so the OpenAPI spec
@@ -121,7 +121,7 @@ Routers are mounted in `app.ts` via `app.route("/", createTelegramRoutes())`.
 
 ## Durable Object Layer
 
-**Reference:** `apps/agent-api/src/UserDO/index.ts`
+**Reference:** `apps/zero-api/src/UserDO/index.ts`
 
 `UserDO` extends `DurableObject<Env>`, one instance per Clerk user
 (`env.USER_DO.idFromName(clerkUserId)`, via the typed `getUserDO` stub). It
@@ -172,8 +172,8 @@ would arrive as a plain error and lose which versions collided.
 `DurableObjectState.waitUntil` does not extend the object's lifetime, so leaving a
 multi-minute promise behind after an RPC returns can lose the job.
 
-The agents and the turn orchestrator (`apps/agent-api/src/agents/*`) depend on the
-`Store` port (`apps/agent-api/src/store/types.ts`), not on the DO or do-orm, so they
+The agents and the turn orchestrator (`apps/zero-api/src/agents/*`) depend on the
+`Store` port (`apps/zero-api/src/store/types.ts`), not on the DO or do-orm, so they
 are unit-tested with an in-memory store and a scripted mock model. `UserDO`
 supplies the production `DbStore` adapter. LLM access sits behind the
 `AgentModel` port (`agents/protocol.ts`), whose only production adapter is

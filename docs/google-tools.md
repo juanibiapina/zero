@@ -8,7 +8,7 @@ OAuth/connect plumbing.
 
 ## Port and adapters
 
-A single `GoogleWorkspace` port (`apps/agent-api/src/google/types.ts`) groups three
+A single `GoogleWorkspace` port (`apps/zero-api/src/google/types.ts`) groups three
 sub-APIs, `mail`, `calendar` and `drive`, and normalizes payloads to small flat shapes so
 a field the model never needs never reaches it and a provider swap stays local.
 It mirrors the WebSearch seam:
@@ -21,7 +21,7 @@ It mirrors the WebSearch seam:
   threads/events, records sent mail and created events for assertions.
 
 Tools are built by `buildGoogleTools({ google, timezone })`
-(`apps/agent-api/src/tools/google.ts`) and added to the interface agent's tool set
+(`apps/zero-api/src/tools/google.ts`) and added to the interface agent's tool set
 alongside the topic, research, and set_timezone tools. The learning and research
 agents do **not** get them.
 
@@ -29,7 +29,7 @@ agents do **not** get them.
 
 `createGoogleWorkspace` receives a provider, not a token, so a turn that never
 calls a Google tool mints nothing. The DO wraps `getGoogleAccessToken` in
-`memoizeTokenProvider` (`apps/agent-api/src/google-token.ts`): the first Google tool
+`memoizeTokenProvider` (`apps/zero-api/src/google-token.ts`): the first Google tool
 call mints a token via Clerk and caches the promise (including a `null` result)
 for the turn; later calls reuse it. A Google access token lives ~1h, longer than
 any turn, so per-turn caching is safe.

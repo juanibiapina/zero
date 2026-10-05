@@ -54,7 +54,7 @@ Facts worth keeping (measured against the live instance, 2026-08-14):
 - Refresh tokens never expire but **rotate**, and replaying an old one revokes
   the whole family. The CLI therefore persists a rotated pair before using it.
 - Revocation (`/oauth/token/revoke`, no client secret needed) kills the access
-  token immediately, which is why `apps/vault-api` verifies remotely rather than
+  token immediately, which is why `apps/zeroapps-api` verifies remotely rather than
   checking the JWT locally.
 
 **Degradation mode:** `/vault/v1/*` and `/errors/v1/*` now call Clerk to verify

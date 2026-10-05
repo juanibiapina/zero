@@ -36,8 +36,8 @@ locally (pnpm isolated installs keep them scoped to this app):
 ## Styling and UI
 
 The app styles with **Uniwind** (Tailwind CSS **v4** for React Native), the same
-Tailwind vocabulary as the web packages (`agent-web`, `dashboard-web`,
-`landing`). You write `className="..."` on React Native components; Uniwind maps
+Tailwind vocabulary as the web packages (`zero-web`, `zeroapps-dashboard-web`,
+`zeroapps-landing`). You write `className="..."` on React Native components; Uniwind maps
 it to styles through a Metro transform (no Babel preset).
 
 - **Design tokens live in `global.css`.** Static `@theme` values own spacing,
@@ -130,7 +130,7 @@ input.
 
 Run the generator from the repository root (Python 3, ImageMagick 7, and DejaVu
 Sans) to regenerate the mobile PNGs, state SVGs, comparison sheet, and
-`apps/agent-web/public` favicons. It validates dimensions, full-bleed corners,
+`apps/zero-web/public` favicons. It validates dimensions, full-bleed corners,
 transparency, neutral pixels, Android's safe zone, and deterministic output. Do
 not edit generated PNGs, state SVGs, comparison image, or web copy independently.
 

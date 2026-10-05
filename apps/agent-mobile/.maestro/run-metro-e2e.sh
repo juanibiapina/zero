@@ -340,12 +340,12 @@ podman run --rm --name "$CONTAINER" \
     stamp=/repo/node_modules/.zero-e2e-lockfile
     lockfile="$(sha256sum pnpm-lock.yaml | cut -d" " -f1)"
     if [ "$(cat "$stamp" 2>/dev/null)" != "$lockfile" ] \
-      || [ ! -x apps/agent-api/node_modules/.bin/wrangler ]; then
+      || [ ! -x apps/zero-api/node_modules/.bin/wrangler ]; then
       pnpm config set store-dir /pnpm-store
       CI=true pnpm install --frozen-lockfile
       printf "%s\n" "$lockfile" > "$stamp"
     fi
-    cd apps/agent-api
+    cd apps/zero-api
     exec pnpm exec wrangler dev --config wrangler.e2e.jsonc \
       --persist-to /persist --ip 0.0.0.0 --port 8787
   ' > "$ARTIFACT_DIR/worker.log" 2>&1 &

@@ -2,7 +2,7 @@
 
 `https://zeroapps.dev/` is Zero's public landing page. It introduces Vault and Errors and sends visitors to the authenticated dashboard at `https://dash.zeroapps.dev`.
 
-The site lives in `apps/landing` (`@zero/landing`). It is a static Astro site served by an asset-only Cloudflare Worker: it has no Worker script, API, storage, Clerk setup, or runtime secrets. `astro build` emits static HTML with the CSS inlined into `<head>` and ships zero client JavaScript.
+The site lives in `apps/zeroapps-landing` (`@zeroapps/landing`). It is a static Astro site served by an asset-only Cloudflare Worker: it has no Worker script, API, storage, Clerk setup, or runtime secrets. `astro build` emits static HTML with the CSS inlined into `<head>` and ships zero client JavaScript.
 
 ## Design
 
@@ -15,7 +15,7 @@ the same neutral ramp, each commented in `src/styles/global.css`.
 
 Invariants:
 
-- **Chroma 0.** Every color literal that ships from `apps/landing` is written
+- **Chroma 0.** Every color literal that ships from `apps/zeroapps-landing` is written
   `oklch(L 0 0)` — no hex, no `rgb()`/`hsl()`/`color-mix()`, no named color, no
   `currentColor`, no `transparent` — and every shipped PNG is grayscale. The
   landing page has no destructive, success, or warning state, so it needs no
@@ -33,7 +33,7 @@ Invariants:
 Start the Astro dev server:
 
 ```bash
-pnpm --filter @zero/landing run dev
+pnpm --filter @zeroapps/landing run dev
 ```
 
 Astro serves the source site at `http://localhost:5180`.
@@ -41,15 +41,15 @@ Astro serves the source site at `http://localhost:5180`.
 Build the site, then serve its generated `dist` assets through Workers Assets:
 
 ```bash
-pnpm --filter @zero/landing run build
-pnpm --filter @zero/landing run dev:worker
+pnpm --filter @zeroapps/landing run build
+pnpm --filter @zeroapps/landing run dev:worker
 ```
 
 The Worker listens on `http://localhost:8794` and serves only the built `dist` directory.
 
 ## SEO and social assets
 
-Static files in `apps/landing/public/` are copied to the `dist/` root at build and
+Static files in `apps/zeroapps-landing/public/` are copied to the `dist/` root at build and
 served verbatim by Workers Assets (exact paths are served directly, before
 `not_found_handling` is ever consulted):
 
@@ -94,8 +94,8 @@ preferred.
 ## Build and deploy
 
 ```bash
-pnpm --filter @zero/landing run build
-pnpm --filter @zero/landing run deploy
+pnpm --filter @zeroapps/landing run build
+pnpm --filter @zeroapps/landing run deploy
 ```
 
 Workers Builds auto-deploys the site on relevant pushes to `main`. See

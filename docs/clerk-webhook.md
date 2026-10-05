@@ -12,8 +12,8 @@ so Clerk does not retry them.
 The Agent uses its own Clerk instance and Worker configuration.
 
 - Endpoint: `https://zero.juanibiapina.dev/api/webhooks/clerk`
-- Code: `apps/agent-api/src/routes/clerk-webhook.ts` and
-  `apps/agent-api/src/discord.ts`
+- Code: `apps/zero-api/src/routes/clerk-webhook.ts` and
+  `apps/zero-api/src/discord.ts`
 - ZeroVault project: `zero-api`
 - Discord message: the existing Agent signup format with the user's name, email, and Clerk ID.
 
@@ -23,8 +23,8 @@ The dashboard covers Vault and Errors. It has a separate Clerk instance and
 Worker configuration from the Agent.
 
 - Endpoint: `https://dash.zeroapps.dev/api/webhooks/clerk`
-- Code: `apps/vault-api/src/routes/clerk-webhook.ts` and
-  `apps/vault-api/src/discord.ts`
+- Code: `apps/zeroapps-api/src/routes/clerk-webhook.ts` and
+  `apps/zeroapps-api/src/discord.ts`
 - ZeroVault project: `zerovault`
 - Discord message: `🎉 New Zero dashboard signup: Alice Smith - alice@example.com (user_abc123)`
 
@@ -48,7 +48,7 @@ $ZERO vault secrets set CLERK_WEBHOOK_SIGNING_SECRET="whsec_..." -p zerovault -e
 $ZERO vault secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zerovault -e development
 $ZERO vault secrets set DISCORD_SIGNUP_WEBHOOK_URL="https://discord.com/api/webhooks/..." -p zerovault -e production
 
-pnpm --dir apps/vault-api cf-typegen
+pnpm --dir apps/zeroapps-api cf-typegen
 bin/sync-secrets-to-cloudflare
 ```
 

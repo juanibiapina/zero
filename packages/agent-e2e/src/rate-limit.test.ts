@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { buildWebhookUpdate, pollForMessage } from "./helpers";
 
-// Must match RATE_LIMIT_MESSAGE in apps/agent-api/src/agents/llm-error.ts.
+// Must match RATE_LIMIT_MESSAGE in apps/zero-api/src/agents/llm-error.ts.
 // Inlined because agent-e2e does not depend on the worker package.
 const RATE_LIMIT_MESSAGE =
   "I've hit my usage limit for now, so I can't get to that just yet. " +

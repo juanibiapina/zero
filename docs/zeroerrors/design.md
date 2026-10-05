@@ -6,9 +6,9 @@ occurrences. It shares Vault API keys and Clerk organization tenancy.
 
 ## Runtime
 
-Errors runs inside the surviving `zerovault-api` Worker (`apps/vault-api`,
-package `@zero/dashboard-api`), alongside Vault. The dashboard SPA is
-`apps/dashboard-web` and exposes Errors at `/errors/*`.
+Errors runs inside the surviving `zerovault-api` Worker (`apps/zeroapps-api`,
+package `@zeroapps/api`), alongside Vault. The dashboard SPA is
+`apps/zeroapps-dashboard-web` and exposes Errors at `/errors/*`.
 
 - Public ingest: `POST https://api.zeroapps.dev/errors/v1/errors`
 - Public issue list: `GET https://api.zeroapps.dev/errors/v1/issues`

@@ -1,7 +1,7 @@
 # User Timezone
 
 The interface agent anchors every turn to an absolute datetime rendered in
-the user's timezone (see `formatAnchor` in `apps/agent-api/src/agents/prompts.ts`).
+the user's timezone (see `formatAnchor` in `apps/zero-api/src/agents/prompts.ts`).
 Correct time is load-bearing: relative phrasing ("this afternoon",
 "tomorrow 9am") and, later, calendar windows all resolve against it.
 
@@ -30,7 +30,7 @@ be formatted with DST resolved automatically; storing `+02:00` would break at
 the next DST transition. The value is null until first reported; the prompt
 falls back to `UTC` (see `DEFAULT_TIMEZONE`).
 
-Server-side validation (`isValidTimezone` in `apps/agent-api/src/timezone.ts`)
+Server-side validation (`isValidTimezone` in `apps/zero-api/src/timezone.ts`)
 rejects anything that isn't a member of `Intl.supportedValuesOf("timeZone")`
 or `UTC`. Legacy abbreviations like `PST` are rejected on purpose — they
 carry a fixed offset and ignore DST.
@@ -57,7 +57,7 @@ the baseline. It runs on cold start (`onColdStart`) and, on mobile, on every
 
 Per surface:
 
-- **Web** (`apps/agent-web/src/lib/timezone-sync.ts`, wired in `App.tsx`): a
+- **Web** (`apps/zero-web/src/lib/timezone-sync.ts`, wired in `App.tsx`): a
   `localStorage` store; the mount `GET /api/user-settings` (needed for
   onboarding) also seeds the baseline via `onColdStart(serverZone)`. Web also
   sends `region` derived from the locale. A plain reload no longer re-PATCHes.
@@ -70,7 +70,7 @@ Per surface:
 
 A user who travels and only uses Telegram (never opens the web app) can't be
 auto-detected. The `set_timezone` tool
-(`apps/agent-api/src/tools/timezone.ts`) covers this: when the user says where they
+(`apps/zero-api/src/tools/timezone.ts`) covers this: when the user says where they
 are ("I'm in Tokyo now"), the model calls it with the IANA zone. The tool
 validates and, on a miss, returns near matches (`suggestTimezones`) so the
 model can correct itself. No timezone list is fed into the prompt — the model

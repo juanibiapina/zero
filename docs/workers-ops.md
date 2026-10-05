@@ -19,10 +19,10 @@ deploy, not the schema.
 
 Live examples in this repo:
 
-- `apps/vault-api/wrangler.jsonc` lists `secrets.required` including
+- `apps/zeroapps-api/wrangler.jsonc` lists `secrets.required` including
   `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `ENVIRONMENT`, `MASTER_KEY`, and
   `ZERO_API_KEY`.
-- `apps/agent-api/wrangler.jsonc` lists `secrets.required` including
+- `apps/zero-api/wrangler.jsonc` lists `secrets.required` including
   `ENVIRONMENT` and `ZERO_API_KEY`.
 
 ## Removing a `custom_domain` route tears down the domain + DNS on deploy

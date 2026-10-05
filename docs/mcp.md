@@ -25,7 +25,7 @@ Add the server to `~/.pi/agent/mcp.json`:
 Then run `pi mcp login zero`, sign in to Zero in the browser, and check the
 connection with `pi mcp list`. Tools appear as `mcp__zero__<tool>`.
 
-For the local Worker (`pnpm run dev` in `apps/agent-api`), point a second entry
+For the local Worker (`pnpm run dev` in `apps/zero-api`), point a second entry
 at `http://localhost:8790/mcp`. Start the Worker with
 `pnpm run dev --local-upstream localhost:8790` so the advertised resource URL is
 `localhost` instead of the production route host; pi rejects a mismatch.

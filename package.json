@@ -12,11 +12,11 @@
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev",
     "test": "turbo run test",
-    "build:agent": "zero vault run -p zero-web -e production -- turbo run build --filter=@zero/agent-web",
-    "build:dashboard": "zero vault run -p zerovault-web -e production -- turbo run build --filter=@zero/dashboard-web",
-    "deploy:agent": "zero vault run -p zero-web -e production -- turbo run deploy --filter=@zero/agent-api",
-    "deploy:dashboard": "zero vault run -p zerovault-web -e production -- turbo run deploy --filter=@zero/dashboard-api",
-    "deploy:sites": "turbo run deploy --filter=@zero/landing --filter=@zero/docs"
+    "build:agent": "zero vault run -p zero-web -e production -- turbo run build --filter=@zero/web",
+    "build:dashboard": "zero vault run -p zerovault-web -e production -- turbo run build --filter=@zeroapps/dashboard-web",
+    "deploy:agent": "zero vault run -p zero-web -e production -- turbo run deploy --filter=@zero/api",
+    "deploy:dashboard": "zero vault run -p zerovault-web -e production -- turbo run deploy --filter=@zeroapps/api",
+    "deploy:sites": "turbo run deploy --filter=@zeroapps/landing --filter=@zeroapps/docs"
   },
   "devDependencies": {
     "@zeroapps/cli": "0.7.0",

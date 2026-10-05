@@ -14,7 +14,7 @@ import { getUserDO } from "../UserDO/stub";
 import type { Env } from "../types";
 import type { SendReplyFn } from "./new";
 
-// The web app's origin. agent-api has no web-URL binding and adding one for a
+// The web app's origin. zero-api has no web-URL binding and adding one for a
 // single string is not worth it; this matches wrangler.jsonc's route.
 const WEB_APP_URL = "https://zero.juanibiapina.dev";
 

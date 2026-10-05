@@ -9,16 +9,16 @@ KV namespaces.
 - Browser endpoints: `/api/vault/*`, `/api/errors/*`
 - Public endpoints: `/vault/v1/*`, `/errors/v1/*`
 
-`apps/vault-api` (`@zero/dashboard-api`) is the sole console Worker. It binds
+`apps/zeroapps-api` (`@zeroapps/api`) is the sole console Worker. It binds
 Vault's existing `ORGDO` and `PROJECTVAULTDO`, plus a new `ERRORSDO` namespace.
-`apps/dashboard-web` builds the SPA that its Workers Assets binding serves.
+`apps/zeroapps-dashboard-web` builds the SPA that its Workers Assets binding serves.
 
 ## Deploy
 
 Workers Builds runs `pnpm run build` and deploys with:
 
 ```bash
-pnpm --filter @zero/dashboard-api run deploy
+pnpm --filter @zeroapps/api run deploy
 ```
 
 The dashboard build needs `VITE_CLERK_PUBLISHABLE_KEY` configured as a Workers

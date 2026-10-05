@@ -28,7 +28,7 @@ TextInput). Do not adopt a component kit for this pass.
 | Option | State (Sept 2026) | Native module? | Fit here |
 |---|---|---|---|
 | **NativeWind v4** (current) | 4.2.6 (June 2026); v5 stuck at `5.0.0-preview.4`, last nightly July; 68 open issues; community threads recommend moving off it | no | Babel JSX runtime complicates jest mocks; Tailwind 3 only; cannot style `@expo/ui` |
-| **Uniwind** (Codemask, the Unistyles authors) | 1.12.0 released 2026-09-04, monthly releases, 4 open issues; listed in Expo's Tailwind guide next to NativeWind; official `expo/examples/with-router-uniwind` on SDK 57; HeroUI Native and React Native Reusables target it | no (free tier is Metro + JS; Expo Go compatible). Pro tier is a paid C++ engine (zero re-renders, Reanimated `className` animations, native theme transitions) and needs a dev client | Tailwind 4 `@theme` CSS = same token syntax as `apps/agent-web/src/index.css`; no Babel preset; `withUniwind` / `useResolveClassNames` / `Uniwind.getCSSVariable` bridge tokens into `@expo/ui` `style` / `textStyle`; `@variant dark` and custom themes without a ThemeProvider; `withUniwindConfig` must be the outermost Metro wrapper |
+| **Uniwind** (Codemask, the Unistyles authors) | 1.12.0 released 2026-09-04, monthly releases, 4 open issues; listed in Expo's Tailwind guide next to NativeWind; official `expo/examples/with-router-uniwind` on SDK 57; HeroUI Native and React Native Reusables target it | no (free tier is Metro + JS; Expo Go compatible). Pro tier is a paid C++ engine (zero re-renders, Reanimated `className` animations, native theme transitions) and needs a dev client | Tailwind 4 `@theme` CSS = same token syntax as `apps/zero-web/src/index.css`; no Babel preset; `withUniwind` / `useResolveClassNames` / `Uniwind.getCSSVariable` bridge tokens into `@expo/ui` `style` / `textStyle`; `@variant dark` and custom themes without a ThemeProvider; `withUniwindConfig` must be the outermost Metro wrapper |
 | **Unistyles 3** | 3.3.0; same authors, say Unistyles 4 is next | yes (`react-native-nitro-modules`) → dev-client rebuild | StyleSheet-flavored with themes and variants; no advantage over Uniwind for a Tailwind-literate repo |
 | **Tamagui** | active, 14k stars | compiler + large surface | overkill for a 10-file app |
 | **Plain StyleSheet + theme tokens** | Expo default template (`constants/theme.ts`, `ThemedText`), Expo skills' recommendation | no | simplest; `boxShadow`, `borderCurve`, `Pressable` style functions cover the needs; dark mode and token sharing are manual |
@@ -90,7 +90,7 @@ matches the web app's shadcn conventions; HeroUI is the more polished default.
 
 ## Open questions
 
-- Share one token CSS file between `apps/agent-web` and `apps/agent-mobile`
+- Share one token CSS file between `apps/zero-web` and `apps/agent-mobile`
   (e.g. `packages/ui/tokens.css` imported by both `@theme` blocks)? Uniwind
   makes it possible; the web uses `oklch()` values, which Uniwind converts
   (it depends on `culori`). Worth a follow-up, not this pass.

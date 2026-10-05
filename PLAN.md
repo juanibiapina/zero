@@ -12,7 +12,7 @@ Analytics Engine is an operational estimate, not an accounting ledger. Data can 
 
 ### 1. Add a dedicated Analytics Engine dataset
 
-Add an `AI_USAGE` binding for a new `zero-ai-usage` dataset in `apps/agent-api/wrangler.jsonc` and `apps/agent-api/wrangler.test.jsonc`. Do not reuse `ANALYTICS` and its `zero-events` dataset because that positional schema already stores signup events.
+Add an `AI_USAGE` binding for a new `zero-ai-usage` dataset in `apps/zero-api/wrangler.jsonc` and `apps/zero-api/wrangler.test.jsonc`. Do not reuse `ANALYTICS` and its `zero-events` dataset because that positional schema already stores signup events.
 
 Write one point after each agent execution that produced at least one successful model response. An interface run and each nested research run produce separate points. Learner slices, compaction, onboarding, and admin tasks each produce their own point.
 
@@ -41,8 +41,8 @@ Analytics Engine blobs are strings, not nullable fields. Queries must keep unpri
 
 Split measurement across the existing seams:
 
-1. In `apps/agent-api/src/agents/model.ts`, parse the full Anthropic usage object after each successful response. Extend the internal token usage shape to preserve separate 5-minute and 1-hour cache-write counters.
-2. In `apps/agent-api/src/agents/run.ts`, keep accumulating successful step usage as it does now, including a model-call count.
+1. In `apps/zero-api/src/agents/model.ts`, parse the full Anthropic usage object after each successful response. Extend the internal token usage shape to preserve separate 5-minute and 1-hour cache-write counters.
+2. In `apps/zero-api/src/agents/run.ts`, keep accumulating successful step usage as it does now, including a model-call count.
 3. Add a narrow, optional completion callback to the runner. Invoke it once from a `finally` path when at least one model response succeeded, including when a later model request or tool fails.
 4. Pass a non-throwing Analytics Engine reporter from each production agent wrapper. The reporter estimates cost, writes one point for the aggregate without `await`, and catches/logs synchronous fake or programming failures so telemetry cannot lose a user reply.
 
@@ -154,7 +154,7 @@ Do not backfill old AI Gateway logs. Analytics Engine timestamps points when wri
 
 - Update `docs/design.md` with the aggregated agent-execution schema, sampling behavior, roughly three-month retention, estimated-cost semantics, reset limitation, and admin query path.
 - Update `docs/secrets.md` for the analytics-read token.
-- Add to `apps/agent-api/CHANGELOG.md`: `- 2026-07-31: Admins can see estimated AI costs by user, agent, and conversation for selectable time ranges.`
+- Add to `apps/zero-api/CHANGELOG.md`: `- 2026-07-31: Admins can see estimated AI costs by user, agent, and conversation for selectable time ranges.`
 
 ## Acceptance criteria
 

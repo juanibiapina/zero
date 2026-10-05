@@ -2,7 +2,7 @@
 // Requested as one block.
 //
 // Each scope is the narrowest one that covers the tools in
-// `apps/agent-api/src/google/rest.ts`, because OAuth verification asks
+// `apps/zero-api/src/google/rest.ts`, because OAuth verification asks
 // why a narrower scope would not do:
 //   - gmail.modify           read, compose and send (gmail_search/thread/send)
 //   - calendar.events        events.list and events.insert

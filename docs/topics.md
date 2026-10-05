@@ -39,7 +39,7 @@ Each section below expands one of these:
 ## Topics
 
 A **topic** is a living knowledge document about a subject (a project, a person,
-an ongoing thread). Columns (see `apps/agent-api/src/UserDO/db/schema.ts`):
+an ongoing thread). Columns (see `apps/zero-api/src/UserDO/db/schema.ts`):
 
 - `name` — human label the agent addresses (unique). A surrogate integer `id` is
   the internal key, so a rename is a one-field `name` update.
@@ -130,9 +130,9 @@ same for every user and versioned with the code. They live in no user's SQLite.
 There are two: `Zero` (the assistant's own identity and how it communicates,
 pinned so it is always in context) and `Changelog` (Zero's user-facing changelog,
 unpinned but discoverable via `list_topics`, its body sourced from
-`apps/agent-api/CHANGELOG.md`). Their definitions are `SYSTEM_TOPICS` in
+`apps/zero-api/CHANGELOG.md`). Their definitions are `SYSTEM_TOPICS` in
 `store/system-topics.ts`; the `Zero` body is authored inline and the `Changelog`
-body is a text import of `apps/agent-api/CHANGELOG.md` (bundled via the wrangler
+body is a text import of `apps/zero-api/CHANGELOG.md` (bundled via the wrangler
 `Text` rule for `**/*.md`, mirrored for vitest by the `text-imports` plugin in
 `vitest.config.ts`).
 
@@ -150,7 +150,7 @@ load-bearing; the `update_topic`/`delete_topic` tools surface the thrown error a
 a tool error. The
 learner prompt also tells it not to edit `Zero`/`Changelog`, to avoid a wasted,
 always-rejected call. Updating a system topic is a source edit plus deploy (edit
-the `Zero` body or `apps/agent-api/CHANGELOG.md`); every user picks up the new content with no
+the `Zero` body or `apps/zero-api/CHANGELOG.md`); every user picks up the new content with no
 migration and no per-user seeding.
 
 ## The turn, and what happens after it

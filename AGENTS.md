@@ -6,7 +6,7 @@ During development, use `gob run bin/ci` to run all necessary checks including b
 
 **Mobile (`apps/agent-mobile`):** unit tests, lint, and typecheck run in the Turbo pipeline like the other packages. On the `mini` host (2 CPUs, 7.6 GB RAM) these checks are cheap in isolation but crawl 10-50x when they compete for memory: stop Metro and any local `gradlew`/`eas build --local` before running them, prefer EAS cloud builds, and use `jest --runInBand` / `turbo --concurrency=1`. See the "Run checks on a starved box" section of `apps/agent-mobile/README.md`. Test mobile behavior in Jest at the module interface by default. `pnpm --filter @zero/agent-mobile e2e:pixel` runs the two critical phone flows in `.maestro/critical/`: native persistence across restart, account binding and sync with the Worker, and native medicine notifications. Change one of those flows only when a change touches its seam and Jest cannot prove the behavior; do not add a third default flow without recording the decision in `apps/agent-mobile/README.md`. A passing run prints one `PASS` line; a failing run prints the flow, the failed step, a screenshot path, and the artifact directory. Use manual Metro inspection with screenshots for visual, auditory, tactile, or accessibility judgment. See `apps/agent-mobile/README.md`.
 
-**Local `workerd` limitation:** on dev boxes where the host `workerd` binary can't start (e.g. NixOS), direct `wrangler dev` / `dev:worker` cannot start for any Worker, including asset-only ones like `apps/landing` (observed: `write EPIPE` then "NixOS cannot run dynamically linked executables"). The `e2e:pixel` harness is the supported exception: it runs the Task Worker inside rootless Podman. `gob run bin/ci` and `bin/e2e-test` still can't run whole-repo because they boot host `workerd`. For other changes, verify the touched package directly, e.g. `pnpm --filter @zero/agent-api run test`, plus `pnpm --filter @zero/agent-api run lint` and `pnpm --filter @zero/agent-api run typecheck`. GitHub Actions CI runs lint, typecheck, build, package tests, and the deploy dry-run. The `packages/agent-e2e` suite is **not** wired into CI; run it manually via `bin/e2e-test` on a `workerd`-capable machine.
+**Local `workerd` limitation:** on dev boxes where the host `workerd` binary can't start (e.g. NixOS), direct `wrangler dev` / `dev:worker` cannot start for any Worker, including asset-only ones like `apps/zeroapps-landing` (observed: `write EPIPE` then "NixOS cannot run dynamically linked executables"). The `e2e:pixel` harness is the supported exception: it runs the Task Worker inside rootless Podman. `gob run bin/ci` and `bin/e2e-test` still can't run whole-repo because they boot host `workerd`. For other changes, verify the touched package directly, e.g. `pnpm --filter @zero/api run test`, plus `pnpm --filter @zero/api run lint` and `pnpm --filter @zero/api run typecheck`. GitHub Actions CI runs lint, typecheck, build, package tests, and the deploy dry-run. The `packages/agent-e2e` suite is **not** wired into CI; run it manually via `bin/e2e-test` on a `workerd`-capable machine.
 
 ## Changelog
 
@@ -22,19 +22,19 @@ separate follow-up after deployment.
 
 Route the entry by product:
 
-- **Agent (Zero assistant):** changes to `apps/agent-api` or the Telegram bot go
-  in `apps/agent-api/CHANGELOG.md`.
-- **ZeroVault / ZeroErrors / console:** changes to `apps/vault-*`, `apps/errors-*`,
-  or shared console UI go in the root `CHANGELOG.md`.
+- **Agent (Zero assistant):** changes to `apps/zero-api` or the Telegram bot go
+  in `apps/zero-api/CHANGELOG.md`.
+- **ZeroVault / ZeroErrors / console:** changes to `apps/zeroapps-api`,
+  `apps/zeroapps-dashboard-web`, or shared console UI go in the root `CHANGELOG.md`.
 - **Mobile todo app (`apps/agent-mobile`):** a separate product surface, NOT the
-  Zero agent. Its user-facing changes do **not** go in `apps/agent-api/CHANGELOG.md`
+  Zero agent. Its user-facing changes do **not** go in `apps/zero-api/CHANGELOG.md`
   (that ships to agent users as the in-product Changelog topic). They go in
   `apps/agent-mobile/CHANGELOG.md`.
-- **Web app (`apps/agent-web`):** user-facing changes to the web surface (e.g. the
-  Inbox) go in `apps/agent-web/CHANGELOG.md`, not the agent file.
+- **Web app (`apps/zero-web`):** user-facing changes to the web surface (e.g. the
+  Inbox) go in `apps/zero-web/CHANGELOG.md`, not the agent file.
 
-`apps/agent-api/CHANGELOG.md` is bundled and surfaced in-product as Zero's
-read-only "Changelog" system topic (`apps/agent-api/src/store/system-topics.ts`),
+`apps/zero-api/CHANGELOG.md` is bundled and surfaced in-product as Zero's
+read-only "Changelog" system topic (`apps/zero-api/src/store/system-topics.ts`),
 so its entries ship to agent users on the next deploy. Keep them clean and
 user-facing. The root `CHANGELOG.md` has no in-product surface today; it is the
 console's human-readable changelog. **Do not mix console entries into the agent
@@ -63,15 +63,15 @@ dependencies, so a push only redeploys the Workers it affects (see
 Each of the four deployable Workers has its own Workers Builds git
 connector on `juanibiapina/zero` (branch `main`, root dir `/`):
 
-- `zero-api` (agent) — build `pnpm run build`, deploy `pnpm -F @zero/agent-api run deploy`
-- `zerovault-api` (vault + errors dashboard) — build `pnpm run build`, deploy `pnpm -F @zero/dashboard-api run deploy`
-- `zero-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zero/landing run build`, deploy `pnpm -F @zero/landing run deploy`
-- `zero-docs` (docs site, `docs.zeroapps.dev`) — build `pnpm -F @zero/docs run build`, deploy `pnpm -F @zero/docs run deploy`
+- `zero-api` (agent) — build `pnpm run build`, deploy `pnpm -F @zero/api run deploy`
+- `zerovault-api` (vault + errors dashboard) — build `pnpm run build`, deploy `pnpm -F @zeroapps/api run deploy`
+- `zero-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zeroapps/landing run build`, deploy `pnpm -F @zeroapps/landing run deploy`
+- `zero-docs` (docs site, `docs.zeroapps.dev`) — build `pnpm -F @zeroapps/docs run build`, deploy `pnpm -F @zeroapps/docs run deploy`
 
 `zero-api` and `zerovault-api` build the whole monorepo (`pnpm run build`) and set
 `VITE_CLERK_PUBLISHABLE_KEY` as a build variable, which the dashboard build needs.
 `zero-landing` has no Clerk build var, so its build is scoped to the landing package
-(`pnpm -F @zero/landing run build`) to avoid pulling in the dashboard build.
+(`pnpm -F @zeroapps/landing run build`) to avoid pulling in the dashboard build.
 
 The `zero-landing` connector was attached 2026-07-26; before that, landing was
 deployed only via manual `wrangler deploy` (it had been bootstrapped that way and
@@ -85,10 +85,10 @@ trigger only uploads a version for branch pushes.
 
 | Worker | default branch (`main`) | non-production branches |
 |---|---|---|
-| `zero-api` | `pnpm -F @zero/agent-api run deploy` | `pnpm -F @zero/agent-api exec wrangler versions upload` |
-| `zerovault-api` | `pnpm -F @zero/dashboard-api run deploy` | none (no preview trigger) |
-| `zero-landing` | `pnpm -F @zero/landing run deploy` | `pnpm -F @zero/landing exec wrangler versions upload` |
-| `zero-docs` | `pnpm -F @zero/docs run deploy` | `pnpm -F @zero/docs exec wrangler versions upload` |
+| `zero-api` | `pnpm -F @zero/api run deploy` | `pnpm -F @zero/api exec wrangler versions upload` |
+| `zerovault-api` | `pnpm -F @zeroapps/api run deploy` | none (no preview trigger) |
+| `zero-landing` | `pnpm -F @zeroapps/landing run deploy` | `pnpm -F @zeroapps/landing exec wrangler versions upload` |
+| `zero-docs` | `pnpm -F @zeroapps/docs run deploy` | `pnpm -F @zeroapps/docs exec wrangler versions upload` |
 
 Rules, each learned from a real breakage (2026-07-28):
 
@@ -104,8 +104,9 @@ Rules, each learned from a real breakage (2026-07-28):
   instead of letting `npx` fetch the latest.
 - Check the package name. `pnpm -F` exits 0 when the filter matches nothing, so
   a typo is a silent no-op that reports a green build: `zero-api`'s preview
-  trigger ran `pnpm -F @zero/api run deploy` (no such package) for months and
-  logged `No projects matched the filters` under a `success` outcome.
+  trigger once named a package that did not exist for months and logged
+  `No projects matched the filters` under a `success` outcome. A package rename
+  has the same effect, so every connector must be updated when one lands.
 - `zerovault-api` has no preview trigger on purpose. Its build command is the
   whole-repo `pnpm run build`, which needs `VITE_CLERK_PUBLISHABLE_KEY` set as a
   build variable on each trigger, so adding one is a separate decision.
@@ -134,16 +135,16 @@ files, 3000+ changed files, or 20+ commits bypasses matching and always builds.
 
 Per-Worker **include** paths (exclude list is empty for every Worker):
 
-- **zero-api:** `apps/agent-api/*`, `apps/agent-web/*`, `packages/agent-core/*`, `packages/recurrence/*`
-- **zerovault-api:** `apps/vault-api/*`, `apps/dashboard-web/*`, `packages/auth/*`, `packages/vault-core/*`, `packages/errors-core/*`, `packages/ui/*`
-- **zero-landing:** `apps/landing/*`
-- **zero-docs:** `apps/docs/*`
+- **zero-api:** `apps/zero-api/*`, `apps/zero-web/*`, `packages/agent-core/*`, `packages/recurrence/*`
+- **zerovault-api:** `apps/zeroapps-api/*`, `apps/zeroapps-dashboard-web/*`, `packages/auth/*`, `packages/vault-core/*`, `packages/errors-core/*`, `packages/ui/*`
+- **zero-landing:** `apps/zeroapps-landing/*`
+- **zero-docs:** `apps/zeroapps-docs/*`
 - **all four also include the shared build roots:** `packages/typescript-config/*`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`, `patches/*`
 
-`zero-api` bundles `apps/agent-web` as its static assets, so an `agent-web`
+`zero-api` bundles `apps/zero-web` as its static assets, so a `zero-web`
 change must redeploy the agent Worker (hence it is in `zero-api`'s includes).
 Repo-root `docs/` (plans, notes) is documentation only and is intentionally in no
-Worker's watch paths — it is **not** the `apps/docs` site, which is what
+Worker's watch paths — it is **not** the `apps/zeroapps-docs` site, which is what
 `zero-docs` watches. When you add a new cross-package dependency to a Worker,
 extend that Worker's include list too, or it will silently stop redeploying on
 changes to that dependency (a missed include is worse than an over-broad one, so
@@ -200,15 +201,15 @@ Zero receives Telegram bot webhooks and routes each update to the right user via
 
 Packages:
 
-- **Worker:** `apps/agent-api` (`@zero/agent-api`)
-- **Frontend:** `apps/agent-web` (`@zero/agent-web`)
-- **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Routine releases publish compatible JavaScript and assets to the EAS `preview` channel after green `main` CI. Native fingerprint changes use a preview APK built **locally by default** on `mini` with a Nix dev shell; use an EAS cloud build only when explicitly asked. Publish the APK to a dedicated Google Drive folder and replace the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/agent-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
+- **Worker:** `apps/zero-api` (`@zero/api`)
+- **Frontend:** `apps/zero-web` (`@zero/web`)
+- **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Routine releases publish compatible JavaScript and assets to the EAS `preview` channel after green `main` CI. Native fingerprint changes use a preview APK built **locally by default** on `mini` with a Nix dev shell; use an EAS cloud build only when explicitly asked. Publish the APK to a dedicated Google Drive folder and replace the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/zero-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
 - **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and OpenAI servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
-- **Dashboard Worker:** `apps/vault-api` (`@zero/dashboard-api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
-- **Dashboard frontend:** `apps/dashboard-web` (`@zero/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
-- **Landing site:** `apps/landing` (`@zero/landing`) is a static Astro site served by the asset-only Worker `zero-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
-- **Docs site:** `apps/docs` (`@zero/docs`) is a static Astro + Starlight site served by the asset-only Worker `zero-docs` for `docs.zeroapps.dev`. It documents ZeroVault and ZeroErrors and ships per-page raw-markdown twins (bare `<page>.md`, e.g. `/vault/overview.md`) with a Copy Markdown button, plus `/llms.txt`, `/llms-full.txt`, `/llms-small.txt`. Unknown paths get a real 404 (`not_found_handling: 404-page`). Unlike landing it ships Starlight's own theme JS and a Pagefind search index (the zero-JS invariant is landing-only). The content is real and the site is indexable: no page carries a `noindex` or `nofollow` directive, `robots.txt` is `Allow: /` and declares `https://docs.zeroapps.dev/sitemap-index.xml`, and that sitemap lists exactly the HTML pages, never the `.md` twins or the `llms*.txt` files. It is submitted to Google Search Console under the `sc-domain:zeroapps.dev` property, which covers both `zeroapps.dev` and `docs.zeroapps.dev`. No runtime secrets or API. Build/deploy are package-scoped (`pnpm -F @zero/docs ...`), never the whole-repo build. Auto-deploys on push to `main` via its own Workers Builds connector.
+- **Dashboard Worker:** `apps/zeroapps-api` (`@zeroapps/api`, Worker `zerovault-api`) serves the unified dashboard at `dash.zeroapps.dev` and public API at `api.zeroapps.dev`. It retains Vault state and adds a fresh Errors Durable Object namespace. Backed by `packages/vault-core` (`@zero/vault-core`) and `packages/errors-core` (`@zero/errors-core`).
+- **Dashboard frontend:** `apps/zeroapps-dashboard-web` (`@zeroapps/dashboard-web`) serves Vault at `/vault/*` and Errors at `/errors/*`.
+- **Landing site:** `apps/zeroapps-landing` (`@zeroapps/landing`) is a static Astro site served by the asset-only Worker `zero-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
+- **Docs site:** `apps/zeroapps-docs` (`@zeroapps/docs`) is a static Astro + Starlight site served by the asset-only Worker `zero-docs` for `docs.zeroapps.dev`. It documents ZeroVault and ZeroErrors and ships per-page raw-markdown twins (bare `<page>.md`, e.g. `/vault/overview.md`) with a Copy Markdown button, plus `/llms.txt`, `/llms-full.txt`, `/llms-small.txt`. Unknown paths get a real 404 (`not_found_handling: 404-page`). Unlike landing it ships Starlight's own theme JS and a Pagefind search index (the zero-JS invariant is landing-only). The content is real and the site is indexable: no page carries a `noindex` or `nofollow` directive, `robots.txt` is `Allow: /` and declares `https://docs.zeroapps.dev/sitemap-index.xml`, and that sitemap lists exactly the HTML pages, never the `.md` twins or the `llms*.txt` files. It is submitted to Google Search Console under the `sc-domain:zeroapps.dev` property, which covers both `zeroapps.dev` and `docs.zeroapps.dev`. No runtime secrets or API. Build/deploy are package-scoped (`pnpm -F @zeroapps/docs ...`), never the whole-repo build. Auto-deploys on push to `main` via its own Workers Builds connector.
 - **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `@zeroapps/cli` (`packages/zero-cli`), whose command is `zero`: `zero vault ...` for secrets, `zero errors ...` for issues, `zero keys` for the org-scoped key both products accept. It replaced `zv` outright, with no alias and no config or env-var migration.
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
@@ -224,7 +225,7 @@ Expected dev ports:
 | landing | 8794 (Workers Assets) | n/a | 5180 |
 | docs | 8796 (Workers Assets) | n/a | 5182 |
 
-`pnpm --filter @zero/landing run dev:worker` serves the landing site's built `apps/landing/dist` directory through Workers Assets.
+`pnpm --filter @zeroapps/landing run dev:worker` serves the landing site's built `apps/zeroapps-landing/dist` directory through Workers Assets.
 
 The worker follows a layered architecture: Entry Point → App → Routes → Durable Objects. See `docs/framework.md` and `docs/design.md`.
 
@@ -236,7 +237,7 @@ issues in project `zero-agent` (`dash.zeroapps.dev/errors`). See
 Object resets never do.
 
 ```bash
-gob add pnpm --dir apps/agent-api exec wrangler tail
+gob add pnpm --dir apps/zero-api exec wrangler tail
 ```
 
 `wrangler tail` streams live only, so it cannot see a past incident, and on this

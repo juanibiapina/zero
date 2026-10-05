@@ -2,7 +2,7 @@
 // Upcoming). Kept per-app rather than in @zero/agent-core so the app's own React
 // is the only instance (a workspace lib that called hooks would resolve its own
 // React copy and break the rules-of-hooks dispatcher). The web app has its own
-// mirror in apps/agent-web/src/lib/screen-hooks.ts.
+// mirror in apps/zero-web/src/lib/screen-hooks.ts.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 

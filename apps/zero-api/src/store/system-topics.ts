@@ -5,7 +5,7 @@
 // boundary (not by a prompt or a soft tool check).
 //
 // Updating a system topic is a source edit + deploy: change the Zero body below
-// or apps/agent-api/CHANGELOG.md and every user sees the new content
+// or apps/zero-api/CHANGELOG.md and every user sees the new content
 // immediately, with no migration and no per-user seeding.
 
 import changelogMarkdown from "../../CHANGELOG.md";

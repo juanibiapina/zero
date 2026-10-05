@@ -40,7 +40,7 @@ and findable again.
 
 ## One runner, three agents
 
-`apps/agent-api/src/agents/run.ts` is the single agent machine:
+`apps/zero-api/src/agents/run.ts` is the single agent machine:
 
 ```
 runAgent({ model, system, prompt, tools, maxSteps }) →
@@ -127,7 +127,7 @@ Counting successes is the point.
 
 ## Web search port
 
-`apps/agent-api/src/websearch/types.ts` defines the `WebSearch` port and a normalized
+`apps/zero-api/src/websearch/types.ts` defines the `WebSearch` port and a normalized
 `SearchResult` (`{ title, url, snippet }`). Adapters:
 
 - `brave.ts` — `createBraveSearch(apiKey)`, production. Calls the Brave Web
@@ -149,7 +149,7 @@ Counting successes is the point.
 
 ## Page fetch port
 
-`apps/agent-api/src/pagefetch/types.ts` defines the `PageFetcher` port and a
+`apps/zero-api/src/pagefetch/types.ts` defines the `PageFetcher` port and a
 normalized `PageContent` (`{ url, content }`, cleaned markdown). Search stays
 snippet-only on Brave; depth is a separate, on-demand `read_page` tool. The
 interface agent calls it on an address the user gives and on the search results

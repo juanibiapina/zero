@@ -1,5 +1,5 @@
 {
-  "name": "@zero/agent-api",
+  "name": "@zero/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",

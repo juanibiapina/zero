@@ -9,7 +9,7 @@ manual `npm publish` from a laptop.
 
 1. Bump `version` in `packages/zero-cli/package.json`.
 2. Add a `CHANGELOG.md` entry if the release carries user-visible CLI changes.
-3. Update the pinned version in `apps/docs/src/content/docs/vault/cli.mdx`.
+3. Update the pinned version in `apps/zeroapps-docs/src/content/docs/vault/cli.mdx`.
 4. Commit to `main` and wait for CI to go green.
 5. Tag and push: `git tag vX.Y.Z && git push origin main --tags`.
 

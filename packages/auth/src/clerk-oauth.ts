@@ -21,7 +21,7 @@
  *
  * This lives in `@zero/auth` rather than in the Worker because it depends on
  * nothing but `fetch` and a KV namespace: here its tests run anywhere, while in
- * `apps/vault-api` they would need workerd and so only ever run in CI.
+ * `apps/zeroapps-api` they would need workerd and so only ever run in CI.
  */
 
 import { hashApiKey, type OAuthTokenVerifier } from "./index";

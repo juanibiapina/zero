@@ -3,7 +3,7 @@
 // picker opens. It is NOT an entity collection — no sync, no outbox, no server
 // row, just a device-local hint. The pure staleness check and the shared shape
 // live in @zero/agent-core; the fetch (Clerk Bearer) and this persistence are
-// per surface. Sibling of the web store in apps/agent-web/src/lib/icon-suggestions.ts.
+// per surface. Sibling of the web store in apps/zero-web/src/lib/icon-suggestions.ts.
 
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';

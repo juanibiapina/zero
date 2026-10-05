@@ -59,8 +59,8 @@ The mount avoids all three.
 | Command | What it does |
 |---|---|
 | `pnpm run build` | Builds everything with whatever `VITE_*` is set. Used by Cloudflare and CI |
-| `pnpm run build:agent` | Builds `agent-web` with `zero-web` production values, byte-identical to production |
-| `pnpm run build:dashboard` | The same for `dashboard-web` with `zerovault-web` |
+| `pnpm run build:agent` | Builds `@zero/web` with `zero-web` production values, byte-identical to production |
+| `pnpm run build:dashboard` | The same for `@zeroapps/dashboard-web` with `zerovault-web` |
 | `pnpm run deploy:agent` | Builds and deploys `zero-api` with production values |
 | `pnpm run deploy:dashboard` | Builds and deploys `zerovault-api` |
 | `pnpm run deploy:sites` | Deploys landing and docs, which carry no build values |

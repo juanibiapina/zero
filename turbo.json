@@ -24,18 +24,18 @@
     "dev": { "persistent": true, "cache": false },
     "test": { "outputs": [], "outputLogs": "errors-only" },
     "deploy": { "dependsOn": ["build"], "cache": false, "outputLogs": "errors-only" },
-    "@zero/agent-api#deploy": {
-      "dependsOn": ["@zero/agent-web#build"],
+    "@zero/api#deploy": {
+      "dependsOn": ["@zero/web#build"],
       "cache": false,
       "outputLogs": "errors-only"
     },
-    "@zero/dashboard-api#test": {
-      "dependsOn": ["@zero/dashboard-web#build"],
+    "@zeroapps/api#test": {
+      "dependsOn": ["@zeroapps/dashboard-web#build"],
       "outputs": [],
       "outputLogs": "errors-only"
     },
-    "@zero/dashboard-api#deploy": {
-      "dependsOn": ["@zero/dashboard-web#build"],
+    "@zeroapps/api#deploy": {
+      "dependsOn": ["@zeroapps/dashboard-web#build"],
       "cache": false,
       "outputLogs": "errors-only"
     }

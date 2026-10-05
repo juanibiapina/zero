@@ -16,7 +16,7 @@ as the user.
 > the installation-token minting all exist, but there is **no consumer**
 > yet. The per-user container that used to clone/commit/push was removed
 > with the container runtime (see `docs/design.md`). `getGithubInstallationToken`
-> in `apps/agent-api/src/github-token.ts` is currently unused; it is the
+> in `apps/zero-api/src/github-token.ts` is currently unused; it is the
 > reattachment point for a future meta-agent GitHub tool.
 
 > **Capability granted by the app.** `contents: write`,
@@ -31,7 +31,7 @@ as the user.
    install is the permission grant — there is no in-app "connect" button
    like the Google one; it's a hand-off to GitHub.
 2. When a consumer needs GitHub, the worker mints a fresh **installation
-   access token** (`apps/agent-api/src/github-token.ts`):
+   access token** (`apps/zero-api/src/github-token.ts`):
    - sign an app JWT (RS256) with the app's private key,
    - find the user's installation via their connected GitHub username
      (`GET /users/{username}/installation`),
@@ -77,4 +77,4 @@ There is no webhook secret. One was provisioned before any webhook code
 existed, went unread for months, and was removed. When webhooks are wired up,
 generate a fresh secret in the GitHub App settings, store it as
 `GITHUB_WEBHOOK_SECRET` in both environments, and add it to `secrets.required`
-in `apps/agent-api/wrangler.jsonc` so a deploy without it fails.
+in `apps/zero-api/wrangler.jsonc` so a deploy without it fails.

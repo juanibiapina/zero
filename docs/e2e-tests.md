@@ -21,7 +21,7 @@ mock HTTP servers so the test is fast, free, and deterministic:
   (reset with `DELETE /test/mode`).
 
 `TELEGRAM_API_ROOT` and the LLM base URL are pointed at these mocks via
-the test wrangler config (`apps/agent-api/wrangler.test.jsonc`), so no real
+the test wrangler config (`apps/zero-api/wrangler.test.jsonc`), so no real
 Telegram or LLM traffic leaves the machine.
 
 Current tests:
@@ -44,7 +44,7 @@ bin/e2e-test
 The script (`bin/e2e-test`) orchestrates everything:
 
 1. Serves `zero-api/development` secrets to `wrangler dev` through a named pipe
-   at `apps/agent-api/.dev.vars` (`zero vault run --mount`), so no plaintext
+   at `apps/zero-api/.dev.vars` (`zero vault run --mount`), so no plaintext
    file is written and nothing has to be restored afterwards. Requires a
    ZeroVault credential; `ZERO_API_URL` is optional.
 2. Starts mock Telegram (:3501), mock OpenAI (:3502), and
@@ -59,7 +59,7 @@ and spins up several processes); run it on demand.
 
 ## Testing gotcha: LLM error paths
 
-Unit tests inject failures at the `AgentModel` seam (`capturingModel` in `apps/agent-api/src/agents/mock-model.ts`), which is above the HTTP client, so nothing retries and a thrown error surfaces immediately. Classification reads `status`: see the 429 case in `apps/agent-api/src/agents/orchestrator.test.ts`, which throws `Object.assign(new Error("rate limited"), { status: 429 })`.
+Unit tests inject failures at the `AgentModel` seam (`capturingModel` in `apps/zero-api/src/agents/mock-model.ts`), which is above the HTTP client, so nothing retries and a thrown error surfaces immediately. Classification reads `status`: see the 429 case in `apps/zero-api/src/agents/orchestrator.test.ts`, which throws `Object.assign(new Error("rate limited"), { status: 429 })`.
 
 Only the e2e suite exercises the real OpenAI client, where a 429 is retried twice (`maxRetries: 2`) with backoff before it surfaces. That is why `packages/agent-e2e/src/rate-limit.test.ts` polls with a longer timeout.
 

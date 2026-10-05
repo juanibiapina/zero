@@ -5,7 +5,7 @@ roadmap. Current entity behavior belongs in [`docs/entities/`](entities/), and
 storage mechanics belong in [`docs/storage.md`](storage.md). User-visible
 delivery history lives in the
 [mobile](../apps/agent-mobile/CHANGELOG.md) and
-[web](../apps/agent-web/CHANGELOG.md) changelogs.
+[web](../apps/zero-web/CHANGELOG.md) changelogs.
 
 ## North star
 
@@ -128,7 +128,7 @@ and storage-warning states; its details show the last successful sync and
 offline-copy status:
 
 - [`apps/agent-mobile/CHANGELOG.md`](../apps/agent-mobile/CHANGELOG.md)
-- [`apps/agent-web/CHANGELOG.md`](../apps/agent-web/CHANGELOG.md)
+- [`apps/zero-web/CHANGELOG.md`](../apps/zero-web/CHANGELOG.md)
 
 The conversational agent does not yet refine a Task into a Project or resolve
 Waiting conditions through email, calendar, or other observed content. Local
