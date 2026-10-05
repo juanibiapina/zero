@@ -1,11 +1,11 @@
 import { useAuth, useSSO } from '@clerk/expo';
 import { Button, Host } from '@expo/ui';
 import * as AuthSession from 'expo-auth-session';
-import { Redirect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
+import { ReturnHome } from '@/components/return-home';
 import { Text } from '@/components/ui/text';
 import {
   hermeticSignInRedirect,
@@ -90,7 +90,7 @@ export default function SignInScreen() {
   }, []);
 
   if (isLoaded && isSignedIn) {
-    return <Redirect href="/" />;
+    return <ReturnHome />;
   }
 
   const e2e = process.env.EXPO_PUBLIC_E2E === '1';

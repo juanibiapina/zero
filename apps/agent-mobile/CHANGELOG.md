@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-05: Fix signing in leaving a second copy of Home behind Back, which could make a later sign-out fail.
+
 - 2026-10-05: Change the Medicines screen to show reminder setup only when reminders need fixing, with one button to fix it; remove the watch, battery, and muted-sound notes, and show dates as words.
 
 - 2026-10-04: Change medicine reminders to normal notifications with sound, vibration, watch forwarding, and Taken; add battery settings guidance and keep dose-time delivery active through normal power saving.
