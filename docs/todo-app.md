@@ -20,8 +20,9 @@ without disturbing the conversational agent, and dogfood Zero's own services.
 
 Each entity type is a new block added to the system. Introducing one requires a
 deliberate pass over how it looks, relates to every existing entity, participates
-in workflows, persists, synchronizes, and fails. The goal is specific behavior,
-not a generic relational builder.
+in workflows, persists, synchronizes, and fails, and which operations it
+offers agents through the operation catalog (see [`docs/mcp.md`](mcp.md)). The
+goal is specific behavior, not a generic relational builder.
 
 ### Current work must remain trustworthy
 
@@ -100,7 +101,9 @@ adoption policies live in [`docs/storage.md`](storage.md).
 
 TaskDO retains Durable Object persistence, synchronization, erasure protection,
 and typed REST mapping. Public todo REST routes remain for compatible installed
-clients and other callers, but they reach the same TaskDO authority. `UserDO`
+clients and other callers, but they reach the same TaskDO authority. External
+agents such as pi use the MCP server, which runs operation catalog entries in
+TaskDO; see [`docs/mcp.md`](mcp.md). `UserDO`
 continues to own non-todo agent state; migration 0057 removes its retired todo
 tables. See [`docs/storage.md`](storage.md) for the complete current model and
 the historical
@@ -128,7 +131,8 @@ offline-copy status:
 - [`apps/agent-web/CHANGELOG.md`](../apps/agent-web/CHANGELOG.md)
 
 The conversational agent does not yet refine a Task into a Project or resolve
-Waiting conditions through email, calendar, or other observed content.
+Waiting conditions through email, calendar, or other observed content. Local
+agents can read and change the todo workspace through the MCP server.
 
 ## Roadmap
 

@@ -1,6 +1,7 @@
 import { createMergeableStore } from "tinybase";
 import { createDurableObjectSqlStoragePersister } from "tinybase/persisters/persister-durable-object-sql-storage";
 import { WsServerDurableObject } from "tinybase/synchronizers/synchronizer-ws-server-durable-object";
+import type { OperationOutcome } from "@zero/agent-core/operations";
 import type { Recurrence } from "@zeroapps/recurrence";
 
 import type { Env } from "../types";
@@ -42,6 +43,11 @@ export class TaskDO extends WsServerDurableObject<Env> {
   isErased(): Promise<boolean> {
     if (this.purging) return Promise.resolve(true);
     return this.ctx.storage.get<boolean>(TASKDO_FIXTURE_DELETED_KEY).then((deleted) => deleted === true);
+  }
+
+  runOperation(name: string, input: unknown, today: string): Promise<OperationOutcome> {
+    if (this.purging) return Promise.resolve({ ok: false, error: "Account erased" });
+    return this.domain.run(name, input, today);
   }
 
   listProjects(): Project[] {

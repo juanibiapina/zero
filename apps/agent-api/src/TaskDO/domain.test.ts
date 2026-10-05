@@ -88,3 +88,29 @@ describe("TaskDomain adapter", () => {
     await expect(domain.addProject("project", "Project")).rejects.toThrow("Account erased");
   });
 });
+
+describe("TaskDomain catalog operations", () => {
+  it("saves only when an operation changes the workspace", async () => {
+    const { domain, saves } = setup();
+    const created = await domain.run("tasks_create", { id: "t", text: "Task" }, "2026-09-26");
+    await domain.run("tasks_create", { id: "t", text: "Task" }, "2026-09-26");
+    const listed = await domain.run("tasks_list", {}, "2026-09-26");
+
+    expect(created).toMatchObject({ ok: true, changed: true });
+    expect(listed).toMatchObject({ ok: true, value: { tasks: [{ id: "t" }] } });
+    expect(saves()).toBe(1);
+  });
+
+  it("mints ids for operations that omit them", async () => {
+    const { domain } = setup();
+    const outcome = await domain.run("projects_create", { title: "Trip" }, "2026-09-26");
+    expect(outcome.ok && (outcome.value as { id: string }).id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("rejects writes on an erased account without saving", async () => {
+    const { domain, saves, erase } = setup();
+    erase();
+    expect(await domain.run("tasks_create", { text: "Late" }, "2026-09-26")).toEqual({ ok: false, error: "Account erased" });
+    expect(saves()).toBe(0);
+  });
+});

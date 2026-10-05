@@ -25,7 +25,8 @@ row decoding, accepted projections, todo mutations, recurrence, ordering,
 cascades, conflict checks, and recovery classification and repair. The
 in-process `TaskDomain` is the TaskDO adapter: it rejects erased-account writes,
 saves successful typed mutations, and maps canonical conflicts and issues to
-the established RPC and REST values. `TaskDO` retains the Durable Object
+the established RPC and REST values. It also runs operation catalog entries for
+the MCP server ([`mcp.md`](mcp.md)) with the same erasure and save policy. `TaskDO` retains the Durable Object
 lifecycle: SQL persistence, WebSocket synchronization, socket shutdown, and
 account purge/erasure protection. Mobile persists its current workspace in Expo
 SQLite; web persists an account-named IndexedDB replica. Bound mobile workspaces

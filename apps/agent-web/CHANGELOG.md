@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-05: Connect a local AI agent such as pi to your tasks, projects, and medicines. Sign in once from the agent, and its changes appear here and on your phone.
+
 - 2026-10-02: Add support for medicines
 
 - 2026-10-01: Dates and repeats you type while editing a task are highlighted and saved with its title. Dismiss a highlighted phrase to keep those words and the existing schedule.

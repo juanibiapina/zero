@@ -9,6 +9,7 @@ import {
   type TodoIssue,
   type WaitingCondition,
 } from "@zero/agent-core";
+import { findTodoOperation, runTodoOperation, type OperationOutcome } from "@zero/agent-core/operations";
 import type { Recurrence } from "@zeroapps/recurrence";
 import type { MergeableStore } from "tinybase";
 
@@ -42,13 +43,26 @@ type TaskDomainOptions = {
 // RPC result contracts. Todo row rules live in @zero/agent-core.
 export class TaskDomain {
   private readonly model: TodoModel;
+  private readonly store: MergeableStore;
+  private readonly now: () => Date;
   private readonly save: () => Promise<void>;
   private readonly isErased: () => Promise<boolean>;
 
   constructor({ store, save, isErased = async () => false, now = () => new Date() }: TaskDomainOptions) {
     this.model = new TodoModel({ store, now });
+    this.store = store;
+    this.now = now;
     this.save = save;
     this.isErased = isErased;
+  }
+
+  async run(name: string, input: unknown, today: string): Promise<OperationOutcome> {
+    if (findTodoOperation(name)?.kind !== "read" && await this.isErased()) {
+      return { ok: false, error: "Account erased" };
+    }
+    const outcome = runTodoOperation({ store: this.store, now: this.now, today, newId: () => crypto.randomUUID() }, name, input);
+    if (outcome.ok && outcome.changed) await this.save();
+    return outcome;
   }
 
   private async assertActive(message = "Todo account erased"): Promise<void> {

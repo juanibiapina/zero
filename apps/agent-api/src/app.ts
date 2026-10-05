@@ -17,6 +17,7 @@ import { createTasksRoutes } from "./routes/tasks";
 import { createProjectsRoutes } from "./routes/projects";
 import { createWaitsRoutes } from "./routes/waits";
 import { createTaskSyncRoutes } from "./routes/task-sync";
+import { createMcpRoutes } from "./routes/mcp";
 
 type Variables = {
   userId: string;
@@ -50,6 +51,7 @@ export const createApp = () => {
 
   app.route("/", createTelegramWebhookRoute());
   app.route("/", createClerkWebhookRoute());
+  app.route("/", createMcpRoutes());
 
   // Auth guard. Under ENVIRONMENT=test the hermetic release E2E stack has no
   // Clerk secret, so trust the bearer token as the userId and skip Clerk
