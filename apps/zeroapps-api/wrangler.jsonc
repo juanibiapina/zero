@@ -44,6 +44,8 @@
   ],
   "routes": [
     { "pattern": "dash.zeroapps.dev", "custom_domain": true },
-    { "pattern": "api.zeroapps.dev", "custom_domain": true }
+    { "pattern": "api.zeroapps.dev", "custom_domain": true },
+    { "pattern": "dash.zeroapps.dev/api/*", "zone_name": "zeroapps.dev" },
+    { "pattern": "dash.zeroapps.dev/ping*", "zone_name": "zeroapps.dev" }
   ]
 }
