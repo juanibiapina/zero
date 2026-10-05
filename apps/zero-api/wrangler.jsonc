@@ -47,7 +47,10 @@
     "LLM_BASE_URL_OVERRIDE": ""
   },
   "routes": [
-    { "pattern": "zero.juanibiapina.dev/*", "zone_name": "juanibiapina.dev" }
+    { "pattern": "zero.juanibiapina.dev/*", "zone_name": "juanibiapina.dev" },
+    { "pattern": "zero.juanibiapina.dev/api/*", "zone_name": "juanibiapina.dev" },
+    { "pattern": "zero.juanibiapina.dev/mcp*", "zone_name": "juanibiapina.dev" },
+    { "pattern": "zero.juanibiapina.dev/.well-known/*", "zone_name": "juanibiapina.dev" }
   ],
   "observability": {
     "enabled": true
