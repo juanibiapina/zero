@@ -13,5 +13,5 @@ const noSecretsInDist = (): Plugin => ({
 
 export default defineConfig({
   plugins: [cloudflare({ inspectorPort: 9233 }), noSecretsInDist()],
-  server: { port: 8792, strictPort: true },
+  server: { port: 8792, strictPort: true, watch: { ignored: ["**/.dev.vars"] } },
 });

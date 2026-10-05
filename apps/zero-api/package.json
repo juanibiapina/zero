@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "zero vault run -p zero-api -e development --mount .dev.vars -- wrangler dev --port 8790 --inspector-port 9232",
+    "dev": "zero vault run -p zero-api -e development --mount .dev.vars -- vite dev",
+    "build": "vite build",
     "deploy": "wrangler deploy",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types --config wrangler.jsonc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -35,13 +36,15 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.62.5",
     "@cloudflare/workers-types": "^5.20260801.1",
     "@types/node": "^26.1.2",
     "@zero/eslint-config": "workspace:*",
     "@zero/typescript-config": "workspace:*",
     "eslint": "10.8.0",
     "typescript": "6.0.3",
+    "vite": "8.2.0",
     "vitest": "^4.1.10",
-    "wrangler": "^4.118.0"
+    "wrangler": "^4.147.0"
   }
 }

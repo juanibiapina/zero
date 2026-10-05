@@ -415,7 +415,7 @@ Conventions:
 ### Dev environment
 
 - **5176**: Web frontend (Vite)
-- **8790**: API worker (Wrangler)
+- **8790**: API Worker (`vite dev` with the Cloudflare Vite plugin)
 
 See [`AGENTS.md`](../AGENTS.md) for CI and deploy instructions.
 

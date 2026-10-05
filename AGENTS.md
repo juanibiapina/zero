@@ -6,7 +6,7 @@ During development, use `gob run bin/ci` to run all necessary checks including b
 
 **Mobile (`apps/agent-mobile`):** unit tests, lint, and typecheck run in the Turbo pipeline like the other packages. On the `mini` host (2 CPUs, 7.6 GB RAM) these checks are cheap in isolation but crawl 10-50x when they compete for memory: stop Metro and any local `gradlew`/`eas build --local` before running them, prefer EAS cloud builds, and use `jest --runInBand` / `turbo --concurrency=1`. See the "Run checks on a starved box" section of `apps/agent-mobile/README.md`. Test mobile behavior in Jest at the module interface by default. `pnpm --filter @zero/agent-mobile e2e:pixel` runs the two critical phone flows in `.maestro/critical/`: native persistence across restart, account binding and sync with the Worker, and native medicine notifications. Change one of those flows only when a change touches its seam and Jest cannot prove the behavior; do not add a third default flow without recording the decision in `apps/agent-mobile/README.md`. A passing run prints one `PASS` line; a failing run prints the flow, the failed step, a screenshot path, and the artifact directory. Use manual Metro inspection with screenshots for visual, auditory, tactile, or accessibility judgment. See `apps/agent-mobile/README.md`.
 
-**Local `workerd` limitation:** on dev boxes where the host `workerd` binary can't start (e.g. NixOS), direct `wrangler dev` / `dev:worker` cannot start for any Worker, including asset-only ones like `apps/zeroapps-landing` (observed: `write EPIPE` then "NixOS cannot run dynamically linked executables"). The `e2e:pixel` harness is the supported exception: it runs the Task Worker inside rootless Podman. `gob run bin/ci` and `bin/e2e-test` still can't run whole-repo because they boot host `workerd`. For other changes, verify the touched package directly, e.g. `pnpm --filter @zero/api run test`, plus `pnpm --filter @zero/api run lint` and `pnpm --filter @zero/api run typecheck`. GitHub Actions CI runs lint, typecheck, build, package tests, and the deploy dry-run. The `packages/agent-e2e` suite is **not** wired into CI; run it manually via `bin/e2e-test` on a `workerd`-capable machine.
+**Local `workerd` limitation:** on dev boxes where the host `workerd` binary can't start (e.g. NixOS), no local Worker runtime can start (the API Workers' `vite dev`, `wrangler dev`, `dev:worker`), including asset-only ones like `apps/zeroapps-landing` (observed: `write EPIPE` then "NixOS cannot run dynamically linked executables"). The `e2e:pixel` harness is the supported exception: it runs the Task Worker inside rootless Podman. `gob run bin/ci` and `bin/e2e-test` still can't run whole-repo because they boot host `workerd`. For other changes, verify the touched package directly, e.g. `pnpm --filter @zero/api run test`, plus `pnpm --filter @zero/api run lint` and `pnpm --filter @zero/api run typecheck`. GitHub Actions CI runs lint, typecheck, build, package tests, and the deploy dry-run. The `packages/agent-e2e` suite is **not** wired into CI; run it manually via `bin/e2e-test` on a `workerd`-capable machine.
 
 ## Changelog
 
@@ -72,7 +72,9 @@ and its folder is `apps/<Worker name>`.
 - `zeroapps-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zeroapps/landing run build`, deploy `pnpm -F @zeroapps/landing run deploy`
 - `zeroapps-docs` (docs site, `docs.zeroapps.dev`) — build `pnpm -F @zeroapps/docs run build`, deploy `pnpm -F @zeroapps/docs run deploy`
 
-Every connector scopes the build to its own package. A web Worker's
+Every connector scopes the build to its own package. The API Workers build
+with Vite and the Cloudflare Vite plugin, and the deploy commands ship that
+output; see `docs/workers-ops.md` (API Workers build with Vite). A web Worker's
 connector carries the `VITE_*` build variables its bundle needs; `bin/check-build-vars`
 compares them with ZeroVault.
 

@@ -2,10 +2,6 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "zero-api",
   "main": "./src/index.ts",
-  "rules": [
-    { "type": "Text", "globs": ["**/*.sql"], "fallthrough": true },
-    { "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
-  ],
   "compatibility_date": "2026-06-01",
   "compatibility_flags": [
     "nodejs_compat"
@@ -30,9 +26,6 @@
       "TELEGRAM_WEBHOOK_SECRET",
       "ZERO_API_KEY"
     ]
-  },
-  "dev": {
-    "port": 8790
   },
   "vars": {
     "TELEGRAM_API_ROOT": "https://api.telegram.org",

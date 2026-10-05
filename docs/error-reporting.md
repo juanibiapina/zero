@@ -59,7 +59,7 @@ tests and `bin/e2e-test` cannot write into the production issue list.
 
 - Local: the `dev` script mounts `ENVIRONMENT=development` from ZeroVault
   `zero-api/development` at `apps/zero-api/.dev.vars`, for as long as
-  `wrangler dev` runs.
+  the dev server runs.
 - Production: `ENVIRONMENT=production` lives in ZeroVault `zero-api/production`
   and reaches the Worker through `bin/sync-secrets-to-cloudflare`. It is listed
   in `secrets.required` in `apps/zero-api/wrangler.jsonc`, so a deploy without

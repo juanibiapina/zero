@@ -38,11 +38,12 @@ With no network, those commands exit with status 75 and the app does not start.
 The two Worker `dev` scripts use `--mount`:
 
 ```
-zero vault run -p zero-api -e development --mount .dev.vars -- wrangler dev ...
+zero vault run -p zero-api -e development --mount .dev.vars -- vite dev
 ```
 
-That serves `.dev.vars` through a named pipe. Do not replace it with plain
-environment variables. Wrangler treats the two routes differently:
+That serves `.dev.vars` through a named pipe. The Cloudflare Vite plugin reads
+it through Wrangler's own reader, so Wrangler's rules apply. Do not replace it
+with plain environment variables. Wrangler treats the two routes differently:
 
 1. If a real `.dev.vars` file exists, Wrangler reads it and ignores everything
    else. A stale file therefore wins silently. Delete it.

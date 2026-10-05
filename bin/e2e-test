@@ -32,15 +32,12 @@ echo "=== Starting mock OpenAI API on :3502 ==="
 pnpm exec tsx packages/agent-e2e/src/mock-openai.ts &
 PIDS+=($!)
 
-echo "=== Starting wrangler dev (test config) on :8791 ==="
+echo "=== Starting vite dev --mode test (wrangler.test.jsonc) on :8791 ==="
 # The mount path is relative to this script's working directory (the repo root),
-# and must land next to the wrangler config, which is where wrangler looks for
-# .dev.vars. The pipe disappears when the command exits.
+# and must land next to the wrangler config, which is where the Cloudflare Vite
+# plugin looks for .dev.vars. The pipe disappears when the command exits.
 $ZERO vault run -p zero-api -e development --mount apps/zero-api/.dev.vars -- \
-  pnpm --dir apps/zero-api exec wrangler dev \
-    --config wrangler.test.jsonc \
-    --port 8791 \
-    --inspector-port 9233 &
+  pnpm --dir apps/zero-api exec vite dev --mode test --port 8791 &
 PIDS+=($!)
 
 echo "=== Waiting for ports ==="

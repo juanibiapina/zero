@@ -5,30 +5,40 @@ that are easy to get wrong.
 
 ## API Workers build with Vite, Wrangler deploys
 
-`zeroapps-api` builds with Vite and the Cloudflare Vite plugin
-(`@cloudflare/vite-plugin`); its `vite.config.ts` reads `wrangler.jsonc`, which
-stays the only Worker config. `vite build` writes the bundle and an output
-config to `dist/<worker>/` (for example `dist/zeroapps_api/wrangler.json`) and a
-redirect at `.wrangler/deploy/config.json`. A plain `wrangler deploy`,
-`wrangler versions upload` or `wrangler deploy --dry-run` follows the redirect and
-ships the Vite output.
+`zero-api` and `zeroapps-api` build with Vite and the Cloudflare Vite plugin
+(`@cloudflare/vite-plugin`). Each `vite.config.ts` reads the package's
+`wrangler.jsonc`, which stays the only Worker config. `vite build` writes the
+bundle, its source maps and an output config to `dist/<worker>/` (for example
+`dist/zero_api/wrangler.json`) plus a redirect at `.wrangler/deploy/config.json`.
+A plain `wrangler deploy`, `wrangler versions upload` or `wrangler deploy
+--dry-run` follows the redirect and ships the Vite output.
 
 - **Missing redirect means a silent source build.** Without
   `.wrangler/deploy/config.json`, Wrangler bundles `src/index.ts` itself and
   reports success. Turbo lists `.wrangler/deploy/**` as a build output next to
-  `dist/**` so a cache hit restores it. Commands that must read the source
+  `dist/**`, so a cache hit restores it. Commands that must read the source
   config pass `--config wrangler.jsonc` (`cf-typegen` does).
 - **No secrets in `dist/`.** For `vite preview` the plugin copies local secrets
   into `dist/<worker>/.dev.vars`, from `.dev.vars` or, when that is absent, from
   the process environment. `vite.config.ts` deletes that file from the build
-  output. To preview the build with secrets, mount them there instead:
+  output. To preview a build with secrets, mount them there instead:
   `zero vault run -p <project> -e development --mount dist/<worker>/.dev.vars -- vite preview`.
-- **Vite ignores Wrangler `rules`.** `.sql` imports still work because the
-  plugin follows Wrangler's default module rules, which treat `**/*.sql` as text.
+- **`.dev.vars` is a pipe, so Vite must not watch it.** The plugin restarts the
+  dev server when `.dev.vars` changes, and every read of the `zero vault run`
+  pipe changes it, which loops forever. `server.watch.ignored` lists
+  `**/.dev.vars`.
+- **Vite ignores Wrangler `rules`.** `.sql` imports follow Wrangler's default
+  module rules and upload as text modules. `zero-api` also imports `.md`, which
+  the `text-imports` plugin in its `vite.config.ts` inlines (`vitest.config.ts`
+  reuses it). `src/text-modules.d.ts` types both, since `wrangler types` only
+  emitted those declarations from `rules`. `wrangler.e2e.jsonc` keeps its
+  `rules` because the mobile e2e harness still runs `wrangler dev` on it.
+- **Dynamic imports become separate modules.** Vite splits them into chunks under
+  `dist/<worker>/assets/`; Wrangler uploads each as an ES module with its source
+  map.
 - **`dev` runs `vite dev`.** Port and inspector port live in `vite.config.ts`
-  (`server.port`, `cloudflare({ inspectorPort })`); `.dev.vars` is read through
-  Wrangler's own reader, so the `zero vault run --mount .dev.vars` pipe works
-  unchanged (see `docs/secrets.md`).
+  (`server.port`, `cloudflare({ inspectorPort })`). `zero-api` selects
+  `wrangler.test.jsonc` with `--mode test`, which `bin/e2e-test` uses.
 
 ## Force a deploy to fail on a missing secret (`secrets.required`)
 

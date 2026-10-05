@@ -132,9 +132,9 @@ pinned so it is always in context) and `Changelog` (Zero's user-facing changelog
 unpinned but discoverable via `list_topics`, its body sourced from
 `apps/zero-api/CHANGELOG.md`). Their definitions are `SYSTEM_TOPICS` in
 `store/system-topics.ts`; the `Zero` body is authored inline and the `Changelog`
-body is a text import of `apps/zero-api/CHANGELOG.md` (bundled via the wrangler
-`Text` rule for `**/*.md`, mirrored for vitest by the `text-imports` plugin in
-`vitest.config.ts`).
+body is a text import of `apps/zero-api/CHANGELOG.md` (bundled by the
+`text-imports` plugin in `apps/zero-api/vite.config.ts`, which `vitest.config.ts`
+reuses).
 
 They are not seeded into the database. `SystemTopicStore` (same file) decorates
 the `Store`: it overlays the bundled topics onto every read

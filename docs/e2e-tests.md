@@ -21,7 +21,7 @@ mock HTTP servers so the test is fast, free, and deterministic:
   (reset with `DELETE /test/mode`).
 
 `TELEGRAM_API_ROOT` and the LLM base URL are pointed at these mocks via
-the test wrangler config (`apps/zero-api/wrangler.test.jsonc`), so no real
+the test Worker config (`apps/zero-api/wrangler.test.jsonc`), so no real
 Telegram or LLM traffic leaves the machine.
 
 Current tests:
@@ -43,12 +43,14 @@ bin/e2e-test
 
 The script (`bin/e2e-test`) orchestrates everything:
 
-1. Serves `zero-api/development` secrets to `wrangler dev` through a named pipe
+1. Serves `zero-api/development` secrets to the Worker dev server through a named pipe
    at `apps/zero-api/.dev.vars` (`zero vault run --mount`), so no plaintext
    file is written and nothing has to be restored afterwards. Requires a
    ZeroVault credential; `ZERO_API_URL` is optional.
 2. Starts mock Telegram (:3501), mock OpenAI (:3502), and
-   `wrangler dev --config wrangler.test.jsonc` (:8791).
+   `vite dev --mode test` (:8791, inspector :9233). `--mode test` makes
+   `apps/zero-api/vite.config.ts` load `wrangler.test.jsonc`, so the suite runs
+   the same Vite pipeline that builds production.
 3. Seeds KV so `tg:12345 → user_test`.
 4. Runs the vitest suite in `packages/agent-e2e`.
 5. Tears down all processes and ports on exit.

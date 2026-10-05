@@ -2,17 +2,10 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "zero-api-test",
   "main": "./src/index.ts",
-  "rules": [
-    { "type": "Text", "globs": ["**/*.sql"], "fallthrough": true },
-    { "type": "Text", "globs": ["**/*.md"], "fallthrough": true }
-  ],
   "compatibility_date": "2026-06-01",
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "dev": {
-    "port": 8791
-  },
   "vars": {
     "TELEGRAM_API_ROOT": "http://localhost:3501",
     "LLM_BASE_URL_OVERRIDE": "http://localhost:3502",
