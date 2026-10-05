@@ -63,6 +63,14 @@ describe("todo MCP server", () => {
     expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: "missing-project" }] });
   });
 
+  it("refuses a Medicine write without touching the workspace", async () => {
+    const runOperation = vi.fn();
+    const client = await connect(buildApp({ runOperation }));
+    const result = await client.callTool({ name: "medicines_edit", arguments: { id: "m1", paused: true } });
+    expect(result.isError).toBe(true);
+    expect(runOperation).not.toHaveBeenCalled();
+  });
+
   it("answers GET with 405 because the server is stateless", async () => {
     const response = await buildApp({})("http://localhost/mcp", { headers: { Authorization: "Bearer user-abc" } });
     expect(response.status).toBe(405);

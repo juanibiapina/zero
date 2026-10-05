@@ -1,9 +1,10 @@
 # MCP server (todo workspace for local agents)
 
 `zero-api` serves a remote MCP server at `https://zero.juanibiapina.dev/mcp`. An
-MCP client such as pi signs in as a Zero user and reads and changes that user's
-Tasks, Projects, Waiting conditions, Afters, and Medicines. Writes land in the
-user's `TaskDO`, so they reach mobile and web through the normal sync.
+MCP client such as pi signs in as a Zero user, reads and changes that user's
+Tasks, Projects, Waiting conditions, and Afters, and reads their Medicines.
+Writes land in the user's `TaskDO`, so they reach mobile and web through the
+normal sync.
 
 ## Connect pi
 
@@ -82,8 +83,7 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
 - `kind` sets the MCP annotations: `read` is read-only, `destructive` sets
   `destructiveHint`.
 - The route resolves the user's today from the `UserDO` timezone (UTC when
-  unset). `tasks_complete` defaults `completedOn` to it, and `medicines_create`
-  defaults `startsOn` to it.
+  unset). `tasks_complete` defaults `completedOn` to it.
 
 ### Left out on purpose
 
@@ -91,6 +91,12 @@ route has no per-tool code; adding an operation to the catalog adds a tool.
 - **Undo** carries UI snapshots taken before a change.
 - **Recovery repair** is a user decision on Home; `recoveries_list` reports the
   rows.
+- **Medicine writes** (create, edit, delete). Android sets medicine alarms only
+  when the app's JavaScript sees a change: on a sync while the app is open, on
+  foreground, or after an in-app edit. A write while the app is in the
+  background or closed leaves the old alarms in place, and a dose time that
+  passes before the app opens is skipped. Writes return once a server push can
+  wake the app.
 - **Dose confirmation** belongs to the Android receipt flow
   (see [`storage.md`](storage.md), Medicine and Dose storage).
 - **Project icon suggestion** is a UI helper.

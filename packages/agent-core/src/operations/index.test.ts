@@ -1,6 +1,7 @@
 import { createMergeableStore } from "tinybase";
 import { describe, expect, it } from "vitest";
 
+import { MedicineModel, medicineOccurrences } from "../medicines/model";
 import { runTodoOperation, todoOperations, type OperationContext, type OperationOutcome } from "./index";
 
 function workspace(today = "2026-03-10") {
@@ -111,22 +112,27 @@ describe("todo operation catalog", () => {
     expect(value<{ projects: unknown[] }>(run("projects_list", { includeDone: true })).projects).toHaveLength(1);
   });
 
-  it("creates, edits, and deletes a Medicine, keeping omitted fields", () => {
-    const { run, value } = workspace();
-    const created = value<{ id: string; startsOn: string; doses: Array<{ id: string }> }>(run("medicines_create", {
-      name: "Vitamin D", doses: [{ remindAt: "08:00", alarmAt: "08:30" }],
-    }));
-    expect(created.startsOn).toBe("2026-03-10");
+  it("only reads Medicines, because the phone sets alarms only when the app sees a change", () => {
+    const medicineOperations = todoOperations.filter((operation) => operation.name.startsWith("medicines_"));
+    expect(medicineOperations.map((operation) => [operation.name, operation.kind])).toEqual([["medicines_list", "read"]]);
+  });
 
-    const edited = value<{ name: string; instructions: string | null; doses: Array<{ id: string }> }>(
-      run("medicines_edit", { id: created.id, instructions: "With food" }));
-    expect(edited).toMatchObject({ name: "Vitamin D", instructions: "With food", doses: created.doses });
+  it("lists Medicines and their Doses since a date", () => {
+    const { ctx, run, value } = workspace();
+    const model = new MedicineModel(ctx.store, ctx.now);
+    const medicine = model.add("m", {
+      name: "Vitamin D", instructions: null, startsOn: "2026-03-01", endsOn: null, paused: false,
+      doses: [{ id: "morning", remindAt: "08:00", alarmAt: "08:30" }],
+    });
+    const [old] = medicineOccurrences(medicine, "2026-03-02");
+    const [recent] = medicineOccurrences(medicine, "2026-03-09");
+    model.take(old, "a1");
+    model.take(recent, "a2");
 
-    expect(run("medicines_edit", { id: created.id, doses: [{ remindAt: "09:00", alarmAt: "08:00" }] }))
-      .toEqual({ ok: false, error: "The reminder must be earlier than its alarm on the same day" });
-
-    value(run("medicines_delete", { id: created.id }));
-    expect(value<{ medicines: unknown[] }>(run("medicines_list")).medicines).toEqual([]);
+    const listed = value<{ today: string; medicines: Array<{ id: string }>; doses: Array<{ id: string }> }>(run("medicines_list"));
+    expect(listed.today).toBe("2026-03-10");
+    expect(listed.medicines.map((m) => m.id)).toEqual(["m"]);
+    expect(listed.doses.map((dose) => dose.id)).toEqual([recent.id]);
   });
 
   it("reports invalid synchronized rows as recoveries instead of listing them", () => {

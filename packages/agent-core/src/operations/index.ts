@@ -2,7 +2,7 @@ import { validateRecurrence } from "@zeroapps/recurrence";
 import type { MergeableStore } from "tinybase";
 import { z } from "zod";
 
-import { MedicineModel, type Medicine, type MedicineInput } from "../medicines/model";
+import { MedicineModel } from "../medicines/model";
 import { projectDisplayStatus } from "../projects/derive";
 import { TodoModel, type TodoModelResult } from "../taskdo/model";
 import type { Project, Task } from "../taskdo/types";
@@ -31,7 +31,6 @@ export type TodoOperation<Input extends z.ZodObject = z.ZodObject> = {
 
 const PlainDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
 const Id = z.string().min(1);
-const Time = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM (24h)");
 const Weekday = z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
 const Ordinal = z.union([z.number().int(), z.literal("last")]);
 const MonthSelector = z.discriminatedUnion("kind", [
@@ -62,12 +61,6 @@ const RecurrenceInput = z.object({
   ]),
 }).refine((value) => validateRecurrence(value).ok, "invalid recurrence");
 
-const DoseTime = z.object({
-  id: Id.optional().describe("Stable dose slot id; omit for a new slot"),
-  remindAt: Time.describe("Early reminder time, before alarmAt"),
-  alarmAt: Time.describe("Dose time; unique per Medicine"),
-});
-
 function define<Input extends z.ZodObject>(operation: TodoOperation<Input>): TodoOperation {
   return operation;
 }
@@ -86,28 +79,6 @@ function allProjects(model: TodoModel): Project[] {
   return model.store.getRowIds("projects")
     .flatMap((id) => model.getProject(id) ?? [])
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-}
-
-function guarded(run: () => OperationOutcome): OperationOutcome {
-  try {
-    return run();
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-function medicineInput(fields: {
-  name: string; instructions?: string | null; startsOn: string; endsOn?: string | null;
-  paused?: boolean; doses: z.infer<typeof DoseTime>[];
-}, newId: () => string): MedicineInput {
-  return {
-    name: fields.name,
-    instructions: fields.instructions?.trim() ? fields.instructions.trim() : null,
-    startsOn: fields.startsOn,
-    endsOn: fields.endsOn ?? null,
-    paused: fields.paused ?? false,
-    doses: fields.doses.map((dose) => ({ id: dose.id ?? newId(), remindAt: dose.remindAt, alarmAt: dose.alarmAt })),
-  };
 }
 
 function withAttention(projects: Project[], model: TodoModel, today: string) {
@@ -334,70 +305,6 @@ export const todoOperations: readonly TodoOperation[] = [
         doses: snapshot.doses.filter((dose) => dose.on >= since),
       });
     },
-  }),
-  define({
-    name: "medicines_create",
-    title: "Create a Medicine",
-    description:
-      "Create a daily Medicine routine with 1 to 24 dose times. Each dose has an early reminder (remindAt) before its alarm (alarmAt). " +
-      "startsOn defaults to today; endsOn is the inclusive last day or null for no end.",
-    kind: "write",
-    input: z.object({
-      id: Id.optional(),
-      name: z.string().trim().min(1),
-      instructions: z.string().nullable().optional(),
-      startsOn: PlainDate.optional(),
-      endsOn: PlainDate.nullable().optional(),
-      paused: z.boolean().optional(),
-      doses: z.array(DoseTime).min(1).max(24),
-    }),
-    run: (ctx, { id, ...fields }) => guarded(() => {
-      const value = medicines(ctx).add(id ?? ctx.newId(), medicineInput({ ...fields, startsOn: fields.startsOn ?? ctx.today }, ctx.newId));
-      return { ok: true, changed: true, value };
-    }),
-  }),
-  define({
-    name: "medicines_edit",
-    title: "Edit a Medicine",
-    description:
-      "Change a Medicine. Omitted fields keep their value. doses replaces the whole dose list; keep a slot's id to preserve its history.",
-    kind: "write",
-    input: z.object({
-      id: Id,
-      name: z.string().trim().min(1).optional(),
-      instructions: z.string().nullable().optional(),
-      startsOn: PlainDate.optional(),
-      endsOn: PlainDate.nullable().optional(),
-      paused: z.boolean().optional(),
-      doses: z.array(DoseTime).min(1).max(24).optional(),
-    }),
-    run: (ctx, { id, ...fields }) => guarded(() => {
-      const model = medicines(ctx);
-      const current: Medicine | null = model.get(id);
-      if (!current) return { ok: false, error: "missing-medicine" };
-      model.edit(id, medicineInput({
-        name: fields.name ?? current.name,
-        instructions: fields.instructions !== undefined ? fields.instructions : current.instructions,
-        startsOn: fields.startsOn ?? current.startsOn,
-        endsOn: fields.endsOn !== undefined ? fields.endsOn : current.endsOn,
-        paused: fields.paused ?? current.paused,
-        doses: fields.doses ?? current.doses,
-      }, ctx.newId));
-      return { ok: true, changed: true, value: model.get(id) };
-    }),
-  }),
-  define({
-    name: "medicines_delete",
-    title: "Delete a Medicine",
-    description: "Delete a Medicine and its Dose history.",
-    kind: "destructive",
-    input: z.object({ id: Id }),
-    run: (ctx, input) => guarded(() => {
-      const model = medicines(ctx);
-      if (!model.get(input.id)) return { ok: true, changed: false, value: null };
-      model.remove(input.id);
-      return { ok: true, changed: true, value: null };
-    }),
   }),
   define({
     name: "recoveries_list",
