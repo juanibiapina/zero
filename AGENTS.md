@@ -65,15 +65,14 @@ Each deployable Worker has its own Workers Builds git connector on
 package: scope + "-" + package name (`@zeroapps/api` deploys `zeroapps-api`),
 and its folder is `apps/<Worker name>`.
 
-- `zero-api` (agent) — build `pnpm run build`, deploy `pnpm -F @zero/api run deploy`
+- `zero-api` (agent API) — build `pnpm turbo run build --filter=@zero/api`, deploy `pnpm -F @zero/api run deploy`
+- `zero-web` (agent web app, `zero.juanibiapina.dev`) — build `pnpm turbo run build --filter=@zero/web`, deploy `pnpm -F @zero/web run deploy`. `@zero/web` takes `wrangler` from the workspace root: declaring it in the package changes a `utf-8-validate` peer variant, which installs a second `tinybase` copy and breaks the replica tests.
 - `zeroapps-api` (Vault + Errors API) — build `pnpm turbo run build --filter=@zeroapps/api`, deploy `pnpm -F @zeroapps/api run deploy`
 - `zeroapps-dashboard-web` (dashboard SPA, `dash.zeroapps.dev`) — build `pnpm turbo run build --filter=@zeroapps/dashboard-web`, deploy `pnpm -F @zeroapps/dashboard-web run deploy`
 - `zeroapps-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zeroapps/landing run build`, deploy `pnpm -F @zeroapps/landing run deploy`
 - `zeroapps-docs` (docs site, `docs.zeroapps.dev`) — build `pnpm -F @zeroapps/docs run build`, deploy `pnpm -F @zeroapps/docs run deploy`
 
-`zero-api` builds the whole monorepo (`pnpm run build`) and sets
-`VITE_CLERK_PUBLISHABLE_KEY` as a build variable, which the dashboard build needs.
-The other connectors scope the build to their own package. A web Worker's
+Every connector scopes the build to its own package. A web Worker's
 connector carries the `VITE_*` build variables its bundle needs; `bin/check-build-vars`
 compares them with ZeroVault.
 
@@ -90,6 +89,7 @@ trigger only uploads a version for branch pushes.
 | Worker | default branch (`main`) | non-production branches |
 |---|---|---|
 | `zero-api` | `pnpm -F @zero/api run deploy` | `pnpm -F @zero/api exec wrangler versions upload` |
+| `zero-web` | `pnpm -F @zero/web run deploy` | `pnpm -F @zero/web exec wrangler versions upload` |
 | `zeroapps-api` | `pnpm -F @zeroapps/api run deploy` | none (no preview trigger) |
 | `zeroapps-dashboard-web` | `pnpm -F @zeroapps/dashboard-web run deploy` | `pnpm -F @zeroapps/dashboard-web exec wrangler versions upload` |
 | `zeroapps-landing` | `pnpm -F @zeroapps/landing run deploy` | `pnpm -F @zeroapps/landing exec wrangler versions upload` |
@@ -140,15 +140,16 @@ files, 3000+ changed files, or 20+ commits bypasses matching and always builds.
 
 Per-Worker **include** paths (exclude list is empty for every Worker):
 
-- **zero-api:** `apps/zero-api/*`, `apps/zero-web/*`, `packages/agent-core/*`, `packages/recurrence/*`
+- **zero-api:** `apps/zero-api/*`, `packages/agent-core/*`, `packages/recurrence/*`
+- **zero-web:** `apps/zero-web/*`, `packages/agent-core/*`, `packages/recurrence/*`
 - **zeroapps-api:** `apps/zeroapps-api/*`, `packages/auth/*`, `packages/vault-core/*`, `packages/errors-core/*`
 - **zeroapps-dashboard-web:** `apps/zeroapps-dashboard-web/*`, `packages/ui/*`, `packages/vault-core/*`, `packages/errors-core/*`, `packages/auth/*`
 - **zeroapps-landing:** `apps/zeroapps-landing/*`
 - **zeroapps-docs:** `apps/zeroapps-docs/*`
 - **every Worker also includes the shared build roots:** `packages/typescript-config/*`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`, `patches/*`
 
-`zero-api` bundles `apps/zero-web` as its static assets, so a `zero-web`
-change must redeploy the agent Worker (hence it is in `zero-api`'s includes).
+Each web app is its own Worker, so a web-only change redeploys only its web
+Worker and never resets agent turns in `zero-api`.
 Repo-root `docs/` (plans, notes) is documentation only and is intentionally in no
 Worker's watch paths — it is **not** the `apps/zeroapps-docs` site, which is what
 `zeroapps-docs` watches. When you add a new cross-package dependency to a Worker,
@@ -160,7 +161,7 @@ To deploy manually (e.g. from a branch, without pushing), one Worker at a time.
 Each command wraps the build in `zero vault run`, because the web bundle needs
 its build-time values and nothing writes them to disk:
 ```bash
-gob run pnpm run deploy:agent      # zero-api
+gob run pnpm run deploy:agent      # zero-api + zero-web
 gob run pnpm run deploy:dashboard  # zeroapps-api + zeroapps-dashboard-web
 gob run pnpm run deploy:sites      # landing + docs
 ```
@@ -207,8 +208,8 @@ Zero receives Telegram bot webhooks and routes each update to the right user via
 
 Packages:
 
-- **Worker:** `apps/zero-api` (`@zero/api`)
-- **Frontend:** `apps/zero-web` (`@zero/web`)
+- **Worker:** `apps/zero-api` (`@zero/api`, Worker `zero-api`) serves `/api/*`, `/mcp*` and `/.well-known/*` on `zero.juanibiapina.dev` through zone routes, which take precedence over the web app's custom domain.
+- **Frontend:** `apps/zero-web` (`@zero/web`) is a Vite SPA served by the assets-only Worker `zero-web` on the `zero.juanibiapina.dev` custom domain. Its `/api` calls stay same-origin (the agent web app authenticates with Clerk's session cookie) and reach `zero-api` through the routes above.
 - **Mobile:** `apps/agent-mobile` (`@zero/agent-mobile`) — Expo (React Native) app. Signs in with Clerk against the **same Clerk instance as web** (one account across web and mobile). Routine releases publish compatible JavaScript and assets to the EAS `preview` channel after green `main` CI. Native fingerprint changes use a preview APK built **locally by default** on `mini` with a Nix dev shell; use an EAS cloud build only when explicitly asked. Publish the APK to a dedicated Google Drive folder and replace the previous APK. See `docs/mobile-releases.md` for the release process and `apps/agent-mobile/README.md` for the local build toolchain. A todo app (the Todoist replacement, intended to become the main surface) is being built on this app plus `apps/zero-api`; its vision, decisions, and build order live in `docs/todo-app.md` — read and update it when working on todos.
 - **Shared types:** `packages/agent-core` (`@zero/agent-core`) — currently empty placeholder
 - **E2E tests:** `packages/agent-e2e` (`@zero/agent-e2e`) — end-to-end tests against a local worker with mock Telegram and OpenAI servers; run via `bin/e2e-test`. See `docs/e2e-tests.md`
@@ -220,7 +221,7 @@ Packages:
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
 
-All deployable Workers (`zero-api`, `zeroapps-api`, `zeroapps-dashboard-web`, `zeroapps-landing`, `zeroapps-docs`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place. Each connector's build watch paths are scoped to that Worker's dependencies (see Deployment → Build watch paths), so a push only redeploys the Workers it affects.
+All deployable Workers (`zero-api`, `zero-web`, `zeroapps-api`, `zeroapps-dashboard-web`, `zeroapps-landing`, `zeroapps-docs`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place. Each connector's build watch paths are scoped to that Worker's dependencies (see Deployment → Build watch paths), so a push only redeploys the Workers it affects.
 
 Expected dev ports:
 

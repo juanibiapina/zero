@@ -14,14 +14,15 @@
     "test": "turbo run test",
     "build:agent": "zero vault run -p zero-web -e production -- turbo run build --filter=@zero/web",
     "build:dashboard": "zero vault run -p zerovault-web -e production -- turbo run build --filter=@zeroapps/dashboard-web",
-    "deploy:agent": "zero vault run -p zero-web -e production -- turbo run deploy --filter=@zero/api",
+    "deploy:agent": "zero vault run -p zero-web -e production -- turbo run deploy --filter=@zero/api --filter=@zero/web",
     "deploy:dashboard": "zero vault run -p zerovault-web -e production -- turbo run deploy --filter=@zeroapps/api --filter=@zeroapps/dashboard-web",
     "deploy:sites": "turbo run deploy --filter=@zeroapps/landing --filter=@zeroapps/docs"
   },
   "devDependencies": {
     "@zeroapps/cli": "0.7.0",
     "tsx": "^4.23.1",
-    "turbo": "^2.10.8"
+    "turbo": "^2.10.8",
+    "wrangler": "4.118.0"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2"

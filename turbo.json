@@ -28,11 +28,6 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".wrangler/deploy/**"],
       "outputLogs": "errors-only"
-    },
-    "@zero/api#deploy": {
-      "dependsOn": ["@zero/web#build"],
-      "cache": false,
-      "outputLogs": "errors-only"
     }
   }
 }

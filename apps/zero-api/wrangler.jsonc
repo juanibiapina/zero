@@ -31,11 +31,6 @@
       "ZERO_API_KEY"
     ]
   },
-  "assets": {
-    "directory": "../zero-web/dist",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/mcp", "/.well-known/*"]
-  },
   "dev": {
     "port": 8790
   },
@@ -47,7 +42,6 @@
     "LLM_BASE_URL_OVERRIDE": ""
   },
   "routes": [
-    { "pattern": "zero.juanibiapina.dev/*", "zone_name": "juanibiapina.dev" },
     { "pattern": "zero.juanibiapina.dev/api/*", "zone_name": "juanibiapina.dev" },
     { "pattern": "zero.juanibiapina.dev/mcp*", "zone_name": "juanibiapina.dev" },
     { "pattern": "zero.juanibiapina.dev/.well-known/*", "zone_name": "juanibiapina.dev" }

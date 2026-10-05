@@ -15,7 +15,7 @@ import type { Env } from "../types";
 import type { SendReplyFn } from "./new";
 
 // The web app's origin. zero-api has no web-URL binding and adding one for a
-// single string is not worth it; this matches wrangler.jsonc's route.
+// single string is not worth it; this is the zero-web custom domain.
 const WEB_APP_URL = "https://zero.juanibiapina.dev";
 
 export const SIGN_IN_REPLY =

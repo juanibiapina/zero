@@ -64,7 +64,7 @@ check_worker() {
   done <<<"${names}"
 }
 
-check_worker zero-api zero-web
+check_worker zero-web zero-web
 check_worker zeroapps-dashboard-web zerovault-web
 
 if [ "${status}" -ne 0 ]; then

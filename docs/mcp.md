@@ -62,9 +62,9 @@ and consent remain the gate. Switch to "Pre-registered and previously connected
 clients" to require each client to be added in the dashboard first.
 
 The server is stateless: each `POST` builds a fresh MCP server. `GET` and
-`DELETE` on `/mcp` return 405. `wrangler.jsonc` lists `/mcp` and
-`/.well-known/*` in `run_worker_first` so the web app's SPA fallback does not
-answer them.
+`DELETE` on `/mcp` return 405. `zero-api` owns `/mcp*` and
+`/.well-known/*` through zone routes on `zero.juanibiapina.dev`, so the web app's
+Worker (`zero-web`) and its SPA fallback never answer them.
 
 ## Operation catalog
 
