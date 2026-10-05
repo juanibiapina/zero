@@ -3,7 +3,6 @@
   "name": "zeroapps-api",
   "main": "./src/index.ts",
   "compatibility_date": "2025-07-09",
-  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "compatibility_flags": ["nodejs_als", "nodejs_compat"],
   "secrets": {
     "required": [

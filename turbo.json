@@ -24,6 +24,11 @@
     "dev": { "persistent": true, "cache": false },
     "test": { "outputs": [], "outputLogs": "errors-only" },
     "deploy": { "dependsOn": ["build"], "cache": false, "outputLogs": "errors-only" },
+    "@zeroapps/api#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".wrangler/deploy/**"],
+      "outputLogs": "errors-only"
+    },
     "@zero/api#deploy": {
       "dependsOn": ["@zero/web#build"],
       "cache": false,

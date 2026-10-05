@@ -3,6 +3,33 @@
 Deploy-time Cloudflare Workers operational facts for this repo: behaviors
 that are easy to get wrong.
 
+## API Workers build with Vite, Wrangler deploys
+
+`zeroapps-api` builds with Vite and the Cloudflare Vite plugin
+(`@cloudflare/vite-plugin`); its `vite.config.ts` reads `wrangler.jsonc`, which
+stays the only Worker config. `vite build` writes the bundle and an output
+config to `dist/<worker>/` (for example `dist/zeroapps_api/wrangler.json`) and a
+redirect at `.wrangler/deploy/config.json`. A plain `wrangler deploy`,
+`wrangler versions upload` or `wrangler deploy --dry-run` follows the redirect and
+ships the Vite output.
+
+- **Missing redirect means a silent source build.** Without
+  `.wrangler/deploy/config.json`, Wrangler bundles `src/index.ts` itself and
+  reports success. Turbo lists `.wrangler/deploy/**` as a build output next to
+  `dist/**` so a cache hit restores it. Commands that must read the source
+  config pass `--config wrangler.jsonc` (`cf-typegen` does).
+- **No secrets in `dist/`.** For `vite preview` the plugin copies local secrets
+  into `dist/<worker>/.dev.vars`, from `.dev.vars` or, when that is absent, from
+  the process environment. `vite.config.ts` deletes that file from the build
+  output. To preview the build with secrets, mount them there instead:
+  `zero vault run -p <project> -e development --mount dist/<worker>/.dev.vars -- vite preview`.
+- **Vite ignores Wrangler `rules`.** `.sql` imports still work because the
+  plugin follows Wrangler's default module rules, which treat `**/*.sql` as text.
+- **`dev` runs `vite dev`.** Port and inspector port live in `vite.config.ts`
+  (`server.port`, `cloudflare({ inspectorPort })`); `.dev.vars` is read through
+  Wrangler's own reader, so the `zero vault run --mount .dev.vars` pipe works
+  unchanged (see `docs/secrets.md`).
+
 ## Force a deploy to fail on a missing secret (`secrets.required`)
 
 Add the secret name to `secrets: { required: [...] }` in the worker's

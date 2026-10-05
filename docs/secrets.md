@@ -8,7 +8,7 @@ it needs and removes every trace when the command exits. There is no
 
 | Value | Source of truth | Who reads it |
 |---|---|---|
-| Worker secrets (`TELEGRAM_BOT_TOKEN`, `CLERK_SECRET_KEY`, `MASTER_KEY`, …) | ZeroVault `zero-api`, `zerovault` | `wrangler dev` locally, Worker secrets in production |
+| Worker secrets (`TELEGRAM_BOT_TOKEN`, `CLERK_SECRET_KEY`, `MASTER_KEY`, …) | ZeroVault `zero-api`, `zerovault` | The Worker dev server locally, Worker secrets in production |
 | Web build values (`VITE_CLERK_PUBLISHABLE_KEY`, `VITE_TELEGRAM_BOT_USERNAME`) | ZeroVault `zero-web`, `zerovault-web` | Vite, locally and in `pnpm run build:agent` |
 | The same web build values, for production builds | The Workers Builds connector on each Worker | The Cloudflare build, which has no ZeroVault credential |
 
