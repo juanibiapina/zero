@@ -1,3 +1,5 @@
+import type { ProjectSuggestionCandidate } from '@zero/agent-core';
+
 import { API_BASE_URL } from './env';
 
 // Returns the current Clerk session JWT (or null when signed out). Matches the
@@ -58,4 +60,28 @@ export async function fetchIconSuggestions(
   }
   const body = (await res.json()) as { icons: string[] };
   return body.icons;
+}
+
+// Ask the server which Project a Task being typed belongs to. Any failure is a
+// soft miss, so quick add keeps working without a suggestion.
+export async function fetchProjectSuggestion(
+  getToken: TokenGetter,
+  input: { title: string; projects: ProjectSuggestionCandidate[] },
+  signal: AbortSignal,
+  baseUrl: string = API_BASE_URL,
+): Promise<string | null> {
+  const res = await apiFetch(
+    getToken,
+    '/api/tasks/project-suggestion',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal,
+    },
+    baseUrl,
+  );
+  if (!res.ok) return null;
+  const body = (await res.json()) as { projectId: string | null };
+  return body.projectId;
 }

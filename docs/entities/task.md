@@ -115,6 +115,21 @@ are replicated to the account-scoped client store. Client-facing `Task`:
   pickers preserve the draft. Closing a creation drawer or sheet with a
   nonempty draft asks before clearing it. On web, a failed local save retains
   the draft and retries the existing addition without inserting another row.
+- **Suggest a Project** while a signed-in user types a new Task in global quick
+  add (Home or Projects). After a 400 ms pause the client sends the title, with
+  schedule phrases removed, and the open Projects (each with its description and
+  up to five newest open Task titles) to `POST /api/tasks/project-suggestion`.
+  The Worker asks TypeSafe's Jev decision model (pinned to `jev-1.13.0`, key
+  `TYPESAFE_API_KEY`) one Choice over those Projects plus `none`, and returns
+  a Project only when its probability is at least 0.5. The
+  Project field then shows it marked **Suggested**, and Add files the Task
+  there. Choosing a Project or No project by hand stops suggestions for that
+  draft; adding inside a Project, or as a guest, never asks. Any failure leaves
+  the field unchanged. Each request logs `task_project_suggested` with its
+  confidence, latency, and input tokens. On 2026-10-05 this setting placed 37 of
+  47 real Project Tasks correctly, 2 wrongly, and 2 of 22 unrelated Tasks in a
+  Project, at 313 ms median and 366 ms p95 round trip. Cloudflare's
+  Jev-compatible Clef model placed 33 of 47 correctly with the same error counts.
 - **Complete** an ordinary task: it leaves the list at once and a single bottom
   **Undo** snackbar reopens it. For a Project Task, the same feedback names and
   links the Project and offers **Waiting for…**, which opens the shared Project

@@ -7,6 +7,7 @@ import {
   toast,
   type AddMode,
   type Project,
+  type ProjectSelection,
   type TodoProjects,
   type TodoTasks,
   type Task,
@@ -24,6 +25,7 @@ import { Fab } from '@/components/ui/fab';
 import { Text } from '@/components/ui/text';
 import type { TokenGetter } from '@/lib/api';
 import { requestIconSuggestions } from '@/lib/icon-suggestions';
+import { useProjectSuggestion } from '@/lib/project-suggestion';
 import { useLocalDay } from '@/lib/local-day';
 import { showTaskDestination } from '@/lib/task-feedback';
 import { useTodoDataContext } from '@/lib/todo-data-context';
@@ -35,6 +37,11 @@ export type QuickAddScope =
       project: Project | null;
       waitsApi: TodoWaits;
     };
+
+const NO_PROJECT: ProjectSelection = { projectId: null, source: 'none' };
+
+const fixedProject = (projectId: string | null): ProjectSelection =>
+  projectId ? { projectId, source: 'context' } : NO_PROJECT;
 
 export type QuickAddController = {
   bar: ReactNode;
@@ -89,7 +96,6 @@ export function useQuickAdd({
   const [adding, setAdding] = useState(false);
   const [mode, setMode] = useState<AddMode>(modes[0] ?? 'task');
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const [addProjectId, setAddProjectId] = useState<string | null>(null);
   const [schedulingAdd, setSchedulingAdd] = useState(false);
   const [pickingProject, setPickingProject] = useState(false);
   const [pickingAfter, setPickingAfter] = useState(false);
@@ -104,6 +110,16 @@ export function useQuickAdd({
   const taskView = useMemo(() => taskDraft.view(today), [taskDraft, today]);
   const effectiveDate = taskView.date;
   const effectiveRecurrence = taskView.recurrence;
+  const projectChoice = useProjectSuggestion({
+    getToken,
+    initial: NO_PROJECT,
+    title: adding && mode === 'task' ? taskView.title : '',
+    projects,
+    tasks: openTasks,
+    enabled: authenticatedFeatures && adding && mode === 'task' && scope.kind === 'global',
+  });
+  const addProjectId = projectChoice.selection.projectId;
+  const resetProject = projectChoice.reset;
   const setText = useCallback(
     (next: string) => {
       if (mode === 'task') setTaskDraft((current) => current.change(next));
@@ -119,13 +135,13 @@ export function useQuickAdd({
     setTaskDraft(TaskDraft.create());
     setConfirmingDiscard(false);
     setAdding(false);
-    setAddProjectId(null);
+    resetProject(NO_PROJECT);
     setSchedulingAdd(false);
     setPickingProject(false);
     setPickingAfter(false);
     setMode(modes[0] ?? 'task');
     onClosed?.();
-  }, [modes, onClosed]);
+  }, [modes, onClosed, resetProject]);
 
   const open = useCallback(
     (options?: { initialMode?: AddMode; projectId?: string }) => {
@@ -136,22 +152,22 @@ export function useQuickAdd({
           ? options.initialMode
           : (modes[0] ?? 'task');
       setMode(initialMode);
-      setAddProjectId(options?.projectId ?? contextProjectId);
+      resetProject(fixedProject(options?.projectId ?? contextProjectId));
       setAdding(true);
       setPickingAfter(initialMode === 'after');
     },
-    [modes, contextProjectId],
+    [modes, contextProjectId, resetProject],
   );
 
   const selectMode = useCallback(
     (nextMode: AddMode) => {
       setMode(nextMode);
       if (nextMode === 'task' && contextProjectId) {
-        setAddProjectId(contextProjectId);
+        resetProject(fixedProject(contextProjectId));
       }
       if (nextMode === 'after') setPickingAfter(true);
     },
-    [contextProjectId],
+    [contextProjectId, resetProject],
   );
 
   const onAdd = useCallback(() => {
@@ -429,6 +445,10 @@ export function useQuickAdd({
                 label: selectedProject ? selectedProject.title : 'No project',
                 icon: selectedProject?.icon ?? null,
                 active: addProjectId != null,
+                note:
+                  selectedProject && projectChoice.selection.source === 'suggested'
+                    ? 'Suggested'
+                    : undefined,
                 onPress: () => setPickingProject(true),
               }
             : undefined
@@ -469,7 +489,7 @@ export function useQuickAdd({
         conditions={conditions}
         selectedProjectId={addProjectId}
         onPick={(id) => {
-          setAddProjectId(id);
+          projectChoice.pick(id);
           setPickingProject(false);
         }}
         onClose={() => setPickingProject(false)}

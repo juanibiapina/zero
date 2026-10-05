@@ -5,7 +5,7 @@ import type { Recurrence } from "@zeroapps/recurrence";
 import type { Task } from "../TaskDO/domain";
 import type { Env } from "../types";
 import { taskDoEnv } from "./taskdo-test-stub";
-import { createTasksRoutes } from "./tasks";
+import { createTasksRoutes, type SuggestTaskProject } from "./tasks";
 
 const TASK_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
@@ -30,14 +30,14 @@ const task = (over: Partial<Task> = {}): Task => ({
   ...over,
 });
 
-function buildApp(methods: object) {
+function buildApp(methods: object, suggestProject?: SuggestTaskProject) {
   const env = taskDoEnv(methods);
   const app = new OpenAPIHono<{ Bindings: Env; Variables: { userId: string } }>();
   app.use("/api/*", async (context, next) => {
     context.set("userId", "user-abc");
     await next();
   });
-  app.route("/", createTasksRoutes());
+  app.route("/", createTasksRoutes({ suggestProject }));
   return (path: string, init?: RequestInit) =>
     app.fetch(new Request(`http://localhost${path}`, init), env);
 }
@@ -223,4 +223,42 @@ describe("task routes", () => {
       expect(await response.json()).toEqual({ error: "invalid stored recurrence" });
     },
   );
+});
+
+describe("task project suggestion route", () => {
+  const candidate = { id: PROJECT_ID, title: "Bathroom renovation", icon: "🛁", description: null, tasks: ["choose tiles"] };
+
+  it("returns the suggested Project id", async () => {
+    const suggestProject = vi.fn<SuggestTaskProject>(async () => ({ projectId: PROJECT_ID, confidence: 0.8, inputTokens: 300 }));
+    const response = await buildApp({}, suggestProject)(
+      "/api/tasks/project-suggestion",
+      json("POST", { title: "buy grout", projects: [candidate] }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ projectId: PROJECT_ID });
+    expect(suggestProject).toHaveBeenCalledWith(expect.anything(), "user-abc", { title: "buy grout", projects: [candidate] });
+  });
+
+  it("returns null for a soft miss or an id outside the candidates", async () => {
+    for (const projectId of [null, "someone-elses-project"]) {
+      const suggestProject = vi.fn<SuggestTaskProject>(async () => ({ projectId, confidence: 0.9, inputTokens: 300 }));
+      const response = await buildApp({}, suggestProject)(
+        "/api/tasks/project-suggestion",
+        json("POST", { title: "buy grout", projects: [candidate] }),
+      );
+
+      expect(await response.json()).toEqual({ projectId: null });
+    }
+  });
+
+  it("rejects an empty title or too many Projects before deciding", async () => {
+    const suggestProject = vi.fn<SuggestTaskProject>();
+    const app = buildApp({}, suggestProject);
+    const many = Array.from({ length: 255 }, (_, index) => ({ ...candidate, id: `project-${index}` }));
+
+    expect((await app("/api/tasks/project-suggestion", json("POST", { title: "  ", projects: [candidate] }))).status).toBe(400);
+    expect((await app("/api/tasks/project-suggestion", json("POST", { title: "buy grout", projects: many }))).status).toBe(400);
+    expect(suggestProject).not.toHaveBeenCalled();
+  });
 });

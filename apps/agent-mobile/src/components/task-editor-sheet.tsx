@@ -49,6 +49,7 @@ type EditorAction = {
   onPress: () => void;
   accessibilityLabel?: string;
   icon?: string | null;
+  note?: string;
   testID?: string;
   trailingAction?: {
     icon: ReactNode;
@@ -64,6 +65,7 @@ function EditorActionRow({
   onPress,
   accessibilityLabel,
   icon,
+  note,
   testID,
   trailingAction,
 }: EditorAction) {
@@ -71,7 +73,7 @@ function EditorActionRow({
     <View className="max-w-full flex-row items-stretch">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityLabel={accessibilityLabel ?? (note ? `${label}, ${note}` : label)}
         accessibilityValue={accessibilityLabel ? { text: label } : undefined}
         testID={testID}
         onPress={onPress}
@@ -87,6 +89,11 @@ function EditorActionRow({
         >
           {icon != null ? `${icon} ${label}` : label}
         </Text>
+        {note ? (
+          <Text variant="caption" className="pl-3 text-foreground-secondary">
+            {note}
+          </Text>
+        ) : null}
       </Pressable>
       {trailingAction ? (
         <Pressable

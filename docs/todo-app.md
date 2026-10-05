@@ -115,7 +115,7 @@ evidence.
 The present Task, Project, Waiting, and After model is available on mobile and
 web. Both open the same Home, Upcoming, Projects, and quick-add surfaces for
 guests and signed-in users. Sign-in adds synchronization plus authenticated
-timezone and icon-suggestion features. Guest screens omit those authenticated
+timezone, icon-suggestion, and Project-suggestion features. Guest screens omit those authenticated
 requests. Web todo loading is independent of agent settings, so a failed
 settings request does not block local work. Current clients also provide
 offline writes, account isolation, recurrence, Undo, and recovery reporting. The product changelogs are

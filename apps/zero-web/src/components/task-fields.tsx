@@ -65,11 +65,12 @@ export function TaskDateField({ date, label, onPick, onOpen, onStopRecurrence, o
   );
 }
 
-export function TaskProjectField({ projects, tasks, conditions, projectId, onPick, onOpen, compact = false }: {
+export function TaskProjectField({ projects, tasks, conditions, projectId, suggested = false, onPick, onOpen, compact = false }: {
   projects: Project[];
   tasks: Task[];
   conditions: WaitingCondition[];
   projectId: string | null;
+  suggested?: boolean;
   onPick: (projectId: string | null) => void;
   onOpen?: () => void;
   compact?: boolean;
@@ -77,12 +78,14 @@ export function TaskProjectField({ projects, tasks, conditions, projectId, onPic
   const today = useLocalDay();
   const [open, setOpen] = useState(false);
   const current = projects.find((project) => project.id === projectId);
+  const isSuggested = suggested && current != null;
   return (
     <Popover open={open} onOpenChange={(next) => { if (next) onOpen?.(); setOpen(next); }}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size={compact ? "sm" : "default"} aria-label={compact ? current ? `Project: ${current.title}` : "Add to a project" : undefined}>
+        <Button type="button" variant="outline" size={compact ? "sm" : "default"} aria-label={compact ? current ? `Project: ${current.title}${isSuggested ? ", suggested" : ""}` : "Add to a project" : undefined}>
           {current ? <span aria-hidden>{current.icon}</span> : null}
           {current?.title ?? (compact ? "No project" : "Project")}
+          {isSuggested ? <span className="text-xs font-normal text-muted-foreground">Suggested</span> : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-1">

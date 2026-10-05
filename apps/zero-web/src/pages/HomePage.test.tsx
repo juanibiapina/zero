@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter as RouterMemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -514,5 +514,53 @@ describe("HomePage", () => {
 
     await waitFor(() => expect(moved.length).toBe(1));
     expect(moved[0]).toEqual({ id: "1", projectId: "p" });
+  });
+});
+
+describe("HomePage project suggestions", () => {
+  const fetchMock = vi.fn();
+  const suggestionCalls = () => fetchMock.mock.calls.filter(([url]) => String(url) === "/api/tasks/project-suggestion");
+
+  afterEach(() => {
+    h.replica = null;
+    defaultToastController.dismiss();
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  it("suggests a Project while typing and files the Task there", async () => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ projectId: "p" }) });
+    setApi([taskRow("1", "choose tiles", { projectId: "p" })], [projectRow("p", { title: "Bathroom renovation", icon: "🛁" })]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "Add a task" }), { target: { value: "buy grout tomorrow" } });
+
+    expect(await screen.findByRole("button", { name: "Project: Bathroom renovation, suggested" })).toBeInTheDocument();
+    const [, init] = suggestionCalls().at(-1) as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: "buy grout",
+      projects: [{ id: "p", title: "Bathroom renovation", icon: "🛁", description: null, tasks: ["choose tiles"] }],
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    });
+    await waitFor(() => expect(defaultToastController.getSnapshot()[0]?.message).toBe("Filed to project"));
+  });
+
+  it("keeps a Project chosen by hand and stops asking", async () => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ projectId: "p" }) });
+    setApi([], [projectRow("p", { title: "Bathroom renovation" }), projectRow("q", { title: "Lisbon trip" })]);
+    render(<HomePage />, { wrapper: MemoryRouter });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add to a project" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Lisbon trip" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a task" }), { target: { value: "buy grout" } });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(suggestionCalls()).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Project: Lisbon trip" })).toBeInTheDocument();
   });
 });

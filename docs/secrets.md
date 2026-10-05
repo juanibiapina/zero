@@ -96,6 +96,12 @@ production environments. Create it as a custom Cloudflare token with only
 `zero-ai-usage` dataset for admin reports. Model calls write through the
 `AI_USAGE` Worker binding and do not use this token.
 
+## TypeSafe
+
+`TYPESAFE_API_KEY` belongs in the `zero-api` development and production
+environments. It authenticates the Worker's calls to TypeSafe's Jev model, which
+suggests a Project while a user types a new Task.
+
 Before deploying code that lists a new secret in `secrets.required`:
 
 1. Store the secret in both `zero-api` environments.

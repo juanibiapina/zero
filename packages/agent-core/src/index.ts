@@ -15,6 +15,14 @@ export { messageOf } from "./errors";
 export type { Task } from "./taskdo/types";
 export { localToday } from "./tasks/today";
 export { TaskDraft, type TaskDraftView, type TaskDraftCommit } from "./tasks/draft";
+export {
+  ProjectSuggester,
+  projectSuggestionCandidates,
+  type ProjectSelection,
+  type ProjectSelectionSource,
+  type ProjectSuggestionCandidate,
+  type ProjectSuggestionRequest,
+} from "./tasks/project-suggestion";
 export { homeTasks } from "./tasks/home";
 export {
   dayLabel,

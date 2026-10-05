@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { isNull, type Transaction } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
-import { TaskDraft, toast, type TaskdoReplica } from "@zero/agent-core";
+import { TaskDraft, toast, type ProjectSelection, type TaskdoReplica } from "@zero/agent-core";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { ProjectOptionList } from "@/components/ProjectOptionList";
@@ -11,6 +11,7 @@ import { reportTodoError } from "@/lib/todo-feedback";
 import { useLocalDay } from "@/lib/local-day";
 import { useTodoData } from "@/lib/todo-data";
 import { requestIconSuggestions } from "@/lib/icon-suggestions";
+import { useProjectSuggestion } from "@/lib/project-suggestion";
 
 export type TodoAddKind = "task" | "project" | "waiting" | "after";
 const LABELS: Record<TodoAddKind, string> = { task: "Task", project: "Project", waiting: "Waiting condition", after: "After project" };
@@ -28,7 +29,6 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
   const [kind, setKind] = useState(initialKind);
   const [draft, setDraft] = useState(() => TaskDraft.create());
   const text = draft.text;
-  const [projectId, setProjectId] = useState(contextProjectId);
   const [pending, setPending] = useState(false);
   const [retryAddition, setRetryAddition] = useState<(() => Promise<void>) | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -40,11 +40,20 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
   const recurrence = draftView.recurrence;
   const effectiveDate = draftView.date;
   const effectiveText = kind === "task" ? draftView.title : text.trim();
+  const contextSelection: ProjectSelection = contextProjectId ? { projectId: contextProjectId, source: "context" } : { projectId: null, source: "none" };
+  const projectChoice = useProjectSuggestion({
+    initial: contextSelection,
+    title: kind === "task" ? draftView.title : "",
+    projects,
+    tasks,
+    enabled: authenticatedFeatures && kind === "task" && contextProjectId == null,
+  });
+  const projectId = projectChoice.selection.projectId;
   const context = projects.find((project) => project.id === contextProjectId);
   const kinds: TodoAddKind[] = contextProjectId ? ["task", "waiting", "after", "project"] : ["task", "project"];
   const placeholder = kind === "project" ? "Name an outcome" : kind === "waiting" ? "What are you waiting for?" : "Add a task";
   const reset = () => {
-    setDraft(TaskDraft.create()); setProjectId(contextProjectId); onDraftChange?.(false);
+    setDraft(TaskDraft.create()); projectChoice.reset(contextSelection); onDraftChange?.(false);
   };
 
   const finish = () => {
@@ -122,7 +131,7 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
           onDismissRange={(range) => setDraft((current) => current.dismiss(range))}
           trailing={<Button type="submit" disabled={pending || (kind === "task" ? draftView.commit.kind !== "ready" : !effectiveText.trim())}>{pending ? "Saving…" : "Add"}</Button>}
           dateField={kind === "task" ? { onPick: (next) => setDraft((current) => current.pickCreationDate(next, today)) } : undefined}
-          projectField={kind === "task" ? { projects, tasks, conditions, projectId, onPick: setProjectId } : undefined}
+          projectField={kind === "task" ? { projects, tasks, conditions, projectId, suggested: projectChoice.selection.source === "suggested", onPick: projectChoice.pick } : undefined}
         />
       </>}
     </fieldset>

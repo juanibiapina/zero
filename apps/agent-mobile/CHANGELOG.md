@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-05: Add a suggested project when you type a new task on Home. Pick another project or No project to change it.
+
 - 2026-10-05: Fix signing in leaving a second copy of Home behind Back, which could make a later sign-out fail.
 
 - 2026-10-05: Change the Medicines screen to show reminder setup only when reminders need fixing, with one button to fix it; remove the watch, battery, and muted-sound notes, and show dates as words.

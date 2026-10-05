@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-05: Add a suggested project when you type a new task on Home. Pick another project or No project to change it.
+
 - 2026-10-05: Change local AI agents to only see your medicines, not change them. Change medicines in the app so their reminders stay on time.
 
 - 2026-10-05: Connect a local AI agent such as pi to your tasks, projects, and medicines. Sign in once from the agent, and its changes appear here and on your phone.

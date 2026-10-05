@@ -383,3 +383,58 @@ describe('HomeScreen', () => {
     expect(defaultToastController.getSnapshot()).toHaveLength(0);
   });
 });
+
+describe('HomeScreen project suggestions', () => {
+  const fetchMock = jest.fn<typeof fetch>();
+  const suggestionCalls = () =>
+    fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/tasks/project-suggestion'));
+
+  beforeEach(() => {
+    defaultToastController.dismiss();
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ projectId: 'bathroom' }), { status: 200 }),
+    );
+    global.fetch = fetchMock;
+  });
+
+  it('suggests a Project while typing and files the Task there', async () => {
+    const screen = await renderScreen({
+      projects: [project('bathroom', 'Bathroom renovation', { icon: '🛁' })],
+      tasks: [task('t', 'choose tiles', { projectId: 'bathroom' })],
+    });
+    await fireEvent.press(screen.getByLabelText('Task'));
+    const input = screen.getByPlaceholderText('Add a task');
+    await fireEvent.changeText(input, 'buy grout');
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Bathroom renovation, Suggested')).toBeTruthy(),
+    );
+    const [, init] = suggestionCalls().at(-1)!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      title: 'buy grout',
+      projects: [{ id: 'bathroom', tasks: ['choose tiles'] }],
+    });
+
+    await fireEvent(input, 'submitEditing');
+    await waitFor(() =>
+      expect(
+        [...screen.data.replica!.tasks.collection.values()].find((row) => row.text === 'buy grout'),
+      ).toMatchObject({ projectId: 'bathroom' }),
+    );
+  });
+
+  it('sends no suggestion request for a guest', async () => {
+    const screen = await renderScreen(
+      { projects: [project('bathroom', 'Bathroom renovation')] },
+      true,
+    );
+    await fireEvent.press(screen.getByLabelText('Task'));
+    await fireEvent.changeText(screen.getByPlaceholderText('Add a task'), 'buy grout');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+
+    expect(suggestionCalls()).toHaveLength(0);
+  });
+});

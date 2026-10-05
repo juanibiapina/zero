@@ -8,6 +8,8 @@ import {
 import { log } from "../log";
 import type { Env } from "../types";
 import { getTaskDO } from "../TaskDO/stub";
+import { suggestProject, type ProjectSuggestion } from "../agents/project-suggest";
+import { typesafeDecide } from "../agents/system-one";
 
 type Variables = {
   userId: string;
@@ -34,7 +36,27 @@ const TaskSchema = z.object({
   sortKey: z.string().nullable(),
 });
 
-export const createTasksRoutes = () => {
+export type SuggestTaskProject = (
+  env: Env,
+  userId: string,
+  input: Parameters<typeof suggestProject>[1],
+) => Promise<ProjectSuggestion>;
+
+const defaultSuggestProject: SuggestTaskProject = (env, _userId, input) =>
+  suggestProject(typesafeDecide(env), input);
+
+const ProjectCandidateSchema = z.object({
+  id: z.string().min(1).max(100),
+  title: z.string().min(1).max(200),
+  icon: z.string().max(32),
+  description: z.string().max(300).nullable(),
+  tasks: z.array(z.string().max(200)).max(5),
+});
+
+export const createTasksRoutes = (
+  deps: { suggestProject?: SuggestTaskProject } = {},
+) => {
+  const suggest = deps.suggestProject ?? defaultSuggestProject;
   const router = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
   const listRoute = createRoute({
@@ -402,6 +424,54 @@ export const createTasksRoutes = () => {
     if (!task) return c.json({ error: "task not found" }, 404);
     log("task_occurrence_undone", { clerk_user_id: userId });
     return c.json({ task }, 200);
+  });
+
+  const projectSuggestionRoute = createRoute({
+    method: "post",
+    path: "/api/tasks/project-suggestion",
+    tags: ["Tasks"],
+    summary: "Suggest the Project a Task being typed belongs to",
+    request: {
+      body: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              title: z.string().trim().min(1).max(200),
+              projects: z.array(ProjectCandidateSchema).min(1).max(254),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": {
+            schema: z.object({ projectId: z.string().nullable() }),
+          },
+        },
+        description: "The suggested Project id; null is a soft miss.",
+      },
+    },
+  });
+
+  router.openapi(projectSuggestionRoute, async (c) => {
+    const userId = c.get("userId");
+    const input = c.req.valid("json");
+    const started = Date.now();
+    const suggestion = await suggest(c.env, userId, input);
+    log("task_project_suggested", {
+      clerk_user_id: userId,
+      suggested: suggestion.projectId !== null,
+      confidence: suggestion.confidence,
+      latency_ms: Date.now() - started,
+      input_tokens: suggestion.inputTokens,
+      candidates: input.projects.length,
+    });
+    const projectId = input.projects.some((project) => project.id === suggestion.projectId)
+      ? suggestion.projectId
+      : null;
+    return c.json({ projectId }, 200);
   });
 
   return router;
