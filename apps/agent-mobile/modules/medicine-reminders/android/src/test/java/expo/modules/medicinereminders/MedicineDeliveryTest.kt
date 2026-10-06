@@ -191,6 +191,15 @@ class MedicineDeliveryTest {
   }
 
   @Test
+  fun anotherWorkspacesUnimportedConfirmationIsNotDropped() {
+    MedicineEngine.replace(context, "previous", plans())
+    MedicineEngine.deliver(context, payload("reminder"))
+    MedicineReceiver().onReceive(context, shadowOf(notification().actions.single().actionIntent).savedIntent)
+    assertThrows(IllegalStateException::class.java) { MedicineEngine.replace(context, workspace, plans(listOf("other"))) }
+    assertEquals(1, (0 until JSONArray(MedicineEngine.receipts(context, "previous")).length()).count { JSONArray(MedicineEngine.receipts(context, "previous")).getJSONObject(it).getString("kind") == "taken" })
+  }
+
+  @Test
   fun aReminderFileRestoredFromAnotherInstallDoesNotBlockReminders() {
     val restored = JSONObject(plans()).put("workspace", "restored")
     context.getSharedPreferences("medicine-reminders-v1", Context.MODE_PRIVATE).edit().putString("state", restored.toString()).commit()

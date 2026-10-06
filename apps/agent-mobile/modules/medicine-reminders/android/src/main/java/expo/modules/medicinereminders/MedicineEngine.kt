@@ -111,6 +111,8 @@ internal object MedicineEngine {
     schedule(c, state)
   }
   private fun release(c: Context, state: JSONObject): JSONObject {
+    val receipts = array(state, "receipts")
+    check((0 until receipts.length()).none { receipts.getJSONObject(it).getString("kind") == "taken" }) { "Another workspace has unimported medicine confirmations" }
     cancelIntents(c, state)
     for (id in obj(state, "visible").keys()) notificationManager(c).cancel(id, 0)
     return JSONObject()
