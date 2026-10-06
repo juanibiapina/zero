@@ -387,11 +387,6 @@ export function useQuickAdd({
               accessibilityLabel="Suggested icons"
               className="flex-row flex-wrap items-center gap-2 px-screen-x pb-3"
             >
-              {projectIcon.choice.source === 'suggested' ? (
-                <Text className="text-[12px] font-medium text-foreground-muted">
-                  Suggested
-                </Text>
-              ) : null}
               {projectIcon.choice.icons.map((emoji) => {
                 const selected = emoji === projectIcon.choice.icon;
                 return (

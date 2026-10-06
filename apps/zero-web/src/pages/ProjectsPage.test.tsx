@@ -775,7 +775,6 @@ describe("project icon suggestions", () => {
     renderApp();
     await typeTitle("Run a 5K");
     expect(await screen.findByRole("button", { name: "Use icon 🌟" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("Suggested")).toBeInTheDocument();
     const [, init] = suggestionCalls()[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ title: "Run a 5K", description: null });
 

@@ -135,7 +135,6 @@ export function TodoComposer({ replica, projectId: contextProjectId = null, init
           leading={kind === "project" && authenticatedFeatures ? <span aria-label={`Icon ${projectIcon.choice.icon}`} role="img" className="flex size-9 shrink-0 items-center justify-center text-xl">{projectIcon.choice.icon}</span> : undefined}
         />
         {kind === "project" && projectIcon.choice.icons.length > 0 ? <div role="group" aria-label="Suggested icons" className="flex flex-wrap items-center gap-0.5">
-          {projectIcon.choice.source === "suggested" ? <span className="mr-1 text-xs font-medium text-muted-foreground">Suggested</span> : null}
           {projectIcon.choice.icons.map((emoji) => <button key={emoji} type="button" aria-label={`Use icon ${emoji}`} aria-pressed={emoji === projectIcon.choice.icon}
             onClick={() => projectIcon.pick(emoji)}
             className={`flex size-8 items-center justify-center rounded-md text-lg hover:bg-accent ${emoji === projectIcon.choice.icon ? "bg-accent ring-1 ring-ring" : ""}`}>{emoji}</button>)}

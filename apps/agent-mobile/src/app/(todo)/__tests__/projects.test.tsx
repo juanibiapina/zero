@@ -106,8 +106,9 @@ describe('ProjectsScreen', () => {
       const input = screen.getByPlaceholderText('Name an outcome');
       await fireEvent.changeText(input, 'Run a 5K');
 
-      await waitFor(() => expect(screen.getByText('Suggested')).toBeTruthy());
-      expect(screen.getByLabelText('Use icon 🌟').props.accessibilityState).toMatchObject({ selected: true });
+      await waitFor(() =>
+        expect(screen.getByLabelText('Use icon 🌟').props.accessibilityState).toMatchObject({ selected: true }),
+      );
       await fireEvent(input, 'submitEditing');
 
       await waitFor(() => expect(createdIcon(screen, 'Run a 5K')).toBe('🌟'));
