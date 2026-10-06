@@ -72,6 +72,10 @@ const STATUS_DISCLOSURE_ICON = Icon.select({
   ios: 'chevron.down',
   android: import('@expo/material-symbols/keyboard_arrow_down.xml'),
 });
+const REFRESH_ICON = Icon.select({
+  ios: 'arrow.clockwise',
+  android: import('@expo/material-symbols/refresh.xml'),
+});
 const ROW_DISCLOSURE_ICON = Icon.select({
   ios: 'chevron.right',
   android: import('@expo/material-symbols/chevron_right.xml'),
@@ -526,6 +530,7 @@ function IconPickerSheet({
     !!cached && cached.status === 'ready' && isBasisStale(cached.basis, basis);
   const refresh = () =>
     void requestIconSuggestions(getToken, project.id, basis, { force: true });
+  const refreshColor = useColor(stale ? '--color-foreground' : '--color-foreground-muted');
 
   return (
     <EmojiPickerSheet
@@ -547,7 +552,7 @@ function IconPickerSheet({
               accessibilityLabel={`Use suggested icon ${emoji}`}
               hitSlop={6}
               onPress={() => onPick(emoji)}
-              className="rounded-md px-1.5 py-1"
+              className="h-10 w-10 items-center justify-center rounded-md"
             >
               <Text className="text-[22px]">{emoji}</Text>
             </Pressable>
@@ -562,17 +567,11 @@ function IconPickerSheet({
           accessibilityLabel="Refresh suggested icons"
           hitSlop={8}
           onPress={refresh}
-          className="ml-auto rounded-md px-2 py-1"
+          className="ml-auto h-10 w-10 items-center justify-center rounded-md"
         >
-          <Text
-            className={
-              stale
-                ? 'text-[16px] text-foreground'
-                : 'text-[16px] text-foreground-muted'
-            }
-          >
-            ↻
-          </Text>
+          <Host matchContents>
+            <Icon name={REFRESH_ICON} size={20} color={refreshColor} />
+          </Host>
         </Pressable>
         </View>
       ) : null}
