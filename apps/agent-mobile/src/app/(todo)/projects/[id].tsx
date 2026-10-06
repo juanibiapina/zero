@@ -538,10 +538,11 @@ function IconPickerSheet({
       onClose={onClose}
       onPick={onPick}
       header={authenticatedFeatures ? (
-        <View className="flex-row flex-wrap items-center gap-2 px-4 pt-3 pb-2">
-        <Text className="text-[12px] font-medium text-foreground-muted">
-          Suggested
-        </Text>
+        <View className="h-14 flex-row items-center gap-1 px-4">
+        <View
+          accessibilityLabel="Suggested icons"
+          className="min-w-0 flex-1 flex-row items-center gap-1 overflow-hidden"
+        >
         {loading ? (
           <Text className="text-foreground-muted">Loading suggested icons…</Text>
         ) : icons.length > 0 ? (
@@ -562,12 +563,13 @@ function IconPickerSheet({
             Couldn&apos;t load suggestions
           </Text>
         )}
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Refresh suggested icons"
           hitSlop={8}
           onPress={refresh}
-          className="ml-auto h-10 w-10 items-center justify-center rounded-md"
+          className="h-10 w-10 items-center justify-center rounded-md"
         >
           <Host matchContents>
             <Icon name={REFRESH_ICON} size={20} color={refreshColor} />

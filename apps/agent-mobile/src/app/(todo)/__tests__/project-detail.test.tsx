@@ -223,7 +223,7 @@ describe('ProjectDetailScreen', () => {
     fireEvent.press(screen.getByLabelText('Change icon'));
 
     await waitFor(() => expect(screen.getByLabelText('Manual emoji picker')).toBeTruthy());
-    expect(screen.queryByText('Suggested')).toBeNull();
+    expect(screen.queryByLabelText('Suggested icons')).toBeNull();
     expect(screen.queryByLabelText('Refresh suggested icons')).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
     fetch.mockRestore();
