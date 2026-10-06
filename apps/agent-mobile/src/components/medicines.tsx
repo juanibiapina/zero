@@ -1,9 +1,9 @@
 import { Host, Icon } from '@expo/ui';
 import { safeRandomUUID } from '@tanstack/db';
-import { MedicineDraft, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Medicine, type TaskdoReplica } from '@zero/agent-core';
+import { MedicineDraft, medicineOccurrences, medicineState, medicineToday, parseLocalDay, type Medicine } from '@zero/agent-core';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Alert, AppState, FlatList, Pressable, ScrollView, View } from 'react-native';
+import { useCallback, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Alert, FlatList, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MedicineEditorFields, MedicineSaveButton, type MedicineEditorHandle } from '@/components/medicine-editor';
@@ -13,10 +13,9 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Text } from '@/components/ui/text';
 import { Fab } from '@/components/ui/fab';
 import { useLocalDay } from '@/lib/local-day';
-import { enableMedicineReminders, getMedicineReminders, reminderSettings } from '@/lib/medicine-reminders';
+import { useMedicineReminderNotice } from '@/lib/medicine-reminders';
 import { useColor } from '@/lib/theme';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
-import type { ReminderCapabilities } from '../../modules/medicine-reminders';
 
 const MEDICINE_ICONS = {
   back: Icon.select({ ios: 'arrow.left', android: import('@expo/material-symbols/arrow_back.xml') }),
@@ -86,41 +85,12 @@ function MedicineListContent({ snapshot, today }: {
     {adding ? <MedicineDrawer onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : <Fab label="Add medicine" onPress={() => setAdding(true)} className="absolute right-4" style={{ bottom: insets.bottom + 16 }} />}
   </View>;
 }
-type ReminderIssue = { kind?: 'notifications'; message: string; action: string; fix: () => unknown | Promise<unknown> };
-function reminderIssue(controller: NonNullable<ReturnType<typeof getMedicineReminders>>, replica: TaskdoReplica, native: NonNullable<typeof reminderSettings>, enabled: boolean, failed: boolean, askedForNotifications: boolean, capabilities: ReminderCapabilities): ReminderIssue | null {
-  if (failed) return { message: 'Reminders couldn’t be scheduled.', action: 'Try again', fix: () => controller.refresh() };
-  if (!enabled) return { message: 'Reminders are off on this phone.', action: 'Turn on', fix: () => enableMedicineReminders(replica, controller.workspace) };
-  if (!capabilities.notifications) return { kind: 'notifications', message: 'Notifications are off, so reminders won’t appear.', action: 'Allow notifications', fix: () => askedForNotifications ? native.openNotificationSettings() : native.requestNotifications() };
-  if (!capabilities.alertChannel) return { message: 'Medicine notifications are turned off.', action: 'Open settings', fix: () => native.openReminderSettings() };
-  if (!capabilities.exactAlarms) return { message: 'Reminders can’t arrive on time.', action: 'Allow', fix: () => native.openExactAlarmSettings() };
-  if (capabilities.backgroundRestricted) return { message: 'Battery restrictions may delay reminders.', action: 'Battery settings', fix: () => native.openBatterySettings() };
-  return null;
-}
 function ReminderNotice() {
-  const replica = useTodoReplica(); const controller = getMedicineReminders(replica);
-  const [capabilities, setCapabilities] = useState<ReminderCapabilities | null>(null);
-  const [delivery, setDelivery] = useState(() => ({ controller, state: controller?.getState() }));
-  const state = delivery.controller === controller ? delivery.state : controller?.getState();
-  const [failed, setFailed] = useState(false);
-  const [askedForNotifications, setAskedForNotifications] = useState(false);
-  const refresh = useCallback(() => { void reminderSettings?.capabilities().then(setCapabilities).catch(() => setFailed(true)); }, []);
-  useEffect(() => {
-    refresh();
-    const subscription = AppState.addEventListener('change', (value) => { if (value === 'active') refresh(); });
-    const unsubscribe = controller?.subscribe(() => setDelivery({ controller, state: controller.getState() }));
-    return () => { subscription.remove(); unsubscribe?.(); };
-  }, [controller, refresh]);
-  if (!reminderSettings || !controller || !replica || !capabilities) return null;
-  const issue = reminderIssue(controller, replica, reminderSettings, !!state?.enabled, failed || !!state?.error, askedForNotifications, capabilities);
-  if (!issue) return null;
-  const fix = async () => {
-    setFailed(false);
-    try { await issue.fix(); if (issue.kind === 'notifications') setAskedForNotifications(true); setCapabilities(await reminderSettings!.capabilities()); }
-    catch { setFailed(true); }
-  };
+  const notice = useMedicineReminderNotice();
+  if (!notice) return null;
   return <View accessibilityRole="alert" className="flex-row flex-wrap items-center justify-between gap-x-3 border-b border-divider py-2">
-    <Text variant="caption" className="min-w-0 flex-1 text-danger">{issue.message}</Text>
-    <Action label={issue.action} disabled={!!state?.pending} onPress={() => void fix()} />
+    <Text variant="caption" className="min-w-0 flex-1 text-danger">{notice.message}</Text>
+    <Action label={notice.action} disabled={notice.pending} onPress={() => void notice.fix()} />
   </View>;
 }
 export function MedicineDetail() {

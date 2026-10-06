@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { createMedicineReminders, type MedicineReminders, type TaskdoReplica } from '@zero/agent-core';
-import { medicineReminderDevice, reminderSettings } from '../../modules/medicine-reminders';
+import { medicineReminderDevice, reminderSettings, type ReminderCapabilities, type ReminderSettings } from '../../modules/medicine-reminders';
+import { useTodoReplica } from './todo-replica-hook';
 
 const controllers = new WeakMap<TaskdoReplica, MedicineReminders>();
-export const getMedicineReminders = (replica: TaskdoReplica | null) => replica ? controllers.get(replica) ?? null : null;
 const enabledKey = (workspace: string) => `zero.medicine-reminders.enabled.${workspace}`;
 
 export async function attachMedicineReminders(replica: TaskdoReplica, workspace: string): Promise<TaskdoReplica> {
@@ -59,14 +60,57 @@ export async function attachMedicineReminders(replica: TaskdoReplica, workspace:
   return wrapped;
 }
 
-export async function enableMedicineReminders(replica: TaskdoReplica, workspace: string) {
-  const controller = controllers.get(replica);
-  if (!controller) throw new Error('Install an Android build with medicine reminder support');
-  await AsyncStorage.setItem(enabledKey(workspace), '1');
-  await controller.enable();
-}
 export async function clearMedicineReminders(workspace: string) {
   await medicineReminderDevice?.clear(workspace);
   await AsyncStorage.removeItem(enabledKey(workspace));
 }
-export { reminderSettings };
+
+type MedicineReminderNotice = { message: string; action: string; pending: boolean; fix: () => Promise<void> };
+
+type ReminderIssue = { kind?: 'notifications'; message: string; action: string; fix: () => unknown };
+
+async function enable(controller: MedicineReminders) {
+  await AsyncStorage.setItem(enabledKey(controller.workspace), '1');
+  await controller.enable();
+}
+
+function reminderIssue(controller: MedicineReminders, settings: ReminderSettings, enabled: boolean, failed: boolean, askedForNotifications: boolean, capabilities: ReminderCapabilities): ReminderIssue | null {
+  if (failed) return { message: 'Reminders couldn’t be scheduled.', action: 'Try again', fix: () => controller.refresh() };
+  if (!enabled) return { message: 'Reminders are off on this phone.', action: 'Turn on', fix: () => enable(controller) };
+  if (!capabilities.notifications) return { kind: 'notifications', message: 'Notifications are off, so reminders won’t appear.', action: 'Allow notifications', fix: () => askedForNotifications ? settings.openNotificationSettings() : settings.requestNotifications() };
+  if (!capabilities.alertChannel) return { message: 'Medicine notifications are turned off.', action: 'Open settings', fix: () => settings.openReminderSettings() };
+  if (!capabilities.exactAlarms) return { message: 'Reminders can’t arrive on time.', action: 'Allow', fix: () => settings.openExactAlarmSettings() };
+  if (capabilities.backgroundRestricted) return { message: 'Battery restrictions may delay reminders.', action: 'Battery settings', fix: () => settings.openBatterySettings() };
+  return null;
+}
+
+export function useMedicineReminderNotice(): MedicineReminderNotice | null {
+  const replica = useTodoReplica();
+  const controller = replica ? controllers.get(replica) ?? null : null;
+  const [capabilities, setCapabilities] = useState<ReminderCapabilities | null>(null);
+  const [delivery, setDelivery] = useState(() => ({ controller, state: controller?.getState() }));
+  const state = delivery.controller === controller ? delivery.state : controller?.getState();
+  const [failed, setFailed] = useState(false);
+  const [askedForNotifications, setAskedForNotifications] = useState(false);
+  const refresh = useCallback(() => { void reminderSettings?.capabilities().then(setCapabilities).catch(() => setFailed(true)); }, []);
+  useEffect(() => {
+    refresh();
+    const subscription = AppState.addEventListener('change', (value) => { if (value === 'active') refresh(); });
+    const unsubscribe = controller?.subscribe(() => setDelivery({ controller, state: controller.getState() }));
+    return () => { subscription.remove(); unsubscribe?.(); };
+  }, [controller, refresh]);
+  if (!reminderSettings || !controller || !capabilities) return null;
+  const settings = reminderSettings;
+  const issue = reminderIssue(controller, settings, !!state?.enabled, failed || !!state?.error, askedForNotifications, capabilities);
+  if (!issue) return null;
+  return {
+    message: issue.message,
+    action: issue.action,
+    pending: !!state?.pending,
+    async fix() {
+      setFailed(false);
+      try { await issue.fix(); if (issue.kind === 'notifications') setAskedForNotifications(true); setCapabilities(await settings.capabilities()); }
+      catch { setFailed(true); }
+    },
+  };
+}

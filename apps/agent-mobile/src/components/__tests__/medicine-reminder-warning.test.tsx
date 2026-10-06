@@ -7,7 +7,7 @@ import type { ReactElement } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { reminderSettings, type ReminderCapabilities } from '../../../modules/medicine-reminders';
 import { MedicineDetail, MedicinesList } from '../medicines';
-import { attachMedicineReminders, enableMedicineReminders } from '@/lib/medicine-reminders';
+import { attachMedicineReminders } from '@/lib/medicine-reminders';
 import { createInMemoryTodoData, InMemoryTodoDataProvider } from '@/testing/in-memory-todo-data';
 
 let mockParams: { id?: string } = {};
@@ -46,10 +46,14 @@ async function open(screen: ReactElement, { enabled = true } = {}) {
   mockParams = { id: medicine.id };
   replica = await attachMedicineReminders(data.replica!, 'medicine-warning-test');
   data.replica = replica;
-  if (enabled) await enableMedicineReminders(replica, 'medicine-warning-test');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const rendered = await render(<QueryClientProvider client={client}><InMemoryTodoDataProvider data={data}>{screen}</InMemoryTodoDataProvider></QueryClientProvider>);
   await waitFor(() => expect(rendered.getByText('Evening medicine')).toBeTruthy());
+  if (enabled) {
+    await waitFor(() => expect(rendered.getByLabelText('Turn on')).toBeTruthy());
+    await fireEvent.press(rendered.getByLabelText('Turn on'));
+    await waitFor(() => expect(rendered.queryByText('Reminders are off on this phone.')).toBeNull());
+  }
   return rendered;
 }
 
