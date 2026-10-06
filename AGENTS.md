@@ -32,6 +32,8 @@ Route the entry by product:
   `apps/agent-mobile/CHANGELOG.md`.
 - **Web app (`apps/zero-web`):** user-facing changes to the web surface (e.g. the
   Inbox) go in `apps/zero-web/CHANGELOG.md`, not the agent file.
+- **Emoji app (`apps/zeroapps-emoji`):** user-facing changes to the public emoji
+  page go in `apps/zeroapps-emoji/CHANGELOG.md`.
 
 `apps/zero-api/CHANGELOG.md` is bundled and surfaced in-product as Zero's
 read-only "Changelog" system topic (`apps/zero-api/src/store/system-topics.ts`),
@@ -71,6 +73,7 @@ and its folder is `apps/<Worker name>`.
 - `zeroapps-dashboard-web` (dashboard SPA, `dash.zeroapps.dev`) — build `pnpm turbo run build --filter=@zeroapps/dashboard-web`, deploy `pnpm -F @zeroapps/dashboard-web run deploy`
 - `zeroapps-landing` (landing site, `zeroapps.dev`) — build `pnpm -F @zeroapps/landing run build`, deploy `pnpm -F @zeroapps/landing run deploy`
 - `zeroapps-docs` (docs site, `docs.zeroapps.dev`) — build `pnpm -F @zeroapps/docs run build`, deploy `pnpm -F @zeroapps/docs run deploy`
+- `zeroapps-emoji` (public emoji suggester, `emoji.zeroapps.dev`) — build `pnpm turbo run build --filter=@zeroapps/emoji`, deploy `pnpm -F @zeroapps/emoji run deploy`. Needs `TYPESAFE_API_KEY` from the `zeroapps-emoji` ZeroVault project, set with `bin/sync-secrets-to-cloudflare`.
 
 Every connector scopes the build to its own package. The API Workers build
 with Vite and the Cloudflare Vite plugin, and the deploy commands ship that
@@ -96,6 +99,7 @@ trigger only uploads a version for branch pushes.
 | `zeroapps-dashboard-web` | `pnpm -F @zeroapps/dashboard-web run deploy` | `pnpm -F @zeroapps/dashboard-web exec wrangler versions upload` |
 | `zeroapps-landing` | `pnpm -F @zeroapps/landing run deploy` | `pnpm -F @zeroapps/landing exec wrangler versions upload` |
 | `zeroapps-docs` | `pnpm -F @zeroapps/docs run deploy` | `pnpm -F @zeroapps/docs exec wrangler versions upload` |
+| `zeroapps-emoji` | `pnpm -F @zeroapps/emoji run deploy` | `pnpm -F @zeroapps/emoji exec wrangler versions upload` |
 
 Rules, each learned from a real breakage (2026-07-28):
 
@@ -142,12 +146,13 @@ files, 3000+ changed files, or 20+ commits bypasses matching and always builds.
 
 Per-Worker **include** paths (exclude list is empty for every Worker):
 
-- **zero-api:** `apps/zero-api/*`, `packages/agent-core/*`, `packages/recurrence/*`
+- **zero-api:** `apps/zero-api/*`, `packages/agent-core/*`, `packages/recurrence/*`, `packages/emoji-suggest/*`, `packages/typesafe/*`
 - **zero-web:** `apps/zero-web/*`, `packages/agent-core/*`, `packages/recurrence/*`
 - **zeroapps-api:** `apps/zeroapps-api/*`, `packages/auth/*`, `packages/vault-core/*`, `packages/errors-core/*`
 - **zeroapps-dashboard-web:** `apps/zeroapps-dashboard-web/*`, `packages/ui/*`, `packages/vault-core/*`, `packages/errors-core/*`, `packages/auth/*`
 - **zeroapps-landing:** `apps/zeroapps-landing/*`
 - **zeroapps-docs:** `apps/zeroapps-docs/*`
+- **zeroapps-emoji:** `apps/zeroapps-emoji/*`, `packages/emoji-suggest/*`, `packages/typesafe/*`
 - **every Worker also includes the shared build roots:** `packages/typescript-config/*`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `turbo.json`, `package.json`, `patches/*`
 
 Each web app is its own Worker, so a web-only change redeploys only its web
@@ -165,7 +170,7 @@ its build-time values and nothing writes them to disk:
 ```bash
 gob run pnpm run deploy:agent      # zero-api + zero-web
 gob run pnpm run deploy:dashboard  # zeroapps-api + zeroapps-dashboard-web
-gob run pnpm run deploy:sites      # landing + docs
+gob run pnpm run deploy:sites      # landing + docs + emoji
 ```
 There is no root `deploy` script: an unwrapped whole-repo deploy would ship a
 web bundle built with no values in it.
@@ -219,11 +224,13 @@ Packages:
 - **Dashboard frontend:** `apps/zeroapps-dashboard-web` (`@zeroapps/dashboard-web`) is a Vite SPA served by the assets-only Worker `zeroapps-dashboard-web` on the `dash.zeroapps.dev` custom domain, with Vault at `/vault/*` and Errors at `/errors/*`. Its `/api` calls stay same-origin and reach `zeroapps-api` through the routes above.
 - **Landing site:** `apps/zeroapps-landing` (`@zeroapps/landing`) is a static Astro site served by the asset-only Worker `zeroapps-landing` for `zeroapps.dev`. `astro build` ships zero client JS with CSS inlined into `<head>`; unknown paths get a real 404 (`not_found_handling: 404-page`). It has no runtime secrets or API. It auto-deploys on push to `main` via its own Workers Builds connector (attached 2026-07-26).
 - **Docs site:** `apps/zeroapps-docs` (`@zeroapps/docs`) is a static Astro + Starlight site served by the asset-only Worker `zeroapps-docs` for `docs.zeroapps.dev`. It documents ZeroVault and ZeroErrors and ships per-page raw-markdown twins (bare `<page>.md`, e.g. `/vault/overview.md`) with a Copy Markdown button, plus `/llms.txt`, `/llms-full.txt`, `/llms-small.txt`. Unknown paths get a real 404 (`not_found_handling: 404-page`). Unlike landing it ships Starlight's own theme JS and a Pagefind search index (the zero-JS invariant is landing-only). The content is real and the site is indexable: no page carries a `noindex` or `nofollow` directive, `robots.txt` is `Allow: /` and declares `https://docs.zeroapps.dev/sitemap-index.xml`, and that sitemap lists exactly the HTML pages, never the `.md` twins or the `llms*.txt` files. It is submitted to Google Search Console under the `sc-domain:zeroapps.dev` property, which covers both `zeroapps.dev` and `docs.zeroapps.dev`. No runtime secrets or API. Build/deploy are package-scoped (`pnpm -F @zeroapps/docs ...`), never the whole-repo build. Auto-deploys on push to `main` via its own Workers Builds connector.
+- **Emoji suggester:** `packages/emoji-suggest` (`@zeroapps/emoji-suggest`) suggests emoji for a short text with TypeSafe's Jev. `zero-api` uses it for Project icons; `apps/zeroapps-emoji` (`@zeroapps/emoji`, Worker `zeroapps-emoji`) serves it publicly at `emoji.zeroapps.dev` with no sign-in, behind a 7-day cache and per-IP and global rate limits. See `packages/emoji-suggest/README.md`.
+- **TypeSafe connection:** `packages/typesafe` (`@zeroapps/typesafe`) holds the `Decide` port and the `typesafeDecide` adapter for Jev. Project suggestion and `@zeroapps/emoji-suggest` use it.
 - **Shared dashboard packages:** `packages/auth` (`@zero/auth`), `packages/ui` (`@zero/ui`), and the published `@zeroapps/cli` (`packages/zero-cli`), whose command is `zero`: `zero vault ...` for secrets, `zero errors ...` for issues, `zero keys` for the org-scoped key both products accept. It replaced `zv` outright, with no alias and no config or env-var migration.
 
 The dashboard uses one Clerk instance whose primary domain is `zeroapps.dev`, with the dashboard on `dash.zeroapps.dev`. The agent is a separate Clerk instance. See `docs/console-auth.md`.
 
-All deployable Workers (`zero-api`, `zero-web`, `zeroapps-api`, `zeroapps-dashboard-web`, `zeroapps-landing`, `zeroapps-docs`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place. Each connector's build watch paths are scoped to that Worker's dependencies (see Deployment → Build watch paths), so a push only redeploys the Workers it affects.
+All deployable Workers (`zero-api`, `zero-web`, `zeroapps-api`, `zeroapps-dashboard-web`, `zeroapps-landing`, `zeroapps-docs`, `zeroapps-emoji`) auto-deploy on push to `main` via this repo's Cloudflare Workers Builds connectors, each Worker updated in place. Each connector's build watch paths are scoped to that Worker's dependencies (see Deployment → Build watch paths), so a push only redeploys the Workers it affects.
 
 Expected dev ports:
 
@@ -233,6 +240,7 @@ Expected dev ports:
 | dashboard | 8792 | 9233 | 5178 |
 | landing | 8794 (Workers Assets) | n/a | 5180 |
 | docs | 8796 (Workers Assets) | n/a | 5182 |
+| emoji | 5184 (page and API on one Vite server) | 9234 | 5184 |
 
 `pnpm --filter @zeroapps/landing run dev:worker` serves the landing site's built `apps/zeroapps-landing/dist` directory through Workers Assets.
 
@@ -317,11 +325,11 @@ GET /accounts/4e04b64af4013414441c59014392bea0/ai-gateway/gateways/zero/logs?per
 
 ## Dev Server
 
-Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs and the landing and docs Astro apps.
+Start the dev server manually with `pnpm turbo dev` from the repo root. This launches the agent and dashboard API/web pairs, the landing and docs Astro apps, and the emoji app.
 
 If ports are unavailable or an app doesn't load, there may be lingering processes that need to be killed:
 ```bash
-for p in 5176 5178 5180 5182 8790 8792 8794 8796; do lsof -ti :$p | xargs -r kill -9; done
+for p in 5176 5178 5180 5182 5184 8790 8792 8794 8796; do lsof -ti :$p | xargs -r kill -9; done
 ```
 
 Then start the dev server again with `pnpm turbo dev`.

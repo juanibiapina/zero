@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zeroapps-emoji",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+  "secrets": {
+    "required": ["TYPESAFE_API_KEY"]
+  },
+  "ratelimits": [
+    { "name": "PER_IP", "namespace_id": "5001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "GLOBAL", "namespace_id": "5002", "simple": { "limit": 30, "period": 60 } }
+  ],
+  "routes": [{ "pattern": "emoji.zeroapps.dev", "custom_domain": true }],
+  "observability": {
+    "enabled": true
+  }
+}

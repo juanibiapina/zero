@@ -100,7 +100,10 @@ production environments. Create it as a custom Cloudflare token with only
 
 `TYPESAFE_API_KEY` belongs in the `zero-api` development and production
 environments. It authenticates the Worker's calls to TypeSafe's Jev model, which
-suggests a Project while a user types a new Task.
+suggests a Project while a user types a new Task and suggests Project icons.
+
+The public emoji app has its own key in the `zeroapps-emoji` ZeroVault project
+(`development` and `production`), so it can be revoked without touching Zero.
 
 Before deploying code that lists a new secret in `secrets.required`:
 

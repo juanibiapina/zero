@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Emoji for anything</title>
+    <meta name="description" content="Describe anything in a few words and get six emoji that fit. Click one to copy it." />
+    <meta name="theme-color" content="#f7f1e6" />
+    <meta property="og:title" content="Emoji for anything" />
+    <meta property="og:description" content="Describe anything in a few words and get six emoji that fit." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script type="module" src="/src/client/main.ts"></script>
+  </head>
+  <body>
+    <main class="page">
+      <form class="ask" id="ask" role="search" autocomplete="off">
+        <label class="ask-label" for="q">I need an emoji for</label>
+        <div class="ask-row">
+          <input
+            class="ask-input"
+            id="q"
+            name="q"
+            type="text"
+            maxlength="200"
+            placeholder="a trip to Japan"
+            enterkeyhint="search"
+            spellcheck="false"
+          />
+          <button class="ask-button" type="submit">Suggest</button>
+        </div>
+      </form>
+
+      <p class="examples" id="examples">
+        <span>Try</span>
+        <button type="button" data-example="a trip to Japan">a trip to Japan</button>
+        <button type="button" data-example="learning piano">learning piano</button>
+        <button type="button" data-example="my dog's birthday">my dog's birthday</button>
+        <button type="button" data-example="quitting coffee">quitting coffee</button>
+      </p>
+
+      <section class="results" aria-labelledby="results-title">
+        <h2 class="visually-hidden" id="results-title">Suggestions</h2>
+        <p class="status" id="status" role="status"></p>
+        <p class="visually-hidden" id="announce" aria-live="polite"></p>
+        <ul class="grid" id="grid"></ul>
+        <div class="share" id="share" hidden>
+          <button type="button" id="share-button">Share this search</button>
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <p>Suggestions by <a href="https://typesafe.ai">Jev from TypeSafe</a>.</p>
+    </footer>
+  </body>
+</html>

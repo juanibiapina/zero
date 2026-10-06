@@ -5,26 +5,28 @@ import { log } from "../log";
 import type { Project } from "../TaskDO/domain";
 import type { Env } from "../types";
 import { getTaskDO } from "../TaskDO/stub";
-import { createModel } from "../agents/model";
-import { suggestProjectIcons } from "../agents/icon-suggest";
+import { suggestEmoji, type EmojiSuggestion, type Purpose } from "@zeroapps/emoji-suggest";
+import { typesafeDecide } from "@zeroapps/typesafe";
 
 type Variables = {
   userId: string;
 };
 
-// The AI icon-suggestion seam, injectable so the route is testable without a
-// real model. The default builds a per-user model tagged `icon_suggest` (low
-// effort) and asks it for emoji; it never throws (a soft miss returns []).
+// The icon-suggestion seam, injectable so the route is testable without Jev.
+// It never throws: a soft miss returns no emoji.
 export type SuggestIcons = (
   env: Env,
   userId: string,
   input: { title: string; description?: string | null },
-) => Promise<string[]>;
+) => Promise<EmojiSuggestion>;
 
-const defaultSuggestIcons: SuggestIcons = async (env, userId, input) => {
-  const model = await createModel(env, userId, "icon_suggest");
-  return suggestProjectIcons(model, input);
+const PROJECT_ICON: Purpose = {
+  context: "The user is creating a project in their personal todo app and wants an emoji as its icon.",
+  subject: "project",
 };
+
+const defaultSuggestIcons: SuggestIcons = (env, _userId, input) =>
+  suggestEmoji(typesafeDecide(env.TYPESAFE_API_KEY), { ...input, purpose: PROJECT_ICON });
 
 const ProjectState = z.enum(["in-play", "backlog", "done"]);
 
@@ -166,9 +168,15 @@ export const createProjectsRoutes = (
   router.openapi(iconSuggestRoute, async (c) => {
     const userId = c.get("userId");
     const { title, description } = c.req.valid("json");
-    const icons = await suggestIcons(c.env, userId, { title, description });
-    log("project_icon_suggested", { clerk_user_id: userId, count: icons.length });
-    return c.json({ icons }, 200);
+    const started = Date.now();
+    const { emoji, inputTokens } = await suggestIcons(c.env, userId, { title, description });
+    log("project_icon_suggested", {
+      clerk_user_id: userId,
+      count: emoji.length,
+      input_tokens: inputTokens,
+      latency_ms: Date.now() - started,
+    });
+    return c.json({ icons: emoji }, 200);
   });
 
   const editRoute = createRoute({

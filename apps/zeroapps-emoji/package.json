@@ -1,0 +1,32 @@
+{
+  "name": "@zeroapps/emoji",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "zero vault run -p zeroapps-emoji -e development --mount .dev.vars -- vite dev",
+    "build": "vite build",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types --config wrangler.jsonc",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/client",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/fraunces": "^5.2.8",
+    "@zeroapps/emoji-suggest": "workspace:*",
+    "@zeroapps/typesafe": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.62.5",
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "@types/node": "^26.1.2",
+    "@zero/eslint-config": "workspace:*",
+    "@zero/typescript-config": "workspace:*",
+    "eslint": "10.8.0",
+    "typescript": "6.0.3",
+    "vite": "8.2.0",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.147.0"
+  }
+}

@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-06: Change suggested project icons to appear almost at once, drawn from every emoji, including your destination's flag for trips.
+
 - 2026-10-05: Add a suggested project when you type a new task on Home. Pick another project or No project to change it.
 
 - 2026-10-05: Change local AI agents to only see your medicines, not change them. Change medicines in the app so their reminders stay on time.

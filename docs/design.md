@@ -186,8 +186,7 @@ agents still use the single-`prompt` path.
 ### Reasoning effort
 
 Agent calls use `MODEL_ID` at the default `high` reasoning effort (resolved in
-`resolveModelSpec`, see [LLM path](#llm-path)), except project icon suggestions
-at `low`. They persist reasoning signatures without the reasoning prose. The
+`resolveModelSpec`, see [LLM path](#llm-path)). They persist reasoning signatures without the reasoning prose. The
 background agents also run at `high`: the
 learner and compaction decide what Zero remembers about a user, which is the
 judgement call whose mistakes last longest. Reasoning makes learner slices

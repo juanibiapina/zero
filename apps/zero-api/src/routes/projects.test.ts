@@ -148,8 +148,8 @@ describe("project routes", () => {
     expect(deleteProject).toHaveBeenCalledWith(PROJECT_ID);
   });
 
-  it("passes icon suggestion context through its separate model seam", async () => {
-    const suggestIcons = vi.fn(async () => ["🏃", "🎯"]);
+  it("passes icon suggestion context through its seam", async () => {
+    const suggestIcons = vi.fn(async () => ({ emoji: ["🏃", "🎯"], inputTokens: 1200 }));
     const response = await buildApp({}, suggestIcons)("/api/projects/icon-suggestions", json("POST", {
       title: "Run a 5K",
       description: "race",
@@ -163,7 +163,7 @@ describe("project routes", () => {
   });
 
   it("rejects an empty icon-suggestion title before calling the model", async () => {
-    const response = await buildApp({}, async () => ["🏃"])(
+    const response = await buildApp({}, async () => ({ emoji: ["🏃"], inputTokens: 1 }))(
       "/api/projects/icon-suggestions",
       json("POST", { title: "" }),
     );

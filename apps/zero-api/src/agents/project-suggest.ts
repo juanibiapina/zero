@@ -6,7 +6,7 @@
 // It never throws: a decision failure or an unexpected answer is a soft miss,
 // because a missing suggestion leaves quick add exactly as it was.
 
-import type { Decide, SystemOneRequest } from "./system-one";
+import type { Decide, SystemOneRequest } from "@zeroapps/typesafe";
 
 export type ProjectCandidate = {
   id: string;
@@ -76,7 +76,7 @@ export const suggestProject = async (
   try {
     const response = await decide(request);
     const answer = response?.answers?.[QUESTION];
-    if (!answer || typeof answer.choice !== "string") return MISS;
+    if (answer?.type !== "choice" || typeof answer.choice !== "string") return MISS;
     const probability = answer.probabilities?.[answer.choice];
     if (typeof probability !== "number") return MISS;
     const inputTokens = response.usage?.input_tokens ?? null;

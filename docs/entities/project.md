@@ -62,6 +62,16 @@ Several relationships read `2 projects` / `after 2 projects`.
 - **List** — return every non-Done Project, oldest first.
 - **Set state** — persist In-play, Backlog, or Done.
 - **Edit** — update supplied title, icon, or description fields.
+- **Suggest icons** — `POST /api/projects/icon-suggestions` returns up to six
+  emoji for a title and optional description, through the shared
+  `@zeroapps/emoji-suggest` package and TypeSafe's Jev (`jev-1.13.0`, key
+  `TYPESAFE_API_KEY`). See `packages/emoji-suggest/README.md` for how it picks
+  them. Any failure returns no icons. Each request logs
+  `project_icon_suggested` with its count, input tokens, and latency. On
+  2026-10-06 it suggested the hand-picked icon for 15 of 19 real Projects (the
+  previous LLM: 14), gave all 12 test titles naming a country, city, people, or
+  language that country's flag, and answered in 699 ms median and 877 ms p95,
+  against about 2.3 s before.
 - **Complete** — atomically persist Done and resolve every incoming After
   relationship before returning.
 - **Undo completion** — revive the Project to its prior In-play or Backlog state

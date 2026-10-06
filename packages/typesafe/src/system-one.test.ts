@@ -12,7 +12,7 @@ describe("typesafeDecide", () => {
     const answer = { model: JEV_MODEL, answers: {}, usage: { input_tokens: 10, output_tokens: 0 } };
     const fetchImpl = vi.fn<typeof fetch>(async () => Response.json(answer));
 
-    expect(await typesafeDecide({ TYPESAFE_API_KEY: "key" }, fetchImpl)(request)).toEqual(answer);
+    expect(await typesafeDecide("key", fetchImpl)(request)).toEqual(answer);
     const [url, init] = fetchImpl.mock.calls[0] ?? [];
     expect(url).toBe("https://api.typesafe.ai/v1/systemone");
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer key");
@@ -22,6 +22,6 @@ describe("typesafeDecide", () => {
   it("throws on a failed response", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => new Response("slow down", { status: 429 }));
 
-    await expect(typesafeDecide({ TYPESAFE_API_KEY: "key" }, fetchImpl)(request)).rejects.toThrow("429");
+    await expect(typesafeDecide("key", fetchImpl)(request)).rejects.toThrow("429");
   });
 });

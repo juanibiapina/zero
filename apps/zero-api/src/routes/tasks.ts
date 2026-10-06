@@ -9,7 +9,7 @@ import { log } from "../log";
 import type { Env } from "../types";
 import { getTaskDO } from "../TaskDO/stub";
 import { suggestProject, type ProjectSuggestion } from "../agents/project-suggest";
-import { typesafeDecide } from "../agents/system-one";
+import { typesafeDecide } from "@zeroapps/typesafe";
 
 type Variables = {
   userId: string;
@@ -43,7 +43,7 @@ export type SuggestTaskProject = (
 ) => Promise<ProjectSuggestion>;
 
 const defaultSuggestProject: SuggestTaskProject = (env, _userId, input) =>
-  suggestProject(typesafeDecide(env), input);
+  suggestProject(typesafeDecide(env.TYPESAFE_API_KEY), input);
 
 const ProjectCandidateSchema = z.object({
   id: z.string().min(1).max(100),

@@ -55,17 +55,8 @@ describe("resolveModelSpec", () => {
     ).toEqual({ modelId: "gpt-6-luna", effort: "high" });
   });
 
-  it("runs the icon_suggest agent at low effort, leaving others at high", () => {
-    expect(
-      resolveModelSpec(makeEnv(), { agent: "icon_suggest", clerkUserId: "u" })
-        .effort,
-    ).toBe("low");
-    expect(
-      resolveModelSpec(makeEnv(), { agent: "interface", clerkUserId: "u" })
-        .effort,
-    ).toBe("high");
-    // The default effort backs every label that has no override entry.
-    expect(AGENT_EFFORT_OVERRIDES.interface).toBeUndefined();
+  it("has no effort overrides, so every agent reasons at high", () => {
+    expect(AGENT_EFFORT_OVERRIDES).toEqual({});
   });
 
   it("honors a per-agent override for that agent only", () => {
@@ -172,13 +163,13 @@ describe("createModel", () => {
     expect(standard.usage.costUsd).toBeCloseTo(0.0000035, 10);
 
     inputTokens = 272001;
-    const iconModel = await createModel(
-      makeEnv(), "user_123", "icon_suggest", fetchImpl,
+    const learnerModel = await createModel(
+      makeEnv(), "user_123", "learner", fetchImpl,
     );
-    const longContext = await iconModel.generate(request());
+    const longContext = await learnerModel.generate(request());
     expect(calls[1].body).toMatchObject({
       model: "gpt-6-luna",
-      reasoning: { effort: "low" },
+      reasoning: { effort: "high" },
     });
     expect(longContext.usage.costUsd).toBeCloseTo(
       (272001 * 0.2 + 5 * 0.75) / 1_000_000,

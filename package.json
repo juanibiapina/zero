@@ -16,7 +16,7 @@
     "build:dashboard": "zero vault run -p zerovault-web -e production -- turbo run build --filter=@zeroapps/dashboard-web",
     "deploy:agent": "zero vault run -p zero-web -e production -- turbo run deploy --filter=@zero/api --filter=@zero/web",
     "deploy:dashboard": "zero vault run -p zerovault-web -e production -- turbo run deploy --filter=@zeroapps/api --filter=@zeroapps/dashboard-web",
-    "deploy:sites": "turbo run deploy --filter=@zeroapps/landing --filter=@zeroapps/docs"
+    "deploy:sites": "turbo run deploy --filter=@zeroapps/landing --filter=@zeroapps/docs --filter=@zeroapps/emoji"
   },
   "devDependencies": {
     "@zeroapps/cli": "0.7.0",

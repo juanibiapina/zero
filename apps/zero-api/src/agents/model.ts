@@ -23,11 +23,7 @@ export type AgentLabel =
   | "learner"
   | "compaction"
   | "onboarding"
-  | "admin_task"
-  // A one-shot, tool-less structured call: suggest emoji icons for a project
-  // from its title/description. Trivial mapping, so it runs at `low` effort (see
-  // AGENT_EFFORT_OVERRIDES) and is tagged separately for gateway cost attribution.
-  | "icon_suggest";
+  | "admin_task";
 
 // Per-agent model overrides, empty on purpose. Zero runs one model everywhere;
 // this is the lever for the agent whose quality is hardest to recover if the
@@ -62,13 +58,9 @@ export interface ModelSelection {
 // docs/plans/openai-gpt56-luna.md). A silent drop here is a silent quality drop.
 export const DEFAULT_EFFORT: Effort = "high";
 
-// Per-agent effort overrides, mirroring AGENT_MODEL_OVERRIDES. Empty of the
-// agents that must stay at `high` (that quality bar is load-bearing); the only
-// entry is the one agent whose task is a trivial mapping where `high` only
-// wastes latency and money. Adding an entry is a code change on purpose.
-export const AGENT_EFFORT_OVERRIDES: Partial<Record<AgentLabel, Effort>> = {
-  icon_suggest: "low",
-};
+// Per-agent effort overrides, mirroring AGENT_MODEL_OVERRIDES. Empty: every
+// agent reasons at `high`. Adding an entry is a code change on purpose.
+export const AGENT_EFFORT_OVERRIDES: Partial<Record<AgentLabel, Effort>> = {};
 
 // The single model+effort decision point. Today: the per-agent override or the
 // configured MODEL_ID, always at the default effort. This is the one place

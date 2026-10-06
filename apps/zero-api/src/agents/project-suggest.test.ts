@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { suggestProject, type ProjectCandidate } from "./project-suggest";
-import type { Decide, SystemOneRequest, SystemOneResponse } from "./system-one";
+import type { Decide, SystemOneRequest, SystemOneResponse } from "@zeroapps/typesafe";
 
 const bathroom: ProjectCandidate = {
   id: "project-bathroom",
@@ -68,7 +68,8 @@ describe("suggestProject", () => {
 
     const request: SystemOneRequest | undefined = decide.mock.calls[0]?.[0];
     expect(request?.state).toEqual({ draft_task: "buy grout" });
-    const criteria = request?.questions.project?.criteria ?? {};
+    const question = request?.questions.project;
+    const criteria: Record<string, unknown> = question?.type === "choice" ? question.criteria : {};
     expect(Object.keys(criteria)).toEqual(["p1", "p2", "none"]);
     expect(criteria.p1).toBe("🛁 Bathroom renovation. Redo the tiles Open tasks: choose tiles; get plumber quotes");
     expect(criteria.p2).toBe("✈️ Lisbon trip.");
