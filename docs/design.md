@@ -205,7 +205,7 @@ resolve together in one place (`resolveModelSpec`), on pi-ai's provider-neutral
 effort scale (default `high`). pi-ai's built-in `cloudflare-ai-gateway` provider
 owns the transport and routes by the model's own `api`, so `MODEL_ID` alone
 decides where traffic goes and a rollback to a Cloudflare-gateway catalog id such
-as `claude-sonnet-4.6` (dotted, Anthropic Messages wire) needs no code change.
+as `claude-sonnet-4-6` (Anthropic Messages wire) needs no code change.
 
 Usage is accounted per execution, as an estimate. Each completed agent execution
 writes one aggregate call/token/cost point to the `AI_USAGE` Analytics Engine

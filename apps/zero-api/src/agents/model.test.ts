@@ -84,14 +84,14 @@ describe("createModel", () => {
   });
 
   // Rollback is a var flip, not a code change: the gateway catalog holds the
-  // claude models (dotted id, e.g. `claude-sonnet-4.6`) and routes them to the
+  // claude models (e.g. `claude-sonnet-4-6`) and routes them to the
   // Anthropic wire by the model's own `api`.
   it("builds a claude model id from the same catalog for rollback", async () => {
     const model = await createModel(
-      makeEnv({ MODEL_ID: "claude-sonnet-4.6" }),
+      makeEnv({ MODEL_ID: "claude-sonnet-4-6" }),
       "user_123",
     );
-    expect(model).toMatchObject({ modelId: "claude-sonnet-4.6" });
+    expect(model).toMatchObject({ modelId: "claude-sonnet-4-6" });
   });
 
   it("tags each agent independently off one factory", async () => {

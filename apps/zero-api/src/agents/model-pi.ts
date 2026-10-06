@@ -252,7 +252,7 @@ const toAssistantContent = (
         type: "toolCall",
         id: block.id,
         name: block.name,
-        arguments: (block.input ?? {}) as Record<string, unknown>,
+        arguments: (block.input ?? {}) as ToolCall["arguments"],
       });
     }
     // Images and tool results never appear in an assistant message.
