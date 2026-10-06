@@ -1,3 +1,5 @@
+import type { Awaitable } from "../awaitable";
+
 // The schedule port the agent tools are written against. It carries no SQLite,
 // no croner, no Durable Object and no chat id: a tool can create, list and
 // cancel, and nothing else.
@@ -29,8 +31,8 @@ export interface ScheduleBook {
     prompt: string;
     pattern: string;
     timezone: string;
-  }): CreateScheduleResult;
-  list(): Schedule[];
+  }): Awaitable<CreateScheduleResult>;
+  list(): Awaitable<Schedule[]>;
   // False when no active schedule has this id (unknown, or already cancelled).
-  cancel(id: string): boolean;
+  cancel(id: string): Awaitable<boolean>;
 }

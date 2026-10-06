@@ -6,10 +6,10 @@
 //
 //   1. Release the Telegram claim first. While it stands, an inbound message
 //      still resolves to this user and writes fresh rows behind the purge.
-//   2. Kill the deadlines and the learning job. Both exist to call back into
+//   2. Kill the deadlines and the assistant. Both exist to call back into
 //      UserDO later, so they have to stop before UserDO is emptied.
 //   3. Empty UserDO, which is the data the user actually means.
-//   4. Purge deadlines and learning a second time. A learner slice that was
+//   4. Purge deadlines and the assistant a second time. An agent run that was
 //      already mid-flight in step 2 runs for minutes and keeps writing topics
 //      over RPC, so this catches what it re-armed. It cannot close the window
 //      completely; a write that lands after this re-creates the object's schema
@@ -26,10 +26,12 @@ export interface PurgeDeps {
   telegramId: string | null;
   releaseTelegram: (telegramId: string) => Promise<void>;
   purgeSchedules: () => Promise<void>;
-  purgeLearning: () => Promise<void>;
+  purgeAssistant: () => Promise<void>;
   purgeUser: () => Promise<void>;
   purgeTasks: () => Promise<void>;
   resetTasks: () => Promise<void>;
+  // ctx.abort() on AssistantDO, so the emptied instance cannot serve again.
+  dropAssistant: () => Promise<void>;
   // ctx.abort() on UserDO. ALWAYS rejects on this side: the error it raises "is
   // not able to be caught within the application code", so the RPC connection
   // dies instead of returning. That rejection means it worked.
@@ -40,14 +42,19 @@ export const purgeUserData = async (deps: PurgeDeps): Promise<void> => {
   if (deps.telegramId !== null) await deps.releaseTelegram(deps.telegramId);
 
   await deps.purgeSchedules();
-  await deps.purgeLearning();
+  await deps.purgeAssistant();
 
   await deps.purgeUser();
 
   await deps.purgeSchedules();
-  await deps.purgeLearning();
+  await deps.purgeAssistant();
   await deps.purgeTasks();
 
+  try {
+    await deps.dropAssistant();
+  } catch {
+    // AssistantDO aborts after its storage is empty, like TaskDO.
+  }
   try {
     await deps.resetTasks();
   } catch {

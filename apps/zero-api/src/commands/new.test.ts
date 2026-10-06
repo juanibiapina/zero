@@ -20,7 +20,7 @@ const createFakeUserDO = (): UserDOStub & { _reset: Array<[number, number]> } =>
   const reset: Array<[number, number]> = [];
   return {
     _reset: reset,
-    resetConversation: (chatId: number, topicId: number) => {
+    resetConversation: async (chatId: number, topicId: number) => {
       reset.push([chatId, topicId]);
     },
   };

@@ -53,8 +53,8 @@
         "class_name": "ScheduleDO"
       },
       {
-        "name": "LEARNING_DO",
-        "class_name": "LearningDO"
+        "name": "ASSISTANT_DO",
+        "class_name": "AssistantDO"
       }
     ]
   },
@@ -96,6 +96,14 @@
     {
       "tag": "v9",
       "new_sqlite_classes": ["ScheduleDO", "LearningDO"]
+    },
+    {
+      "tag": "v10",
+      "new_sqlite_classes": ["AssistantDO"]
+    },
+    {
+      "tag": "v11",
+      "deleted_classes": ["LearningDO"]
     }
   ]
 }

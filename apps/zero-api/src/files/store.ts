@@ -1,3 +1,4 @@
+import type { Settled } from "../awaitable";
 import { log } from "../log";
 import type { FileRecordStore } from "../store/types";
 import {
@@ -84,7 +85,7 @@ export const createUserFileStore = (input: {
   clerkUserId: string;
   records: FileRecordStore;
   blobs: FileBlobStore;
-}): UserFileStore => {
+}): Settled<UserFileStore> => {
   const { clerkUserId, records, blobs } = input;
   const prefix = `files/${clerkUserId}/`;
 

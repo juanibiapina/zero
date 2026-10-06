@@ -12,7 +12,8 @@ const deps = (overrides: Partial<PurgeDeps> = {}): PurgeDeps & { calls: string[]
     telegramId: "555",
     releaseTelegram: record("telegram"),
     purgeSchedules: record("schedules"),
-    purgeLearning: record("learning"),
+    purgeAssistant: record("assistant"),
+    dropAssistant: record("dropAssistant"),
     purgeUser: record("user"),
     purgeTasks: record("tasks"),
     resetTasks: record("resetTasks"),
@@ -37,7 +38,7 @@ describe("purgeUserData", () => {
     expect(d.calls[0]).toBe("schedules");
   });
 
-  it("wipes the user's own data after the deadlines and learning jobs", async () => {
+  it("wipes the user's own data after the deadlines and the assistant", async () => {
     const d = deps();
 
     await purgeUserData(d);
@@ -45,11 +46,12 @@ describe("purgeUserData", () => {
     expect(d.calls).toEqual([
       "telegram",
       "schedules",
-      "learning",
+      "assistant",
       "user",
       "schedules",
-      "learning",
+      "assistant",
       "tasks",
+      "dropAssistant",
       "resetTasks",
       "reset",
     ]);
@@ -64,11 +66,12 @@ describe("purgeUserData", () => {
     expect(releaseTelegram).not.toHaveBeenCalled();
     expect(d.calls).toEqual([
       "schedules",
-      "learning",
+      "assistant",
       "user",
       "schedules",
-      "learning",
+      "assistant",
       "tasks",
+      "dropAssistant",
       "resetTasks",
       "reset",
     ]);

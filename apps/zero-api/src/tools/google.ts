@@ -118,11 +118,15 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
   // Watch the thread a send landed in, so its reply is noticed. Never fails the
   // send: mail that is out cannot be unsent, and a watch that could not be
   // recorded is a smaller loss than an error the model reads as "not sent".
-  const watchSent = (threadId: string): void => {
+  const watchSent = async (threadId: string): Promise<void> => {
     if (!mailWatch) return;
-    const result = mailWatch.watch(threadId);
-    if ("error" in result) return;
-    onWatchChanged?.();
+    try {
+      const result = await mailWatch.watch(threadId);
+      if ("error" in result) return;
+      onWatchChanged?.();
+    } catch (err) {
+      log("mail_watch_after_send_failed", { error: err instanceof Error ? err.message : String(err) });
+    }
   };
 
   return {
@@ -201,7 +205,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
       }),
       execute: async (input) => {
         const sent = await writeGuard("gmail_send", () => google.mail.send(input));
-        watchSent(sent.threadId);
+        await watchSent(sent.threadId);
         return sent;
       },
       // Irreversible: once the mail leaves there is no unsend, so a resumed turn
@@ -313,7 +317,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
         const sent = await writeGuard("gmail_send_draft", () =>
           google.mail.sendDraft(draftId),
         );
-        watchSent(sent.threadId);
+        await watchSent(sent.threadId);
         return sent;
       },
       // Irreversible, exactly like gmail_send: there is no unsend.
@@ -490,7 +494,7 @@ export const buildGoogleTools = (deps: GoogleToolsDeps): AgentToolSet => {
           // A missing file provably sent nothing, so it is reported as a
           // completed non-effect rather than an unknown outcome.
           if (!files) throw new ExternalCallNotSent("File storage is unavailable.");
-          const file = files.get(fileId);
+          const file = await files.get(fileId);
           if (!file) throw new ExternalCallNotSent(`No file found for id ${fileId}.`);
           const bytes = await files.read(fileId);
           if (!bytes) throw new ExternalCallNotSent(`No file found for id ${fileId}.`);

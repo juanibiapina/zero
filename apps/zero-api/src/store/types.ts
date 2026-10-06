@@ -83,6 +83,23 @@ export interface Thread {
   topicId: number;
 }
 
+export interface LegacyExport {
+  id: string;
+  chatId: number;
+  topicId: number;
+  summary: string | null;
+  boundary: number | null;
+  messages: {
+    id: number;
+    kind: MessageKind;
+    content: ContentBlock[];
+    stopReason: string | null;
+    consolidated: boolean;
+    createdAt: string;
+  }[];
+  pending: { id: number; content: string }[];
+}
+
 // User-owned file metadata. Bytes live in R2 under storageKey. Legacy records
 // may have an unknown byte size until file-store quota enforcement backfills it.
 export interface StoredFileRecord {
@@ -241,6 +258,11 @@ export interface ConversationStore {
   // mailwatch, wake) drain as user rows too, so a role filter would not isolate
   // genuine speech. Used to pick the topic to re-open when waking a sleeper.
   getMostRecentConversation(): Thread | null;
+  getConversationThread(conversationId: string): Thread | null;
+  // Every conversation's legacy transcript for the one-time move into the
+  // assistant: the summary and boundary, messages after the boundary plus
+  // unconsolidated ones before it, and messages still queued.
+  exportLegacyConversations(): LegacyExport[];
   // Queue a Telegram message for this conversation. It enters the transcript
   // only when a turn drains the queue, so a message arriving mid-run is never
   // spliced into a request the model is already answering.
@@ -460,6 +482,8 @@ export interface SettingsStore {
 
   // Record an update id; true if newly seen, false if already processed.
   markProcessed(updateId: string): boolean;
+  // Whether an update id was already recorded, without recording it.
+  isProcessed(updateId: string): boolean;
 
   // True exactly once per user, on the first call. Persisted, so a relink, a
   // DO eviction or a second /start never re-introduces Zero. The

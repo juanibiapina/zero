@@ -1,3 +1,5 @@
+import type { Awaitable } from "../awaitable";
+
 // The watched-thread port the agent tools are written against. No SQLite, no
 // Gmail, no Durable Object, no chat id: a tool can watch, list and stop, and
 // nothing else.
@@ -17,8 +19,8 @@ export type WatchResult =
   | { error: string; reason: WatchRejection };
 
 export interface MailWatchBook {
-  watch(threadId: string): WatchResult;
-  list(): WatchedThread[];
+  watch(threadId: string): Awaitable<WatchResult>;
+  list(): Awaitable<WatchedThread[]>;
   // False when this thread was not being watched.
-  stop(threadId: string): boolean;
+  stop(threadId: string): Awaitable<boolean>;
 }

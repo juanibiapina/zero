@@ -5,6 +5,7 @@
 // to this conversation), so the tools stay a thin translation to the model's
 // wire format.
 
+import type { Settled } from "../awaitable";
 import { MAX_WATCHED_THREADS } from "../do/mail-watch";
 import { log } from "../log";
 import type { MailThreadRecord, MailThreadStore } from "../store/types";
@@ -23,7 +24,7 @@ const toWatched = (record: MailThreadRecord): WatchedThread => ({
 
 export const createMailWatchBook = (
   deps: MailWatchBookDeps,
-): MailWatchBook => {
+): Settled<MailWatchBook> => {
   const { store, conversationId } = deps;
 
   return {

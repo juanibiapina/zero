@@ -8,7 +8,6 @@ import {
   scheduleDeadline,
   setDeadline,
   takeDueDeadlines,
-  requestLearnSafely,
   requestWakeSafely,
   retryDeadline,
   retryDispatch,
@@ -214,35 +213,6 @@ describe("best-effort scheduling from the turn path", () => {
     };
     await expect(
       touchScheduleSafely(schedule, "user_1", "c1"),
-    ).resolves.toBeUndefined();
-  });
-
-  it("swallows a failed learn request and passes the reason through otherwise", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const calls: Array<[string, string, string | undefined]> = [];
-    const schedule = {
-      touch: async () => {},
-      requestLearn: async (user: string, reason: "idle" | "size", conversationId?: string) => {
-        calls.push([user, reason, conversationId]);
-      },
-      requestReminderAt: async () => {},
-      requestMailWatchAt: async () => {},
-      requestWakeAt: async () => {},
-    };
-    await requestLearnSafely(schedule, "user_1", "size", "c1");
-    expect(calls).toEqual([["user_1", "size", "c1"]]);
-
-    const broken = {
-      touch: async () => {},
-      requestLearn: async () => {
-        throw new Error("do unreachable");
-      },
-      requestReminderAt: async () => {},
-      requestMailWatchAt: async () => {},
-      requestWakeAt: async () => {},
-    };
-    await expect(
-      requestLearnSafely(broken, "user_1", "size", "c1"),
     ).resolves.toBeUndefined();
   });
 

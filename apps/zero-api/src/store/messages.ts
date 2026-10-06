@@ -5,8 +5,8 @@
 // "what kind of row is this" and "does this conversation still need the model"
 // lives here as pure functions, testable without a Durable Object.
 
-import type { ContentBlock, ToolResultContent } from "../agents/protocol";
-import type { Message, MessageContent, MessageKind, Role } from "./types";
+import type { ContentBlock } from "../agents/protocol";
+import type { MessageContent, MessageKind, Role } from "./types";
 
 // The default kind for a row the caller did not classify: a user row is a real
 // user message, an assistant row is a model response. `tool_result` rows are
@@ -107,14 +107,6 @@ export const conversationHasWork = (input: {
   return true;
 };
 
-// --- context rendering ---
-
-// How many rows one context read pages in. This is a query bound, not a context
-// ceiling: what keeps a conversation's context small is size-triggered
-// compaction moving its boundary. It exists so a single read cannot pull an
-// unbounded number of rows out of storage.
-export const CONTEXT_MESSAGE_PAGE = 500;
-
 // Make a rendered window safe to send. A window can open mid-turn in two ways:
 // a read that hit `CONTEXT_MESSAGE_PAGE` and cut the oldest rows, or a boundary
 // that landed between an assistant `tool_use` and its `tool_result`. Either way
@@ -155,22 +147,8 @@ export const safeCompactionCut = (
   return null;
 };
 
-// Rough token estimate from character count (~4 chars per token). Used only for
-// the `context_rendered` log line the compaction threshold is derived from, so
-// an approximation is enough; the real number comes from the gateway.
+// Rough token estimate from character count (~4 chars per token).
 export const estimateTokens = (chars: number): number => Math.ceil(chars / 4);
-
-export const contentChars = (content: MessageContent): number =>
-  typeof content === "string" ? content.length : JSON.stringify(content).length;
-
-// The rendered-context size at which a conversation asks for learning, which is
-// what triggers its compaction. Provisional, and deliberately not presented as
-// derived: a large prefix costs cache reads on every call of every turn (100k
-// tokens at $0.30/M is ~$0.03 per call, several calls per turn), while
-// compaction costs one summarization plus a cache rebuild. 45k is the starting
-// point named in PLAN.md; `context_rendered.total_tokens` from real sessions is
-// what must move it.
-export const LEARN_SIZE_THRESHOLD_TOKENS = 45_000;
 
 // --- staleness ---
 
@@ -180,76 +158,3 @@ export const LEARN_SIZE_THRESHOLD_TOKENS = 45_000;
 // different version with this stub.
 export const STALE_TOPIC_STUB =
   "[stale: topic knowledge changed; reread before using or writing]";
-
-// Tools whose results carry a knowledge version and therefore go stale.
-const TOPIC_READ_TOOLS = new Set(["list_topics", "get_topic", "list_backlinks"]);
-
-// The version a persisted tool result was taken at, or null when the payload
-// carries none (a pre-versioning row, or an error result).
-const resultVersion = (content: ToolResultContent): number | null => {
-  const text = typeof content === "string" ? content : null;
-  if (text === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === "object" && "version" in parsed) {
-      const v: unknown = parsed.version;
-      return typeof v === "number" ? v : null;
-    }
-  } catch {
-    // not JSON: no version to compare
-  }
-  return null;
-};
-
-// How many persisted topic-read results the rendered context carries. Counted
-// on the filtered messages, so subtracting `stale_stubs` gives the reads the
-// model does not have to make again this turn.
-export const countTopicReads = (messages: Message[]): number => {
-  const toolNames = new Map<string, string>();
-  let count = 0;
-  for (const message of messages) {
-    if (typeof message.content === "string") continue;
-    for (const block of message.content) {
-      if (block.type === "tool_use") toolNames.set(block.id, block.name);
-      else if (
-        block.type === "tool_result" &&
-        TOPIC_READ_TOOLS.has(toolNames.get(block.tool_use_id) ?? "")
-      )
-        count++;
-    }
-  }
-  return count;
-};
-
-// Replace, never delete: every `tool_use` block requires a matching
-// `tool_result`, so a stale read keeps its pair and loses only its content.
-// Mechanical and version-based, so it applies to every conversation without a
-// model call. Returns the rendered messages and how many results were stubbed
-// (logged as `context_rendered.stale_stubs`).
-export const applyStalenessFilter = (
-  messages: Message[],
-  currentVersion: number,
-): { messages: Message[]; stubbed: number } => {
-  const toolNames = new Map<string, string>();
-  let stubbed = 0;
-  const out = messages.map((message) => {
-    const content = message.content;
-    if (typeof content === "string") return message;
-    let changed = false;
-    const blocks = content.map((block): ContentBlock => {
-      if (block.type === "tool_use") {
-        toolNames.set(block.id, block.name);
-        return block;
-      }
-      if (block.type !== "tool_result") return block;
-      const name = toolNames.get(block.tool_use_id);
-      if (name === undefined || !TOPIC_READ_TOOLS.has(name)) return block;
-      if (resultVersion(block.content) === currentVersion) return block;
-      changed = true;
-      stubbed++;
-      return { ...block, content: STALE_TOPIC_STUB };
-    });
-    return changed ? { ...message, content: blocks } : message;
-  });
-  return { messages: out, stubbed };
-};

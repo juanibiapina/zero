@@ -24,6 +24,7 @@ import type {
   Role,
   ScheduleRecord,
   Store,
+  LegacyExport,
   Thread,
   Topic,
   TopicMeta,
@@ -274,6 +275,14 @@ export class SystemTopicStore implements Store {
     this.inner.resetConversation(chatId, topicId);
   }
 
+  getConversationThread(conversationId: string): Thread | null {
+    return this.inner.getConversationThread(conversationId);
+  }
+
+  exportLegacyConversations(): LegacyExport[] {
+    return this.inner.exportLegacyConversations();
+  }
+
   getMostRecentConversation(): Thread | null {
     return this.inner.getMostRecentConversation();
   }
@@ -453,6 +462,10 @@ export class SystemTopicStore implements Store {
 
   unlinkTelegram(): { removed: string | null } {
     return this.inner.unlinkTelegram();
+  }
+
+  isProcessed(updateId: string): boolean {
+    return this.inner.isProcessed(updateId);
   }
 
   markProcessed(updateId: string): boolean {

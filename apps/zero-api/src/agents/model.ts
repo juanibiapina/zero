@@ -1,19 +1,9 @@
-// The LLM seam's front door: resolve which model and effort a given agent runs
-// on, then hand back a tagged `AgentModel`. The library that speaks to the
-// providers (@earendil-works/pi-ai) lives behind the adapter in model-pi.ts;
-// everything downstream sees only the dependency-free `AgentModel` from
-// protocol.ts.
-//
-// Provider routing is not Zero's job any more: pi-ai's built-in
-// cloudflare-ai-gateway provider routes by the model's own `api`, so a
-// `MODEL_ID` flip from a `gpt-*` (Responses) id to a `claude-*` (Messages) id
-// switches wire protocol with no code change. `providerFor` is kept only to
-// document that property and for tests.
+// Which model and effort each agent runs on, and the gateway attribution tag.
+// Provider routing is pi-ai's job: a `MODEL_ID` flip from a `gpt-*` (Responses)
+// id to a `claude-*` (Messages) id switches wire protocol with no code change.
+// assistant/models.ts turns these choices into pi-ai providers.
 
-import type { AgentModel } from "./protocol";
 import type { Env } from "../types";
-import type { AiUsageAttribution } from "./ai-usage";
-import { createPiModel } from "./model-pi";
 
 // The agents that issue LLM calls. Each turn runs the interface agent (which may
 // search the web in its own loop) then the writer; onboarding and admin tasks
@@ -88,46 +78,3 @@ export const gatewayMetadata = (
   clerkUserId: string,
   agent: AgentLabel,
 ): string => JSON.stringify({ user_id: clerkUserId, agent });
-
-// Build a per-agent model factory for one user. pi-ai's provider owns the base
-// URL (from the gateway env template), so there is no per-provider async
-// resolution any more; the returned function stamps each model with its agent
-// tag, resolved model id, and effort.
-export const createModelFactory = async (
-  env: Env,
-  clerkUserId: string,
-  fetchImpl?: typeof fetch,
-  attribution?: AiUsageAttribution,
-): Promise<(agent: AgentLabel) => AgentModel> => {
-  return (agent: AgentLabel): AgentModel => {
-    const { modelId, effort } = resolveModelSpec(env, { agent, clerkUserId });
-    return createPiModel({
-      env,
-      clerkUserId,
-      agent,
-      modelId,
-      effort,
-      metadata: gatewayMetadata(clerkUserId, agent),
-      fetchImpl,
-      attribution,
-    });
-  };
-};
-
-// Single-model convenience over the factory, for callers outside a turn (e.g.
-// onboarding). Defaults to the interface tag.
-export const createModel = async (
-  env: Env,
-  clerkUserId: string,
-  agent: AgentLabel = "interface",
-  fetchImpl?: typeof fetch,
-  attribution?: AiUsageAttribution,
-): Promise<AgentModel> => {
-  const makeModel = await createModelFactory(
-    env,
-    clerkUserId,
-    fetchImpl,
-    attribution,
-  );
-  return makeModel(agent);
-};

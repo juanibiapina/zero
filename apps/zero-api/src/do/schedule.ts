@@ -219,21 +219,6 @@ export const touchScheduleSafely = async (
   }
 };
 
-// Ask for learning now, best-effort, for the same reason: a turn that has
-// already answered the user must not fail because a timer could not be set.
-export const requestLearnSafely = async (
-  schedule: ScheduleTarget,
-  clerkUserId: string,
-  reason: "idle" | "size",
-  conversationId?: string,
-): Promise<void> => {
-  try {
-    await schedule.requestLearn(clerkUserId, reason, conversationId);
-  } catch (err) {
-    logError("schedule_request_failed", { reason, error: fmtErr(err) });
-  }
-};
-
 // Hold the user's reminder deadline at their earliest pending schedule, or
 // clear nothing when there is none. Best-effort for the same reason as the
 // others: a timer that cannot be armed must not fail the turn that set it, and

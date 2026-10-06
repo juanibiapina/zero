@@ -1,30 +1,43 @@
-// A schedule coming due, end to end in process: the firing pass queues the
-// prompt, and the ordinary turn path answers it and messages the user. This is
-// what says the two halves fit — everything either side of it is unit-tested,
-// and the seam between them is where a scheduled turn would silently do nothing.
+// A schedule coming due, end to end in process: the firing pass hands the
+// prompt to the assistant, and the assistant answers it and messages the user.
+// This is what says the two halves fit; the seam between them is where a
+// scheduled turn would silently do nothing.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
 import { fireDueSchedules } from "./schedules";
-import { runTurn } from "../agents/orchestrator";
-import { capturingModel } from "../agents/mock-model";
 import { MemoryStore } from "../store/memory";
-import { createMemorySearch } from "../websearch/memory";
-import { createMemoryFetcher } from "../pagefetch/memory";
-import { createMemoryGoogle } from "../google/memory";
 import { createScheduleBook } from "../schedules/book";
 import { composeTurnText, SCHEDULE_NOTE } from "../UserDO/turn-text";
 import { nextRun } from "../schedules/recurrence";
-import type { AgentModelRequest } from "../agents/protocol";
+import { createTestAssistant } from "../assistant/test-support";
 
 const NOW = new Date("2026-01-02T12:00:00Z").getTime();
 
-const fire = (store: MemoryStore, now: number) =>
+type Submitted = { conversationId: string; text: string; operationId: string };
+
+const fire = (
+  store: MemoryStore,
+  now: number,
+  submit: (conversationId: string, text: string, operationId: string) => Promise<void>,
+) =>
   fireDueSchedules({
     store,
     now,
     nextRun,
     composeText: (prompt) => composeTurnText({ note: SCHEDULE_NOTE, text: prompt }),
+    submit,
   });
+
+const recorder = () => {
+  const submitted: Submitted[] = [];
+  return {
+    submitted,
+    submit: async (conversationId: string, text: string, operationId: string) => {
+      submitted.push({ conversationId, text, operationId });
+    },
+  };
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -33,11 +46,7 @@ describe("a schedule coming due", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const store = new MemoryStore();
     const conversationId = store.getOrCreateConversation(1, 0);
-    const book = createScheduleBook({
-      store,
-      conversationId,
-      now: () => NOW,
-    });
+    const book = createScheduleBook({ store, conversationId, now: () => NOW });
     const created = book.create({
       prompt: "remind the user to take the bread out",
       pattern: "2026-01-02T13:10:00",
@@ -45,43 +54,32 @@ describe("a schedule coming due", () => {
     });
     if ("error" in created) throw new Error(created.error);
 
-    // Nothing is due yet, so nothing is queued.
-    expect(fire(store, NOW)).toBe(0);
-
-    // The moment arrives.
-    expect(fire(store, created.schedule.nextDueAt! + 1000)).toBe(1);
-
-    const sent: string[] = [];
-    const requests: AgentModelRequest[] = [];
-    const model = capturingModel((request) => {
-      requests.push(request);
-      return {
-        content: [{ type: "text", text: "Bread's ready to come out." }],
-      };
-    });
-
-    await runTurn({
+    const seen: string[] = [];
+    const t = await createTestAssistant({
       store,
-      makeModel: () => model,
-      send: async (text) => void sent.push(text),
-      search: createMemorySearch(),
-      fetcher: createMemoryFetcher(),
-      google: createMemoryGoogle(),
-      chatId: 1,
-      topicId: 0,
+      steps: [
+        (context) => {
+          seen.push(JSON.stringify(context.messages));
+          return fauxAssistantMessage("Bread's ready to come out.");
+        },
+      ],
     });
+    const submit = async (conversation: string, text: string, operationId: string) =>
+      t.assistant.submit({ chat: { chatId: 1, topicId: 0 }, conversationId: conversation, text, operationId });
 
-    // The model saw the note and the prompt, and the user got the message.
-    const text = JSON.stringify(requests[0]?.messages ?? []);
-    expect(text).toContain(SCHEDULE_NOTE);
-    expect(text).toContain("remind the user to take the bread out");
-    expect(sent).toEqual(["Bread's ready to come out."]);
-    // A one-shot is finished: it is gone from what the user has scheduled.
+    expect(await fire(store, NOW, submit)).toBe(0);
+    expect(await fire(store, created.schedule.nextDueAt! + 1000, submit)).toBe(1);
+    await t.idle();
+
+    expect(seen[0]).toContain(SCHEDULE_NOTE);
+    expect(seen[0]).toContain("remind the user to take the bread out");
+    expect(t.sent.map((s) => s.text)).toEqual(["Bread's ready to come out."]);
     expect(book.list()).toEqual([]);
     expect(store.earliestScheduleDueAt()).toBeNull();
+    await t.close();
   });
 
-  it("keeps a recurring schedule due at its next occurrence", async () => {
+  it("submits one occurrence under a key a retry repeats", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const store = new MemoryStore();
     const conversationId = store.getOrCreateConversation(1, 0);
@@ -93,16 +91,36 @@ describe("a schedule coming due", () => {
     });
     if ("error" in created) throw new Error(created.error);
 
-    // Down for two weeks: every missed morning collapses into a single fire.
+    const { submitted, submit } = recorder();
     const twoWeeksOn = created.schedule.nextDueAt! + 14 * 24 * 60 * 60 * 1000;
-    expect(fire(store, twoWeeksOn)).toBe(1);
-    expect(store.drainPendingMessages(conversationId)).toHaveLength(1);
-    // And it is armed for the next weekday morning, not for a backlog.
+    expect(await fire(store, twoWeeksOn, submit)).toBe(1);
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0].operationId).toBe(
+      `schedule:${created.schedule.id}:${created.schedule.nextDueAt}`,
+    );
     expect(store.earliestScheduleDueAt()!).toBeGreaterThan(twoWeeksOn);
     expect(book.list()).toHaveLength(1);
   });
 
-  it("never fires a cancelled schedule", () => {
+  it("does not advance a schedule whose hand-off failed", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const store = new MemoryStore();
+    const conversationId = store.getOrCreateConversation(1, 0);
+    const book = createScheduleBook({ store, conversationId, now: () => NOW });
+    const created = book.create({
+      prompt: "x",
+      pattern: "2026-01-02T13:10:00",
+      timezone: "UTC",
+    });
+    if ("error" in created) throw new Error(created.error);
+    const failing = async () => {
+      throw new Error("assistant unavailable");
+    };
+    await expect(fire(store, created.schedule.nextDueAt! + 1000, failing)).rejects.toThrow();
+    expect(book.list()).toHaveLength(1);
+  });
+
+  it("never fires a cancelled schedule", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     const store = new MemoryStore();
     const conversationId = store.getOrCreateConversation(1, 0);
@@ -114,7 +132,8 @@ describe("a schedule coming due", () => {
     });
     if ("error" in created) throw new Error(created.error);
     expect(book.cancel(created.schedule.id)).toBe(true);
-    expect(fire(store, created.schedule.nextDueAt! + 1000)).toBe(0);
-    expect(store.drainPendingMessages(conversationId)).toEqual([]);
+    const { submitted, submit } = recorder();
+    expect(await fire(store, created.schedule.nextDueAt! + 1000, submit)).toBe(0);
+    expect(submitted).toEqual([]);
   });
 });

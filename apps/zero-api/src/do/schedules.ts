@@ -59,30 +59,20 @@ const safeNextRun = (
   }
 };
 
-// The store surface a firing pass needs: the schedule records, and the pending
-// queue their prompts go into.
-export interface ScheduleFiringStore extends ScheduleRecordStore {
-  enqueuePendingMessage(conversationId: string, content: string): void;
-}
+export type ScheduleFiringStore = ScheduleRecordStore;
 
-// Fire everything due: queue each prompt as a pending message, then advance or
-// retire its record. Returns how many fired, so the caller knows whether to arm
-// the turn alarm.
-//
-// The enqueue happens BEFORE the record moves, and both are synchronous, so a
-// reset in between fires a schedule twice rather than never. For a reminder the
-// duplicate is the better failure.
-//
-// No model runs here. The prompts sit in the ordinary pending queue and the
-// turns happen on UserDO's alarm like any other message, which is what keeps
-// LLM work off the schedule's alarm.
-export const fireDueSchedules = (input: {
+// Fire everything due: hand each prompt to the assistant, then advance or
+// retire its record. The submission carries the schedule id and the due time,
+// so a reset between the two submits the same occurrence again and the
+// assistant answers it once.
+export const fireDueSchedules = async (input: {
   store: ScheduleFiringStore;
   now: number;
   nextRun: (pattern: string, timezone: string, after: number) => number | null;
   // Wrap a schedule's prompt as the text of a turn (the SCHEDULE_NOTE prefix).
   composeText: (prompt: string) => string;
-}): number => {
+  submit: (conversationId: string, text: string, operationId: string) => Promise<void>;
+}): Promise<number> => {
   const { store, now } = input;
   const fires = planFiring({
     due: store.listDueSchedules(now),
@@ -92,9 +82,10 @@ export const fireDueSchedules = (input: {
   const lastFiredAt = new Date(now).toISOString();
   for (const fire of fires) {
     logScheduleFired(fire, now);
-    store.enqueuePendingMessage(
+    await input.submit(
       fire.record.conversationId,
       input.composeText(fire.record.prompt),
+      `schedule:${fire.record.id}:${fire.record.nextDueAt}`,
     );
     if (fire.next === null) {
       store.retireSchedule(fire.record.id, { lastFiredAt });

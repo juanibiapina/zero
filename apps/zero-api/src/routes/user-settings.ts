@@ -19,7 +19,7 @@ import {
 } from "../telegram/identity";
 import { isValidCountry, resolveCountry } from "../country";
 import { purgeUserData } from "../do/purge";
-import { getLearningDO } from "../LearningDO/stub";
+import { getAssistantDO } from "../AssistantDO/stub";
 import { getScheduleDO } from "../ScheduleDO/stub";
 import type { Env } from "../types";
 import { getUserDO } from "../UserDO/stub";
@@ -161,7 +161,8 @@ export const createUserSettingsRoutes = () => {
       telegramId,
       releaseTelegram: (id) => unlinkTelegramAccount(c.env, id),
       purgeSchedules: () => getScheduleDO(c.env, clerkUserId).purge(),
-      purgeLearning: () => getLearningDO(c.env, clerkUserId).purge(),
+      purgeAssistant: () => getAssistantDO(c.env, clerkUserId).purge(),
+      dropAssistant: () => getAssistantDO(c.env, clerkUserId).drop(),
       purgeUser: () => userDO.deleteAllData(clerkUserId),
       purgeTasks: () => getTaskDO(c.env, clerkUserId).purge(),
       resetTasks: () => getTaskDO(c.env, clerkUserId).reset(),

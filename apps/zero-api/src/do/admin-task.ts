@@ -11,7 +11,7 @@ export const ADMIN_TASK_KEY = "adminTask";
 export const MAX_ADMIN_TASK_SUMMARY_CHARS = 16_000;
 
 export type AdminTask =
-  | { clerkUserId: string; prompt: string; status: "queued" }
+  | { clerkUserId: string; prompt: string; status: "queued"; id?: string }
   | { clerkUserId: string; status: "done"; summary: string }
   | { clerkUserId: string; status: "failed" };
 

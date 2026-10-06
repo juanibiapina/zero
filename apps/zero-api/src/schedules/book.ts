@@ -5,6 +5,7 @@
 // is one we accept, the user is under the cap, and the first due time is
 // resolved — so the tools stay a thin translation to the model's wire format.
 
+import type { Settled } from "../awaitable";
 import { isValidTimezone, suggestTimezones } from "../timezone";
 import { log } from "../log";
 import { nextRun as defaultNextRun, validatePattern as defaultValidate } from "./recurrence";
@@ -45,7 +46,9 @@ const toSchedule = (record: ScheduleRecord): Schedule => ({
 const generateId = (): string =>
   `sch_${crypto.randomUUID().replaceAll("-", "").slice(0, 6)}`;
 
-export const createScheduleBook = (deps: ScheduleBookDeps): ScheduleBook => {
+export const createScheduleBook = (
+  deps: ScheduleBookDeps,
+): Settled<ScheduleBook> => {
   const {
     store,
     conversationId,

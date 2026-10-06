@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zero-api-workers-test",
+  "main": "./src/workers-test/worker.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "TELEGRAM_API_ROOT": "http://127.0.0.1:9",
+    "CLOUDFLARE_ACCOUNT_ID": "test",
+    "CLOUDFLARE_GATEWAY_ID": "test",
+    "MODEL_ID": "faux-1",
+    "LLM_BASE_URL_OVERRIDE": "",
+    "ENVIRONMENT": "test"
+  },
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "zero-attachments-test" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "USER_DO", "class_name": "UserDO" },
+      { "name": "ASSISTANT_DO", "class_name": "TestAssistantDO" },
+      { "name": "SCHEDULE_DO", "class_name": "ScheduleDO" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["UserDO", "TestAssistantDO", "ScheduleDO"] }
+  ]
+}

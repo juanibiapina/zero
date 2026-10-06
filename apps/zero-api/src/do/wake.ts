@@ -3,38 +3,26 @@
 //
 // Reached by the `wake` deadline and by the admin backfill. The `wokeAt` marker
 // on user_settings makes it self-dedupe regardless of trigger, so one message is
-// sent per sleep episode. No model runs here: a wake queues a pending message
-// and the turn happens on UserDO's own alarm, like any other message. See
-// docs/wake-sleepers.md.
+// sent per sleep episode, and the submission is keyed on the sleep episode so a
+// retry between the two is answered once. See docs/wake-sleepers.md.
 
 import { log } from "../log";
 import { WAKE_INACTIVE_MS } from "./schedule";
-import type { ConversationStore, SettingsStore } from "../store/types";
+import type { SettingsStore, Thread } from "../store/types";
 
-// The store surface a wake needs: settings (lastActiveAt / wokeAt), the
-// most-recent-conversation lookup, and the pending queue the note goes into.
-export interface WakeStore extends SettingsStore {
-  getMostRecentConversation: ConversationStore["getMostRecentConversation"];
-  enqueuePendingMessage(conversationId: string, content: string): void;
-}
-
-// Whether a message was queued, or why not.
 export type WakeOutcome =
   | { status: "woken" }
   | { status: "skipped"; reason: "active" | "already_woken" | "no_conversation" };
 
-// Apply the episode guard and, if it passes, mark wokeAt and queue the note.
-// Does NOT arm the alarm or re-arm the wake deadline: the caller owns the alarm,
-// and the user's next message re-arms the deadline.
-export const runWake = (input: {
-  store: WakeStore;
+export const runWake = async (input: {
+  store: SettingsStore;
+  conversation: Thread | null;
   now: number;
-  // Wrap the wake note as the text of a turn (the WAKE_NOTE prefix).
   composeText: () => string;
-}): WakeOutcome => {
-  const { store, now } = input;
+  submit: (conversationId: string, text: string, operationId: string) => Promise<void>;
+}): Promise<WakeOutcome> => {
+  const { store, now, conversation } = input;
   const settings = store.getSettings();
-  // A null lastActiveAt means the user never messaged: nothing to wake into.
   const lastActive = settings.lastActiveAt
     ? Date.parse(settings.lastActiveAt)
     : null;
@@ -42,21 +30,16 @@ export const runWake = (input: {
     log("wake_skipped", { reason: "active" });
     return { status: "skipped", reason: "active" };
   }
-  // Already nudged since the user last spoke: a repeated backfill or a duplicate
-  // alarm must not re-nudge.
   if (settings.wokeAt && Date.parse(settings.wokeAt) > lastActive) {
     log("wake_skipped", { reason: "already_woken" });
     return { status: "skipped", reason: "already_woken" };
   }
-  const conversation = store.getMostRecentConversation();
   if (!conversation) {
     log("wake_skipped", { reason: "no_conversation" });
     return { status: "skipped", reason: "no_conversation" };
   }
-  // Mark before enqueue so a duplicate fire cannot double-nudge. The user's next
-  // message moves lastActiveAt past this, re-enabling a future episode.
+  await input.submit(conversation.id, input.composeText(), `wake:${settings.lastActiveAt}`);
   store.updateSettings({ wokeAt: new Date(now).toISOString() });
-  store.enqueuePendingMessage(conversation.id, input.composeText());
   log("wake_fired", {});
   return { status: "woken" };
 };
