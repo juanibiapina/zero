@@ -6,12 +6,9 @@ import {
 } from '@zero/agent-core';
 import { useEffect } from 'react';
 
-import {
-  homeAppIconForTaskCount,
-  syncHomeAppIcon,
-} from '@/lib/home-app-icon';
 import { useLocalDay } from '@/lib/local-day';
 import { useTodoReplica } from '@/lib/todo-replica-hook';
+import { setHomeAppIcon, type HomeAppIcon } from '../../modules/home-app-icon';
 
 // Keep Android's launcher icon equal to the list Home actually shows. This
 // module owns collection hydration, Home's shared visibility rule, icon
@@ -35,15 +32,30 @@ function HydratedHomeAppIconSync({ replica }: { replica: TaskdoReplica }) {
 
   const hydrated = !tasksLoading && !projectsLoading;
   const icon = hydrated
-    ? homeAppIconForTaskCount(
-        homeTasks(tasks ?? [], projects ?? [], today).length,
-      )
+    ? iconForTaskCount(homeTasks(tasks ?? [], projects ?? [], today).length)
     : undefined;
 
   useEffect(() => {
-    if (icon === undefined) return;
-    void syncHomeAppIcon(icon);
+    if (icon !== undefined) applyIcon(icon);
   }, [icon]);
 
   return null;
+}
+
+function iconForTaskCount(count: number): HomeAppIcon {
+  if (count <= 0) return 'Empty';
+  if (count === 1) return 'OneTask';
+  if (count === 2) return 'TwoTasks';
+  if (count === 3) return 'ThreeTasks';
+  return 'FourPlusTasks';
+}
+
+const ICON_WARNING = 'Could not update the Home task-count launcher icon.';
+
+function applyIcon(icon: HomeAppIcon) {
+  try {
+    if (!setHomeAppIcon(icon)) console.warn(ICON_WARNING);
+  } catch (error) {
+    console.warn(ICON_WARNING, error);
+  }
 }

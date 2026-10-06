@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, render, waitFor } from '@testing-library/react-native';
-import { Platform } from 'react-native';
 import type { Project, Task } from '@zero/agent-core';
 
 import type { TodoData } from '@/lib/todo-data-context';
@@ -63,7 +62,6 @@ async function expectIcon(icon: string) {
 
 describe('HomeAppIconSync', () => {
   beforeEach(() => {
-    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     mockSetAppIcon.mockReset();
     mockSetAppIcon.mockReturnValue(true);
   });
@@ -85,6 +83,27 @@ describe('HomeAppIconSync', () => {
   ])('selects %s visible Home tasks as %s', async (count, icon) => {
     await renderSync({ tasks: Array.from({ length: count }, (_, index) => task(String(index))) });
     await expectIcon(icon);
+  });
+
+  it('warns without throwing when Android rejects the icon', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockSetAppIcon.mockReturnValue(false);
+
+    await renderSync({ tasks: [task('1')] });
+
+    await waitFor(() => expect(warn).toHaveBeenCalledWith('Could not update the Home task-count launcher icon.'));
+    warn.mockRestore();
+  });
+
+  it('warns without throwing when the native call throws', async () => {
+    const error = new Error('native unavailable');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockSetAppIcon.mockImplementation(() => { throw error; });
+
+    await renderSync({ tasks: [task('1')] });
+
+    await waitFor(() => expect(warn).toHaveBeenCalledWith('Could not update the Home task-count launcher icon.', error));
+    warn.mockRestore();
   });
 
   it('counts only tasks visible on Home', async () => {

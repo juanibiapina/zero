@@ -1,11 +1,21 @@
-import { Platform } from 'react-native';
+import { requireOptionalNativeModule } from 'expo';
 
-import HomeAppIconModule from './src/HomeAppIconModule';
-import type { NativeHomeAppIcon } from './src/HomeAppIcon.types';
+export type HomeAppIcon =
+  | 'Default'
+  | 'Empty'
+  | 'OneTask'
+  | 'TwoTasks'
+  | 'ThreeTasks'
+  | 'FourPlusTasks';
 
-export function setHomeAppIcon(icon: NativeHomeAppIcon): boolean {
-  if (Platform.OS !== 'android') return true;
-  return HomeAppIconModule.setIcon(icon);
+type NativeHomeAppIcon = {
+  setIcon(icon: HomeAppIcon): boolean;
+};
+
+const native = typeof requireOptionalNativeModule === 'function'
+  ? requireOptionalNativeModule<NativeHomeAppIcon>('HomeAppIcon')
+  : null;
+
+export function setHomeAppIcon(icon: HomeAppIcon): boolean {
+  return native ? native.setIcon(icon) : true;
 }
-
-export type { NativeHomeAppIcon } from './src/HomeAppIcon.types';
