@@ -2,20 +2,13 @@ package expo.modules.homeappicon
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class HomeAppIconModule : Module() {
-  private val iconNames = listOf(
-    "Default",
-    "Empty",
-    "OneTask",
-    "TwoTasks",
-    "ThreeTasks",
-    "FourPlusTasks"
-  )
   private val stateLock = Any()
   private var requestedComponent: String? = null
 
@@ -23,11 +16,8 @@ class HomeAppIconModule : Module() {
     Name("HomeAppIcon")
 
     Function("setIcon") { name: String ->
-      if (name !in iconNames) return@Function false
-
-      val packageName = context.packageName
-      val target = "$packageName.MainActivityIcon$name"
-      if (!componentExists(target)) return@Function false
+      val target = "${context.packageName}.$ALIAS_PREFIX$name"
+      if (target !in aliases()) return@Function false
 
       synchronized(stateLock) {
         requestedComponent = if (enabledComponent() == target) null else target
@@ -62,8 +52,7 @@ class HomeAppIconModule : Module() {
       return
     }
 
-    iconNames
-      .map { "$packageName.MainActivityIcon$it" }
+    aliases()
       .filter { it != target }
       .forEach { component ->
         try {
@@ -74,37 +63,37 @@ class HomeAppIconModule : Module() {
       }
   }
 
+  private fun aliases(): List<String> {
+    val packageName = context.packageName
+    val launcher = Intent(Intent.ACTION_MAIN)
+      .addCategory(Intent.CATEGORY_LAUNCHER)
+      .setPackage(packageName)
+    return context.packageManager
+      .queryIntentActivities(launcher, PackageManager.MATCH_DISABLED_COMPONENTS)
+      .map { it.activityInfo.name }
+      .filter { it.startsWith("$packageName.$ALIAS_PREFIX") }
+      .distinct()
+  }
+
   private fun enabledComponent(): String? {
     val packageName = context.packageName
     val packageManager = context.packageManager
-    return iconNames
-      .map { "$packageName.MainActivityIcon$it" }
-      .firstOrNull { component ->
-        val componentName = ComponentName(packageName, component)
-        when (packageManager.getComponentEnabledSetting(componentName)) {
-          PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-          PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ->
-            try {
-              packageManager.getActivityInfo(
-                componentName,
-                PackageManager.MATCH_DISABLED_COMPONENTS
-              ).enabled
-            } catch (_: PackageManager.NameNotFoundException) {
-              false
-            }
-          else -> false
-        }
+    return aliases().firstOrNull { component ->
+      val componentName = ComponentName(packageName, component)
+      when (packageManager.getComponentEnabledSetting(componentName)) {
+        PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+        PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ->
+          try {
+            packageManager.getActivityInfo(
+              componentName,
+              PackageManager.MATCH_DISABLED_COMPONENTS
+            ).enabled
+          } catch (_: PackageManager.NameNotFoundException) {
+            false
+          }
+        else -> false
       }
-  }
-
-  private fun componentExists(component: String): Boolean = try {
-    context.packageManager.getActivityInfo(
-      ComponentName(context.packageName, component),
-      PackageManager.MATCH_DISABLED_COMPONENTS
-    )
-    true
-  } catch (_: PackageManager.NameNotFoundException) {
-    false
+    }
   }
 
   private fun setEnabled(
@@ -131,5 +120,6 @@ class HomeAppIconModule : Module() {
 
   companion object {
     private const val TAG = "HomeAppIcon"
+    private const val ALIAS_PREFIX = "MainActivityIcon"
   }
 }

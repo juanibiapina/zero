@@ -2,14 +2,9 @@ const { AndroidConfig, withAndroidManifest, withDangerousMod } = require('@expo/
 const fs = require('fs/promises');
 const path = require('path');
 
+const ALTERNATES = require('./icons.json');
+
 const ALIAS_PREFIX = 'MainActivityIcon';
-const ALTERNATES = {
-  Empty: '0-empty',
-  OneTask: '1-task',
-  TwoTasks: '2-tasks',
-  ThreeTasks: '3-tasks',
-  FourPlusTasks: '4-plus-tasks',
-};
 
 function launcherFilter() {
   return {

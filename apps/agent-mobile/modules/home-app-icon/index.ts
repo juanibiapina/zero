@@ -1,12 +1,8 @@
 import { requireOptionalNativeModule } from 'expo';
 
-export type HomeAppIcon =
-  | 'Default'
-  | 'Empty'
-  | 'OneTask'
-  | 'TwoTasks'
-  | 'ThreeTasks'
-  | 'FourPlusTasks';
+import type icons from './icons.json';
+
+export type HomeAppIcon = 'Default' | keyof typeof icons;
 
 type NativeHomeAppIcon = {
   setIcon(icon: HomeAppIcon): boolean;
